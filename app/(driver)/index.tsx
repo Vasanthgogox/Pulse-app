@@ -16,15 +16,21 @@ import { JobRequestCard } from "@/components/JobRequestCard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { useDriverInviteModal } from "@/contexts/DriverInviteModalContext";
+import { useDriverHomeInvites } from "@/features/driver/hooks/useDriverHomeInvites";
 import {
     useDriverTheme,
     useDriverThemeColors,
 } from "@/contexts/DriverThemeContext";
 import { computeDriverCommissionForTrip } from "@/features/finance/aggregation/aggregateDrivers";
-import { useAdaptiveTripLocationPingLoop } from "@/features/driver/hooks/useAdaptiveTripLocationPingLoop";
+import {
+  useDriverCommunication,
+  useDriverLocationStream,
+} from "@/features/driver/communication";
 import { useDriverMapLivePositionWatch } from "@/features/driver/hooks/useDriverMapLivePositionWatch";
-import { claimTripByOtp, getPendingOtpTrips } from "@/features/trips/services/tripOtp.service";
+import { claimTripByOtp } from "@/features/trips/services/tripOtp.service";
+import { useDriverHomeDriversQuery } from "@/lib/queries/useDriverHomeDriversQuery";
+import { useInvalidateDriverHomeDashboard } from "@/lib/queries/useInvalidateDriverHomeDashboard";
+import { usePendingOtpTripsQuery } from "@/lib/queries/usePendingOtpTripsQuery";
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
@@ -69,8 +75,6 @@ import {
 } from "@/lib/routingService";
 import * as tripsService from "@/features/trips/services/trips.service";
 import {
-  formatGeocodedCityState,
-  formatGeocodedPlaceLine,
   reverseGeocodeCityStateLabel,
 } from "@/lib/reverseGeocodePlace.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -444,8 +448,21 @@ export default function DriverRadarScreen() {
     ? "rgba(255,255,255,0.22)"
     : Theme.textPrimaryDark;
   const { profile } = useAuth();
-  const { presentPendingInvite, pendingCount: pendingInviteModalCount } =
-    useDriverInviteModal();
+  const uid = profile?.uid ?? null;
+  const invalidateDriverHome = useInvalidateDriverHomeDashboard();
+  const lastTripsSyncKeyRef = useRef<string | null>(null);
+  const refreshDashboard = useCallback(() => {
+    lastTripsSyncKeyRef.current = null;
+    if (uid) void invalidateDriverHome(uid);
+  }, [uid, invalidateDriverHome]);
+  const linkedDriversQuery = useDriverHomeDriversQuery(uid);
+  const pendingOtpQuery = usePendingOtpTripsQuery(uid);
+  const pendingOtpTrips = pendingOtpQuery.pendingTrips;
+  const {
+    invites,
+    presentPendingInvite,
+    pendingCount: pendingInviteModalCount,
+  } = useDriverHomeInvites();
   const { avatarUri } = useDriverAvatarUri();
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [allTrips, setAllTrips] = useState<tripsService.TripRow[]>([]);
@@ -468,7 +485,6 @@ export default function DriverRadarScreen() {
   const newAssignmentBlinkAnim = useRef(new Animated.Value(0)).current;
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [showNotification, setShowNotification] = useState(false);
   const [invitationAccepted, setInvitationAccepted] = useState(false);
   const [invitationDeclined, setInvitationDeclined] = useState(false);
@@ -501,9 +517,6 @@ export default function DriverRadarScreen() {
   >(null);
   const [notificationHistory, setNotificationHistory] = useState<
     { tripId: string; reason: "accepted_other" | "declined"; movedAt: string }[]
-  >([]);
-  const [pendingOtpTrips, setPendingOtpTrips] = useState<
-    tripsService.TripRow[]
   >([]);
   const [assignerNamesByUserId, setAssignerNamesByUserId] = useState<
     Record<string, string>
@@ -704,107 +717,135 @@ export default function DriverRadarScreen() {
     });
   }, []);
 
-  const fetch = useCallback(() => {
-    if (!profile?.uid) {
+  const tripsSyncGenRef = useRef(0);
+  const appStateForInvalidateRef = useRef(AppState.currentState);
+
+  const driverIdsKey = linkedDriversQuery.driverIdsKey;
+  const driversDataUpdatedAt = linkedDriversQuery.dataUpdatedAt;
+  const driversFetchStatus = linkedDriversQuery.fetchStatus;
+  const driversQueryFailed =
+    linkedDriversQuery.isError && !linkedDriversQuery.isFetched;
+
+  /**
+   * Trips by driver ids — keyed on primitive query signals only (never callback/array deps).
+   * Skips redundant fetches when driverIdsKey + dataUpdatedAt unchanged.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const finishLoading = () => {
       setLoading(false);
-      return Promise.resolve();
-    }
-    setAcceptError(null);
-    if (!initialLoadDoneRef.current && !isRefreshingRef.current)
-      setLoading(true);
-    return Promise.all([
-      driversService.getLinkedDriversForCurrentUser(profile.uid),
-      driversService.getDriverInvitesReceived(),
-      getPendingOtpTrips(),
-    ])
-      .then(([driversRes, invitesRes, pendingTripsRes]) => {
-        setInvites(invitesRes.invites ?? []);
-        setPendingOtpTrips(
-          pendingTripsRes?.error ? [] : (pendingTripsRes?.trips ?? []),
-        );
-        // Failed driver lookup (network, timeout) returns `drivers: []` — do not clear
-        // linked driver or flip online; that made pull-to-refresh / refetch look like "went offline".
-        if (driversRes.error) {
-          setLoading(false);
-          initialLoadDoneRef.current = true;
-          isRefreshingRef.current = false;
-          setRefreshing(false);
-          return;
-        }
-        const drivers = (driversRes.drivers ?? []).filter((d) => !d.left_at);
-        if (drivers.length > 0) {
-          const primaryDriver = drivers[0];
-          setDriver(primaryDriver);
-          const driverIds = drivers.map((d) => d.id);
-          return tripsService.getTripsByDriverIds(driverIds).then((tRes) => {
-            const trips = tRes.trips ?? [];
-            const currentIds = new Set(trips.map((t) => t.id));
-            const disappearedLabels: string[] = [];
-            previousTripsRef.current.forEach((displayNum, id) => {
-              if (!currentIds.has(id)) disappearedLabels.push(displayNum);
-            });
-            const seqByTrip = buildDriverTripNumberMap(trips);
-            previousTripsRef.current = new Map(
-              trips.map((t) => [t.id, getDriverTripDisplayNumber(t, seqByTrip)]),
-            );
-            setAllTrips(trips);
-            const normalizedDriverStatus = String(
-              primaryDriver.status ?? "",
-            ).toLowerCase();
-            const hasActiveTrip = trips.some((t) => isTripInProgress(t));
-            setIsOnline(
-              (prev) =>
-                prev ||
-                normalizedDriverStatus === "online" ||
-                normalizedDriverStatus === "on_trip" ||
-                hasActiveTrip,
-            );
-            setLoading(false);
-            initialLoadDoneRef.current = true;
-            isRefreshingRef.current = false;
-            setRefreshing(false);
-            setAcceptedTripId((prev) => {
-              if (prev == null) return prev;
-              const trip = trips.find((t) => t.id === prev);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    };
 
-              // Keep DRIVER_ACCEPTED_TRIP_ID_KEY while the trip is in progress so Notifications + other
-              // screens can treat other assignments as passive. Only clear once the trip is completed.
-              if (
-                !isOtpClaiming &&
-                trip &&
-                isCompletedStatus(trip.status)
-              ) {
-                AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
-                return null;
-              }
-
-              // DO NOT clear if not found. Let lag catch up or let the user manually go back from the card.
-              // This prevents the JobRequestCard ("Hold to accept") from reappearing due to replication lag.
-              return prev;
-            });
-          });
-        } else {
-          setDriver(null);
-          setAllTrips([]);
-          // Do NOT reset pendingOtpTrips here — a newly registered driver with no
-          // linked driver rows yet may still have phone-preassigned trips waiting
-          // for OTP claim. setPendingOtpTrips was already called above from the
-          // getPendingOtpTrips() result before this branch ran.
-          setIsOnline(false);
-          previousTripsRef.current = new Map();
-          setLoading(false);
-          initialLoadDoneRef.current = true;
-          isRefreshingRef.current = false;
-          setRefreshing(false);
-        }
-      })
-      .finally(() => {
+    const run = async () => {
+      if (!uid) {
         setLoading(false);
-        initialLoadDoneRef.current = true;
-        isRefreshingRef.current = false;
-        setRefreshing(false);
+        return;
+      }
+
+      setAcceptError(null);
+      if (!initialLoadDoneRef.current && !isRefreshingRef.current) {
+        setLoading(true);
+      }
+
+      if (driversQueryFailed) {
+        if (!cancelled) finishLoading();
+        return;
+      }
+
+      if (!linkedDriversQuery.isFetched) {
+        return;
+      }
+
+      const syncKey = `${driverIdsKey}|${driversDataUpdatedAt}|${isOtpClaiming ? 1 : 0}`;
+      if (
+        lastTripsSyncKeyRef.current === syncKey &&
+        initialLoadDoneRef.current &&
+        !isRefreshingRef.current
+      ) {
+        return;
+      }
+
+      const active = linkedDriversQuery.activeLinkedDrivers;
+      const gen = ++tripsSyncGenRef.current;
+
+      if (active.length === 0) {
+        if (!cancelled) {
+          setDriver((prev) => (prev === null ? prev : null));
+          setAllTrips((prev) => (prev.length === 0 ? prev : []));
+          setIsOnline((prev) => (prev === false ? prev : false));
+          previousTripsRef.current = new Map();
+          finishLoading();
+          lastTripsSyncKeyRef.current = syncKey;
+        }
+        return;
+      }
+
+      const primaryDriver = active[0];
+      const driverIds = active.map((d) => d.id);
+      const tRes = await tripsService.getTripsByDriverIds(driverIds);
+      if (cancelled || tripsSyncGenRef.current !== gen) return;
+
+      const trips = tRes.trips ?? [];
+      const tripIdsKey = trips
+        .map((t) => t.id)
+        .sort()
+        .join(",");
+
+      const seqByTrip = buildDriverTripNumberMap(trips);
+      previousTripsRef.current = new Map(
+        trips.map((t) => [t.id, getDriverTripDisplayNumber(t, seqByTrip)]),
+      );
+
+      setDriver((prev) =>
+        prev?.id === primaryDriver.id ? prev : primaryDriver,
+      );
+      setAllTrips((prev) => {
+        const prevKey = prev
+          .map((t) => t.id)
+          .sort()
+          .join(",");
+        return prevKey === tripIdsKey ? prev : trips;
       });
-  }, [profile?.uid]);
+
+      const normalizedDriverStatus = String(primaryDriver.status ?? "").toLowerCase();
+      const hasActiveTrip = trips.some((t) => isTripInProgress(t));
+      const nextOnline =
+        normalizedDriverStatus === "online" ||
+        normalizedDriverStatus === "on_trip" ||
+        hasActiveTrip;
+      setIsOnline((prev) => (prev || nextOnline ? true : prev));
+
+      finishLoading();
+      lastTripsSyncKeyRef.current = syncKey;
+
+      setAcceptedTripId((prev) => {
+        if (prev == null) return prev;
+        const trip = trips.find((t) => t.id === prev);
+        if (!isOtpClaiming && trip && isCompletedStatus(trip.status)) {
+          void AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+          return null;
+        }
+        return prev;
+      });
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    uid,
+    driverIdsKey,
+    driversDataUpdatedAt,
+    driversFetchStatus,
+    driversQueryFailed,
+    linkedDriversQuery.isFetched,
+    isOtpClaiming,
+  ]);
 
 
   const runDeclineTrip = useCallback(
@@ -848,7 +889,7 @@ export default function DriverRadarScreen() {
       });
       setAssignmentFeedback("declined");
       setDeclinedTripId(tripId);
-      fetch();
+      if (uid) void invalidateDriverHome(uid);
       if (assignmentFeedbackTimeoutRef.current)
         clearTimeout(assignmentFeedbackTimeoutRef.current);
       assignmentFeedbackTimeoutRef.current = setTimeout(() => {
@@ -856,7 +897,7 @@ export default function DriverRadarScreen() {
         assignmentFeedbackTimeoutRef.current = null;
       }, 1200);
     },
-    [declineLoading, otpClaimTripId, acceptedTripId, fetch, setDeclinedTripId],
+    [declineLoading, otpClaimTripId, acceptedTripId, uid, invalidateDriverHome, setDeclinedTripId],
   );
 
   const confirmDeclineTrip = useCallback(
@@ -884,10 +925,6 @@ export default function DriverRadarScreen() {
     },
     [runDeclineTrip],
   );
-
-  useEffect(() => {
-    if (profile?.uid) fetch();
-  }, [profile?.uid, fetch]);
 
   // Ensure notification channel exists for Android foreground services (fixes APK crashes).
   // Do not import expo-notifications in Expo Go on Android (SDK 53+): it triggers a noisy error
@@ -951,29 +988,12 @@ export default function DriverRadarScreen() {
         void ExpoLocation.requestBackgroundPermissionsAsync().catch(() => {});
       }
 
-      // 4. Reverse geocode with timeout (native only; web SDK warns and service is deprecated)
-      if (Platform.OS !== "web") {
-        try {
-          const results = (await Promise.race([
-            ExpoLocation.reverseGeocodeAsync({ latitude, longitude }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("timeout")), 5000),
-            ),
-          ])) as ExpoLocation.LocationGeocodedAddress[];
-
-          if (results && results.length > 0) {
-            const place = results[0];
-            const cityState = formatGeocodedCityState(place).trim();
-            if (cityState) {
-              setLocationLabel(cityState);
-            } else {
-              const fallback = formatGeocodedPlaceLine(place).trim();
-              if (fallback) setLocationLabel(fallback);
-            }
-          }
-        } catch {
-          // ignore reverse geocode failure; use fallback label so we don't show "Location not found" when we have coords (e.g. simulator)
-        }
+      // 4. Refine label via Mapbox/Nominatim (all platforms; expo is fallback inside util)
+      try {
+        const cityState = await reverseGeocodeCityStateLabel(latitude, longitude);
+        if (cityState) setLocationLabel(cityState);
+      } catch {
+        // keep "Current location" when geocode fails
       }
     } catch (err) {
       console.error("[DriverIndex] fetchLocation error:", err);
@@ -1006,7 +1026,7 @@ export default function DriverRadarScreen() {
     };
   }, [liveDriverGeocodeCoord?.latitude, liveDriverGeocodeCoord?.longitude]);
 
-  // Refetch on focus and re-read accepted trip id (e.g. after OTP claim) so Dashboard shows "View trip" not "Accept & Enter OTP".
+  // Focus: local storage only — no invalidate (invalidate + unstable query observers caused update loops).
   useFocusEffect(
     useCallback(() => {
       Promise.all([
@@ -1021,16 +1041,24 @@ export default function DriverRadarScreen() {
         }
         setAssignableTripsNotifyOnlyAfterMission(notifyOnly === "1");
       });
-      if (profile?.uid) fetch();
-    }, [profile?.uid, fetch]),
+    }, []),
   );
 
+  /** Invalidate only on true background → foreground resume (not every focus/render). */
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && profile?.uid) fetch();
+    const sub = AppState.addEventListener("change", (nextState) => {
+      const prev = appStateForInvalidateRef.current;
+      appStateForInvalidateRef.current = nextState;
+      const resumed =
+        nextState === "active" &&
+        (prev === "background" || prev === "inactive");
+      if (resumed && uid) {
+        lastTripsSyncKeyRef.current = null;
+        void invalidateDriverHome(uid);
+      }
     });
     return () => sub.remove();
-  }, [profile?.uid, fetch]);
+  }, [uid, invalidateDriverHome]);
 
   // Clear declinedTripId once the declined trip is no longer present in any assignment source.
   useEffect(() => {
@@ -1048,11 +1076,17 @@ export default function DriverRadarScreen() {
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
+    isRefreshingRef.current = true;
+    lastTripsSyncKeyRef.current = null;
     setLocationStatus("loading");
-    Promise.all([fetch() ?? Promise.resolve(), fetchLocation()]).finally(() =>
-      setRefreshing(false),
-    );
-  }, [fetch, fetchLocation]);
+    Promise.all([
+      uid ? invalidateDriverHome(uid) : Promise.resolve(),
+      fetchLocation(),
+    ]).finally(() => {
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    });
+  }, [uid, invalidateDriverHome, fetchLocation]);
 
   const reportLocationToDb = useCallback(
     async (
@@ -2047,37 +2081,23 @@ export default function DriverRadarScreen() {
     [],
   );
 
-  const reportLocationToDbWithPins = useCallback(
-    async (
-      tripId: string | null,
-      lat: number,
-      lng: number,
-      accuracy: number | null,
-      source: driverLocationService.DriverLocationSource,
-      extras?: { odometerKm?: number | null; recordedAt?: string },
-    ) => {
-      const ok = await reportLocationToDb(tripId, lat, lng, accuracy, source, extras);
-      if (ok && tripId) void fetchAndLogRecentPins(tripId);
-      return ok;
-    },
-    [fetchAndLogRecentPins, reportLocationToDb],
-  );
+  const { communicationActive } = useDriverCommunication();
 
-  useAdaptiveTripLocationPingLoop({
+  useDriverLocationStream({
     driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
     trip: activeGuidanceTrip,
     enabled: Boolean(driver && activeGuidanceTrip),
+    communicationActive,
     shouldPersistCheckpoint: shouldPersistCheckpointPing,
     minDisplacementM: null,
     source: "background",
-    reportLocationToDb: reportLocationToDbWithPins,
     onLocationFix: onPingLocationFix,
   });
 
-  // DEV: fetch last 3 pinned locations whenever the active trip changes
+  // DEV only: one-time pin preview when active trip changes (not on every GPS tick).
   useEffect(() => {
-    if (!activeGuidanceTrip?.id) {
-      setRecentPinPoints([]);
+    if (!__DEV__ || !activeGuidanceTrip?.id) {
+      if (!activeGuidanceTrip?.id) setRecentPinPoints([]);
       return;
     }
     void fetchAndLogRecentPins(activeGuidanceTrip.id);
@@ -2362,7 +2382,7 @@ export default function DriverRadarScreen() {
 
         // Delay background refresh slightly more
         setTimeout(() => {
-          void fetch();
+          if (uid) void invalidateDriverHome(uid);
         }, 500);
 
         if (assignmentFeedbackTimeoutRef.current)
@@ -2380,7 +2400,7 @@ export default function DriverRadarScreen() {
     } finally {
       setOtpSubmitting(false);
     }
-  }, [fetch, otpValue, otpClaimTripId, otpSubmitting, assignmentFeedback]);
+  }, [uid, invalidateDriverHome, otpValue, otpClaimTripId, otpSubmitting, assignmentFeedback]);
 
   const handleOpenOtpClaimFromHeader = useCallback(() => {
     const firstIncomingRequiringOtp =
@@ -4263,7 +4283,7 @@ export default function DriverRadarScreen() {
               driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
               driverLocationLabel={locationLabel}
-              onRefresh={fetch}
+              onRefresh={refreshDashboard}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
                 setSelectedIncomingTripId(null);
@@ -4279,7 +4299,7 @@ export default function DriverRadarScreen() {
                 justCompletedTripRef.current = false;
                 justClaimedTripIdRef.current = null;
                 justClaimedOldTripIdRef.current = null;
-                fetch();
+                if (uid) void invalidateDriverHome(uid);
               }}
               {...(mapSheet
                 ? {
@@ -4303,7 +4323,7 @@ export default function DriverRadarScreen() {
               driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
               driverLongitude={(truckPosition ?? driverMapPosition)?.longitude ?? null}
               driverLocationLabel={locationLabel}
-              onRefresh={fetch}
+              onRefresh={refreshDashboard}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
                 setSelectedIncomingTripId(null);
@@ -4319,7 +4339,7 @@ export default function DriverRadarScreen() {
                 justCompletedTripRef.current = false;
                 justClaimedTripIdRef.current = null;
                 justClaimedOldTripIdRef.current = null;
-                fetch();
+                if (uid) void invalidateDriverHome(uid);
               }}
               {...(mapSheet
                 ? {
@@ -4400,7 +4420,7 @@ export default function DriverRadarScreen() {
               onPress={() => {
                 setIsOnline(true);
                 triggerSuccess("You are online now.");
-                fetch();
+                if (uid) void invalidateDriverHome(uid);
                 setLocationStatus("loading");
                 fetchLocation();
                 if (driver?.organization_id && driver?.id) {
@@ -4447,7 +4467,7 @@ export default function DriverRadarScreen() {
                 onPress={() => {
                   setIsOnline(true);
                   triggerSuccess("You are online now.");
-                  fetch();
+                  if (uid) void invalidateDriverHome(uid);
                   setLocationStatus("loading");
                   fetchLocation();
                   if (driver?.organization_id && driver?.id) {
@@ -4953,7 +4973,7 @@ export default function DriverRadarScreen() {
                           );
                           setInviteActionId(null);
                           setInvitationDeclined(true);
-                          fetch();
+                          if (uid) void invalidateDriverHome(uid);
                         }}
                         onAccept={async () => {
                           setInviteActionId(pendingInvite.id);
@@ -4964,7 +4984,7 @@ export default function DriverRadarScreen() {
                           setInviteActionId(null);
                           if (!error) {
                             setInvitationAccepted(true);
-                            fetch();
+                            if (uid) void invalidateDriverHome(uid);
                           }
                         }}
                       />
@@ -5012,7 +5032,7 @@ export default function DriverRadarScreen() {
                           );
                           setInviteActionId(null);
                           setInvitationDeclined(true);
-                          fetch();
+                          if (uid) void invalidateDriverHome(uid);
                         }}
                         onAccept={async () => {
                           setInviteActionId(pendingInvite.id);
@@ -5023,7 +5043,7 @@ export default function DriverRadarScreen() {
                           setInviteActionId(null);
                           if (!error) {
                             setInvitationAccepted(true);
-                            fetch();
+                            if (uid) void invalidateDriverHome(uid);
                           }
                         }}
                       />
@@ -5152,7 +5172,7 @@ export default function DriverRadarScreen() {
                     await driversService.rejectDriverInvite(pendingInvite.id);
                     setInviteActionId(null);
                     setInvitationDeclined(true);
-                    fetch();
+                    if (uid) void invalidateDriverHome(uid);
                   }}
                   onAccept={async () => {
                     setInviteActionId(pendingInvite.id);
@@ -5162,7 +5182,7 @@ export default function DriverRadarScreen() {
                     setInviteActionId(null);
                     if (!error) {
                       setInvitationAccepted(true);
-                      fetch();
+                      if (uid) void invalidateDriverHome(uid);
                     }
                   }}
                 />

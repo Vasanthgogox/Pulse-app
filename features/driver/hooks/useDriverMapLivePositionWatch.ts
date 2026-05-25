@@ -11,7 +11,7 @@ export type DriverMapLiveFixArgs = {
 
 /**
  * Foreground GPS/watch updates for map UI only. Does not write to `driver_locations`;
- * DB persistence stays on {@link useAdaptiveTripLocationPingLoop}.
+ * DB persistence stays on {@link useDriverLocationStream} (write-only, no per-tick reads).
  */
 export function useDriverMapLivePositionWatch(opts: {
   enabled: boolean;

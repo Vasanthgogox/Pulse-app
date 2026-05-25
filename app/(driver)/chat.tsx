@@ -29,7 +29,9 @@ import { ChatMobileComposer } from "@/features/chat/components/ChatMobileCompose
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
+import { useDriverChatSystem } from "@/features/driver/communication";
 import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
 import type { TripConversation, TripMessageRow } from "@/features/chat/types/chat.types";
 import {
@@ -41,15 +43,6 @@ import {
 } from "@/features/driver/utils/driverTripStatusNotes.util";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import * as tripsService from "@/features/trips/services/trips.service";
-
-/** Last chat bubble preview for list rows — fleet system broadcasts excluded. */
-function lastVisibleDriverChatMessage(messages: TripMessageRow[]): TripMessageRow | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m.message_type !== "system") return m;
-  }
-  return undefined;
-}
 
 const DRIVER_QUICK_MESSAGES = [
   "I have arrived at pickup.",
@@ -119,7 +112,7 @@ function ChatBubble({ isOwn, content, timestamp, senderName }: {
 function ConvListItem({ conv, active, onPress }: {
   conv: TripConversation; active: boolean; onPress: () => void;
 }) {
-  const last = lastVisibleDriverChatMessage(conv.messages);
+  const preview = conv.last_message_preview?.trim() ?? "";
   const time = conv.last_message_at
     ? new Date(conv.last_message_at).toLocaleTimeString("en-IN", {
         hour: "2-digit", minute: "2-digit", hour12: true,
@@ -147,9 +140,9 @@ function ConvListItem({ conv, active, onPress }: {
         <Text style={[dr.convRoute, active && dr.convRouteActive]} numberOfLines={1}>
           {conv.pickup_area} → {conv.drop_location}
         </Text>
-        {last ? (
+        {preview ? (
           <Text style={[dr.convPrev, active && dr.convPrevActive]} numberOfLines={1}>
-            {last.content}
+            {preview}
           </Text>
         ) : null}
       </View>
@@ -194,14 +187,24 @@ function isStatusNoteRedundantWithChat(
 }
 
 function MessageThread({
-  conv,
+  conversationId,
+  organizationId,
+  tripId,
+  tripNumber,
+  pickupArea,
+  dropLocation,
   messageInput,
   setMessageInput,
   onSend,
   onSendTripChat,
   onBack,
 }: {
-  conv: TripConversation;
+  conversationId: string;
+  organizationId: string;
+  tripId: string;
+  tripNumber: string;
+  pickupArea: string;
+  dropLocation: string;
   messageInput: string;
   setMessageInput: (v: string) => void;
   onSend: () => void;
@@ -209,11 +212,26 @@ function MessageThread({
   onSendTripChat: (text: string) => Promise<void>;
   onBack: () => void;
 }) {
+  const { profile } = useAuth();
+  const selfUid = (profile as { uid?: string })?.uid ?? null;
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const { keyboardVisible: keyboardOpen, keyboardHeight } = useKeyboardVisible();
   const keyboardInset = effectiveKeyboardInset(keyboardOpen, keyboardHeight);
   const [trip, setTrip] = useState<TripRow | null>(null);
+
+  const {
+    messages,
+    isLoading: messagesLoading,
+    hasOlder,
+    isFetchingOlder,
+    loadOlder,
+  } = useDriverChatSystem({
+    conversationId,
+    organizationId,
+    selfUid,
+    enabled: true,
+  });
 
   // Scroll to bottom when keyboard opens so composer stays visible
   useEffect(() => {
@@ -229,13 +247,13 @@ function MessageThread({
   useEffect(() => {
     let cancelled = false;
     setTrip(null);
-    void tripsService.getTripById(conv.trip_id).then(({ trip: t }) => {
+    void tripsService.getTripById(tripId).then(({ trip: t }) => {
       if (!cancelled) setTrip(t);
     });
     return () => {
       cancelled = true;
     };
-  }, [conv.trip_id]);
+  }, [tripId]);
 
   const statusNotes = useMemo(
     () => parseDriverUpdatesFromNotes(trip?.notes ?? null),
@@ -247,12 +265,12 @@ function MessageThread({
       | { key: string; kind: "msg"; m: TripMessageRow }
       | { key: string; kind: "status"; u: ParsedDriverStatusNote };
     const items: Row[] = [];
-    for (const m of conv.messages) {
+    for (const m of messages) {
       if (m.message_type === "system") continue;
       items.push({ key: `m-${m.id}`, kind: "msg", m });
     }
     statusNotes.forEach((u, i) => {
-      if (isStatusNoteRedundantWithChat(u, conv.messages)) return;
+      if (isStatusNoteRedundantWithChat(u, messages)) return;
       items.push({
         key: `s-${u.timestamp}-${i}-${u.message.slice(0, 12)}`,
         kind: "status",
@@ -265,7 +283,7 @@ function MessageThread({
       return ta - tb;
     });
     return items;
-  }, [conv.messages, statusNotes]);
+  }, [messages, statusNotes]);
 
   const flowStep = trip ? deriveDriverFlowStepFromTrip(trip) : "completed";
   const predefinedForStep = DRIVER_PREDEFINED_STATUS_BY_STEP[flowStep] ?? [];
@@ -275,7 +293,7 @@ function MessageThread({
     setStatusSending(label);
     const res = await appendDriverStatusNote(trip.id, flowStep, label);
     if (!res.error) {
-      const { trip: next } = await tripsService.getTripById(conv.trip_id);
+      const { trip: next } = await tripsService.getTripById(tripId);
       if (next) setTrip(next);
       try {
         await onSendTripChat(label);
@@ -360,9 +378,9 @@ function MessageThread({
           <ArrowLeft size={22} color="#111B21" />
         </TouchableOpacity>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={dr.threadHeaderTitle} numberOfLines={1}>{conv.trip_number}</Text>
+          <Text style={dr.threadHeaderTitle} numberOfLines={1}>{tripNumber}</Text>
           <Text style={dr.threadHeaderSub} numberOfLines={1}>
-            {conv.pickup_area} → {conv.drop_location}
+            {pickupArea} → {dropLocation}
           </Text>
         </View>
       </View>
@@ -374,8 +392,23 @@ function MessageThread({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+        onScroll={(e) => {
+          if (!hasOlder || isFetchingOlder) return;
+          if (e.nativeEvent.contentOffset.y < 80) void loadOlder();
+        }}
+        scrollEventThrottle={200}
       >
-        {merged.length === 0 ? (
+        {messagesLoading ? (
+          <View style={{ paddingVertical: 24, alignItems: "center" }}>
+            <ActivityIndicator size="small" color={Theme.driverEmeraldDark} />
+          </View>
+        ) : null}
+        {isFetchingOlder ? (
+          <View style={{ paddingVertical: 8, alignItems: "center" }}>
+            <ActivityIndicator size="small" color="#94a3b8" />
+          </View>
+        ) : null}
+        {merged.length === 0 && !messagesLoading ? (
           <View style={{ alignItems: "center", paddingVertical: 32 }}>
             <Text style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
               No messages yet — use quick status or reply below.
@@ -438,6 +471,11 @@ export default function DriverChatScreen() {
     markAsRead,
     ensureDriverTripConversation,
   } = useDriverChat();
+  const ensureConvRef = useRef(ensureDriverTripConversation);
+  const markReadRef = useRef(markAsRead);
+  ensureConvRef.current = ensureDriverTripConversation;
+  markReadRef.current = markAsRead;
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [openingTripThread, setOpeningTripThread] = useState(false);
@@ -454,12 +492,12 @@ export default function DriverChatScreen() {
     setTripThreadError(null);
     setSelectedId(null);
     setMessageInput("");
-    void ensureDriverTripConversation(normalizedTripId).then((convId) => {
+    void ensureConvRef.current(normalizedTripId).then((convId) => {
       if (cancelled) return;
       setOpeningTripThread(false);
       if (convId) {
         setSelectedId(convId);
-        void markAsRead(convId);
+        void markReadRef.current(convId);
       } else {
         setTripThreadError("Could not open chat for this trip.");
       }
@@ -467,7 +505,7 @@ export default function DriverChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [normalizedTripId, ensureDriverTripConversation, markAsRead]);
+  }, [normalizedTripId]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
 
@@ -527,7 +565,12 @@ export default function DriverChatScreen() {
       return (
         <View style={[dr.root, screenPadding]}>
           <MessageThread
-            conv={selectedConv}
+            conversationId={selectedConv.id}
+            organizationId={selectedConv.organization_id}
+            tripId={selectedConv.trip_id}
+            tripNumber={selectedConv.trip_number}
+            pickupArea={selectedConv.pickup_area}
+            dropLocation={selectedConv.drop_location}
             messageInput={messageInput}
             setMessageInput={setMessageInput}
             onSend={handleSend}
@@ -593,14 +636,22 @@ export default function DriverChatScreen() {
         </View>
       ) : (
         <MessageThread
-          conv={selectedConv}
+          conversationId={selectedConv.id}
+          organizationId={selectedConv.organization_id}
+          tripId={selectedConv.trip_id}
+          tripNumber={selectedConv.trip_number}
+          pickupArea={selectedConv.pickup_area}
+          dropLocation={selectedConv.drop_location}
           messageInput={messageInput}
           setMessageInput={setMessageInput}
           onSend={handleSend}
           onSendTripChat={(text) =>
             sendMessage(selectedConv.id, selectedConv.organization_id, text)
           }
-          onBack={() => { setSelectedId(null); setMessageInput(""); }}
+          onBack={() => {
+            setSelectedId(null);
+            setMessageInput("");
+          }}
         />
       )}
     </View>

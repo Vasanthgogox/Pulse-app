@@ -58,11 +58,15 @@ import {
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
-import type * as ExpoLocationTypes from "expo-location";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { useRealtimeDriverLocations, useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
+import { useTrackingTripBroadcast } from "@/features/tracking/hooks/useTrackingTripBroadcast";
+import { isTrackingBroadcastV1Enabled } from "@/features/tracking/trackingFeatureFlags";
+import { isTripTrackingActive } from "@/features/trips/utils/tripTrackingStatus.util";
+import { useTripLiveTracking } from "@/features/trips/hooks/useTripLiveTracking";
+import { useRequestDriverPing } from "@/features/trips/hooks/useRequestDriverPing";
 import {
     clearInitialTripForDetail,
     getInitialTripForDetail,
@@ -89,27 +93,24 @@ import {
     type TripRow,
 } from "../../../services/trips.service";
 import type { AssignmentSource } from "../../TripAssignmentBlock";
+import type { ReassignCompletedMeta } from "../../reassign/reassign.types";
+
+export type { ReassignCompletedMeta };
 import type {
     ReconciliationPartyInfo,
     TripDetailTab,
     TripDocItem,
 } from "../TripDetailFinanceView";
 
-let ExpoLocationModule: typeof ExpoLocationTypes | null = null;
-
-async function safeReverseGeocode(
-  latitude: number,
-  longitude: number,
-): Promise<ExpoLocationTypes.LocationGeocodedAddress[]> {
-  try {
-    if (!ExpoLocationModule) {
-      ExpoLocationModule = await import("expo-location");
-    }
-    return await ExpoLocationModule.reverseGeocodeAsync({ latitude, longitude });
-  } catch {
-    return [];
-  }
-}
+import {
+  resolveMapLocationLabel,
+  resolveMapLocationLabelsBatch,
+} from "@/lib/mapLocationLabel.service";
+import { getTripTrackingMapStore } from "@/features/tracking/map/TripTrackingMapStore";
+import {
+  TRACKING_LOCATION_GEOCODE_MAX,
+  TRIP_TRACKING_HISTORY_FETCH_LIMIT,
+} from "@/lib/trackingLocation.constants";
 
 function docTypeFromFileName(fileName: string): string {
   const ext = fileName.split(".").pop()?.toLowerCase() || "";
@@ -285,10 +286,14 @@ export function useTripDetail({
   const [assignmentDriverNames, setAssignmentDriverNames] = useState<Record<string, string>>({});
   const [assignmentVehicleLabels, setAssignmentVehicleLabels] = useState<Record<string, string>>({});
   const [tripOtp, setTripOtp] = useState<{ code: string | null; expires_at: string | null } | null>(null);
+  /** After reassign: show tracking copy until new driver presence arrives (max 60s). */
+  const [waitingForNewDriverLocation, setWaitingForNewDriverLocation] = useState(false);
 
   // ── Tracking / location ───────────────────────────────────────────────────
   const [driverLocation, setDriverLocation] =
     useState<driverLocationService.DriverLocationRow | null>(null);
+  // ISO timestamp from broadcast (not lat/lon — GPS never enters React state from broadcast path).
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
   const [driverLocationLoading, setDriverLocationLoading] = useState(false);
   const [tripLocationPoints, setTripLocationPoints] = useState<
     { latitude: number; longitude: number; recorded_at: string }[]
@@ -340,6 +345,10 @@ export function useTripDetail({
   tripRef.current = trip;
   // Phase 3c: deduplicates dual-filter Realtime events (trip_id + driver_id on same channel).
   const lastSeenLocationIdRef = useRef<string | null>(null);
+  // Coarse gate: only re-geocode when position changes by > ~100m (3 decimal degrees).
+  const lastGeocodedLocRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Broadcast timestamp ref — written per GPS tick, flushed into React state at 1s cadence.
+  const lastBroadcastTimestampRef = useRef<string | null>(null);
   // Phase 3b: true after bundle data has been seeded into state on initial mount.
   const bundleSeededRef = useRef(false);
 
@@ -391,6 +400,20 @@ export function useTripDetail({
     [trip?.driver_id, latestAssignmentRow],
   );
 
+  const trackingBroadcastEnabled =
+    isTrackingBroadcastV1Enabled() && isTripTrackingActive(trip?.status, trip?.completed_at) && !!trip?.id;
+
+  const liveTracking = useTripLiveTracking({
+    tripId: trip?.id ?? null,
+    driverId: effectiveDriverIdForLocation,
+    trackingEnabled: trackingBroadcastEnabled,
+  });
+
+  const driverPing = useRequestDriverPing({
+    tripId: trip?.id ?? null,
+    trackingEnabled: trackingBroadcastEnabled,
+  });
+
   const isDriverOffline = useMemo(() => {
     const statusLower = (trip?.status ?? "").toLowerCase();
     const hasJourneyRuntimeStatus =
@@ -405,8 +428,8 @@ export function useTripDetail({
     const hasAssignedDriver =
       !!effectiveDriverIdForLocation || hasJourneyRuntimeStatus;
     if (!hasAssignedDriver) return true;
-    const hasLiveTrackingSignal =
-      !!driverLocation || tripLocationPoints.length > 0;
+    const trailPointCount = liveTracking.trail.length;
+    const hasLiveTrackingSignal = !!driverLocation || trailPointCount > 0;
     const viewerOrgId = currentOrganization?.id ?? null;
     const isSharedClientOrNonOwnerView =
       !!trip &&
@@ -436,7 +459,7 @@ export function useTripDetail({
     driverLinked,
     currentOrganization?.id,
     driverLocation,
-    tripLocationPoints,
+    liveTracking.trail.length,
   ]);
 
   const driverRatingAvg = useMemo(() => averageScore(tripRatings), [tripRatings]);
@@ -1278,7 +1301,10 @@ export function useTripDetail({
     try {
       const [latestRes, historyByTrip] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
-        driverLocationService.getTripLocationHistory(trip.id),
+        driverLocationService.getTripLocationHistory(
+          trip.id,
+          TRIP_TRACKING_HISTORY_FETCH_LIMIT,
+        ),
       ]);
       let effectivePoints = !historyByTrip.error ? historyByTrip.points : [];
       if (effectivePoints.length === 0 && driverId) {
@@ -2013,7 +2039,7 @@ export function useTripDetail({
     }
   }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp]);
 
-  // Driver location load/polling (shared across web + native detail screens).
+  // Legacy DB location fetch when broadcast tracking is off.
   useEffect(() => {
     if (!trip?.id) {
       setDriverLocation(null);
@@ -2021,8 +2047,20 @@ export function useTripDetail({
       setDriverLocationLoading(false);
       return;
     }
+    const trackingActive =
+      isTripTrackingActive(trip.status, trip.completed_at) || trackingBroadcastEnabled;
+    if (trackingActive) return;
     void fetchDriverLocationFromDb();
-  }, [trip?.id, effectiveDriverIdForLocation, fetchDriverLocationFromDb]);
+  }, [
+    trip?.id,
+    trip?.status,
+    trip?.completed_at,
+    effectiveDriverIdForLocation,
+    trackingBroadcastEnabled,
+    fetchDriverLocationFromDb,
+  ]);
+
+  // Live tracking seed/trail: TanStack Query key is [tripId, driverId] — driver change refetches once, no per-render loop.
 
   // Phase 3c: on trip status/update events, fetch latest location only — history unchanged by status transitions.
   useEffect(() => {
@@ -2032,37 +2070,85 @@ export function useTripDetail({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.updated_at, trip?.status, effectiveDriverIdForLocation, trip?.id]);
 
-  /**
-   * Phase 3c: merge driver_locations INSERTs directly from Realtime payload.
-   * Eliminates DB#13+DB#14 (latest + history re-fetch) on every location ping.
-   * Deduplicates dual-filter events (same INSERT fires once per matching filter spec).
-   */
-  useRealtimeDriverLocations(trip?.id ?? null, effectiveDriverIdForLocation, (payload) => {
-    if (payload.eventType !== 'INSERT' || !payload.new) return;
-    const raw = payload.new as Record<string, unknown>;
-    const locId = raw.id as string | undefined;
-    if (!locId || locId === lastSeenLocationIdRef.current) return;
-    lastSeenLocationIdRef.current = locId;
-    const loc: driverLocationService.DriverLocationRow = {
-      latitude:    raw.latitude as number,
-      longitude:   raw.longitude as number,
-      accuracy:    (raw.accuracy as number | null) ?? null,
-      recorded_at: raw.recorded_at as string,
-    };
-    setDriverLocation(loc);
-    setTripLocationPoints(prev => [
-      ...prev,
-      { latitude: loc.latitude, longitude: loc.longitude, recorded_at: loc.recorded_at },
-    ]);
+  useTrackingTripBroadcast({
+    tripId: trip?.id ?? null,
+    enabled: trackingBroadcastEnabled,
+    // Only the ISO timestamp escapes into React — coordinates go exclusively to TripTrackingMapStore.
+    onTimestamp: (ts) => {
+      lastBroadcastTimestampRef.current = ts;
+    },
+    onReseed: () => {
+      liveTracking.reseed();
+    },
   });
+
+  // Flush broadcast timestamp ref → React state at 1s cadence (drives "Updated X min ago" label).
+  useEffect(() => {
+    if (!trackingBroadcastEnabled) return;
+    const id = globalThis.setInterval(() => {
+      const ts = lastBroadcastTimestampRef.current;
+      if (ts) setLastSeenAt(ts);
+    }, 1000);
+    return () => globalThis.clearInterval(id);
+  }, [trackingBroadcastEnabled]);
+
+  // Geocode live position from store (broadcast path) — no driverLocation state dependency.
+  useEffect(() => {
+    if (!trackingBroadcastEnabled || !trip?.id) return;
+    const store = getTripTrackingMapStore(trip.id);
+    const unsub = store.subscribe((point) => {
+      if (!point) return;
+      const roundedLat = Math.round(point.latitude * 1000) / 1000;
+      const roundedLng = Math.round(point.longitude * 1000) / 1000;
+      const last = lastGeocodedLocRef.current;
+      if (last && last.lat === roundedLat && last.lng === roundedLng) return;
+      lastGeocodedLocRef.current = { lat: roundedLat, lng: roundedLng };
+      void resolveMapLocationLabel(point.latitude, point.longitude, { mode: 'full' }).then((label) => {
+        setDriverLocationAddress(label);
+      });
+    });
+    return unsub;
+  }, [trackingBroadcastEnabled, trip?.id]);
+
+  /**
+   * Legacy WAL path — disabled when EXPO_PUBLIC_TRACKING_BROADCAST_V1=1.
+   * Preserved for rollout; removes postgres_changes fanout at scale.
+   */
+  useRealtimeDriverLocations(
+    trackingBroadcastEnabled ? null : trip?.id ?? null,
+    trackingBroadcastEnabled ? null : effectiveDriverIdForLocation,
+    (payload) => {
+      if (payload.eventType !== "INSERT" || !payload.new) return;
+      const raw = payload.new as Record<string, unknown>;
+      const locId = raw.id as string | undefined;
+      if (!locId || locId === lastSeenLocationIdRef.current) return;
+      lastSeenLocationIdRef.current = locId;
+      const loc: driverLocationService.DriverLocationRow = {
+        latitude: raw.latitude as number,
+        longitude: raw.longitude as number,
+        accuracy: (raw.accuracy as number | null) ?? null,
+        recorded_at: raw.recorded_at as string,
+      };
+      setDriverLocation(loc);
+      setTripLocationPoints((prev) => [
+        ...prev,
+        {
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          recorded_at: loc.recorded_at,
+        },
+      ]);
+    },
+  );
 
   /**
    * Phase 3c: fallback poll fetches latest location only (not history).
    * History is established at initial mount and updated via realtime payload merge.
    * 1 DB call per 60s vs 2-3 calls previously.
+   * Disabled when broadcast is active — broadcast updates arrive at 30s cadence.
    */
   useEffect(() => {
-    if (!trip?.id || tripCompleted) return;
+    if (!trip?.id || tripCompleted || trackingBroadcastEnabled) return;
     const id = globalThis.setInterval(async () => {
       const driverId = effectiveDriverIdForLocation;
       const res = await driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id!, driverId);
@@ -2148,103 +2234,140 @@ export function useTripDetail({
     };
   }, [trip?.id, tripCompleted]);
 
-  // Driver location reverse geocoding
+  // Driver location — Mapbox/Nominatim label (no raw lat/lon in UI).
+  // When broadcast is active, the store subscriber above handles geocoding instead.
   useEffect(() => {
+    if (trackingBroadcastEnabled) return;
     if (!driverLocation) {
       setDriverLocationAddress(null);
       return;
     }
+    // Only re-geocode when position moves > ~100m (3 decimal degrees ≈ 111m).
+    const roundedLat = Math.round(driverLocation.latitude * 1000) / 1000;
+    const roundedLng = Math.round(driverLocation.longitude * 1000) / 1000;
+    const last = lastGeocodedLocRef.current;
+    if (last && last.lat === roundedLat && last.lng === roundedLng) return;
+    lastGeocodedLocRef.current = { lat: roundedLat, lng: roundedLng };
     let isActive = true;
-    safeReverseGeocode(driverLocation.latitude, driverLocation.longitude).then(
-      (results) => {
-        if (!isActive) return;
-        const addr = results[0];
-        if (!addr) return;
-        const parts = [addr.street, addr.city, addr.region].filter(Boolean);
-        setDriverLocationAddress(parts.join(", "));
-      },
-    );
-    return () => {
-      isActive = false;
-    };
-  }, [driverLocation?.latitude, driverLocation?.longitude]);
-
-  // Past location geocoding
-  useEffect(() => {
-    const past = tripLocationPoints.slice(-2).reverse();
-    setPastLocationAddresses([null, null]);
-    let isActive = true;
-    past.forEach((pt, i) => {
-      safeReverseGeocode(pt.latitude, pt.longitude).then((results) => {
-        if (!isActive) return;
-        const addr = results[0];
-        if (!addr) return;
-        const parts = [addr.street, addr.city].filter(Boolean);
-        setPastLocationAddresses((prev) => {
-          const next: [string | null, string | null] = [...prev];
-          next[i] = parts.join(", ") || null;
-          return next;
-        });
-      });
+    void resolveMapLocationLabel(
+      driverLocation.latitude,
+      driverLocation.longitude,
+      { mode: "full" },
+    ).then((label) => {
+      if (!isActive) return;
+      setDriverLocationAddress(label);
     });
     return () => {
       isActive = false;
     };
-  }, [tripLocationPoints]);
+  }, [driverLocation?.latitude, driverLocation?.longitude, trackingBroadcastEnabled]);
 
-  // Location trail geocoding — reverse-geocode up to 10 most recent pings
+  // Past location labels (last 2 checkpoints) for map stage markers
   useEffect(() => {
-    const points = tripLocationPoints.slice(-10);
-    // Seed with null names immediately so the list renders while geocoding
-    setLocationTrailWithNames(
-      tripLocationPoints.map((p) => ({ ...p, locationName: null })),
-    );
-    if (points.length === 0) return;
+    const past = liveTracking.trail.slice(-2).reverse();
+    setPastLocationAddresses([null, null]);
+    if (past.length === 0) return;
     let isActive = true;
-    (async () => {
-      for (let i = 0; i < points.length; i++) {
-        if (!isActive) return;
-        const pt = points[i];
-        const results = await safeReverseGeocode(pt.latitude, pt.longitude);
-        if (!isActive) return;
-        const addr = results[0];
-        let locationName: string | null = null;
-        if (addr) {
-          const street = addr.street?.trim() || null;
-          const city = addr.city?.trim() || null;
-          const state = addr.region?.trim() || null;
-          if (street) {
-            locationName = [street, city, state].filter(Boolean).join(", ");
-          } else {
-            locationName = [city, state].filter(Boolean).join(", ") || null;
-          }
-        }
-        // Map back to the original index in tripLocationPoints
-        const originalIndex = tripLocationPoints.length - points.length + i;
-        setLocationTrailWithNames((prev) => {
-          if (!isActive) return prev;
-          const next = [...prev];
-          if (next[originalIndex]) {
-            next[originalIndex] = { ...next[originalIndex], locationName };
-          }
-          return next;
-        });
-        if (i < points.length - 1) {
-          await new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, 300);
-            // Allow cleanup to cancel the delay
-            const check = () => { if (!isActive) { clearTimeout(timer); resolve(); } };
-            const interval = setInterval(check, 50);
-            setTimeout(() => clearInterval(interval), 350);
+    past.forEach((pt, i) => {
+      void resolveMapLocationLabel(pt.latitude, pt.longitude, { mode: "city" }).then(
+        (label) => {
+          if (!isActive) return;
+          setPastLocationAddresses((prev) => {
+            const next: [string | null, string | null] = [...prev];
+            next[i] = label;
+            return next;
           });
-        }
-      }
-    })();
+        },
+      );
+    });
     return () => {
       isActive = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tripLocationPoints]);
+  }, [liveTracking.trail]);
+
+  // Location trail — batch reverse geocode (up to 10 recent checkpoints)
+  useEffect(() => {
+    type TrailRow = { latitude: number; longitude: number; recorded_at: string; locationName: string | null };
+    setLocationTrailWithNames(
+      liveTracking.trail.map((p) => ({ ...p, locationName: null })),
+    );
+    if (liveTracking.trail.length === 0) return;
+    let isActive = true;
+    void resolveMapLocationLabelsBatch(liveTracking.trail, {
+      maxResolve: TRACKING_LOCATION_GEOCODE_MAX,
+      mode: "full",
+      onProgress: (resolved) => {
+        if (isActive) setLocationTrailWithNames(resolved as TrailRow[]);
+      },
+    }).then((resolved) => {
+      if (isActive) setLocationTrailWithNames(resolved as TrailRow[]);
+    });
+    return () => {
+      isActive = false;
+    };
+  }, [liveTracking.trail]);
+
+  // Clear "waiting for new driver" when presence arrives for the assigned driver.
+  useEffect(() => {
+    if (!waitingForNewDriverLocation) return;
+    const driverId = trip?.driver_id;
+    const seed = liveTracking.seedPoint;
+    if (
+      driverId &&
+      seed &&
+      seed.driver_id === driverId &&
+      seed.trip_id === trip?.id
+    ) {
+      setWaitingForNewDriverLocation(false);
+    }
+  }, [
+    waitingForNewDriverLocation,
+    trip?.driver_id,
+    trip?.id,
+    liveTracking.seedPoint,
+  ]);
+
+  useEffect(() => {
+    if (!waitingForNewDriverLocation) return;
+    const t = setTimeout(() => setWaitingForNewDriverLocation(false), 60_000);
+    return () => clearTimeout(t);
+  }, [waitingForNewDriverLocation]);
+
+  /**
+   * After reassign: refresh trip row, assignment audit, finance labels, documents, adjustments, OTP.
+   * Reseed is driven by effectiveDriverIdForLocation effect — not called directly here
+   * to avoid stale driver_id on seed.
+   *
+   * Intentionally excluded vs handleAssignmentUpdated:
+   * - refetchTransactionsRef — ledger transaction list unchanged by driver/vehicle swap alone
+   * - no duplicate audit pipeline beyond loadAssignmentAudit()
+   */
+  const handleReassignCompleted = useCallback(
+    async (meta?: { driverIdChanged?: boolean }) => {
+      await load();
+      loadAssignmentAudit();
+      loadAdjustments();
+      loadTripDocuments();
+      setFinanceRefreshKey((k) => k + 1);
+      loadTripOtp();
+      if (meta?.driverIdChanged) {
+        setWaitingForNewDriverLocation(true);
+      }
+      if (bundleActive && tripId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+      }
+    },
+    [
+      load,
+      loadAssignmentAudit,
+      loadAdjustments,
+      loadTripDocuments,
+      loadTripOtp,
+      bundleActive,
+      tripId,
+      queryClient,
+    ],
+  );
 
   return {
     // Data
@@ -2311,6 +2434,18 @@ export function useTripDetail({
     trackingMapDestinationCoordinate,
     isDriverOffline,
     effectiveDriverIdForLocation,
+    /** @deprecated Use useTrackingState(tripId, tripStatus).broadcastActive instead. */
+    trackingActive: trackingBroadcastEnabled,
+    trackingTrail: liveTracking.trail,
+    lastSeenAt,
+    requestDriverPing: driverPing.requestPing,
+    /** @deprecated Use useTrackingState(tripId, tripStatus, overrides).isPinging instead. */
+    isPingingDriver: driverPing.isPinging,
+    /** @deprecated Use useTrackingState(tripId, tripStatus, overrides).lastPingRespondedAt instead. */
+    lastPingRespondedAt: driverPing.lastPingRespondedAt,
+    /** UI-only — do not pass through useTrackingState overrides. True for 3s after ping timeout. */
+    isPingTimedOut: driverPing.pingTimedOut,
+    waitingForNewDriverLocation,
 
     // Documents
     tripDocuments,
@@ -2358,6 +2493,7 @@ export function useTripDetail({
     load,
     handleRefresh,
     handleAssignmentUpdated,
+    handleReassignCompleted,
     openAddEntry,
     openAddExpense,
     handleAcceptPartnerView,

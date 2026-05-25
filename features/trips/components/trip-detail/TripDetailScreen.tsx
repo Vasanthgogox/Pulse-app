@@ -31,6 +31,7 @@ import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Image,
     Linking,
@@ -66,11 +67,21 @@ import {
 } from "../../services/trips.service";
 import { AggregateTripOtpPanel } from "../AggregateTripOtpPanel";
 import { TripAssignmentBlock } from "../TripAssignmentBlock";
+import { ReassignSheet } from "../reassign/ReassignSheet";
+import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
+import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripMap } from "./TripMap";
+import { ManifestDriverPingList } from "./ManifestDriverPingList";
+import { formatLocationUpdatedAt } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { useTripDetail } from "./hooks/useTripDetail";
+import { useTrackingState } from "@/features/tracking/hooks/useTrackingState";
+import { LiveTrackingModal } from "./modals/LiveTrackingModal";
+import { isTripTrackingActive, defaultTrackingState } from "@/features/trips/utils/tripTrackingStatus.util";
+import { MAP_LOCATION_LABEL_LOADING } from "@/lib/mapLocationLabel.service";
+import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import {
@@ -294,6 +305,7 @@ export default function TripDetailScreen({
   const [inlineAdjReason, setInlineAdjReason] = useState("");
   const [inlineAdjOtherReason, setInlineAdjOtherReason] = useState("");
   const [showAssignmentManager, setShowAssignmentManager] = useState(false);
+  const [showReassignSheet, setShowReassignSheet] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
   const [provisionVoidReason, setProvisionVoidReason] = useState("");
 
@@ -325,6 +337,17 @@ export default function TripDetailScreen({
     onBack,
   });
 
+  const trackingState = useTrackingState(
+    detail.trip?.id ?? null,
+    detail.trip?.status ?? null,
+    {
+      isPinging: detail.isPingingDriver,
+      lastPingRespondedAt: detail.lastPingRespondedAt,
+      lastSeenAt: detail.lastSeenAt,
+    },
+  );
+  const isPingTimedOut = detail.isPingTimedOut ?? false;
+
   useEffect(() => {
     const tr = detail.trip;
     if (!tr) return;
@@ -332,6 +355,17 @@ export default function TripDetailScreen({
       setShowAssignmentManager(false);
     }
   }, [detail.trip, detail.canAssign]);
+
+  // Must run before any early return (loading/error) — Rules of Hooks.
+  // One cached/deduped migration RPC per aggregate assignable trip (not per render).
+  const tripForReassignGate = detail.trip;
+  const reassignMigrationCheckEnabled =
+    !!tripForReassignGate &&
+    isAggregateTrip(tripForReassignGate) &&
+    detail.canAssign &&
+    !isTripCompleted(tripForReassignGate);
+  const { migrationBlocked: reassignMigrationBlocked } =
+    useReassignMigrationGate(reassignMigrationCheckEnabled);
 
   const goToVehicleGalleryIndex = useCallback(
     (nextIndex: number, animated = true) => {
@@ -665,18 +699,21 @@ export default function TripDetailScreen({
         return tr.updated_at ?? tr.created_at ?? null;
       return null;
     })();
-    const loc = detail.driverLocation;
-    const coordLine =
-      loc && Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
-        ? `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}`
-        : null;
+    const latestPing = detail.driverLocation;
     const inTransitLocation =
       detail.driverLocationAddress?.trim() ||
-      coordLine ||
-      "Route in progress";
-    const inTransitDetails =
-      coordLine != null
-        ? `Last GPS checkpoint ${coordLine}. Vehicle moving towards destination through planned route.`
+      (latestPing ? MAP_LOCATION_LABEL_LOADING : "Route in progress");
+    const inTransitTime = latestPing?.recorded_at ?? tr.started_at;
+    const pingCount = (detail.locationTrailWithNames ?? detail.tripLocationPoints)
+      .length;
+    const inTransitDetails = detail.driverLocationAddress?.trim()
+      ? `Last known position: ${detail.driverLocationAddress.trim()}. ${
+          pingCount > 0
+            ? `${pingCount} GPS ping${pingCount === 1 ? "" : "s"} recorded on this trip.`
+            : "Vehicle moving towards destination through planned route."
+        }`
+      : pingCount > 0
+        ? `${pingCount} GPS ping${pingCount === 1 ? "" : "s"} recorded. Resolving latest position…`
         : "Vehicle moving towards destination through planned route.";
     const statusLc = (tr.status ?? "").toLowerCase();
     const driverAcceptedAtIso: string | null = (() => {
@@ -746,8 +783,8 @@ export default function TripDetailScreen({
       {
         status: "In-Transit",
         location: inTransitLocation,
-        time: tr.started_at
-          ? new Date(tr.started_at).toLocaleTimeString("en-IN", {
+        time: inTransitTime
+          ? new Date(inTransitTime).toLocaleTimeString("en-IN", {
               hour: "2-digit",
               minute: "2-digit",
             })
@@ -771,7 +808,27 @@ export default function TripDetailScreen({
     detail.assignmentAuditRows,
     detail.driverLocation,
     detail.driverLocationAddress,
+    detail.locationTrailWithNames,
+    detail.tripLocationPoints,
   ]);
+
+  const manifestDriverPings = useMemo(() => {
+    const trail = detail.locationTrailWithNames ?? [];
+    const source =
+      trail.length > 0
+        ? trail
+        : detail.tripLocationPoints.map((p) => ({
+            ...p,
+            locationName: null as string | null,
+          }));
+    return [...source]
+      .reverse()
+      .slice(0, MANIFEST_PULSE_PING_DISPLAY_MAX)
+      .map((p) => ({
+        recorded_at: p.recorded_at,
+        locationName: "locationName" in p ? p.locationName : null,
+      }));
+  }, [detail.locationTrailWithNames, detail.tripLocationPoints]);
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -1235,6 +1292,8 @@ export default function TripDetailScreen({
 
   const tripCompleted = isTripCompleted(trip);
   const canChangeManifestAssets = detail.canAssign && !tripCompleted;
+  const canOpenReassign =
+    canChangeManifestAssets && (!isAggregate || !reassignMigrationBlocked);
   const effectiveStatusLower = tripCompleted
     ? "completed"
     : String(trip.status ?? "assigned").toLowerCase();
@@ -2315,6 +2374,24 @@ export default function TripDetailScreen({
 
             {activeTab === "trip" ? (
               <View style={styles.refTrackWrap}>
+                {isTripTrackingActive(trip?.status, trip?.completed_at) ? (
+                  <TouchableOpacity
+                    style={styles.refLiveTrackBanner}
+                    onPress={() => detail.setShowTrackingModal(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Feather
+                      name="map-pin"
+                      size={15}
+                      color="#818cf8"
+                      style={styles.refLiveTrackBannerIcon}
+                    />
+                    <Text style={styles.refLiveTrackBannerLabel}>
+                      Live Tracking
+                    </Text>
+                    <Feather name="chevron-right" size={15} color="#94a3b8" />
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.refTimelineCard}>
                   {journeyLogs.map((log, index) => {
                     const expanded = expandedLog === index;
@@ -3096,6 +3173,9 @@ export default function TripDetailScreen({
                                     {log.details}
                                   </Text>
                                 ) : null}
+                                {expanded && index === 3 ? (
+                                  <ManifestDriverPingList pings={manifestDriverPings} />
+                                ) : null}
                                 {/* Business simulation log badges */}
                                 {stepSimLogs.map((sim, si) => (
                                   <View key={si} style={neoStyles.simLogBadge}>
@@ -3116,9 +3196,6 @@ export default function TripDetailScreen({
                                             hour: "2-digit",
                                             minute: "2-digit",
                                           })}
-                                          {sim.lat && sim.lng
-                                            ? `  ·  ${sim.lat.toFixed(4)}°N, ${sim.lng.toFixed(4)}°E`
-                                            : ""}
                                         </Text>
                                       ) : null}
                                     </View>
@@ -3231,6 +3308,9 @@ export default function TripDetailScreen({
 
                     <View style={neoStyles.radarCard}>
                       <View style={neoStyles.radarMapLayer}>
+                        <WaitingForDriverLocationOverlay
+                          visible={detail.waitingForNewDriverLocation}
+                        />
                         <TripMap
                           source={(trip.pickup_area ?? "").trim() || undefined}
                           destination={
@@ -3247,7 +3327,7 @@ export default function TripDetailScreen({
                               ? undefined
                               : (detail.driverLocation ?? undefined)
                           }
-                          dbLocationTrail={detail.tripLocationPoints}
+                          dbLocationTrail={detail.trackingTrail ?? detail.tripLocationPoints}
                           truckStatus={
                             detail.tripCompleted || !detail.driverLocation
                               ? null
@@ -3264,30 +3344,61 @@ export default function TripDetailScreen({
                           }
                           height="100%"
                           onDistanceCalculated={setMapRouteDistanceKm}
+                          tripId={trip.id}
+                          trackingEnabled={trackingState?.broadcastActive ?? false}
                         />
                       </View>
-                      <View style={neoStyles.radarTopLeft}>
-                        <TouchableOpacity
-                          style={neoStyles.radarControl}
-                          onPress={openTripDirectionsInMaps}
-                          activeOpacity={0.85}
-                        >
-                          <Feather name="compass" size={18} color="#fff" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={neoStyles.radarControl}
-                          activeOpacity={0.85}
-                        >
-                          <Feather name="layers" size={18} color="#fff" />
-                        </TouchableOpacity>
-                      </View>
-                      <View style={neoStyles.radarLive}>
+                      <View style={neoStyles.radarLive} pointerEvents="none">
                         <View style={neoStyles.radarLiveDot} />
                         <Text style={neoStyles.radarLiveText}>
                           Live Telemetry
                         </Text>
                       </View>
-                      <View style={neoStyles.radarBottom}>
+                      {(trackingState?.broadcastActive ?? false) ? (
+                        <TouchableOpacity
+                          style={[
+                            neoStyles.radarPingBtn,
+                            isPingTimedOut && neoStyles.radarPingBtnTimedOut,
+                            (trackingState?.isPinging ?? false) && neoStyles.radarPingBtnActive,
+                          ]}
+                          onPress={detail.requestDriverPing}
+                          disabled={trackingState?.isPinging ?? false}
+                          activeOpacity={0.75}
+                        >
+                          {(trackingState?.isPinging ?? false) ? (
+                            <ActivityIndicator size="small" color="#60a5fa" />
+                          ) : isPingTimedOut ? (
+                            <Feather name="alert-circle" size={14} color="#f59e0b" />
+                          ) : (
+                            <Feather name="navigation" size={14} color="#60a5fa" />
+                          )}
+                          <Text
+                            style={[
+                              neoStyles.radarPingText,
+                              isPingTimedOut && neoStyles.radarPingTextTimedOut,
+                            ]}
+                          >
+                            {(trackingState?.isPinging ?? false)
+                              ? "Pinging…"
+                              : isPingTimedOut
+                                ? "No response"
+                                : "Ping Driver"}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {isTripTrackingActive(trip?.status, trip?.completed_at) ? (
+                        <TouchableOpacity
+                          style={neoStyles.radarLiveTrackBtn}
+                          onPress={() => detail.setShowTrackingModal(true)}
+                          activeOpacity={0.75}
+                        >
+                          <Feather name="map-pin" size={14} color="#818cf8" />
+                          <Text style={neoStyles.radarLiveTrackText}>
+                            Live Tracking
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <View style={neoStyles.radarBottom} pointerEvents="box-none">
                         <View style={neoStyles.radarBottomLeft}>
                           <Text style={neoStyles.radarMetaLabel}>
                             Active Node
@@ -3304,14 +3415,22 @@ export default function TripDetailScreen({
                         </View>
                         <View style={neoStyles.radarBottomRight}>
                           <Text style={neoStyles.radarMetaLabel}>
-                            Distance / ETA
+                            {(trackingState?.lastPingRespondedAt ?? null)
+                              ? "Last ping"
+                              : "Distance / ETA"}
                           </Text>
-                          <Text style={neoStyles.radarSpeed}>
-                            {resolvedDistanceLabel ?? "Calculating"}{" "}
-                            <Text style={neoStyles.radarSpeedUnit}>
-                              · ETA {trackingEtaLabel}
+                          {(trackingState?.lastPingRespondedAt ?? null) ? (
+                            <Text style={neoStyles.radarSpeed}>
+                              {trackingState?.lastSeenLabel ?? ""}
                             </Text>
-                          </Text>
+                          ) : (
+                            <Text style={neoStyles.radarSpeed}>
+                              {resolvedDistanceLabel ?? "Calculating"}{" "}
+                              <Text style={neoStyles.radarSpeedUnit}>
+                                · ETA {trackingEtaLabel}
+                              </Text>
+                            </Text>
+                          )}
                         </View>
                       </View>
                     </View>
@@ -3977,6 +4096,9 @@ export default function TripDetailScreen({
                     )}
                 </View>
                 <View style={dStyles.telemetryWrap}>
+                  <WaitingForDriverLocationOverlay
+                    visible={detail.waitingForNewDriverLocation}
+                  />
                   <TripMap
                     source={(trip.pickup_area ?? "").trim() || undefined}
                     destination={(trip.drop_location ?? "").trim() || undefined}
@@ -3991,9 +4113,11 @@ export default function TripDetailScreen({
                         ? undefined
                         : (detail.driverLocation ?? undefined)
                     }
-                    dbLocationTrail={detail.tripLocationPoints}
+                    dbLocationTrail={detail.trackingTrail ?? detail.tripLocationPoints}
                     height={mapHeight}
                     onDistanceCalculated={setMapRouteDistanceKm}
+                    tripId={trip.id}
+                    trackingEnabled={trackingState?.broadcastActive ?? false}
                   />
                 </View>
               </View>
@@ -4135,16 +4259,34 @@ export default function TripDetailScreen({
             </View>
 
             {/* ── Driver / Vehicle + Documents ── */}
+            {isAggregate && reassignMigrationBlocked ? (
+              <View
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: Theme.warningMuted,
+                  borderWidth: 1,
+                  borderColor: Theme.warning,
+                }}
+              >
+                <Text style={{ fontSize: 13, color: Theme.textPrimary, lineHeight: 18 }}>
+                  Reassignment is unavailable until database migration 20260805140000 is
+                  applied (preserves trip stage on reassign). Contact your admin to run db
+                  push.
+                </Text>
+              </View>
+            ) : null}
             <View style={dStyles.row}>
               <View style={dStyles.bottomLeft}>
                 <View style={dStyles.card}>
                   <View style={dStyles.cardHeaderRowInline}>
                     <Text style={dStyles.cardMicroLabel}>PRIMARY DRIVER</Text>
-                    {detail.canAssign ? (
+                    {canOpenReassign ? (
                       <TouchableOpacity
                         style={dStyles.reassignInlineBtn}
                         activeOpacity={0.85}
-                        onPress={() => setShowAssignmentManager(true)}
+                        onPress={() => setShowReassignSheet(true)}
                       >
                         <Text style={dStyles.reassignInlineBtnText}>
                           Reassign
@@ -4194,11 +4336,11 @@ export default function TripDetailScreen({
                 <View style={dStyles.card}>
                   <View style={dStyles.cardHeaderRowInline}>
                     <Text style={dStyles.cardMicroLabel}>ASSIGNED VEHICLE</Text>
-                    {detail.canAssign ? (
+                    {canOpenReassign ? (
                       <TouchableOpacity
                         style={dStyles.reassignInlineBtn}
                         activeOpacity={0.85}
-                        onPress={() => setShowAssignmentManager(true)}
+                        onPress={() => setShowReassignSheet(true)}
                       >
                         <Text style={dStyles.reassignInlineBtnText}>
                           Reassign
@@ -4438,6 +4580,9 @@ export default function TripDetailScreen({
                     }
                     mapPreview={
                       <View style={styles.telemetryWrap}>
+                        <WaitingForDriverLocationOverlay
+                          visible={detail.waitingForNewDriverLocation}
+                        />
                         <TripMap
                           source={(trip.pickup_area ?? "").trim() || undefined}
                           destination={
@@ -4454,9 +4599,11 @@ export default function TripDetailScreen({
                               ? undefined
                               : (detail.driverLocation ?? undefined)
                           }
-                          dbLocationTrail={detail.tripLocationPoints}
+                          dbLocationTrail={detail.trackingTrail ?? detail.tripLocationPoints}
                           height={520}
                           onDistanceCalculated={setMapRouteDistanceKm}
+                          tripId={trip.id}
+                          trackingEnabled={trackingState?.broadcastActive ?? false}
                         />
                         <View style={styles.telemetryOverlay}>
                           <FontAwesome
@@ -4544,7 +4691,7 @@ export default function TripDetailScreen({
                             <View style={styles.locationLogContent}>
                               <Text style={styles.locationLogTime}>{timeStr}</Text>
                               <Text style={styles.locationLogName} numberOfLines={2}>
-                                {locationName ?? "Location ping"}
+                                {locationName ?? "Resolving location…"}
                               </Text>
                             </View>
                           </View>
@@ -5119,6 +5266,32 @@ export default function TripDetailScreen({
         variant="warning"
       />
 
+      {trip.organization_id ? (
+        <ReassignSheet
+          visible={showReassignSheet}
+          onClose={() => setShowReassignSheet(false)}
+          trip={trip}
+          organizationId={currentOrganization?.id ?? trip.organization_id}
+          isAggregate={isAggregate}
+          canAssign={detail.canAssign}
+          currentUserId={detail.currentUserId}
+          driverAssignOrgId={isAggregate ? (currentOrganization?.id ?? null) : null}
+          currentDriverName={detail.driverName}
+          currentVehicleLabel={
+            isAggregate
+              ? detail.displayVehicleFromInput.trim() ||
+                detail.vehicleLabel ||
+                null
+              : detail.vehicleLabel
+          }
+          onCompleted={detail.handleReassignCompleted}
+          onReloadTrip={detail.load}
+          onVehicleDisplayChange={(value) => {
+            detail.setDisplayVehicleFromInput(formatIndianVehicleNumber(value ?? ""));
+          }}
+        />
+      ) : null}
+
       <Modal
         visible={showAssignmentManager}
         animationType="slide"
@@ -5460,6 +5633,26 @@ export default function TripDetailScreen({
           </View>
         </View>
       </Modal>
+
+      <LiveTrackingModal
+        visible={detail.showTrackingModal ?? false}
+        onClose={() => detail.setShowTrackingModal(false)}
+        trip={trip}
+        trackingState={trackingState ?? defaultTrackingState}
+        vehicleLabel={detail.vehicleLabel}
+        locationLabels={detail.trackingMapLocationLabels}
+        originCoordinate={detail.trackingMapOriginCoordinate}
+        destinationCoordinate={detail.trackingMapDestinationCoordinate}
+        tripLocationPoints={detail.tripLocationPoints}
+        locationAddress={detail.driverLocationAddress}
+        driverActivityTimelineRows={detail.driverActivityTimelineRows}
+        expandedTimelineEntryIds={detail.expandedTimelineEntryIds}
+        onToggleTimelineItem={detail.toggleTimelineItemExpanded}
+        assignmentDriverNames={detail.assignmentDriverNames}
+        assignmentVehicleLabels={detail.assignmentVehicleLabels}
+        driverName={detail.driverName}
+        currentUserId={detail.currentUserId}
+      />
     </View>
   );
 }
@@ -6166,7 +6359,11 @@ const dStyles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  telemetryWrap: { borderRadius: 10 },
+  telemetryWrap: {
+    borderRadius: 10,
+    position: "relative",
+    overflow: "hidden",
+  },
   telemetryBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -7211,6 +7408,59 @@ const neoStyles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
+  },
+  radarPingBtn: {
+    position: "absolute",
+    bottom: 88,
+    right: 14,
+    zIndex: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 16,
+    backgroundColor: "rgba(96,165,250,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,0.28)",
+  },
+  radarPingBtnActive: {
+    backgroundColor: "rgba(96,165,250,0.22)",
+    borderColor: "rgba(96,165,250,0.5)",
+  },
+  radarPingBtnTimedOut: {
+    backgroundColor: "rgba(245,158,11,0.12)",
+    borderColor: "rgba(245,158,11,0.28)",
+  },
+  radarPingText: {
+    color: "#60a5fa",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+  radarPingTextTimedOut: {
+    color: "#f59e0b",
+  },
+  radarLiveTrackBtn: {
+    position: "absolute",
+    bottom: 130,
+    right: 14,
+    zIndex: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 16,
+    backgroundColor: "rgba(129,140,248,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(129,140,248,0.28)",
+  },
+  radarLiveTrackText: {
+    color: "#818cf8",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
   radarBottom: {
     position: "absolute",
@@ -8708,6 +8958,26 @@ const neoStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   refTrackWrap: { gap: 14 },
+  refLiveTrackBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: DS_CARD,
+    borderWidth: 0.5,
+    borderColor: DS_BORDER,
+    borderRadius: 16,
+  },
+  refLiveTrackBannerIcon: {
+    marginRight: 10,
+  },
+  refLiveTrackBannerLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    color: DS_TEXT,
+  },
   refHeroBridgeRow: {
     flexDirection: "row",
     alignItems: "center",

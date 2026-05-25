@@ -1,4 +1,8 @@
 import Theme from "@/constants/Theme";
+import {
+  createTripMapMarkerElement,
+  tripMapMarkerRoleFromId,
+} from "@/lib/mapMarkerIcons.util";
 import React, { useEffect, useRef } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 
@@ -441,42 +445,14 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           const lat = m.coordinate.latitude;
           const lng = m.coordinate.longitude;
           const color = m.color || Theme.driverEmerald;
-
-          // Pin-style marker: circle body + label chip
-          const el = document.createElement("div");
-          el.style.display = "flex";
-          el.style.flexDirection = "column";
-          el.style.alignItems = "center";
-          el.style.gap = "3px";
-          el.style.cursor = "pointer";
-
-          const dot = document.createElement("div");
-          dot.style.width = "16px";
-          dot.style.height = "16px";
-          dot.style.borderRadius = "50%";
-          dot.style.background = color;
-          dot.style.border = "3px solid #ffffff";
-          dot.style.boxShadow = "0 2px 8px rgba(0,0,0,0.45)";
-          el.appendChild(dot);
-
-          if (m.label) {
-            const chip = document.createElement("div");
-            chip.textContent = m.label;
-            chip.style.background = "#0f141a";
-            chip.style.color = "#f1f5f9";
-            chip.style.fontSize = "10px";
-            chip.style.fontWeight = "700";
-            chip.style.padding = "2px 7px";
-            chip.style.borderRadius = "4px";
-            chip.style.whiteSpace = "nowrap";
-            chip.style.boxShadow = "0 1px 4px rgba(0,0,0,0.5)";
-            chip.style.letterSpacing = "0.3px";
-            el.appendChild(chip);
-          }
+          const role = tripMapMarkerRoleFromId(m.id);
+          const el = createTripMapMarkerElement(role, m.label, color);
+          const anchor =
+            role === "origin" || role === "destination" ? "bottom" : "center";
 
           const marker = new maplibregl.Marker({
             element: el,
-            anchor: "top",
+            anchor,
           })
             .setLngLat([lng, lat])
             .addTo(mapInstance);

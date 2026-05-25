@@ -7,19 +7,29 @@ import React, {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
-import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
-import { getLinkedDriversForCurrentUser } from "@/features/drivers/services/drivers.service";
-import * as tripsService from "@/features/trips/services/trips.service";
-import * as chatService from "../services/chat.service";
+} from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDriverChatConversationsQuery } from '@/features/chat/hooks/useDriverChatConversationsQuery';
+import { driverChatConversationsQueryKey } from '@/features/chat/hooks/useDriverChatConversationsQuery';
+import { useDriverHomeDriversQuery } from '@/lib/queries/useDriverHomeDriversQuery';
+import * as tripsService from '@/features/trips/services/trips.service';
+import * as chatService from '@/features/chat/services/chat.service';
 import type {
   TripConversation,
   TripConversationRow,
   TripMessageRow,
-} from "../types/chat.types";
-import type { TripRow } from "@/features/trips/services/trips.service";
+} from '@/features/chat/types/chat.types';
+import type { TripRow } from '@/features/trips/services/trips.service';
+import { notifyTripChatMessagesChanged } from '@/lib/tripChatInvalidate';
+import {
+  appendDriverChatMessageToCache,
+  driverChatMessagesQueryKey,
+  removeDriverChatMessageFromCache,
+  replaceDriverChatMessageInCache,
+} from '@/features/chat/utils/driverChatMessageCache.util';
+import type { InfiniteData } from '@tanstack/react-query';
+import type { DriverChatMessagesPage } from '@/features/chat/utils/driverChatMessageCache.util';
+import { useQueryClient } from '@tanstack/react-query';
 
 function buildMinimalDriverTripConversation(
   trip: TripRow,
@@ -28,9 +38,9 @@ function buildMinimalDriverTripConversation(
   const perDriver = trip.driver_display_trip_id?.trim();
   return {
     ...row,
-    trip_number: perDriver || trip.trip_number || "",
-    pickup_area: trip.pickup_area ?? "",
-    drop_location: trip.drop_location ?? "",
+    trip_number: perDriver || trip.trip_number || '',
+    pickup_area: trip.pickup_area ?? '',
+    drop_location: trip.drop_location ?? '',
     messages: [],
   };
 }
@@ -43,7 +53,6 @@ interface DriverChatContextType {
   markAsRead: (conversationId: string) => Promise<void>;
   getTotalUnreadCount: () => number;
   refreshConversations: () => Promise<TripConversation[]>;
-  /** Ensures the driver's 1:1 trip thread exists and reloads conversations; returns conversation id or null. */
   ensureDriverTripConversation: (tripId: string) => Promise<string | null>;
 }
 
@@ -51,7 +60,7 @@ const DriverChatContext = createContext<DriverChatContextType | undefined>(undef
 
 export function useDriverChat() {
   const ctx = useContext(DriverChatContext);
-  if (!ctx) throw new Error("useDriverChat must be used within a DriverChatProvider");
+  if (!ctx) throw new Error('useDriverChat must be used within a DriverChatProvider');
   return ctx;
 }
 
@@ -63,117 +72,68 @@ export function DriverChatProvider({
   isActive?: boolean;
 }) {
   const { profile } = useAuth();
-  const uid = (profile as any)?.uid ?? null;
+  const uid = (profile as { uid?: string })?.uid ?? null;
+  const queryClient = useQueryClient();
 
-  const [driverIds, setDriverIds] = useState<string[]>([]);
-  const [conversations, setConversations] = useState<TripConversation[]>([]);
-  const conversationsRef = useRef(conversations);
-  conversationsRef.current = conversations;
-  const loadConversationsRef = useRef<() => Promise<TripConversation[]>>(async () => []);
-  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastFocusLoadAtRef = useRef<number>(0);
-  const [isLoading, setIsLoading] = useState(false);
   const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingMarkReadRef = useRef<Set<string>>(new Set());
 
-  // Resolve driver record IDs from current user
-  useEffect(() => {
-    if (!isActive) return;
-    if (!uid) { setDriverIds([]); return; }
-    getLinkedDriversForCurrentUser(uid)
-      .then(({ drivers }) => setDriverIds(drivers.map((d) => d.id)))
-      .catch(() => setDriverIds([]));
-  }, [isActive, uid]);
+  const { driverIds, driverIdsKey } = useDriverHomeDriversQuery(isActive ? uid : null);
 
-  const loadConversations = useCallback(async (): Promise<TripConversation[]> => {
-    if (!driverIds.length) {
-      setConversations([]);
-      setIsLoading(false);
-      return [];
-    }
-    setIsLoading(true);
-    try {
-      const data = await chatService.getConversationsByDriverIds(driverIds);
-      setConversations((prev) => {
-        const byId = new Map<string, TripConversation>();
-        for (const c of data) {
-          byId.set(c.id, c);
-        }
-        for (const c of prev) {
-          if (
-            !byId.has(c.id) &&
-            c.driver_id &&
-            driverIds.includes(String(c.driver_id))
-          ) {
-            byId.set(c.id, c);
-          }
-        }
-        return Array.from(byId.values()).sort((a, b) => {
-          const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-          const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-          return tb - ta;
-        });
-      });
-      return data;
-    } catch {
-      setConversations([]);
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [driverIds]);
-  loadConversationsRef.current = loadConversations;
+  const {
+    conversations,
+    isLoading,
+    refreshConversations: refetchConversations,
+  } = useDriverChatConversationsQuery(isActive ? driverIds : []);
 
-  // 30s cooldown on focus load — Realtime handles live updates in between
-  useEffect(() => {
-    if (!isActive) return;
-    const now = Date.now();
-    if (now - lastFocusLoadAtRef.current < 30_000) return;
-    lastFocusLoadAtRef.current = now;
-    void loadConversations();
-  }, [isActive, loadConversations]);
-
-  const queueRefreshConversations = useCallback(() => {
-    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
-    refreshDebounceRef.current = setTimeout(() => {
-      void loadConversationsRef.current();
-    }, 350);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
-      if (batchFlushRef.current) clearTimeout(batchFlushRef.current);
-      msgQueueRef.current = [];
-    };
-  }, []);
+  const patchConversationListPreview = useCallback(
+    (conversationId: string, preview: string, at: string) => {
+      if (!driverIdsKey) return;
+      queryClient.setQueryData<TripConversation[]>(
+        driverChatConversationsQueryKey(driverIdsKey),
+        (old) =>
+          (old ?? []).map((c) =>
+            c.id === conversationId
+              ? {
+                  ...c,
+                  last_message_at: at,
+                  last_message_preview: preview.slice(0, 120),
+                }
+              : c,
+          ),
+      );
+    },
+    [driverIdsKey, queryClient],
+  );
 
   const ensureDriverTripConversation = useCallback(
     async (tripId: string): Promise<string | null> => {
-      const id = String(tripId ?? "").trim();
+      const id = String(tripId ?? '').trim();
       if (!id || !uid) return null;
+
       let resolvedDriverIds = driverIds;
       if (!resolvedDriverIds.length) {
         const { drivers } = await getLinkedDriversForCurrentUser(uid);
         resolvedDriverIds = drivers.map((d) => d.id);
-        if (resolvedDriverIds.length) {
-          setDriverIds(resolvedDriverIds);
-        }
+        if (resolvedDriverIds.length) setDriverIds(resolvedDriverIds);
       }
       if (!resolvedDriverIds.length) return null;
+
       const { error, trip } = await tripsService.getTripById(id);
       if (error || !trip?.driver_id || !trip.organization_id) return null;
       const assignedDriverId = String(trip.driver_id);
       if (!resolvedDriverIds.some((d) => String(d) === assignedDriverId)) return null;
+
       const partyName =
         (profile as { full_name?: string; displayName?: string })?.full_name ||
         (profile as { displayName?: string })?.displayName ||
-        "Driver";
+        'Driver';
+
       let created: TripConversationRow;
       try {
         created = await chatService.getOrCreateConversation({
           tripId: trip.id,
-          partyType: "driver",
+          partyType: 'driver',
           partyName,
           organizationId: trip.organization_id,
           partyId: trip.driver_id,
@@ -182,143 +142,56 @@ export function DriverChatProvider({
         return null;
       }
 
-      // Merge immediately so the chat UI has a row even if list refetch lags or RLS differs on SELECT.
       const minimal = buildMinimalDriverTripConversation(trip, created);
-      setConversations((prev) => {
-        if (prev.some((c) => c.id === minimal.id)) {
-          return prev.map((c) => (c.id === minimal.id ? { ...c, ...minimal } : c));
-        }
-        return [minimal, ...prev];
-      });
-
-      void loadConversations();
-      return created.id;
-    },
-    [driverIds, profile, loadConversations, uid],
-  );
-
-  // Derive unique org IDs from loaded conversations so we subscribe per-org
-  // instead of the entire trip_messages table (full-table WAL fanout).
-  const conversationOrgIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const c of conversations) {
-      if (c.organization_id) ids.add(c.organization_id);
-    }
-    return Array.from(ids).sort();
-  }, [conversations]);
-  const orgIdsKey = conversationOrgIds.join(",");
-
-  const isActiveRef = useRef(isActive);
-  isActiveRef.current = isActive;
-
-  // Batch queue: collapses rapid realtime INSERTs into one setState per 100ms window.
-  const msgQueueRef = useRef<Partial<TripMessageRow>[]>([]);
-  const batchFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const scheduleBatchFlush = useCallback(() => {
-    if (batchFlushRef.current) return;
-    batchFlushRef.current = setTimeout(() => {
-      batchFlushRef.current = null;
-      const messages = msgQueueRef.current.splice(0);
-      if (messages.length === 0) return;
-
-      const byCid = new Map<string, Partial<TripMessageRow>[]>();
-      for (const row of messages) {
-        if (!row.conversation_id) continue;
-        const b = byCid.get(row.conversation_id) ?? [];
-        b.push(row);
-        byCid.set(row.conversation_id, b);
-      }
-
-      // Unknown conversations (arrived while list was loading): trigger one refresh.
-      let needsRefresh = false;
-      const knownIds = new Set(conversationsRef.current.map((c) => c.id));
-      for (const cid of byCid.keys()) {
-        if (!knownIds.has(cid)) { needsRefresh = true; break; }
-      }
-
-      setConversations((prev) =>
-        prev.map((conv) => {
-          const batch = byCid.get(conv.id);
-          if (!batch) return conv;
-          const last = batch[batch.length - 1];
-          return {
-            ...conv,
-            messages: [...conv.messages, ...(batch as TripMessageRow[])],
-            last_message_at: last.created_at ?? conv.last_message_at,
-            last_message_preview:
-              typeof last.content === "string" && last.content.trim().length > 0
-                ? last.content.slice(0, 120)
-                : conv.last_message_preview,
-          };
-        })
+      queryClient.setQueryData<TripConversation[]>(
+        driverChatConversationsQueryKey(
+          [...resolvedDriverIds].sort().join(','),
+        ),
+        (old) => {
+          const list = old ?? [];
+          if (list.some((c) => c.id === minimal.id)) {
+            return list.map((c) => (c.id === minimal.id ? { ...c, ...minimal } : c));
+          }
+          return [minimal, ...list];
+        },
       );
 
-      if (needsRefresh) queueRefreshConversations();
-    }, 100);
-  }, [queueRefreshConversations]);
-
-  useEffect(() => {
-    if (!isActive || !uid || !orgIdsKey) return;
-    const orgIds = orgIdsKey.split(",").filter(Boolean);
-    const unsubs = orgIds.map((orgId) =>
-      subscribeSharedPostgresChanges(
-        `trip_messages:org:${orgId}`,
-        [
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "trip_messages",
-            filter: `organization_id=eq.${orgId}`,
-          },
-        ],
-        (payload) => {
-          const row = payload.new as Partial<TripMessageRow> | null;
-          if (!row?.conversation_id) return;
-          // Own echo: optimistic insert already handled.
-          if (row.sender_user_id && row.sender_user_id === uid) return;
-          // Push to queue; flush will coalesce bursts into one setState.
-          msgQueueRef.current.push(row);
-          scheduleBatchFlush();
-        }
-      )
-    );
-    return () => unsubs.forEach((u) => u());
-  }, [isActive, uid, orgIdsKey, queueRefreshConversations, scheduleBatchFlush]);
+      void refetchConversations();
+      return created.id;
+    },
+    [driverIds, profile, uid, queryClient, refetchConversations],
+  );
 
   const sendMessage = useCallback(
     async (conversationId: string, organizationId: string, content: string) => {
       if (!uid) return;
       const senderName =
-        (profile as any)?.full_name ||
-        (profile as any)?.displayName ||
-        "Driver";
+        (profile as { full_name?: string; displayName?: string })?.full_name ||
+        (profile as { displayName?: string })?.displayName ||
+        'Driver';
 
       const optimisticMsg: TripMessageRow = {
         id: `optimistic-${Date.now()}`,
         conversation_id: conversationId,
         organization_id: organizationId,
         sender_user_id: uid,
-        sender_role: "driver",
+        sender_role: 'driver',
         sender_name: senderName,
         content,
-        message_type: "text",
+        message_type: 'text',
         is_read: true,
         read_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       };
 
-      setConversations((prev) =>
-        prev.map((conv) =>
-          conv.id === conversationId
-            ? {
-                ...conv,
-                messages: [...conv.messages, optimisticMsg],
-                last_message_at: optimisticMsg.created_at,
-                last_message_preview: content.slice(0, 120),
-              }
-            : conv
-        )
+      const msgKey = driverChatMessagesQueryKey(conversationId);
+      queryClient.setQueryData<InfiniteData<DriverChatMessagesPage>>(msgKey, (old) =>
+        appendDriverChatMessageToCache(old, optimisticMsg),
+      );
+      patchConversationListPreview(
+        conversationId,
+        content,
+        optimisticMsg.created_at ?? new Date().toISOString(),
       );
 
       try {
@@ -329,82 +202,96 @@ export function DriverChatProvider({
           senderName,
           senderUserId: uid,
         });
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === conversationId
-              ? {
-                  ...conv,
-                  messages: conv.messages.map((m) =>
-                    m.id === optimisticMsg.id ? persisted : m
-                  ),
-                }
-              : conv
-          )
+        queryClient.setQueryData<InfiniteData<DriverChatMessagesPage>>(msgKey, (old) =>
+          replaceDriverChatMessageInCache(old, optimisticMsg.id, persisted),
+        );
+        patchConversationListPreview(
+          conversationId,
+          content,
+          persisted.created_at ?? optimisticMsg.created_at ?? new Date().toISOString(),
         );
         notifyTripChatMessagesChanged();
       } catch {
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.id === conversationId
-              ? { ...conv, messages: conv.messages.filter((m) => m.id !== optimisticMsg.id) }
-              : conv
-          )
+        queryClient.setQueryData<InfiniteData<DriverChatMessagesPage>>(msgKey, (old) =>
+          removeDriverChatMessageFromCache(old, optimisticMsg.id),
         );
       }
     },
-    [uid, profile]
+    [uid, profile, queryClient, patchConversationListPreview],
   );
 
-  const flushPendingMarkRead = useCallback(() => {
-    markReadTimerRef.current.forEach((timer) => clearTimeout(timer));
-    markReadTimerRef.current.clear();
-    const pending = Array.from(pendingMarkReadRef.current);
-    pendingMarkReadRef.current.clear();
-    for (const id of pending) {
-      void chatService.markConversationRead(id).catch(() => {});
-    }
-  }, []);
+  const markAsRead = useCallback(
+    async (conversationId: string) => {
+      if (!driverIdsKey) return;
+      queryClient.setQueryData<TripConversation[]>(
+        driverChatConversationsQueryKey(driverIdsKey),
+        (old) =>
+          (old ?? []).map((c) =>
+            c.id === conversationId ? { ...c, unread_dispatcher_count: 0 } : c,
+          ),
+      );
+      pendingMarkReadRef.current.add(conversationId);
+      const existing = markReadTimerRef.current.get(conversationId);
+      if (existing) clearTimeout(existing);
+      markReadTimerRef.current.set(
+        conversationId,
+        setTimeout(() => {
+          markReadTimerRef.current.delete(conversationId);
+          pendingMarkReadRef.current.delete(conversationId);
+          void chatService.markConversationRead(conversationId).catch(() => {});
+        }, 2000),
+      );
+    },
+    [driverIdsKey, queryClient],
+  );
 
-  useEffect(() => () => { flushPendingMarkRead(); }, [flushPendingMarkRead]);
-
-  const markAsRead = useCallback(async (conversationId: string) => {
-    setConversations((prev) =>
-      prev.map((conv) =>
-        conv.id === conversationId ? { ...conv, unread_dispatcher_count: 0 } : conv
-      )
-    );
-    pendingMarkReadRef.current.add(conversationId);
-    const existing = markReadTimerRef.current.get(conversationId);
-    if (existing) clearTimeout(existing);
-    markReadTimerRef.current.set(
-      conversationId,
-      setTimeout(() => {
-        markReadTimerRef.current.delete(conversationId);
-        pendingMarkReadRef.current.delete(conversationId);
-        void chatService.markConversationRead(conversationId).catch(() => {});
-      }, 2000),
-    );
-  }, []);
+  useEffect(
+    () => () => {
+      markReadTimerRef.current.forEach((t) => clearTimeout(t));
+      markReadTimerRef.current.clear();
+      const pending = Array.from(pendingMarkReadRef.current);
+      pendingMarkReadRef.current.clear();
+      for (const id of pending) {
+        void chatService.markConversationRead(id).catch(() => {});
+      }
+    },
+    [],
+  );
 
   const getTotalUnreadCount = useCallback(
     () => conversations.reduce((sum, c) => sum + (c.unread_dispatcher_count ?? 0), 0),
-    [conversations]
+    [conversations],
+  );
+
+  const refreshConversations = useCallback(async () => {
+    const result = await refetchConversations();
+    return result.data ?? [];
+  }, [refetchConversations]);
+
+  const value = useMemo(
+    (): DriverChatContextType => ({
+      conversations,
+      driverIds,
+      isLoading,
+      sendMessage,
+      markAsRead,
+      getTotalUnreadCount,
+      refreshConversations,
+      ensureDriverTripConversation,
+    }),
+    [
+      conversations,
+      driverIds,
+      isLoading,
+      sendMessage,
+      markAsRead,
+      getTotalUnreadCount,
+      refreshConversations,
+      ensureDriverTripConversation,
+    ],
   );
 
   return (
-    <DriverChatContext.Provider
-      value={{
-        conversations,
-        driverIds,
-        isLoading,
-        sendMessage,
-        markAsRead,
-        getTotalUnreadCount,
-        refreshConversations: loadConversations,
-        ensureDriverTripConversation,
-      }}
-    >
-      {children}
-    </DriverChatContext.Provider>
+    <DriverChatContext.Provider value={value}>{children}</DriverChatContext.Provider>
   );
 }

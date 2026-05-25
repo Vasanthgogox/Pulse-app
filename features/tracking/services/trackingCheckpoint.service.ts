@@ -1,0 +1,46 @@
+import { supabase } from '@/lib/supabase';
+
+export type TrackingCheckpointResult = {
+  error: Error | null;
+  checkpointId: string | null;
+  wroteCheckpoint: boolean;
+};
+
+/**
+ * Sparse checkpoint + presence UPSERT (server movement gate).
+ * Legacy driver_locations insert remains on client until dual-write removed.
+ */
+export async function recordTrackingCheckpoint(params: {
+  tripId: string;
+  driverId: string;
+  organizationId: string;
+  sessionId: string;
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  source?: string;
+  recordedAt?: string;
+}): Promise<TrackingCheckpointResult> {
+  const { data, error } = await supabase().rpc('tracking_record_checkpoint', {
+    p_trip_id: params.tripId,
+    p_driver_id: params.driverId,
+    p_org_id: params.organizationId,
+    p_session_id: params.sessionId,
+    p_latitude: params.latitude,
+    p_longitude: params.longitude,
+    p_accuracy: params.accuracy ?? null,
+    p_source: params.source ?? 'live',
+    p_recorded_at: params.recordedAt ?? new Date().toISOString(),
+  });
+
+  if (error) {
+    return { error: new Error(error.message), checkpointId: null, wroteCheckpoint: false };
+  }
+
+  const row = data as { checkpoint_id?: string; wrote?: boolean } | null;
+  return {
+    error: null,
+    checkpointId: row?.checkpoint_id ?? null,
+    wroteCheckpoint: Boolean(row?.wrote),
+  };
+}

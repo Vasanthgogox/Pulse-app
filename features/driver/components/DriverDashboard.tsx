@@ -7,7 +7,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { computeDriverCommissionForTrip } from '@/features/finance/aggregation/aggregateDrivers';
-import { useAdaptiveTripLocationPingLoop } from '@/features/driver/hooks/useAdaptiveTripLocationPingLoop';
+import {
+  useDriverCommunication,
+  useDriverLocationStream,
+} from '@/features/driver/communication';
 import { useDriverMapLivePositionWatch } from '@/features/driver/hooks/useDriverMapLivePositionWatch';
 import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
@@ -20,8 +23,6 @@ import * as driversService from '@/features/drivers/services/drivers.service';
 import { getOptimalRoute, RouteResult } from '@/lib/routingService';
 import * as tripsService from '@/features/trips/services/trips.service';
 import {
-  formatGeocodedCityState,
-  formatGeocodedPlaceLine,
   reverseGeocodeCityStateLabel,
 } from '@/lib/reverseGeocodePlace.util';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -408,9 +409,6 @@ export default function DriverDashboard() {
   const [isFullMapVisible, setIsFullMapVisible] = useState(false);
   const [inlineMapViewportHeight, setInlineMapViewportHeight] = useState(0);
   const [toastMessage, setToastMessage] = useState('You are online now.');
-  const [recentPinPoints, setRecentPinPoints] = useState<
-    { latitude: number; longitude: number; recorded_at: string }[]
-  >([]);
   const pingMapUiRef = useRef<{
     setDriverMapPosition: (p: { latitude: number; longitude: number } | null) => void;
     youLatSv: typeof youLatSv;
@@ -561,22 +559,11 @@ export default function DriverDashboard() {
         // ignore
       });
 
-      if (Platform.OS !== 'web') {
-        try {
-          const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-          if (results && results.length > 0) {
-            const place = results[0];
-            const cityState = formatGeocodedCityState(place).trim();
-            if (cityState) {
-              setLocationLabel(cityState);
-            } else {
-              const fallback = formatGeocodedPlaceLine(place).trim();
-              if (fallback) setLocationLabel(fallback);
-            }
-          }
-        } catch {
-          // ignore reverse geocode failure; use fallback label so we don't show "Location not found" when we have coords (e.g. simulator)
-        }
+      try {
+        const cityState = await reverseGeocodeCityStateLabel(latitude, longitude);
+        if (cityState) setLocationLabel(cityState);
+      } catch {
+        // keep "Current location" when geocode fails
       }
     } catch {
       setLocationStatus('error');
@@ -663,12 +650,6 @@ export default function DriverDashboard() {
     },
     [driver],
   );
-
-  const fetchAndLogRecentPins = useCallback(async (tripId: string) => {
-    const { points } = await driverLocationService.getLastNLocationsForTrip(tripId, 3);
-    console.log('[tracking] last 3 pinned coordinates for trip', tripId, points);
-    setRecentPinPoints(points);
-  }, []);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -1042,46 +1023,25 @@ export default function DriverDashboard() {
     [],
   );
 
-  const reportLocationToDbWithPins = useCallback(
-    async (
-      tripId: string | null,
-      lat: number,
-      lng: number,
-      accuracy: number | null,
-      source: driverLocationService.DriverLocationSource,
-      extras?: { odometerKm?: number | null; recordedAt?: string },
-    ) => {
-      const ok = await reportLocationToDb(tripId, lat, lng, accuracy, source, extras);
-      if (ok && tripId) void fetchAndLogRecentPins(tripId);
-      return ok;
-    },
-    [fetchAndLogRecentPins, reportLocationToDb],
-  );
+  const { communicationActive } = useDriverCommunication();
 
-  useAdaptiveTripLocationPingLoop({
+  /** Write-only telemetry (skipHealthFetchOnTick + reportFireAndForget inside hook). */
+  useDriverLocationStream({
     driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
     trip: activeGuidanceTrip,
     enabled: Boolean(driver && activeGuidanceTrip),
+    communicationActive,
     shouldPersistCheckpoint: shouldPersistCheckpointPing,
     minDisplacementM: null,
     source: 'background',
-    reportLocationToDb: reportLocationToDbWithPins,
     onLocationFix: onPingLocationFix,
   });
 
-  /** Map-only position stream; does not call `reportDriverLocation`. */
+  /** Map-only foreground watch; updates Reanimated coords without table reads. */
   useDriverMapLivePositionWatch({
-    enabled: Boolean(driver && activeGuidanceTrip),
+    enabled: Boolean(driver && activeGuidanceTrip && communicationActive),
     onFix: onPingLocationFix,
   });
-
-  useEffect(() => {
-    if (!activeGuidanceTrip?.id) {
-      setRecentPinPoints([]);
-      return;
-    }
-    void fetchAndLogRecentPins(activeGuidanceTrip.id);
-  }, [activeGuidanceTrip?.id, fetchAndLogRecentPins]);
 
   // Blink/ping for pickup dot and Live badge on the offline "Assigned trip waiting" card (must run after effectiveFirstIncoming is defined)
   const showOfflineAssignedCard = Boolean(driver && !isOnline && effectiveFirstIncoming);

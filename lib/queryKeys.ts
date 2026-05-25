@@ -129,6 +129,24 @@ export const queryKeys = {
 
   driverInvites: {
     sent: (orgId: string) => ["q", "driver-invites", "sent", orgId] as const,
+    /** Driver app: invites received by authenticated user (RPC get_driver_invites_received). */
+    received: (userId: string) =>
+      ["q", "driver-invites", "received", userId] as const,
+  },
+
+  tracking: {
+    /** Dispatcher trip detail: presence seed + checkpoint trail for one trip/driver pair. */
+    tripLiveSeed: (tripId: string, driverId: string) =>
+      ["q", "tracking", "trip-live-seed", tripId, driverId] as const,
+  },
+
+  /** Driver app home dashboard (linked drivers + pending OTP trips). */
+  driverApp: {
+    root: (userId: string) => ["q", "driver-app", userId] as const,
+    linkedDrivers: (userId: string) =>
+      ["q", "driver-app", userId, "linked-drivers"] as const,
+    pendingOtpTrips: (userId: string) =>
+      ["q", "driver-app", userId, "pending-otp-trips"] as const,
   },
 
   salaryRequests: (orgId: string, status?: string) =>
@@ -193,6 +211,14 @@ export const queryKeys = {
       ["q", "trip-conversations", "detail", conversationId] as const,
     messages: (conversationId: string) =>
       ["q", "trip-conversations", "messages", conversationId] as const,
+    /** Driver app: infinite message pages for one thread. */
+    driverMessages: (conversationId: string) =>
+      ["q", "trip-conversations", "driver-messages", conversationId] as const,
+  },
+
+  driverChat: {
+    conversations: (driverIdsKey: string) =>
+      ["q", "driver-chat", "conversations", driverIdsKey] as const,
   },
 
   disputes: {
