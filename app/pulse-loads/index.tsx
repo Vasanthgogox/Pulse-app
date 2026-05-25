@@ -20,7 +20,7 @@ import { StyleSheet, View } from "react-native";
 export default function PulseLoadsScreen() {
   const layout = useLayoutInsets();
   const router = useRouter();
-  const { currentOrganization: organization } = useOrganization();
+  const { currentOrganization: organization, isLoading: orgLoading } = useOrganization();
   const orgId = organization?.id ?? null;
   const [shareLoad, setShareLoad] = useState<IndentRow | null>(null);
   const invalidateNetwork = useInvalidateNetwork(orgId);
@@ -31,7 +31,7 @@ export default function PulseLoadsScreen() {
     : layout.top;
 
   if (!orgId) {
-    return <ChromeBelowTopNavLoadingScreen variant="preparing" />;
+    return <ChromeBelowTopNavLoadingScreen variant={orgLoading ? "preparing" : "generic"} />;
   }
 
   return (
