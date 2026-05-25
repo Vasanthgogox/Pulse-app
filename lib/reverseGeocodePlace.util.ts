@@ -1,7 +1,12 @@
 /**
- * Human-readable place line from expo reverse geocode (driver trip strip / map callouts).
+ * Human-readable place lines for driver HUD / trip strips.
+ * Delegates to mapLocationLabel.service (Mapbox/Nominatim); native expo is last resort.
  */
 import * as Location from 'expo-location';
+import {
+  resolveMapLocationLabel,
+  type MapLocationLabelMode,
+} from '@/lib/mapLocationLabel.service';
 import { Platform } from 'react-native';
 
 export function formatGeocodedPlaceLine(place: Location.LocationGeocodedAddress): string {
@@ -24,11 +29,11 @@ export function formatGeocodedCityState(place: Location.LocationGeocodedAddress)
   return parts.join(', ');
 }
 
-export async function reverseGeocodePlaceLabel(
+async function reverseExpoNative(
   latitude: number,
   longitude: number,
+  mode: MapLocationLabelMode,
 ): Promise<string | null> {
-  // expo-location web warns: Geocoding API removed in SDK 49; skip on web.
   if (Platform.OS === 'web') return null;
 
   try {
@@ -40,11 +45,23 @@ export async function reverseGeocodePlaceLabel(
     ])) as Location.LocationGeocodedAddress[];
 
     if (!results?.length) return null;
-    const line = formatGeocodedPlaceLine(results[0]).trim();
+    const line =
+      mode === 'city'
+        ? formatGeocodedCityState(results[0]).trim()
+        : formatGeocodedPlaceLine(results[0]).trim();
     return line || null;
   } catch {
     return null;
   }
+}
+
+export async function reverseGeocodePlaceLabel(
+  latitude: number,
+  longitude: number,
+): Promise<string | null> {
+  const api = await resolveMapLocationLabel(latitude, longitude, { mode: 'full' });
+  if (api) return api;
+  return reverseExpoNative(latitude, longitude, 'full');
 }
 
 /** Reverse geocode to **city, state** only (readable HUD without street noise). */
@@ -52,20 +69,7 @@ export async function reverseGeocodeCityStateLabel(
   latitude: number,
   longitude: number,
 ): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
-
-  try {
-    const results = (await Promise.race([
-      Location.reverseGeocodeAsync({ latitude, longitude }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 6500),
-      ),
-    ])) as Location.LocationGeocodedAddress[];
-
-    if (!results?.length) return null;
-    const line = formatGeocodedCityState(results[0]).trim();
-    return line || null;
-  } catch {
-    return null;
-  }
+  const api = await resolveMapLocationLabel(latitude, longitude, { mode: 'city' });
+  if (api) return api;
+  return reverseExpoNative(latitude, longitude, 'city');
 }

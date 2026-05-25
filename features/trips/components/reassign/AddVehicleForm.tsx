@@ -1,0 +1,101 @@
+import Theme from '@/constants/Theme';
+import { createVehicle } from '@/features/vehicles/services/vehicles.service';
+import {
+  formatIndianVehicleNumber,
+  formatIndianVehicleNumberInput,
+} from '@/lib/format';
+import { useInvalidateVehicles } from '@/lib/queries/useVehiclesQuery';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { reassignStyles as s } from './reassign.styles';
+
+const VEHICLE_TYPES = ['Truck', 'Container', 'Trailer', 'Tanker', 'Other'] as const;
+
+type Props = {
+  organizationId: string;
+  onCreated: (vehicleId: string) => void;
+};
+
+export function AddVehicleForm({ organizationId, onCreated }: Props) {
+  const invalidateVehicles = useInvalidateVehicles();
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [vehicleType, setVehicleType] = useState<string>('Truck');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback(async () => {
+    const plate = formatIndianVehicleNumber(vehicleNumber).trim();
+    if (!plate) {
+      setError('Enter vehicle registration number.');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const { error: createErr, vehicle } = await createVehicle(organizationId, {
+      vehicleSource: 'organization',
+      vehicle_number: plate,
+      vehicle_type: vehicleType,
+      documents: {},
+    });
+    setSaving(false);
+    if (createErr || !vehicle) {
+      setError(createErr?.message ?? 'Could not add vehicle.');
+      return;
+    }
+    invalidateVehicles(organizationId);
+    onCreated(vehicle.id);
+  }, [vehicleNumber, vehicleType, organizationId, invalidateVehicles, onCreated]);
+
+  return (
+    <View style={s.form}>
+      <View>
+        <Text style={s.label}>Registration</Text>
+        <TextInput
+          style={s.input}
+          value={vehicleNumber}
+          onChangeText={(t) => setVehicleNumber(formatIndianVehicleNumberInput(t))}
+          placeholder="e.g. TN 01 AB 1234"
+          placeholderTextColor={Theme.textMuted}
+          autoCapitalize="characters"
+        />
+      </View>
+      <View>
+        <Text style={s.label}>Type</Text>
+        <View style={s.typeChipRow}>
+          {VEHICLE_TYPES.map((t) => {
+            const active = vehicleType === t;
+            return (
+              <TouchableOpacity
+                key={t}
+                style={[s.typeChip, active && s.typeChipActive]}
+                onPress={() => setVehicleType(t)}
+                activeOpacity={0.85}
+              >
+                <Text style={[s.typeChipText, active && s.typeChipTextActive]}>{t}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+      {error ? <Text style={s.inlineError}>{error}</Text> : null}
+      <TouchableOpacity
+        style={[s.primaryBtn, saving && s.primaryBtnDisabled]}
+        onPress={() => void submit()}
+        disabled={saving}
+        activeOpacity={0.9}
+      >
+        {saving ? (
+          <ActivityIndicator color={Theme.textOnPrimary} />
+        ) : (
+          <Text style={s.primaryBtnText}>Add vehicle</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}

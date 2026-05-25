@@ -1,4 +1,6 @@
 import 'react-native-gesture-handler';
+// Background GPS task must be registered before any component mounts — do not move this import.
+import '@/lib/tracking/backgroundTasks';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';

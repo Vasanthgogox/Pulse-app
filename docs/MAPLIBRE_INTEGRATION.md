@@ -42,3 +42,7 @@ This project now uses MapLibre as the map rendering layer while preserving exist
 
 - Current style URL is `https://demotiles.maplibre.org/style.json`.
 - If you need branded tiles/styles later, replace style source only in adapter files; screen logic can remain unchanged.
+
+## Location labels (tracking UI)
+
+Coordinates are for maps/routing only. Human-readable addresses use **`docs/FRONTEND_MAP_RENDERING_ARCHITECTURE.md`** and `@/lib/mapLocationLabel.service` (Mapbox → Nominatim reverse geocode).

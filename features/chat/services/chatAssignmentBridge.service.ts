@@ -156,6 +156,77 @@ export async function postAssignmentUpdateToTripChats(params: {
   notifyTripChatMessagesChanged();
 }
 
+/**
+ * Posts a single assignment_update card to all conversations for an aggregate trip
+ * assignment that went through the `assign_aggregate_trip_driver` RPC (which bypasses
+ * updateTripAssignment and therefore skips the normal audit-based broadcast).
+ */
+export async function postAggregateAssignmentMessage(
+  trip: TripRow,
+  previousDriverId: string | null,
+): Promise<void> {
+  if (!trip.organization_id || !trip.driver_id) return;
+
+  const isReassignment =
+    previousDriverId != null && previousDriverId !== trip.driver_id;
+  const driverName = trip.driver_display_name?.trim() || 'Driver';
+  const content = isReassignment
+    ? `Driver reassigned to ${driverName}.`
+    : `${driverName} assigned as driver.`;
+
+  const dedupeKey = `agg-assign|${trip.driver_id}|${trip.updated_at ?? new Date().toISOString()}`;
+
+  const { data: conversations, error } = await supabase()
+    .from('trip_conversations')
+    .select('id, organization_id')
+    .eq('trip_id', trip.id);
+
+  if (error || !conversations?.length) {
+    if (__DEV__) {
+      console.warn('[chatAssignmentBridge] postAggregateAssignmentMessage: no conversations', {
+        tripId: trip.id,
+        message: error?.message,
+      });
+    }
+    return;
+  }
+
+  for (const conv of conversations) {
+    const { data: existing } = await supabase()
+      .from('trip_messages')
+      .select('id')
+      .eq('conversation_id', conv.id)
+      .eq('message_type', 'assignment_update')
+      .contains('metadata', { agg_dedupe_key: dedupeKey })
+      .maybeSingle();
+
+    if (existing) continue;
+
+    const { error: rpcError } = await supabase().rpc('send_trip_chat_message', {
+      p_conversation_id: conv.id,
+      p_content: content,
+      p_sender_role: 'system',
+      p_sender_name: 'Trip System',
+      p_sender_user_id: null,
+      p_message_type: 'assignment_update',
+      p_metadata: {
+        agg_dedupe_key: dedupeKey,
+        driver_id_new: trip.driver_id,
+        driver_id_prev: previousDriverId,
+      },
+    });
+
+    if (rpcError && __DEV__) {
+      console.warn('[chatAssignmentBridge] postAggregateAssignmentMessage: send failed', {
+        conversationId: conv.id,
+        message: rpcError.message,
+      });
+    }
+  }
+
+  notifyTripChatMessagesChanged();
+}
+
 export async function postAssignmentUpdateAfterTripSave(params: {
   trip: TripRow;
   updateData: {

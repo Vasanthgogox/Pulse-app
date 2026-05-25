@@ -10,7 +10,7 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
-import { DriverChatProvider } from '@/features/chat/contexts/DriverChatContext';
+import { DriverCommunicationProvider } from '@/features/driver/communication';
 import { ROUTES } from '@/lib/routes';
 import {
   PlusJakartaSans_400Regular,
@@ -21,7 +21,7 @@ import {
   useFonts as usePlusJakartaFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
-import { Tabs, usePathname, useRouter } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
@@ -78,9 +78,6 @@ export default function DriverAppLayout() {
   const { user, profile, roleVerified, loading } = useAuth();
 
   const router = useRouter();
-  const pathname = usePathname();
-  const isDriverChatRouteActive = pathname === '/chat' || pathname.startsWith('/chat/');
-
   const logDriverGate = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
     console.info('[RouteGuard:driver]', event, details);
@@ -135,11 +132,11 @@ export default function DriverAppLayout() {
   return (
     <DriverThemeProvider>
       <DriverAvatarProvider>
-        <DriverChatProvider isActive={isDriverChatRouteActive}>
+        <DriverCommunicationProvider>
           <DriverInviteModalProvider>
             <DriverTabsNavigator />
           </DriverInviteModalProvider>
-        </DriverChatProvider>
+        </DriverCommunicationProvider>
       </DriverAvatarProvider>
     </DriverThemeProvider>
   );

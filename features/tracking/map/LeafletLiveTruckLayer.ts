@@ -1,0 +1,91 @@
+/**
+ * Leaflet adapter for TripTrackingMapStore + MarkerInterpolationEngine.
+ *
+ * Mirrors TripTrackingMapManager (which targets MapLibre) but attaches to a
+ * Leaflet map instance (used by TripMap.web.tsx / trip radar).
+ *
+ * No React state — all updates go through store → RAF → marker.setLatLng().
+ * Leaflet (L) is passed in to avoid a dynamic import inside this class.
+ */
+
+import type * as LeafletNS from 'leaflet';
+import {
+  MarkerInterpolationEngine,
+  type LngLat,
+} from '@/features/tracking/map/MarkerInterpolationEngine';
+import {
+  getTripTrackingMapStore,
+  type TripMapPoint,
+} from '@/features/tracking/map/TripTrackingMapStore';
+import {
+  MAP_TRUCK_MARKER_HTML,
+  MAP_TRUCK_MARKER_ICON_ANCHOR,
+  MAP_TRUCK_MARKER_ICON_SIZE,
+} from '@/lib/mapMarkerIcons.util';
+
+export class LeafletLiveTruckLayer {
+  private marker: LeafletNS.Marker | null = null;
+  private readonly interp: MarkerInterpolationEngine;
+  private unsub: (() => void) | null = null;
+
+  constructor(
+    private readonly tripId: string,
+    private readonly map: LeafletNS.Map,
+    private readonly L: typeof LeafletNS,
+  ) {
+    this.interp = new MarkerInterpolationEngine((pos) => {
+      this.marker?.setLatLng([pos.latitude, pos.longitude]);
+    });
+  }
+
+  /**
+   * Subscribe to the store and place the marker.
+   * @param initialLatLng - optional seed position (from driver_presence); placed immediately.
+   */
+  attach(initialLatLng?: LeafletNS.LatLngTuple): void {
+    const icon = this.L.divIcon({
+      html: MAP_TRUCK_MARKER_HTML,
+      className: '',
+      iconSize: MAP_TRUCK_MARKER_ICON_SIZE as LeafletNS.PointTuple,
+      iconAnchor: MAP_TRUCK_MARKER_ICON_ANCHOR as LeafletNS.PointTuple,
+    });
+    this.marker = this.L.marker(initialLatLng ?? [0, 0], {
+      icon,
+      zIndexOffset: 1000,
+    }).addTo(this.map);
+
+    if (!initialLatLng) {
+      this.marker.setOpacity(0);
+    }
+
+    const store = getTripTrackingMapStore(this.tripId);
+    this.unsub = store.subscribe((point) => this.onStorePoint(point));
+  }
+
+  detach(): void {
+    this.unsub?.();
+    this.unsub = null;
+    this.interp.cancel();
+    this.marker?.remove();
+    this.marker = null;
+  }
+
+  private onStorePoint(point: TripMapPoint | null): void {
+    if (!point) {
+      this.marker?.setOpacity(0);
+      return;
+    }
+    if (!this.marker) return;
+
+    this.marker.setOpacity(point.stale ? 0.55 : 1);
+
+    const el = this.marker.getElement();
+    if (el) {
+      el.style.filter = point.stale ? 'grayscale(0.6)' : 'none';
+      el.style.transition = 'opacity 0.3s ease, filter 0.3s ease';
+    }
+
+    const target: LngLat = { latitude: point.latitude, longitude: point.longitude };
+    this.interp.setTarget(target, point.stale);
+  }
+}

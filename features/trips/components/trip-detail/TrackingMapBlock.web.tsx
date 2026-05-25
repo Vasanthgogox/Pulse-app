@@ -19,7 +19,7 @@ export interface TrackingMapBlockProps {
   originCoordinate?: { latitude: number; longitude: number } | null;
   destinationCoordinate?: { latitude: number; longitude: number } | null;
   latestLocation?: { latitude: number; longitude: number } | null;
-  driverLocationLoading?: boolean;
+  isLocating?: boolean;
   tripLocationPoints?: { latitude: number; longitude: number }[];
   locationAddress?: string | null;
 }

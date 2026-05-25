@@ -12,8 +12,11 @@ import {
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
-import type { DriverLocationRow } from "@/features/driver/services/driverLocation.service";
 import { getOptimalRoute, type RouteResult } from "@/lib/routingService";
+import {
+  MAP_LOCATION_LABEL_LOADING,
+  MAP_LOCATION_LABEL_UNKNOWN,
+} from "@/lib/mapLocationLabel.service";
 import { LeafletMap, type LeafletMapRef } from "@/components/driver/LeafletMap";
 
 type MapCoordinate = {
@@ -268,10 +271,10 @@ export interface TrackingMapBlockProps {
   locationLabels?: TrackingMapLocationLabels;
   originCoordinate?: MapCoordinate | null;
   destinationCoordinate?: MapCoordinate | null;
-  /** Latest driver location from DB (Live Tracking). */
-  latestLocation?: DriverLocationRow | null;
-  /** True while fetching driver location. */
-  driverLocationLoading?: boolean;
+  /** Latest GPS position. Only latitude/longitude are read internally. */
+  latestLocation?: { latitude: number; longitude: number } | null;
+  /** True while locating — shows spinner and suppresses empty state. */
+  isLocating?: boolean;
   /** Trip location history points (pickup/drop proxy). */
   tripLocationPoints?: { latitude: number; longitude: number; recorded_at: string }[];
   /** Reverse-geocoded address for latest location. */
@@ -293,7 +296,7 @@ export function TrackingMapBlock({
   originCoordinate,
   destinationCoordinate,
   latestLocation,
-  driverLocationLoading = false,
+  isLocating = false,
   tripLocationPoints = [],
   locationAddress,
 }: TrackingMapBlockProps) {
@@ -463,6 +466,22 @@ export function TrackingMapBlock({
           }
         : null
     );
+
+    const recentPings = tripLocationPoints.slice(-5);
+    recentPings.forEach((point, idx) => {
+      const coord = normalizeCoordinateForIndia({
+        latitude: point.latitude,
+        longitude: point.longitude,
+      });
+      if (!isValidCoordinate(coord)) return;
+      if (latestCoordinate && areCoordinatesClose(coord, latestCoordinate)) return;
+      pushMarker({
+        id: `ping-${idx}`,
+        coordinate: coord,
+        title: `GPS ping ${tripLocationPoints.length - recentPings.length + idx + 1}`,
+      });
+    });
+
     return nextMarkers;
   }, [
     currentLabel,
@@ -475,6 +494,7 @@ export function TrackingMapBlock({
     origin,
     past1,
     past2,
+    tripLocationPoints,
     vehicleLabel,
   ]);
 
@@ -493,7 +513,7 @@ export function TrackingMapBlock({
     normalizedOriginCoordinate,
   ]);
 
-  const statusLabel = driverLocationLoading
+  const statusLabel = isLocating
     ? "Syncing live location"
     : latestLocation
       ? "Live tracking active"
@@ -540,18 +560,21 @@ export function TrackingMapBlock({
         <Text style={styles.trackingRouteHaloLabel}>{statusLabel}</Text>
         <Text style={styles.trackingRouteHaloText} numberOfLines={2}>
           {locationAddress?.trim() ||
-            vehicleLabel?.trim() ||
-            "Trip route and live driver movement appear here."}
+            (isLocating
+              ? MAP_LOCATION_LABEL_LOADING
+              : latestLocation
+                ? MAP_LOCATION_LABEL_UNKNOWN
+                : vehicleLabel?.trim() || "Trip route and live driver movement appear here.")}
         </Text>
       </View>
 
-      {driverLocationLoading ? (
+      {isLocating ? (
         <View style={styles.mapLoadingOverlay} pointerEvents="none">
           <LoadingIndicator size="small" color={Theme.primary} />
         </View>
       ) : null}
 
-      {!driverLocationLoading && displayedRouteCoordinates.length === 0 ? (
+      {!isLocating && displayedRouteCoordinates.length === 0 ? (
         <View style={styles.mapEmptyState} pointerEvents="none">
           <FontAwesome name="map-o" size={28} color={Theme.textMuted} />
           <Text style={styles.mapEmptyTitle}>No route points yet</Text>

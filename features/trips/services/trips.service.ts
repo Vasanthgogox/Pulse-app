@@ -10,6 +10,8 @@ import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
+import { TRIP_REASSIGN_STALE_ERROR } from "@/features/trips/utils/tripReassignConflict.util";
+import { shouldMarkAssignedOnFirstAssign } from "@/features/trips/utils/tripReassign.util";
 
 export interface TripRow {
   id: string;
@@ -493,7 +495,7 @@ const ONGOING_TRIP_TERMINAL_STATUSES = [
  * Any trip for this driver that is not in a terminal status counts as blocking further assignment.
  * excludeTripId skips the trip being edited so reassignment/unassign workflows keep working.
  */
-async function getDriverOngoingTrip(
+export async function getDriverOngoingTrip(
   driverId: string,
   excludeTripId?: string,
 ): Promise<{
@@ -553,7 +555,7 @@ async function getDriverAnyOpenTrip(
 }
 
 /** Same terminal rule as {@link getDriverOngoingTrip}, for roster vehicle UUIDs. */
-async function getVehicleOngoingTrip(
+export async function getVehicleOngoingTrip(
   vehicleId: string,
   excludeTripId?: string,
 ): Promise<{
@@ -1403,6 +1405,8 @@ export interface UpdateTripAssignmentOptions {
   trackingOnly?: boolean;
   /** When true (reassignment), ensure driver row is unlinked so trip must be claimed via OTP. */
   forceOtpClaim?: boolean;
+  /** Optimistic lock: PATCH only if trip.updated_at still matches (concurrent dispatcher guard). */
+  expectedUpdatedAt?: string | null;
 }
 
 export async function updateTripAssignment(
@@ -1412,7 +1416,7 @@ export async function updateTripAssignment(
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const { data: tripGate, error: tripGateError } = await supabase()
     .from("trips")
-    .select("id, status, completed_at")
+    .select("id, status, completed_at, started_at")
     .eq("id", tripId)
     .maybeSingle();
   if (tripGateError) return { error: new Error(tripGateError.message), trip: null };
@@ -1459,17 +1463,29 @@ export async function updateTripAssignment(
   if (data.vehicle_id !== undefined) updates.vehicle_id = data.vehicle_id;
   if (data.vehicle_display_number !== undefined)
     updates.vehicle_display_number = data.vehicle_display_number;
-  // When assigning a driver, set status to 'assigned' so the driver app shows it as incoming.
-  if (data.driver_id != null) {
+  // Reassign preserves trip stage — only driver_id and vehicle_id change.
+  // Only push status → 'assigned' on first assign before the trip has started.
+  if (
+    data.driver_id != null &&
+    shouldMarkAssignedOnFirstAssign(
+      tripGate as Pick<TripRow, "status" | "started_at" | "completed_at">,
+    )
+  ) {
     updates.status = "assigned";
   }
-  const { data: row, error } = await supabase()
-    .from("trips")
-    .update(updates)
-    .eq("id", tripId)
-    .select()
-    .maybeSingle();
+  let updateQ = supabase().from("trips").update(updates).eq("id", tripId);
+  if (options?.expectedUpdatedAt != null && options.expectedUpdatedAt.trim() !== "") {
+    updateQ = updateQ.eq("updated_at", options.expectedUpdatedAt);
+  }
+  const { data: row, error } = await updateQ.select().maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
+  if (
+    options?.expectedUpdatedAt != null &&
+    options.expectedUpdatedAt.trim() !== "" &&
+    !row
+  ) {
+    return { error: new Error(TRIP_REASSIGN_STALE_ERROR), trip: null };
+  }
 
   const updatedTrip = row as TripRow | null;
   if (options?.changedBy != null && updatedTrip) {
@@ -1635,6 +1651,8 @@ export async function assignAggregateTripDriverByPhone(
   driverOrgId: string,
   phone: string,
   vehicleDisplayNumber?: string | null,
+  vehicleId?: string | null,
+  previousDriverId?: string | null,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
@@ -1661,12 +1679,34 @@ export async function assignAggregateTripDriverByPhone(
       ? String(vehicleDisplayNumber).trim()
       : null;
 
-  const { data, error } = await supabase().rpc("assign_aggregate_trip_driver", {
+  const rpcArgs: Record<string, unknown> = {
     p_trip_id: tripId,
     p_driver_org_id: driverOrgId,
     p_driver_phone: normalized,
     p_vehicle_display_number: trimmedVehicleDisplay,
-  });
+  };
+  const fleetVehicleId =
+    vehicleId != null && String(vehicleId).trim() !== "" ? vehicleId : null;
+  if (fleetVehicleId) {
+    rpcArgs.p_vehicle_id = fleetVehicleId;
+  }
+
+  let { data, error } = await supabase().rpc(
+    "assign_aggregate_trip_driver",
+    rpcArgs,
+  );
+  if (
+    error &&
+    fleetVehicleId &&
+    /p_vehicle_id|Could not find the function/i.test(String(error.message ?? ""))
+  ) {
+    const legacyArgs = { ...rpcArgs };
+    delete legacyArgs.p_vehicle_id;
+    ({ data, error } = await supabase().rpc(
+      "assign_aggregate_trip_driver",
+      legacyArgs,
+    ));
+  }
   if (error) {
     const msg = String(error.message ?? "");
     const missingDisplayColumn =
@@ -1712,7 +1752,20 @@ export async function assignAggregateTripDriverByPhone(
       trip: null,
     };
   }
-  return { error: null, trip: (obj.trip ?? null) as TripRow | null };
+  const resultTrip = (obj.trip ?? null) as TripRow | null;
+  if (resultTrip) {
+    const { postAggregateAssignmentMessage } = await import(
+      "@/features/chat/services/chatAssignmentBridge.service"
+    );
+    void postAggregateAssignmentMessage(resultTrip, previousDriverId ?? null).catch(
+      (e) => {
+        if (__DEV__) {
+          console.warn("[trips] aggregate assign chat broadcast failed:", e);
+        }
+      },
+    );
+  }
+  return { error: null, trip: resultTrip };
 }
 
 /** Trip status values allowed by DB (public.trips.status CHECK). */
@@ -2139,24 +2192,116 @@ export async function updateTripPayment(
   return { error: null, trip: row as TripRow | null };
 }
 
+export type ActiveDriverAssignmentMap = {
+  busyDriverIds: Set<string>;
+  tripLabelByDriverId: Record<string, string>;
+};
+
 /**
- * Driver IDs on any non-terminal trip for this org (matches {@link getDriverOngoingTrip} rules).
+ * Driver IDs on any non-terminal trip for this org, with trip label for display.
+ * Mirrors the shape of {@link getActiveVehicleAssignments} so the reassign UI
+ * can show "On Trip #TR-001" instead of a generic "On another trip".
  */
-export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
-  const { data } = await supabase()
+export async function getActiveDriverAssignments(
+  orgId: string,
+  excludeTripId?: string,
+): Promise<{ error: Error | null; map: ActiveDriverAssignmentMap }> {
+  let q = supabase()
     .from("trips")
-    .select("driver_id")
+    .select("id, driver_id, trip_number, status")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
     .limit(500);
-
-  const ids = new Set<string>();
-  for (const row of data ?? []) {
-    const r = row as { driver_id?: string | null };
-    const id = r.driver_id;
-    if (!id) continue;
-    ids.add(id);
+  if (excludeTripId != null && excludeTripId.trim() !== "") {
+    q = q.neq("id", excludeTripId);
   }
-  return ids;
+  const { data, error } = await q;
+  if (error) {
+    return {
+      error: new Error(error.message),
+      map: { busyDriverIds: new Set(), tripLabelByDriverId: {} },
+    };
+  }
+  const busyDriverIds = new Set<string>();
+  const tripLabelByDriverId: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const r = row as {
+      driver_id?: string | null;
+      trip_number?: string | null;
+      status?: string | null;
+    };
+    const did = r.driver_id;
+    if (!did || busyDriverIds.has(did)) continue;
+    busyDriverIds.add(did);
+    tripLabelByDriverId[did] = r.trip_number
+      ? `Trip #${r.trip_number}`
+      : "another trip";
+  }
+  return { error: null, map: { busyDriverIds, tripLabelByDriverId } };
+}
+
+/** @deprecated Use {@link getActiveDriverAssignments} for trip-label context. */
+export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
+  const { map } = await getActiveDriverAssignments(orgId);
+  return map.busyDriverIds;
+}
+
+export type ActiveVehicleAssignmentMap = {
+  busyVehicleIds: Set<string>;
+  tripLabelByVehicleId: Record<string, string>;
+};
+
+/**
+ * Batch load vehicles on non-terminal trips for this org (one query).
+ * excludeTripId allows reassignment on the current trip.
+ */
+export async function getActiveVehicleAssignments(
+  orgId: string,
+  excludeTripId?: string,
+): Promise<{ error: Error | null; map: ActiveVehicleAssignmentMap }> {
+  let q = supabase()
+    .from("trips")
+    .select("id, vehicle_id, trip_number")
+    .eq("organization_id", orgId)
+    .not("vehicle_id", "is", null)
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
+    .limit(500);
+  if (excludeTripId != null && excludeTripId.trim() !== "") {
+    q = q.neq("id", excludeTripId);
+  }
+  const { data, error } = await q;
+  if (error) {
+    return {
+      error: new Error(error.message),
+      map: { busyVehicleIds: new Set(), tripLabelByVehicleId: {} },
+    };
+  }
+  const busyVehicleIds = new Set<string>();
+  const tripLabelByVehicleId: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const r = row as {
+      vehicle_id?: string | null;
+      trip_number?: string | null;
+    };
+    const vid = r.vehicle_id;
+    if (!vid || busyVehicleIds.has(vid)) continue;
+    busyVehicleIds.add(vid);
+    tripLabelByVehicleId[vid] = r.trip_number?.trim() || "another trip";
+  }
+  return { error: null, map: { busyVehicleIds, tripLabelByVehicleId } };
+}
+
+/** Read trip.updated_at for client-side stale guard before reassign. */
+export async function getTripUpdatedAt(
+  tripId: string,
+): Promise<{ error: Error | null; updatedAt: string | null }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("updated_at")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), updatedAt: null };
+  const row = data as { updated_at?: string | null } | null;
+  return { error: null, updatedAt: row?.updated_at ?? null };
 }

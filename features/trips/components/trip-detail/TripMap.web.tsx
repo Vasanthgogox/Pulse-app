@@ -2,6 +2,15 @@
  * Web-only trip map using Leaflet with road routing via routingService.ts.
  */
 import { getOptimalRoute, type RouteResult } from '@/lib/routingService';
+import {
+  MAP_DESTINATION_PIN_HTML,
+  MAP_SOURCE_PIN_HTML,
+  MAP_TRUCK_MARKER_HTML,
+  MAP_TRUCK_MARKER_ICON_ANCHOR,
+  MAP_TRUCK_MARKER_ICON_SIZE,
+} from '@/lib/mapMarkerIcons.util';
+import { LeafletLiveTruckLayer } from '@/features/tracking/map/LeafletLiveTruckLayer';
+import type { Map as LeafletMap, LatLngTuple } from 'leaflet';
 import React, { useEffect, useRef, useState } from 'react';
 
 /** Metro web cannot bundle leaflet.css (relative url(images/...) in CSS). Load from CDN instead. */
@@ -84,10 +93,11 @@ const getCoordinates = async (location: string, retryCount = 0): Promise<[number
       return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
     }
     throw new Error('No results');
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const e = err as { name?: string; message?: string };
     if (
       retryCount < 2 &&
-      (err.name === 'AbortError' || err.message?.includes('Failed to fetch') || err.message?.includes('HTTP 5'))
+      (e.name === 'AbortError' || e.message?.includes('Failed to fetch') || e.message?.includes('HTTP 5'))
     ) {
       await new Promise((r) => setTimeout(r, (retryCount + 1) * 1000));
       return getCoordinates(location, retryCount + 1);
@@ -152,6 +162,10 @@ export interface TripMapProps {
   /** Pixel height or a CSS height string (e.g. `"100%"`) to fill the parent. */
   height?: number | string;
   onDistanceCalculated?: (distanceKm: string) => void;
+  /** When set, attaches LeafletLiveTruckLayer instead of a static pin. */
+  tripId?: string | null;
+  /** Must be true for live layer to attach; false = static pin fallback. */
+  trackingEnabled?: boolean;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -162,12 +176,19 @@ export function TripMap({
   intermediateStops = [],
   height,
   onDistanceCalculated,
+  tripId,
+  trackingEnabled,
 }: TripMapProps) {
   const resolvedHeight = height ?? 520;
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
+  const mapInstanceRef = useRef<LeafletMap | null>(null);
   const unmountedRef = useRef(false);
   const initRunIdRef = useRef(0);
+  const liveLayerRef = useRef<LeafletLiveTruckLayer | null>(null);
+  // Side-channel map lifecycle refs — avoids tagging the map instance with custom props.
+  const mapRafIdRef = useRef<number | null>(null);
+  const mapTimeoutIdsRef = useRef<number[]>([]);
+  const mapResizeObserverRef = useRef<ResizeObserver | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [geocodingProgress, setGeocodingProgress] = useState({ current: 0, total: 0 });
@@ -242,7 +263,7 @@ export function TripMap({
       if (!mapRef.current || !isRunActive()) return;
 
       // ── Create map ───────────────────────────────────────────────────────
-      const map = L.map(mapRef.current).setView([avgLat, avgLng], 7);
+      const map = L.map(mapRef.current, { zoomControl: false }).setView([avgLat, avgLng], 7);
       mapInstanceRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -254,20 +275,12 @@ export function TripMap({
 
       // ── Markers (identical SVG icons as reference) ───────────────────────
       const sourceIcon = L.divIcon({
-        html: `<svg width="28" height="40" viewBox="0 0 28 40" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.16));">
-          <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26c0-7.73-6.27-14-14-14z" fill="#059669"/>
-          <path d="M14 2C7.37 2 2 7.37 2 14c0 9.25 12 24 12 24s12-14.75 12-24c0-6.63-5.37-12-12-12z" fill="#10b981"/>
-          <circle cx="14" cy="14" r="6" fill="#fff"/><circle cx="14" cy="14" r="3" fill="#059669"/>
-        </svg>`,
+        html: MAP_SOURCE_PIN_HTML,
         className: '', iconSize: [28, 40], iconAnchor: [14, 40], popupAnchor: [0, -40],
       });
 
       const destinationIcon = L.divIcon({
-        html: `<svg width="28" height="40" viewBox="0 0 28 40" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.16));">
-          <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26c0-7.73-6.27-14-14-14z" fill="#b91c1c"/>
-          <path d="M14 2C7.37 2 2 7.37 2 14c0 9.25 12 24 12 24s12-14.75 12-24c0-6.63-5.37-12-12-12z" fill="#dc2626"/>
-          <circle cx="14" cy="14" r="6" fill="#fff"/><circle cx="14" cy="14" r="3" fill="#b91c1c"/>
-        </svg>`,
+        html: MAP_DESTINATION_PIN_HTML,
         className: '', iconSize: [28, 40], iconAnchor: [14, 40], popupAnchor: [0, -40],
       });
 
@@ -281,8 +294,10 @@ export function TripMap({
       });
 
       const truckIcon = L.divIcon({
-        html: `<div style="background:linear-gradient(145deg,#059669,#047857);color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 10px rgba(5,150,105,0.45);font-size:14px;">🚚</div>`,
-        className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+        html: MAP_TRUCK_MARKER_HTML,
+        className: '',
+        iconSize: MAP_TRUCK_MARKER_ICON_SIZE,
+        iconAnchor: MAP_TRUCK_MARKER_ICON_ANCHOR,
       });
 
       L.marker(srcCoords, { icon: sourceIcon })
@@ -299,7 +314,18 @@ export function TripMap({
           .addTo(map);
       });
 
-      if (isValidCoordinatePair(truckLocation)) {
+      if (tripId && trackingEnabled) {
+        // Live layer: subscribes to TripTrackingMapStore → RAF → marker.setLatLng()
+        // Detaches on map cleanup below. Static truckLocation prop ignored when live.
+        liveLayerRef.current?.detach();
+        const seedLatLng: [number, number] | undefined =
+          isValidCoordinatePair(truckLocation)
+            ? [truckLocation.latitude, truckLocation.longitude]
+            : undefined;
+        const layer = new LeafletLiveTruckLayer(tripId, map, L);
+        layer.attach(seedLatLng);
+        liveLayerRef.current = layer;
+      } else if (isValidCoordinatePair(truckLocation)) {
         const truckMarker = L.marker([truckLocation.latitude, truckLocation.longitude], {
           icon: truckIcon,
           zIndexOffset: 1000,
@@ -543,7 +569,7 @@ export function TripMap({
       for (const p of validTrailPoints) {
         boundsCoords.push([p.latitude, p.longitude]);
       }
-      map.fitBounds(boundsCoords as any, { padding: [50, 50], maxZoom: 15, animate: false });
+      map.fitBounds(boundsCoords as LatLngTuple[], { padding: [50, 50], maxZoom: 15, animate: false });
 
       map.whenReady(() => {
         if (!isRunActive()) return;
@@ -570,12 +596,12 @@ export function TripMap({
             setIsLoading(false);
           }
         }, 800);
-        (map as any)._tripMapRafId = rafId;
-        (map as any)._tripMapTimeoutIds = [t1, t2, t3];
+        mapRafIdRef.current = rafId;
+        mapTimeoutIdsRef.current = [t1, t2, t3];
         if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
           const ro = new ResizeObserver(() => kickLayout());
           ro.observe(mapRef.current);
-          (map as any)._tripMapResizeObserver = ro;
+          mapResizeObserverRef.current = ro;
         }
       });
     } catch (err) {
@@ -599,27 +625,23 @@ export function TripMap({
     return () => {
       unmountedRef.current = true;
       initRunIdRef.current += 1;
+      liveLayerRef.current?.detach();
+      liveLayerRef.current = null;
+      mapTimeoutIdsRef.current.forEach((id) => window.clearTimeout(id));
+      mapTimeoutIdsRef.current = [];
+      if (mapRafIdRef.current !== null) {
+        window.cancelAnimationFrame(mapRafIdRef.current);
+        mapRafIdRef.current = null;
+      }
+      if (mapResizeObserverRef.current) {
+        try { mapResizeObserverRef.current.disconnect(); } catch { /* ignore */ }
+        mapResizeObserverRef.current = null;
+      }
       const m = mapInstanceRef.current;
       if (m) {
-        const timeoutIds = (m as any)._tripMapTimeoutIds as number[] | undefined;
-        if (timeoutIds?.length) {
-          timeoutIds.forEach((id) => window.clearTimeout(id));
-        }
-        const rafId = (m as any)._tripMapRafId as number | undefined;
-        if (typeof rafId === 'number') {
-          window.cancelAnimationFrame(rafId);
-        }
-        const ro = (m as any)._tripMapResizeObserver as ResizeObserver | undefined;
-        if (ro && mapRef.current) {
-          try {
-            ro.disconnect();
-          } catch {
-            /* ignore */
-          }
-        }
         try {
-          if (typeof m.off === 'function') m.off();
-          if (typeof m.stop === 'function') m.stop();
+          m.off();
+          m.stop();
           m.remove();
         } catch {
           /* ignore */
@@ -632,8 +654,8 @@ export function TripMap({
     sourceCoords?.latitude, sourceCoords?.longitude,
     destCoords?.latitude, destCoords?.longitude,
     source, destination,
-    truckLocation?.latitude, truckLocation?.longitude,
-    dbLocationTrail.map((p) => `${p.latitude},${p.longitude},${p.recorded_at ?? ''}`).join('|'),
+    tripId, trackingEnabled,
+    dbLocationTrail.map((p) => p.recorded_at ?? '').join(','),
   ]);
 
   const containerHeightStyle =
@@ -643,10 +665,9 @@ export function TripMap({
 
   const zoomMap = (delta: number) => {
     const m = mapInstanceRef.current;
-    if (!m || typeof m.setZoom !== 'function') return;
+    if (!m) return;
     try {
-      const z = typeof m.getZoom === 'function' ? m.getZoom() : 8;
-      m.setZoom(z + delta);
+      m.setZoom(m.getZoom() + delta);
     } catch {
       /* ignore */
     }
@@ -704,9 +725,9 @@ export function TripMap({
         <div
           style={{
             position: 'absolute',
-            left: 10,
-            top: 72,
-            zIndex: 7,
+            left: 12,
+            top: 12,
+            zIndex: 25,
             display: 'flex',
             flexDirection: 'column',
             gap: 4,
