@@ -407,7 +407,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Only force sign-out here when the local session token is also gone, meaning
       // the app already has no credentials to restore on reload.
       try {
-        const stored = await authService.getSession();
+        const stored = await withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null);
         if (stored) {
           logAuth("zombie_recovery_deferred_session_present", { uid: user.uid }, "warn");
           return;

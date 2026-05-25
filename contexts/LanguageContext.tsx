@@ -53,13 +53,30 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
-      const locale = getDefaultLocale(stored);
-      setLocaleState(locale);
-      setGlobalLocale(locale);
-      if (!stored) AsyncStorage.setItem(STORAGE_KEY, locale);
-      setHydrated(true);
-    });
+    let cancelled = false;
+    const fallback = setTimeout(() => {
+      if (!cancelled) setHydrated(true);
+    }, 3_000);
+
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((stored) => {
+        clearTimeout(fallback);
+        if (cancelled) return;
+        const next = getDefaultLocale(stored);
+        setLocaleState(next);
+        setGlobalLocale(next);
+        if (!stored) void AsyncStorage.setItem(STORAGE_KEY, next);
+        setHydrated(true);
+      })
+      .catch(() => {
+        clearTimeout(fallback);
+        if (!cancelled) setHydrated(true);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+    };
   }, []);
 
   const setLocale = useCallback((next: AppLocale) => {

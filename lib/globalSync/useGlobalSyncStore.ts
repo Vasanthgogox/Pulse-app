@@ -31,6 +31,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
+import { withTimeout } from '@/lib/authEngine';
 import { fetchInboundProtocolSnapshot } from '@/lib/globalSync/inboundProtocol.util';
 import type { InboundPartnerDisplay } from '@/lib/globalSync/inboundProtocol.types';
 import { mapSharedLedgerRow } from '@/lib/globalSync/mapSharedLedgerRow';
@@ -394,14 +395,17 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     networkStatus:            { ...DEFAULT_NETWORK_STATUS },
 
     refreshInboundProtocol: async (orgId) => {
-      const [receivedRes, sentRes] = await Promise.all([
-        getConnectionRequestsReceived(orgId),
-        getConnectionRequestsSent(orgId),
-      ]);
+      const [receivedRes, sentRes] = await withTimeout(
+        Promise.all([
+          getConnectionRequestsReceived(orgId),
+          getConnectionRequestsSent(orgId),
+        ]),
+        15_000,
+      );
       const received = receivedRes.error ? [] : receivedRes.requests;
       const sent = sentRes.error ? [] : sentRes.requests;
       const { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId } =
-        await fetchInboundProtocolSnapshot(orgId, received, sent);
+        await withTimeout(fetchInboundProtocolSnapshot(orgId, received, sent), 15_000);
       set({
         connectionRequestsReceived: received,
         connectionRequestsSent: sent,
@@ -427,16 +431,19 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
 
       try {
         const [bootstrapRes, salaryRes, sharedRes, receivedRes, sentRes] =
-          await Promise.all([
-            supabase().rpc('get_global_app_bootstrap', { p_org_id: orgId }),
-            getSalaryRequestsByOrganization(orgId, {
-              limit: REGISTRY_BOOTSTRAP_SALARY_LIMIT,
-              offset: 0,
-            }),
-            getSharedLedgerNotifications(orgId, 'all'),
-            getConnectionRequestsReceived(orgId),
-            getConnectionRequestsSent(orgId),
-          ]);
+          await withTimeout(
+            Promise.all([
+              supabase().rpc('get_global_app_bootstrap', { p_org_id: orgId }),
+              getSalaryRequestsByOrganization(orgId, {
+                limit: REGISTRY_BOOTSTRAP_SALARY_LIMIT,
+                offset: 0,
+              }),
+              getSharedLedgerNotifications(orgId, 'all'),
+              getConnectionRequestsReceived(orgId),
+              getConnectionRequestsSent(orgId),
+            ]),
+            20_000,
+          );
 
         if (bootstrapRes.error) throw bootstrapRes.error;
 
@@ -444,7 +451,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         const received = receivedRes.error ? [] : receivedRes.requests;
         const sent = sentRes.error ? [] : sentRes.requests;
         const { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId } =
-          await fetchInboundProtocolSnapshot(orgId, received, sent);
+          await withTimeout(fetchInboundProtocolSnapshot(orgId, received, sent), 15_000);
         const duration = Date.now() - t0;
 
         const notifRows: GlobalNotificationRow[] = Array.isArray(

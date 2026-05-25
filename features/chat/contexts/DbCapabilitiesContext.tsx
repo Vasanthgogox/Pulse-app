@@ -17,6 +17,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -56,21 +57,37 @@ export function useDbCapabilities(): DbCapabilities {
   return capabilities ?? DEFAULT_CAPABILITIES;
 }
 
+const DB_CAP_TIMEOUT_MS = 8_000;
+
 export function DbCapabilitiesProvider({ children }: { children: ReactNode }) {
   const [capabilities, setCapabilities] = useState<DbCapabilities | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    // Single RPC call at startup. Result is stable — extensions don't change
-    // at runtime — so we never re-fetch.
-    void supabase()
-      .rpc("get_db_capabilities")
+    mounted.current = true;
+    const timer = setTimeout(() => {
+      if (mounted.current) setIsLoading(false);
+    }, DB_CAP_TIMEOUT_MS);
+
+    void Promise.resolve(supabase().rpc("get_db_capabilities"))
       .then(({ data, error }) => {
+        clearTimeout(timer);
+        if (!mounted.current) return;
         if (!error && data && typeof data === "object") {
           setCapabilities(data as DbCapabilities);
         }
         setIsLoading(false);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        if (mounted.current) setIsLoading(false);
       });
+
+    return () => {
+      mounted.current = false;
+      clearTimeout(timer);
+    };
   }, []);
 
   return (
