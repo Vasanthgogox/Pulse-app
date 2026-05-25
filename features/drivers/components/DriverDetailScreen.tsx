@@ -4,7 +4,7 @@ import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
-import { DriverPartnerProfileDashboard } from "@/components/DriverPartnerProfileDashboard";
+import { DriverPartnerProfileDashboard } from "@/features/drivers/components/DriverPartnerProfileDashboard";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import Layout from "@/constants/Layout";

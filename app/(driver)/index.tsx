@@ -7,7 +7,7 @@ import {
     type LeafletMapRef,
     type LeafletMarker,
 } from "@/components/driver/LeafletMap";
-import { DriverTripFlowCard } from "@/components/DriverTripFlowCard";
+import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
