@@ -38,7 +38,7 @@ import {
     resolveDispute,
     resolveDisputeTableOnly,
     type DisputeRow,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {

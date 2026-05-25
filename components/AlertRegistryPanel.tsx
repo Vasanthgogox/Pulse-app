@@ -14,7 +14,7 @@ import { useRegistryFeed } from "@/lib/globalSync/useRegistryFeed";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
+import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronDown, Radar, RefreshCw, X } from "lucide-react-native";
 import {

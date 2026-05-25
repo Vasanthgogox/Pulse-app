@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import * as routingService from '@/services/routingService';
+import * as routingService from '@/lib/routingService';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { getTripStopCoordinate } from '@/features/drivers/utils/driverGuidanceUtils';
 import { DriverGuidanceStep } from '@/types/driver';

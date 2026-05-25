@@ -13,7 +13,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
 import type { DriverLocationRow } from "@/features/driver/services/driverLocation.service";
-import { getOptimalRoute, type RouteResult } from "@/services/routingService";
+import { getOptimalRoute, type RouteResult } from "@/lib/routingService";
 import { LeafletMap, type LeafletMapRef } from "@/components/driver/LeafletMap";
 
 type MapCoordinate = {

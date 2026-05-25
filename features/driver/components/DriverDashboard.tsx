@@ -17,7 +17,7 @@ import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import { darkMapStyle } from '@/lib/mapStyles';
 import * as driverLocationService from '@/features/driver/services/driverLocation.service';
 import * as driversService from '@/features/drivers/services/drivers.service';
-import { getOptimalRoute, RouteResult } from '@/services/routingService';
+import { getOptimalRoute, RouteResult } from '@/lib/routingService';
 import * as tripsService from '@/features/trips/services/trips.service';
 import {
   formatGeocodedCityState,

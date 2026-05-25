@@ -7,7 +7,7 @@ import {
   type CourierPartnerRow,
   type LogPodsPayload,
   type LogPodsTripView,
-} from '@/services/logPodsService';
+} from '@/features/log-pods/services/logPods.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 

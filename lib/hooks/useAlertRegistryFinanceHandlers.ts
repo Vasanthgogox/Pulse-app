@@ -5,7 +5,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
+import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import { useRouter } from "expo-router";
 
 export function useAlertRegistryFinanceHandlers(): {

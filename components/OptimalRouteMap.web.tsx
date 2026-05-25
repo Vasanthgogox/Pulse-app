@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Theme from '@/constants/Theme';
 import { LeafletMap, type LeafletLatLng, type LeafletMarker } from '@/components/driver/LeafletMap.web';
-import { getOptimalRoute } from '@/services/routingService';
+import { getOptimalRoute } from '@/lib/routingService';
 
 interface OptimalRouteMapProps {
   from: any;

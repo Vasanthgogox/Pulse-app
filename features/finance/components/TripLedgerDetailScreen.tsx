@@ -47,7 +47,7 @@ import {
   getSharedLedgerEntriesForPartner,
   getSharedLedgerTripSummary,
   type SharedLedgerEntry,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 
 const PREVIEW_TRIP_ID = "preview";
 

@@ -47,7 +47,7 @@ import {
   getSharedLedgerNotifications,
   markSharedLedgerNotificationRead,
   type SharedLedgerNotificationRow,
-} from '@/services/sharedLedgerNotificationsService';
+} from '@/features/finance/services/sharedLedgerNotifications.service';
 import {
   getConnectionRequestsReceived,
   getConnectionRequestsSent,

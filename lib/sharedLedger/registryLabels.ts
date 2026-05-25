@@ -1,4 +1,4 @@
-import type { SharedLedgerNotificationRow } from '@/services/sharedLedgerNotificationsService';
+import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
 
 export function sharedLedgerActionLabel(
   eventType: SharedLedgerNotificationRow['event_type'],

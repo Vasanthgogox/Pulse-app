@@ -27,7 +27,7 @@ import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { useSafeBack } from "@/lib/useSafeBack";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
-import { getOptimalRoute } from "@/services/routingService";
+import { getOptimalRoute } from "@/lib/routingService";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import * as tripsService from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";

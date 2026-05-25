@@ -18,7 +18,7 @@
 import {
   getSharedLedgerConnections,
   getSharedLedgerEntriesForPartner,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 import { getClientsByOrganization } from "@/features/clients/services/clients.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { ClientFeedLocalStatus } from "../lib/clientFeedLocalStatus";

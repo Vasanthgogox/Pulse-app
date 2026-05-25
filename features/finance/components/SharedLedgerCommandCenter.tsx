@@ -13,7 +13,7 @@ import {
 import {
     getPartnerTripIdsForSharedLedgerFocus,
     getSharedTripFinanceAdjustments,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 import {
     isBlankOrPlaceholderPartyName,
     partyAvatarBackgroundColor,

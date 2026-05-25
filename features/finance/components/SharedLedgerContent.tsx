@@ -40,7 +40,7 @@ import {
     resolveDisputeTableOnly,
     type DisputeRow,
     type SharedLedgerEntry,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

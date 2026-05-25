@@ -20,7 +20,7 @@ import { ROUTES } from "@/lib/routes";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
-import { getOptimalRoute } from "@/services/routingService";
+import { getOptimalRoute } from "@/lib/routingService";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";

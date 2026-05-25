@@ -42,14 +42,14 @@ import {
 } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
-import type { DisputeRow } from "@/services/sharedLedgerService";
+import type { DisputeRow } from "@/features/finance/services/sharedLedger.service";
 import {
     acceptPartnerView,
     createDispute,
     getSharedLedgerEntriesForPartner,
     resolveDispute,
     resolveDisputeTableOnly,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 import {
     useOpenDisputesQuery,
     useDisputesReceivedQuery,

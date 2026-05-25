@@ -1,7 +1,7 @@
 /**
  * Maps Postgres / RPC rows → shared-ledger notification shape (global sync slice).
  */
-import type { SharedLedgerNotificationRow } from '@/services/sharedLedgerNotificationsService';
+import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
 
 export function mapSharedLedgerRow(
   raw: Record<string, unknown>,

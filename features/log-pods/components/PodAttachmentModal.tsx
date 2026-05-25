@@ -20,7 +20,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { supabase } from '@/lib/supabase';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
-import type { MappedPodAttachment } from '@/services/logPodsService';
+import type { MappedPodAttachment } from '@/features/log-pods/services/logPods.service';
 import { isTripDocumentsMetaTableUnavailable } from '@/features/trips/services/tripDocuments.service';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;

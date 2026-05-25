@@ -15,7 +15,7 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { createLedgerEntry } from "@/features/finance/services/finance.service";
-import { createDispute } from "@/services/sharedLedgerService";
+import { createDispute } from "@/features/finance/services/sharedLedger.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useState } from "react";
 import {

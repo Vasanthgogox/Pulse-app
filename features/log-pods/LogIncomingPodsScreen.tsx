@@ -21,7 +21,7 @@ import {
 import type {
     CourierPartnerRow,
     MappedPodAttachment,
-} from "@/services/logPodsService";
+} from "@/features/log-pods/services/logPods.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";

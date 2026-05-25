@@ -5,7 +5,7 @@ import {
     type LeafletMarker,
 } from "@/components/driver/LeafletMap.web";
 import Theme from "@/constants/Theme";
-import { getOptimalRoute, type RouteResult } from "@/services/routingService";
+import { getOptimalRoute, type RouteResult } from "@/lib/routingService";
 import FontAwesomeIcon from "@expo/vector-icons/FontAwesome";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";

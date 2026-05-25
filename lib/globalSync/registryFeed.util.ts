@@ -1,6 +1,6 @@
 import type { GlobalOperationAlert } from '@/lib/globalSync/priorityEngine.util';
 import type { SalaryRequestWithDriverRow } from '@/features/drivers/services/salaryRequests.service';
-import type { SharedLedgerNotificationRow } from '@/services/sharedLedgerNotificationsService';
+import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
 
 export type RegistryFeedKind = 'ops' | 'salary' | 'shared';
 

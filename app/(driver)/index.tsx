@@ -61,7 +61,7 @@ import {
     getOptimalRoute,
     parseRouteFetchKey,
     type RouteResult,
-} from "@/services/routingService";
+} from "@/lib/routingService";
 import * as tripsService from "@/features/trips/services/trips.service";
 import {
   formatGeocodedCityState,

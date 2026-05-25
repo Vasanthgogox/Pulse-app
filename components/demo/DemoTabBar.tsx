@@ -48,7 +48,7 @@ import {
     rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
+import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { Home, Package, Route, Wallet } from "lucide-react-native";

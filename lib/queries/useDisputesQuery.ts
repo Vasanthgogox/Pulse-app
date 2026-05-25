@@ -6,7 +6,7 @@ import {
   getDisputesReceived,
   getOpenDisputesByOrg,
   type DisputeRow,
-} from '@/services/sharedLedgerService';
+} from '@/features/finance/services/sharedLedger.service';
 
 export type { DisputeRow };
 

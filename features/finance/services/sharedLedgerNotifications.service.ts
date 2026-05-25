@@ -21,7 +21,7 @@ import {
     getDisputesForPartner,
     getDisputesReceived,
     getSharedLedgerEntriesForPartner,
-} from "@/services/sharedLedgerService";
+} from "@/features/finance/services/sharedLedger.service";
 
 export type SharedLedgerNotificationEventType =
   | "dispute_received"

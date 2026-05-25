@@ -12,7 +12,7 @@ import {
     required,
     runValidators,
 } from '@/lib/validation';
-import { getOptimalRoute } from '@/services/routingService';
+import { getOptimalRoute } from '@/lib/routingService';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AddTripFormData, AddTripFormState } from './types';
 

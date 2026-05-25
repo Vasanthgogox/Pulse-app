@@ -7,7 +7,7 @@ import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { darkMapStyle } from '@/lib/mapStyles';
 import { DriverGuidanceConfig } from '@/types/driver';
-import type { RouteResult } from '@/services/routingService';
+import type { RouteResult } from '@/lib/routingService';
 
 export type TripStopCoord = { latitude: number; longitude: number };
 

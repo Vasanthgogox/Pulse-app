@@ -1,7 +1,7 @@
 /**
  * Web-only trip map using Leaflet with road routing via routingService.ts.
  */
-import { getOptimalRoute, type RouteResult } from '@/services/routingService';
+import { getOptimalRoute, type RouteResult } from '@/lib/routingService';
 import React, { useEffect, useRef, useState } from 'react';
 
 /** Metro web cannot bundle leaflet.css (relative url(images/...) in CSS). Load from CDN instead. */

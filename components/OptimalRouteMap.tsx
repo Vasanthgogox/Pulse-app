@@ -9,7 +9,7 @@ import MapView, {
   type MapViewRef,
 } from '@/lib/reactNativeMapsCompat';
 import { FontAwesome } from '@expo/vector-icons';
-import { getOptimalRoute, LatLon, RouteResult } from '@/services/routingService';
+import { getOptimalRoute, LatLon, RouteResult } from '@/lib/routingService';
 import Theme from '@/constants/Theme';
 import { useDriverTheme } from '@/contexts/DriverThemeContext';
 import { darkMapStyle } from '@/lib/mapStyles';

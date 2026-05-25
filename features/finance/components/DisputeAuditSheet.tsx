@@ -25,9 +25,9 @@ import { getTransactionsByOrganizationAndContactId } from '../services/finance.s
 import {
   getSharedLedgerEntriesForPartner,
   createDispute,
-} from '@/services/sharedLedgerService';
+} from '@/features/finance/services/sharedLedger.service';
 import type { LedgerRow } from '../services/finance.service';
-import type { SharedLedgerEntry } from '@/services/sharedLedgerService';
+import type { SharedLedgerEntry } from '@/features/finance/services/sharedLedger.service';
 
 export type DisputedItemKind = 'MISSING_IN_PARTNER' | 'AMOUNT_MISMATCH' | 'UNRECOGNIZED_IN_OURS';
 
