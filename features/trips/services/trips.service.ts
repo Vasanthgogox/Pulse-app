@@ -1652,6 +1652,7 @@ export async function assignAggregateTripDriverByPhone(
   phone: string,
   vehicleDisplayNumber?: string | null,
   vehicleId?: string | null,
+  previousDriverId?: string | null,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
@@ -1751,7 +1752,20 @@ export async function assignAggregateTripDriverByPhone(
       trip: null,
     };
   }
-  return { error: null, trip: (obj.trip ?? null) as TripRow | null };
+  const resultTrip = (obj.trip ?? null) as TripRow | null;
+  if (resultTrip) {
+    const { postAggregateAssignmentMessage } = await import(
+      "@/features/chat/services/chatAssignmentBridge.service"
+    );
+    void postAggregateAssignmentMessage(resultTrip, previousDriverId ?? null).catch(
+      (e) => {
+        if (__DEV__) {
+          console.warn("[trips] aggregate assign chat broadcast failed:", e);
+        }
+      },
+    );
+  }
+  return { error: null, trip: resultTrip };
 }
 
 /** Trip status values allowed by DB (public.trips.status CHECK). */
@@ -2178,26 +2192,59 @@ export async function updateTripPayment(
   return { error: null, trip: row as TripRow | null };
 }
 
+export type ActiveDriverAssignmentMap = {
+  busyDriverIds: Set<string>;
+  tripLabelByDriverId: Record<string, string>;
+};
+
 /**
- * Driver IDs on any non-terminal trip for this org (matches {@link getDriverOngoingTrip} rules).
+ * Driver IDs on any non-terminal trip for this org, with trip label for display.
+ * Mirrors the shape of {@link getActiveVehicleAssignments} so the reassign UI
+ * can show "On Trip #TR-001" instead of a generic "On another trip".
  */
-export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
-  const { data } = await supabase()
+export async function getActiveDriverAssignments(
+  orgId: string,
+  excludeTripId?: string,
+): Promise<{ error: Error | null; map: ActiveDriverAssignmentMap }> {
+  let q = supabase()
     .from("trips")
-    .select("driver_id")
+    .select("id, driver_id, trip_number, status")
     .eq("organization_id", orgId)
     .not("driver_id", "is", null)
     .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`)
     .limit(500);
-
-  const ids = new Set<string>();
-  for (const row of data ?? []) {
-    const r = row as { driver_id?: string | null };
-    const id = r.driver_id;
-    if (!id) continue;
-    ids.add(id);
+  if (excludeTripId != null && excludeTripId.trim() !== "") {
+    q = q.neq("id", excludeTripId);
   }
-  return ids;
+  const { data, error } = await q;
+  if (error) {
+    return {
+      error: new Error(error.message),
+      map: { busyDriverIds: new Set(), tripLabelByDriverId: {} },
+    };
+  }
+  const busyDriverIds = new Set<string>();
+  const tripLabelByDriverId: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const r = row as {
+      driver_id?: string | null;
+      trip_number?: string | null;
+      status?: string | null;
+    };
+    const did = r.driver_id;
+    if (!did || busyDriverIds.has(did)) continue;
+    busyDriverIds.add(did);
+    tripLabelByDriverId[did] = r.trip_number
+      ? `Trip #${r.trip_number}`
+      : "another trip";
+  }
+  return { error: null, map: { busyDriverIds, tripLabelByDriverId } };
+}
+
+/** @deprecated Use {@link getActiveDriverAssignments} for trip-label context. */
+export async function getActiveDriverIds(orgId: string): Promise<Set<string>> {
+  const { map } = await getActiveDriverAssignments(orgId);
+  return map.busyDriverIds;
 }
 
 export type ActiveVehicleAssignmentMap = {

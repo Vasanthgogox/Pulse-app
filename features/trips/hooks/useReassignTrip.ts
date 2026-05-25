@@ -2,12 +2,13 @@ import { useCallback, useState } from 'react';
 import {
   assignAggregateTripDriverByPhone,
   assignTripDriverByPhone,
-  getActiveDriverIds,
+  getActiveDriverAssignments,
   getActiveVehicleAssignments,
   getDriverOngoingTrip,
   getTripUpdatedAt,
   getVehicleOngoingTrip,
   updateTripAssignment,
+  type ActiveDriverAssignmentMap,
   type TripRow,
 } from '@/features/trips/services/trips.service';
 import {
@@ -233,6 +234,7 @@ export function useReassignTrip({
             payload.phone,
             payload.vehicleDisplayNumber ?? null,
             payload.vehicleId ?? null,
+            trip.driver_id ?? null,
           );
           if (rpcErr) {
             setError(rpcErr.message);
@@ -370,9 +372,10 @@ export function useReassignTrip({
     ],
   );
 
-  const loadBusyDriverIds = useCallback(async (): Promise<Set<string>> => {
-    return getActiveDriverIds(organizationId);
-  }, [organizationId]);
+  const loadBusyDriverIds = useCallback(async (): Promise<ActiveDriverAssignmentMap> => {
+    const { map } = await getActiveDriverAssignments(organizationId, trip.id);
+    return map;
+  }, [organizationId, trip.id]);
 
   const loadBusyVehicleAssignments = useCallback(async () => {
     const { error: loadErr, map } = await getActiveVehicleAssignments(

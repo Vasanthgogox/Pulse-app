@@ -39,6 +39,7 @@ type Props = {
   drivers: DriverRow[];
   driversLoading: boolean;
   busyDriverIds: Set<string>;
+  tripLabelByDriverId: Record<string, string>;
   mode: DriverReassignMode;
   onModeChange: (mode: DriverReassignMode) => void;
   selectedDriverId: string | null;
@@ -59,6 +60,7 @@ export function DriverReassignSection({
   drivers,
   driversLoading,
   busyDriverIds,
+  tripLabelByDriverId,
   mode,
   onModeChange,
   selectedDriverId,
@@ -215,7 +217,9 @@ export function DriverReassignSection({
                           {d.name ?? '—'}
                         </Text>
                         <Text style={s.rowSub} numberOfLines={1}>
-                          {busy ? 'On another trip' : d.phone ?? 'No phone'}
+                          {busy
+                            ? `On ${tripLabelByDriverId[d.id] ?? 'another trip'}`
+                            : d.phone ?? 'No phone'}
                         </Text>
                       </View>
                       {selected ? (

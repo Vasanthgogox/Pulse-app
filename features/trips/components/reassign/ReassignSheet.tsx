@@ -106,6 +106,7 @@ export function ReassignSheet({
     formatIndianVehicleNumber(trip.vehicle_display_number ?? '').trim(),
   );
   const [busyDriverIds, setBusyDriverIds] = useState<Set<string>>(new Set());
+  const [busyDriverTripLabels, setBusyDriverTripLabels] = useState<Record<string, string>>({});
   const [busyVehicleIds, setBusyVehicleIds] = useState<Set<string>>(new Set());
   const [staleConflict, setStaleConflict] = useState(false);
 
@@ -157,8 +158,11 @@ export function ReassignSheet({
     setStaleConflict(false);
     setTripUpdatedAtSnapshot(trip.updated_at ?? null);
 
-    void loadBusyDriverIds().then((ids) => {
-      if (sheetOpenGenRef.current === openGen) setBusyDriverIds(ids);
+    void loadBusyDriverIds().then(({ busyDriverIds: ids, tripLabelByDriverId: labels }) => {
+      if (sheetOpenGenRef.current === openGen) {
+        setBusyDriverIds(ids);
+        setBusyDriverTripLabels(labels);
+      }
     });
     void loadBusyVehicleAssignments().then(({ busyVehicleIds: busy }) => {
       if (sheetOpenGenRef.current === openGen) setBusyVehicleIds(busy);
@@ -586,6 +590,7 @@ export function ReassignSheet({
                   drivers={drivers}
                   driversLoading={driversLoading}
                   busyDriverIds={busyDriverIds}
+                  tripLabelByDriverId={busyDriverTripLabels}
                   mode={driverMode}
                   onModeChange={setDriverMode}
                   selectedDriverId={selectedDriverId}
