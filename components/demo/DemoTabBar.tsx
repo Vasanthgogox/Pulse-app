@@ -46,7 +46,7 @@ import {
     cancelConnectionRequest,
     cancelPendingConnectionRequestsForPartnerOwner,
     rejectConnectionRequest,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";

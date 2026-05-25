@@ -6,7 +6,7 @@ import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.s
 import type { InboundPartnerDisplay, InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { normalizePhoneForInviteeLookup } from '@/lib/phoneLookup';
-import type { ConnectionRequestRow } from '@/services/connectionRequestsService';
+import type { ConnectionRequestRow } from '@/features/connections/services/connectionRequests.service';
 import { REGISTRY_PAGE_SIZE } from '@/lib/globalSync/registryFeed.constants';
 
 export function connectionRequestTypeLabel(row: ConnectionRequestRow): string {

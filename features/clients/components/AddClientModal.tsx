@@ -13,7 +13,7 @@ import { formatMobileNumber } from "@/lib/format";
 import {
   inviteeProfileIsDriver,
   inviteeSuggestedCompanyName,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { partyAddModalChromeStyles } from "@/components/PartyAddModalChrome";

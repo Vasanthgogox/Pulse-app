@@ -12,7 +12,7 @@ import type { DriverFormData } from "@/features/drivers/components/AddDriverModa
 import {
   createConnectionRequest,
   getConnectionInviteeByPhone,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import { createSupplier } from "@/features/suppliers/services/suppliers.service";
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import { createVehicle } from "@/features/vehicles/services/vehicles.service";

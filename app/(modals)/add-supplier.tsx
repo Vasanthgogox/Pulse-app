@@ -11,7 +11,7 @@ import { createSupplier } from '@/features/suppliers/services/suppliers.service'
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
-} from '@/services/connectionRequestsService';
+} from '@/features/connections/services/connectionRequests.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { ROUTES } from '@/lib/routes';
 import { useQueryClient } from '@tanstack/react-query';

@@ -36,7 +36,7 @@ import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/p
 import {
   createConnectionRequest,
   looksLikeConnectionRateLimitError,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";

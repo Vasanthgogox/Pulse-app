@@ -60,7 +60,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
   inviteeProfileIsDriver,
   inviteeSuggestedCompanyName,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import {
   ActivityIndicator,
   Dimensions,

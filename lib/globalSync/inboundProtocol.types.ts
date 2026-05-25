@@ -1,4 +1,4 @@
-import type { ConnectionRequestRow } from '@/services/connectionRequestsService';
+import type { ConnectionRequestRow } from '@/features/connections/services/connectionRequests.service';
 
 export type InboundPartnerDisplay = {
   organizationName: string;

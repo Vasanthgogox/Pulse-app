@@ -7,7 +7,7 @@ import { STALE } from "@/lib/queryClient";
 import {
     getConnectionRequestsReceived,
     getConnectionRequestsSent,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useConnectionRequestsReceivedQuery(orgId: string | null) {

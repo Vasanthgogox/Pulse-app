@@ -52,7 +52,7 @@ import {
   getConnectionRequestsReceived,
   getConnectionRequestsSent,
   type ConnectionRequestRow,
-} from '@/services/connectionRequestsService';
+} from '@/features/connections/services/connectionRequests.service';
 import type {
   ActiveTripLastKnownLocation,
   ActiveTripSummary,

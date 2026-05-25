@@ -11,7 +11,7 @@ import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
-import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
+import type { ConnectionRequestRow } from "@/features/connections/services/connectionRequests.service";
 import type { ReactNode } from "react";
 import type { LedgerRow } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";

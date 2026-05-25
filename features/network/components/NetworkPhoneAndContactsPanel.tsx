@@ -30,7 +30,7 @@ import {
   inviteeSuggestedCompanyName,
   looksLikeConnectionRateLimitError,
   type ConnectionRequestRow,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import {
   useConnectionRequestsSentQuery,
   useInvalidateNetwork,

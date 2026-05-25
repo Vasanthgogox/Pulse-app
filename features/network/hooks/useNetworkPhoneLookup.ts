@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   getConnectionInviteeByPhone,
   type ConnectionInviteeByPhone,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import {
   isPhoneLikeNetworkSearch,
   NETWORK_PHONE_SEARCH_DEBOUNCE_MS,

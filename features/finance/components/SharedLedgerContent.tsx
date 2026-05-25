@@ -27,7 +27,7 @@ import {
     getConnectionInviteeByPhone,
     getConnectionRequestsSent,
     type ConnectionInviteeByPhone,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import {
     acceptPartnerView,
     createDispute,

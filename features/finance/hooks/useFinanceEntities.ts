@@ -11,7 +11,7 @@ import { type SupplierRow } from "@/features/suppliers/services/suppliers.servic
 import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatLedgerDate } from "@/lib/format";
-import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
+import type { ConnectionRequestRow } from "@/features/connections/services/connectionRequests.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import {
   useClientsQuery,

@@ -8,7 +8,7 @@ import {
     getConnectionInviteeByPhone,
     isDailyConnectionInviteLimitReached,
     looksLikeConnectionRateLimitError,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import { Alert, Share } from "react-native";
 
 export type PartyForConnectionInvite = {

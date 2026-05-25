@@ -39,7 +39,7 @@ import {
   DAILY_CONNECTION_INVITE_LIMIT,
   type ConnectionRequestRow,
   looksLikeConnectionRateLimitError,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import { useConnectionRequestsSentQuery, useInvalidateNetwork } from '@/lib/queries/useNetworkQueries';
 import { queryKeys } from '@/lib/queryKeys';
 import { useLanguage } from '@/contexts/LanguageContext';

@@ -12,7 +12,7 @@ import {
   cancelConnectionRequest,
   cancelPendingConnectionRequestsForPartnerOwner,
   rejectConnectionRequest,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 
 export function useInboundProtocolInviteActions(orgId: string | null) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);

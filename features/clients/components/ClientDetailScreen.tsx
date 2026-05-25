@@ -363,7 +363,7 @@ export default function ClientDetailScreen({
       setIsInApp(false);
       return;
     }
-    import("@/services/connectionRequestsService")
+    import("@/features/connections/services/connectionRequests.service")
       .then(({ getConnectionInviteeByPhone }) =>
         getConnectionInviteeByPhone(phone),
       )
@@ -1084,7 +1084,7 @@ export default function ClientDetailScreen({
     setSendingInvitation(true);
     try {
       const { createConnectionRequest, getConnectionInviteeByPhone } =
-        await import("@/services/connectionRequestsService");
+        await import("@/features/connections/services/connectionRequests.service");
       const { invitee, error: lookupError } = await getConnectionInviteeByPhone(
         client.phone,
       );

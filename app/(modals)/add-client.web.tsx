@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 
 function closeModal(
   router: ReturnType<typeof useRouter>,

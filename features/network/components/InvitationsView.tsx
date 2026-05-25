@@ -17,7 +17,7 @@ import {
   cancelConnectionRequest,
   rejectConnectionRequest,
   type ConnectionRequestRow,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 import { Check, Clock3, Search, Send, UserPlus2, X } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {

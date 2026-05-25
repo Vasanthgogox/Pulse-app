@@ -5,7 +5,7 @@ import {
   inviteeProfileIsDriver,
   inviteeSuggestedCompanyName,
   type ConnectionInviteeByPhone,
-} from "@/services/connectionRequestsService";
+} from "@/features/connections/services/connectionRequests.service";
 
 export type NetworkContactRecommendation = {
   normalizedPhone: string;
