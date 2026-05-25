@@ -3,6 +3,7 @@
 const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const importPlugin = require('eslint-plugin-import');
+const boundariesPlugin = require('eslint-plugin-boundaries');
 
 // Custom project-specific rules
 const qmobile = {
@@ -150,6 +151,41 @@ module.exports = [
           ],
         },
       ],
+    },
+  },
+  // Architecture boundary enforcement
+  {
+    files: ['**/*.{ts,tsx}'],
+    plugins: { boundaries: boundariesPlugin },
+    settings: {
+      'boundaries/elements': [
+        { type: 'app',       pattern: 'app/**/*' },
+        { type: 'feature',   pattern: 'features/**/*' },
+        { type: 'lib',       pattern: 'lib/**/*' },
+        { type: 'ui',        pattern: 'components/**/*' },
+        { type: 'context',   pattern: 'contexts/**/*' },
+        { type: 'constants', pattern: 'constants/**/*' },
+        { type: 'types',     pattern: 'types/**/*' },
+      ],
+      'boundaries/ignore': ['**/*.d.ts'],
+    },
+    rules: {
+      // lib must not import from features (prevents inverted dependencies)
+      'boundaries/dependencies': ['warn', {
+        default: 'allow',
+        rules: [
+          {
+            from: ['lib'],
+            disallow: ['feature'],
+            message: 'lib/ must not import from features/ — move shared logic to lib/ or invert the dep.',
+          },
+          {
+            from: ['ui'],
+            disallow: ['feature'],
+            message: 'Shared components/ must not import from features/ — pass data via props instead.',
+          },
+        ],
+      }],
     },
   },
 ];
