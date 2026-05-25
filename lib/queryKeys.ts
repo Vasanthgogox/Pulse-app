@@ -35,6 +35,8 @@ export const queryKeys = {
     assignmentAuditRoot: ["q", "trips", "assignment-audit"] as const,
     assignmentAudit: (tripIdsKey: string) =>
       ["q", "trips", "assignment-audit", tripIdsKey] as const,
+    /** Phase 3a: single-RPC bundle for trip detail hydration. */
+    bundle: (tripId: string) => ["q", "trips", "bundle", tripId] as const,
   },
 
   transactions: {

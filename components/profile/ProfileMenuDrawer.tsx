@@ -11,6 +11,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { ROUTES } from "@/lib/routes";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useRouter } from "expo-router";
@@ -205,27 +206,37 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
     });
   };
 
+  const openWorkspace = (panel?: WorkspacePanelId) => {
+    onClose();
+    requestAnimationFrame(() => {
+      router.push({
+        pathname: ROUTES.WORKSPACE,
+        params: panel ? { panel } : {},
+      } as Parameters<typeof router.push>[0]);
+    });
+  };
+
   const workspaceRows: MenuRow[] = [
     {
       id: "workspace",
       label: "Workspace settings",
       icon: <Building2 size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
       iconBg: PURPLE_TINT,
-      onPress: () => navigate(ROUTES.WORKSPACE),
+      onPress: () => openWorkspace("settings"),
     },
     {
       id: "team",
       label: "Team members",
       icon: <Users size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
       iconBg: PURPLE_TINT,
-      onPress: () => navigate(ROUTES.MODALS.TEAM),
+      onPress: () => openWorkspace("team"),
     },
     {
       id: "org-settings",
       label: "Org identity & KYC",
       icon: <Settings size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
       iconBg: PURPLE_TINT,
-      onPress: () => navigate(ROUTES.WORKSPACE),
+      onPress: () => openWorkspace("kyc"),
     },
   ];
 
@@ -289,7 +300,7 @@ export function ProfileMenuDrawer({ visible, onClose }: ProfileMenuDrawerProps) 
           >
             {/* ── Workspace header (purple, pinned top) ── */}
             <Pressable
-              onPress={() => navigate(ROUTES.WORKSPACE)}
+              onPress={() => openWorkspace()}
               style={[styles.orgHeader, { paddingTop: insets.top + 14 }]}
               accessibilityRole="button"
               accessibilityLabel="Open workspace settings"
