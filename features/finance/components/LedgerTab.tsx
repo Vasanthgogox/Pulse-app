@@ -13,7 +13,7 @@ import {
 } from "@/lib/entityIdentity";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
@@ -124,6 +124,7 @@ export function LedgerTab({
   const isControlled = transactionsProp !== undefined;
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
   const [profileImages, setProfileImages] = useState<Record<string, string>>({});
+  const attemptedProfileIds = useRef(new Set<string>());
   const viewMode = viewModeProp ?? "table";
 
   const clientById = new Map(clientRows.map(c => [c.id, c]));
@@ -191,7 +192,13 @@ export function LedgerTab({
   useEffect(() => {
     const fetchDriverProfileImages = async () => {
       const driverIds = rows
-        .filter((row) => row.contact_type === 'driver' && row.contact_id && !profileImages[row.contact_id] && !driverProfileImageUrls[row.contact_id!])
+        .filter((row) => {
+          if (row.contact_type !== 'driver' || !row.contact_id) return false;
+          const id = row.contact_id;
+          if (driverProfileImageUrls[id] || attemptedProfileIds.current.has(id)) return false;
+          attemptedProfileIds.current.add(id);
+          return true;
+        })
         .map((row) => row.contact_id as string);
 
       if (driverIds.length === 0) return;
