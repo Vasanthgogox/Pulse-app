@@ -276,7 +276,12 @@ async function findLatestAvatarPathForUserFolder(
 async function buildAvatarPathCandidates(path: string): Promise<string[]> {
   const p = path.trim();
   if (!p) return [];
+  // Paths with query params are never valid storage object keys (e.g. Expo dev-server URLs).
+  if (p.includes("?")) return [];
   if (p.includes("/")) return [p];
+  // Bare filename (has image extension but no folder) — try it directly in both buckets.
+  // Old profiles occasionally stored filenames without a user-folder prefix.
+  if (hasImageExtension(p)) return [p];
 
   // Legacy records sometimes stored only the user-id folder in avatar_url.
   // In that case discover the newest image object under that folder first.
@@ -363,13 +368,6 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
         return url;
       }
 
-      // If bucket is public or signed URL policy is unavailable, try public URL.
-      const primaryPublic = supabase().storage.from(AVATAR_BUCKET).getPublicUrl(candidate);
-      if (primaryPublic.data?.publicUrl) {
-        const url = primaryPublic.data.publicUrl;
-        if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
-        return url;
-      }
     }
 
     // Backward compatibility: old avatars may still be in the previous bucket.
@@ -380,12 +378,6 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
         .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
       if (!legacy.error && legacy.data?.signedUrl) {
         const url = legacy.data.signedUrl;
-        if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
-        return url;
-      }
-      const legacyPublic = supabase().storage.from(LEGACY_AVATAR_BUCKET).getPublicUrl(candidate);
-      if (legacyPublic.data?.publicUrl) {
-        const url = legacyPublic.data.publicUrl;
         if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
         return url;
       }
