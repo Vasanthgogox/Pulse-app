@@ -161,22 +161,16 @@ export default function TabLayout() {
       router.replace(ROUTES.SIGN_IN_DIRECT);
       return;
     }
-    if (!profile || !roleVerified) {
+    if (!profile) {
       router.replace(ROUTES.SIGN_IN_DIRECT);
       return;
     }
-    if (profile.role === 'driver') {
+    if (profile.role === 'driver' && roleVerified) {
       router.replace(ROUTES.DRIVER_ROOT);
     }
   }, [loading, user, profile, roleVerified, router]);
 
-  if (
-    loading ||
-    !user ||
-    !profile ||
-    !roleVerified ||
-    profile.role === 'driver'
-  ) {
+  if (loading || !user || !profile || profile.role === 'driver') {
     return (
       <AppLoadingSplash
         variant={loading ? 'session' : 'verify'}
