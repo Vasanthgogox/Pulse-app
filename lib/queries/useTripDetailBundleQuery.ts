@@ -1,0 +1,264 @@
+/**
+ * Phase 3a: Trip Detail Bundle Query
+ *
+ * Replaces 18-24 serial DB round trips with one RPC call to get_trip_detail_bundle().
+ * Feature-flagged: set ENABLE_TRIP_DETAIL_BUNDLE = true after validating bundle output
+ * against the legacy 20-call path on representative trips.
+ *
+ * Rollback: set flag to false — the hook returns undefined and callers fall back
+ * to the existing direct-service code path. No schema changes required for rollback.
+ */
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { queryKeys } from '@/lib/queryKeys';
+
+// ── Feature flag ─────────────────────────────────────────────────────────────
+// Global kill switch — keep false until 48h soak passes cleanly.
+// Per-org staged rollout is controlled via BUNDLE_ENABLED_ORG_IDS below.
+export const ENABLE_TRIP_DETAIL_BUNDLE = false;
+
+// Orgs enabled for staged bundle rollout before global flip.
+// Add internal/test org IDs here; remove after global flag is on.
+const BUNDLE_ENABLED_ORG_IDS = new Set<string>([
+  'c481a15d-c488-4e26-aa03-d77681fb5835', // internal — vasanth/gogox primary test org
+]);
+
+/** Returns true if the bundle path should be active for the given org. */
+export function isBundleEnabled(orgId: string | null): boolean {
+  return ENABLE_TRIP_DETAIL_BUNDLE || (orgId != null && BUNDLE_ENABLED_ORG_IDS.has(orgId));
+}
+
+// ── Payload contract ─────────────────────────────────────────────────────────
+
+export interface BundleTrip {
+  id: string;
+  organization_id: string;
+  trip_number: string;
+  display_trip_id: string | null;
+  driver_display_trip_id: string | null;
+  indent_id: string | null;
+  source: string;
+  pickup_area: string;
+  drop_location: string;
+  distance: number | null;
+  estimated_duration: string | null;
+  client_id: string | null;
+  client_name: string;
+  supplier_id: string | null;
+  driver_id: string | null;
+  vehicle_id: string | null;
+  driver_display_name: string | null;
+  vehicle_display_number: string | null;
+  client_price: number;
+  supplier_rate: number;
+  margin: number | null;
+  platform_fee: number;
+  driver_commission: number;
+  is_guaranteed: boolean;
+  payment_status: string;
+  amount_paid: number;
+  advance_paid: number;
+  status: string;
+  pickup_date: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  load_type: string | null;
+  load_tons: number | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  pickup_lat: number | null;
+  pickup_lon: number | null;
+  drop_lat: number | null;
+  drop_lon: number | null;
+  owner_user_id: string | null;
+  created_by_user_id: string | null;
+  assigned_by_user_id: string | null;
+  trip_payout_mode: string | null;
+  last_location_at: string | null;
+  actual_distance_traveled_km: number | null;
+  last_location_chat_at: string | null;
+}
+
+export interface BundleAssignmentAuditRow {
+  id: string;
+  trip_id: string;
+  event_type: string;
+  driver_id_prev: string | null;
+  driver_id_new: string | null;
+  vehicle_id_prev: string | null;
+  vehicle_id_new: string | null;
+  changed_at: string;
+  changed_by: string | null;
+  driver_new_name: string | null;
+  driver_prev_name: string | null;
+  vehicle_new_label: string | null;
+  vehicle_prev_label: string | null;
+}
+
+export interface BundleDriver {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  avatar_seed: string | null;
+  user_id: string | null;
+  organization_id: string;
+}
+
+export interface BundleVehicle {
+  id: string;
+  vehicle_number: string;
+  vehicle_type: string | null;
+  capacity: string | null;
+  vehicle_brand: string | null;
+  vehicle_body_type: string | null;
+  organization_id: string;
+  supplier_id: string | null;
+  status: string;
+  documents: Record<string, unknown> | null;
+}
+
+export interface BundleLinkedOrg {
+  id: string;
+  logo_url: string | null;
+}
+
+export interface BundleClient {
+  id: string;
+  name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  avatar_seed: string | null;
+  linked_organization_id: string | null;
+  organization_id: string;
+  status: string | null;
+}
+
+export interface BundleSupplier {
+  id: string;
+  company_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  avatar_seed: string | null;
+  linked_organization_id: string | null;
+  organization_id: string;
+}
+
+export interface BundleTransaction {
+  id: string;
+  organization_id: string;
+  trip_id: string;
+  party_name: string;
+  description: string;
+  amount_in: number;
+  amount_out: number;
+  transaction_date: string;
+  created_at: string | null;
+  contact_id: string | null;
+  contact_type: string | null;
+  ledger_entity_type: string | null;
+  ledger_flow_type: string | null;
+  ledger_category: string | null;
+}
+
+export interface BundleAdjustment {
+  id: string;
+  trip_id: string;
+  organization_id: string;
+  type: string;
+  impact: string;
+  amount: number;
+  reason: string;
+  mission_key: string | null;
+  created_at: string;
+  created_by: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+}
+
+export interface BundleDocument {
+  id: string;
+  trip_id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  uploaded_at: string;
+  uploaded_by: string | null;
+}
+
+export interface BundleOtp {
+  code: string;
+  expires_at: string;
+}
+
+export interface BundleLatestLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  recorded_at: string;
+}
+
+export interface TripDetailBundle {
+  trip: BundleTrip;
+  assignment_audit: BundleAssignmentAuditRow[];
+  driver: BundleDriver | null;
+  vehicle: BundleVehicle | null;
+  client_detail: { client: BundleClient; linked_org: BundleLinkedOrg | null } | null;
+  supplier_detail: { supplier: BundleSupplier; linked_org: BundleLinkedOrg | null } | null;
+  transactions: BundleTransaction[];
+  adjustments: BundleAdjustment[];
+  documents: BundleDocument[];
+  otp: BundleOtp | null;
+  latest_driver_location: BundleLatestLocation | null;
+}
+
+// ── Fetcher ──────────────────────────────────────────────────────────────────
+
+async function fetchTripDetailBundle(
+  tripId: string,
+  viewerOrgId: string,
+): Promise<TripDetailBundle | null> {
+  const { data, error } = await supabase().rpc('get_trip_detail_bundle', {
+    p_trip_id: tripId,
+    p_viewer_org_id: viewerOrgId,
+  });
+  if (error) throw new Error(error.message);
+  return (data as TripDetailBundle | null) ?? null;
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches the trip detail bundle via RPC when ENABLE_TRIP_DETAIL_BUNDLE is true.
+ * Returns undefined when the flag is off — callers fall through to legacy path.
+ *
+ * Stale time: 60s (matches org-level trip queries).
+ * Does not auto-invalidate on realtime events — useTripDetail owns that via setTrip().
+ * Invalidate manually via queryClient.invalidateQueries(queryKeys.trips.bundle(tripId))
+ * after mutations (assignment, status change, finance entry).
+ */
+export function useTripDetailBundleQuery(
+  tripId: string | null,
+  viewerOrgId: string | null,
+): { bundle: TripDetailBundle | null | undefined; isBundleLoading: boolean; bundleError: Error | null } {
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.trips.bundle(tripId ?? ''),
+    queryFn: () => fetchTripDetailBundle(tripId!, viewerOrgId!),
+    enabled: isBundleEnabled(viewerOrgId) && !!tripId && !!viewerOrgId,
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  if (!isBundleEnabled(viewerOrgId)) {
+    return { bundle: undefined, isBundleLoading: false, bundleError: null };
+  }
+
+  return {
+    bundle: data ?? null,
+    isBundleLoading: isLoading,
+    bundleError: error as Error | null,
+  };
+}

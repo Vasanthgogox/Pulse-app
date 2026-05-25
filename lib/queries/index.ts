@@ -86,3 +86,8 @@ export {
   useDisputeMapQuery,
   useInvalidateDisputes,
 } from './useDisputesQuery';
+export {
+  useTripDetailBundleQuery,
+  ENABLE_TRIP_DETAIL_BUNDLE,
+} from './useTripDetailBundleQuery';
+export type { TripDetailBundle } from './useTripDetailBundleQuery';

@@ -40,6 +40,7 @@ import {
     useTransactionsQuery,
     useTripSubcontractsQuery,
 } from "@/lib/queries";
+import { isBundleEnabled, useTripDetailBundleQuery } from "@/lib/queries/useTripDetailBundleQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import type { DisputeRow } from "@/features/finance/services/sharedLedger.service";
@@ -337,6 +338,10 @@ export function useTripDetail({
   const supplierRetryForTripIdRef = useRef<string | null>(null);
   const tripRef = useRef<TripRow | null>(null);
   tripRef.current = trip;
+  // Phase 3c: deduplicates dual-filter Realtime events (trip_id + driver_id on same channel).
+  const lastSeenLocationIdRef = useRef<string | null>(null);
+  // Phase 3b: true after bundle data has been seeded into state on initial mount.
+  const bundleSeededRef = useRef(false);
 
   // ── Shipper display names (platform-level alias) ──────────────────────────
   const { data: shipperNameByTripId = {} } = useShipperDisplayNamesQuery(
@@ -610,6 +615,12 @@ export function useTripDetail({
     trip ? [trip.id] : [],
   );
 
+  // Phase 3b: single-RPC bundle replacing 18-24 serial calls.
+  // bundleActive is false for all orgs not in BUNDLE_ENABLED_ORG_IDS and when global flag is off —
+  // all guards below become no-ops, preserving existing behavior for those orgs.
+  const { bundle } = useTripDetailBundleQuery(tripId, currentOrganization?.id ?? null);
+  const bundleActive = isBundleEnabled(currentOrganization?.id ?? null);
+
   const subcontractRate = useMemo(() => {
     if (tripSubcontracts.length > 0 && trip) {
       const exact = tripSubcontracts.find((row) => row.trip_id === trip.id);
@@ -844,8 +855,9 @@ export function useTripDetail({
 
   useRealtimeTrip(tripId ?? null, handleRealtimeTripUpdate);
 
-  /** Resolve audit row IDs to labels (web + shared timeline). Native screen had this inline; hook must own it for `.web.tsx`. */
+  /** Resolve audit row IDs to labels. Skipped on bundle path — names are already inlined by the RPC. */
   useEffect(() => {
+    if (bundleActive && bundleSeededRef.current) return;
     const orgId = trip?.organization_id;
     if (!orgId || assignmentAuditRows.length === 0) {
       setAssignmentDriverNames({});
@@ -938,8 +950,9 @@ export function useTripDetail({
     currentOrganization?.id,
   ]);
 
-  /** Primary driver card + vehicle label (matches native TripDetailScreen; aggregate drivers may live on supplier org). */
+  /** Primary driver card + vehicle label. Skipped on bundle path — driver/vehicle seeded from RPC. */
   useEffect(() => {
+    if (bundleActive && bundleSeededRef.current) return;
     if (!trip?.organization_id) {
       setDriverName(null);
       setDriverAvatarUri(null);
@@ -1314,7 +1327,10 @@ export function useTripDetail({
     loadTripDocuments();
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
-  }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments]);
+    if (bundleActive && tripId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+    }
+  }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments, tripId, queryClient]);
 
 
   /** Immediate refresh after assignment/reassignment actions. */
@@ -1326,7 +1342,10 @@ export function useTripDetail({
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
     loadTripOtp();
-  }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp]);
+    if (bundleActive && tripId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+    }
+  }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp, tripId, queryClient]);
 
   // ── Reconciliation actions ────────────────────────────────────────────────
   const refreshTripDispute = useCallback(() => {
@@ -1799,6 +1818,56 @@ export function useTripDetail({
 
   // ── Effects ───────────────────────────────────────────────────────────────
 
+  // Phase 3b: seed all state from bundle on initial mount and on bundle cache refresh.
+  // Individual load effects below are guarded by bundleActive so they do not
+  // fire their own DB calls when the bundle path is active.
+  useEffect(() => {
+    if (!bundle) return;
+    bundleSeededRef.current = true;
+
+    setTrip(bundle.trip as unknown as TripRow);
+    setLoading(false);
+    setError(null);
+    loadCompletedForIdRef.current = bundle.trip.id;
+    initialLoadDoneRef.current = true;
+
+    const sorted = [...bundle.assignment_audit].sort(
+      (a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime(),
+    );
+    setAssignmentAuditRows(sorted as unknown as TripAssignmentAuditRow[]);
+
+    const driverNames: Record<string, string> = {};
+    const vehicleLabels: Record<string, string> = {};
+    for (const aa of bundle.assignment_audit) {
+      if (aa.driver_id_new && aa.driver_new_name) driverNames[aa.driver_id_new] = aa.driver_new_name;
+      if (aa.driver_id_prev && aa.driver_prev_name) driverNames[aa.driver_id_prev] = aa.driver_prev_name;
+      if (aa.vehicle_id_new && aa.vehicle_new_label) vehicleLabels[aa.vehicle_id_new] = aa.vehicle_new_label;
+      if (aa.vehicle_id_prev && aa.vehicle_prev_label) vehicleLabels[aa.vehicle_id_prev] = aa.vehicle_prev_label;
+    }
+    setAssignmentDriverNames(driverNames);
+    setAssignmentVehicleLabels(vehicleLabels);
+
+    setAdjustments(bundle.adjustments as unknown as TripAdjustment[]);
+    setTripDocuments(bundle.documents as unknown as tripDocumentsService.TripDocumentRow[]);
+
+    if (bundle.otp) {
+      setTripOtp({ code: bundle.otp.code, expires_at: bundle.otp.expires_at });
+    }
+    if (bundle.latest_driver_location) {
+      setDriverLocation(bundle.latest_driver_location);
+    }
+    if (bundle.driver) {
+      const d = bundle.driver;
+      setDriverName((d.name || d.phone || '').trim() || (bundle.trip as unknown as TripRow).driver_display_name || null);
+      setDriverLinked(!!d.user_id);
+    }
+    if (bundle.vehicle) {
+      const v = bundle.vehicle;
+      setVehicleLabel([v.vehicle_number, v.vehicle_type].filter(Boolean).join(' · '));
+      setVehicleDocs((v.documents ?? null) as unknown as VehicleDocuments | null);
+    }
+  }, [bundle]);
+
   // Stash: preloaded trip from load-flow
   useEffect(() => {
     if (!tripId) return;
@@ -1812,8 +1881,11 @@ export function useTripDetail({
     }
   }, [tripId]);
 
-  // Initial load
-  useEffect(() => load(), [load]);
+  // Initial load — skipped on bundle path (bundle seeding effect owns initial hydration)
+  useEffect(() => {
+    if (bundleActive) return;
+    load();
+  }, [load]);
 
   // Supplier retry when org becomes available
   useEffect(() => {
@@ -1824,16 +1896,19 @@ export function useTripDetail({
     load();
   }, [tripId, currentOrganization?.id, trip, loading, load]);
 
-  // Adjustments + audit on mount
+  // Adjustments + audit on mount — skipped on bundle path (bundle seeding effect provides both)
   useEffect(() => {
+    if (bundleActive) return;
     if (tripId) loadAdjustments();
   }, [tripId, loadAdjustments]);
   useEffect(() => {
+    if (bundleActive) return;
     if (tripId) loadAssignmentAudit();
   }, [tripId, loadAssignmentAudit]);
 
-  // Trip documents
+  // Trip documents — skipped on bundle path (bundle seeding effect provides documents)
   useEffect(() => {
+    if (bundleActive && bundleSeededRef.current) return;
     if (trip?.id) loadTripDocuments();
     else setTripDocuments([]);
   }, [trip?.id, loadTripDocuments]);
@@ -1928,8 +2003,9 @@ export function useTripDetail({
     loadTripDocuments();
   }, [selectedDoc, docPreviewStoragePath, tripId, loadTripDocuments]);
 
-  // OTP for aggregate trips and non-aggregate trips with unlinked (tracking-only) drivers
+  // OTP — skipped on bundle path (bundle seeding effect provides otp or null)
   useEffect(() => {
+    if (bundleActive && bundleSeededRef.current) return;
     if (trip?.id && (isAggregateTrip(trip) || (!!trip.driver_id && !driverLinked))) {
       loadTripOtp();
     } else {
@@ -1948,25 +2024,52 @@ export function useTripDetail({
     void fetchDriverLocationFromDb();
   }, [trip?.id, effectiveDriverIdForLocation, fetchDriverLocationFromDb]);
 
-  // Re-fetch location on realtime trip updates/status transitions so map follows driver movement quickly.
+  // Phase 3c: on trip status/update events, fetch latest location only — history unchanged by status transitions.
   useEffect(() => {
     if (!trip?.id || !effectiveDriverIdForLocation) return;
-    void fetchDriverLocationFromDb();
-  }, [trip?.updated_at, trip?.status_revision, trip?.status, effectiveDriverIdForLocation, fetchDriverLocationFromDb, trip?.id]);
+    void driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, effectiveDriverIdForLocation)
+      .then(res => { if (!res.error && res.location) setDriverLocation(res.location); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.updated_at, trip?.status, effectiveDriverIdForLocation, trip?.id]);
 
-  /** Refetch when driver_locations rows arrive (read-only; does not change driver DB ping cadence). */
-  useRealtimeDriverLocations(trip?.id ?? null, effectiveDriverIdForLocation, () => {
-    void fetchDriverLocationFromDb();
+  /**
+   * Phase 3c: merge driver_locations INSERTs directly from Realtime payload.
+   * Eliminates DB#13+DB#14 (latest + history re-fetch) on every location ping.
+   * Deduplicates dual-filter events (same INSERT fires once per matching filter spec).
+   */
+  useRealtimeDriverLocations(trip?.id ?? null, effectiveDriverIdForLocation, (payload) => {
+    if (payload.eventType !== 'INSERT' || !payload.new) return;
+    const raw = payload.new as Record<string, unknown>;
+    const locId = raw.id as string | undefined;
+    if (!locId || locId === lastSeenLocationIdRef.current) return;
+    lastSeenLocationIdRef.current = locId;
+    const loc: driverLocationService.DriverLocationRow = {
+      latitude:    raw.latitude as number,
+      longitude:   raw.longitude as number,
+      accuracy:    (raw.accuracy as number | null) ?? null,
+      recorded_at: raw.recorded_at as string,
+    };
+    setDriverLocation(loc);
+    setTripLocationPoints(prev => [
+      ...prev,
+      { latitude: loc.latitude, longitude: loc.longitude, recorded_at: loc.recorded_at },
+    ]);
   });
 
-  /** Fallback poll while trip is active (Realtime covers the common case). */
+  /**
+   * Phase 3c: fallback poll fetches latest location only (not history).
+   * History is established at initial mount and updated via realtime payload merge.
+   * 1 DB call per 60s vs 2-3 calls previously.
+   */
   useEffect(() => {
     if (!trip?.id || tripCompleted) return;
-    const id = globalThis.setInterval(() => {
-      void fetchDriverLocationFromDb();
+    const id = globalThis.setInterval(async () => {
+      const driverId = effectiveDriverIdForLocation;
+      const res = await driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id!, driverId);
+      if (!res.error && res.location) setDriverLocation(res.location);
     }, 60_000);
     return () => globalThis.clearInterval(id);
-  }, [trip?.id, tripCompleted, fetchDriverLocationFromDb]);
+  }, [trip?.id, tripCompleted, effectiveDriverIdForLocation]);
 
   // Counterparty entries
   useEffect(() => {
