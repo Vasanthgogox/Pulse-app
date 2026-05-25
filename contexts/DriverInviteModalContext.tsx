@@ -3,7 +3,7 @@ import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
 import { useAuth } from '@/contexts/AuthContext';
 import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
-import * as driversService from '@/services/driversService';
+import * as driversService from '@/features/drivers/services/drivers.service';
 import { usePathname } from 'expo-router';
 import {
   createContext,

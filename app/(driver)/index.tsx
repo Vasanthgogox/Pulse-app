@@ -55,14 +55,14 @@ import MapView, {
 } from "@/lib/reactNativeMapsCompat";
 import { supabase } from "@/lib/supabase";
 import * as driverLocationService from "@/services/driverLocationService";
-import * as driversService from "@/services/driversService";
+import * as driversService from "@/features/drivers/services/drivers.service";
 import {
     buildRouteFetchKey,
     getOptimalRoute,
     parseRouteFetchKey,
     type RouteResult,
 } from "@/services/routingService";
-import * as tripsService from "@/services/tripsService";
+import * as tripsService from "@/features/trips/services/trips.service";
 import {
   formatGeocodedCityState,
   formatGeocodedPlaceLine,

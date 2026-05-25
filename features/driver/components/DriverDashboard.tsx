@@ -16,9 +16,9 @@ import { formatINR } from '@/lib/format';
 import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import { darkMapStyle } from '@/lib/mapStyles';
 import * as driverLocationService from '@/services/driverLocationService';
-import * as driversService from '@/services/driversService';
+import * as driversService from '@/features/drivers/services/drivers.service';
 import { getOptimalRoute, RouteResult } from '@/services/routingService';
-import * as tripsService from '@/services/tripsService';
+import * as tripsService from '@/features/trips/services/trips.service';
 import {
   formatGeocodedCityState,
   formatGeocodedPlaceLine,

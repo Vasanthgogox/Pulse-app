@@ -17,7 +17,7 @@ import {
 } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
 import { phonePeMetaDate } from "@/features/driver/utils/driverGpayTransactions.util";
-import type { TripRow } from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useRouter } from "expo-router";
 import {

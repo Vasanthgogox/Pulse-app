@@ -39,8 +39,8 @@ import {
   parseDriverUpdatesFromNotes,
   type ParsedDriverStatusNote,
 } from "@/features/driver/utils/driverTripStatusNotes.util";
-import type { TripRow } from "@/services/tripsService";
-import * as tripsService from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
+import * as tripsService from "@/features/trips/services/trips.service";
 
 /** Last chat bubble preview for list rows — fleet system broadcasts excluded. */
 function lastVisibleDriverChatMessage(messages: TripMessageRow[]): TripMessageRow | undefined {

@@ -12,14 +12,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getLinkedDriversForCurrentUser } from "@/features/drivers/services/drivers.service";
-import * as tripsService from "@/services/tripsService";
+import * as tripsService from "@/features/trips/services/trips.service";
 import * as chatService from "../services/chat.service";
 import type {
   TripConversation,
   TripConversationRow,
   TripMessageRow,
 } from "../types/chat.types";
-import type { TripRow } from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
 
 function buildMinimalDriverTripConversation(
   trip: TripRow,

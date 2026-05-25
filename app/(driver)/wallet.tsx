@@ -41,9 +41,9 @@ import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/features/vehicle
 import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
 import { buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
-import * as driversService from '@/services/driversService';
+import * as driversService from '@/features/drivers/services/drivers.service';
 import * as salaryRequestsService from '@/services/salaryRequestsService';
-import * as tripsService from '@/services/tripsService';
+import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';

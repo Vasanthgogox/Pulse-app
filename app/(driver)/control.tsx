@@ -25,11 +25,11 @@ import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { useSafeBack } from "@/lib/useSafeBack";
-import * as driversService from "@/services/driversService";
+import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/services/salaryRequestsService";
 import { getOptimalRoute } from "@/services/routingService";
 import * as tripDocumentsService from "@/services/tripDocumentsService";
-import * as tripsService from "@/services/tripsService";
+import * as tripsService from "@/features/trips/services/trips.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";

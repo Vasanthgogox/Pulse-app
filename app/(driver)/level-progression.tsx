@@ -18,8 +18,8 @@ import {
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
-import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
+import * as driversService from '@/features/drivers/services/drivers.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 import { supabase } from '@/lib/supabase';
 
 

@@ -1,7 +1,7 @@
 import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import { getDriverTripDisplayNumber } from "@/features/driver/utils/driverTripSequence.util";
-import type { DriverLedgerRow } from "@/services/driversService";
-import type { TripRow } from "@/services/tripsService";
+import type { DriverLedgerRow } from "@/features/drivers/services/drivers.service";
+import type { TripRow } from "@/features/trips/services/trips.service";
 
 export type DriverTripPaymentStatus =
   | "salary"

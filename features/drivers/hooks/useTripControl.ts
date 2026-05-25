@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import * as tripsService from "@/services/tripsService";
-import * as driversService from "@/services/driversService";
+import * as tripsService from "@/features/trips/services/trips.service";
+import * as driversService from "@/features/drivers/services/drivers.service";
 
 export const STEPS = [
   { id: "accepted", label: "Start", icon: "compass" as const },

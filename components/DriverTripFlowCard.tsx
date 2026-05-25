@@ -9,7 +9,7 @@ import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTrip
 import { isAggregateTrip } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import * as tripDocumentsService from '@/services/tripDocumentsService';
-import * as tripsService from '@/services/tripsService';
+import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';

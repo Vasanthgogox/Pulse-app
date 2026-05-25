@@ -3,7 +3,7 @@ import {
   buildDriverTripSettlementView,
   type DriverTripSettlementView,
 } from "@/features/driver/tripSettlement/driverTripSettlement.util";
-import * as driversService from "@/services/driversService";
+import * as driversService from "@/features/drivers/services/drivers.service";
 import {
   buildSettlementShareMessage,
   buildTripClaimWhatsappMessage,
@@ -15,7 +15,7 @@ import {
 } from "@/features/driver/utils/driverTripSequence.util";
 import { isCompleted as isTripCompleted } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import * as salaryRequestsService from "@/services/salaryRequestsService";
-import type { TripRow } from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

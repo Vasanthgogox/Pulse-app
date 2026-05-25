@@ -1,8 +1,8 @@
 import { buildDriverTripSettlementView } from '@/features/driver/tripSettlement/driverTripSettlement.util';
 import { buildDriverTripNumberMap } from '@/features/driver/utils/driverTripSequence.util';
 import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
-import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
+import * as driversService from '@/features/drivers/services/drivers.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 

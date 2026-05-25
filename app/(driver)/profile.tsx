@@ -17,8 +17,8 @@ import type { RatingRow } from '@/features/ratings/types';
 import { useLayoutInsets } from '@/lib/layoutInsets';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
-import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
+import * as driversService from '@/features/drivers/services/drivers.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {

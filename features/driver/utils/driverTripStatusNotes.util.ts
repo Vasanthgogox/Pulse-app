@@ -3,7 +3,7 @@
  * The driver chat UI also mirrors each tap into `trip_messages` so dispatchers see it in Command Hub.
  */
 import { supabase } from '@/lib/supabase';
-import type { TripRow } from '@/services/tripsService';
+import type { TripRow } from '@/features/trips/services/trips.service';
 
 export type DriverFlowStepId = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
 

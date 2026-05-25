@@ -17,8 +17,8 @@ import {
 import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
-import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
+import * as driversService from '@/features/drivers/services/drivers.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';

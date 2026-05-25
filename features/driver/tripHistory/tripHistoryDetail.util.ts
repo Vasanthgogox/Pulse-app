@@ -2,7 +2,7 @@ import { humanizeAssignerDisplayName } from "@/features/trips/utils/driverAssign
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { formatTime } from "@/lib/format";
 import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
-import type { TripRow } from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
 
 export function isCompleted(status: string) {
   const s = (status || "").toLowerCase();

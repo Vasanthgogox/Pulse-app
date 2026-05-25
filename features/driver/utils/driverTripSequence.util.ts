@@ -1,4 +1,4 @@
-import type { TripRow } from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
 
 function toTime(value: string | null | undefined): number {
   if (!value) return 0;

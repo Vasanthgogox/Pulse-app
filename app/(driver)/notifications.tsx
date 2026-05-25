@@ -36,8 +36,8 @@ import {
 } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
-import * as driversService from '@/services/driversService';
-import * as tripsService from '@/services/tripsService';
+import * as driversService from '@/features/drivers/services/drivers.service';
+import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';

@@ -2,7 +2,7 @@
  * Resolve “who assigned this trip?” for driver UI (asset roster, aggregate OTP, assign-by-phone).
  * Mirrors logic in app/(driver)/index.tsx notifications / assignment card.
  */
-import type { TripRow } from "@/services/tripsService";
+import type { TripRow } from "@/features/trips/services/trips.service";
 
 const UUID_V4_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
