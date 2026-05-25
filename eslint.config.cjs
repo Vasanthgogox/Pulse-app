@@ -52,6 +52,20 @@ const qmobile = {
 /** @type {import('eslint').Linter.FlatConfig[]} */
 module.exports = [
   {
+    // Global ignores — exclude build artifacts, caches, and third-party code
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'dist-test-bundle/**',
+      '.expo/**',
+      '.metro-cache/**',
+      'playwright-report/**',
+      'data-analytics/**',
+      'apps/web/**',
+      'packages/*/node_modules/**',
+    ],
+  },
+  {
     files: ['**/*.{ts,tsx,js,jsx}'],
     languageOptions: {
       parser: tsParser,
