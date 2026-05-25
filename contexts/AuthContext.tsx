@@ -35,8 +35,8 @@ import {
   TimeoutError,
   withTimeout,
 } from "@/lib/authEngine";
-import { useMobileKeepSignedInSignOut } from "@/hooks/useMobileKeepSignedInSignOut";
-import { useWebKeepSignedInSignOut } from "@/hooks/useWebKeepSignedInSignOut";
+import { useMobileKeepSignedInSignOut } from "@/features/auth/hooks/useMobileKeepSignedInSignOut";
+import { useWebKeepSignedInSignOut } from "@/features/auth/hooks/useWebKeepSignedInSignOut";
 import {
   createContext,
   useCallback,

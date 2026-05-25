@@ -117,7 +117,7 @@ import Reanimated, {
 import {
   effectiveKeyboardInset,
   useKeyboardVisible,
-} from "@/hooks/useKeyboardVisible";
+} from "@/lib/hooks/useKeyboardVisible";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Default map region when driver location is not yet available (India center). */

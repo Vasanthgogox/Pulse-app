@@ -24,7 +24,7 @@ import {
   dockPaddingBottom,
   effectiveKeyboardInset,
   useKeyboardVisible,
-} from "@/hooks/useKeyboardVisible";
+} from "@/lib/hooks/useKeyboardVisible";
 import { ChatMobileComposer } from "@/features/chat/components/ChatMobileComposer";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";

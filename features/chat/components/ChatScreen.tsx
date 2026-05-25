@@ -15,7 +15,7 @@ import {
   dockPaddingBottom,
   effectiveKeyboardInset,
   useKeyboardVisible,
-} from "@/hooks/useKeyboardVisible";
+} from "@/lib/hooks/useKeyboardVisible";
 import { ChatMobileComposer } from "@/features/chat/components/ChatMobileComposer";
 import { MessageTick } from "@/features/chat/components/MessageTick";
 import { SystemEventCard } from "@/features/chat/components/SystemEventCard";

@@ -1,7 +1,7 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { SemanticAddIcon } from '@/components/SemanticAddIcon';
-import { useGlobalFabAnimation } from '@/hooks/useGlobalFabAnimation';
+import { useGlobalFabAnimation } from '@/lib/hooks/useGlobalFabAnimation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Plus, type LucideIcon } from 'lucide-react-native';
 import type { ComponentProps } from 'react';

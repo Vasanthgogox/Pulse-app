@@ -7,7 +7,7 @@ import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useOptionalKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
-import { dockPaddingBottom, useKeyboardVisible } from "@/hooks/useKeyboardVisible";
+import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
 import { KEYBOARD_ACCESSORY_BAR_HEIGHT } from "@/components/AppKeyboardAccessory";
 import type { ReactNode } from "react";
 import {

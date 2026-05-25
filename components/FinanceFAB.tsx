@@ -5,7 +5,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { useGlobalFabAnimation } from "@/hooks/useGlobalFabAnimation";
+import { useGlobalFabAnimation } from "@/lib/hooks/useGlobalFabAnimation";
 import {
   Building2,
   CirclePlus,
