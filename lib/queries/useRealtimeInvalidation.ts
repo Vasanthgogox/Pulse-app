@@ -106,7 +106,41 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
 }
 
 /**
- * No-op: clients/suppliers/drivers are slow-changing; mutations invalidate manually.
- * Realtime on these tables added ~50% WAL decoder overhead with negligible benefit.
+ * Subscribes to connection_requests (low-write) and invalidates clients/suppliers
+ * when a request involving this org transitions to 'approved'. This is the only
+ * cross-org cache bust path — the approving org invalidates itself manually, but
+ * the requesting org has no other signal.
  */
-export function useRealtimeNetworkInvalidation(_organizationId: string | null) {}
+export function useRealtimeNetworkInvalidation(organizationId: string | null) {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!organizationId) return;
+
+    const invalidate = () => {
+      qc.invalidateQueries({ queryKey: queryKeys.clients.all(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(organizationId) });
+    };
+
+    const isApproval = (payload: { eventType: string; new: unknown }) =>
+      payload.eventType === 'UPDATE' &&
+      (payload.new as { status?: string })?.status === 'approved';
+
+    // Two subscriptions: one for requests this org sent, one for requests it received.
+    const unsubFrom = subscribeSharedPostgresChanges(
+      `conn_req:from:${organizationId}`,
+      [{ event: 'UPDATE', schema: 'public', table: 'connection_requests', filter: `from_organization_id=eq.${organizationId}` }],
+      (payload) => { if (isApproval(payload)) invalidate(); },
+    );
+
+    const unsubTo = subscribeSharedPostgresChanges(
+      `conn_req:to:${organizationId}`,
+      [{ event: 'UPDATE', schema: 'public', table: 'connection_requests', filter: `to_organization_id=eq.${organizationId}` }],
+      (payload) => { if (isApproval(payload)) invalidate(); },
+    );
+
+    return () => { unsubFrom(); unsubTo(); };
+  }, [organizationId, qc]);
+}

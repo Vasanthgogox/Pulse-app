@@ -49,6 +49,8 @@ function thumbCacheKey(path: string, width: number, height: number, quality: num
 export function normalizeTripDocumentsStoragePath(raw: string): string {
   let path = String(raw ?? '').trim();
   if (!path || /^https?:\/\//i.test(path)) return path;
+  // Storage object keys never contain query params — reject Expo dev-server URLs or other junk.
+  if (path.includes('?')) return '';
   const stripped = path.replace(/^\/*/, '');
   if (stripped.startsWith('trip-documents/')) return stripped.slice('trip-documents/'.length);
   if (stripped.startsWith('documents/')) return stripped.slice('documents/'.length);

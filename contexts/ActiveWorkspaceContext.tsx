@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { supabase } from '@/lib/supabase';
+import { withTimeout } from '@/lib/authEngine';
 import type { CurrentOrganization } from '@/types/organization';
 import type { ActiveWorkspaceState, Workspace, WorkspaceMember } from '@/types/workspace';
 
@@ -34,7 +35,6 @@ const STORAGE_KEY = 'pulse:active_workspace_id';
 interface WorkspaceMemberRow {
   role: WorkspaceMember['role'];
   status: string;
-  joined_at: string;
   organizations: {
     id: string;
     name: string | null;
@@ -178,21 +178,25 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data, error: dbError } = await supabase()
-          .from('organization_members')
-          .select(`
-            role,
-            status,
-            joined_at,
-            organizations (
-              id, name, slug, logo_url, operating_model,
-              address_line, city, state, zone,
-              business_pan, gstin, cin,
-              verification_status, verified_at, kyc_rejected_reason
-            )
-          `)
-          .eq('user_id', currentUser.uid)
-          .eq('status', 'active');
+        const { data, error: dbError } = await Promise.race([
+          supabase()
+            .from('organization_members')
+            .select(`
+              role,
+              status,
+              organizations (
+                id, name, slug, logo_url, operating_model,
+                address_line, city, state, zone,
+                business_pan, gstin, cin,
+                verification_status, verified_at, kyc_rejected_reason
+              )
+            `)
+            .eq('user_id', currentUser.uid)
+            .eq('status', 'active'),
+          new Promise<{ data: null; error: { message: string } }>((resolve) =>
+            setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), 15_000),
+          ),
+        ]);
 
         if (stale()) return;
 

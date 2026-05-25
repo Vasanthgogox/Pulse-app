@@ -5,8 +5,10 @@
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { useAuth } from '@/contexts/AuthContext';
 import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
+
+const BOOT_HARD_TIMEOUT_MS = 20_000;
 
 type AppBootGateProps = {
   children: ReactNode;
@@ -15,8 +17,15 @@ type AppBootGateProps = {
 export function AppBootGate({ children }: AppBootGateProps) {
   const { status, user, profile, roleVerified } = useAuth();
   const splashHidden = useRef(false);
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setTimedOut(true), BOOT_HARD_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   const bootReady = useMemo(() => {
+    if (timedOut) return true;
     // Only block on auth state — workspace/org data loads behind the scenes
     // after navigation is unblocked. Each screen shows its own skeleton while
     // workspace data streams in (avoids blocking the entire app on org fetch).
@@ -25,7 +34,7 @@ export function AppBootGate({ children }: AppBootGateProps) {
     if (user && profile?.role === 'driver' && !roleVerified) return false;
     return true;
     // Intentionally excluded: org?.isLoading — workspace loads behind the screen
-  }, [status, user, profile, roleVerified]);
+  }, [status, user, profile, roleVerified, timedOut]);
 
   const splashVariant =
     status === 'restoring'

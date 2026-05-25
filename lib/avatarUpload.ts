@@ -21,7 +21,11 @@ const QUALITY = 0.85;
 /** Signed URL expiry (seconds). Refresh before expiry when displaying. */
 const SIGNED_URL_EXPIRY_SEC = 3600;
 const SIGNED_URL_CACHE_MS = 55 * 60 * 1000;
-const signedAvatarUrlCache = new Map<string, { url: string; expiresAt: number }>();
+// null = confirmed not found; cached for 5min to suppress repeated 400s
+const SIGNED_URL_NOT_FOUND_CACHE_MS = 5 * 60 * 1000;
+const signedAvatarUrlCache = new Map<string, { url: string | null; expiresAt: number }>();
+// Deduplicates concurrent calls for the same path (thundering-herd guard)
+const inFlightAvatarRequests = new Map<string, Promise<string | null>>();
 
 function base64ToUint8Array(base64: string): Uint8Array {
   const normalized = base64.replace(/\s/g, '');
@@ -272,7 +276,12 @@ async function findLatestAvatarPathForUserFolder(
 async function buildAvatarPathCandidates(path: string): Promise<string[]> {
   const p = path.trim();
   if (!p) return [];
+  // Paths with query params are never valid storage object keys (e.g. Expo dev-server URLs).
+  if (p.includes("?")) return [];
   if (p.includes("/")) return [p];
+  // Bare filename (has image extension but no folder) — try it directly in both buckets.
+  // Old profiles occasionally stored filenames without a user-folder prefix.
+  if (hasImageExtension(p)) return [p];
 
   // Legacy records sometimes stored only the user-id folder in avatar_url.
   // In that case discover the newest image object under that folder first.
@@ -334,63 +343,57 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
     if (cached && cached.expiresAt > Date.now()) {
       return cached.url;
     }
+    // Deduplicate concurrent callers for the same path (thundering-herd guard).
+    // Without this, 87 list-rows mounting simultaneously each start their own
+    // storage.list() + createSignedUrl chain before the first one can populate the cache.
+    const inFlight = inFlightAvatarRequests.get(cacheKey);
+    if (inFlight) return inFlight;
   }
 
-  const candidates = await buildAvatarPathCandidates(path);
-  if (candidates.length === 0) return null;
+  const promise = (async (): Promise<string | null> => {
+    const candidates = await buildAvatarPathCandidates(path);
+    if (candidates.length === 0) {
+      if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url: null, expiresAt: Date.now() + SIGNED_URL_NOT_FOUND_CACHE_MS });
+      return null;
+    }
 
-  for (const candidate of candidates) {
-    const primary = await supabase()
-      .storage
-      .from(AVATAR_BUCKET)
-      .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
-    if (!primary.error && primary.data?.signedUrl) {
-      const url = primary.data.signedUrl;
-      if (cacheKey) {
-        signedAvatarUrlCache.set(cacheKey, {
-          url,
-          expiresAt: Date.now() + SIGNED_URL_CACHE_MS,
-        });
+    for (const candidate of candidates) {
+      const primary = await supabase()
+        .storage
+        .from(AVATAR_BUCKET)
+        .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
+      if (!primary.error && primary.data?.signedUrl) {
+        const url = primary.data.signedUrl;
+        if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
+        return url;
       }
-      return url;
+
     }
 
-    // If bucket is public or signed URL policy is unavailable, try public URL.
-    const primaryPublic = supabase()
-      .storage
-      .from(AVATAR_BUCKET)
-      .getPublicUrl(candidate);
-    if (primaryPublic.data?.publicUrl) {
-      return primaryPublic.data.publicUrl;
-    }
-  }
-
-  // Backward compatibility: old avatars may still be in the previous bucket.
-  for (const candidate of candidates) {
-    const legacy = await supabase()
-      .storage
-      .from(LEGACY_AVATAR_BUCKET)
-      .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
-    if (!legacy.error && legacy.data?.signedUrl) {
-      const url = legacy.data.signedUrl;
-      if (cacheKey) {
-        signedAvatarUrlCache.set(cacheKey, {
-          url,
-          expiresAt: Date.now() + SIGNED_URL_CACHE_MS,
-        });
+    // Backward compatibility: old avatars may still be in the previous bucket.
+    for (const candidate of candidates) {
+      const legacy = await supabase()
+        .storage
+        .from(LEGACY_AVATAR_BUCKET)
+        .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
+      if (!legacy.error && legacy.data?.signedUrl) {
+        const url = legacy.data.signedUrl;
+        if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
+        return url;
       }
-      return url;
     }
-    const legacyPublic = supabase()
-      .storage
-      .from(LEGACY_AVATAR_BUCKET)
-      .getPublicUrl(candidate);
-    if (legacyPublic.data?.publicUrl) {
-      return legacyPublic.data.publicUrl;
-    }
+
+    // Cache the not-found result so repeated calls don't hammer storage again.
+    if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url: null, expiresAt: Date.now() + SIGNED_URL_NOT_FOUND_CACHE_MS });
+    return null;
+  })();
+
+  if (cacheKey) {
+    inFlightAvatarRequests.set(cacheKey, promise);
+    void promise.finally(() => inFlightAvatarRequests.delete(cacheKey));
   }
 
-  return null;
+  return promise;
 }
 
 /**

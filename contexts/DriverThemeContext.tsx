@@ -77,14 +77,31 @@ export function DriverThemeProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    const fallback = setTimeout(() => {
+      if (!cancelled) setHydrated(true);
+    }, 3_000);
+
     Promise.all([
       AsyncStorage.getItem(STORAGE_KEY),
-      AsyncStorage.getItem(MAP_STORAGE_KEY)
-    ]).then(([storedTheme, storedMap]) => {
-      if (storedTheme === 'light' || storedTheme === 'dark') setThemeState(storedTheme);
-      if (storedMap === 'light' || storedMap === 'dark' || storedMap === 'auto') setMapThemeState(storedMap as MapThemeMode);
-      setHydrated(true);
-    });
+      AsyncStorage.getItem(MAP_STORAGE_KEY),
+    ])
+      .then(([storedTheme, storedMap]) => {
+        clearTimeout(fallback);
+        if (cancelled) return;
+        if (storedTheme === 'light' || storedTheme === 'dark') setThemeState(storedTheme);
+        if (storedMap === 'light' || storedMap === 'dark' || storedMap === 'auto') setMapThemeState(storedMap as MapThemeMode);
+        setHydrated(true);
+      })
+      .catch(() => {
+        clearTimeout(fallback);
+        if (!cancelled) setHydrated(true);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+    };
   }, []);
 
   const setTheme = (mode: DriverThemeMode) => {

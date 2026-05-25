@@ -30,10 +30,27 @@ export function DriverAvatarProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
-      if (stored) setAvatarSeedState(stored);
-      setHydrated(true);
-    });
+    let cancelled = false;
+    const fallback = setTimeout(() => {
+      if (!cancelled) setHydrated(true);
+    }, 3_000);
+
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((stored) => {
+        clearTimeout(fallback);
+        if (cancelled) return;
+        if (stored) setAvatarSeedState(stored);
+        setHydrated(true);
+      })
+      .catch(() => {
+        clearTimeout(fallback);
+        if (!cancelled) setHydrated(true);
+      });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+    };
   }, []);
 
   const setAvatarSeed = (seed: string) => {

@@ -272,30 +272,23 @@ export function FinanceScreen() {
   const [profileImages, setProfileImages] = useState<Record<string, string>>(
     {},
   );
+  // Tracks IDs that have been attempted (success OR failure) — prevents
+  // infinite re-fetch when Storage returns 400 (URL not found) for an ID.
+  const attemptedProfileIds = useRef(new Set<string>());
 
   useEffect(() => {
     let cancelled = false;
 
     const fetchProfileImages = async () => {
-      const pending = new Map<
-        string,
-        { id: string; type: "client" | "supplier" | "driver" }
-      >();
+      const driverIds: string[] = [];
       for (const row of filteredLedgerForDisplay) {
         const id = (row.contact_id ?? "").trim();
         const type = row.contact_type;
-        if (!id || !type) continue;
-        if (profileImages[id]) continue;
-        const dedupeKey = `${type}:${id}`;
-        if (!pending.has(dedupeKey)) {
-          pending.set(dedupeKey, { id, type });
-        }
+        if (!id || type !== "driver") continue;
+        if (attemptedProfileIds.current.has(id)) continue;
+        attemptedProfileIds.current.add(id);
+        driverIds.push(id);
       }
-
-      if (pending.size === 0) return;
-      const driverIds = Array.from(pending.values())
-        .filter(({ type }) => type === "driver")
-        .map(({ id }) => id);
 
       if (driverIds.length === 0) return;
       const next = await getProfileImageBatch(driverIds);
@@ -310,7 +303,7 @@ export function FinanceScreen() {
     return () => {
       cancelled = true;
     };
-  }, [filteredLedgerForDisplay, profileImages]);
+  }, [filteredLedgerForDisplay]);
 
   const isAnyFilterActive = useMemo(
     () => ledgerAnyFilterActive || entityFilter !== "all",
