@@ -41,7 +41,7 @@ import {
     useTripSubcontractsQuery,
 } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
-import * as driverLocationService from "@/services/driverLocationService";
+import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import type { DisputeRow } from "@/services/sharedLedgerService";
 import {
     acceptPartnerView,
@@ -54,7 +54,7 @@ import {
     useOpenDisputesQuery,
     useDisputesReceivedQuery,
 } from "@/lib/queries";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
+import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import type * as ExpoLocationTypes from "expo-location";

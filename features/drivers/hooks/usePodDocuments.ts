@@ -1,4 +1,4 @@
-import * as tripDocumentsService from "@/services/tripDocumentsService";
+import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useRef, useState } from "react";

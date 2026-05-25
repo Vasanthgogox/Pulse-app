@@ -21,7 +21,7 @@ import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getOptimalRoute } from "@/services/routingService";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
+import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as DocumentPicker from "expo-document-picker";

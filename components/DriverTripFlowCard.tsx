@@ -8,7 +8,7 @@ import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverT
 import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { isAggregateTrip } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
-import * as tripDocumentsService from '@/services/tripDocumentsService';
+import * as tripDocumentsService from '@/features/trips/services/tripDocuments.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';

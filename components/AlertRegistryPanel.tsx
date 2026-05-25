@@ -13,7 +13,7 @@ import { REGISTRY_PAGE_SIZE } from "@/lib/globalSync/registryFeed.constants";
 import { useRegistryFeed } from "@/lib/globalSync/useRegistryFeed";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronDown, Radar, RefreshCw, X } from "lucide-react-native";

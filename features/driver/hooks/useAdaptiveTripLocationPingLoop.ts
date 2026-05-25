@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import type { DriverLocationSource } from "@/services/driverLocationService";
+import type { DriverLocationSource } from "@/features/driver/services/driverLocation.service";
 import {
   LONG_HAUL_STANDARD_PINGS,
   adaptivePingRoutePlanKey,

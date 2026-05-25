@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import type { MappedPodAttachment } from '@/services/logPodsService';
-import { isTripDocumentsMetaTableUnavailable } from '@/services/tripDocumentsService';
+import { isTripDocumentsMetaTableUnavailable } from '@/features/trips/services/tripDocuments.service';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 

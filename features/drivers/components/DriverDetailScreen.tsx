@@ -51,7 +51,7 @@ import {
     formatLedgerAmount,
     formatLedgerDate,
 } from "@/lib/format";
-import type { SalaryRequestRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestRow } from "@/features/drivers/services/salaryRequests.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";

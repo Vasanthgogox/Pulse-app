@@ -54,7 +54,7 @@ import MapView, {
     Polyline,
 } from "@/lib/reactNativeMapsCompat";
 import { supabase } from "@/lib/supabase";
-import * as driverLocationService from "@/services/driverLocationService";
+import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import {
     buildRouteFetchKey,

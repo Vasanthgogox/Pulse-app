@@ -21,7 +21,7 @@ import {
 import { showAppAlert } from '@/lib/appAlert';
 import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/features/drivers/services/drivers.service';
-import * as salaryRequestsService from '@/services/salaryRequestsService';
+import * as salaryRequestsService from '@/features/drivers/services/salaryRequests.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { NeededByCalendar } from '@/components/driver/NeededByCalendar';
 import FontAwesome from '@expo/vector-icons/FontAwesome';

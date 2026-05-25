@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Platform } from "react-native";
-import * as driverLocationService from "@/services/driverLocationService";
+import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import { supabase } from "@/lib/supabase";
 import type * as ExpoLocationTypes from "expo-location";
 

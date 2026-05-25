@@ -17,9 +17,9 @@ import {
 import { formatLedgerDateTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
+import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
-import * as salaryRequestsService from "@/services/salaryRequestsService";
+import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
 import * as tripsService from "@/features/trips/services/trips.service";
 import { tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";

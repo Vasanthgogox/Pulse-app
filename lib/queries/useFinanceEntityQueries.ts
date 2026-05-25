@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getTripsWhereOrgIsClient } from '@/features/trips/services/trips.service';
 import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { getDriverOffersByOrganization } from '@/features/drivers/services/drivers.service';
-import { getSalaryRequestsByOrganization } from '@/services/salaryRequestsService';
+import { getSalaryRequestsByOrganization } from '@/features/drivers/services/salaryRequests.service';
 import { getIndentsByOrganization } from '@/features/indents/services/indents.service';
 import { getAcceptedDirectQuotesByOrg } from '@/features/indents/services/direct-quotes.service';
 import { getTripSubcontracts } from '@/features/finance/services/tripSubcontracts.service';

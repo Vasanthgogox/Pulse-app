@@ -9,7 +9,7 @@ import { Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TripRow } from "../../../services/trips.service";
 import type { TripAssignmentAuditRow } from "../../../services/trip-assignment-audit.service";
-import type { DriverLocationRow } from "@/services/driverLocationService";
+import type { DriverLocationRow } from "@/features/driver/services/driverLocation.service";
 import { TrackingMapBlock, VehicleTrackingCard } from "../TrackingMapBlock";
 import type { DriverActivityTimelineRow } from "../hooks/useTripDetail";
 

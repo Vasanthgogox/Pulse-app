@@ -42,7 +42,7 @@ import {
   getSalaryRequestsByOrganization,
   updateSalaryRequestStatus,
   type SalaryRequestWithDriverRow,
-} from '@/services/salaryRequestsService';
+} from '@/features/drivers/services/salaryRequests.service';
 import {
   getSharedLedgerNotifications,
   markSharedLedgerNotificationRead,

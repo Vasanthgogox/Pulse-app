@@ -12,7 +12,7 @@ import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/tr
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatLedgerDate } from "@/lib/format";
 import type { ConnectionRequestRow } from "@/services/connectionRequestsService";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import {
   useClientsQuery,
   useConnectionRequestsSentQuery,

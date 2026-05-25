@@ -27,7 +27,7 @@ import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";
-import * as tripDocumentsService from "@/services/tripDocumentsService";
+import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { supabase } from "@/lib/supabase";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as tripsService from "@/features/trips/services/trips.service";

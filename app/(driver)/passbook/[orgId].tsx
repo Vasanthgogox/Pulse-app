@@ -24,7 +24,7 @@ import {
 } from '@/features/driver/utils/driverTripSequence.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/features/drivers/services/drivers.service';
-import * as salaryRequestsService from '@/services/salaryRequestsService';
+import * as salaryRequestsService from '@/features/drivers/services/salaryRequests.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Print from 'expo-print';

@@ -33,7 +33,7 @@ import { getSuppliersByOrganization, type SupplierRow } from "@/features/supplie
 import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles";
-import { updateSalaryRequestStatus } from "@/services/salaryRequestsService";
+import { updateSalaryRequestStatus } from "@/features/drivers/services/salaryRequests.service";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";

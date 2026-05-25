@@ -15,7 +15,7 @@ import { isAggregateTrip, isRosterTrip } from '@/features/drivers/utils/driverUt
 import { formatINR } from '@/lib/format';
 import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import { darkMapStyle } from '@/lib/mapStyles';
-import * as driverLocationService from '@/services/driverLocationService';
+import * as driverLocationService from '@/features/driver/services/driverLocation.service';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import { getOptimalRoute, RouteResult } from '@/services/routingService';
 import * as tripsService from '@/features/trips/services/trips.service';

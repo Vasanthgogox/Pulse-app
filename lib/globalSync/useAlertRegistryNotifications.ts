@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import { useGlobalSync } from '@/lib/globalSync/GlobalSyncContext';
 import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
-import type { SalaryRequestWithDriverRow } from '@/services/salaryRequestsService';
+import type { SalaryRequestWithDriverRow } from '@/features/drivers/services/salaryRequests.service';
 import type { SharedLedgerNotificationRow } from '@/services/sharedLedgerNotificationsService';
 
 export function selectRegistryBellCount(

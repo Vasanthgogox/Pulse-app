@@ -47,7 +47,7 @@ import {
     cancelPendingConnectionRequestsForPartnerOwner,
     rejectConnectionRequest,
 } from "@/services/connectionRequestsService";
-import type { SalaryRequestWithDriverRow } from "@/services/salaryRequestsService";
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/services/sharedLedgerNotificationsService";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
