@@ -1,10 +1,10 @@
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { resolveOrgAvatarUri } from '@/lib/fleetAvatar';
+import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from '@/lib/driverTripSequence';
+} from '@/features/driver/utils/driverTripSequence.util';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
 import { DriverInviteCard } from '@/components/driver/DriverInviteCard';
 import Layout from '@/constants/Layout';
@@ -13,8 +13,8 @@ import {
   buildOfferText,
   isCompletedStatus,
   tripEarningsForDriver,
-} from '@/lib/driverUtils';
-import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
+} from '@/features/drivers/utils/driverUtils.util';
+import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import * as driversService from '@/services/driversService';

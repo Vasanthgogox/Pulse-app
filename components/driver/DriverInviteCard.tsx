@@ -1,5 +1,5 @@
 import Theme from '@/constants/Theme';
-import { resolveOrgAvatarUri } from '@/lib/fleetAvatar';
+import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
 import type { DriverInviteRow } from '@/services/driversService';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React from 'react';

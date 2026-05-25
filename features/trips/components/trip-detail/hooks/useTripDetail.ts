@@ -33,7 +33,7 @@ import {
 } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import {
     useShipperDisplayNamesQuery,

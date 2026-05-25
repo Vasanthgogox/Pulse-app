@@ -30,7 +30,7 @@ import {
     getExpenseLinesForTripPnL,
 } from "@/features/vehicles/pnl";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import {
     formatINR,
     formatIndianVehicleNumber,

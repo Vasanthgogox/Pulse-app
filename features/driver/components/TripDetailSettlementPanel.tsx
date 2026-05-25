@@ -16,7 +16,7 @@ import {
   getGrossRevenue,
 } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
-import { phonePeMetaDate } from "@/lib/driverGpayTransactions";
+import { phonePeMetaDate } from "@/features/driver/utils/driverGpayTransactions.util";
 import type { TripRow } from "@/services/tripsService";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useRouter } from "expo-router";

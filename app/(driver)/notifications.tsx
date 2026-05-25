@@ -18,22 +18,22 @@ import {
     assignerPrimarySecondaryForDriver,
     buildAssignerDisplayForTrip,
     resolveAssignerUserId,
-} from '@/lib/driverAssignerDisplay';
+} from '@/features/trips/utils/driverAssignerDisplay.util';
 import {
     DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
     DRIVER_POST_MISSION_PENDING_SNAPSHOT_KEY,
-} from '@/lib/driverDashboardFlags';
+} from '@/features/driver/utils/driverDashboardFlags.util';
 import {
     buildDriverTripNumberMap,
     getDriverTripDisplayNumber,
-} from '@/lib/driverTripSequence';
+} from '@/features/driver/utils/driverTripSequence.util';
 import {
     isActiveMission,
     isAggregateTrip,
     isAssignedNotStarted,
     isCompletedStatus,
     isRosterTrip,
-} from '@/lib/driverUtils';
+} from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import * as driversService from '@/services/driversService';

@@ -55,7 +55,7 @@ import {
   tripDayMatchesHubDateFilter,
   type TripHubDateFilter,
 } from "@/lib/dateRangePresets";
-import { shouldShowAggregateTripKindPill } from "@/lib/driverUtils";
+import { shouldShowAggregateTripKindPill } from "@/features/drivers/utils/driverUtils.util";
 import { formatLedgerDate } from "@/lib/format";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";

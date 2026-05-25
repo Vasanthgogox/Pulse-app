@@ -9,11 +9,11 @@ import { useDriverTheme, useDriverThemeColors } from "@/contexts/DriverThemeCont
 import { getLatestAssignmentAuditByTripIds } from "@/features/trips/services/trip-assignment-audit.service";
 import {
   buildAssignerDisplayForTrip,
-} from "@/lib/driverAssignerDisplay";
+} from "@/features/trips/utils/driverAssignerDisplay.util";
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from "@/lib/driverTripSequence";
+} from "@/features/driver/utils/driverTripSequence.util";
 import { formatLedgerDateTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";
@@ -21,7 +21,7 @@ import * as tripDocumentsService from "@/services/tripDocumentsService";
 import * as driversService from "@/services/driversService";
 import * as salaryRequestsService from "@/services/salaryRequestsService";
 import * as tripsService from "@/services/tripsService";
-import { tripEarningsForDriver } from "@/lib/driverUtils";
+import { tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";

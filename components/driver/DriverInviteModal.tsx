@@ -1,8 +1,8 @@
 import Theme from '@/constants/Theme';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import type { DriverInviteRow } from '@/features/drivers/services/drivers.service';
-import { buildDriverInviteSalaryLines } from '@/lib/driverInviteOffer.util';
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import { buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
+import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
 import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';

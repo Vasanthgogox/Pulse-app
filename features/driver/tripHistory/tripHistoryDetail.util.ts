@@ -1,7 +1,7 @@
-import { humanizeAssignerDisplayName } from "@/lib/driverAssignerDisplay";
+import { humanizeAssignerDisplayName } from "@/features/trips/utils/driverAssignerDisplay.util";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { formatTime } from "@/lib/format";
-import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
+import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import type { TripRow } from "@/services/tripsService";
 
 export function isCompleted(status: string) {

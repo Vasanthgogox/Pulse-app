@@ -12,12 +12,12 @@ import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { tripEarningsForDriver } from '@/lib/driverUtils';
-import { resolveOrgAvatarUri } from '@/lib/fleetAvatar';
+import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
+import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from '@/lib/driverTripSequence';
+} from '@/features/driver/utils/driverTripSequence.util';
 import { showAppAlert } from '@/lib/appAlert';
 import { VALIDATION } from '@/lib/validation';
 import * as driversService from '@/services/driversService';

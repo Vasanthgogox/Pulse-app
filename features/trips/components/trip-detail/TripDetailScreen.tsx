@@ -15,7 +15,7 @@ import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import { ROUTES } from "@/lib/routes";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";

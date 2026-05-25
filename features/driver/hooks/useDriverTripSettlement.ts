@@ -7,12 +7,12 @@ import * as driversService from "@/services/driversService";
 import {
   buildSettlementShareMessage,
   buildTripClaimWhatsappMessage,
-} from "@/lib/driverCommunication";
-import { phonePeMetaDate } from "@/lib/driverGpayTransactions";
+} from "@/features/driver/utils/driverCommunication.util";
+import { phonePeMetaDate } from "@/features/driver/utils/driverGpayTransactions.util";
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from "@/lib/driverTripSequence";
+} from "@/features/driver/utils/driverTripSequence.util";
 import { isCompleted as isTripCompleted } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import * as salaryRequestsService from "@/services/salaryRequestsService";
 import type { TripRow } from "@/services/tripsService";

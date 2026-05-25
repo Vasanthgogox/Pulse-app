@@ -71,7 +71,7 @@ import {
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
-import { isAggregateTrip } from "@/lib/driverUtils";
+import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import {

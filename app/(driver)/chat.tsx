@@ -38,7 +38,7 @@ import {
   DRIVER_PREDEFINED_STATUS_BY_STEP,
   parseDriverUpdatesFromNotes,
   type ParsedDriverStatusNote,
-} from "@/lib/driverTripStatusNotes.util";
+} from "@/features/driver/utils/driverTripStatusNotes.util";
 import type { TripRow } from "@/services/tripsService";
 import * as tripsService from "@/services/tripsService";
 

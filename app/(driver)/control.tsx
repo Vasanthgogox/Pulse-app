@@ -20,8 +20,8 @@ import { useDriverAvatarUri } from "@/lib/avatarUpload";
 import {
     buildDriverTripNumberMap,
     getDriverTripDisplayNumber,
-} from "@/lib/driverTripSequence";
-import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
+} from "@/features/driver/utils/driverTripSequence.util";
+import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { useSafeBack } from "@/lib/useSafeBack";

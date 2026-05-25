@@ -18,12 +18,12 @@ import {
     buildAssignerDisplayForTrip,
     humanizeAssignerDisplayName,
     resolveAssignerUserId,
-} from "@/lib/driverAssignerDisplay";
+} from "@/features/trips/utils/driverAssignerDisplay.util";
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from "@/lib/driverTripSequence";
-import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
+} from "@/features/driver/utils/driverTripSequence.util";
+import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import { formatLedgerDateTime, formatTime } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
 import { getOptimalRoute } from "@/services/routingService";

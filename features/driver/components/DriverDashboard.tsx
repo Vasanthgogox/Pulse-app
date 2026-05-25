@@ -11,7 +11,7 @@ import { useAdaptiveTripLocationPingLoop } from '@/features/driver/hooks/useAdap
 import { useDriverMapLivePositionWatch } from '@/features/driver/hooks/useDriverMapLivePositionWatch';
 import { claimTripByOtp, getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
 import { useDriverAvatarUri } from '@/lib/avatarUpload';
-import { isAggregateTrip, isRosterTrip } from '@/lib/driverUtils';
+import { isAggregateTrip, isRosterTrip } from '@/features/drivers/utils/driverUtils.util';
 import { formatINR } from '@/lib/format';
 import { formatEstimatedDuration } from '@/lib/formatEstimatedDuration';
 import { darkMapStyle } from '@/lib/mapStyles';

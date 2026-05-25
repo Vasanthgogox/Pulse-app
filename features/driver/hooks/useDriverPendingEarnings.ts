@@ -1,6 +1,6 @@
 import { buildDriverTripSettlementView } from '@/features/driver/tripSettlement/driverTripSettlement.util';
-import { buildDriverTripNumberMap } from '@/lib/driverTripSequence';
-import { tripEarningsForDriver } from '@/lib/driverUtils';
+import { buildDriverTripNumberMap } from '@/features/driver/utils/driverTripSequence.util';
+import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
 import * as driversService from '@/services/driversService';
 import * as tripsService from '@/services/tripsService';
 import { useAuth } from '@/contexts/AuthContext';

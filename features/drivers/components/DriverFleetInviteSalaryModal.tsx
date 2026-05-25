@@ -7,7 +7,7 @@ import Theme from '@/constants/Theme';
 import {
   buildCompensationSalaryLines,
   type DriverInviteSalaryLine,
-} from '@/lib/driverInviteOffer.util';
+} from '@/features/drivers/utils/driverInviteOffer.util';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import {

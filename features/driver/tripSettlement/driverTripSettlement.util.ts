@@ -1,5 +1,5 @@
-import { isAggregateTrip, tripEarningsForDriver } from "@/lib/driverUtils";
-import { getDriverTripDisplayNumber } from "@/lib/driverTripSequence";
+import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
+import { getDriverTripDisplayNumber } from "@/features/driver/utils/driverTripSequence.util";
 import type { DriverLedgerRow } from "@/services/driversService";
 import type { TripRow } from "@/services/tripsService";
 

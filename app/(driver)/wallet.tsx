@@ -21,15 +21,15 @@ import {
     buildBulkTripClaimWhatsappMessage,
     buildSettlementShareMessage,
     buildTripClaimWhatsappMessage,
-} from '@/lib/driverCommunication';
+} from '@/features/driver/utils/driverCommunication.util';
 import {
     phonePeMetaDate
-} from '@/lib/driverGpayTransactions';
+} from '@/features/driver/utils/driverGpayTransactions.util';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from '@/lib/driverTripSequence';
-import { tripEarningsForDriver } from '@/lib/driverUtils';
+} from '@/features/driver/utils/driverTripSequence.util';
+import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
 import {
   buildDriverTripSettlementView,
   buildMarkPaidConfirmMessage,
@@ -37,9 +37,9 @@ import {
   extractDriverPaymentUtr,
   formatDriverPaymentModeLabel,
 } from "@/features/driver/tripSettlement/driverTripSettlement.util";
-import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/lib/fleetAvatar';
+import { getFleetAvatarUriForOrg, resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
 import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
-import { buildDriverInviteSalaryLines } from '@/lib/driverInviteOffer.util';
+import { buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';

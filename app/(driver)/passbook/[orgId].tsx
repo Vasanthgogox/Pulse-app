@@ -14,14 +14,14 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import {
   buildBulkTripClaimWhatsappMessage,
   buildSettlementShareMessage,
-} from '@/lib/driverCommunication';
-import { phonePeMetaDate } from '@/lib/driverGpayTransactions';
-import { isAggregateTrip, tripEarningsForDriver } from '@/lib/driverUtils';
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+} from '@/features/driver/utils/driverCommunication.util';
+import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
+import { isAggregateTrip, tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
+import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
 import {
   buildDriverTripNumberMap,
   getDriverTripDisplayNumber,
-} from '@/lib/driverTripSequence';
+} from '@/features/driver/utils/driverTripSequence.util';
 import { usePreventScreenCapture } from '@/lib/usePreventScreenCapture';
 import * as driversService from '@/services/driversService';
 import * as salaryRequestsService from '@/services/salaryRequestsService';

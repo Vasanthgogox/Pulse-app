@@ -1,5 +1,5 @@
 import Theme from '@/constants/Theme';
-import { getFleetAvatarUriForOrg } from '@/lib/fleetAvatar';
+import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { PendingEarningsTripItem } from '../hooks/useDriverPendingEarnings';

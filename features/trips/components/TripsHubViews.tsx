@@ -17,7 +17,7 @@ import { compareTripsByScheduleDesc } from "@/lib/dateRangePresets";
 import {
     isAggregateTrip,
     shouldShowAggregateTripKindPill,
-} from "@/lib/driverUtils";
+} from "@/features/drivers/utils/driverUtils.util";
 import {
     formatINR,
     formatLedgerDate,

@@ -9,7 +9,7 @@ import { getTripDisplayNumber } from "../../../services/trips.service";
 import {
   shouldShowAggregateTripKindPill,
   type AggregateTripKindPillContext,
-} from "@/lib/driverUtils";
+} from "@/features/drivers/utils/driverUtils.util";
 
 interface TripDetailHeaderProps {
   trip: TripRow;
