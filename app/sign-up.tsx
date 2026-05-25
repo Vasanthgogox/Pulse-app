@@ -12,7 +12,7 @@ import {
 import { validateEmail } from '@/lib/emailValidation';
 import { ROUTES } from '@/lib/routes';
 import { formatMobileNumber } from '@/lib/format';
-import INDIA_LOCATIONS from '@/lib/indiaLocations.json';
+import INDIA_LOCATIONS from '@/lib/data/indiaLocations.json';
 import {
   extractIndianMobileTenDigits,
   isPhoneValid,

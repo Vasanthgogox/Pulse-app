@@ -64,3 +64,10 @@ tmp_*
 data-analytics/.venv/
 data-analytics/__pycache__/
 data-analytics/.pytest_cache/
+
+# build test bundles
+dist-test-bundle/
+
+# empty monorepo stubs
+apps/web/.next/
+h
