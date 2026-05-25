@@ -35,7 +35,6 @@ const STORAGE_KEY = 'pulse:active_workspace_id';
 interface WorkspaceMemberRow {
   role: WorkspaceMember['role'];
   status: string;
-  joined_at: string;
   organizations: {
     id: string;
     name: string | null;
@@ -185,7 +184,6 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
             .select(`
               role,
               status,
-              joined_at,
               organizations (
                 id, name, slug, logo_url, operating_model,
                 address_line, city, state, zone,
