@@ -206,9 +206,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(web.user);
       setProfile(web.profile);
       setStatus("authenticated");
-      // JWT role is Supabase-signed — safe for initial routing. Async restore
-      // still runs in background and will update if DB role differs.
-      setRoleVerified(true);
+      // Note: roleVerified intentionally NOT set here — setting it in useLayoutEffect
+      // causes React hydration mismatch (#418) on Netlify static export because child
+      // components render with the new value before server HTML is fully reconciled.
+      // Dispatchers don't need roleVerified to boot. Drivers wait for async restore
+      // (capped at BOOT_HARD_TIMEOUT_MS = 8s).
     }
   }, []);
 

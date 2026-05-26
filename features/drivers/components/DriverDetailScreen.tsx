@@ -506,6 +506,13 @@ export default function DriverDetailScreen({
     }, [load]),
   );
 
+  // On Netlify (cold load), org context may not be ready when useFocusEffect fires.
+  // load() returns early without setting initialLoadDoneRef, so retry when org becomes available.
+  useEffect(() => {
+    if (!currentOrganization?.id || initialLoadDoneRef.current) return;
+    load();
+  }, [currentOrganization?.id, load]);
+
   useEffect(() => {
     const linkedUserId =
       signupMatch?.matched_user_id ?? driver?.user_id ?? null;
