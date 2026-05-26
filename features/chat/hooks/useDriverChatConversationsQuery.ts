@@ -19,15 +19,16 @@ export function driverChatConversationsQueryKey(driverIdsKey: string) {
 }
 
 export function useDriverChatConversationsQuery(driverIds: string[]) {
+  const safeDriverIds = Array.isArray(driverIds) ? driverIds : [];
   const driverIdsKey = useMemo(
-    () => [...driverIds].sort().join(','),
-    [driverIds],
+    () => [...safeDriverIds].sort().join(','),
+    [safeDriverIds],
   );
 
   const query = useQuery({
     queryKey: driverChatConversationsQueryKey(driverIdsKey),
-    queryFn: () => chatService.getConversationsByDriverIds(driverIds),
-    enabled: driverIds.length > 0,
+    queryFn: () => chatService.getConversationsByDriverIds(safeDriverIds),
+    enabled: safeDriverIds.length > 0,
     staleTime: STALE_MS,
     gcTime: 10 * 60_000,
     retry: infrastructureShouldRetry,

@@ -70,7 +70,7 @@ export function DriverCommunicationProvider({
     () => ({
       communicationActive,
       userId: uid,
-      driverIds: activeLinkedDrivers.map((d) => d.id),
+      driverIds,
       driverIdsKey,
       lastPaymentEvent,
     }),

@@ -84,7 +84,9 @@ export function useDriverPaymentListener({
   enabled = true,
 }: UseDriverPaymentListenerArgs) {
   const uid = userId ?? '';
-  const driverIdsKey = driverIds.length > 0 ? [...driverIds].sort().join(',') : '';
+  // Guard against non-array values at runtime (corrupted cache, wrong caller type).
+  const safeDriverIds = Array.isArray(driverIds) ? driverIds : [];
+  const driverIdsKey = safeDriverIds.length > 0 ? [...safeDriverIds].sort().join(',') : '';
   const invalidateDashboard = useInvalidateDriverHomeDashboard();
 
   const [lastPaymentEvent, setLastPaymentEvent] =
@@ -122,7 +124,7 @@ export function useDriverPaymentListener({
 
     const unsubs: (() => void)[] = [];
 
-    for (const driverId of driverIds) {
+    for (const driverId of safeDriverIds) {
       const filter = `driver_id=eq.${driverId}`;
       const unsub = subscribeSharedPostgresChanges(
         driverLedgerRealtimeKey(driverId),
@@ -173,7 +175,7 @@ export function useDriverPaymentListener({
         invalidateTimerRef.current = null;
       }
     };
-  }, [enabled, uid, driverIdsKey, driverIds, emitPaymentCompleted]);
+  }, [enabled, uid, driverIdsKey, safeDriverIds, emitPaymentCompleted]);
 
   return { lastPaymentEvent };
 }

@@ -30,6 +30,7 @@ import {
 import type { InfiniteData } from '@tanstack/react-query';
 import type { DriverChatMessagesPage } from '@/features/chat/utils/driverChatMessageCache.util';
 import { useQueryClient } from '@tanstack/react-query';
+import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
 
 function buildMinimalDriverTripConversation(
   trip: TripRow,
@@ -78,7 +79,12 @@ export function DriverChatProvider({
   const markReadTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingMarkReadRef = useRef<Set<string>>(new Set());
 
-  const { driverIds, driverIdsKey } = useDriverHomeDriversQuery(isActive ? uid : null);
+  const { activeLinkedDrivers, driverIdsKey } = useDriverHomeDriversQuery(isActive ? uid : null);
+
+  const driverIds = useMemo(
+    () => activeLinkedDrivers.map((d) => d.id),
+    [activeLinkedDrivers],
+  );
 
   const {
     conversations,
@@ -111,11 +117,10 @@ export function DriverChatProvider({
       const id = String(tripId ?? '').trim();
       if (!id || !uid) return null;
 
-      let resolvedDriverIds = driverIds;
+      let resolvedDriverIds: string[] = Array.isArray(driverIds) ? driverIds : [];
       if (!resolvedDriverIds.length) {
         const { drivers } = await getLinkedDriversForCurrentUser(uid);
-        resolvedDriverIds = drivers.map((d) => d.id);
-        if (resolvedDriverIds.length) setDriverIds(resolvedDriverIds);
+        resolvedDriverIds = (drivers ?? []).map((d: { id: string }) => d.id);
       }
       if (!resolvedDriverIds.length) return null;
 
