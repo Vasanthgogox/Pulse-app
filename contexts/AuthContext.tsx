@@ -42,6 +42,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -187,12 +188,25 @@ function tryReadWebSession(): {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const webSession = tryReadWebSession();
-  const [user, setUser] = useState<AuthUser | null>(webSession.user);
-  const [profile, setProfile] = useState<UserProfile | null>(webSession.profile);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roleVerified, setRoleVerified] = useState(false);
-  const [status, setStatus] = useState<AuthStatus>(webSession.status);
+  const [status, setStatus] = useState<AuthStatus>("restoring");
   const [restoreError, setRestoreError] = useState<AuthError | null>(null);
+
+  // On web: read localStorage synchronously before first paint so AppBootGate
+  // never blocks for returning authenticated users. useLayoutEffect fires after
+  // DOM mutations but before the browser paints, which avoids both the SSR
+  // hydration mismatch (useState initializer would differ server vs client) and
+  // the visible flash (useEffect fires after paint).
+  useLayoutEffect(() => {
+    const web = tryReadWebSession();
+    if (web.status === "authenticated" && web.user && web.profile) {
+      setUser(web.user);
+      setProfile(web.profile);
+      setStatus("authenticated");
+    }
+  }, []);
 
   const clearRestoreError = useCallback(() => setRestoreError(null), []);
 
