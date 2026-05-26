@@ -719,6 +719,31 @@ export default function DriverDetailScreen({
     [driverTransactions],
   );
 
+  // Pending salary requests shown as list items in Cash Flow so header total == list total.
+  const cashFlowRows = useMemo<LedgerRow[]>(() => {
+    const pendingRows: LedgerRow[] = driverRequests.map((r) => ({
+      id: r.id,
+      organization_id: r.organization_id,
+      trip_id: r.trip_ids?.[0] ?? null,
+      party_name: driver?.name ?? "",
+      description: `Pending salary request${r.note ? ` — ${r.note}` : ""}`,
+      amount_in: 0,
+      amount_out: Number(r.amount),
+      transaction_date: r.created_at.slice(0, 10),
+      created_at: r.created_at,
+      contact_id: driverId,
+      contact_type: "driver",
+      primary_category: "Driver payment",
+      payment_mode: null,
+      payment_reference: null,
+    }));
+    return [...pendingRows, ...sortedDriverLedger].sort((a, b) => {
+      const da = a.transaction_date ?? a.created_at ?? "";
+      const db = b.transaction_date ?? b.created_at ?? "";
+      return db.localeCompare(da);
+    });
+  }, [driverRequests, sortedDriverLedger, driver, driverId]);
+
   const ledgerRows = useMemo(() => {
     const normId = (id: string | null | undefined) =>
       id == null ? "" : String(id).trim();
@@ -1942,7 +1967,7 @@ export default function DriverDetailScreen({
         >
           <View>
             <LedgerTransactionListView
-              transactions={sortedDriverLedger}
+              transactions={cashFlowRows}
               tripDetailsMap={driverTripDetailsMap}
               tripOptions={tripOptions}
               useTimelineLayout={true}
