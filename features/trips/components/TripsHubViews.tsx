@@ -612,6 +612,7 @@ export function TripsHubTripCard({
     onPress,
     tr,
     style: rowWebStyle,
+    viewerOrgId: currentOrganizationId,
   };
 
   const receivedForReceivable =
@@ -1120,7 +1121,7 @@ export function TripsHubTableView({
         const route = `${t.pickup_area ?? ""} ${t.drop_location ?? ""}`
           .trim()
           .toLowerCase();
-        const tripNo = getTripDisplayNumber(t).toLowerCase();
+        const tripNo = getTripDisplayNumber(t, currentOrganizationId).toLowerCase();
         return (
           tripNo.includes(q) ||
           clientName.includes(q) ||
@@ -1761,7 +1762,7 @@ export function TripsHubTableView({
                     onPress={() => toggleExpanded(t.id)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded }}
-                    accessibilityLabel={`${getTripDisplayNumber(t)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
+                    accessibilityLabel={`${getTripDisplayNumber(t, currentOrganizationId)} ${expanded ? tr("tripsHubCollapseRow") : tr("tripsHubExpandRow")}`}
                   >
                     <View
                       style={[styles.manifestTd, styles.manifestColIdentity]}
@@ -1797,7 +1798,7 @@ export function TripsHubTableView({
                             ]}
                             numberOfLines={1}
                           >
-                            {getTripDisplayNumber(t)}
+                            {getTripDisplayNumber(t, currentOrganizationId)}
                           </Text>
                           <Text
                             style={styles.manifestDateMeta}
@@ -2492,7 +2493,7 @@ export function TripsHubTableView({
                             .toUpperCase()}
                         </Text>
                         <Text style={styles.receiptSub}>
-                          {getTripDisplayNumber(receiptTrip)} •{" "}
+                          {getTripDisplayNumber(receiptTrip, currentOrganizationId)} •{" "}
                           {formatTripPickupCell(
                             receiptTrip.pickup_date,
                           ).toUpperCase()}
@@ -2548,7 +2549,7 @@ export function TripsHubTableView({
                       <View style={styles.receiptMetaRow}>
                         <Text style={styles.receiptMetaLabel}>Reference</Text>
                         <Text style={styles.receiptMetaValue}>
-                          {getTripDisplayNumber(receiptTrip)}
+                          {getTripDisplayNumber(receiptTrip, currentOrganizationId)}
                         </Text>
                       </View>
                       <View style={styles.receiptMetaRow}>
@@ -2585,7 +2586,7 @@ export function TripsHubTableView({
                             const routeLabel = `${(receiptTrip.pickup_area ?? "—").trim()} -> ${(receiptTrip.drop_location ?? "—").trim()}`;
                             const receiptTextPayload = [
                               "Settlement Receipt",
-                              `Trip: ${getTripDisplayNumber(receiptTrip)}`,
+                              `Trip: ${getTripDisplayNumber(receiptTrip, currentOrganizationId)}`,
                               `Amount: ${formatINR(Math.abs(txAmount))}`,
                               `Date: ${txDate}`,
                               `Transaction ID: ${txRow?.id ?? receiptTrip.id}`,
@@ -2618,7 +2619,7 @@ export function TripsHubTableView({
   </head>
   <body>
     <h2>Settlement Receipt</h2>
-    <p class="sub">${getTripDisplayNumber(receiptTrip)} • ${txDate}</p>
+    <p class="sub">${getTripDisplayNumber(receiptTrip, currentOrganizationId)} • ${txDate}</p>
     <h1>${formatINR(Math.abs(txAmount))}</h1>
     <table>
       <tr><td>Transaction ID</td><td>${txRow?.id ?? receiptTrip.id}</td></tr>
@@ -2665,7 +2666,7 @@ export function TripsHubTableView({
                         onPress={async () => {
                           try {
                             await Share.share({
-                              message: `Settlement ${formatINR(Math.abs(txAmount))}\nReference: ${getTripDisplayNumber(receiptTrip)}`,
+                              message: `Settlement ${formatINR(Math.abs(txAmount))}\nReference: ${getTripDisplayNumber(receiptTrip, currentOrganizationId)}`,
                             });
                           } catch {
                             // no-op

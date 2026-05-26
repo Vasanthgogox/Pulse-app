@@ -285,7 +285,7 @@ export default function LedgerSyncScreen() {
           const meta = tripDueMeta[t.id];
           return {
             id: t.id,
-            trip_number: getTripDisplayNumber(t),
+            trip_number: getTripDisplayNumber(t, orgId),
             client_id: t.client_id ?? null,
             client_name: t.client_name ?? null,
             supplier_id: t.supplier_id ?? null,
@@ -488,7 +488,7 @@ export default function LedgerSyncScreen() {
     if (!meta) return { in: null, out: null };
     const lockedTrip = trips.find((t) => t.id === tid);
     const lockedTripNumber = lockedTrip
-      ? getTripDisplayNumber(lockedTrip as TripRow)
+      ? getTripDisplayNumber(lockedTrip as TripRow, orgId)
       : null;
     const entries = getTripLedgerEntries(transactions, tid, lockedTripNumber);
 

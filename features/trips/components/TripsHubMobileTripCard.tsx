@@ -269,6 +269,8 @@ export type TripsHubMobileTripCardProps = {
   dense?: boolean;
   fillGrid?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Viewer org id — used to show BKG ref instead of TRP001 for cross-org supplier trips. */
+  viewerOrgId?: string | null;
 };
 
 export function TripsHubMobileTripCard({
@@ -302,8 +304,9 @@ export function TripsHubMobileTripCard({
   dense = false,
   fillGrid = false,
   style,
+  viewerOrgId,
 }: TripsHubMobileTripCardProps) {
-  const tripNo = asLabel(getTripDisplayNumber(trip));
+  const tripNo = asLabel(getTripDisplayNumber(trip, viewerOrgId));
   const schedule = formatMobileTripSchedule(
     pickupIso ?? trip.pickup_date ?? trip.created_at,
   );
