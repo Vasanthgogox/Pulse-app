@@ -94,6 +94,8 @@ import {
   type DriverFleetInviteSalaryModalMode,
 } from "./DriverFleetInviteSalaryModal";
 import { DriverAnalyticsTab } from "./analytics/DriverAnalyticsTab";
+import { DriverEarningsAnalyticsTab } from "./analytics/DriverEarningsAnalyticsTab";
+import { DriverFleetRankingTab } from "./analytics/DriverFleetRankingTab";
 import {
   normalizeDriverInviteCompensation,
   suggestDriverInviteCompensation,
@@ -331,7 +333,7 @@ export default function DriverDetailScreen({
   >([]);
   const [driverTransactions, setDriverTransactions] = useState<LedgerRow[]>([]);
   const [driverDetailTab, setDriverDetailTab] = useState<
-    "trips" | "ledger" | "statement" | "analytics"
+    "trips" | "ledger" | "statement" | "analytics" | "ranking" | "earnings"
   >("trips");
   const [tripsDatePreset, setTripsDatePreset] =
     useState<FinancePeriodFilter>("RANGE");
@@ -1705,6 +1707,40 @@ export default function DriverDetailScreen({
             Analytics
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
+            driverDetailTab === "ranking" && styles.tabItemActive,
+          ]}
+          onPress={() => setDriverDetailTab("ranking")}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabItemText,
+              driverDetailTab === "ranking" && styles.tabItemTextActive,
+            ]}
+          >
+            Fleet Ranking
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
+            driverDetailTab === "earnings" && styles.tabItemActive,
+          ]}
+          onPress={() => setDriverDetailTab("earnings")}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabItemText,
+              driverDetailTab === "earnings" && styles.tabItemTextActive,
+            ]}
+          >
+            Earnings
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <Modal
@@ -2308,6 +2344,24 @@ export default function DriverDetailScreen({
             driver={driver}
             driverOffer={driverOffer}
             driverRatings={driverRatings}
+          />
+        </View>
+      )}
+
+      {driverDetailTab === "ranking" && (
+        <View style={styles.tabScroll}>
+          <DriverFleetRankingTab currentDriverId={driverId} />
+        </View>
+      )}
+
+      {driverDetailTab === "earnings" && (
+        <View style={styles.tabScroll}>
+          <DriverEarningsAnalyticsTab
+            trips={trips}
+            driverTransactions={driverTransactions}
+            driverRequests={driverRequests}
+            driver={driver}
+            driverOffer={driverOffer}
           />
         </View>
       )}
