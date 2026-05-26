@@ -41,6 +41,11 @@ export type {
   SupplierReliabilityScore,
   TrendPoint,
   TrendSeries,
+  VehicleBadge,
+  VehicleKpiHeader,
+  VehicleLeaderboardRow,
+  VehicleLeaderboardSortKey,
+  VehiclePerformanceScore,
 } from "./types/analytics.types";
 
 export { scoreLevelFromValue } from "./types/analytics.types";
@@ -73,6 +78,16 @@ export type {
   DriverScoreTxnInput,
 } from "./scores/driverPerformanceScore.util";
 
+export {
+  computeVehiclePerformanceScore,
+  deriveVehicleBadges,
+} from "./scores/vehiclePerformanceScore.util";
+export type {
+  VehicleScoreOptions,
+  VehicleScoreTripInput,
+  VehicleScoreTxnInput,
+} from "./scores/vehiclePerformanceScore.util";
+
 // ── Services ─────────────────────────────────────────────────────────────────
 export {
   getClientMonthlyAnalytics,
@@ -82,6 +97,7 @@ export {
   getSupplierMonthlyAnalytics,
   getSupplierReliabilityScore,
   getVehicleMonthlyAnalytics,
+  getVehiclePerformanceScore,
 } from "./services/analytics.service";
 
 export type {

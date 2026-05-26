@@ -43,6 +43,8 @@ import {
   RevExpBarChart,
   UtilizationRing,
 } from "./AnalyticsChart";
+import VehicleIntelligenceSection from "./VehicleIntelligenceSection";
+import type { VehicleMonthlyBuckets } from "./vehicleIntelligenceUtils";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,9 @@ interface Props {
   vehicleTrips: TripRow[];
   vehicleTransactions: LedgerRow[];
   vehicle: VehicleRow | null;
+  /** Org id forwarded to the Intelligence overlay so it can pull the
+   *  server-side composite score (`compute_vehicle_performance_score`). */
+  orgId?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -501,6 +506,9 @@ const emptyStyles = StyleSheet.create({
 export const VehicleAnalyticsTab = memo(function VehicleAnalyticsTab({
   missionRows,
   vehicle,
+  vehicleTrips,
+  vehicleTransactions,
+  orgId = null,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const [period, setPeriod] = useState<AnalyticsPeriod>("monthly");
@@ -562,12 +570,36 @@ export const VehicleAnalyticsTab = memo(function VehicleAnalyticsTab({
     return rows;
   }, [kpiItems, ITEMS_PER_ROW]);
 
+  // Phase-5 Intelligence overlay needs `monthly` style buckets to derive
+  // trend-based insights ("Trip volume up 30% vs last month").
+  const intelMonthly = useMemo<VehicleMonthlyBuckets[]>(
+    () =>
+      computePeriodPoints(missionRows, "monthly").map((p) => ({
+        label: p.label,
+        revenue: p.revenue,
+        expense: p.expense,
+        profit: p.profit,
+        tripCount: p.tripCount,
+      })),
+    [missionRows],
+  );
+
   if (missionRows.length === 0 && kpi.totalRevenue === 0) {
     return <EmptyAnalytics />;
   }
 
   return (
     <View style={[styles.root, isDesktop && styles.rootDesktop]}>
+      {/* ── Intelligence overlay (Phase 5) ───────────────────────────────── */}
+      <VehicleIntelligenceSection
+        vehicle={vehicle}
+        vehicleTrips={vehicleTrips}
+        vehicleTransactions={vehicleTransactions}
+        missionRows={missionRows}
+        orgId={orgId}
+        monthlyBuckets={intelMonthly}
+      />
+
       {/* ── Period picker ───────────────────────────────────────────────── */}
       <View style={styles.periodRow}>
         {PERIOD_OPTIONS.map((opt) => (

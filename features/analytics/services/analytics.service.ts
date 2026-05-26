@@ -28,6 +28,7 @@ import type {
   DriverPerformanceScore,
   SupplierMonthlyAnalyticsRow,
   SupplierReliabilityScore,
+  VehiclePerformanceScore,
 } from "../types/analytics.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,4 +230,21 @@ export async function getVehicleMonthlyAnalytics(
     km_driven: toNumber(r.km_driven),
   }));
   return { error: null, rows };
+}
+
+/** Vehicle Performance Score — server score (composite + sub-scores +
+ *  breakdown). Mirrors `compute_vehicle_performance_score` SQL RPC. */
+export async function getVehiclePerformanceScore(
+  orgId: string,
+  vehicleId: string,
+): Promise<{ error: Error | null; score: VehiclePerformanceScore | null }> {
+  const { data, error } = await supabase().rpc(
+    "compute_vehicle_performance_score",
+    {
+      p_org_id: orgId,
+      p_vehicle_id: vehicleId,
+    },
+  );
+  if (error) return { error: new Error(error.message), score: null };
+  return { error: null, score: (data as VehiclePerformanceScore | null) ?? null };
 }

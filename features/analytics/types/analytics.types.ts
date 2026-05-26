@@ -292,6 +292,86 @@ export type DriverLeaderboardSortKey =
   | "rank";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Vehicle analytics
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** KPI header for the Vehicle Intelligence section / Fleet ranking. */
+export interface VehicleKpiHeader {
+  tripsTotal: number;
+  tripsCompleted: number;
+  revenue: number;
+  expense: number;
+  profit: number;
+  marginPct: number;
+  kmDriven: number;
+  activeDays: number;
+  utilizationPct: number;
+  performanceScore: number;
+}
+
+/** Vehicle Performance Score — payload of
+ *  `compute_vehicle_performance_score(org, vehicle).result`. */
+export interface VehiclePerformanceScore extends AnalyticsScoreBase {
+  profitabilityScore: number;
+  utilizationScore: number;
+  completionScore: number;
+  costEfficiencyScore: number;
+  consistencyScore: number;
+  breakdown: {
+    tripsTotal: number;
+    tripsCompleted: number;
+    tripsCancelled: number;
+    revenue: number;
+    expense: number;
+    profit: number;
+    marginPct: number;
+    expenseRatio: number;
+    distance: number;
+    distinctMonths: number;
+    tripsPerMonthAvg: number;
+    tripsPerMonthCv: number;
+  };
+}
+
+/** Strategic badge for a vehicle. */
+export type VehicleBadge =
+  | "top_earner"
+  | "high_risk"
+  | "most_utilized"
+  | "underutilized"
+  | "cost_efficient"
+  | "expensive"
+  | "consistent";
+
+/** Row in the fleet-wide vehicle leaderboard. */
+export interface VehicleLeaderboardRow {
+  vehicleId: string;
+  vehicleNumber: string;
+  vehicleType: string | null;
+  rank: number;
+  trips: number;
+  revenue: number;
+  profit: number;
+  marginPct: number;
+  utilizationPct: number;
+  kmDriven: number;
+  score: number;
+  level: ScoreLevel;
+  riskFlag: boolean;
+}
+
+/** Vehicle leaderboard sort dimension. */
+export type VehicleLeaderboardSortKey =
+  | "score"
+  | "revenue"
+  | "trips"
+  | "profit"
+  | "marginPct"
+  | "utilizationPct"
+  | "kmDriven"
+  | "rank";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Generic primitives (used by all three modules)
 // ─────────────────────────────────────────────────────────────────────────────
 

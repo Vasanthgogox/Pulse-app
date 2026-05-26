@@ -344,5 +344,8 @@ export const queryKeys = {
         "monthly",
         monthsBack,
       ] as const,
+    /** Vehicle Performance Score for a single vehicle. */
+    vehiclePerformance: (orgId: string, vehicleId: string) =>
+      ["q", "analytics", orgId, "vehicle", vehicleId, "performance"] as const,
   },
 } as const;

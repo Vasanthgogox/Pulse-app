@@ -27,6 +27,7 @@ import {
   getSupplierMonthlyAnalytics,
   getSupplierReliabilityScore,
   getVehicleMonthlyAnalytics,
+  getVehiclePerformanceScore,
 } from "@/features/analytics";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -161,5 +162,23 @@ export function useVehicleMonthlyAnalyticsQuery(
     enabled: !!orgId && !!vehicleId,
     staleTime: 300_000,
     select: (data) => data.rows,
+  });
+}
+
+/** Vehicle Performance Score — composite + sub-scores + breakdown for a
+ *  single vehicle. Cached 10 minutes; aligned with other score RPCs. */
+export function useVehiclePerformanceScoreQuery(
+  orgId: string | null,
+  vehicleId: string | null,
+) {
+  return useQuery({
+    queryKey:
+      orgId && vehicleId
+        ? queryKeys.analytics.vehiclePerformance(orgId, vehicleId)
+        : ANALYTICS_NOOP_KEY,
+    queryFn: () => getVehiclePerformanceScore(orgId!, vehicleId!),
+    enabled: !!orgId && !!vehicleId,
+    staleTime: 600_000,
+    select: (data) => data.score,
   });
 }
