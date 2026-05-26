@@ -164,7 +164,14 @@ function MobileFooterTab({
 }) {
   const showBadge = (badgeCount ?? 0) > 0;
   const iconSize = compact ? MOBILE_EDGE_ICON_SIZE_COMPACT : MOBILE_EDGE_ICON_SIZE;
-  const iconColor = active ? Theme.pulseIndigo : Theme.textMutedDemo;
+  /* Active edge tabs (Home / Chat) render a solid indigo chip, so the
+   *  glyph inside must flip to white to read on the deep purple fill.
+   *  Inactive uses the muted demo grey. */
+  const iconColor = active
+    ? edge
+      ? Theme.textOnPrimary
+      : Theme.pulseIndigo
+    : Theme.textMutedDemo;
   const isProfile = avatarInitials != null;
   return (
     <TouchableOpacity
@@ -1193,14 +1200,18 @@ export function DemoTabBar({
             active={isNetwork}
             badgeCount={pendingInvites}
             customIcon={
+              /* Active = solid indigo edge chip → glyph must flip to
+               *  white so the filled house stays readable on the deep
+               *  purple background. Inactive keeps the muted demo grey
+               *  outline. */
               <Home
                 size={
                   isCompactMobile
                     ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
                     : MOBILE_EDGE_ICON_SIZE + 1
                 }
-                color={isNetwork ? Theme.pulseIndigo : Theme.textMutedDemo}
-                fill={isNetwork ? Theme.pulseIndigo : "transparent"}
+                color={isNetwork ? Theme.textOnPrimary : Theme.textMutedDemo}
+                fill={isNetwork ? Theme.textOnPrimary : "transparent"}
                 strokeWidth={CLUSTER_STROKE}
               />
             }
@@ -1425,9 +1436,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "transparent",
   },
+  /* Edge tabs (Home / Chat): active = solid indigo chip with a soft
+   *  purple glow underneath. Pairs the home/chat pill with the matte
+   *  black cluster in the centre so the bottom bar reads as "purple ↔
+   *  black ↔ purple" instead of a washed-out tint floating beside a
+   *  dark slab. */
   mobileFooterIconSlotEdgeActive: {
-    backgroundColor: Theme.pulseTabActiveBg,
+    backgroundColor: Theme.primary,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.actionAccentBorder,
+    shadowColor: Theme.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    elevation: 6,
   },
   mobileFooterIconSlotActive: {
     backgroundColor: Theme.pulseTabActiveBg,
@@ -1516,7 +1539,9 @@ const styles = StyleSheet.create({
     color: Theme.iconPrimary,
   },
   mobileFooterEdgeLabelActive: {
-    color: Theme.pulseIndigo,
+    color: Theme.primary,
+    fontWeight: "700",
+    letterSpacing: -0.05,
   },
   mobileFooterRow: {
     width: "100%",

@@ -1537,7 +1537,7 @@ export function ChatScreen() {
           <PartyAvatar
             name={avatarName}
             entityType={item.party_type}
-            size={isNativeMobile ? CHAT_MOBILE.listAvatar : 38}
+            size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
             avatarSeed={lastMsgSeed}
           />
           {item.unread_dispatcher_count > 0 && !active && (
@@ -1562,7 +1562,7 @@ export function ChatScreen() {
                 <Star
                   size={14}
                   color={CHAT_ACCENT}
-                  fill="rgba(26,35,126,0.12)"
+                  fill="rgba(79,70,229,0.12)"
                   style={s.chatPendingFeedbackStar}
                   accessibilityLabel="Pending trip feedback"
                 />
@@ -1639,7 +1639,7 @@ export function ChatScreen() {
         <PartyAvatar
           name={item.partnerName}
           entityType="client"
-          size={isNativeMobile ? CHAT_MOBILE.listAvatar : 38}
+          size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
         />
         <View style={s.chatBody}>
           <View style={s.chatRow}>
@@ -3587,9 +3587,9 @@ const s = StyleSheet.create({
     position: "absolute",
     top: -2,
     right: -2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: CHAT_ACCENT,
     borderWidth: 2,
     borderColor: "#fff",
@@ -4762,7 +4762,7 @@ function ChatBubble({
   isMobile?: boolean;
   onAvatarPress?: () => void;
 }) {
-  const avatarSize = isMobile ? CHAT_MOBILE.avatarSize : 32;
+  const avatarSize = isMobile ? CHAT_MOBILE.avatarSize : 44;
   const bubbleMaxWidth = isMobile ? CHAT_MOBILE.bubbleMaxWidthPct : "72%";
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();

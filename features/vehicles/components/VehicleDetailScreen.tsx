@@ -56,6 +56,7 @@ import {
   type DriverOption,
 } from "./AddVehicleEntryModal";
 import { VehicleDocumentsSection } from "./VehicleDocumentsSection";
+import { VehicleAnalyticsTab } from "./analytics/VehicleAnalyticsTab";
 
 export interface VehicleDetailScreenProps {
   vehicleId: string;
@@ -90,7 +91,7 @@ export default function VehicleDetailScreen({
   const [error, setError] = useState<string | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">("trips");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "analytics">("trips");
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
@@ -708,6 +709,23 @@ export default function VehicleDetailScreen({
               Cash Flow
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tabItem,
+              detailSubTab === "analytics" && styles.tabItemActive,
+            ]}
+            onPress={() => setDetailSubTab("analytics")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.tabItemText,
+                detailSubTab === "analytics" && styles.tabItemTextActive,
+              ]}
+            >
+              Analytics
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {detailSubTab === "trips" && (
@@ -765,6 +783,15 @@ export default function VehicleDetailScreen({
               </View>
             )}
           </View>
+        )}
+
+        {detailSubTab === "analytics" && (
+          <VehicleAnalyticsTab
+            missionRows={missionRows}
+            vehicleTrips={vehicleTrips}
+            vehicleTransactions={vehicleTransactions}
+            vehicle={vehicle}
+          />
         )}
 
         {detailSubTab === "cash" && (

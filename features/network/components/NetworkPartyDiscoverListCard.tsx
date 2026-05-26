@@ -107,12 +107,16 @@ export function NetworkPartyDiscoverListCard({
   const isConnected = status === "approved";
   const hasMutuals = mutualCount > 0 && Boolean(viewerOrgId);
 
-  const pendingLabel =
+  /** Status button label stays compact ("Request sent"); the role used
+   *  for the invitation is communicated by a sibling pill rendered just
+   *  before the button. */
+  const pendingLabel = t("networkDiscoverRequestSent");
+  const pendingRoleTag =
     pendingRole === "client"
-      ? t("networkDiscoverRequestSentAsClient")
+      ? t("networkDiscoverPendingRoleClient")
       : pendingRole === "supplier"
-        ? t("networkDiscoverRequestSentAsSupplier")
-        : t("networkDiscoverRequestSent");
+        ? t("networkDiscoverPendingRoleSupplier")
+        : null;
 
   const avatarSize = nativeListRow ? 40 : mobileGrid ? 32 : compact ? 36 : 40;
   const metricsCompact = compact || mobileGrid || nativeListRow;
@@ -127,7 +131,7 @@ export function NetworkPartyDiscoverListCard({
             viewerOrgId={viewerOrgId!}
             targetOrgId={orgId}
             mutualCount={mutualCount}
-            faceSize={18}
+            faceSize={32}
             showSectionLabel={false}
             compact
             onPressMutual={onPressMutual}
@@ -145,7 +149,7 @@ export function NetworkPartyDiscoverListCard({
             viewerOrgId={viewerOrgId!}
             targetOrgId={orgId}
             mutualCount={mutualCount}
-            faceSize={mobileGrid ? 16 : compact ? 18 : 20}
+            faceSize={mobileGrid ? 30 : compact ? 34 : 36}
             showSectionLabel={false}
             compact
             onPressMutual={onPressMutual}
@@ -159,24 +163,35 @@ export function NetworkPartyDiscoverListCard({
   );
 
   const statusAction = showStatusAction ? (
-    <View style={styles.nativeActionWrap}>
+    <View style={[styles.nativeActionWrap, styles.actionRow]}>
       {isConnected ? (
         <NetworkHubGlassButton variant="connected" label={t("networkDiscoverConnected")} />
       ) : isPending ? (
-        <NetworkHubGlassButton
-          variant="neutral"
-          label={pendingLabel}
-          onPress={onCancel}
-          loading={loading}
-          leadingIcon={<Check size={11} color={Theme.primary} strokeWidth={2.2} />}
-        />
+        <>
+          {pendingRoleTag ? (
+            <View style={styles.pendingRolePill}>
+              <Text style={styles.pendingRolePillText} numberOfLines={1}>
+                {pendingRoleTag}
+              </Text>
+            </View>
+          ) : null}
+          <NetworkHubGlassButton
+            variant="neutral"
+            label={pendingLabel}
+            size="default"
+            onPress={onCancel}
+            loading={loading}
+            leadingIcon={<Check size={13} color={Theme.primary} strokeWidth={2.4} />}
+          />
+        </>
       ) : (
         <NetworkHubGlassButton
           variant="primary"
           label={t("networkDiscoverConnect")}
+          size="default"
           onPress={onConnect}
           loading={loading}
-          leadingIcon={<UserPlus size={11} color={Theme.primary} strokeWidth={2.2} />}
+          leadingIcon={<UserPlus size={13} color={Theme.primary} strokeWidth={2.4} />}
         />
       )}
     </View>
@@ -347,20 +362,29 @@ export function NetworkPartyDiscoverListCard({
                     size={mobileGrid ? "compact" : "default"}
                   />
                 ) : isPending ? (
-                  <NetworkHubGlassButton
-                    variant="neutral"
-                    label={pendingLabel}
-                    size={mobileGrid ? "compact" : "default"}
-                    onPress={onCancel}
-                    loading={loading}
-                    leadingIcon={
-                      <Check
-                        size={mobileGrid ? 10 : 12}
-                        color={Theme.primary}
-                        strokeWidth={2.2}
-                      />
-                    }
-                  />
+                  <>
+                    {pendingRoleTag ? (
+                      <View style={styles.pendingRolePill}>
+                        <Text style={styles.pendingRolePillText} numberOfLines={1}>
+                          {pendingRoleTag}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <NetworkHubGlassButton
+                      variant="neutral"
+                      label={pendingLabel}
+                      size={mobileGrid ? "compact" : "default"}
+                      onPress={onCancel}
+                      loading={loading}
+                      leadingIcon={
+                        <Check
+                          size={mobileGrid ? 11 : 13}
+                          color={Theme.primary}
+                          strokeWidth={2.4}
+                        />
+                      }
+                    />
+                  </>
                 ) : (
                   <NetworkHubGlassButton
                     variant="primary"
@@ -370,9 +394,9 @@ export function NetworkPartyDiscoverListCard({
                     loading={loading}
                     leadingIcon={
                       <UserPlus
-                        size={mobileGrid ? 10 : 12}
+                        size={mobileGrid ? 11 : 13}
                         color={Theme.primary}
-                        strokeWidth={2.2}
+                        strokeWidth={2.4}
                       />
                     }
                   />

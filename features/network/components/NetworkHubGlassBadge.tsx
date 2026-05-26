@@ -81,21 +81,21 @@ export function NetworkHubGlassBadge({ pill, size = "default" }: NetworkHubGlass
 
 const styles = StyleSheet.create({
   shell: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 14,
     borderWidth: 1,
     overflow: "hidden",
     position: "relative",
     alignSelf: "flex-start",
-    minHeight: 18,
+    minHeight: 14,
     justifyContent: "center",
   },
   shellCompact: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 18,
-    minHeight: 16,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 12,
+    minHeight: 12,
   },
   specular: {
     ...StyleSheet.absoluteFillObject,

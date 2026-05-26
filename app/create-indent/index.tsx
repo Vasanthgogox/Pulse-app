@@ -6,6 +6,7 @@ import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchIn
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
+import { IndentShareTicketModal } from "@/features/indents/components/IndentShareTicketModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -400,6 +401,16 @@ export default function CreateIndentScreen() {
     resolve: null,
   });
 
+  /** Share-to-network confirmation uses a dedicated ticket-styled
+   *  modal (`IndentShareTicketModal`) instead of the generic
+   *  `ThemedConfirmModal`. The promise resolver is held here so the
+   *  share-handler can `await` the user's decision the same way it
+   *  used to await `confirmDialog`. */
+  const [shareTicketState, setShareTicketState] = useState<{
+    visible: boolean;
+    resolve: ((value: boolean) => void) | null;
+  }>({ visible: false, resolve: null });
+
   const showDialog = useCallback((title: string, message?: string) => {
     setAlertState({ visible: true, title, message: message ?? "" });
   }, []);
@@ -441,6 +452,16 @@ export default function CreateIndentScreen() {
     },
     [],
   );
+
+  /** Open the share-to-network ticket modal and resolve when the
+   *  user picks Cancel (false) or Share now (true). Mirrors the
+   *  `confirmDialog` promise contract so handlers can keep
+   *  `const shouldShare = await requestShareConfirm()`. */
+  const requestShareConfirm = useCallback((): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setShareTicketState({ visible: true, resolve });
+    });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -794,12 +815,7 @@ export default function CreateIndentScreen() {
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    const summary = buildIndentSummaryMessage(form);
-    const shouldShare = await confirmDialog(
-      "Share to network?",
-      `${summary}\n\nOnce shared, this indent becomes read-only and cannot be edited.`,
-      "Share now",
-    );
+    const shouldShare = await requestShareConfirm();
     if (!shouldShare) return;
 
     const payload = buildPayload();
@@ -856,7 +872,7 @@ export default function CreateIndentScreen() {
     buildPayload,
     draftIndentId,
     showDialog,
-    confirmDialog,
+    requestShareConfirm,
   ]);
 
   if (!canCreate) {
@@ -2168,6 +2184,29 @@ export default function CreateIndentScreen() {
             visible: false,
             resolve: null,
           }));
+        }}
+      />
+      <IndentShareTicketModal
+        visible={shareTicketState.visible}
+        ticketRef={draftIndentId}
+        fields={{
+          pickup: compactLocationLabel(form.pickup_area) || "",
+          drop: compactLocationLabel(form.drop_location) || "",
+          client: (form.client_name ?? "").trim(),
+          tripDate: (form.pickup_date ?? "").trim(),
+          tons: (form.weight ?? "").trim(),
+          vehicle: (form.vehicle_type ?? "").trim(),
+          loadType: (form.load_type ?? "").trim(),
+          clientPrice: (form.client_price ?? "").trim(),
+          supplierTarget: (form.supplier_target ?? "").trim(),
+        }}
+        onCancel={() => {
+          if (shareTicketState.resolve) shareTicketState.resolve(false);
+          setShareTicketState({ visible: false, resolve: null });
+        }}
+        onConfirm={() => {
+          if (shareTicketState.resolve) shareTicketState.resolve(true);
+          setShareTicketState({ visible: false, resolve: null });
         }}
       />
     </View>

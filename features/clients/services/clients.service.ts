@@ -34,7 +34,10 @@ export interface ClientRow {
   linked_organization_id?: string | null;
   /** Optional contact/commission percent; shown in Finance customers table subline (e.g. "MANUAL · 10%"). */
   contact_percent?: number | null;
-  /** Joined profile data for integrated clients (owner of linked org). */
+  /** Avatar for the linked org, populated by `get_clients_with_profiles`.
+   *  Resolution priority: `organizations.logo_url` (org branding) →
+   *  `profiles.avatar_url` (owner's personal avatar) → null (let the UI
+   *  render initials from the name + avatar_seed). */
   avatar_url?: string | null;
   avatar_seed?: string | null;
   owner_full_name?: string | null;

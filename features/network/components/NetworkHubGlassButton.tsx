@@ -64,10 +64,10 @@ const VARIANT_THEMES: Record<NetworkHubGlassButtonVariant, GlassTheme> = {
   },
 };
 
-function ConnectedDot() {
+function ConnectedDot({ small = false }: { small?: boolean }) {
   return (
-    <View style={styles.connectedDotOuter}>
-      <View style={styles.connectedDotInner} />
+    <View style={[styles.connectedDotOuter, small && styles.connectedDotOuterSmall]}>
+      <View style={[styles.connectedDotInner, small && styles.connectedDotInnerSmall]} />
     </View>
   );
 }
@@ -84,12 +84,19 @@ function GlassButtonShell({
   children: ReactNode;
 }) {
   const theme = VARIANT_THEMES[variant];
+  /** CONNECTED is a status indicator, not a CTA — render it at a tighter
+   *  pill scale so it doesn't dominate the card or fight visually with
+   *  the INTEGRATED badge floating at the top-right corner. The status
+   *  variant uses smaller padding, height, and edge-line inset; the
+   *  label + dot styles also shrink (see `*Status` styles below). */
+  const isStatus = variant === "connected";
 
   return (
     <View
       style={[
         styles.shell,
         compact && styles.shellCompact,
+        isStatus && styles.shellStatus,
         { borderColor: theme.borderColor },
         btnShadow,
         GLASS_WEB,
@@ -109,8 +116,23 @@ function GlassButtonShell({
         style={styles.specular}
         pointerEvents="none"
       />
-      <View style={[styles.edgeLine, compact && styles.edgeLineCompact]} pointerEvents="none" />
-      <View style={[styles.content, compact && styles.contentCompact]}>{children}</View>
+      <View
+        style={[
+          styles.edgeLine,
+          compact && styles.edgeLineCompact,
+          isStatus && styles.edgeLineStatus,
+        ]}
+        pointerEvents="none"
+      />
+      <View
+        style={[
+          styles.content,
+          compact && styles.contentCompact,
+          isStatus && styles.contentStatus,
+        ]}
+      >
+        {children}
+      </View>
     </View>
   );
 }
@@ -139,14 +161,22 @@ export function NetworkHubGlassButton({
   const compact = size === "compact";
   const theme = VARIANT_THEMES[variant];
   const isStatic = variant === "connected" || !onPress;
+  /** Status variant (CONNECTED) renders smaller than the CTA variants
+   *  so it sits alongside the INTEGRATED badge as a peer indicator. */
+  const isStatus = variant === "connected";
 
   const inner = loading ? (
     <LoadingIndicator size={compact ? 10 : 12} color={theme.textColor} />
   ) : (
     <>
-      {variant === "connected" ? <ConnectedDot /> : leadingIcon}
+      {isStatus ? <ConnectedDot small /> : leadingIcon}
       <Text
-        style={[styles.label, compact && styles.labelCompact, { color: theme.textColor }]}
+        style={[
+          styles.label,
+          compact && styles.labelCompact,
+          isStatus && styles.labelStatus,
+          { color: theme.textColor },
+        ]}
         numberOfLines={1}
       >
         {label}
@@ -205,63 +235,98 @@ const styles = StyleSheet.create({
     opacity: 0.96,
     transform: [{ scale: 0.985 }],
   },
+  /** Pill-shaped frosted CTA matching the discover-card reference
+   *  (Connect / Request sent / Connected). Radius is fully rounded so the
+   *  button reads as a single confident pill, with extra padding so the
+   *  uppercase label + leading icon get enough breathing room to land
+   *  cleanly on mobile (Expo) and desktop. */
   shell: {
-    borderRadius: 10,
+    borderRadius: 999,
     borderWidth: 1,
     overflow: "hidden",
     position: "relative",
-    minHeight: 28,
+    minHeight: 32,
     justifyContent: "center",
   },
   shellCompact: {
-    borderRadius: 9,
-    minHeight: 24,
+    borderRadius: 999,
+    minHeight: 28,
+  },
+  /** Tighter pill used by the `connected` status variant. Matches the
+   *  visual weight of the INTEGRATED badge — both pills now read as
+   *  peer status chips rather than CONNECTED dominating the card. */
+  shellStatus: {
+    minHeight: 20,
+    borderRadius: 999,
   },
   shellPressed: {
     opacity: 0.94,
   },
   specular: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.88,
+    opacity: 0.78,
   },
+  /** Inner top specular hairline. Pulled tighter on the pill so it hugs
+   *  the curved edge instead of bleeding into the rounded corner. */
   edgeLine: {
     position: "absolute",
     top: 0,
-    left: 10,
-    right: 10,
+    left: 16,
+    right: 16,
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.networkGlassBorder,
     zIndex: 1,
   },
   edgeLineCompact: {
-    left: 7,
-    right: 7,
+    left: 12,
+    right: 12,
+  },
+  /** Status pill specular hairline pulled even tighter so it stays
+   *  inside the smaller curved edge of the CONNECTED chip. */
+  edgeLineStatus: {
+    left: 8,
+    right: 8,
   },
   content: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     zIndex: 2,
   },
   contentCompact: {
-    gap: 3,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  /** Status pill (CONNECTED) — tighter than `contentCompact` so it
+   *  visually peers with the INTEGRATED badge instead of looking
+   *  like a primary CTA. */
+  contentStatus: {
+    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
   label: {
-    fontSize: 8,
-    fontWeight: "500",
-    letterSpacing: 0.55,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.7,
     textTransform: "uppercase",
-    lineHeight: 11,
+    lineHeight: 13,
   },
   labelCompact: {
-    fontSize: 7,
-    letterSpacing: 0.45,
-    lineHeight: 9,
+    fontSize: 9,
+    letterSpacing: 0.6,
+    lineHeight: 12,
+  },
+  /** Smaller label for the CONNECTED status pill so it lines up
+   *  with the INTEGRATED chip's text size (6 / 0.7 / 9). */
+  labelStatus: {
+    fontSize: 8,
+    letterSpacing: 0.6,
+    lineHeight: 10,
   },
   connectedDotOuter: {
     width: 7,
@@ -273,10 +338,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(16, 185, 129, 0.35)",
   },
+  /** Smaller dot variant for the status pill — keeps the dot in
+   *  proportion to the reduced pill height (~20 px). */
+  connectedDotOuterSmall: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
   connectedDotInner: {
     width: 4,
     height: 4,
     borderRadius: 2,
     backgroundColor: Theme.positive,
+  },
+  connectedDotInnerSmall: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
   },
 });

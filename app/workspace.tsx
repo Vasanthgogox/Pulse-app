@@ -37,8 +37,17 @@ import {
 
 const FLEX_CARD_BREAKPOINT = 720;
 const FLEX_CARD_RATIO = 0.4;
-const FLEX_CARD_MIN_WIDTH = 420;
-const FLEX_CARD_MAX_WIDTH = 720;
+/**
+ * Side flex card sized to match the canonical workspace reference
+ * (`w-[40vw] min-w-[380px] max-w-[480px]`). The previous 420–720 px
+ * range felt too wide on standard desktops — content rattled in the
+ * column and typography read too sparse. 380–480 keeps the card
+ * thumb-graspable on a single-monitor browser, matches the density
+ * of the rest of the app (network cards, detail forms), and gives
+ * the underlying screen more breathing room behind the backdrop.
+ */
+const FLEX_CARD_MIN_WIDTH = 380;
+const FLEX_CARD_MAX_WIDTH = 480;
 const FLEX_CARD_CANVAS = "#f4f6fb";
 
 export default function WorkspaceScreen() {

@@ -19,7 +19,15 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DETAIL_CANVAS = "#f4f6fb";
-const CONTENT_MAX_WIDTH = 720;
+/**
+ * Content max-width tracks the flex card's max width (480 px in
+ * `app/workspace.tsx`) plus a small overflow buffer for embedded
+ * lists / forms. The old 720 px rail was wider than the card itself
+ * and effectively a no-op; setting it to 520 keeps content centered
+ * on the rare wider-than-card breakpoint while letting it stretch
+ * comfortably edge-to-edge inside the card.
+ */
+const CONTENT_MAX_WIDTH = 520;
 
 type Props = {
   title: string;
@@ -107,28 +115,28 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 22,
-    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingHorizontal: 18,
     alignItems: "center",
   },
   contentColumn: {
     width: "100%",
     maxWidth: CONTENT_MAX_WIDTH,
-    gap: 18,
+    gap: 14,
     alignSelf: "center",
   },
   fillBody: {
     flex: 1,
     minHeight: 0,
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingHorizontal: 18,
+    paddingTop: 12,
   },
   footer: {
     backgroundColor: Theme.cardWhite,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingHorizontal: 24,
-    paddingTop: 14,
+    paddingHorizontal: 18,
+    paddingTop: 12,
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.04,

@@ -38,6 +38,7 @@ import {
     isIntegratedSupplierRow,
     isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
+import type { DriversViewTab } from "@/features/drivers/components/DriversTab";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
 import {
     canAccessFinance,
@@ -352,6 +353,7 @@ export function FinanceScreen() {
   const [addEntryContext, setAddEntryContext] =
     useState<TripEntryContext | null>(null);
   const [garageViewTab, setGarageViewTab] = useState<GarrageViewTab>("vehicle");
+  const [driverViewTab, setDriverViewTab] = useState<DriversViewTab>("list");
 
   const onSuccessNavigateToDetail = useCallback(
     (data: import("@/components/AddTransactionModal").AddTransactionData) => {
@@ -1405,6 +1407,8 @@ export function FinanceScreen() {
         onGarageViewTabChange={
           financeSubTab === "garage" ? setGarageViewTab : undefined
         }
+        driverViewTab={financeSubTab === "drivers" ? driverViewTab : undefined}
+        onDriverViewTabChange={setDriverViewTab}
         showPeriodFilter={false}
         periodFilter={financePeriodFilter}
         onPeriodFilterChange={setFinancePeriodFilter}
@@ -1467,6 +1471,8 @@ export function FinanceScreen() {
               onGaragePeriodChange={setGaragePeriod}
               garageViewTab={garageViewTab}
               onGarageViewTabChange={setGarageViewTab}
+              driverViewTab={driverViewTab}
+              onDriverViewTabChange={setDriverViewTab}
               onTripSelect={(tripId) => router.push(`/trip/${tripId}` as const)}
               refreshing={refreshing}
               onRefresh={handleRefresh}

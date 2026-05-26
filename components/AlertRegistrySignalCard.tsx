@@ -20,7 +20,7 @@ export type AlertSignalStatus = "WARNING" | "ACTION" | "INFO";
 const STATUS_ICON = {
   WARNING: { icon: "#f59e0b", ring: "rgba(245,158,11,0.55)" },
   ACTION: { icon: "#f43f5e", ring: "rgba(244,63,94,0.55)" },
-  INFO: { icon: Theme.primary, ring: "rgba(26,35,126,0.4)" },
+  INFO: { icon: Theme.primary, ring: "rgba(79,70,229,0.4)" },
 } as const;
 
 /** Borderless icon with soft opacity pulse + expanding radar rings (no solid fill). */

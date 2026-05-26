@@ -48,6 +48,7 @@ export function MutualConnectionsFacepile({
     id: row.id,
     name: row.name,
     avatar_seed: row.avatar_seed,
+    avatar_url: row.avatar_url,
   }));
 
   const handlePressFace = (face: MutualFace) => {
@@ -55,6 +56,7 @@ export function MutualConnectionsFacepile({
       id: face.id,
       name: face.name,
       avatar_seed: face.avatar_seed ?? null,
+      avatar_url: face.avatar_url ?? null,
     });
   };
 

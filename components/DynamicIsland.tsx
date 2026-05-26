@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: 'rgba(26,35,126,0.08)',
+    backgroundColor: 'rgba(79,70,229,0.08)',
   },
   quickChatText: {
     fontSize: 14,

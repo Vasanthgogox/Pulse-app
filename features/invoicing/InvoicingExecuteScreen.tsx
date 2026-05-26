@@ -1476,7 +1476,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     color: Theme.primary,
-    backgroundColor: "rgba(26,35,126,0.1)",
+    backgroundColor: "rgba(79,70,229,0.1)",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
@@ -1511,7 +1511,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.surfaceBorder,
     backgroundColor: Theme.screenBackground,
   },
-  clientRowActive: { backgroundColor: "rgba(26,35,126,0.03)" },
+  clientRowActive: { backgroundColor: "rgba(79,70,229,0.03)" },
   clientRowIndicator: {
     position: "absolute",
     left: 0,
@@ -1882,7 +1882,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
-  tripTableRowSelected: { backgroundColor: "rgba(26,35,126,0.03)" },
+  tripTableRowSelected: { backgroundColor: "rgba(79,70,229,0.03)" },
   tripRowDisabled: { opacity: 0.6 },
   tripCardMobile: {
     backgroundColor: Theme.screenBackground,
@@ -1894,7 +1894,7 @@ const styles = StyleSheet.create({
   },
   tripCardMobileSelected: {
     borderColor: Theme.primary,
-    backgroundColor: "rgba(26,35,126,0.05)",
+    backgroundColor: "rgba(79,70,229,0.05)",
   },
   tripCardMobileTop: {
     flexDirection: "row",

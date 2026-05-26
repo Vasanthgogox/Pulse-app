@@ -79,9 +79,18 @@ export interface TreasurySummaryCardProps {
   garagePeriodOptions?: { value: string; label: string }[];
   garagePeriod?: string;
   onGaragePeriodChange?: (value: string) => void;
-  /** Garage tab: view/sort (Vehicle | Trips | Revenue | Profit) in same filter dropdown. */
-  garageViewTab?: 'vehicle' | 'trips' | 'revenue' | 'profit';
-  onGarageViewTabChange?: (value: 'vehicle' | 'trips' | 'revenue' | 'profit') => void;
+  /** Garage tab: view/sort (Vehicle | Trips | Revenue | Profit | Analytics) in same filter dropdown. */
+  garageViewTab?: 'vehicle' | 'trips' | 'revenue' | 'profit' | 'analytics';
+  onGarageViewTabChange?: (value: 'vehicle' | 'trips' | 'revenue' | 'profit' | 'analytics') => void;
+  /** Drivers tab: view mode (list | analytics) shown in filter dropdown. */
+  driverViewTab?: 'list' | 'analytics';
+  onDriverViewTabChange?: (value: 'list' | 'analytics') => void;
+  /** Customers tab: view mode (list | analytics) shown in filter dropdown. */
+  customerViewTab?: 'list' | 'analytics';
+  onCustomerViewTabChange?: (value: 'list' | 'analytics') => void;
+  /** Suppliers tab: view mode (list | analytics) shown in filter dropdown. */
+  supplierViewTab?: 'list' | 'analytics';
+  onSupplierViewTabChange?: (value: 'list' | 'analytics') => void;
   /** Vehicle detail: show margin % in the card (e.g. +90.5%) */
   marginPercent?: number | null;
   /** Ledger tab: filter by cash direction. When set, one of the summary cells is highlighted. */
@@ -309,6 +318,12 @@ export function TreasurySummaryCard({
   onGaragePeriodChange,
   garageViewTab,
   onGarageViewTabChange,
+  driverViewTab,
+  onDriverViewTabChange,
+  customerViewTab,
+  onCustomerViewTabChange,
+  supplierViewTab,
+  onSupplierViewTabChange,
   marginPercent,
   cashDirectionFilter = 'all',
   onCashInPress,
@@ -570,7 +585,7 @@ export function TreasurySummaryCard({
                           <FontAwesome name="sort" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
                           <Text style={styles.filterModalSectionLabel}>View / Sort</Text>
                         </View>
-                        {(['vehicle', 'trips', 'revenue', 'profit'] as const).map((v) => (
+                        {(['vehicle', 'trips', 'revenue', 'profit', 'analytics'] as const).map((v) => (
                           <TouchableOpacity
                             key={v}
                             style={[styles.dropdownItem, garageViewTab === v && styles.dropdownItemActive]}
@@ -583,7 +598,7 @@ export function TreasurySummaryCard({
                             {garageViewTab === v && <View style={styles.dropdownItemAccent} />}
                             <View style={[styles.dropdownItemIconWrap, garageViewTab === v && styles.dropdownItemIconWrapActive]}>
                               <FontAwesome
-                                name={v === 'vehicle' ? 'truck' : v === 'trips' ? 'road' : v === 'revenue' ? 'money' : 'bar-chart'}
+                                name={v === 'vehicle' ? 'truck' : v === 'trips' ? 'road' : v === 'revenue' ? 'money' : v === 'analytics' ? 'line-chart' : 'bar-chart'}
                                 size={14}
                                 color={garageViewTab === v ? Theme.teslaRed : Theme.textMutedDemo}
                               />
@@ -594,6 +609,87 @@ export function TreasurySummaryCard({
                             {garageViewTab === v && (
                               <FontAwesome name="check" size={12} color={Theme.teslaRed} style={styles.dropdownItemCheck} />
                             )}
+                          </TouchableOpacity>
+                        ))}
+                        <View style={styles.filterModalDivider} />
+                      </>
+                    )}
+                    {showFilterDropdown && onDriverViewTabChange != null && driverViewTab != null && (
+                      <>
+                        <View style={styles.filterModalSectionRow}>
+                          <FontAwesome name="sort" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
+                          <Text style={styles.filterModalSectionLabel}>Driver View</Text>
+                        </View>
+                        {(['list', 'analytics'] as const).map((v) => (
+                          <TouchableOpacity
+                            key={v}
+                            style={[styles.dropdownItem, driverViewTab === v && styles.dropdownItemActive]}
+                            onPress={() => {
+                              onDriverViewTabChange(v);
+                              setShowFilterDropdown(false);
+                            }}
+                            activeOpacity={0.75}
+                          >
+                            {driverViewTab === v && <View style={styles.dropdownItemAccent} />}
+                            <View style={[styles.dropdownItemIconWrap, driverViewTab === v && styles.dropdownItemIconWrapActive]}>
+                              <FontAwesome
+                                name={v === 'analytics' ? 'line-chart' : 'list'}
+                                size={14}
+                                color={driverViewTab === v ? Theme.teslaRed : Theme.textMutedDemo}
+                              />
+                            </View>
+                            <Text style={[styles.dropdownItemText, driverViewTab === v && styles.dropdownItemTextActive]}>
+                              {v === 'analytics' ? 'Analytics' : 'Driver List'}
+                            </Text>
+                            {driverViewTab === v && (
+                              <FontAwesome name="check" size={12} color={Theme.teslaRed} style={styles.dropdownItemCheck} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                        <View style={styles.filterModalDivider} />
+                      </>
+                    )}
+                    {showFilterDropdown && onCustomerViewTabChange != null && customerViewTab != null && (
+                      <>
+                        <View style={styles.filterModalSectionRow}>
+                          <FontAwesome name="sort" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
+                          <Text style={styles.filterModalSectionLabel}>Customer View</Text>
+                        </View>
+                        {(['list', 'analytics'] as const).map((v) => (
+                          <TouchableOpacity key={v} style={[styles.dropdownItem, customerViewTab === v && styles.dropdownItemActive]}
+                            onPress={() => { onCustomerViewTabChange(v); setShowFilterDropdown(false); }} activeOpacity={0.75}>
+                            {customerViewTab === v && <View style={styles.dropdownItemAccent} />}
+                            <View style={[styles.dropdownItemIconWrap, customerViewTab === v && styles.dropdownItemIconWrapActive]}>
+                              <FontAwesome name={v === 'analytics' ? 'line-chart' : 'users'} size={14}
+                                color={customerViewTab === v ? Theme.teslaRed : Theme.textMutedDemo} />
+                            </View>
+                            <Text style={[styles.dropdownItemText, customerViewTab === v && styles.dropdownItemTextActive]}>
+                              {v === 'analytics' ? 'Analytics' : 'Client List'}
+                            </Text>
+                            {customerViewTab === v && <FontAwesome name="check" size={12} color={Theme.teslaRed} style={styles.dropdownItemCheck} />}
+                          </TouchableOpacity>
+                        ))}
+                        <View style={styles.filterModalDivider} />
+                      </>
+                    )}
+                    {showFilterDropdown && onSupplierViewTabChange != null && supplierViewTab != null && (
+                      <>
+                        <View style={styles.filterModalSectionRow}>
+                          <FontAwesome name="sort" size={11} color={Theme.teslaRed} style={styles.filterModalSectionIcon} />
+                          <Text style={styles.filterModalSectionLabel}>Supplier View</Text>
+                        </View>
+                        {(['list', 'analytics'] as const).map((v) => (
+                          <TouchableOpacity key={v} style={[styles.dropdownItem, supplierViewTab === v && styles.dropdownItemActive]}
+                            onPress={() => { onSupplierViewTabChange(v); setShowFilterDropdown(false); }} activeOpacity={0.75}>
+                            {supplierViewTab === v && <View style={styles.dropdownItemAccent} />}
+                            <View style={[styles.dropdownItemIconWrap, supplierViewTab === v && styles.dropdownItemIconWrapActive]}>
+                              <FontAwesome name={v === 'analytics' ? 'line-chart' : 'truck'} size={14}
+                                color={supplierViewTab === v ? Theme.teslaRed : Theme.textMutedDemo} />
+                            </View>
+                            <Text style={[styles.dropdownItemText, supplierViewTab === v && styles.dropdownItemTextActive]}>
+                              {v === 'analytics' ? 'Analytics' : 'Supplier List'}
+                            </Text>
+                            {supplierViewTab === v && <FontAwesome name="check" size={12} color={Theme.teslaRed} style={styles.dropdownItemCheck} />}
                           </TouchableOpacity>
                         ))}
                         <View style={styles.filterModalDivider} />
@@ -1003,9 +1099,16 @@ export function TreasurySummaryCard({
           ]}
         >
           <View style={[styles.toolbarLeft, styles.toolbarLeftNetwork]}>
-            <View style={chatChrome.toolbarStack}>
+            <View
+              style={[
+                chatChrome.toolbarStack,
+                showInlineSourceChips && styles.toolbarStackInlineChips,
+              ]}
+            >
               {showInlineSourceChips ? (
-                <View style={chatChrome.tabRow}>
+                <View
+                  style={[chatChrome.tabRow, styles.toolbarStackInlineChipsTabRow]}
+                >
                   {(["all", "asset", "aggregate"] as const).map((s) => {
                     const active = sourceFilter === s;
                     return (
@@ -1046,7 +1149,12 @@ export function TreasurySummaryCard({
                 </View>
               ) : null}
 
-              <View style={chatChrome.searchScopeStrip}>
+              <View
+                style={[
+                  chatChrome.searchScopeStrip,
+                  showInlineSourceChips && styles.toolbarStackInlineChipsSearch,
+                ]}
+              >
                 <View style={chatChrome.searchWrap}>
                   <AnimatedIcon
                     name="search"
@@ -1292,6 +1400,24 @@ const styles = StyleSheet.create({
   },
   toolbarLeftNetwork: {
     gap: 8,
+  },
+  /** Cash-network toolbar override: when the ALL / Asset / Aggregate
+   *  source chips are inline, lay them out side-by-side with the search
+   *  field on a single row instead of stacking. Equal flex weights keep
+   *  the tab tray and search field visually balanced. */
+  toolbarStackInlineChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  toolbarStackInlineChipsTabRow: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolbarStackInlineChipsSearch: {
+    flex: 1,
+    minWidth: 0,
+    width: 'auto',
   },
   /** Same row as Network hub: search (flex) + pill group + optional trailing actions. */
   networkSearchRow: {

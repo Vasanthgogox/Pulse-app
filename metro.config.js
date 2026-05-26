@@ -57,6 +57,26 @@ const blockList = Array.isArray(existingBlock)
 
 const upstreamResolveRequest = resolver.resolveRequest;
 
+// ── Native shim for `framer-motion` ──────────────────────────────────────────
+// `moti` ships a `react-native: "src/index.tsx"` entry that runtime-imports
+// `AnimatePresence` / `usePresence` / `PresenceContext` from `framer-motion`,
+// which is a DOM-only library. On Hermes/JSC the framer-motion CJS bundle
+// fails at module init with `Cannot set property 'importedAll' of undefined`
+// and corrupts Metro's lazy-chunk module-ID table — the symptom in the
+// Finance screen was the cascade of `Requiring unknown module "5064/65/70/72"`
+// errors blocking the customer / supplier / driver sub-tabs from rendering
+// any party details.
+//
+// On native we point `framer-motion` (and any subpath import) at a tiny
+// no-op shim that exposes the three symbols moti actually uses. Web keeps
+// the real package via the default upstream resolver.
+const framerMotionNativeShimPath = path.resolve(
+  projectRoot,
+  'polyfills/framer-motion-native.js',
+);
+const isFramerMotionRequest = (moduleName) =>
+  moduleName === 'framer-motion' || moduleName.startsWith('framer-motion/');
+
 config.transformer = {
   ...transformer,
   babelTransformerPath: require.resolve('react-native-svg-transformer/expo'),
@@ -86,6 +106,17 @@ config.resolver = {
     if (moduleName === 'tslib' || moduleName.endsWith('/tslib')) {
       return {
         filePath: path.resolve(projectRoot, 'node_modules/tslib/tslib.js'),
+        type: 'sourceFile',
+      };
+    }
+    // Native-only `framer-motion` stub — keeps moti from dragging the DOM-only
+    // framer-motion bundle into iOS/Android builds. Web falls through.
+    if (
+      (platform === 'ios' || platform === 'android') &&
+      isFramerMotionRequest(moduleName)
+    ) {
+      return {
+        filePath: framerMotionNativeShimPath,
         type: 'sourceFile',
       };
     }

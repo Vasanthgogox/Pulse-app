@@ -20,6 +20,8 @@ export function FinanceDriversTab(props: FinanceTabBodyProps) {
     onRefresh,
     bottomInset,
     financeSubTab,
+    driverViewTab,
+    onDriverViewTabChange,
   } = props;
 
   return (
@@ -44,6 +46,8 @@ export function FinanceDriversTab(props: FinanceTabBodyProps) {
       refreshing={refreshing}
       onRefresh={onRefresh}
       bottomInset={bottomInset}
+      viewTab={driverViewTab}
+      onViewTabChange={onDriverViewTabChange}
       hideSummaryRow
     />
   );

@@ -35,10 +35,14 @@ function ChatBubbleSvg({
   size: number;
   active: boolean;
 }) {
-  const accent = active ? Theme.pulseIndigo : "#94a3b8";
-  const accentDeep = active ? "#4338ca" : "#64748b";
-  const highlight = active ? "#a5b4fc" : "#cbd5e1";
-  const face = active ? "#eef2ff" : "#f8fafc";
+  /* When the edge chat tab is active it sits on a solid indigo chip,
+   *  so the SVG bubble flips to a white / pale-indigo palette to read
+   *  on the deep purple background. Inactive keeps the muted slate
+   *  tones used by the rest of the bar. */
+  const accent = active ? "#FFFFFF" : "#94a3b8";
+  const accentDeep = active ? "#C7D2FE" : "#64748b";
+  const highlight = active ? "#FFFFFF" : "#cbd5e1";
+  const face = active ? "#FFFFFF" : "#f8fafc";
 
   return (
     <Svg
@@ -134,7 +138,7 @@ export function AnimatedChatTabIcon({
     ],
   }));
 
-  const dotColor = active ? Theme.pulseIndigo : "#64748b";
+  const dotColor = active ? Theme.primary : "#64748b";
   const dotSize = Math.max(2.5, size * 0.14);
 
   return (

@@ -93,6 +93,7 @@ import {
   DriverFleetInviteSalaryModal,
   type DriverFleetInviteSalaryModalMode,
 } from "./DriverFleetInviteSalaryModal";
+import { DriverAnalyticsTab } from "./analytics/DriverAnalyticsTab";
 import {
   normalizeDriverInviteCompensation,
   suggestDriverInviteCompensation,
@@ -330,7 +331,7 @@ export default function DriverDetailScreen({
   >([]);
   const [driverTransactions, setDriverTransactions] = useState<LedgerRow[]>([]);
   const [driverDetailTab, setDriverDetailTab] = useState<
-    "trips" | "ledger" | "statement"
+    "trips" | "ledger" | "statement" | "analytics"
   >("trips");
   const [tripsDatePreset, setTripsDatePreset] =
     useState<FinancePeriodFilter>("RANGE");
@@ -1687,6 +1688,23 @@ export default function DriverDetailScreen({
             {t("statement")}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
+            driverDetailTab === "analytics" && styles.tabItemActive,
+          ]}
+          onPress={() => setDriverDetailTab("analytics")}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabItemText,
+              driverDetailTab === "analytics" && styles.tabItemTextActive,
+            ]}
+          >
+            Analytics
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <Modal
@@ -2278,6 +2296,19 @@ export default function DriverDetailScreen({
               </View>
             </>
           )}
+        </View>
+      )}
+
+      {driverDetailTab === "analytics" && (
+        <View style={styles.tabScroll}>
+          <DriverAnalyticsTab
+            trips={trips}
+            driverTransactions={driverTransactions}
+            driverRequests={driverRequests}
+            driver={driver}
+            driverOffer={driverOffer}
+            driverRatings={driverRatings}
+          />
         </View>
       )}
 

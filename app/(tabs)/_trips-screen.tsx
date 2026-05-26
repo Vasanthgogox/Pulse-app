@@ -31,6 +31,7 @@ import {
   tripFinanceAdjForHubLookup,
   tripHubCost,
   tripHubRevenue,
+    TripsHubAuditFooter,
     TripsHubMobileTripListCanvas,
     TripsHubTableView,
     TripsHubTripCard,
@@ -1831,22 +1832,6 @@ export default function TripsScreen() {
                 ) : null}
               </View>
             </ScrollView>
-              {showTripsPaginationFooter ? (
-                <HubListPaginationBar
-                  page={tripsTablePageSafe}
-                  totalPages={tripsTableTotalPages}
-                  totalItems={tripsHubPaginationTotal}
-                  pageSize={tripsTablePageSize}
-                  onPageSizeChange={setTripsTablePageSize}
-                  itemLabel="trips"
-                  onPrev={() => setTripsTablePage((p) => Math.max(0, p - 1))}
-                  onNext={() =>
-                    setTripsTablePage((p) =>
-                      Math.min(tripsTableTotalPages - 1, p + 1),
-                    )
-                  }
-                />
-              ) : null}
             </View>
           ) : (
             <View>
@@ -2063,25 +2048,35 @@ export default function TripsScreen() {
                   )
                 }
               />
-              {showTripsPaginationFooter ? (
-                <HubListPaginationBar
-                  page={tripsTablePageSafe}
-                  totalPages={tripsTableTotalPages}
-                  totalItems={tripsHubPaginationTotal}
-                  pageSize={tripsTablePageSize}
-                  onPageSizeChange={setTripsTablePageSize}
-                  itemLabel="trips"
-                  onPrev={() => setTripsTablePage((p) => Math.max(0, p - 1))}
-                  onNext={() =>
-                    setTripsTablePage((p) =>
-                      Math.min(tripsTableTotalPages - 1, p + 1),
-                    )
-                  }
-                />
-              ) : null}
             </View>
           )}
         </ScrollView>
+      {Platform.OS === "web" ? (
+        <View style={styles.tripsBottomBar}>
+          <TripsHubAuditFooter
+            onExportLedger={() => setTripLedgerExportOpen(true)}
+            tr={tr}
+          />
+          {showTripsPaginationFooter ? (
+            <View style={styles.tripsBottomBarPaginationWrap}>
+              <HubListPaginationBar
+                page={tripsTablePageSafe}
+                totalPages={tripsTableTotalPages}
+                totalItems={tripsHubPaginationTotal}
+                pageSize={tripsTablePageSize}
+                onPageSizeChange={setTripsTablePageSize}
+                itemLabel="trips"
+                onPrev={() => setTripsTablePage((p) => Math.max(0, p - 1))}
+                onNext={() =>
+                  setTripsTablePage((p) =>
+                    Math.min(tripsTableTotalPages - 1, p + 1),
+                  )
+                }
+              />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <TripsLedgerExportModalGate
         active={tripLedgerExportOpen}
         visible={tripLedgerExportOpen}
@@ -2097,6 +2092,20 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: TRIPS_PAGE_BG },
+  /** Web: pinned bottom bar that holds the Fleet Confidence audit row and
+   *  the pagination controls. Sits below the scroll as a flex sibling so
+   *  it stays at the bottom of the page regardless of scroll position. */
+  tripsBottomBar: {
+    flexShrink: 0,
+    backgroundColor: TRIPS_PAGE_BG,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+  },
+  tripsBottomBarPaginationWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 10,
+  },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -3542,7 +3551,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: "rgba(26, 35, 126, 0.06)",
+    backgroundColor: "rgba(79, 70, 229, 0.06)",
   },
   historyWmReceiveBlobA: {
     backgroundColor: "rgba(21, 128, 61, 0.1)",

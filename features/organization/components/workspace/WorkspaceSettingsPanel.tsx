@@ -414,7 +414,7 @@ const local = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(26,35,126,0.08)",
+    backgroundColor: "rgba(79,70,229,0.08)",
   },
   uploadThumbInitials: { fontSize: 26, fontWeight: "900", color: PURPLE },
   uploadThumbBadge: {
@@ -446,9 +446,9 @@ const local = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: "rgba(26,35,126,0.08)",
+    backgroundColor: "rgba(79,70,229,0.08)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(26,35,126,0.18)",
+    borderColor: "rgba(79,70,229,0.18)",
   },
   uploadBtnText: {
     fontSize: 11,

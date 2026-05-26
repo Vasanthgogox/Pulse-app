@@ -28,15 +28,27 @@ import {
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
 import { NetworkProfileModalChrome } from "@/features/network/components/NetworkProfileGlassShell";
+import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
 import { LinearGradient } from "expo-linear-gradient";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import { NetworkTabErrorBoundary } from "@/components/network/NetworkTabErrorBoundary";
 import { StoryReel } from "@/features/network/components/StoryReel";
+import {
+  ENABLE_UNLINKED_COUNTERPARTIES,
+  UnlinkedCounterpartiesSection,
+} from "@/features/network/components/UnlinkedCounterpartiesSection";
 import { isPostVisibleForOrg, type PostRow } from "@/features/network/services/posts.service";
 import {
+  cancelPendingConnectionRequestByOrgPair,
+  type ConnectionRequestRow,
   createConnectionRequest,
   looksLikeConnectionRateLimitError,
 } from "@/features/connections/services/connectionRequests.service";
+import {
+  ConnectionRoleModal,
+  type ConnectionInviteRole,
+} from "@/features/network/components/ConnectionRoleModal";
+import { queryKeys } from "@/lib/queryKeys";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
 import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
@@ -59,6 +71,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Building2,
+  Check,
   Compass,
   Mail,
   Search,
@@ -90,6 +103,7 @@ import {
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import { useQueryClient } from "@tanstack/react-query";
 
 function isStoryPost(p: PostRow): boolean {
   return p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY";
@@ -234,9 +248,12 @@ function NetworkScreenInner() {
   const [discoverInviteLimit, setDiscoverInviteLimit] = useState(5);
   const { t } = useLanguage();
   const discoverOrgSearch = discoverSearchTermForOrgs(discoverSearch);
-  const [showProtocolRolePicker, setShowProtocolRolePicker] = useState(false);
+  const [protocolRoleModalOpen, setProtocolRoleModalOpen] = useState(false);
+  const [protocolSending, setProtocolSending] = useState(false);
+  const [protocolCancelling, setProtocolCancelling] = useState(false);
 
   useRealtimeNetworkInvalidation(orgId);
+  const queryClient = useQueryClient();
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
   const driverInvitesSentQ = useDriverInvitesSentQuery(orgId);
@@ -355,7 +372,12 @@ function NetworkScreenInner() {
   useEffect(() => {
     let cancelled = false;
     const nodeOrgId = selectedProfileNode?.id ?? null;
-    setShowProtocolRolePicker(false);
+    /** Whenever we point the modal at a different org, drop any
+     *  in-flight role picker / cancel state so it can't leak across
+     *  profiles. */
+    setProtocolRoleModalOpen(false);
+    setProtocolSending(false);
+    setProtocolCancelling(false);
     const isUuid =
       typeof nodeOrgId === "string" &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nodeOrgId);
@@ -369,12 +391,41 @@ function NetworkScreenInner() {
     setProfileStatsLoading(true);
     void (async () => {
       try {
-        const { count } = await supabase()
-          .from("trips")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", nodeOrgId);
+        const [tripsRes, snapshotRes] = await Promise.all([
+          supabase()
+            .from("trips")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", nodeOrgId),
+          orgId
+            ? getOrgProfileSnapshot(orgId, nodeOrgId)
+            : Promise.resolve({ error: null, snapshot: null }),
+        ]);
         if (cancelled) return;
-        setSelectedProfileStats({ totalTrips: count ?? 0 });
+        setSelectedProfileStats({ totalTrips: tripsRes.count ?? 0 });
+        const snap = snapshotRes.snapshot;
+        if (snap) {
+          setSelectedProfileNode((prev) => {
+            if (!prev || prev.id !== nodeOrgId) return prev;
+            return {
+              ...prev,
+              name: snap.name?.trim() || prev.name,
+              type: snap.type ?? prev.type,
+              location:
+                snap.location && snap.location !== "Not available"
+                  ? snap.location
+                  : prev.location && prev.location !== "Not available"
+                    ? prev.location
+                    : snap.location,
+              status: snap.status ?? prev.status,
+              rating: snap.rating ?? prev.rating,
+              mutuals: snap.mutuals ?? prev.mutuals,
+              phone: snap.phone ?? prev.phone,
+              avatar_url: snap.avatar_url ?? prev.avatar_url,
+              avatar_seed: snap.avatar_seed ?? prev.avatar_seed,
+              is_integrated: snap.is_integrated ?? prev.is_integrated,
+            };
+          });
+        }
       } finally {
         if (!cancelled) setProfileStatsLoading(false);
       }
@@ -383,7 +434,7 @@ function NetworkScreenInner() {
     return () => {
       cancelled = true;
     };
-  }, [selectedProfileNode?.id]);
+  }, [selectedProfileNode?.id, orgId]);
 
   const handleOpenProfileFromDiscover = useCallback(
     (org: {
@@ -419,8 +470,28 @@ function NetworkScreenInner() {
     setMutualModalTarget({ targetOrgId: target.id, targetOrgName: target.name });
   }, []);
 
+  /** Belt-and-suspenders: ensure we only open a profile for a real
+   *  organization UUID. Synthetic placeholder faces from
+   *  `MutualAvatarStack` have ids like "<orgId>-mutual-0" — those must
+   *  never reach the profile modal, otherwise the snapshot hydrator
+   *  bails on the non-UUID id and the modal sticks on "MUTUAL 1 /
+   *  NOT AVAILABLE / 0 trips". The avatar stack now blocks taps on
+   *  synthetic faces at the source, but we re-check here so any future
+   *  caller is also safe. */
   const handleOpenMutualProfile = useCallback(
     (row: MutualConnectionRow) => {
+      const looksLikeOrgUuid =
+        typeof row.id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id);
+      if (!looksLikeOrgUuid) {
+        if (__DEV__) {
+          console.warn(
+            "[network] ignored mutual profile open for non-UUID id",
+            row.id,
+          );
+        }
+        return;
+      }
       handleOpenProfileFromDiscover({
         id: row.id,
         name: row.name,
@@ -501,18 +572,59 @@ function NetworkScreenInner() {
     });
   };
 
-  const handleSendProtocolFromProfile = async () => {
+  /** Live pending row for the org currently shown in the profile modal.
+   *  Sourced from the same `sentQ` cache the rest of the screen uses, so
+   *  it updates immediately after send/cancel without re-opening the
+   *  modal. */
+  const profileLivePending = useMemo(() => {
+    if (!selectedProfileNode) return null;
+    const row = (sentQ.data ?? []).find(
+      (r) =>
+        r.to_organization_id === selectedProfileNode.id &&
+        r.status === "pending",
+    );
+    if (!row) return null;
+    const role: ConnectionInviteRole | null = row.request_shipper_client
+      ? "client"
+      : row.request_carrier_supplier
+        ? "supplier"
+        : null;
+    return { row, role };
+  }, [sentQ.data, selectedProfileNode]);
+
+  /** Authoritative status for CTA rendering: starts from the snapshot
+   *  status but is overridden whenever `sentQ` shows a live pending row
+   *  for this org. This is what stops the modal from showing "Send
+   *  protocol" right after a successful send. */
+  const profileEffectiveStatus: NetworkProfileNode["status"] | null =
+    selectedProfileNode
+      ? selectedProfileNode.status === "CONNECTED"
+        ? "CONNECTED"
+        : profileLivePending
+          ? "REQUEST SENT"
+          : selectedProfileNode.status
+      : null;
+
+  const handleSendProtocolFromProfile = () => {
     if (!selectedProfileNode || !orgId) return;
-    if (selectedProfileNode.status === "CONNECTED") {
-      Alert.alert("Network protocol", "You are already connected with this organization.");
+    if (profileEffectiveStatus === "CONNECTED") {
+      Alert.alert(
+        "Network protocol",
+        "You are already connected with this organization.",
+      );
       return;
     }
-    if (selectedProfileNode.status === "REQUEST SENT") {
-      Alert.alert("Network protocol", "A connection request is already pending.");
+    if (profileEffectiveStatus === "REQUEST SENT") {
+      /* "Request sent" tap is wired to the cancel button now; this
+       *  branch is just a safety net if some other call path triggers
+       *  the send handler while a request is already pending. */
       return;
     }
     if (selectedProfileNode.type === "DRIVER") {
-      Alert.alert("Network protocol", "Driver protocol can be sent from driver invite flows.");
+      Alert.alert(
+        "Network protocol",
+        "Driver protocol can be sent from driver invite flows.",
+      );
       return;
     }
     if (!UUID_REGEX.test(selectedProfileNode.id)) {
@@ -523,13 +635,13 @@ function NetworkScreenInner() {
       return;
     }
 
-    setShowProtocolRolePicker(true);
+    setProtocolRoleModalOpen(true);
   };
 
-  const handleSendProtocolWithRole = async (mode: "client" | "supplier") => {
+  const handleSendProtocolWithRole = async (mode: ConnectionInviteRole) => {
     if (!selectedProfileNode || !orgId) return;
-    setShowProtocolRolePicker(false);
-    const { error, alreadyInvited } = await createConnectionRequest(
+    setProtocolSending(true);
+    const { error, alreadyInvited, requestId } = await createConnectionRequest(
       orgId,
       selectedProfileNode.id,
       {
@@ -537,16 +649,24 @@ function NetworkScreenInner() {
         requestCarrierSupplier: mode === "supplier",
       },
     );
+    setProtocolSending(false);
+    setProtocolRoleModalOpen(false);
 
     if (error) {
       if (looksLikeConnectionRateLimitError(error.message)) {
-        Alert.alert("Daily limit reached", "You have reached today's invite limit.");
+        Alert.alert(
+          "Daily limit reached",
+          "You have reached today's invite limit.",
+        );
         return;
       }
       Alert.alert("Could not send protocol", error.message);
       return;
     }
 
+    /* Optimistic local snapshot status + cache write so the CTA flips
+     *  to "Request sent · CLIENT/SUPPLIER" immediately, even before the
+     *  refetch resolves. */
     setSelectedProfileNode((prev) =>
       prev
         ? {
@@ -555,13 +675,74 @@ function NetworkScreenInner() {
           }
         : prev,
     );
+    if (requestId) {
+      const nodeName = selectedProfileNode.name;
+      const nodeId = selectedProfileNode.id;
+      queryClient.setQueryData<ConnectionRequestRow[]>(
+        queryKeys.connectionRequests.sent(orgId),
+        (prev = []) => {
+          if (prev.some((r) => r.id === requestId)) return prev;
+          const optimistic: ConnectionRequestRow = {
+            id: requestId,
+            from_organization_id: orgId,
+            to_organization_id: nodeId,
+            request_shipper_client: mode === "client",
+            request_carrier_supplier: mode === "supplier",
+            status: "pending",
+            created_at: new Date().toISOString(),
+            responded_at: null,
+            responded_by: null,
+            from_org_name: "",
+            to_org_name: nodeName,
+          };
+          return [optimistic, ...prev];
+        },
+      );
+    }
     await Promise.all([sentQ.refetch(), receivedQ.refetch()]);
     invalidateNetwork();
     if (alreadyInvited) {
-      Alert.alert("Protocol status", "A request was already pending for this organization.");
+      Alert.alert(
+        "Protocol status",
+        "A request was already pending for this organization.",
+      );
       return;
     }
-    Alert.alert("Protocol sent", `Request sent to ${selectedProfileNode.name}.`);
+    Alert.alert(
+      "Protocol sent",
+      `Request sent to ${selectedProfileNode.name}.`,
+    );
+  };
+
+  const handleCancelProtocolFromProfile = async () => {
+    if (!selectedProfileNode || !orgId) return;
+    if (protocolCancelling) return;
+    if (!UUID_REGEX.test(selectedProfileNode.id)) return;
+    setProtocolCancelling(true);
+    const { error } = await cancelPendingConnectionRequestByOrgPair(
+      orgId,
+      selectedProfileNode.id,
+    );
+    setProtocolCancelling(false);
+    if (error) {
+      Alert.alert("Could not cancel request", error.message);
+      return;
+    }
+    /* Clear the pending row from the sent cache immediately so the CTA
+     *  flips back to "Send protocol" without waiting on the refetch. */
+    const nodeId = selectedProfileNode.id;
+    queryClient.setQueryData<ConnectionRequestRow[]>(
+      queryKeys.connectionRequests.sent(orgId),
+      (prev = []) =>
+        prev.filter(
+          (r) => !(r.to_organization_id === nodeId && r.status === "pending"),
+        ),
+    );
+    setSelectedProfileNode((prev) =>
+      prev ? { ...prev, status: "LIVE" } : prev,
+    );
+    await sentQ.refetch();
+    invalidateNetwork();
   };
 
   const handleOpenDirectMessage = async () => {
@@ -630,13 +811,13 @@ function NetworkScreenInner() {
                 <View style={[styles.commandMainContent, isMobileLayout && styles.commandMainContentCompact]}>
                   <View style={[styles.commandMainHead, isMobileLayout && styles.commandMainHeadMobile]}>
                     <View style={[styles.commandMainKickerRow, isMobileLayout && styles.commandMainKickerRowMobile]}>
-                  <Activity size={isMobileLayout ? 10 : 12} color={Theme.primary} />
+                  <Activity size={isMobileLayout ? 12 : 14} color={Theme.primary} />
                       <Text style={styles.commandMainKicker} numberOfLines={1}>
                         NETWORK GROWTH
                       </Text>
                 </View>
                 <View style={styles.commandGrowthPill}>
-                  <ArrowUpRight size={isMobileLayout ? 9 : 11} color={Theme.primary} />
+                  <ArrowUpRight size={isMobileLayout ? 11 : 13} color={Theme.primary} />
                   <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
                 </View>
               </View>
@@ -649,7 +830,7 @@ function NetworkScreenInner() {
                     <View style={[styles.commandMetricGrid, isMobileLayout && styles.commandMetricGridCompact]}>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <Building2
-                      size={isMobileLayout ? 9 : 11}
+                      size={isMobileLayout ? 11 : 13}
                       color={Theme.primary}
                       strokeWidth={2}
                     />
@@ -662,7 +843,7 @@ function NetworkScreenInner() {
                   </View>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <Warehouse
-                      size={isMobileLayout ? 9 : 11}
+                      size={isMobileLayout ? 11 : 13}
                       color={Theme.primary}
                       strokeWidth={2}
                     />
@@ -675,7 +856,7 @@ function NetworkScreenInner() {
                   </View>
                       <View style={[styles.commandMetricCell, isMobileLayout && styles.commandMetricCellCompact]}>
                     <User
-                      size={isMobileLayout ? 9 : 11}
+                      size={isMobileLayout ? 11 : 13}
                       color={Theme.primary}
                       strokeWidth={2}
                     />
@@ -725,6 +906,9 @@ function NetworkScreenInner() {
             )}
               </View>
         </View>
+        {ENABLE_UNLINKED_COUNTERPARTIES && orgId ? (
+          <UnlinkedCounterpartiesSection orgId={orgId} />
+        ) : null}
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
           <View
             style={[
@@ -1124,52 +1308,74 @@ function NetworkScreenInner() {
                     />
 
                   <View style={styles.profileCtaStack}>
-                    {selectedProfileNode.status !== "CONNECTED" ? (
-                      <>
+                    {profileEffectiveStatus !== "CONNECTED" ? (
+                      profileEffectiveStatus === "REQUEST SENT" ? (
+                        /* Request already exists for this org. The
+                         *  primary CTA flips to a withdraw button so
+                         *  the user can recall the invite from the
+                         *  same place they sent it; the role pill on
+                         *  the left mirrors the discover card so the
+                         *  user remembers whether they invited as a
+                         *  CLIENT or SUPPLIER. */
+                        <View style={styles.profileRequestSentRow}>
+                          {profileLivePending?.role ? (
+                            <View style={styles.profilePendingRolePill}>
+                              <Text
+                                style={styles.profilePendingRolePillText}
+                                numberOfLines={1}
+                              >
+                                {profileLivePending.role === "supplier"
+                                  ? t("networkDiscoverPendingRoleSupplier")
+                                  : t("networkDiscoverPendingRoleClient")}
+                              </Text>
+                            </View>
+                          ) : null}
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.profileRequestSentBtn,
+                              protocolCancelling &&
+                                styles.profileRequestSentBtnDisabled,
+                              pressed && { opacity: 0.85 },
+                            ]}
+                            onPress={() =>
+                              void handleCancelProtocolFromProfile()
+                            }
+                            disabled={protocolCancelling}
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              protocolCancelling
+                                ? t("networkDiscoverRequestSent")
+                                : `${t("networkDiscoverRequestSent")} — ${t("cancel")}`
+                            }
+                          >
+                            <Check
+                              size={12}
+                              color={Theme.primary}
+                              strokeWidth={2.4}
+                            />
+                            <Text style={styles.profileRequestSentBtnText}>
+                              {protocolCancelling
+                                ? `${t("cancel")}…`
+                                : `${t("networkDiscoverRequestSent")} · ${t("cancel")}`}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      ) : (
                         <Pressable
-                          style={({ pressed }) => [styles.profilePrimaryBtn, pressed && { opacity: 0.88 }]}
-                          onPress={() => void handleSendProtocolFromProfile()}
+                          style={({ pressed }) => [
+                            styles.profilePrimaryBtn,
+                            pressed && { opacity: 0.88 },
+                          ]}
+                          onPress={() => handleSendProtocolFromProfile()}
+                          accessibilityRole="button"
+                          accessibilityLabel="Send protocol"
                         >
                           <UserPlus size={12} color={Theme.textOnPrimary} />
                           <Text style={styles.profilePrimaryBtnText}>
-                            {selectedProfileNode.status === "REQUEST SENT" ? "Request sent" : "Send protocol"}
+                            Send protocol
                           </Text>
                         </Pressable>
-                        {showProtocolRolePicker ? (
-                          <View style={styles.profileRolePicker}>
-                            <Text style={styles.profileRolePickerTitle}>Add as</Text>
-                            <View style={styles.profileRolePickerActions}>
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.profileRolePickerBtn,
-                                  pressed && { opacity: 0.82 },
-                                ]}
-                                onPress={() => void handleSendProtocolWithRole("client")}
-                              >
-                                <Text style={styles.profileRolePickerBtnText}>Client</Text>
-                              </Pressable>
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.profileRolePickerBtn,
-                                  pressed && { opacity: 0.82 },
-                                ]}
-                                onPress={() => void handleSendProtocolWithRole("supplier")}
-                              >
-                                <Text style={styles.profileRolePickerBtnText}>Supplier</Text>
-                              </Pressable>
-                              <Pressable
-                                style={({ pressed }) => [
-                                  styles.profileRolePickerCancelBtn,
-                                  pressed && { opacity: 0.7 },
-                                ]}
-                                onPress={() => setShowProtocolRolePicker(false)}
-                              >
-                                <Text style={styles.profileRolePickerCancelText}>Cancel</Text>
-                              </Pressable>
-                            </View>
-                          </View>
-                        ) : null}
-                      </>
+                      )
                     ) : null}
                     <Pressable
                       style={({ pressed }) => [
@@ -1189,6 +1395,20 @@ function NetworkScreenInner() {
         </View>
       </Modal>
       ) : null}
+      {/* Role picker for "Send protocol" — same modal used by Discover so
+       *  the entire app shares one invite flow (Add as Client / Supplier
+       *  → submit). Rendered outside the profile modal so it can appear
+       *  on top of (or alongside) it. */}
+      <ConnectionRoleModal
+        visible={protocolRoleModalOpen}
+        companyName={selectedProfileNode?.name ?? ""}
+        submitting={protocolSending}
+        onClose={() => {
+          if (protocolSending) return;
+          setProtocolRoleModalOpen(false);
+        }}
+        onConfirm={(role) => void handleSendProtocolWithRole(role)}
+      />
     </View>
   );
 }
@@ -1248,11 +1468,11 @@ const styles = StyleSheet.create({
   },
   topTicker: {
     marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 10,
+    marginTop: 12,
     borderRadius: 14,
     backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
   },
   topTickerText: {
     fontSize: 8,
@@ -1267,8 +1487,8 @@ const styles = StyleSheet.create({
   },
   topCluster: {
     marginHorizontal: Layout.screenPaddingHorizontal,
-    marginTop: 8,
-    gap: 10,
+    marginTop: 14,
+    gap: 14,
   },
   topClusterCompact: {
     marginHorizontal: 10,
@@ -1277,7 +1497,7 @@ const styles = StyleSheet.create({
   topClusterMain: {
     flex: 1,
     minWidth: 0,
-    gap: 12,
+    gap: 16,
   },
   storyLoadsRow: {
     flexDirection: "row",
@@ -1323,7 +1543,7 @@ const styles = StyleSheet.create({
   commandMainCard: {
     flex: 1,
     minWidth: 0,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
@@ -1331,28 +1551,28 @@ const styles = StyleSheet.create({
   },
   commandMainBgOrb: {
     position: "absolute",
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: "rgba(26,35,126,0.05)",
-    right: -80,
-    top: -80,
+    width: 288,
+    height: 288,
+    borderRadius: 144,
+    backgroundColor: "rgba(79,70,229,0.05)",
+    right: -96,
+    top: -96,
   },
   commandMainContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    gap: 12,
   },
   commandMainContentCompact: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
   },
   commandMainHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 10,
   },
   commandMainHeadMobile: {
     alignItems: "center",
@@ -1360,7 +1580,7 @@ const styles = StyleSheet.create({
   commandMainKickerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
   },
   commandMainKickerRowMobile: {
     flex: 1,
@@ -1368,26 +1588,26 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   commandMainKicker: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     color: Theme.primary,
     letterSpacing: 1.6,
     textTransform: "uppercase",
   },
   commandGrowthPill: {
-    minHeight: 22,
-    borderRadius: 11,
+    minHeight: 26,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingHorizontal: 8,
+    gap: 6,
+    paddingHorizontal: 10,
   },
   commandGrowthText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "900",
     color: Theme.primary,
   },
@@ -1395,41 +1615,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 16,
   },
   commandMainStatsRowCompact: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 10,
+    gap: 12,
   },
   commandTotalWrap: {
     flexGrow: 0,
     flexShrink: 0,
     flexBasis: "auto",
-    minWidth: 96,
+    minWidth: 116,
     alignItems: "flex-start",
     justifyContent: "center",
   },
   commandTotalWrapCompact: {
-    minWidth: 88,
+    minWidth: 104,
     paddingTop: 0,
   },
   commandTotalWrapMobile: {
     alignItems: "flex-start",
   },
   commandTotalText: {
-    fontSize: 64,
+    fontSize: 76,
     fontWeight: "900",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
-    letterSpacing: -1,
-    lineHeight: 64,
+    letterSpacing: -1.2,
+    lineHeight: 76,
   },
   commandMetricGrid: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     marginTop: 0,
     flex: 1,
     flexShrink: 1,
@@ -1437,50 +1657,50 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   commandMetricGridCompact: {
-    gap: 4,
+    gap: 5,
     justifyContent: "flex-end",
   },
   commandMetricCell: {
-    width: 52,
-    borderRadius: 10,
+    width: 62,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surface,
-    paddingHorizontal: 4,
-    paddingVertical: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 7,
     alignItems: "center",
-    gap: 2,
+    gap: 3,
   },
   commandMetricCellCompact: {
     flex: 1,
     width: undefined,
     minWidth: 0,
-    maxWidth: 56,
-    minHeight: 44,
-    borderRadius: 10,
-    paddingHorizontal: 2,
-    paddingVertical: 4,
+    maxWidth: 66,
+    minHeight: 52,
+    borderRadius: 12,
+    paddingHorizontal: 3,
+    paddingVertical: 5,
   },
   commandMetricN: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
-    lineHeight: 16,
+    lineHeight: 20,
   },
   commandMetricNCompact: {
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 14,
+    lineHeight: 17,
   },
   commandMetricL: {
-    fontSize: 6,
+    fontSize: 8,
     fontWeight: "800",
     color: Theme.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   commandMetricLCompact: {
-    fontSize: 5,
-    letterSpacing: 0.35,
+    fontSize: 6,
+    letterSpacing: 0.4,
   },
   profileModalBackdrop: {
     flex: 1,
@@ -1932,58 +2152,50 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
     zIndex: 1,
   },
-  profileRolePicker: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.surfaceLight,
-    padding: 10,
-    gap: 8,
-  },
-  profileRolePickerTitle: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  profileRolePickerActions: {
+  /* "Request sent" CTA row in the profile modal: a CLIENT/SUPPLIER
+   *  pill on the left and a tappable "Request sent · Cancel" button
+   *  on the right, so the user can withdraw without leaving the
+   *  modal. */
+  profileRequestSentRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    width: "100%",
   },
-  profileRolePickerBtn: {
+  profileRequestSentBtn: {
     flex: 1,
-    minHeight: 34,
+    minHeight: 32,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  profileRolePickerBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  profileRolePickerCancelBtn: {
-    minHeight: 34,
-    borderRadius: 10,
+    backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.borderMedium,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
     paddingHorizontal: 10,
-    backgroundColor: Theme.screenBackground,
   },
-  profileRolePickerCancelText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+  profileRequestSentBtnDisabled: {
+    opacity: 0.6,
+  },
+  profileRequestSentBtnText: {
+    ...FinanceTxnTypography.buttonLabel,
+    color: Theme.primary,
+  },
+  profilePendingRolePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.primary + "1A",
+    borderWidth: 1,
+    borderColor: Theme.primary + "33",
+  },
+  profilePendingRolePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   profileOpsCard: {
     borderRadius: 22,

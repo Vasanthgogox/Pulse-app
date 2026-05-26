@@ -22,6 +22,7 @@ import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import {
   partyAvatarBackgroundColor,
   partyAvatarInitialsTextColor,
@@ -728,17 +729,6 @@ const s = StyleSheet.create({
     textTransform: "none",
     letterSpacing: 0,
   },
-  eventBadgeMobile: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    maxWidth: "72%",
-  },
-  eventBadgeTextMobile: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
   pulseProtoCardMobile: {
     borderLeftWidth: 3,
     borderLeftColor: "#10b981",
@@ -848,6 +838,246 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
+
+  /** ── TripProgressEventCard (modern, txn-card-aligned) ──────────────────
+   *  Visual language mirrors `FinanceKanbanTab`'s `timelineCard` so a
+   *  system update reads as a peer of a transaction row:
+   *    • Soft 18 px rounded card on a near-white background with the
+   *      same hairline border `rgba(0,0,0,0.04)` and ultra-subtle
+   *      shadow (`opacity 0.04`, `radius 8`) the txn rows use.
+   *    • 32 px circular avatar with a *status-tinted* fill +
+   *      1.5 px status-color border — the same trick the txn card
+   *      uses (green-tinted border for cash-in, red-tinted for
+   *      cash-out), but keyed by status color instead of flow.
+   *    • An italic uppercase **kicker** above the narrative title
+   *      ("SYSTEM UPDATE", "TRIP STATUS", "LIVE LOCATION") tinted in
+   *      the status color — this is the direct analogue of the
+   *      txn card's italic uppercase party name (`timelineCardParty`
+   *      → `FinanceTxnTypography.partyTitle`).
+   *    • A pill on the right that copies the txn `tripPillWithCheck`
+   *      shape: rounded 999, very light status-tinted fill, hairline
+   *      border, tiny leading status dot, italic uppercase text in
+   *      the status color (same recipe as `tripPillText` →
+   *      `FinanceTxnTypography.tripId`).
+   *    • Subtle 8 px chevron at the bottom-right at `opacity: 0.3`
+   *      mirroring the txn card's `expandHint`. */
+  progressWrap: {
+    alignSelf: "center",
+    maxWidth: "85%",
+    width: "100%",
+    marginVertical: 4,
+  },
+  progressWrapMobile: {
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
+    marginVertical: CHAT_MOBILE.eventCardGap / 2,
+  },
+  progressCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    position: "relative",
+  },
+  progressCardMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 0,
+    paddingHorizontal: CHAT_MOBILE.eventCardPadH,
+    paddingVertical: CHAT_MOBILE.eventCardPadV,
+    borderRadius: CHAT_MOBILE.eventCardRadius,
+    borderColor: "rgba(0,0,0,0.05)",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  progressTopRowMobile: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  progressAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    flexShrink: 0,
+  },
+  progressAvatarMobile: {
+    width: CHAT_MOBILE.eventAvatar,
+    height: CHAT_MOBILE.eventAvatar,
+    borderRadius: CHAT_MOBILE.eventAvatar / 2,
+  },
+  progressAvatarText: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+  progressBody: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    gap: 2,
+  },
+  /** Italic uppercase kicker — exact `FinanceTxnTypography.partyTitle`
+   *  recipe but tinted in the status color so it reads as a status
+   *  tag. Sits above the narrative sentence so the eye lands on
+   *  "SYSTEM UPDATE" / "TRIP STATUS" first. */
+  progressKicker: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 10,
+    letterSpacing: 0.4,
+  },
+  progressKickerMobile: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 11,
+    letterSpacing: 0.4,
+  },
+  /** Narrative sentence — kept in sentence case (it's prose, not a
+   *  proper noun like the txn party name). Weight + size echo the
+   *  txn `amount` text so it carries the same visual weight in the
+   *  card hierarchy. */
+  progressTitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  progressTitleMobile: {
+    fontSize: CHAT_MOBILE.eventTitleSize,
+    lineHeight: CHAT_MOBILE.eventTitleLine,
+    fontWeight: "500",
+    color: "#111B21",
+    marginTop: 1,
+  },
+  /** Date · meta · status label — direct copy of
+   *  `timelineCardDateVehicle`: 8 px UPPERCASE, slate, letterSpacing
+   *  0.5. */
+  progressMeta: {
+    fontSize: 8,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  progressMetaMobile: {
+    fontSize: CHAT_MOBILE.eventMetaSize,
+    lineHeight: CHAT_MOBILE.eventMetaLine,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  /** Optional sub line — italic muted, matches
+   *  `timelineCardRouteWhy`. */
+  progressSub: {
+    fontSize: 8,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    marginTop: 2,
+    opacity: 0.95,
+  },
+  progressSubMobile: {
+    fontSize: CHAT_MOBILE.eventSubSize,
+    lineHeight: 13,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    marginTop: 2,
+  },
+  progressRight: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 6,
+    minWidth: 0,
+    flexShrink: 0,
+  },
+  /** Status pill — same chrome as the txn card's
+   *  `tripPillWithCheck` (rounded 999, very light fill, hairline
+   *  border, leading icon + label). The tiny solid dot replaces the
+   *  txn check-circle but keeps the same visual rhythm. */
+  progressPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  progressPillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  /** Pill label — italic uppercase status color, same recipe as
+   *  `tripPillText` → `FinanceTxnTypography.tripId`. */
+  progressPillText: {
+    ...FinanceTxnTypography.tripId,
+  },
+  progressTime: {
+    ...FinanceTxnTypography.dateLine,
+    fontSize: 8,
+    lineHeight: 11,
+    color: Theme.textMuted,
+  },
+  /** Bottom-right chevron — mirrors `expandHint` from the txn card
+   *  (8 px, opacity 0.3). Visual cue only; rows themselves are not
+   *  navigable so we don't wrap the chevron in a TouchableOpacity. */
+  progressExpandHint: {
+    position: "absolute",
+    bottom: 4,
+    right: 12,
+    opacity: 0.3,
+  },
+  progressFooterMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(0,0,0,0.06)",
+    gap: 8,
+  },
+  progressPillMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  progressPillTextMobile: {
+    ...FinanceTxnTypography.tripId,
+    fontSize: 10,
+    letterSpacing: 0.4,
+  },
+  progressTimeMobile: {
+    ...FinanceTxnTypography.dateLine,
+    fontSize: CHAT_MOBILE.eventTimeSize,
+    color: Theme.textMuted,
+    flexShrink: 0,
+  },
 });
 
 export interface TripProgressEventCardProps {
@@ -862,13 +1092,49 @@ export interface TripProgressEventCardProps {
   isMobile?: boolean;
 }
 
+/** Pad a #rgb / #rrggbb hex to #rrggbb so we can safely append an
+ *  alpha suffix (e.g. `#1234561F`). Non-hex inputs (e.g. `rgb(...)`)
+ *  fall back to the literal value — the helper is only used to
+ *  derive tinted variants of the STATUS_ICON_MAP rightColors which
+ *  are all 6-digit hex literals. */
+function hexWithAlpha(hex: string, alphaHex: string): string {
+  if (typeof hex !== "string" || !hex.startsWith("#")) return hex;
+  if (hex.length === 7) return `${hex}${alphaHex}`;
+  if (hex.length === 4) {
+    const r = hex[1];
+    const g = hex[2];
+    const b = hex[3];
+    return `#${r}${r}${g}${g}${b}${b}${alphaHex}`;
+  }
+  return hex;
+}
+
+/** Split the conventional `"Kicker · DATE · Status"` meta string into
+ *  an italic-uppercase kicker and the remaining UPPERCASE date / status
+ *  string. Falls back gracefully if no separator is present. */
+function splitProgressMetaLine(metaLine: string): {
+  kicker: string;
+  rest: string;
+} {
+  const sep = " · ";
+  const i = metaLine.indexOf(sep);
+  if (i < 0) return { kicker: metaLine.trim(), rest: "" };
+  return {
+    kicker: metaLine.slice(0, i).trim(),
+    rest: metaLine.slice(i + sep.length).trim(),
+  };
+}
+
 /**
- * Same shell as the payment / ledger row: circular avatar + dot, body, vertical rule,
- * bold right column, time, chevron.
+ * Modern system-update card. Mirrors the finance transaction row
+ * (`FinanceKanbanTab` → `timelineCard`) — same chrome, same italic
+ * uppercase kicker, same trip-style pill on the right, same subtle
+ * bottom-right chevron. Status color theming ties the avatar, kicker,
+ * and pill into a single status-themed unit.
  */
 export function TripProgressEventCard({
   avatarSeed,
-  avatarDotColor,
+  avatarDotColor: _avatarDotColor,
   title,
   metaLine,
   subLine,
@@ -877,42 +1143,58 @@ export function TripProgressEventCard({
   time,
   isMobile = false,
 }: TripProgressEventCardProps) {
-  const avatarBg = partyAvatarBackgroundColor(avatarSeed);
-  const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  const { kicker, rest: dateMeta } = splitProgressMetaLine(metaLine);
+
+  const avatarBg = hexWithAlpha(rightPrimaryColor, "1F");
+  const avatarBorder = hexWithAlpha(rightPrimaryColor, "55");
+  const pillBg = hexWithAlpha(rightPrimaryColor, "12");
+  const pillBorder = hexWithAlpha(rightPrimaryColor, "3D");
+
   const avatarEl = (
-    <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign, isMobile && s.ledgerAvatarWrapMobile]}>
-      <View
-        style={[
-          s.ledgerAvatar,
-          isMobile && s.ledgerAvatarMobile,
-          { backgroundColor: avatarBg },
-        ]}
-      >
-        <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
-          {partyInitialsFromName(avatarSeed)}
-        </Text>
-      </View>
-      <View style={[s.ledgerAvatarDot, { backgroundColor: avatarDotColor }]} />
+    <View
+      style={[
+        s.progressAvatar,
+        isMobile && s.progressAvatarMobile,
+        { backgroundColor: avatarBg, borderColor: avatarBorder },
+      ]}
+    >
+      <Text style={[s.progressAvatarText, { color: rightPrimaryColor }]}>
+        {partyInitialsFromName(avatarSeed)}
+      </Text>
     </View>
   );
+
   const bodyEl = (
-    <View style={s.ledgerBody}>
+    <View style={s.progressBody}>
+      {kicker ? (
+        <Text
+          style={[
+            isMobile ? s.progressKickerMobile : s.progressKicker,
+            { color: rightPrimaryColor },
+          ]}
+          numberOfLines={1}
+        >
+          {kicker}
+        </Text>
+      ) : null}
       <Text
-        style={[s.ledgerTitle, isMobile && s.ledgerTitleMobile]}
-        numberOfLines={isMobile ? 4 : 2}
+        style={[s.progressTitle, isMobile && s.progressTitleMobile]}
+        numberOfLines={isMobile ? 3 : 2}
       >
         {title}
       </Text>
-      <Text
-        style={[s.ledgerMeta, isMobile && s.ledgerMetaMobile]}
-        numberOfLines={isMobile ? 3 : 2}
-      >
-        {metaLine}
-      </Text>
+      {dateMeta ? (
+        <Text
+          style={[s.progressMeta, isMobile && s.progressMetaMobile]}
+          numberOfLines={1}
+        >
+          {dateMeta}
+        </Text>
+      ) : null}
       {subLine ? (
         <Text
-          style={[s.ledgerRoute, isMobile && s.ledgerRouteMobile]}
-          numberOfLines={isMobile ? 2 : 2}
+          style={[s.progressSub, isMobile && s.progressSubMobile]}
+          numberOfLines={isMobile ? 2 : 1}
         >
           {subLine}
         </Text>
@@ -920,22 +1202,38 @@ export function TripProgressEventCard({
     </View>
   );
 
+  const pillEl = (
+    <View
+      style={[
+        isMobile ? s.progressPillMobile : s.progressPill,
+        { backgroundColor: pillBg, borderColor: pillBorder },
+      ]}
+    >
+      <View style={[s.progressPillDot, { backgroundColor: rightPrimaryColor }]} />
+      <Text
+        style={[
+          isMobile ? s.progressPillTextMobile : s.progressPillText,
+          { color: rightPrimaryColor },
+        ]}
+        numberOfLines={1}
+      >
+        {rightPrimary}
+      </Text>
+    </View>
+  );
+
   return (
-    <View style={[s.ledgerWrap, isMobile && s.ledgerWrapMobile]}>
-      <View style={[s.ledgerCard, isMobile && s.ledgerCardMobile]}>
+    <View style={[s.progressWrap, isMobile && s.progressWrapMobile]}>
+      <View style={[s.progressCard, isMobile && s.progressCardMobile]}>
         {isMobile ? (
           <>
-            <View style={s.ledgerTopRowMobile}>
+            <View style={s.progressTopRowMobile}>
               {avatarEl}
               {bodyEl}
             </View>
-            <View style={s.ledgerFooterMobile}>
-              <View style={[s.eventBadgeMobile, { backgroundColor: `${rightPrimaryColor}18` }]}>
-                <Text style={[s.eventBadgeTextMobile, { color: rightPrimaryColor }]} numberOfLines={1}>
-                  {rightPrimary}
-                </Text>
-              </View>
-              <Text style={s.ledgerTimeMobile} numberOfLines={1}>
+            <View style={s.progressFooterMobile}>
+              {pillEl}
+              <Text style={s.progressTimeMobile} numberOfLines={1}>
                 {time}
               </Text>
             </View>
@@ -944,16 +1242,14 @@ export function TripProgressEventCard({
           <>
             {avatarEl}
             {bodyEl}
-            <View style={s.ledgerRight}>
-              <Text style={[s.ledgerAmount, { color: rightPrimaryColor }]} numberOfLines={1}>
-                {rightPrimary}
-              </Text>
-              <Text style={s.ledgerTimeRight} numberOfLines={1}>
+            <View style={s.progressRight}>
+              {pillEl}
+              <Text style={s.progressTime} numberOfLines={1}>
                 {time}
               </Text>
             </View>
-            <View style={s.ledgerChevronWrap}>
-              <ChevronRight size={14} color="#cbd5e1" />
+            <View style={s.progressExpandHint} pointerEvents="none">
+              <ChevronRight size={8} color={Theme.textMuted} />
             </View>
           </>
         )}

@@ -29,6 +29,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SupplierRow } from "../services/suppliers.service";
 
+export type SuppliersViewTab = "list" | "analytics";
+
 /** Minimal ledger row for aggregation (compatible with LedgerTx). */
 export interface LedgerRowForSupplier {
   contact_id?: string | null;
@@ -66,6 +68,9 @@ export interface SuppliersTabProps {
   tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
   /** Desktop finance parity: hide summary strip under hero/cards. */
   hideSummaryRow?: boolean;
+  /** View mode for the suppliers tab (list | analytics). */
+  viewTab?: SuppliersViewTab;
+  onViewTabChange?: (v: SuppliersViewTab) => void;
 }
 
 export function SuppliersTab({
@@ -86,6 +91,8 @@ export function SuppliersTab({
   bottomInset = 100,
   tripFinanceAdjustmentsByTripId,
   hideSummaryRow = false,
+  viewTab,
+  onViewTabChange,
 }: SuppliersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();

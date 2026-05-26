@@ -36,9 +36,10 @@ import {
     type GarragePeriodValue,
     type VehiclePnLRow,
 } from "../pnl";
+import { FleetAnalyticsTab } from "./analytics/FleetAnalyticsTab";
 import type { VehicleRow } from "../services/vehicles.service";
 
-export type GarrageViewTab = "vehicle" | "trips" | "revenue" | "profit";
+export type GarrageViewTab = "vehicle" | "trips" | "revenue" | "profit" | "analytics";
 
 export interface GarrageTabProps {
   organizationId: string | null;
@@ -323,6 +324,15 @@ export function GarrageTab({
             />
           </View>
         )}
+        {viewTab === "analytics" && (
+          <FleetAnalyticsTab
+            vehiclesList={vehiclesList}
+            vehicles={vehicles}
+            trips={trips}
+            organizationId={organizationId}
+          />
+        )}
+        {viewTab !== "analytics" && <>
         <View style={styles.listHeader}>
           <View style={styles.headerEntityCol}>
             <Text style={[styles.listHeaderCell, styles.ctHeaderLeft]} numberOfLines={1}>
@@ -448,6 +458,7 @@ export function GarrageTab({
             ))
           )}
         </View>
+        </>}
       </ScrollView>
     </View>
   );

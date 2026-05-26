@@ -2423,41 +2423,11 @@ export function TripsHubTableView({
         </>
       )}
 
-      {Platform.OS === "web" ? (
-        <View style={styles.auditFooter}>
-          <View style={styles.auditFooterLeft}>
-            <View style={styles.auditFooterIcon}>
-              <FontAwesome name="line-chart" size={16} color={Theme.positive} />
-            </View>
-            <View>
-              <Text style={styles.auditFooterTitle}>
-                {tr("tripsHubFleetConfidence")}
-              </Text>
-              <Text style={styles.auditFooterSub}>
-                {tr("tripsHubNetworkMirror")}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.auditExportBtn,
-              !onExportLedger && styles.auditExportBtnDisabled,
-            ]}
-            onPress={() => onExportLedger?.()}
-            disabled={!onExportLedger}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.auditExportBtnText}>
-              {tr("tripsHubExportLedger")}
-            </Text>
-            <FontAwesome
-              name="cloud-download"
-              size={14}
-              color={Theme.textOnPrimary}
-            />
-          </TouchableOpacity>
-        </View>
-      ) : null}
+      {/* Audit footer (Fleet Confidence / Export Ledger) is rendered by the
+       *  parent screen as part of the fixed bottom bar — see
+       *  `TripsHubAuditFooter` below. Keeping it out of the scroll body
+       *  ensures it stays pinned to the viewport instead of scrolling
+       *  away at the end of the list. */}
 
       <Modal
         visible={receiptTx != null}
@@ -2770,6 +2740,58 @@ export function TripsHubTableView({
           </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+/**
+ * Fleet Confidence / Export Ledger audit footer.
+ *
+ * Rendered outside the trips ScrollView by the parent screen so it stays
+ * pinned to the bottom of the viewport instead of scrolling away with the
+ * trip rows. Web-only — mobile keeps its own list-bottom UI.
+ */
+export function TripsHubAuditFooter({
+  onExportLedger,
+  tr,
+}: {
+  onExportLedger?: () => void;
+  tr: (key: string) => string;
+}) {
+  if (Platform.OS !== "web") return null;
+  return (
+    <View style={styles.auditFooter}>
+      <View style={styles.auditFooterLeft}>
+        <View style={styles.auditFooterIcon}>
+          <FontAwesome name="line-chart" size={16} color={Theme.positive} />
+        </View>
+        <View>
+          <Text style={styles.auditFooterTitle}>
+            {tr("tripsHubFleetConfidence")}
+          </Text>
+          <Text style={styles.auditFooterSub}>
+            {tr("tripsHubNetworkMirror")}
+          </Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={[
+          styles.auditExportBtn,
+          !onExportLedger && styles.auditExportBtnDisabled,
+        ]}
+        onPress={() => onExportLedger?.()}
+        disabled={!onExportLedger}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.auditExportBtnText}>
+          {tr("tripsHubExportLedger")}
+        </Text>
+        <FontAwesome
+          name="cloud-download"
+          size={14}
+          color={Theme.textOnPrimary}
+        />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -3398,23 +3420,25 @@ const styles = StyleSheet.create({
   auditAddTripBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
     minHeight: 34,
     paddingVertical: 7,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     borderRadius: 999,
-    backgroundColor: Theme.darkBackground,
-    shadowColor: "#020617",
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    backgroundColor: Theme.actionAccent,
+    borderWidth: 1,
+    borderColor: Theme.actionAccentBorder,
+    shadowColor: Theme.actionAccentShadow,
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   auditAddTripBtnText: {
     fontSize: 9,
     fontWeight: "800",
     color: "#ffffff",
-    letterSpacing: 0.7,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
   },
   /** Matches Chat `tabRow` — date presets + calendar (+ mobile sort) live inside this tray. */

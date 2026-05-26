@@ -31,10 +31,10 @@ export const MAP_TRUCK_MARKER_HTML = `<div style="width:72px;height:72px;display
       <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#059669" flood-opacity="0.18"/>
     </filter>
     <linearGradient id="qmCabPri" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#283593"/><stop offset="100%" stop-color="#1a237e"/>
+      <stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#4F46E5"/>
     </linearGradient>
     <linearGradient id="qmCabFace" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#3949ab"/><stop offset="100%" stop-color="#1a237e"/>
+      <stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#4F46E5"/>
     </linearGradient>
     <linearGradient id="qmBoxSide" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#f1f5f9"/><stop offset="100%" stop-color="#94a3b8"/>
@@ -96,7 +96,7 @@ export const MAP_TRUCK_MARKER_HTML = `<div style="width:72px;height:72px;display
     <path d="M4 34 L11 29 L20 34 L20 40 L4 40 Z" fill="url(#qmCabFace)"/>
     <path d="M5.5 35 L11 32 L17 35 L17 39 L5.5 39 Z" fill="#0f172a" opacity="0.4"/>
     <circle cx="11" cy="36.5" r="2.6" fill="#fcd34d"/>
-    <path d="M8.8 34 Q11.5 32.2 14.2 34 L13.8 36 L8.2 36 Z" fill="#1a237e"/>
+    <path d="M8.8 34 Q11.5 32.2 14.2 34 L13.8 36 L8.2 36 Z" fill="#4F46E5"/>
     <path d="M9.5 36.2 L13.5 36.2" stroke="#fff" stroke-width="0.55" opacity="0.4"/>
     <ellipse cx="16" cy="52" rx="5" ry="5" fill="url(#qmWheel)"/><circle cx="16" cy="52" r="2" fill="#94a3b8"/>
     <ellipse cx="40" cy="52" rx="5" ry="5" fill="url(#qmWheel)"/><circle cx="40" cy="52" r="2" fill="#94a3b8"/>

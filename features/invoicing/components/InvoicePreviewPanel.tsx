@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: "rgba(26,35,126,0.05)",
+    backgroundColor: "rgba(79,70,229,0.05)",
     borderRadius: 4,
   },
   addChargeText: {

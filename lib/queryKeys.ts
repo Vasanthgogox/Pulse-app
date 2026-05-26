@@ -196,6 +196,9 @@ export const queryKeys = {
   mutualConnections: (viewerOrgId: string, targetOrgId: string) =>
     ["q", "network", "mutual-connections", viewerOrgId, targetOrgId] as const,
 
+  unlinkedCounterparties: (orgId: string) =>
+    ["q", "network", "unlinked-counterparties", orgId] as const,
+
   orgMembers: {
     all: (orgId: string) => ["q", "org-members", orgId] as const,
     list: (orgId: string) => ["q", "org-members", orgId, "list"] as const,
@@ -225,5 +228,121 @@ export const queryKeys = {
     all: (orgId: string) => ["q", "disputes", orgId] as const,
     received: (orgId: string) => ["q", "disputes", orgId, "received"] as const,
     open: (orgId: string) => ["q", "disputes", orgId, "open"] as const,
+  },
+
+  /**
+   * Compliance & Document Intelligence — keys for the polymorphic
+   * `entity_documents` table, audit log, and the per-org / per-entity
+   * dashboard slices. Use these instead of ad-hoc strings so realtime
+   * invalidation (`useRealtimeInvalidation`) can target precise scopes.
+   */
+  compliance: {
+    /** Root — invalidate to bust every compliance slice for an org. */
+    all: (orgId: string) => ["q", "compliance", orgId] as const,
+    /** Aggregated `get_compliance_summary` RPC payload. */
+    summary: (orgId: string) => ["q", "compliance", orgId, "summary"] as const,
+    /** `get_expiring_documents` RPC (paramed by lookahead window). */
+    expiring: (orgId: string, daysAhead: number) =>
+      ["q", "compliance", orgId, "expiring", daysAhead] as const,
+    /** Per-org list (Documents Center sections — optional filter bag). */
+    orgList: (
+      orgId: string,
+      filters: Record<string, unknown> = {},
+    ) => ["q", "compliance", orgId, "org-list", filters] as const,
+    /** Documents owned by a single entity (vehicle / driver / etc.). */
+    byEntity: (
+      orgId: string,
+      entityType: string,
+      entityId: string,
+    ) =>
+      [
+        "q",
+        "compliance",
+        orgId,
+        "by-entity",
+        entityType,
+        entityId,
+      ] as const,
+    /** Server-computed compliance score for a single entity. */
+    score: (entityType: string, entityId: string) =>
+      ["q", "compliance", "score", entityType, entityId] as const,
+    /** Document-level audit trail. */
+    audit: (documentId: string) =>
+      ["q", "compliance", "audit", documentId] as const,
+    /** Trip-allocation blocking probe (used by reassign sheets). */
+    blocking: (vehicleId: string | null, driverId: string | null) =>
+      [
+        "q",
+        "compliance",
+        "blocking",
+        vehicleId ?? "_",
+        driverId ?? "_",
+      ] as const,
+  },
+
+  /**
+   * Analytics — keys for the Driver / Client / Supplier intelligence
+   * modules. All entries derived from RPCs in
+   * `supabase/migrations/20260828020000_analytics_rpcs.sql`. Cache
+   * lifetime for analytics is generous (default `staleTime` 5 min) since
+   * the underlying tables don't change frequently and the RPCs aggregate
+   * up to 12 months of data per call.
+   */
+  analytics: {
+    /** Root — invalidate to bust every analytics slice for an org. */
+    all: (orgId: string) => ["q", "analytics", orgId] as const,
+    /** Monthly aggregation per client. */
+    clientMonthly: (orgId: string, clientId: string, monthsBack: number) =>
+      [
+        "q",
+        "analytics",
+        orgId,
+        "client",
+        clientId,
+        "monthly",
+        monthsBack,
+      ] as const,
+    /** Customer Health Score for a single client. */
+    clientHealth: (orgId: string, clientId: string) =>
+      ["q", "analytics", orgId, "client", clientId, "health"] as const,
+    /** Monthly aggregation per supplier. */
+    supplierMonthly: (orgId: string, supplierId: string, monthsBack: number) =>
+      [
+        "q",
+        "analytics",
+        orgId,
+        "supplier",
+        supplierId,
+        "monthly",
+        monthsBack,
+      ] as const,
+    /** Supplier Reliability Score for a single supplier. */
+    supplierReliability: (orgId: string, supplierId: string) =>
+      ["q", "analytics", orgId, "supplier", supplierId, "reliability"] as const,
+    /** Monthly aggregation per driver. */
+    driverMonthly: (orgId: string, driverId: string, monthsBack: number) =>
+      [
+        "q",
+        "analytics",
+        orgId,
+        "driver",
+        driverId,
+        "monthly",
+        monthsBack,
+      ] as const,
+    /** Driver Performance Score for a single driver. */
+    driverPerformance: (orgId: string, driverId: string) =>
+      ["q", "analytics", orgId, "driver", driverId, "performance"] as const,
+    /** Monthly aggregation per vehicle. */
+    vehicleMonthly: (orgId: string, vehicleId: string, monthsBack: number) =>
+      [
+        "q",
+        "analytics",
+        orgId,
+        "vehicle",
+        vehicleId,
+        "monthly",
+        monthsBack,
+      ] as const,
   },
 } as const;

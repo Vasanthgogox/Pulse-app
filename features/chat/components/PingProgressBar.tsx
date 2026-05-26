@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e2e8f0",
   },
   segmentActive: {
-    backgroundColor: Theme.primary ?? "#1a237e",
+    backgroundColor: Theme.primary ?? "#4F46E5",
   },
   segmentLate: {
     backgroundColor: "#fecaca",

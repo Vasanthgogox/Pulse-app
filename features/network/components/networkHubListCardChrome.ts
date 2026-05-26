@@ -57,20 +57,35 @@ const nativeListCardShadow = Platform.select({
 });
 
 export const networkHubListCardChromeStyles = StyleSheet.create({
+  /** Card paddings trimmed ~15 % across the board (16→14 h, 13→11 v)
+   *  to match the now-smaller avatar (48), role chip (12 px tall),
+   *  and INTEGRATED badge. The prior 16/13 felt airy relative to the
+   *  shrunken pills — 14/11 keeps the content rhythm tight without
+   *  the card looking cramped.
+   *
+   *  `alignSelf: stretch` lets the card grow to match the tallest
+   *  sibling in a grid row, and `minHeight` pins a baseline so cards
+   *  with sparse content (no phone line, no extra meta) don't
+   *  collapse shorter than cards with full content — combined with
+   *  the row's `flex: 1`, this lands the metrics at the bottom-right
+   *  at a consistent Y across every card in the grid. */
   card: {
     width: "100%",
+    alignSelf: "stretch",
+    minHeight: 70,
     backgroundColor: Theme.networkHubListCardBackground,
     borderRadius: NETWORK_HUB_RADIUS.card,
     borderWidth: 1,
     borderColor: Theme.networkHubListCardBorder,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     overflow: "hidden",
+    position: "relative",
     ...cardShadow,
   },
   cardCompact: {
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   /** Native app + mobile web — 2-up hub grid cells. */
   cardMobileGrid: {
@@ -81,9 +96,13 @@ export const networkHubListCardChromeStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  /** Shared avatar shell. Kept at 52 so the native list-row path
+   *  (which renders a 48 px `PartyAvatar` inside this wrap) doesn't
+   *  clip. Desktop / hub cards override to a tighter 46 in
+   *  `networkPartyHubListCard.styles.ts`. */
   avatarWrap: {
-    width: 44,
-    height: 44,
+    width: 52,
+    height: 52,
     borderRadius: NETWORK_HUB_RADIUS.avatar,
     backgroundColor: Theme.networkHubListCardAvatarBg,
     alignItems: "center",
@@ -136,16 +155,16 @@ export const networkHubNativeListStyles = StyleSheet.create({
   headerPressable: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 14,
     minWidth: 0,
-    paddingRight: 26,
+    paddingRight: 36,
   },
   headerPressed: {
     opacity: 0.94,
   },
   avatarCol: {
-    width: 44,
-    height: 44,
+    width: 52,
+    height: 52,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -159,8 +178,8 @@ export const networkHubNativeListStyles = StyleSheet.create({
   },
   sectionDivider: {
     ...hubCardSectionDivider,
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 12,
+    marginBottom: 12,
   },
   footer: {
     width: "100%",
@@ -171,7 +190,7 @@ export const networkHubNativeListStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 14,
     width: "100%",
     minWidth: 0,
   },
@@ -179,7 +198,7 @@ export const networkHubNativeListStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 8,
+    gap: 12,
     flexShrink: 0,
     minWidth: 0,
   },
@@ -188,14 +207,17 @@ export const networkHubNativeListStyles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "center",
   },
+  /** Top-right dismiss/close affordance for discover cards. Sized to a
+   *  comfortable hit target while staying subtle enough not to compete
+   *  visually with the primary status button at the bottom. */
   dismissBtn: {
     position: "absolute",
     top: 10,
-    right: 10,
+    right: 12,
     zIndex: 2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.networkHubListCardMetricsBg,

@@ -21,7 +21,6 @@ import {
   LOADS_HUB_PAGE_BG,
   LoadCenterHubMobileShell,
 } from "@/features/network/components/LoadCenterHubMobileShell";
-import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import {
@@ -84,6 +83,7 @@ import * as Linking from "expo-linking";
 import {
     Building2,
     Package,
+    Plus,
     Share2,
     Users,
     Zap,
@@ -434,15 +434,12 @@ export function LoadCenterView({
     [drivers],
   );
 
-  /** Keep add-load FAB above the global chat FAB, tab bar, and safe area. */
-  const hirePartnerFabBottom = layout.fabBottom({
-    stackOffset: Layout.fabStackOffset,
-  });
-  const paddingBottom = useMemo(() => {
-    const base = layout.scrollBottomPadding(36);
-    if (isMobileView || loadSubTab !== "GIVE_LOAD") return base;
-    return hirePartnerFabBottom + Layout.fabSize + Layout.fabBottomOffset;
-  }, [hirePartnerFabBottom, isMobileView, layout, loadSubTab]);
+  // Add Load is now an inline pill in the search row; the scroll body no
+  // longer needs to reserve clearance for a floating FAB.
+  const paddingBottom = useMemo(
+    () => layout.scrollBottomPadding(36),
+    [layout],
+  );
   const statusTabsForRole = useMemo(() => {
     if (!isClaimedTab) return STATUS_TABS;
     return STATUS_TABS.filter((t) => t.id === "AWARDED" || t.id === "DONE");
@@ -1396,8 +1393,31 @@ export function LoadCenterView({
                       <Text style={styles.loadSectionTitle}>
                         Your active indents
                       </Text>
-                      <View style={styles.loadSectionPill}>
-                        <Text style={styles.loadSectionPillText}>Live</Text>
+                      <View style={styles.loadSectionRowActions}>
+                        <View style={styles.loadSectionPill}>
+                          <Text style={styles.loadSectionPillText}>Live</Text>
+                        </View>
+                        {!isMobileView ? (
+                          <TouchableOpacity
+                            style={styles.addLoadBtn}
+                            onPress={onCreateIndentPress}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel="Broadcast new load"
+                          >
+                            <Plus
+                              size={13}
+                              color="#ffffff"
+                              strokeWidth={2.4}
+                            />
+                            <Text
+                              style={styles.addLoadBtnText}
+                              numberOfLines={1}
+                            >
+                              Add Load
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
                     {onShareToNetwork ? (
@@ -1697,31 +1717,6 @@ export function LoadCenterView({
                       </View>
                     );
                   })}
-                  {useGridLayout && giveLoadGridPagination.totalItems > 0 ? (
-                    <View style={styles.gridPaginationWrap}>
-                      <HubListPaginationBar
-                        page={giveLoadGridPagination.page}
-                        totalPages={giveLoadGridPagination.totalPages}
-                        totalItems={giveLoadGridPagination.totalItems}
-                        pageSize={giveLoadGridPagination.pageSize}
-                        onPageSizeChange={giveLoadGridPagination.setPageSize}
-                        itemLabel="loads"
-                        onPrev={() =>
-                          giveLoadGridPagination.setPage((p) =>
-                            Math.max(0, p - 1),
-                          )
-                        }
-                        onNext={() =>
-                          giveLoadGridPagination.setPage((p) =>
-                            Math.min(
-                              giveLoadGridPagination.totalPages - 1,
-                              p + 1,
-                            ),
-                          )
-                        }
-                      />
-                    </View>
-                  ) : null}
                 </View>
               )}
             </>
@@ -2066,31 +2061,6 @@ export function LoadCenterView({
                     </View>
                   );
                 })}
-                {useGridLayout && findWorkGridPagination.totalItems > 0 ? (
-                  <View style={styles.gridPaginationWrap}>
-                    <HubListPaginationBar
-                      page={findWorkGridPagination.page}
-                      totalPages={findWorkGridPagination.totalPages}
-                      totalItems={findWorkGridPagination.totalItems}
-                      pageSize={findWorkGridPagination.pageSize}
-                      onPageSizeChange={findWorkGridPagination.setPageSize}
-                      itemLabel="loads"
-                      onPrev={() =>
-                        findWorkGridPagination.setPage((p) =>
-                          Math.max(0, p - 1),
-                        )
-                      }
-                      onNext={() =>
-                        findWorkGridPagination.setPage((p) =>
-                          Math.min(
-                            findWorkGridPagination.totalPages - 1,
-                            p + 1,
-                          ),
-                        )
-                      }
-                    />
-                  </View>
-                ) : null}
               </View>
             ))}
 
@@ -2151,31 +2121,6 @@ export function LoadCenterView({
                         )}
                       </View>
                     ))}
-                    {claimedGridPagination.totalItems > 0 ? (
-                      <View style={styles.gridPaginationWrap}>
-                        <HubListPaginationBar
-                          page={claimedGridPagination.page}
-                          totalPages={claimedGridPagination.totalPages}
-                          totalItems={claimedGridPagination.totalItems}
-                          pageSize={claimedGridPagination.pageSize}
-                          onPageSizeChange={claimedGridPagination.setPageSize}
-                          itemLabel="loads"
-                          onPrev={() =>
-                            claimedGridPagination.setPage((p) =>
-                              Math.max(0, p - 1),
-                            )
-                          }
-                          onNext={() =>
-                            claimedGridPagination.setPage((p) =>
-                              Math.min(
-                                claimedGridPagination.totalPages - 1,
-                                p + 1,
-                              ),
-                            )
-                          }
-                        />
-                      </View>
-                    ) : null}
                   </View>
                 ) : (
                   <FlashList<IndentRow>
@@ -2203,34 +2148,47 @@ export function LoadCenterView({
               </View>
             ))}
         </ScrollView>
-        {loadSubTab === "GIVE_LOAD" && !isMobileView ? (
-          <View
-            style={[
-              styles.hirePartnerFabWrap,
-              { bottom: hirePartnerFabBottom, pointerEvents: "box-none" },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.hirePartnerFab}
-              onPress={onCreateIndentPress}
-              activeOpacity={0.9}
-              accessibilityLabel="Broadcast New Indent"
-            >
-              <SemanticAddIcon
-                IconComponent={Package}
-                iconSize={20}
-                iconColor={Theme.textOnPrimary}
-                badgeSize={18}
-                badgeIconSize={13}
-                badgeBackgroundColor="#FFFFFF"
-                badgeIconColor={Theme.darkBackground}
-                badgeOffsetX={-7}
-                badgeOffsetY={-6}
-              />
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </View>
+
+      {/* Fixed-bottom pagination bar — pinned to the viewport like the
+       *  trips page so the user can change page/size without scrolling
+       *  back. Only renders on desktop grid layouts. The active
+       *  pagination state switches with the current load sub-tab. */}
+      {!isMobileView && useGridLayout
+        ? (() => {
+            const activePagination =
+              loadSubTab === "GIVE_LOAD"
+                ? giveLoadGridPagination
+                : loadSubTab === "GET_LOAD"
+                  ? findWorkGridPagination
+                  : loadSubTab === "AWARDED"
+                    ? claimedGridPagination
+                    : null;
+            if (!activePagination || activePagination.totalItems <= 0) {
+              return null;
+            }
+            return (
+              <View style={styles.loadsBottomBar}>
+                <HubListPaginationBar
+                  page={activePagination.page}
+                  totalPages={activePagination.totalPages}
+                  totalItems={activePagination.totalItems}
+                  pageSize={activePagination.pageSize}
+                  onPageSizeChange={activePagination.setPageSize}
+                  itemLabel="loads"
+                  onPrev={() =>
+                    activePagination.setPage((p) => Math.max(0, p - 1))
+                  }
+                  onNext={() =>
+                    activePagination.setPage((p) =>
+                      Math.min(activePagination.totalPages - 1, p + 1),
+                    )
+                  }
+                />
+              </View>
+            );
+          })()
+        : null}
 
       {/* Success overlay */}
       {showSuccess && (
@@ -2501,24 +2459,31 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  hirePartnerFabWrap: {
-    position: "absolute",
-    right: 16,
-    zIndex: 100,
-    elevation: 10,
-  },
-  hirePartnerFab: {
-    width: Layout.fabSize,
-    height: Layout.fabSize,
-    borderRadius: Layout.fabBorderRadius,
-    backgroundColor: Theme.darkBackground,
+  /** Inline "Add Load" pill that sits next to the Live chip on the
+   *  "Your active indents" section header. Matches Add Trip / Add Indent. */
+  addLoadBtn: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Theme.darkBackground,
-    shadowOffset: { width: 0, height: Layout.fabShadowOffsetY },
-    shadowOpacity: Layout.fabShadowOpacity,
-    shadowRadius: Layout.fabShadowRadius,
-    elevation: Layout.fabElevation,
+    gap: 7,
+    minHeight: 34,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: Theme.actionAccent,
+    borderWidth: 1,
+    borderColor: Theme.actionAccentBorder,
+    shadowColor: Theme.actionAccentShadow,
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  addLoadBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
   },
   loadSearchRow: {
     flexDirection: "row",
@@ -2672,6 +2637,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     flex: 1,
     minWidth: 0,
+  },
+  loadSectionRowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
   },
   loadSectionPill: {
     paddingHorizontal: 10,
@@ -2920,6 +2891,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginTop: 4,
     marginBottom: 8,
+  },
+  /** Desktop: pinned bottom bar that hosts the loads pagination controls.
+   *  Sits as a flex sibling below the scrolling content area so it stays
+   *  anchored to the bottom of the viewport regardless of scroll position
+   *  — same pattern as the trips page. */
+  loadsBottomBar: {
+    flexShrink: 0,
+    backgroundColor: LOAD_CONTENT_BG,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
   loadCardGrid: {
     flex: 1,

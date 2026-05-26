@@ -18,10 +18,10 @@ import {
 import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-export const PURPLE = '#1a237e';
+export const PURPLE = '#4F46E5';
 export const PURPLE_MID = '#312e81';
-export const PURPLE_TINT = 'rgba(26,35,126,0.08)';
-export const PURPLE_BORDER = 'rgba(26,35,126,0.18)';
+export const PURPLE_TINT = 'rgba(79,70,229,0.08)';
+export const PURPLE_BORDER = 'rgba(79,70,229,0.18)';
 export const TEAL = '#0f766e';
 export const TEAL_TINT = 'rgba(15,118,110,0.08)';
 export const AMBER = '#d97706';

@@ -1,13 +1,18 @@
 /**
  * Filter/tab chrome shared with Chat (`ChatScreen` list header).
  * Use for Finance cash toolbar, Trips filters, etc.
+ *
+ * Selected pill background uses the Pulse purple (`Theme.primary`) so
+ * tab selection in Trips, Chat and Finance all match the brand accent
+ * rather than the prior dark navy.
  */
 import { StyleSheet } from "react-native";
+import Theme from "@/constants/Theme";
 
 export const CHAT_FILTER_MUTED = "#64748b";
 export const CHAT_FILTER_TRAY_BG = "#f1f5f9";
 export const CHAT_FILTER_TRAY_BORDER = "#e8ecf1";
-export const CHAT_FILTER_ACTIVE_BG = "#0f172a";
+export const CHAT_FILTER_ACTIVE_BG = Theme.primary;
 
 export const chatFilterChromeStyles = StyleSheet.create({
   toolbarStack: {

@@ -7,7 +7,23 @@ export type MutualConnectionRow = {
   id: string;
   name: string;
   avatar_seed: string | null;
+  /** Real avatar (org logo → owner profile avatar fallback). When `null`,
+   *  the caller renders the seed-derived placeholder. Mirrors the
+   *  `get_clients_with_profiles` / `get_suppliers_with_profiles`
+   *  resolution priority introduced in `20260827040000_partner_avatar_prefer_org_logo`. */
+  avatar_url: string | null;
 };
+
+function pickOrgAvatarUrl(
+  logoUrl: string | null | undefined,
+  ownerAvatarUrl: string | null | undefined,
+): string | null {
+  const logo = (logoUrl ?? "").trim();
+  if (logo.length > 0) return logo;
+  const owner = (ownerAvatarUrl ?? "").trim();
+  if (owner.length > 0) return owner;
+  return null;
+}
 
 function peerOrgIdsFromRows(
   viewerOrgId: string,
@@ -79,7 +95,7 @@ export async function getMutualConnections(
 
   const { data: orgs, error: orgError } = await supabase()
     .from("organizations")
-    .select("id, name, avatar_seed")
+    .select("id, name, avatar_seed, logo_url, owner_id")
     .in("id", [...mutualIds])
     .is("deleted_at", null)
     .order("name", { ascending: true });
@@ -88,12 +104,56 @@ export async function getMutualConnections(
     return { error: new Error(orgError.message), mutuals: [] };
   }
 
+  /** Owner-avatar fallback lookup. The mutual org's brand logo
+   *  (`organizations.logo_url`) is preferred, but most early-stage orgs
+   *  haven't set one — so we batch-load the owner profile's
+   *  `avatar_url` and COALESCE in TypeScript. This mirrors the SQL
+   *  resolution priority used by `get_clients_with_profiles` /
+   *  `get_suppliers_with_profiles`. */
+  const ownerIds = Array.from(
+    new Set(
+      (orgs ?? [])
+        .map((o) => (o as { owner_id: string | null }).owner_id ?? null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  let ownerAvatarById = new Map<string, string | null>();
+  if (ownerIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase()
+      .from("profiles")
+      .select("id, avatar_url")
+      .in("id", ownerIds);
+    if (profileError) {
+      return { error: new Error(profileError.message), mutuals: [] };
+    }
+    ownerAvatarById = new Map(
+      (profiles ?? []).map((p) => [
+        (p as { id: string }).id,
+        ((p as { avatar_url: string | null }).avatar_url ?? null) || null,
+      ]),
+    );
+  }
+
   return {
     error: null,
-    mutuals: (orgs ?? []).map((org) => ({
-      id: org.id,
-      name: org.name,
-      avatar_seed: org.avatar_seed ?? null,
-    })),
+    mutuals: (orgs ?? []).map((org) => {
+      const row = org as {
+        id: string;
+        name: string;
+        avatar_seed: string | null;
+        logo_url: string | null;
+        owner_id: string | null;
+      };
+      const ownerAvatarUrl = row.owner_id
+        ? (ownerAvatarById.get(row.owner_id) ?? null)
+        : null;
+      return {
+        id: row.id,
+        name: row.name,
+        avatar_seed: row.avatar_seed ?? null,
+        avatar_url: pickOrgAvatarUrl(row.logo_url, ownerAvatarUrl),
+      };
+    }),
   };
 }

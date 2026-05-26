@@ -244,7 +244,6 @@ function ConnectionProfileCard({
         totalTrips={item.total_trips ?? null}
         ratingValue={item.rating ?? null}
         mutualCount={item.mutual_count ?? 0}
-        showVerified={item.is_integrated}
         showOnline={item.is_integrated}
         viewerOrgId={viewerOrgId}
         onPressMutuals={

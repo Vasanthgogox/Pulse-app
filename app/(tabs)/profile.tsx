@@ -684,7 +684,7 @@ export default function ProfileScreen() {
             <View style={styles.contentWrapDriverLike}>
               {/* Hero bleeds to screen edges via negative margins — sits flush under the dark top bar */}
               <LinearGradient
-                colors={["#1e1b4b", "#312e81", "#1a237e"]}
+                colors={["#1e1b4b", "#312e81", "#4F46E5"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.driverLikeHero}
@@ -1386,7 +1386,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: "center",
     gap: 6,
-    shadowColor: "#1a237e",
+    shadowColor: "#4F46E5",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
@@ -1762,14 +1762,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.2)",
+    borderColor: "rgba(79,70,229,0.2)",
     borderLeftWidth: 4,
-    borderLeftColor: "#1a237e",
+    borderLeftColor: "#4F46E5",
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 12,
     gap: 10,
-    shadowColor: "#1a237e",
+    shadowColor: "#4F46E5",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
     shadowRadius: 14,
@@ -1778,7 +1778,7 @@ const styles = StyleSheet.create({
   managedByEyebrow: {
     fontSize: 8,
     fontWeight: "900",
-    color: "#1a237e",
+    color: "#4F46E5",
     letterSpacing: 2.2,
   },
   managedByRow: {

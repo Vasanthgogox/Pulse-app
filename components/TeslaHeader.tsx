@@ -35,6 +35,8 @@ export interface TeslaHeaderProps {
   onAddClick?: () => void;
   /** Trip / command chat — e.g. open org trip thread from trip details. Renders before the notification bell. */
   onChatClick?: () => void;
+  /** Compliance & Documents Center — opens the central document-intelligence hub. Renders just before the notification bell, after `onChatClick`. */
+  onDocumentsClick?: () => void;
   /** Hide the small square icon badge before the brand/title block. */
   hideLogoBadge?: boolean;
   /** Hide bell + unread dot (e.g. when already on the notifications screen). */
@@ -63,6 +65,7 @@ export function TeslaHeader({
   hideRightIcons = false,
   onAddClick,
   onChatClick,
+  onDocumentsClick,
   hideLogoBadge = false,
   hideNotificationBell = false,
   titleTextStyle,
@@ -172,6 +175,17 @@ export function TeslaHeader({
             accessibilityRole="button"
           >
             <FontAwesome name="comments" size={16} color={iconColor(isDark)} />
+          </TouchableOpacity>
+        )}
+        {onDocumentsClick != null && (
+          <TouchableOpacity
+            onPress={onDocumentsClick}
+            style={styles.iconWrap}
+            hitSlop={8}
+            accessibilityLabel="Open documents center"
+            accessibilityRole="button"
+          >
+            <FontAwesome name="folder-open" size={16} color={iconColor(isDark)} />
           </TouchableOpacity>
         )}
         {!hideNotificationBell && (
