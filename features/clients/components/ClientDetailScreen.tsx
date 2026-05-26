@@ -97,6 +97,9 @@ const CounterpartyProfileSystemCard = lazy(() =>
     default: m.CounterpartyProfileSystemCard,
   })),
 );
+const ClientAnalyticsTab = lazy(() =>
+  import("./analytics/ClientAnalyticsTab").then((m) => ({ default: m.default })),
+);
 import {
     Alert,
     Animated,
@@ -307,7 +310,9 @@ export default function ClientDetailScreen({
   const lastFocusRefreshRef = useRef<number>(0);
   const queryClient = useQueryClient();
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+  const [detailSubTab, setDetailSubTab] = useState<
+    "trips" | "cash" | "shared" | "analytics"
+  >(
     "trips",
   );
   const [tripDatePeriod, setTripDatePeriod] =
@@ -1579,6 +1584,7 @@ export default function ClientDetailScreen({
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
+    { id: "analytics" as const, label: "Analytics" },
     { id: "shared" as const, label: "Shared" },
   ];
   const heroDecorAnimatedStyle = isWebDesktop
@@ -2529,6 +2535,20 @@ export default function ClientDetailScreen({
           </View>
         )}
 
+        {/* Tab: Performance Analytics */}
+        {detailSubTab === "analytics" && (
+          <View style={styles.analyticsSection}>
+            <Suspense fallback={<LazySuspenseNullFallback />}>
+              <ClientAnalyticsTab
+                client={client}
+                trips={trips}
+                transactions={transactions}
+                orgId={currentOrganization?.id ?? null}
+              />
+            </Suspense>
+          </View>
+        )}
+
         {/* Tab: Shared */}
         {detailSubTab === "shared" && client && (
           <View
@@ -3386,6 +3406,7 @@ const styles = StyleSheet.create({
   },
   sharedSection: { marginBottom: 24 },
   sharedSectionWeb: { width: "100%", alignSelf: "stretch" },
+  analyticsSection: { marginBottom: 24, paddingHorizontal: 16 },
   sharedCard: {
     backgroundColor: Theme.surface,
     borderWidth: 1,

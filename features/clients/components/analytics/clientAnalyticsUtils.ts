@@ -1,0 +1,808 @@
+/**
+ * Client Performance Analytics — pure compute utilities.
+ * ============================================================================
+ *
+ * Powers `<ClientAnalyticsTab>`. All functions side-effect-free and
+ * memoizable. Consumes the already-loaded `trips` + `transactions` arrays
+ * scoped to a single client by `ClientDetailScreen`, so no new fetches.
+ *
+ * Sections covered:
+ *   • Header KPIs (revenue, margin, trips, outstanding, growth, …)
+ *   • Monthly trend (revenue + margin + collected per month)
+ *   • Lane breakdown (top routes by revenue)
+ *   • Load-type breakdown (sub for "vehicle-type revenue" — TripRow has
+ *     no vehicle_type column without a vehicles join)
+ *   • Profitability metrics (revenue/trip, profit/km, etc.)
+ *   • Payment aging buckets (0-30 / 31-60 / 61-90 / 90+)
+ *   • Payment delay heatmap (rows=months, cols=aging buckets)
+ *   • Operational metrics (on-time %, cancellation, disputes)
+ *   • Auto insights derivation
+ *
+ * Window: last 12 months by default (override via `windowMonths`).
+ */
+
+import type { LedgerRow } from "@/features/finance";
+import type { TripRow } from "@/features/trips/services/trips.service";
+
+import type {
+  AnalyticsInsight,
+  ClientKpiHeader,
+  HeatmapCell,
+} from "@/features/analytics";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+const MONTH_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function tripDate(t: TripRow): Date | null {
+  const raw = t.pickup_date ?? t.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function txnDate(tx: LedgerRow): Date | null {
+  const raw = tx.transaction_date ?? tx.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelShort(key: string): string {
+  const idx = parseInt(key.slice(5, 7), 10) - 1;
+  return MONTH_SHORT[idx] ?? key.slice(5, 7);
+}
+
+function asNumber(v: unknown): number {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function laneLabel(t: TripRow): string {
+  const pickup = (t.pickup_area ?? "").trim();
+  const drop = (t.drop_location ?? "").trim();
+  if (pickup && drop) return `${pickup} → ${drop}`;
+  if (pickup) return pickup;
+  if (drop) return `→ ${drop}`;
+  return "Unspecified lane";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ClientMonthlyTrendPoint {
+  monthKey: string;
+  label: string;
+  revenue: number;
+  margin: number;
+  marginPct: number;
+  trips: number;
+  collected: number;
+  outstanding: number;
+  avgDelayDays: number;
+  onTimePct: number;
+  cancellationPct: number;
+}
+
+export interface ClientLaneBreakdown {
+  id: string;
+  label: string;
+  revenue: number;
+  trips: number;
+  margin: number;
+  marginPct: number;
+}
+
+export interface ClientLoadTypeBreakdown {
+  id: string;
+  label: string;
+  revenue: number;
+  trips: number;
+}
+
+export interface ClientProfitabilityMetrics {
+  revenue: number;
+  cost: number;
+  netMargin: number;
+  marginPct: number;
+  profitPerKm: number;
+  revenuePerTrip: number;
+  totalKm: number;
+  tripsCount: number;
+}
+
+export interface ClientPaymentAging {
+  outstanding: number;
+  bucket0_30: number;
+  bucket31_60: number;
+  bucket61_90: number;
+  bucket90Plus: number;
+  totalOverdueTrips: number;
+}
+
+export interface ClientOperationalMetrics {
+  tripsTotal: number;
+  tripsCompleted: number;
+  tripsCancelled: number;
+  tripsInProgress: number;
+  onTimePct: number;
+  onTimeEligible: number;
+  onTime: number;
+  cancellationPct: number;
+  completionPct: number;
+  disputedCount: number;
+  averageTurnaroundDays: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-trip payment attribution
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Map trip id → collected receipts for this client. Inbound txns
+ *  (`amount_in > 0`) attached to a trip are treated as client payment
+ *  receipts. Used by aging + collection-efficiency math. */
+function buildPaymentByTripMap(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+): Map<string, { paid: number; lastTxDate: Date | null }> {
+  const map = new Map<string, { paid: number; lastTxDate: Date | null }>();
+  const tripIds = new Set(trips.map((t) => t.id));
+  for (const tx of txns) {
+    if (!tx.trip_id || !tripIds.has(tx.trip_id)) continue;
+    const amt = asNumber(tx.amount_in);
+    if (amt <= 0) continue;
+    const txDate = txnDate(tx);
+    const entry = map.get(tx.trip_id) ?? { paid: 0, lastTxDate: null };
+    entry.paid += amt;
+    if (txDate && (!entry.lastTxDate || txDate > entry.lastTxDate)) {
+      entry.lastTxDate = txDate;
+    }
+    map.set(tx.trip_id, entry);
+  }
+  return map;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI Header
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeClientKpiHeader(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date; windowMonths?: number } = {},
+): ClientKpiHeader {
+  const now = options.now ?? new Date();
+  const windowMonths = options.windowMonths ?? 12;
+  const windowStart = new Date(now);
+  windowStart.setMonth(windowStart.getMonth() - windowMonths);
+  const halfStart = new Date(now);
+  halfStart.setMonth(halfStart.getMonth() - Math.floor(windowMonths / 2));
+
+  let revenue = 0;
+  let margin = 0;
+  let tripCount = 0;
+  let recentRevenue = 0;
+  let priorRevenue = 0;
+  const lanes = new Set<string>();
+  const paymentByTrip = buildPaymentByTripMap(trips, txns);
+  let collected = 0;
+  const delays: number[] = [];
+
+  for (const t of trips) {
+    const d = tripDate(t);
+    if (!d || d < windowStart) continue;
+    revenue += asNumber(t.client_price);
+    margin += asNumber(t.margin);
+    tripCount += 1;
+    const lane = laneLabel(t);
+    if (lane !== "Unspecified lane") lanes.add(lane);
+    if (d >= halfStart) recentRevenue += asNumber(t.client_price);
+    else priorRevenue += asNumber(t.client_price);
+
+    const pay = paymentByTrip.get(t.id);
+    if (pay) {
+      collected += pay.paid;
+      if (t.pickup_date && pay.lastTxDate) {
+        const pickup = new Date(t.pickup_date);
+        if (Number.isFinite(pickup.getTime())) {
+          const days = Math.round(
+            (pay.lastTxDate.getTime() - pickup.getTime()) / MS_PER_DAY,
+          );
+          if (days > 0) delays.push(days);
+        }
+      }
+    }
+  }
+
+  const marginPct = revenue > 0 ? (margin / revenue) * 100 : 0;
+  const profitabilityPct = marginPct; // alias for spec wording
+  const outstanding = Math.max(revenue - collected, 0);
+  const avgPaymentDelayDays =
+    delays.length > 0 ? delays.reduce((a, b) => a + b, 0) / delays.length : 0;
+  const businessGrowthPct =
+    priorRevenue > 0
+      ? ((recentRevenue - priorRevenue) / priorRevenue) * 100
+      : recentRevenue > 0
+        ? 100
+        : 0;
+
+  return {
+    totalRevenue: revenue,
+    netMargin: margin,
+    marginPct: Math.round(marginPct * 100) / 100,
+    tripCount,
+    outstanding,
+    avgPaymentDelayDays: Math.round(avgPaymentDelayDays * 10) / 10,
+    profitabilityPct: Math.round(profitabilityPct * 100) / 100,
+    activeRoutes: lanes.size,
+    businessGrowthPct: Math.round(businessGrowthPct * 10) / 10,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monthly trend
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeClientMonthlyTrend(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date; monthsBack?: number } = {},
+): ClientMonthlyTrendPoint[] {
+  const now = options.now ?? new Date();
+  const monthsBack = options.monthsBack ?? 12;
+
+  const keys: string[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(monthKey(d));
+  }
+
+  const paymentByTrip = buildPaymentByTripMap(trips, txns);
+
+  return keys.map((key) => {
+    let revenue = 0;
+    let margin = 0;
+    let tripsInMonth = 0;
+    let collected = 0;
+    let outstanding = 0;
+    let onTime = 0;
+    let onTimeEligible = 0;
+    let cancelled = 0;
+    const delays: number[] = [];
+
+    for (const t of trips) {
+      const d = tripDate(t);
+      if (!d || monthKey(d) !== key) continue;
+      const price = asNumber(t.client_price);
+      revenue += price;
+      margin += asNumber(t.margin);
+      tripsInMonth += 1;
+      if (t.status === "cancelled") cancelled += 1;
+      const pay = paymentByTrip.get(t.id);
+      const paid = pay?.paid ?? 0;
+      collected += Math.min(paid, price);
+      outstanding += Math.max(price - paid, 0);
+      if (pay?.lastTxDate && t.pickup_date) {
+        const pickup = new Date(t.pickup_date);
+        if (Number.isFinite(pickup.getTime())) {
+          const days = Math.round(
+            (pay.lastTxDate.getTime() - pickup.getTime()) / MS_PER_DAY,
+          );
+          if (days > 0) delays.push(days);
+        }
+      }
+      if (t.completed_at && t.pickup_date) {
+        onTimeEligible += 1;
+        const completed = new Date(t.completed_at);
+        const pickup = new Date(t.pickup_date);
+        if (
+          Number.isFinite(completed.getTime()) &&
+          Number.isFinite(pickup.getTime())
+        ) {
+          if (completed <= new Date(pickup.getTime() + MS_PER_DAY)) onTime += 1;
+        }
+      }
+    }
+
+    const marginPct = revenue > 0 ? (margin / revenue) * 100 : 0;
+    return {
+      monthKey: key,
+      label: monthLabelShort(key),
+      revenue,
+      margin,
+      marginPct: Math.round(marginPct * 100) / 100,
+      trips: tripsInMonth,
+      collected,
+      outstanding,
+      avgDelayDays:
+        delays.length > 0
+          ? Math.round(
+              (delays.reduce((a, b) => a + b, 0) / delays.length) * 10,
+            ) / 10
+          : 0,
+      onTimePct:
+        onTimeEligible > 0 ? Math.round((onTime / onTimeEligible) * 100) : 0,
+      cancellationPct:
+        tripsInMonth > 0 ? Math.round((cancelled / tripsInMonth) * 100) : 0,
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lane / load-type breakdowns
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeLaneBreakdown(
+  trips: readonly TripRow[],
+  options: { topN?: number; now?: Date; windowMonths?: number } = {},
+): ClientLaneBreakdown[] {
+  const now = options.now ?? new Date();
+  const windowMonths = options.windowMonths ?? 12;
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - windowMonths);
+
+  const map = new Map<
+    string,
+    { revenue: number; trips: number; margin: number }
+  >();
+  for (const t of trips) {
+    const d = tripDate(t);
+    if (!d || d < cutoff) continue;
+    const lane = laneLabel(t);
+    const entry = map.get(lane) ?? { revenue: 0, trips: 0, margin: 0 };
+    entry.revenue += asNumber(t.client_price);
+    entry.margin += asNumber(t.margin);
+    entry.trips += 1;
+    map.set(lane, entry);
+  }
+
+  const rows: ClientLaneBreakdown[] = Array.from(map.entries()).map(
+    ([label, agg]) => ({
+      id: label,
+      label,
+      revenue: agg.revenue,
+      trips: agg.trips,
+      margin: agg.margin,
+      marginPct:
+        agg.revenue > 0
+          ? Math.round((agg.margin / agg.revenue) * 1000) / 10
+          : 0,
+    }),
+  );
+  rows.sort((a, b) => b.revenue - a.revenue);
+  return rows.slice(0, options.topN ?? 5);
+}
+
+export function computeLoadTypeBreakdown(
+  trips: readonly TripRow[],
+  options: { topN?: number; now?: Date; windowMonths?: number } = {},
+): ClientLoadTypeBreakdown[] {
+  const now = options.now ?? new Date();
+  const windowMonths = options.windowMonths ?? 12;
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - windowMonths);
+
+  const map = new Map<string, { revenue: number; trips: number }>();
+  for (const t of trips) {
+    const d = tripDate(t);
+    if (!d || d < cutoff) continue;
+    const loadType = (t.load_type ?? "").trim() || "Unspecified";
+    const entry = map.get(loadType) ?? { revenue: 0, trips: 0 };
+    entry.revenue += asNumber(t.client_price);
+    entry.trips += 1;
+    map.set(loadType, entry);
+  }
+
+  const rows = Array.from(map.entries()).map(([label, agg]) => ({
+    id: label,
+    label,
+    revenue: agg.revenue,
+    trips: agg.trips,
+  }));
+  rows.sort((a, b) => b.revenue - a.revenue);
+  return rows.slice(0, options.topN ?? 5);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profitability metrics
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeProfitabilityMetrics(
+  trips: readonly TripRow[],
+  options: { now?: Date; windowMonths?: number } = {},
+): ClientProfitabilityMetrics {
+  const now = options.now ?? new Date();
+  const windowMonths = options.windowMonths ?? 12;
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - windowMonths);
+
+  let revenue = 0;
+  let cost = 0;
+  let totalKm = 0;
+  let tripsCount = 0;
+
+  for (const t of trips) {
+    const d = tripDate(t);
+    if (!d || d < cutoff) continue;
+    revenue += asNumber(t.client_price);
+    cost += asNumber(t.supplier_rate);
+    totalKm += asNumber(t.distance);
+    tripsCount += 1;
+  }
+  const netMargin = revenue - cost;
+  return {
+    revenue,
+    cost,
+    netMargin,
+    marginPct:
+      revenue > 0 ? Math.round((netMargin / revenue) * 1000) / 10 : 0,
+    profitPerKm: totalKm > 0 ? Math.round((netMargin / totalKm) * 100) / 100 : 0,
+    revenuePerTrip: tripsCount > 0 ? Math.round(revenue / tripsCount) : 0,
+    totalKm,
+    tripsCount,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment aging
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computePaymentAging(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date } = {},
+): ClientPaymentAging {
+  const now = options.now ?? new Date();
+  const paymentByTrip = buildPaymentByTripMap(trips, txns);
+
+  let bucket0_30 = 0;
+  let bucket31_60 = 0;
+  let bucket61_90 = 0;
+  let bucket90Plus = 0;
+  let overdueTrips = 0;
+
+  for (const t of trips) {
+    const price = asNumber(t.client_price);
+    if (price <= 0) continue;
+    const paid = paymentByTrip.get(t.id)?.paid ?? 0;
+    const outstanding = price - paid;
+    if (outstanding <= 0) continue;
+    const dateAnchor = t.pickup_date ? new Date(t.pickup_date) : tripDate(t);
+    if (!dateAnchor || !Number.isFinite(dateAnchor.getTime())) continue;
+    const daysOld = Math.max(
+      0,
+      Math.round((now.getTime() - dateAnchor.getTime()) / MS_PER_DAY),
+    );
+    overdueTrips += 1;
+    if (daysOld <= 30) bucket0_30 += outstanding;
+    else if (daysOld <= 60) bucket31_60 += outstanding;
+    else if (daysOld <= 90) bucket61_90 += outstanding;
+    else bucket90Plus += outstanding;
+  }
+
+  return {
+    outstanding: bucket0_30 + bucket31_60 + bucket61_90 + bucket90Plus,
+    bucket0_30,
+    bucket31_60,
+    bucket61_90,
+    bucket90Plus,
+    totalOverdueTrips: overdueTrips,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment delay heatmap (rows = months, cols = aging buckets)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AGING_BUCKETS = [
+  { id: "0_30", label: "0-30d", maxDays: 30 },
+  { id: "31_60", label: "31-60d", maxDays: 60 },
+  { id: "61_90", label: "61-90d", maxDays: 90 },
+  { id: "90_plus", label: "90+ d", maxDays: Number.POSITIVE_INFINITY },
+] as const;
+
+export function computePaymentDelayHeatmap(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date; monthsBack?: number } = {},
+): HeatmapCell[] {
+  const now = options.now ?? new Date();
+  const monthsBack = options.monthsBack ?? 6;
+
+  const keys: string[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(monthKey(d));
+  }
+
+  const paymentByTrip = buildPaymentByTripMap(trips, txns);
+
+  // For each (month, bucket) compute aggregate outstanding ₹.
+  const cellMap = new Map<string, number>();
+  for (const t of trips) {
+    const d = tripDate(t);
+    if (!d) continue;
+    const key = monthKey(d);
+    if (!keys.includes(key)) continue;
+    const price = asNumber(t.client_price);
+    if (price <= 0) continue;
+    const pay = paymentByTrip.get(t.id);
+    const outstanding = price - (pay?.paid ?? 0);
+    if (outstanding <= 0) continue;
+    const anchor = t.pickup_date ? new Date(t.pickup_date) : d;
+    const daysOld = Math.max(
+      0,
+      Math.round((now.getTime() - anchor.getTime()) / MS_PER_DAY),
+    );
+    const bucket =
+      daysOld <= 30 ? "0_30" : daysOld <= 60 ? "31_60" : daysOld <= 90 ? "61_90" : "90_plus";
+    const cellKey = `${key}|${bucket}`;
+    cellMap.set(cellKey, (cellMap.get(cellKey) ?? 0) + outstanding);
+  }
+
+  // Resolve max value for intensity scaling.
+  const allValues = Array.from(cellMap.values());
+  const max = allValues.length > 0 ? Math.max(...allValues) : 0;
+
+  const cells: HeatmapCell[] = [];
+  for (const key of keys) {
+    for (const bucket of AGING_BUCKETS) {
+      const cellKey = `${key}|${bucket.id}`;
+      const value = cellMap.get(cellKey) ?? 0;
+      const intensity = max > 0 ? Math.min(value / max, 1) : 0;
+      const tone =
+        value === 0
+          ? "empty"
+          : bucket.id === "0_30"
+            ? "notice"
+            : bucket.id === "31_60"
+              ? "warning"
+              : "critical";
+      const compactLabel =
+        value === 0
+          ? "—"
+          : value >= 100000
+            ? `${Math.round(value / 1000)}k`
+            : value >= 1000
+              ? `${Math.round(value / 100) / 10}k`
+              : `${Math.round(value)}`;
+      cells.push({
+        rowId: key,
+        colId: bucket.id,
+        intensity,
+        tone,
+        label: compactLabel,
+      });
+    }
+  }
+  return cells;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operational metrics
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function computeClientOperationalMetrics(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date; windowMonths?: number } = {},
+): ClientOperationalMetrics {
+  const now = options.now ?? new Date();
+  const windowMonths = options.windowMonths ?? 12;
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - windowMonths);
+
+  let tripsTotal = 0;
+  let tripsCompleted = 0;
+  let tripsCancelled = 0;
+  let tripsInProgress = 0;
+  let onTime = 0;
+  let onTimeEligible = 0;
+  const turnaroundDays: number[] = [];
+
+  for (const t of trips) {
+    const d = tripDate(t);
+    if (!d || d < cutoff) continue;
+    tripsTotal += 1;
+    if (t.status === "completed") tripsCompleted += 1;
+    if (t.status === "cancelled") tripsCancelled += 1;
+    if (
+      t.status === "assigned" ||
+      t.status === "in_progress" ||
+      t.status === "started"
+    ) {
+      tripsInProgress += 1;
+    }
+    if (t.completed_at && t.pickup_date) {
+      onTimeEligible += 1;
+      const completed = new Date(t.completed_at);
+      const pickup = new Date(t.pickup_date);
+      if (
+        Number.isFinite(completed.getTime()) &&
+        Number.isFinite(pickup.getTime())
+      ) {
+        if (completed <= new Date(pickup.getTime() + MS_PER_DAY)) onTime += 1;
+        const days =
+          (completed.getTime() - pickup.getTime()) / MS_PER_DAY;
+        if (days > 0) turnaroundDays.push(days);
+      }
+    }
+  }
+
+  // Disputed = trips with any txn description mentioning DISPUTE / DEDUCTION.
+  const tripIds = new Set(trips.map((t) => t.id));
+  let disputedCount = 0;
+  const disputedSet = new Set<string>();
+  for (const tx of txns) {
+    if (!tx.trip_id || !tripIds.has(tx.trip_id)) continue;
+    const desc = (tx.description ?? "").toUpperCase();
+    if (desc.includes("DISPUTE")) disputedSet.add(tx.trip_id);
+  }
+  disputedCount = disputedSet.size;
+
+  return {
+    tripsTotal,
+    tripsCompleted,
+    tripsCancelled,
+    tripsInProgress,
+    onTime,
+    onTimeEligible,
+    onTimePct:
+      onTimeEligible > 0 ? Math.round((onTime / onTimeEligible) * 100) : 0,
+    cancellationPct:
+      tripsTotal > 0
+        ? Math.round((tripsCancelled / tripsTotal) * 1000) / 10
+        : 0,
+    completionPct:
+      tripsTotal > 0
+        ? Math.round((tripsCompleted / tripsTotal) * 1000) / 10
+        : 0,
+    disputedCount,
+    averageTurnaroundDays:
+      turnaroundDays.length > 0
+        ? Math.round(
+            (turnaroundDays.reduce((a, b) => a + b, 0) /
+              turnaroundDays.length) *
+              10,
+          ) / 10
+        : 0,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto insights
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function deriveClientInsights(
+  monthly: readonly ClientMonthlyTrendPoint[],
+  kpis: ClientKpiHeader,
+  ops: ClientOperationalMetrics,
+  aging: ClientPaymentAging,
+): AnalyticsInsight[] {
+  const out: AnalyticsInsight[] = [];
+  if (monthly.length === 0) return out;
+
+  const last = monthly[monthly.length - 1];
+  const prev = monthly[monthly.length - 2];
+
+  // Revenue trend
+  if (last && prev && prev.revenue > 0) {
+    const pct = ((last.revenue - prev.revenue) / prev.revenue) * 100;
+    if (pct >= 20) {
+      out.push({
+        id: "rev-up",
+        tone: "positive",
+        message: `Revenue jumped ${Math.round(pct)}% vs last month — strong growth signal`,
+      });
+    } else if (pct <= -20) {
+      out.push({
+        id: "rev-down",
+        tone: "warning",
+        message: `Revenue dropped ${Math.round(Math.abs(pct))}% vs last month — investigate trip volume`,
+      });
+    }
+  }
+
+  // Outstanding 90+
+  if (aging.bucket90Plus > 0) {
+    out.push({
+      id: "aging-critical",
+      tone: "negative",
+      message: `₹${Math.round(aging.bucket90Plus).toLocaleString("en-IN")} outstanding for 90+ days across ${aging.totalOverdueTrips} trip${aging.totalOverdueTrips === 1 ? "" : "s"}`,
+    });
+  }
+
+  // High delay
+  if (kpis.avgPaymentDelayDays >= 45) {
+    out.push({
+      id: "delay-high",
+      tone: "warning",
+      message: `Average payment delay is ${kpis.avgPaymentDelayDays} days — consider tighter credit terms`,
+    });
+  } else if (kpis.avgPaymentDelayDays > 0 && kpis.avgPaymentDelayDays <= 10) {
+    out.push({
+      id: "delay-low",
+      tone: "positive",
+      message: `Payments arrive in ${kpis.avgPaymentDelayDays} days on average — premium payment behaviour`,
+    });
+  }
+
+  // Margin health
+  if (kpis.marginPct >= 20) {
+    out.push({
+      id: "margin-strong",
+      tone: "positive",
+      message: `${kpis.marginPct.toFixed(1)}% margin — this is a high-yield account`,
+    });
+  } else if (kpis.marginPct < 5 && kpis.totalRevenue > 0) {
+    out.push({
+      id: "margin-thin",
+      tone: "warning",
+      message: `Margin is ${kpis.marginPct.toFixed(1)}% — review pricing or cost-to-serve`,
+    });
+  }
+
+  // On-time
+  if (ops.onTimeEligible >= 5 && ops.onTimePct < 60) {
+    out.push({
+      id: "ontime-low",
+      tone: "warning",
+      message: `Only ${ops.onTimePct}% on-time delivery — SLA risk`,
+    });
+  } else if (ops.onTimeEligible >= 5 && ops.onTimePct >= 90) {
+    out.push({
+      id: "ontime-high",
+      tone: "positive",
+      message: `${ops.onTimePct}% on-time delivery — operational excellence`,
+    });
+  }
+
+  // Cancellations
+  if (ops.cancellationPct >= 15) {
+    out.push({
+      id: "cancel-high",
+      tone: "warning",
+      message: `Cancellation rate is ${ops.cancellationPct}% — review intake quality`,
+    });
+  }
+
+  // Disputes
+  if (ops.disputedCount > 0) {
+    out.push({
+      id: "disputes",
+      tone: "warning",
+      message: `${ops.disputedCount} trip${ops.disputedCount === 1 ? "" : "s"} flagged with disputes/deductions`,
+    });
+  }
+
+  // Growth
+  if (kpis.businessGrowthPct >= 30) {
+    out.push({
+      id: "growth-strong",
+      tone: "positive",
+      message: `Business volume up ${kpis.businessGrowthPct.toFixed(0)}% YoY — strategic account candidate`,
+    });
+  } else if (kpis.businessGrowthPct <= -30) {
+    out.push({
+      id: "growth-decline",
+      tone: "negative",
+      message: `Business volume down ${Math.abs(kpis.businessGrowthPct).toFixed(0)}% YoY — schedule a check-in`,
+    });
+  }
+
+  return out;
+}
