@@ -108,11 +108,90 @@ export function useAuth() {
 // Provider
 // ---------------------------------------------------------------------------
 
+/**
+ * On web, Supabase persists the session in localStorage synchronously accessible.
+ * Read it before React renders so AppBootGate never blocks for returning users.
+ * The async restore still runs in background to refresh tokens and verify profile.
+ */
+function tryReadWebSession(): {
+  status: AuthStatus;
+  user: AuthUser | null;
+  profile: UserProfile | null;
+} {
+  const empty = { status: "restoring" as AuthStatus, user: null, profile: null };
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return empty;
+  try {
+    const key = Object.keys(localStorage).find(
+      (k) => k.startsWith("sb-") && k.endsWith("-auth-token"),
+    );
+    if (!key) return empty;
+    const raw = localStorage.getItem(key);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw) as {
+      access_token?: string;
+      expires_at?: number;
+      user?: {
+        id?: string;
+        email?: string;
+        user_metadata?: Record<string, unknown>;
+      };
+    };
+    if (!parsed?.access_token || !parsed?.user?.id) return empty;
+    // Treat tokens expiring within 60 s as stale — let async restore refresh them.
+    if (parsed.expires_at && parsed.expires_at * 1000 - Date.now() < 60_000) return empty;
+    const meta = parsed.user.user_metadata ?? {};
+    const uid = parsed.user.id;
+    const email = parsed.user.email ?? "";
+    const fullName =
+      (meta.full_name as string | undefined) ??
+      (meta.name as string | undefined) ??
+      email.split("@")[0] ??
+      "User";
+    const role = meta.role === "driver" ? ("driver" as const) : ("user" as const);
+    const opModel = meta.operating_model as string | undefined;
+    const aggregated =
+      role === "driver"
+        ? false
+        : opModel === "NON_ASSET"
+          ? true
+          : opModel === "ASSET_BASED"
+            ? false
+            : meta.aggregated !== false && meta.aggregated !== "false";
+    const asset =
+      role === "driver"
+        ? false
+        : opModel === "ASSET_BASED"
+          ? true
+          : opModel === "NON_ASSET"
+            ? false
+            : meta.asset !== false && meta.asset !== "false";
+    const user: AuthUser = { uid, email, displayName: fullName };
+    const profile: UserProfile = {
+      uid,
+      email,
+      displayName: fullName,
+      full_name: fullName,
+      role,
+      aggregated: aggregated as boolean,
+      asset: asset as boolean,
+      company_name: meta.company_name as string | undefined,
+      phone: meta.phone as string | undefined,
+      avatar_url: meta.avatar_url as string | undefined,
+      avatar_seed: meta.avatar_seed as string | undefined,
+      status_text: meta.status_text as string | undefined,
+    };
+    return { status: "authenticated", user, profile };
+  } catch {
+    return empty;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const webSession = tryReadWebSession();
+  const [user, setUser] = useState<AuthUser | null>(webSession.user);
+  const [profile, setProfile] = useState<UserProfile | null>(webSession.profile);
   const [roleVerified, setRoleVerified] = useState(false);
-  const [status, setStatus] = useState<AuthStatus>("restoring");
+  const [status, setStatus] = useState<AuthStatus>(webSession.status);
   const [restoreError, setRestoreError] = useState<AuthError | null>(null);
 
   const clearRestoreError = useCallback(() => setRestoreError(null), []);

@@ -42,7 +42,18 @@ function shouldShowNavigationOverlay(
   return true;
 }
 
+/**
+ * On web, per-route loading.tsx Suspense boundaries handle first-load chunk
+ * fetching. Subsequent navigations use the browser's module cache and are
+ * instant. The InteractionManager path adds 120ms+ of artificial delay on
+ * every navigation with no benefit — skip entirely on web.
+ */
 export function NavigationLoadingOverlay() {
+  if (Platform.OS === 'web') return null;
+  return <NativeNavigationLoadingOverlay />;
+}
+
+function NativeNavigationLoadingOverlay() {
   const pathname = usePathname();
   const segments = useSegments() as string[];
   const segmentsKey = segments.join('/');
