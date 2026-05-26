@@ -1,22 +1,23 @@
 /**
  * TanStack Query hooks for indents and related load data. Cached by orgId.
+ *
+ * IMPORTANT: This module is reachable from the startup graph (dock badges in
+ * `DemoTabBar` call `useIndentsQuery` for the dispatcher dock count). To keep
+ * the indents/direct-quotes/bids service graphs out of the startup chunk, all
+ * service modules are **dynamic-imported inside queryFns**. The first call
+ * incurs one extra microtask; the module is cached after that.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  getIndentsByOrganization,
-  getMarketIndentsForOrganization,
-  syncIndentsWithCache,
-} from '@/features/indents/services/indents.service';
-import {
-  getMyDirectQuotes,
-  getDirectQuotesByIndentId,
-  getDirectQuoteCountsByIndentIds,
-  type DirectQuoteRow,
-} from '@/features/indents/services/direct-quotes.service';
-import { getIndentOfferCountsForOwnerIndents } from '@/features/network/services/bids.service';
+import type { DirectQuoteRow } from '@/features/indents/services/direct-quotes.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { STALE } from '@/lib/queryClient';
+
+const loadIndentsService = () =>
+  import('@/features/indents/services/indents.service');
+const loadDirectQuotesService = () =>
+  import('@/features/indents/services/direct-quotes.service');
+const loadBidsService = () => import('@/features/network/services/bids.service');
 
 /** Full list. Use for Load Board, Create Indent when list is small. */
 export function useIndentsQuery(orgId: string | null) {
@@ -24,6 +25,7 @@ export function useIndentsQuery(orgId: string | null) {
   return useQuery({
     queryKey: queryKeys.indents.finite(orgId ?? ''),
     queryFn: async () => {
+      const { syncIndentsWithCache } = await loadIndentsService();
       const existing =
         (qc.getQueryData(queryKeys.indents.finite(orgId ?? '')) as
           | Array<{ id: string }>
@@ -42,6 +44,7 @@ export function useMarketIndentsQuery(orgId: string | null) {
   return useQuery({
     queryKey: queryKeys.indents.market(orgId ?? ''),
     queryFn: async () => {
+      const { getMarketIndentsForOrganization } = await loadIndentsService();
       const res = await getMarketIndentsForOrganization(orgId!);
       if (res.error) throw res.error;
       return res.indents;
@@ -56,6 +59,7 @@ export function useMyDirectQuotesQuery(orgId: string | null) {
   return useQuery<DirectQuoteRow[]>({
     queryKey: [...queryKeys.indents.finite(orgId ?? ''), 'my-direct-quotes'],
     queryFn: async () => {
+      const { getMyDirectQuotes } = await loadDirectQuotesService();
       const res = await getMyDirectQuotes(orgId!);
       if (res.error) throw res.error;
       return res.quotes;
@@ -70,6 +74,7 @@ export function useIndentDirectQuotesQuery(indentId: string | null) {
   return useQuery<DirectQuoteRow[]>({
     queryKey: ['indents', indentId, 'direct-quotes'],
     queryFn: async () => {
+      const { getDirectQuotesByIndentId } = await loadDirectQuotesService();
       const res = await getDirectQuotesByIndentId(indentId!);
       if (res.error) throw res.error;
       return res.quotes;
@@ -87,6 +92,7 @@ export function useDirectQuoteCountsQuery(indentIds: string[] | null) {
   return useQuery<Record<string, number>>({
     queryKey: ['indents', 'quote-counts', stableKey],
     queryFn: async () => {
+      const { getDirectQuoteCountsByIndentIds } = await loadDirectQuotesService();
       const res = await getDirectQuoteCountsByIndentIds(indentIds!);
       if (res.error) throw res.error;
       return res.counts;
@@ -102,6 +108,7 @@ export function useIndentOfferCountsQuery(ownerOrgId: string | null, indentIds: 
   return useQuery<Record<string, number>>({
     queryKey: ['indents', 'offer-counts', ownerOrgId ?? '', stableKey],
     queryFn: async () => {
+      const { getIndentOfferCountsForOwnerIndents } = await loadBidsService();
       const res = await getIndentOfferCountsForOwnerIndents(ownerOrgId!, indentIds);
       if (res.error) throw res.error;
       return res.counts;
@@ -117,6 +124,7 @@ export function useIndentsInfiniteQuery(orgId: string | null, opts?: { pageSize?
   return useInfiniteQuery({
     queryKey: queryKeys.indents.infinite(orgId ?? '', pageSize),
     queryFn: async ({ pageParam = 0 }) => {
+      const { getIndentsByOrganization } = await loadIndentsService();
       const res = await getIndentsByOrganization(orgId!, { limit: pageSize, offset: pageParam });
       if (res.error) throw res.error;
       return { indents: res.indents, hasMore: res.hasMore ?? false, nextOffset: pageParam + pageSize };

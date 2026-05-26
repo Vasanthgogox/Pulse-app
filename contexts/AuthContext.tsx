@@ -46,6 +46,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { markStartupPhase } from "@/lib/startupMetrics";
 
 export type { UserProfile } from "@/lib/authEngine";
 export type { AuthStatus } from "@/lib/authEngine";
@@ -207,6 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     restoringRef.current = true;
+    markStartupPhase('auth_restoring');
 
     // Dev toggle: skip restore and jump straight to expired
     if (isForceExpiredSessionEnabled()) {
@@ -279,11 +281,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const session = await withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null);
+        // getKeepSignedIn is a local AsyncStorage read — run in parallel with the network getSession call.
+        const [session, keep] = await Promise.all([
+          withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null),
+          getKeepSignedIn(),
+        ]);
         if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
         if (session) {
-          const keep = await getKeepSignedIn();
-          if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
           if (!keep) {
             signOutRequestedRef.current = true;
             await authService.signOut();
@@ -370,6 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         restoringRef.current = false;
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+          markStartupPhase('auth_resolved');
           setStatus((prev) => (prev === "restoring" ? "unauthenticated" : prev));
         }
       }

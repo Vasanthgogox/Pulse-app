@@ -2,7 +2,10 @@ import {
   DEFAULT_USER_2D_AVATAR_SEED,
   getUser2DAvatarUriForSeed,
 } from '@/constants/UserAvatars';
-import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
+// Lazy import: `clients.service` carries the trips/links subgraph; loading it
+// at startup contaminates the dispatcher dock chunk. The only call site is
+// inside `fetchInboundProtocolSnapshot`, which runs post-bootstrap.
+const loadClientsService = () => import('@/features/clients/services/clients.service');
 import type { InboundPartnerDisplay, InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { normalizePhoneForInviteeLookup } from '@/lib/phoneLookup';
@@ -151,6 +154,7 @@ export async function fetchInboundProtocolSnapshot(
   partnerOwnerIdByOrgId: Record<string, string>;
 }> {
   const partnerOrgIds = collectPartnerOrgIds(received, sent, true);
+  const { getLinkedOrgProfilesBatch } = await loadClientsService();
   const partnerDisplayByOrgId = await getLinkedOrgProfilesBatch(partnerOrgIds);
   const partnerOwnerIdByOrgId = partnerOwnerIdByOrgFromDisplay(partnerDisplayByOrgId);
   const partnerAvatarUriByOrgId = await resolvePartnerAvatarUris(partnerDisplayByOrgId);

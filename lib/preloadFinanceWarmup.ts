@@ -1,9 +1,12 @@
 /**
  * Warm Finance tab: lazy route chunk + critical TanStack queries (trips + ledger).
- * Call on tab press/hover or idle when the user is likely to open Fiscal — one tab at a time.
+ * Call on tab press/hover or idle when the user is likely to open Fiscal.
+ *
+ * IMPORTANT: This module is statically imported from `app/_layout.tsx`.
+ * It MUST NOT statically import any feature service / component or it will
+ * drag that feature into the startup chunk. All feature imports inside this
+ * file are lazy (`await import(...)`).
  */
-import { syncTransactionsWithCache } from '@/features/finance/services/finance.service';
-import type { TripRow } from '@/features/trips/services/trips.service';
 import { preloadTabScreen } from '@/lib/preloadTabChunks';
 import { queryKeys } from '@/lib/queryKeys';
 export { scheduleIdleWork } from '@/lib/scheduleIdleWork';
@@ -26,13 +29,22 @@ export function prefetchFinanceQueries(
         p_org_id: orgId,
       });
       if (error) throw new Error(error.message);
-      return (data ?? []) as TripRow[];
+      // Loose typing here keeps `finance.service`'s `TripRow` (and its whole
+      // dependency tree) out of the startup graph. Callers reading from the
+      // query cache type-cast at the consumer site.
+      return (data ?? []) as unknown;
     },
   });
 
   void queryClient.prefetchQuery({
     queryKey: queryKeys.transactions.finite(orgId),
     queryFn: async () => {
+      // Lazy-load finance.service so this preloader stays out of the startup
+      // chunk. Without `await import`, `_layout.tsx` would drag the entire
+      // finance feature graph (~hundreds of KB) into the main bundle.
+      const { syncTransactionsWithCache } = await import(
+        '@/features/finance/services/finance.service'
+      );
       const existing =
         (queryClient.getQueryData(queryKeys.transactions.finite(orgId)) as
           | Array<{ id: string }>

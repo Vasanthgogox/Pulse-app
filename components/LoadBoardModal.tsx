@@ -17,7 +17,7 @@ import { SemanticAddIcon } from '@/components/SemanticAddIcon';
 import { TeslaHeader } from '@/components/TeslaHeader';
 import { formatINR } from '@/lib/format';
 import { type IndentRow } from '@/features/indents';
-import { useIndentsQuery } from '@/lib/queries';
+import { useIndentsQuery } from '@/lib/queries/useIndentsQuery';
 import { DatePresetPillBar } from '@/components/DatePresetPillBar';
 import { DateRangePickerModal } from '@/components/DateRangePickerModal';
 import { ledgerDayMatchesPeriod } from '@/features/finance/lib/filterLedgerByPeriod';

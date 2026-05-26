@@ -5,6 +5,7 @@
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { useAuth } from '@/contexts/AuthContext';
 import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
+import { dumpStartupMetrics, markStartupPhase } from '@/lib/startupMetrics';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
@@ -46,8 +47,10 @@ export function AppBootGate({ children }: AppBootGateProps) {
   useEffect(() => {
     if (!bootReady || splashHidden.current) return;
     splashHidden.current = true;
+    markStartupPhase('boot_gate_open');
     const id = requestAnimationFrame(() => {
       void safeHideSplashAsync().catch(() => {});
+      dumpStartupMetrics();
     });
     return () => cancelAnimationFrame(id);
   }, [bootReady]);

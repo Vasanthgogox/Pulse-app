@@ -39,21 +39,21 @@ import {
   REGISTRY_BOOTSTRAP_SALARY_LIMIT,
   REGISTRY_LOAD_MORE_SALARY_LIMIT,
 } from '@/lib/globalSync/registryFeed.constants';
-import {
-  getSalaryRequestsByOrganization,
-  updateSalaryRequestStatus,
-  type SalaryRequestWithDriverRow,
-} from '@/features/drivers/services/salaryRequests.service';
-import {
-  getSharedLedgerNotifications,
-  markSharedLedgerNotificationRead,
-  type SharedLedgerNotificationRow,
-} from '@/features/finance/services/sharedLedgerNotifications.service';
-import {
-  getConnectionRequestsReceived,
-  getConnectionRequestsSent,
-  type ConnectionRequestRow,
-} from '@/features/connections/services/connectionRequests.service';
+// Service modules are dynamic-imported inside actions only — keeps the
+// finance / drivers / connections service graphs (and their transitive
+// trips/chat dependencies) out of the startup chunk. Types are still pulled
+// statically via `import type`, which is erased by babel-preset-expo and
+// produces no runtime cost.
+import type { SalaryRequestWithDriverRow } from '@/features/drivers/services/salaryRequests.service';
+import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
+import type { ConnectionRequestRow } from '@/features/connections/services/connectionRequests.service';
+
+const loadSalaryRequestsService = () =>
+  import('@/features/drivers/services/salaryRequests.service');
+const loadSharedLedgerNotificationsService = () =>
+  import('@/features/finance/services/sharedLedgerNotifications.service');
+const loadConnectionRequestsService = () =>
+  import('@/features/connections/services/connectionRequests.service');
 import type {
   ActiveTripLastKnownLocation,
   ActiveTripSummary,
@@ -395,6 +395,8 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     networkStatus:            { ...DEFAULT_NETWORK_STATUS },
 
     refreshInboundProtocol: async (orgId) => {
+      const { getConnectionRequestsReceived, getConnectionRequestsSent } =
+        await loadConnectionRequestsService();
       const [receivedRes, sentRes] = await withTimeout(
         Promise.all([
           getConnectionRequestsReceived(orgId),
@@ -430,6 +432,19 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
       const t0 = Date.now();
 
       try {
+        // Lazy-load the three feature services in parallel so the startup
+        // chunk never sees them. Bootstrap fires after sign-in so this adds
+        // negligible latency (chunk is fetched alongside the RPC).
+        const [
+          { getSalaryRequestsByOrganization },
+          { getSharedLedgerNotifications },
+          { getConnectionRequestsReceived, getConnectionRequestsSent },
+        ] = await Promise.all([
+          loadSalaryRequestsService(),
+          loadSharedLedgerNotificationsService(),
+          loadConnectionRequestsService(),
+        ]);
+
         const [bootstrapRes, salaryRes, sharedRes, receivedRes, sentRes] =
           await withTimeout(
             Promise.all([
@@ -535,6 +550,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
 
     rejectSalaryRequest: async (requestId, orgId) => {
       get().patchSalaryRequestStatusLocal(requestId, 'rejected');
+      const { updateSalaryRequestStatus } = await loadSalaryRequestsService();
       const { error } = await updateSalaryRequestStatus(requestId, 'rejected');
       if (error) {
         void get().bootstrap(orgId, { force: true });
@@ -545,6 +561,8 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
 
     markSharedLedgerRead: async (notificationId, orgId) => {
       get().patchSharedLedgerStatusLocal(notificationId, 'read');
+      const { markSharedLedgerNotificationRead } =
+        await loadSharedLedgerNotificationsService();
       const { error } = await markSharedLedgerNotificationRead(
         notificationId,
         orgId,
@@ -558,6 +576,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
 
     loadMoreSalaryRequests: async (orgId) => {
       const offset = get().salaryRequestRows.length;
+      const { getSalaryRequestsByOrganization } = await loadSalaryRequestsService();
       const { error, requests } = await getSalaryRequestsByOrganization(orgId, {
         limit: REGISTRY_LOAD_MORE_SALARY_LIMIT,
         offset,

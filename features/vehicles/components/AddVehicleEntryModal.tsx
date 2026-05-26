@@ -6,7 +6,7 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { formatIndianVehicleNumber } from '@/lib/format';
 import { VALIDATION, dateISO } from '@/lib/validation';
-import type { CreateLedgerEntryData } from '@/features/finance';
+import type { CreateLedgerEntryData } from '@/features/finance/services/finance.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React, { useEffect, useState } from 'react';
 import {

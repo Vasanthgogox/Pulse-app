@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
+import { isStartupComplete, markStartupPhase } from '@/lib/startupMetrics';
 
 /** Full list (no pagination). Use for Trips tab. Includes trips where org is owner or supplier on a shared load trip. */
 export function useTripsQuery(orgId: string | null) {
@@ -22,6 +23,7 @@ export function useTripsQuery(orgId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId! });
       if (error) throw new Error(error.message);
+      if (!isStartupComplete()) markStartupPhase('trips_query_done');
       return (data ?? []) as TripRow[];
     },
     enabled: !!orgId,

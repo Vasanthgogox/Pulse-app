@@ -54,8 +54,28 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
           );
         }
 
-        qc.invalidateQueries({ queryKey: queryKeys.trips.shipperNamesForSupplier(organizationId) });
-        qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
+        // Shipper names only change when client_id or client_name changes — not on status/location
+        // updates. Firing this on every realtime event caused a spurious RPC call on every GPS ping.
+        const newRow = payload.new as Record<string, unknown> | null;
+        const oldRow = payload.old as Record<string, unknown> | null;
+        const clientChanged =
+          payload.eventType !== 'UPDATE' ||
+          newRow?.client_id !== oldRow?.client_id ||
+          newRow?.client_name !== oldRow?.client_name;
+        if (clientChanged) {
+          qc.invalidateQueries({ queryKey: queryKeys.trips.shipperNamesForSupplier(organizationId) });
+        }
+
+        // Assignment audit only matters when driver/vehicle/assigner fields change.
+        const assignmentChanged =
+          payload.eventType !== 'UPDATE' ||
+          newRow?.driver_id !== oldRow?.driver_id ||
+          newRow?.vehicle_id !== oldRow?.vehicle_id ||
+          newRow?.assigned_by_user_id !== oldRow?.assigned_by_user_id ||
+          newRow?.status !== oldRow?.status;
+        if (assignmentChanged) {
+          qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
+        }
       },
     );
   }, [organizationId, qc]);

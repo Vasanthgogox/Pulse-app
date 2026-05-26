@@ -21,8 +21,14 @@ import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
 import { preloadTabScreen } from "@/lib/preloadRoutes";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
-import { useIntegratedChat } from "@/features/chat/contexts/IntegratedChatContext";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+// Chat unread badges read from a tiny external signal — importing
+// `useTripChat` / `useIntegratedChat` here would drag the entire chat graph
+// (~256 KB) into the startup chunk. Chat providers (lazy) publish into this
+// signal as their counts change.
+import {
+    getTotalChatUnreadCount as readTotalChatUnread,
+    subscribeChatUnreadSignal,
+} from "@/lib/chatUnreadSignal";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
@@ -53,7 +59,7 @@ import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { Home, Package, Route, Wallet } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
     Image,
     Platform,
@@ -587,9 +593,12 @@ export function DemoTabBar({
   const dockIndentsQ = useIndentsQuery(orgId);
   const dockMarketIndentsQ = useMarketIndentsQuery(orgId);
   const dockMyQuotesQ = useMyDirectQuotesQuery(orgId);
-  const { getTotalUnreadCount: getTripUnreadCount } = useTripChat();
-  const { getTotalUnreadCount: getNetworkUnreadCount } = useIntegratedChat();
-  const messageUnreadCount = getTripUnreadCount() + getNetworkUnreadCount();
+  // External-store-driven counts; chat providers publish into the signal.
+  const messageUnreadCount = useSyncExternalStore(
+    subscribeChatUnreadSignal,
+    readTotalChatUnread,
+    readTotalChatUnread,
+  );
   const {
     receivedItems: receivedInviteItems,
     sentItems: sentInviteItems,
@@ -1007,6 +1016,18 @@ export function DemoTabBar({
           </View>
 
           <View style={styles.webUtilityWrap}>
+            <AnimatedPress
+              style={styles.webBellBtn}
+              activeOpacity={0.8}
+              onPress={() => {
+                setShowNotifications(false);
+                setShowInvitations(false);
+                router.push(ROUTES.CHAT as Parameters<typeof router.push>[0]);
+              }}
+            >
+              <FontAwesome5 name="comments" size={16} color="#64748b" />
+              {messageUnreadCount > 0 ? <View style={styles.webBellDot} /> : null}
+            </AnimatedPress>
             <View style={styles.webPopoverAnchor} ref={notificationsPopoverRootRef}>
               <AnimatedPress
                 style={[

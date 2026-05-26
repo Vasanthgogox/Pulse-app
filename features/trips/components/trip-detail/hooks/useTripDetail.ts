@@ -1297,7 +1297,6 @@ export function useTripDetail({
     if (!trip?.id) return;
     const driverId = effectiveDriverIdForLocation;
     setDriverLocationLoading(true);
-    console.log('[tracking] fetchDriverLocation start', { tripId: trip.id, driverId });
     try {
       const [latestRes, historyByTrip] = await Promise.all([
         driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
@@ -1321,24 +1320,8 @@ export function useTripDetail({
           recorded_at: p.recorded_at,
         })),
       );
-      const last3 = effectivePoints.slice(-3);
-      console.log('[tracking] fetchDriverLocation done', {
-        tripId: trip.id,
-        hasLatest: !!latest,
-        latestAt: latest?.recorded_at ?? null,
-        totalPoints: effectivePoints.length,
-        last3: last3.map((p) => ({ lat: p.latitude, lon: p.longitude, at: p.recorded_at })),
-      });
-      console.log(
-        '[tracking] driver_locations lat/lon from DB (all points for this fetch)',
-        effectivePoints.map((p) => ({
-          latitude: p.latitude,
-          longitude: p.longitude,
-          recorded_at: p.recorded_at,
-        })),
-      );
-    } catch (err) {
-      console.warn('[tracking] fetchDriverLocation error', { tripId: trip.id, err });
+    } catch {
+      // Location fetch failed silently — UI shows offline state
     } finally {
       setDriverLocationLoading(false);
     }

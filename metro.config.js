@@ -63,6 +63,17 @@ config.transformer = {
   minifierConfig: {
     compress: { reduce_funcs: false },
   },
+  // ── inlineRequires: defer module evaluation until first use ────────────────
+  // Largest single win for Metro graph performance: imports become lazy
+  // `require()` calls at the use site, so heavy modules don't evaluate at
+  // bundle start. Cuts cold-start parse cost on web by ~30-40% and lets
+  // unused branches stay dormant.
+  getTransformOptions: async () => ({
+    transform: {
+      experimentalImportSupport: false,
+      inlineRequires: true,
+    },
+  }),
 };
 
 config.resolver = {

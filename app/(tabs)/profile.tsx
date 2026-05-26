@@ -10,7 +10,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { EditProfileModal } from "@/features/auth";
+import { EditProfileModal } from "@/features/auth/components/EditProfileModal";
 import {
   averageScore,
   getRatingsForClients,

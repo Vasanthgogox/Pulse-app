@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -10,6 +11,7 @@ import React, {
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
+import { setNetworkUnreadCount } from "@/lib/chatUnreadSignal";
 import * as chatService from "../services/chat.service";
 import type {
   NetworkConversation,
@@ -359,10 +361,17 @@ export function IntegratedChatProvider({
     [conversations]
   );
 
-  const getTotalUnreadCount = useCallback(
+  const totalUnreadCount = useMemo(
     () => conversations.reduce((sum, c) => sum + c.unread_count, 0),
     [conversations]
   );
+  const getTotalUnreadCount = useCallback(() => totalUnreadCount, [totalUnreadCount]);
+
+  // Publish to the lightweight external signal so consumers like DemoTabBar
+  // can subscribe without statically importing this context.
+  useEffect(() => {
+    setNetworkUnreadCount(totalUnreadCount);
+  }, [totalUnreadCount]);
 
   const initiateNetworkConversation = useCallback(
     async (partner: NetworkPartner): Promise<string | null> => {

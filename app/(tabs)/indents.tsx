@@ -1,6 +1,5 @@
 import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import { EntityRow } from "@/components/EntityRow";
-import { FAB } from "@/components/FAB";
 import { ListScreenLayout } from "@/components/ListScreenLayout";
 import { SummaryCard } from "@/components/SummaryCard";
 import Theme from "@/constants/Theme";
@@ -15,9 +14,9 @@ import { formatINR } from "@/lib/format";
 import { useIndentsQuery } from "@/lib/queries/useIndentsQuery";
 import { useRefreshWithFeedback } from "@/lib/useRefreshWithFeedback";
 import { useRouter } from "expo-router";
-import { Package } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function getIndentStatusLabel(status: string | null | undefined): string {
@@ -113,14 +112,23 @@ export default function IndentsScreen() {
           amountColor="green"
         />
       }
-      fab={
-        <FAB
-          label="Add Indent"
+      headerAction={
+        <Pressable
           onPress={() =>
             router.push("/create-indent" as import("expo-router").Href)
           }
-          LucideIconComponent={Package}
-        />
+          style={({ pressed }) => [
+            styles.addIndentBtn,
+            pressed && styles.addIndentBtnPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Add indent"
+        >
+          <Plus size={14} color="#ffffff" strokeWidth={2.6} />
+          <Text style={styles.addIndentBtnText} numberOfLines={1}>
+            Add Indent
+          </Text>
+        </Pressable>
       }
       listData={filtered}
       listKeyExtractor={(i) => i.id}
@@ -156,4 +164,27 @@ const styles = StyleSheet.create({
   loading: { padding: 24, textAlign: "center", color: Theme.textSecondary },
   empty: { padding: 24, textAlign: "center", color: Theme.textSecondary },
   emptyWrap: { padding: 24 },
+  addIndentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: Theme.darkBackground,
+    shadowColor: "#020617",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  addIndentBtnPressed: { opacity: 0.9, transform: [{ scale: 0.97 }] },
+  addIndentBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
 });

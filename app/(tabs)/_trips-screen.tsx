@@ -7,7 +7,6 @@ import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
 import { HUB_GRID_DEFAULT_PAGE_SIZE } from "@/components/hub/hubGridCardLayout";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
-import { FinanceFAB } from "@/components/FinanceFAB";
 import {
   CHAT_FILTER_MUTED,
   chatFilterChromeStyles as chatChrome,
@@ -230,7 +229,6 @@ export default function TripsScreen() {
   const isMobileViewport = width < 820;
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
-  const tripsFabBottom = layout.fabBottom({ stackOffset: Layout.fabStackOffset });
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
@@ -1818,6 +1816,8 @@ export default function TripsScreen() {
                     }
                   }}
                   onOpenDateRangePicker={() => setShowDateRangePicker(true)}
+                  onAddTrip={canAccess ? () => router.push("/add-trip") : undefined}
+                  addTripLabel={tr("addTrip")}
                     onExportLedger={() => setTripLedgerExportOpen(true)}
                   clientNameByTripId={shipperNameByTripId}
                   linkedOrgByOrganizationId={linkedOrgByOrganizationId}
@@ -1871,6 +1871,8 @@ export default function TripsScreen() {
                   }
                 }}
                 onOpenDateRangePicker={() => setShowDateRangePicker(true)}
+                onAddTrip={canAccess ? () => router.push("/add-trip") : undefined}
+                addTripLabel={tr("addTrip")}
                 onExportLedger={() => setTripLedgerExportOpen(true)}
                 clientNameByTripId={shipperNameByTripId}
                 linkedOrgByOrganizationId={linkedOrgByOrganizationId}
@@ -2079,24 +2081,6 @@ export default function TripsScreen() {
             </View>
           )}
         </ScrollView>
-      {canAccess && !isMobileViewport ? (
-        <View
-          style={[
-            styles.fabWrap,
-            {
-              zIndex: 40,
-              right: Layout.screenPaddingHorizontal,
-              bottom: tripsFabBottom,
-            },
-          ]}
-        >
-          <FinanceFAB
-            onPress={() => router.push("/add-trip")}
-            accessibilityLabel={tr("addTrip")}
-            icon="road"
-          />
-        </View>
-      ) : null}
       <TripsLedgerExportModalGate
         active={tripLedgerExportOpen}
         visible={tripLedgerExportOpen}

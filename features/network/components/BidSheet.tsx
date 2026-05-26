@@ -12,7 +12,7 @@ import {
 import { type BidRow } from '@/features/network/services/bids.service';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
-import { useSubmitBidMutation, useUpdateBidMutation } from '@/lib/queries';
+import { useSubmitBidMutation, useUpdateBidMutation } from '@/lib/queries/useBidsQuery';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
