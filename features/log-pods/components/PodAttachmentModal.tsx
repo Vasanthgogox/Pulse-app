@@ -199,7 +199,7 @@ export function PodAttachmentModal({
         const uploads = await Promise.all(
           tripIds.map(async (tripId) => {
             const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${ext}`;
-            const filePath = `${tripId}/${fileName}`;
+            const filePath = `${tripId}/pod/${fileName}`;
             const { data, error } = await supabase()
               .storage.from('trip-documents')
               .upload(filePath, blob, {
@@ -229,6 +229,7 @@ export function PodAttachmentModal({
             storage_path: storagePath,
             mime_type: fileObj.mimeType,
             size_bytes: fileObj.size,
+            document_type: 'pod',
           }))
         );
         if (metaInsertErr && !isTripDocumentsMetaTableUnavailable(metaInsertErr)) {

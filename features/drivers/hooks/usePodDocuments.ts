@@ -23,7 +23,10 @@ export function usePodDocuments(
     if (!opts?.silent) setPodLoading(true);
     try {
       const { documents, error } = await tripDocumentsService.getDocumentsByTripId(tripId);
-      if (!error) { setPodDocuments(documents); lastPodTripIdRef.current = tripId; }
+      if (!error) {
+        setPodDocuments(documents.filter((d) => d.document_type === 'pod'));
+        lastPodTripIdRef.current = tripId;
+      }
     } finally {
       setPodLoading(false);
     }
@@ -67,7 +70,7 @@ export function usePodDocuments(
         arrayBuffer,
         fileName: fileName ?? `pod-${Date.now()}.jpg`,
         mimeType: mimeType ?? "image/jpeg",
-      });
+      }, 'pod');
       if (error) return onError?.(error.message);
       if (doc) {
         setPodDocuments((prev) => [doc, ...prev]);

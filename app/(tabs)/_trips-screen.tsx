@@ -473,6 +473,7 @@ export default function TripsScreen() {
       const { data, error } = await supabase()
         .from("trip_documents")
         .select("trip_id")
+        .eq("document_type", "pod")
         .in("trip_id", ids);
       if (error) throw error;
       return (data ?? []).map((r) => (r as { trip_id: string }).trip_id);

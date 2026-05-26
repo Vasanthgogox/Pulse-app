@@ -1,12 +1,10 @@
 /**
- * Trip documents (e.g. POD) — list and upload for a trip.
- * Storage: trip-documents bucket, path {tripId}/{uuid}.{ext}.
- * Table: trip_documents (trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_by).
+ * Trip documents — list and upload for a trip.
+ * Storage: trip-documents bucket, path {tripId}/{type}/{uuid}.{ext}.
+ * Table: trip_documents (trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_by, document_type).
  *
- * Complexity: O(n) where n = documents for this trip. Primary: indexed DB lookup by trip_id.
- * If DB returns no rows (e.g. RLS blocks supplier or insert failed), fallback: storage list
- * by prefix {tripId}/ — O(k) for k files in that folder. See docs/TRIP_DOCUMENTS_RLS_AND_STORAGE.md
- * for required RLS and storage policies so suppliers can see driver uploads.
+ * document_type discriminates business concepts: 'pod' | 'manifest' | 'invoice' | 'eway_bill' | 'loading_slip'.
+ * Fallback when DB is unavailable: list storage prefix {tripId}/ and infer type from path segment.
  */
 import { supabase } from "@/lib/supabase";
 
@@ -55,6 +53,8 @@ function randomUUID(): string {
   });
 }
 
+export type TripDocumentType = 'pod' | 'manifest' | 'invoice' | 'eway_bill' | 'loading_slip';
+
 export interface TripDocumentRow {
   id: string;
   trip_id: string;
@@ -64,6 +64,7 @@ export interface TripDocumentRow {
   size_bytes: number | null;
   uploaded_at: string;
   uploaded_by: string | null;
+  document_type: TripDocumentType;
 }
 
 export interface UploadTripDocumentResult {
@@ -111,23 +112,19 @@ export async function getDocumentsByTripId(
 ): Promise<{ documents: TripDocumentRow[]; error: Error | null }> {
   const { data, error } = await supabase()
     .from("trip_documents")
-    .select("id, trip_id, file_name, storage_path, mime_type, uploaded_at")
+    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type")
     .eq("trip_id", tripId)
     .order("uploaded_at", { ascending: false });
   let tableError: Error | null = null;
-  let rows: Pick<
-    TripDocumentRow,
-    "id" | "trip_id" | "file_name" | "storage_path" | "mime_type" | "uploaded_at"
-  >[] = [];
+  let rows: TripDocumentRow[] = [];
   if (error) {
-    // RLS or other SELECT error — attempt storage fallback below before surfacing error.
     tableError = new Error(error.message);
   } else {
-    rows = (data ?? []) as Pick<
-      TripDocumentRow,
-      "id" | "trip_id" | "file_name" | "storage_path" | "mime_type" | "uploaded_at"
-    >[];
-    if (rows.length > 0) return { documents: rows as TripDocumentRow[], error: null };
+    rows = (data ?? []).map((r: any) => ({
+      ...r,
+      document_type: (r.document_type as TripDocumentType) ?? 'pod',
+    })) as TripDocumentRow[];
+    if (rows.length > 0) return { documents: rows, error: null };
   }
 
   // Fallback: list storage folder for this trip so dispatcher/supplier can still preview POD
@@ -142,35 +139,73 @@ export async function getDocumentsByTripId(
     };
   }
 
-  const fallbackRows: TripDocumentRow[] = listData
-    .filter((f) => f.name && /\./.test(f.name))
-    .map((f) => {
-      const fileName = f.name.includes("/") ? f.name.split("/").pop()! : f.name;
-      const storagePath = f.name.includes("/") ? f.name : `${tripId}/${f.name}`;
-      const fileWithMeta = f as { id?: string; updated_at?: string };
-      return {
-        id: fileWithMeta.id ?? `storage-${tripId}-${fileName}`,
-        trip_id: tripId,
-        file_name: fileName,
-        storage_path: storagePath,
-        mime_type: null,
-        size_bytes: null,
-        uploaded_at: fileWithMeta.updated_at ?? new Date().toISOString(),
-        uploaded_by: null,
-      };
-    })
-    .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+  // Supabase list() returns only immediate children — separate files (have a dot)
+  // from subfolder entries (no dot). Old-style uploads are at tripId/uuid.jpg;
+  // new-style uploads are inside tripId/{type}/uuid.jpg and appear as folder entries.
+  const KNOWN_SUBFOLDER_TYPES: TripDocumentType[] = [
+    'pod', 'manifest', 'invoice', 'eway_bill', 'loading_slip',
+  ];
+
+  const topLevelFiles = listData.filter((f) => f.name && /\./.test(f.name));
+  const subFolderEntries = listData.filter(
+    (f) => f.name && !f.name.includes('.') && KNOWN_SUBFOLDER_TYPES.includes(f.name as TripDocumentType),
+  );
+
+  // Fetch files inside each recognised subfolder (parallel, bounded to known types).
+  const subFolderFilePairs = await Promise.all(
+    subFolderEntries.map(async (entry) => {
+      const { data: sub } = await supabase()
+        .storage
+        .from(BUCKET)
+        .list(`${tripId}/${entry.name}`, { limit: 50, sortBy: { column: "updated_at", order: "desc" } });
+      return { type: entry.name as TripDocumentType, files: sub?.filter((f) => f.name && /\./.test(f.name)) ?? [] };
+    }),
+  );
+
+  function makeStorageFallbackRow(
+    file: { name: string; id?: string; updated_at?: string },
+    storagePath: string,
+    docType: TripDocumentType,
+  ): TripDocumentRow {
+    const fileWithMeta = file as { id?: string; updated_at?: string; name: string };
+    return {
+      id: fileWithMeta.id ?? `storage-${tripId}-${docType}-${fileWithMeta.name}`,
+      trip_id: tripId,
+      file_name: fileWithMeta.name,
+      storage_path: storagePath,
+      mime_type: null,
+      size_bytes: null,
+      uploaded_at: fileWithMeta.updated_at ?? new Date().toISOString(),
+      uploaded_by: null,
+      document_type: docType,
+    };
+  }
+
+  const fallbackRows: TripDocumentRow[] = [
+    // Old-style files directly under tripId/ — treat as pod (pre-refactor uploads)
+    ...topLevelFiles.map((f) =>
+      makeStorageFallbackRow(f as { name: string; id?: string; updated_at?: string }, `${tripId}/${f.name}`, 'pod'),
+    ),
+    // New-style files under tripId/{type}/ — type is the subfolder name
+    ...subFolderFilePairs.flatMap(({ type, files }) =>
+      files.map((f) =>
+        makeStorageFallbackRow(f as { name: string; id?: string; updated_at?: string }, `${tripId}/${type}/${f.name}`, type),
+      ),
+    ),
+  ].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+
   return { documents: fallbackRows, error: null };
 }
 
 /**
- * Upload a POD file for a trip. Caller provides file bytes and metadata.
- * uploaded_by should be the current user (auth.uid()) so the connected user is recorded.
+ * Upload a trip document. Pass documentType to correctly classify the file.
+ * Storage path: {tripId}/{documentType}/{uuid}.{ext}
  */
 export async function uploadTripDocument(
   tripId: string,
   uploadedBy: string,
-  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string }
+  file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
+  documentType: TripDocumentType = 'pod',
 ): Promise<UploadTripDocumentResult> {
   if (!file.arrayBuffer?.byteLength) {
     return { doc: null, error: new Error("File is empty") };
@@ -184,7 +219,7 @@ export async function uploadTripDocument(
     };
   }
   const ext = file.fileName.split(".").pop()?.toLowerCase() || "jpg";
-  const path = `${tripId}/${randomUUID()}.${ext}`;
+  const path = `${tripId}/${documentType}/${randomUUID()}.${ext}`;
 
   const { error: uploadError } = await supabase()
     .storage.from(BUCKET)
@@ -209,8 +244,9 @@ export async function uploadTripDocument(
       mime_type: file.mimeType || null,
       size_bytes: file.arrayBuffer.byteLength,
       uploaded_by: uploadedBy,
+      document_type: documentType,
     })
-    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by")
+    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type")
     .single();
 
   if (insertError) {
@@ -227,6 +263,7 @@ export async function uploadTripDocument(
           size_bytes: file.arrayBuffer.byteLength,
           uploaded_at: now,
           uploaded_by: uploadedBy,
+          document_type: documentType,
         },
         error: null,
       };
@@ -237,7 +274,10 @@ export async function uploadTripDocument(
     };
   }
 
-  return { doc: row as TripDocumentRow, error: null };
+  return {
+    doc: { ...(row as any), document_type: (row as any).document_type ?? documentType } as TripDocumentRow,
+    error: null,
+  };
 }
 
 /**

@@ -473,7 +473,7 @@ export function DriverTripFlowCard({
       tripDocumentsService.getDocumentsByTripId(id).then(({ documents, error }) => {
         setPodLoading(false);
         if (!error) {
-          setPodDocuments(documents);
+          setPodDocuments(documents.filter((d) => d.document_type === 'pod'));
           lastPodTripIdRef.current = id;
         }
       });
@@ -687,7 +687,7 @@ export function DriverTripFlowCard({
         arrayBuffer,
         fileName,
         mimeType,
-      });
+      }, 'pod');
       if (error) {
         setStepError(error.message);
         return;

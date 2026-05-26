@@ -647,10 +647,15 @@ export default function TripDetailScreen({
           return;
         }
 
+        const CATEGORY_TO_DOC_TYPE: Record<string, tripDocumentsService.TripDocumentType> = {
+          driver: 'pod',
+          trip: 'manifest',
+        };
         const { error } = await tripDocumentsService.uploadTripDocument(
           tripIdForUpload,
           uploaderId,
           { arrayBuffer, fileName, mimeType },
+          CATEGORY_TO_DOC_TYPE[doc.category ?? ''] ?? 'manifest',
         );
         if (error) {
           Alert.alert("Upload failed", error.message);

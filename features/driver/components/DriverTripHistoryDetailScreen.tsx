@@ -225,7 +225,7 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
     tripDocumentsService.getDocumentsByTripId(tid).then(({ documents, error }) => {
       if (cancelled) return;
       setDetailPodLoading(false);
-      if (!error) setDetailPodDocuments(documents);
+      if (!error) setDetailPodDocuments(documents.filter((d) => d.document_type === 'pod'));
       else setDetailPodDocuments([]);
     });
     return () => {

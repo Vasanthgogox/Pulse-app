@@ -99,8 +99,8 @@ export type { ReassignCompletedMeta };
 import type {
     ReconciliationPartyInfo,
     TripDetailTab,
-    TripDocItem,
 } from "../TripDetailFinanceView";
+import type { TripDocItem } from "../tripDocTypes";
 
 import {
   resolveMapLocationLabel,
@@ -716,11 +716,34 @@ export function useTripDetail({
 
   const computedTripDocs = useMemo<TripDocItem[]>(() => {
     const hasVehicleDoc = vehiclePreviewDocs.some((doc) => !!doc.storagePath);
+
+    const manifestDocs = tripDocuments.filter((d) => d.document_type === 'manifest');
+    const rawPodDocs = tripDocuments.filter((d) => d.document_type === 'pod');
+
+    const manifestCard: TripDocItem =
+      manifestDocs.length > 0
+        ? {
+            id: `manifest-${manifestDocs[0].id}`,
+            label: "Trip Manifest",
+            type: (manifestDocs[0].mime_type ?? "").includes("pdf") ? "PDF" : "JPG",
+            status: "Uploaded" as const,
+            storagePath: manifestDocs[0].storage_path,
+            documentId: manifestDocs[0].id,
+            category: "trip" as const,
+          }
+        : {
+            id: "manifest",
+            label: "Trip Manifest",
+            type: "PDF",
+            status: "Pending" as const,
+            category: "trip" as const,
+          };
+
     const podDocs: TripDocItem[] =
-      tripDocuments.length > 0
-        ? tripDocuments.map((podDoc, index) => ({
+      rawPodDocs.length > 0
+        ? rawPodDocs.map((podDoc, index) => ({
             id: `pod-${podDoc.id}`,
-            label: tripDocuments.length > 1 ? `Driver POD ${index + 1}` : "Driver POD",
+            label: rawPodDocs.length > 1 ? `Driver POD ${index + 1}` : "Driver POD",
             type: (podDoc.mime_type ?? "image/jpeg").includes("pdf") ? "PDF" : "JPG",
             status: "Uploaded" as const,
             storagePath: podDoc.storage_path,
@@ -736,14 +759,9 @@ export function useTripDetail({
               category: "driver" as const,
             },
           ];
+
     return [
-      {
-        id: "manifest",
-        label: "Trip Manifest",
-        type: "PDF",
-        status: "Pending" as const,
-        category: "trip" as const,
-      },
+      manifestCard,
       {
         id: "vehicle-documents",
         label: "Vehicle Document",
@@ -758,12 +776,11 @@ export function useTripDetail({
 
   const docPreviewStoragePath = useMemo(() => {
     if (!selectedDoc) return undefined;
-    return (
-      selectedDoc.storagePath ??
-      (selectedDoc.id.startsWith("pod") && tripDocuments[0]
-        ? tripDocuments[0].storage_path
-        : undefined)
-    );
+    if (selectedDoc.storagePath) return selectedDoc.storagePath;
+    if (selectedDoc.id.startsWith("pod")) {
+      return tripDocuments.find((d) => d.document_type === 'pod')?.storage_path;
+    }
+    return undefined;
   }, [selectedDoc, tripDocuments]);
 
   const isVehicleGalleryDoc = selectedDoc?.id === "vehicle-documents";
@@ -1874,7 +1891,12 @@ export function useTripDetail({
     setAssignmentVehicleLabels(vehicleLabels);
 
     setAdjustments(bundle.adjustments as unknown as TripAdjustment[]);
-    setTripDocuments(bundle.documents as unknown as tripDocumentsService.TripDocumentRow[]);
+    setTripDocuments(
+      bundle.documents.map((d) => ({
+        ...(d as unknown as tripDocumentsService.TripDocumentRow),
+        document_type: (d as any).document_type ?? 'pod',
+      })),
+    );
 
     if (bundle.otp) {
       setTripOtp({ code: bundle.otp.code, expires_at: bundle.otp.expires_at });
