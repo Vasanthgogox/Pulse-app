@@ -588,10 +588,29 @@ export function LoadCenterView({
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
           onPress={() => onIndentPress(load)}
+          actions={
+            <LoadCenterIndentCardFooter>
+              <ClaimedIndentCardActions
+                load={load}
+                isDone={isDone}
+                assigning={tripDeployment.assigningTripId === load.id}
+                onIndentPress={onIndentPress}
+                onShareIndent={handleShareIndent}
+                onAssignDeploy={handshake.open}
+              />
+            </LoadCenterIndentCardFooter>
+          }
         />
       );
     },
-    [creatorOrgProfileMap, myQuotes, onIndentPress],
+    [
+      creatorOrgProfileMap,
+      handleShareIndent,
+      handshake.open,
+      myQuotes,
+      onIndentPress,
+      tripDeployment.assigningTripId,
+    ],
   );
 
   const renderGiveLoadGridCard = useCallback(
