@@ -22,7 +22,7 @@ const PUBLIC_ROUTES = new Set([
   '/auth/reset-password',
 ]);
 
-const BOOT_HARD_TIMEOUT_MS = 20_000;
+const BOOT_HARD_TIMEOUT_MS = 8_000;
 
 type AppBootGateProps = {
   children: ReactNode;

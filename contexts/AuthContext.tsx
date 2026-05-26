@@ -11,6 +11,7 @@
  * Core auth logic (profile merge, comparison, timeout, circuit-breaker)
  * lives in lib/authEngine.
  */
+import { Platform } from "react-native";
 import type { AuthUser } from "@/features/auth/services/auth.service";
 import * as authService from "@/features/auth/services/auth.service";
 import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
@@ -205,6 +206,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(web.user);
       setProfile(web.profile);
       setStatus("authenticated");
+      // JWT role is Supabase-signed — safe for initial routing. Async restore
+      // still runs in background and will update if DB role differs.
+      setRoleVerified(true);
     }
   }, []);
 
@@ -375,7 +379,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const session = await withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null);
         if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
         if (session) {
-          const keep = await getKeepSignedIn();
+          // On web there is no AppState "background" event, so the keep-signed-in
+          // preference has no meaning for page reloads — always restore the session.
+          const keep = Platform.OS === 'web' ? true : await getKeepSignedIn();
           if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
           if (!keep) {
             signOutRequestedRef.current = true;

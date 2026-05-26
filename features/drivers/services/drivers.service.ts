@@ -1218,9 +1218,9 @@ export async function getDriverOffersByOrganization(orgId: string): Promise<{
     .eq("status", "accepted")
     .in("to_user_id", userIds);
   if (error) return { error: new Error(error.message), offersByDriverId: {} };
-  const userToDriverId = new Map<string, string>();
+  const userToDriver = new Map<string, (typeof drivers)[0]>();
   for (const d of drivers) {
-    if (d.user_id) userToDriverId.set(d.user_id, d.id);
+    if (d.user_id) userToDriver.set(d.user_id, d);
   }
   /** Parse numeric from DB (Supabase may return numeric as string). */
   const num = (v: unknown): number | null => {
@@ -1231,22 +1231,24 @@ export async function getDriverOffersByOrganization(orgId: string): Promise<{
 
   const offersByDriverId: Record<string, DriverOffer> = {};
   for (const row of invites ?? []) {
-    const driverId = userToDriverId.get(
+    const driver = userToDriver.get(
       (row as { to_user_id: string }).to_user_id,
     );
-    if (!driverId) continue;
+    if (!driver) continue;
     const r = row as {
       payable_amount?: unknown;
       commission_percent?: unknown;
       commission_per_km?: unknown;
     };
-    const payable = num(r.payable_amount);
-    const pct = num(r.commission_percent);
-    const perKm = num(r.commission_per_km);
-    offersByDriverId[driverId] = {
-      payableAmount: payable != null ? payable : null,
-      commissionPercent: pct != null ? pct : null,
-      commissionPerKm: perKm != null ? perKm : null,
+    // Invite fields take priority; fall back to drivers table when invite was accepted
+    // without commission terms (e.g. invite pre-dated the compensation edit).
+    const payable = num(r.payable_amount) ?? num(driver.payable_amount);
+    const pct = num(r.commission_percent) ?? num(driver.commission_percent);
+    const perKm = num(r.commission_per_km) ?? num(driver.commission_per_km);
+    offersByDriverId[driver.id] = {
+      payableAmount: payable,
+      commissionPercent: pct,
+      commissionPerKm: perKm,
     };
   }
   return { error: null, offersByDriverId };

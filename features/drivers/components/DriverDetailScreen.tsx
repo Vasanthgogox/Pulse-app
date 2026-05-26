@@ -177,6 +177,34 @@ function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+function parseDistKm(v: string | number | null | undefined): number | null {
+  if (v == null) return null;
+  const n = Number(typeof v === 'string' ? v.replace(/,/g, '').trim() : v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function getCommissionBasis(
+  trip: { client_price?: number | null; distance?: string | number | null; driver_commission?: number | null; supplier_rate?: number | null },
+  offer: { commissionPercent: number | null; commissionPerKm: number | null; payableAmount?: number | null } | null,
+): string {
+  if (offer) {
+    const pct = offer.commissionPercent != null && Number(offer.commissionPercent) >= 0 ? Number(offer.commissionPercent) : null;
+    const perKm = offer.commissionPerKm != null && Number(offer.commissionPerKm) >= 0 ? Number(offer.commissionPerKm) : null;
+    const base = Number(trip.client_price ?? 0);
+    if (pct != null && base > 0) return `${pct}% of ₹${base.toLocaleString('en-IN')}`;
+    if (perKm != null) {
+      const km = parseDistKm(trip.distance);
+      if (km != null && km > 0) return `₹${perKm}/km × ${km} km`;
+      return `₹${perKm}/km`;
+    }
+    if (offer.payableAmount != null && Number(offer.payableAmount) > 0)
+      return `Monthly ₹${Number(offer.payableAmount).toLocaleString('en-IN')}`;
+  }
+  if (Number(trip.driver_commission ?? 0) > 0) return 'Fixed trip rate';
+  if (Number(trip.supplier_rate ?? 0) > 0) return '10% of supplier rate';
+  return '10% of revenue';
+}
+
 function endOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
@@ -789,6 +817,7 @@ export default function DriverDetailScreen({
         margin: Number(t.margin ?? 0),
         txnCount: txnCountByTripId[tid] ?? 0,
         lastTxnShort: formatDayMonUpper(lastIso),
+        commissionBasis: getCommissionBasis(t, offer),
       };
     });
     return tripRows;
@@ -1832,6 +1861,14 @@ export default function DriverDetailScreen({
                           >
                             {r.dest?.trim() || "—"}
                           </Text>
+                          {r.commissionBasis ? (
+                            <Text
+                              style={styles.driverTripsCommissionBasis}
+                              numberOfLines={1}
+                            >
+                              {r.commissionBasis}
+                            </Text>
+                          ) : null}
                         </View>
                           {isWebDesktop ? (
                             <View style={styles.driverTripsCellClient}>
@@ -2647,6 +2684,14 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: Theme.textMuted,
     marginTop: 2,
+  },
+  driverTripsCommissionBasis: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.primary,
+    marginTop: 3,
+    letterSpacing: 0.2,
+    opacity: 0.75,
   },
   driverTripsCellClient: {
     flex: 1.85,
