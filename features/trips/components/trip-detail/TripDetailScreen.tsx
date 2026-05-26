@@ -421,7 +421,7 @@ export default function TripDetailScreen({
       fleetOrganizationId: tr.organization_id,
       driverId: tr.driver_id,
       driverDisplayName: detail.driverName?.trim() || "Driver",
-      tripNumber: getTripDisplayNumber(tr),
+      tripNumber: getTripDisplayNumber(tr, currentOrganization?.id),
       pickupArea: tr.pickup_area ?? "",
       dropLocation: tr.drop_location ?? "",
     });
@@ -1945,7 +1945,7 @@ export default function TripDetailScreen({
                 </Text>
                 <View style={neoStyles.manifestNavTitleRow}>
                   <Text style={neoStyles.manifestNavTripId} numberOfLines={1}>
-                    {getTripDisplayNumber(trip)}
+                    {getTripDisplayNumber(trip, currentOrganization?.id)}
                   </Text>
                   <View style={neoStyles.manifestStatusBadge}>
                     <Text style={neoStyles.manifestStatusBadgeText}>
@@ -2002,7 +2002,7 @@ export default function TripDetailScreen({
               <Text style={styles.navMobileKicker}>Trip history</Text>
               <View style={styles.navMobileTripRow}>
                 <Text style={styles.navMobileTripId}>
-                  {getTripDisplayNumber(trip)}
+                  {getTripDisplayNumber(trip, currentOrganization?.id)}
                 </Text>
                 <View style={styles.navMobilePulseRow}>
                   <View
@@ -3951,7 +3951,7 @@ export default function TripDetailScreen({
               <View style={dStyles.heroLeft}>
                 <View style={dStyles.heroTitleRow}>
                   <Text style={dStyles.heroTripId}>
-                    {getTripDisplayNumber(trip)}
+                    {getTripDisplayNumber(trip, currentOrganization?.id)}
                   </Text>
                   <View
                     style={[dStyles.statusBadge, { borderColor: statusColor }]}
@@ -4524,7 +4524,7 @@ export default function TripDetailScreen({
                         (isAggregate || driverIsUnlinked) ? (
                           <AggregateTripOtpPanel
                             variant="inline"
-                            tripNumber={getTripDisplayNumber(trip)}
+                            tripNumber={getTripDisplayNumber(trip, currentOrganization?.id)}
                             aggregateOtpState={aggregateOtpState}
                             canGenerateAggregateOtp={canGenerateAggregateOtp}
                             otpLockedByTripProgress={otpLockedByTripProgress}
@@ -4795,7 +4795,7 @@ export default function TripDetailScreen({
                     (isAggregate || driverIsUnlinked) ? (
                       <AggregateTripOtpPanel
                         variant="sheet"
-                        tripNumber={getTripDisplayNumber(trip)}
+                        tripNumber={getTripDisplayNumber(trip, currentOrganization?.id)}
                         aggregateOtpState={aggregateOtpState}
                         canGenerateAggregateOtp={canGenerateAggregateOtp}
                         otpLockedByTripProgress={otpLockedByTripProgress}
@@ -5349,7 +5349,7 @@ export default function TripDetailScreen({
                     (isAggregate || driverIsUnlinked) ? (
                       <AggregateTripOtpPanel
                         variant="sheet"
-                        tripNumber={getTripDisplayNumber(trip)}
+                        tripNumber={getTripDisplayNumber(trip, currentOrganization?.id)}
                         aggregateOtpState={aggregateOtpState}
                         canGenerateAggregateOtp={canGenerateAggregateOtp}
                         otpLockedByTripProgress={otpLockedByTripProgress}

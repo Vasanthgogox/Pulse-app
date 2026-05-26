@@ -30,7 +30,7 @@ import {
 } from "@/features/ratings";
 import {
     getTripDisplayNumber,
-    getTripsByOrganization,
+    getTripsForOrg,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
@@ -390,16 +390,16 @@ export default function DriverDetailScreen({
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
-    // Use TanStack Query cache for trips (warm from Trips tab or rehydrated from storage).
-    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.all(orgId));
+    // Use TanStack Query cache from Trips tab (get_trips_for_org includes cross-org supplier trips).
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
 
     Promise.all([
       // Bundle: driver row + ratings + salary requests + ledger + transactions in 1 RPC
       getDriverDetailBundle(orgId, driverId),
-      // Trips: read from cache or fall back to DB; get_trips_for_org merges owner+supplier
+      // Trips: read from cache or fall back to RPC (owner + supplier trips).
       cachedTrips !== undefined
         ? Promise.resolve({ error: null, trips: cachedTrips })
-        : getTripsByOrganization(orgId),
+        : getTripsForOrg(orgId),
       getDriverOffersByOrganization(orgId),
       getDriverSignupMatchStatus(driverId),
     ])

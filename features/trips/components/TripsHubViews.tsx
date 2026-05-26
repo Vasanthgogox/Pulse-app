@@ -530,7 +530,7 @@ export function TripsHubTripCard({
   const missionStatus = missionStatusForTrip(trip);
   const origin = trip.pickup_area ?? "—";
   const dest = trip.drop_location ?? "—";
-  const tripNo = getTripDisplayNumber(trip);
+  const tripNo = getTripDisplayNumber(trip, currentOrganizationId);
   const aging = agingLine(trip, tr);
 
   const supplierNameResolved = (displaySupplierName ?? "").trim();

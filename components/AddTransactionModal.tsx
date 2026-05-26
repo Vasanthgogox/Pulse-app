@@ -5770,9 +5770,16 @@ export function AddTransactionModal({
                         activeOpacity={0.6}
                       >
                         <View style={styles.pickerItemTripContent}>
-                          <Text style={styles.pickerItemText} numberOfLines={1}>
-                            {t.trip_number}
-                          </Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={styles.pickerItemText} numberOfLines={1}>
+                              {t.trip_number}
+                            </Text>
+                            {t.is_cross_org_supplier ? (
+                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#6366f1", backgroundColor: "#ede9fe", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                                SUPPLIER
+                              </Text>
+                            ) : null}
+                          </View>
                           {routeAndDate ? (
                             <Text
                               style={styles.pickerItemSubtext}

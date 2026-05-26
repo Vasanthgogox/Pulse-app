@@ -89,6 +89,17 @@ export interface TripRow {
   /** Last actor role who advanced status. */
   status_updated_role?: "driver" | "creator" | "system" | null;
   indent_number?: string | null;
+  /** Globally unique booking reference assigned when a trip is created from an indent award (BKG-XXXXXX). */
+  booking_ref?: string | null;
+}
+
+/** Fetch all trips visible to an org via RPC — includes cross-org supplier trips. Mirrors useTripsQuery. */
+export async function getTripsForOrg(
+  orgId: string,
+): Promise<{ error: Error | null; trips: TripRow[] }> {
+  const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId });
+  if (error) return { error: new Error(error.message), trips: [] };
+  return { error: null, trips: (data ?? []) as TripRow[] };
 }
 
 export async function getTripsByOrganization(
@@ -257,7 +268,21 @@ export async function getShipperDisplayNamesForSupplierTrips(
 }
 
 /** Display label for a trip (TRP001-style when present). */
-export function getTripDisplayNumber(row: TripRow): string {
+/**
+ * Returns the human-readable trip identifier.
+ * For cross-org supplier trips (trip owned by another org), returns the globally-unique
+ * booking_ref (BKG-XXXXXX) to avoid org-local trip_number/indent_number collisions.
+ * Every org's first trip = TRP001, every org's first indent = IND001 — only booking_ref is global.
+ */
+export function getTripDisplayNumber(row: TripRow, viewerOrgId?: string | null): string {
+  if (
+    viewerOrgId &&
+    row.organization_id &&
+    row.organization_id !== viewerOrgId &&
+    row.booking_ref
+  ) {
+    return row.booking_ref;
+  }
   return row.display_trip_id ?? row.trip_number ?? "—";
 }
 
