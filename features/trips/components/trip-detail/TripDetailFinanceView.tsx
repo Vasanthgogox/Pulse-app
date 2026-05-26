@@ -1290,7 +1290,7 @@ export function TripDetailFinanceView({
           preset.type === "revenue"
             ? REVENUE_REASON_OPTIONS
             : COST_REASON_OPTIONS;
-        if (seed && options.includes(seed as (typeof options)[number])) {
+        if (seed && (options as readonly string[]).includes(seed)) {
           setDraftReason(seed);
           setDraftOtherReason("");
         } else if (seed) {

@@ -286,7 +286,6 @@ export function JobRequestCard({
               ))}
             </TouchableOpacity>
             <OtpInput
-              ref={otpInputRef as never}
               value={otpValue}
               onChangeText={(value) =>
                 onOtpChange?.(value.replace(/\D/g, "").slice(0, OTP_LENGTH))
@@ -408,7 +407,7 @@ export function JobRequestCard({
 
               <View style={styles.footer}>
                 <View style={styles.actions}>
-                  {onDecline && !isAccepted ? (
+                  {onDecline != null && !isAccepted ? (
                     <TouchableOpacity
                       onPress={onDecline}
                       style={styles.declineBtn}
@@ -429,7 +428,7 @@ export function JobRequestCard({
                     android_ripple={{ color: "transparent" }}
                     style={[
                       styles.holdBtn,
-                      onDecline && !isAccepted ? styles.holdBtnFlex : styles.holdBtnFull,
+                      onDecline != null && !isAccepted ? styles.holdBtnFlex : styles.holdBtnFull,
                       disabled && styles.btnDisabled,
                       Platform.OS === "web" && holdBtnWebStyle,
                     ]}

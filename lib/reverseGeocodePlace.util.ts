@@ -22,7 +22,7 @@ export function formatGeocodedCityState(place: Location.LocationGeocodedAddress)
   const cityRaw =
     place.city?.trim() ||
     place.subregion?.trim() ||
-    place.district?.trim() ||
+    (place as Location.LocationGeocodedAddress & { district?: string | null }).district?.trim() ||
     '';
   const stateRaw = place.region?.trim() || '';
   const parts = [cityRaw, stateRaw].filter(Boolean);

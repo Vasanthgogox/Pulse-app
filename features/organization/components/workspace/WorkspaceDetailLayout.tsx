@@ -36,6 +36,7 @@ export function WorkspaceDetailLayout({
   scrollProps,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const styles = workspaceDetailLayoutStyles;
 
   const body = fillBody ? (
     <View style={[styles.fillBody, { paddingBottom: insets.bottom }]}>

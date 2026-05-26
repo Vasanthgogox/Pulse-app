@@ -23,7 +23,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -334,10 +334,10 @@ export default function DriverSignUpScreen() {
       const signInPath = `/sign-in?email=${encodeURIComponent(existing.email!)}`;
       if (Platform.OS === 'web') {
         window.alert(`Account already exists\n\n${dupBody}`);
-        router.replace(signInPath);
+        router.replace(signInPath as Href);
       } else {
         Alert.alert('Account already exists', dupBody, [
-          { text: 'OK', onPress: () => router.replace(signInPath) },
+          { text: 'OK', onPress: () => router.replace(signInPath as Href) },
         ]);
       }
       return;

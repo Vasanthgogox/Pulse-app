@@ -1078,7 +1078,7 @@ function TripListContent({
         contentContainerStyle={{
           padding: 16,
           paddingBottom: isDesktopTripTable
-            ? layout.scrollBottomPadding(24)
+            ? Layout.scrollBottomPadding(24)
             : mobileBottomPad + 84,
         }}
         ListEmptyComponent={

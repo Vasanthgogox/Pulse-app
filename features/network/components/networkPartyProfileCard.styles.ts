@@ -481,7 +481,6 @@ export const networkPartyProfileCardStyles = StyleSheet.create({
   },
   gridPartnerMetaSegmentDesktop: {
     flex: 1,
-    maxWidth: "none",
     gap: 5,
   },
   gridPartnerMetaDivider: {

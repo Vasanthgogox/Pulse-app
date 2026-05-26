@@ -44,6 +44,7 @@ import {
   installWebViewportHeight,
   WEB_APP_VIEWPORT_STYLE,
 } from '@/lib/webViewportHeight';
+import type { ViewStyle } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -178,11 +179,11 @@ const styles = StyleSheet.create({
   ghRoot: {
     flex: 1,
     ...(Platform.OS === 'web'
-      ? {
-          ...WEB_APP_VIEWPORT_STYLE,
+      ? ({
+          ...(WEB_APP_VIEWPORT_STYLE as ViewStyle),
           backgroundColor: Theme.screenBackground,
           overflow: 'hidden' as const,
-        }
+        } satisfies ViewStyle)
       : null),
   },
   rootTabBarWrap: {

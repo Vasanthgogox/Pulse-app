@@ -12,8 +12,14 @@ function setCssKeyboardHeight(px: number): void {
   document.documentElement.style.setProperty(CSS_VAR_KEYBOARD_HEIGHT, `${px}px`);
 }
 
+interface VirtualKeyboardApi {
+  boundingRect: { height: number };
+  addEventListener(type: string, listener: () => void): void;
+  removeEventListener(type: string, listener: () => void): void;
+}
+
 type NavigatorWithVK = Navigator & {
-  virtualKeyboard?: VirtualKeyboard;
+  virtualKeyboard?: VirtualKeyboardApi;
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {

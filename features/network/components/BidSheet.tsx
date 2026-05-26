@@ -795,7 +795,7 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     borderWidth: 0,
     ...Platform.select({
-      web: { outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as TextStyle,
+      web: { outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as unknown as TextStyle,
     }),
   },
   amountInputDesktop: {

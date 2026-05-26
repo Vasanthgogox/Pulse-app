@@ -251,9 +251,6 @@ function getSupabase(): SupabaseClient {
       // Default starts at 1s which is fine; we push it slightly faster at the start.
       reconnectAfterMs: (tries: number) =>
         Math.min(250 * Math.pow(2, tries), 30_000),
-      // Rate-limit realtime event broadcasts from this client to 10/sec.
-      // Prevents accidental event storms from rapid state changes (e.g. typing indicators).
-      eventsPerSecondLimit: 10,
     },
   });
 

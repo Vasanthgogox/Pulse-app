@@ -130,7 +130,7 @@ export function computeTripEntryFinancialSnapshot(
   if ((trip.driver_id ?? "").trim()) {
     driver_to_pay_raw = computeDriverCommissionForTrip(
       {
-        driver_id: trip.driver_id,
+        driver_id: trip.driver_id ?? null,
         driver_commission: trip.driver_commission,
         supplier_rate: trip.supplier_rate,
         client_price: trip.client_price,

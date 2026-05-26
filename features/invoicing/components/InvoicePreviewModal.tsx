@@ -29,7 +29,7 @@ export function InvoicePreviewModal({
         <View style={styles.modalContainer}>
           <InvoicePreviewPanel
             onClose={onClose}
-            onFinalize={onFinalize}
+            onPreview={(params) => void onFinalize([], params)}
             isFinalizing={isFinalizing}
             activeClient={activeClient}
             selectedTrips={selectedTrips}

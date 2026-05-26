@@ -115,7 +115,7 @@ function StoryGradientRingSized({
 }) {
   return (
     <LinearGradient
-      colors={[...colors]}
+      colors={[colors[0], colors[1]] as const}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[
@@ -377,7 +377,6 @@ export function StoryReel({
               ]}
               {...(Platform.OS === "web"
                 ? {
-                    // @ts-expect-error -- RNW supports onClick on View
                     onClick: (e: { stopPropagation: () => void }) => {
                       e.stopPropagation();
                       router.push("/(modals)/create-post");

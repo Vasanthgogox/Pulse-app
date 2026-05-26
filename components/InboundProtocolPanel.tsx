@@ -388,6 +388,10 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: Theme.cardWhite,
   },
+  bodyFullscreen: {
+    flex: 1,
+    minHeight: 0,
+  },
   tabTrack: {
     flexDirection: "row",
     gap: 4,

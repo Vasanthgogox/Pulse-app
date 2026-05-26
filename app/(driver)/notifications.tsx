@@ -20,6 +20,7 @@ import {
     buildAssignerDisplayForTrip,
     buildJobCardAssignerPayload,
     resolveAssignerUserId,
+    type JobCardAssignerPayload,
 } from '@/features/trips/utils/driverAssignerDisplay.util';
 import {
     DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY,
@@ -98,16 +99,19 @@ export default function DriverNotificationsScreen() {
     Record<string, string>
   >({});
   const [notifyOnlyAfterMission, setNotifyOnlyAfterMission] = useState(false);
+  type DriverNotificationRow = {
+    trip: tripsService.TripRow;
+    assignerPersonDisplay: string;
+    assignedByOrgName: string;
+    assignerLinePrimary: string;
+    assignerLineSecondary: string;
+    assignerPayload: JobCardAssignerPayload | null;
+    requiresOtp: boolean;
+    commissionForTrip: number;
+  };
+
   const [postMissionSnapshotRows, setPostMissionSnapshotRows] = useState<
-    Array<{
-      trip: tripsService.TripRow;
-      assignerPersonDisplay: string;
-      assignedByOrgName: string;
-      assignerLinePrimary?: string;
-      assignerLineSecondary?: string;
-      requiresOtp: boolean;
-      commissionForTrip: number;
-    }>
+    DriverNotificationRow[]
   >([]);
 
   const hasCompletedInitialFetch = useRef(false);
@@ -132,15 +136,7 @@ export default function DriverNotificationsScreen() {
       );
       if (snapshotRaw && snapshotRaw.trim() !== '') {
         try {
-          const parsed = JSON.parse(snapshotRaw) as Array<{
-            trip: tripsService.TripRow;
-            assignerPersonDisplay: string;
-            assignedByOrgName: string;
-            assignerLinePrimary?: string;
-            assignerLineSecondary?: string;
-            requiresOtp: boolean;
-            commissionForTrip: number;
-          }>;
+          const parsed = JSON.parse(snapshotRaw) as DriverNotificationRow[];
           setPostMissionSnapshotRows(Array.isArray(parsed) ? parsed : []);
         } catch {
           setPostMissionSnapshotRows([]);
@@ -434,8 +430,7 @@ export default function DriverNotificationsScreen() {
     [pendingOtpTrips],
   );
 
-  const rowsWithMeta = useMemo(
-    () =>
+  const rowsWithMeta = useMemo((): DriverNotificationRow[] =>
       mergedIncomingTrips.map((trip) => {
         const {
           assignedByOrgName,
@@ -581,7 +576,7 @@ export default function DriverNotificationsScreen() {
       : notifyOnlyAfterMission
         ? postMissionSnapshotRows.map((row) => {
             const lines =
-              row.assignerLinePrimary != null && row.assignerLineSecondary != null
+              row.assignerLinePrimary && row.assignerLineSecondary
                 ? {
                     assignerLinePrimary: row.assignerLinePrimary,
                     assignerLineSecondary: row.assignerLineSecondary,
@@ -590,7 +585,11 @@ export default function DriverNotificationsScreen() {
                     row.assignedByOrgName,
                     row.assignerPersonDisplay,
                   );
-            return { ...row, ...lines };
+            return {
+              ...row,
+              ...lines,
+              assignerPayload: row.assignerPayload ?? null,
+            };
           })
         : [];
 

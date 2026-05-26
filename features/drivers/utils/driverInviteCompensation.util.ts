@@ -58,6 +58,9 @@ type CompensationSource = {
   payable_amount?: number | null;
   commission_percent?: number | null;
   commission_per_km?: number | null;
+  payableAmount?: number | null;
+  commissionPercent?: number | null;
+  commissionPerKm?: number | null;
 };
 
 /** Prefill reconnect invites with last-known terms (user must confirm in modal). */
@@ -66,18 +69,15 @@ export function suggestDriverInviteCompensation(
 ): DriverInviteCompensation {
   for (const source of sources) {
     if (!source) continue;
+    const payableRaw = source.payable_amount ?? source.payableAmount;
+    const commissionRaw = source.commission_percent ?? source.commissionPercent;
+    const perKmRaw = source.commission_per_km ?? source.commissionPerKm;
     const payable =
-      source.payable_amount != null && Number(source.payable_amount) > 0
-        ? Number(source.payable_amount)
-        : null;
+      payableRaw != null && Number(payableRaw) > 0 ? Number(payableRaw) : null;
     const commission =
-      source.commission_percent != null && Number(source.commission_percent) > 0
-        ? Number(source.commission_percent)
-        : null;
+      commissionRaw != null && Number(commissionRaw) > 0 ? Number(commissionRaw) : null;
     const perKm =
-      source.commission_per_km != null && Number(source.commission_per_km) > 0
-        ? Number(source.commission_per_km)
-        : null;
+      perKmRaw != null && Number(perKmRaw) > 0 ? Number(perKmRaw) : null;
     if (payable != null || commission != null || perKm != null) {
       return { payableAmount: payable, commissionPercent: commission, commissionPerKm: perKm };
     }

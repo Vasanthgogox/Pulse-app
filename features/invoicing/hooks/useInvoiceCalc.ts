@@ -39,3 +39,5 @@ export function useInvoiceCalc(selectedTrips: InvoicingTripView[], config: Invoi
     totalAmount,
   };
 }
+
+export type InvoiceCalcResult = ReturnType<typeof useInvoiceCalc>;

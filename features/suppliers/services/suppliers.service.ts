@@ -50,7 +50,7 @@ export async function getSuppliersByOrganization(
     });
 
     if (!rpcError && data) {
-      const raw = (data ?? []) as SupplierRow[];
+      const raw = (data ?? []) as unknown as SupplierRow[];
       if (opts != null) {
         const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
         const offset = opts.offset ?? 0;
@@ -79,13 +79,13 @@ export async function getSuppliersByOrganization(
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
     if (error) return { error: new Error(error.message), suppliers: [] };
-    const raw = (data ?? []) as SupplierRow[];
+    const raw = (data ?? []) as unknown as SupplierRow[];
     const hasMore = raw.length > limit;
     return { error: null, suppliers: hasMore ? raw.slice(0, limit) : raw, hasMore };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), suppliers: [] };
-  return { error: null, suppliers: (data ?? []) as SupplierRow[] };
+  return { error: null, suppliers: (data ?? []) as unknown as SupplierRow[] };
 }
 
 export async function getSuppliersDelta(

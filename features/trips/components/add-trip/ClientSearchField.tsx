@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingRight: 44,
     ...Platform.select({
-      web: { outlineStyle: "none" } as TextStyle,
+      web: { outlineStyle: "none" } as unknown as TextStyle,
     }),
   },
   inputPressable: {

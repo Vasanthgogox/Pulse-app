@@ -49,8 +49,7 @@ function formatConnectionStatus(status: NetworkProfileModalNode["status"]): stri
 
 function presenceLabel(status: NetworkProfileModalNode["status"]): string {
   if (status === "CONNECTED" || status === "LIVE") return "LIVE";
-  if (status === "REQUEST SENT") return "Pending";
-  return status.replace(/_/g, " ");
+  return "Pending";
 }
 
 function MetaChip({ label, value }: { label: string; value: string }) {

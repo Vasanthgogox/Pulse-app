@@ -106,6 +106,12 @@ const getCoordinates = async (location: string, retryCount = 0): Promise<[number
   }
 };
 
+function isLatLngObject(
+  coords: { latitude: number; longitude: number } | [number, number] | null | undefined,
+): coords is { latitude: number; longitude: number } {
+  return coords != null && !Array.isArray(coords) && isValidCoordinatePair(coords);
+}
+
 function isValidCoordinatePair(
   coords:
     | { latitude: number; longitude: number }
@@ -121,6 +127,12 @@ function isValidCoordinatePair(
   // Sentinel/invalid location frequently appears as null-island coordinates.
   if (Math.abs(latitude) < 0.0001 && Math.abs(longitude) < 0.0001) return false;
   return true;
+}
+
+function toLatLngTuple(
+  coords: { latitude: number; longitude: number },
+): [number, number] {
+  return [coords.latitude, coords.longitude];
 }
 
 // ── Trail helpers ────────────────────────────────────────────────────────────
@@ -210,8 +222,8 @@ export function TripMap({
       setGeocodingProgress({ current: 0, total: locationsToGeocode.length });
 
       let srcCoords: [number, number];
-      if (isValidCoordinatePair(sourceCoords)) {
-        srcCoords = [sourceCoords.latitude, sourceCoords.longitude];
+      if (isLatLngObject(sourceCoords)) {
+        srcCoords = toLatLngTuple(sourceCoords);
       } else if (source) {
         setGeocodingProgress((p) => ({ ...p, current: 1 }));
         srcCoords = await getCoordinates(source);
@@ -222,8 +234,8 @@ export function TripMap({
 
       // ── Resolve destination coordinates ──────────────────────────────────
       let dstCoords: [number, number];
-      if (isValidCoordinatePair(destCoords)) {
-        dstCoords = [destCoords.latitude, destCoords.longitude];
+      if (isLatLngObject(destCoords)) {
+        dstCoords = toLatLngTuple(destCoords);
       } else if (destination) {
         setGeocodingProgress((p) => ({ ...p, current: 2 }));
         dstCoords = await getCoordinates(destination);
@@ -318,15 +330,14 @@ export function TripMap({
         // Live layer: subscribes to TripTrackingMapStore → RAF → marker.setLatLng()
         // Detaches on map cleanup below. Static truckLocation prop ignored when live.
         liveLayerRef.current?.detach();
-        const seedLatLng: [number, number] | undefined =
-          isValidCoordinatePair(truckLocation)
-            ? [truckLocation.latitude, truckLocation.longitude]
-            : undefined;
+        const seedLatLng: [number, number] | undefined = isLatLngObject(truckLocation)
+          ? toLatLngTuple(truckLocation)
+          : undefined;
         const layer = new LeafletLiveTruckLayer(tripId, map, L);
         layer.attach(seedLatLng);
         liveLayerRef.current = layer;
-      } else if (isValidCoordinatePair(truckLocation)) {
-        const truckMarker = L.marker([truckLocation.latitude, truckLocation.longitude], {
+      } else if (isLatLngObject(truckLocation)) {
+        const truckMarker = L.marker(toLatLngTuple(truckLocation), {
           icon: truckIcon,
           zIndexOffset: 1000,
         });
@@ -463,8 +474,9 @@ export function TripMap({
       const bringDbTrailToFront = () => {
         if (!dbTrailLeafletLayer) return;
         try {
-          if (typeof dbTrailLeafletLayer.bringToFront === 'function') {
-            dbTrailLeafletLayer.bringToFront();
+          const trailLayer = dbTrailLeafletLayer as { bringToFront?: () => void };
+          if (typeof trailLayer.bringToFront === 'function') {
+            trailLayer.bringToFront();
           }
         } catch {
           /* map may be torn down */
@@ -563,8 +575,8 @@ export function TripMap({
 
       // ── Fit bounds ───────────────────────────────────────────────────────
       const boundsCoords: [number, number][] = [srcCoords, dstCoords, ...stopCoords.map((s) => s.coords)];
-      if (isValidCoordinatePair(truckLocation)) {
-        boundsCoords.push([truckLocation.latitude, truckLocation.longitude]);
+      if (isLatLngObject(truckLocation)) {
+        boundsCoords.push(toLatLngTuple(truckLocation));
       }
       for (const p of validTrailPoints) {
         boundsCoords.push([p.latitude, p.longitude]);

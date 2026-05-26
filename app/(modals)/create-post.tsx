@@ -167,7 +167,7 @@ export default function CreatePostScreen() {
   const pickColumns =
     windowWidth >= 1024 ? 4 : windowWidth >= 640 ? 2 : 1;
   const pickCellWidth =
-    pickColumns === 4 ? "24%" : pickColumns === 3 ? "32%" : pickColumns === 2 ? "49%" : "100%";
+    pickColumns === 4 ? "24%" : pickColumns === 2 ? "49%" : "100%";
   const isDesktop = windowWidth >= 1024;
 
   const canSubmit = (canSubmitLoadPick || canSubmitLoadManual || canSubmitVehicle) && !submitting;

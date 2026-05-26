@@ -565,11 +565,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sourcePillAsset: {
-    backgroundColor: Theme.primarySoft,
+    backgroundColor: Theme.primaryLight,
     borderColor: Theme.primary,
   },
   sourcePillAggregate: {
-    backgroundColor: Theme.primarySoft,
+    backgroundColor: Theme.primaryLight,
     borderColor: Theme.primary,
   },
   sourcePillText: {

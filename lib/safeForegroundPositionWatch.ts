@@ -58,7 +58,12 @@ export async function startForegroundPositionWatch(
   const { status } = await Location.getForegroundPermissionsAsync();
   if (status !== "granted") return null;
 
-  const subscription = await Location.watchPositionAsync(options, onLocation);
+  const subscription = await Location.watchPositionAsync(options, (position) => {
+    onLocation({
+      coords: position.coords,
+      timestamp: Date.now(),
+    });
+  });
   return {
     remove: () => {
       try {

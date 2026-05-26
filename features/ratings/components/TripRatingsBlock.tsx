@@ -2654,6 +2654,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  regRungDotTap: {
+    opacity: 1,
+  },
   regFeedbackSection: {
     marginTop: 8,
     paddingTop: 8,

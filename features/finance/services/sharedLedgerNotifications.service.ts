@@ -535,6 +535,7 @@ export async function getSharedLedgerNotifications(
       ? false
       : null;
   }
+  let lastRpcErrorMessage: string | null = null;
   if (sharedLedgerRpcReadAvailable !== false) {
     const { data, error } = await supabase().rpc(
       "get_shared_ledger_notifications",
@@ -543,6 +544,9 @@ export async function getSharedLedgerNotifications(
         status_filter: statusFilter,
       },
     );
+    if (error) {
+      lastRpcErrorMessage = error.message;
+    }
     if (!error) {
       sharedLedgerRpcReadAvailable = true;
       const rows = extractRpcRows(data);
@@ -614,7 +618,7 @@ export async function getSharedLedgerNotifications(
     }
     return {
       error: new Error(
-        `RPC failed: ${error.message}. Table fallback failed: ${tableError.message}.`,
+        `RPC failed: ${lastRpcErrorMessage ?? "unknown"}. Table fallback failed: ${tableError.message}.`,
       ),
       notifications: [],
       unavailable: true,
@@ -638,6 +642,7 @@ export async function getSharedLedgerNotificationsCount(
   count: SharedLedgerNotificationCount;
   unavailable?: boolean;
 }> {
+  let lastRpcCountErrorMessage: string | null = null;
   if (sharedLedgerRpcCountAvailable !== false) {
     if (sharedLedgerRpcCountAvailable == null) {
       sharedLedgerRpcCountAvailable = readStickyUnavailableFlag(
@@ -652,6 +657,9 @@ export async function getSharedLedgerNotificationsCount(
         org_id: organizationId,
       },
     );
+    if (error) {
+      lastRpcCountErrorMessage = error.message;
+    }
     if (!error) {
       sharedLedgerRpcCountAvailable = true;
       writeStickyUnavailableFlag(SHARED_LEDGER_RPC_COUNT_FLAG_KEY, false);
@@ -712,7 +720,7 @@ export async function getSharedLedgerNotificationsCount(
     }
     return {
       error: new Error(
-        `RPC failed: ${error.message}. Table fallback failed: ${tableError.message}.`,
+        `RPC failed: ${lastRpcCountErrorMessage ?? "unknown"}. Table fallback failed: ${tableError.message}.`,
       ),
       count: { actionableCount: 0 },
     };

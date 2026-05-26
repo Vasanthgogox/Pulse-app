@@ -304,7 +304,7 @@ export function InvoicePreviewPanel({
                   <FontAwesome
                     name="times"
                     size={12}
-                    color={Theme.errorText || "#dc2626"}
+                    color={Theme.negative || "#dc2626"}
                   />
                 </Pressable>
               </View>
@@ -442,7 +442,7 @@ export function InvoicePreviewPanel({
                         <FontAwesome
                           name="times"
                           size={12}
-                          color={Theme.errorText || "#dc2626"}
+                          color={Theme.negative || "#dc2626"}
                         />
                       </Pressable>
                     </View>

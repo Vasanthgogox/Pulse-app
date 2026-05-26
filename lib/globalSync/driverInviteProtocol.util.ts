@@ -12,7 +12,7 @@ export function mapDriverInvitesSentToProtocolItems(
       name: (row.driver_name ?? 'Driver').trim() || 'Driver',
       subtitle: 'Fleet driver invitation',
       type: 'DRIVER',
-      kind: 'driver',
+      kind: 'driver' as const,
       partnerOrgId: row.to_user_id ?? row.id,
       createdAt: row.created_at,
       avatarUri: null,

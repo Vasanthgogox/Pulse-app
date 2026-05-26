@@ -27,7 +27,7 @@ function dispatch(tripId: string, event: TrackingBroadcastEventName, payload: un
   if (!entry) return;
   for (const h of entry.handlers) {
     try {
-      if (event === TRACKING_BROADCAST_EVENT.POSITION && isTrackingPositionPayload(payload as never)) {
+      if (event === TRACKING_BROADCAST_EVENT.POSITION && isTrackingPositionPayload(payload)) {
         h.onPosition?.(payload);
       } else if (event === TRACKING_BROADCAST_EVENT.RESEED) {
         h.onReseed?.();

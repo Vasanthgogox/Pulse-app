@@ -1239,7 +1239,7 @@ export function TripAssignmentBlock({
               suppressAggregateDriverAssignTap &&
                 styles.manifestNodeShellNonInteractive,
               Platform.OS === "web" && suppressAggregateDriverAssignTap
-                ? ({ cursor: "default" } as const)
+                ? ({ cursor: "auto" } as const)
                 : null,
             ]}
             disabled={!effectiveCanAssign || suppressAggregateDriverAssignTap}
@@ -1292,7 +1292,7 @@ export function TripAssignmentBlock({
               suppressAggregateVehicleAssignTap &&
                 styles.manifestNodeShellNonInteractive,
               Platform.OS === "web" && suppressAggregateVehicleAssignTap
-                ? ({ cursor: "default" } as const)
+                ? ({ cursor: "auto" } as const)
                 : null,
             ]}
             disabled={!effectiveCanAssign || suppressAggregateVehicleAssignTap}

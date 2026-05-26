@@ -18,6 +18,7 @@ import {
 import { networkCompactListStyle } from "@/features/network/components/NetworkCompactRows";
 import { runConnectionInvite } from "@/features/network/utils/connectionInvite.util";
 import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
+import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import {
     getOrganizationLocationsByIds,
     getOrganizationLocationsByNames,
@@ -69,7 +70,7 @@ interface ConnectionsViewProps {
   onRefresh?: () => void;
   onOpenProfile?: (item: ConnectedOrg) => void;
   onPressMutuals?: (org: { id: string; name: string }) => void;
-  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
+  onPressMutual?: (org: MutualConnectionRow) => void;
   onConnectionsComputed?: (items: ConnectedOrg[]) => void;
   /** Render list without internal scroll (nested in parent ScrollView). */
   embedded?: boolean;
@@ -206,7 +207,7 @@ function ConnectionProfileCard({
   nativeListRow?: boolean;
   onOpenProfile?: (item: ConnectedOrg) => void;
   onPressMutuals?: (org: { id: string; name: string }) => void;
-  onPressMutual?: (org: { id: string; name: string; avatar_seed?: string | null }) => void;
+  onPressMutual?: (org: MutualConnectionRow) => void;
   viewerOrgId?: string | null;
   onConnectionAction: () => void;
   actionLoading: boolean;

@@ -190,7 +190,9 @@ export function useFinanceEntities({
     [supplierRows]
   );
 
-  const [garagePeriodOptions, setGaragePeriodOptions] = useState<string[]>([]);
+  const [garagePeriodOptions, setGaragePeriodOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
 
   useEffect(() => {
     if (!includeGaragePeriodOptions || tripRows.length === 0) {

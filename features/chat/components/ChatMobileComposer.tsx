@@ -20,7 +20,7 @@ import {
 
 const INPUT_WEB: ViewStyle =
   Platform.OS === "web"
-    ? ({ outlineStyle: "none" } as ViewStyle)
+    ? ({ outlineStyle: "none" } as unknown as ViewStyle)
     : {};
 
 export type ChatMobileComposerProps = {

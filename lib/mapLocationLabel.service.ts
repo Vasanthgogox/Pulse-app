@@ -193,7 +193,7 @@ async function reverseNativeExpo(
       const city =
         addr.city?.trim() ||
         addr.subregion?.trim() ||
-        addr.district?.trim() ||
+        (addr as { district?: string | null }).district?.trim() ||
         '';
       const state = addr.region?.trim() || '';
       const parts = [city, state].filter(Boolean);

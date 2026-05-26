@@ -2644,27 +2644,27 @@ const styles = StyleSheet.create({
       gap: 16,
       alignItems: "start",
       gridAutoRows: "min-content",
-    },
+    } as ViewStyle,
     default: {},
   }),
   ctaGridSpanWeb: Platform.select<ViewStyle>({
     web: {
       gridColumn: "1 / -1",
       gridRow: 3,
-    },
+    } as ViewStyle,
     default: {},
   }),
   /** Desktop grid: route|client row1; supply spans row2 (notes via modal). */
   cardGridRouteWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: 1, gridRow: 1 },
+    web: { gridColumn: 1, gridRow: 1 } as ViewStyle,
     default: {},
   }),
   cardGridClientWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: 2, gridRow: 1 },
+    web: { gridColumn: 2, gridRow: 1 } as ViewStyle,
     default: {},
   }),
   cardGridSupplyWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: "1 / -1", gridRow: 2 },
+    web: { gridColumn: "1 / -1", gridRow: 2 } as ViewStyle,
     default: {},
   }),
   cardHeadWithTrailingAction: {

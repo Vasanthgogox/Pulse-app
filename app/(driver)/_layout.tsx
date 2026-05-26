@@ -31,7 +31,8 @@ function DriverTabsNavigator() {
       backBehavior="history"
       tabBar={(props) => <DriverTabBar {...props} />}
       screenOptions={{
-        ...routeStackScreenOptions,
+        headerShown: false,
+        contentStyle: routeStackScreenOptions.contentStyle,
         tabBarStyle: {
           position: 'absolute',
           backgroundColor: 'transparent',
