@@ -2,8 +2,9 @@
  * Demo layout: 3 tabs (FISCAL | TRIPS | NETWORK) + floating bottom dock (web + native).
  * Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
  */
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Tabs, useRouter } from 'expo-router';
+import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
@@ -28,7 +29,6 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useQueryClient } from '@tanstack/react-query';
-import { ProfileMenuDrawerProvider, useProfileMenuDrawer } from '@/contexts/ProfileMenuDrawerContext';
 
 function DemoCustomTabBar(
   props: BottomTabBarProps & { onOpenProfileDrawer: () => void },
@@ -147,6 +147,15 @@ export default function TabLayout() {
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   const orgId = org?.currentOrganization?.id ?? null;
+  const tabMountMarked = useRef(false);
+
+  useEffect(() => {
+    if (!tabMountMarked.current && !isStartupComplete()) {
+      tabMountMarked.current = true;
+      markStartupPhase('tab_mount');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (loading || !orgId) return;
@@ -180,22 +189,23 @@ export default function TabLayout() {
   }
 
   return (
-    <ProfileMenuDrawerProvider>
-      <DemoTabBarScrollProvider>
-        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
-      </DemoTabBarScrollProvider>
-    </ProfileMenuDrawerProvider>
+    <DemoTabBarScrollProvider>
+      <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+    </DemoTabBarScrollProvider>
   );
 }
 
 function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
-  const { open: openProfileDrawer } = useProfileMenuDrawer();
+  const router = useRouter();
+  const openWorkspace = useCallback(() => {
+    router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0]);
+  }, [router]);
 
   return (
     <Tabs
       backBehavior="history"
       tabBar={(props) => (
-        <DemoCustomTabBar {...props} onOpenProfileDrawer={openProfileDrawer} />
+        <DemoCustomTabBar {...props} onOpenProfileDrawer={openWorkspace} />
       )}
       screenOptions={{
         headerShown: false,

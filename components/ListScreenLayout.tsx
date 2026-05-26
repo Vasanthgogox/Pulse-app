@@ -25,6 +25,8 @@ interface ListScreenLayoutPropsBase {
   onExportPress?: () => void;
   summaryCard?: ReactNode;
   fab?: ReactNode;
+  /** Inline action rendered at the right end of the search/filter row (e.g. "Add" pill). Replaces FAB on screens that prefer toolbar-anchored actions. */
+  headerAction?: ReactNode;
   onRefresh?: () => void | Promise<void>;
   refreshing?: boolean;
 }
@@ -63,6 +65,7 @@ export function ListScreenLayout<T = unknown>(props: ListScreenLayoutProps<T>) {
     onExportPress,
     summaryCard,
     fab,
+    headerAction,
     onRefresh,
     refreshing = false,
   } = props;
@@ -113,6 +116,9 @@ export function ListScreenLayout<T = unknown>(props: ListScreenLayoutProps<T>) {
             <Text style={styles.exportText}>PDF</Text>
           </TouchableOpacity>
         )}
+        {headerAction != null ? (
+          <View style={styles.headerActionSlot}>{headerAction}</View>
+        ) : null}
       </View>
 
       {isFlatList ? (
@@ -220,6 +226,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Theme.textPrimaryDark,
     textTransform: 'uppercase',
+  },
+  headerActionSlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   list: {
     flex: 1,

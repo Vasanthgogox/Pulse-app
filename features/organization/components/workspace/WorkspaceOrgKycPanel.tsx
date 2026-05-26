@@ -1,6 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
+import { useWorkspaceFeedback } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
 import { WORKSPACE_PANEL_TITLES } from "@/features/organization/components/workspace/workspacePanelTypes";
 import {
   AMBER,
@@ -25,7 +26,7 @@ import Theme from "@/constants/Theme";
 import * as Clipboard from "expo-clipboard";
 import { Lock } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { WorkspaceKyc } from "@/types/organization";
 
 type Props = {
@@ -36,6 +37,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
   const { user } = useAuth();
   const { currentOrganization } = useOrganization();
   const { canEdit } = useOrgRole();
+  const { notice } = useWorkspaceFeedback();
 
   const orgId = currentOrganization?.id ?? "";
   const orgName = currentOrganization?.name ?? "";
@@ -56,9 +58,19 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     setCopying(true);
     try {
       await Clipboard.setStringAsync(orgId);
+      notice({
+        kind: "success",
+        title: "Workspace ID copied",
+        duration: 2000,
+      });
       setTimeout(() => setCopying(false), 1400);
     } catch {
       setCopying(false);
+      notice({
+        kind: "error",
+        title: "Couldn’t copy",
+        message: "Clipboard access was denied.",
+      });
     }
   };
 
@@ -68,8 +80,18 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     try {
       const patch: Partial<WorkspaceKyc> = { [field]: val || null };
       const { kyc: updated, error } = await updateWorkspaceKyc(orgId, patch);
-      if (error) Alert.alert("Save failed", error.message);
-      else if (updated) setKyc(updated);
+      if (error) {
+        notice({ kind: "error", title: "Save failed", message: error.message });
+        return;
+      }
+      if (updated) {
+        setKyc(updated);
+        notice({
+          kind: "success",
+          title: val ? "Field saved" : "Field cleared",
+          duration: 2400,
+        });
+      }
     } finally {
       setKycSaving(false);
     }

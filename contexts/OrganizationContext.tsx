@@ -1,9 +1,12 @@
 /**
  * Organization context — current org for list/detail screens. Uses services/organizationService.
  */
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import * as organizationService from '@/features/organization';
+// Direct path avoids dragging the org barrel (components + visibility helpers)
+// into every consumer of the OrganizationContext.
+import * as organizationService from '@/features/organization/services/organization.service';
+import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { CurrentOrganization } from '@/types/organization';
 
 interface OrganizationContextType {
@@ -73,6 +76,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       setCurrentOrganization(null);
     } finally {
       if (!staleForUser(sessionUid)) {
+        // Only mark once during cold boot — not on every org refresh.
+        if (!isStartupComplete()) markStartupPhase('org_resolved');
         setIsLoading(false);
       }
     }
@@ -91,10 +96,16 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     };
   }, [user, loadOrganizationsForSession]);
 
+  // Stable context value: consumers only re-render when the fields they actually
+  // use change. Without useMemo the object is recreated on every render of
+  // OrganizationProvider (e.g. each isLoading flip triggers 20+ consumers).
+  const value = useMemo(
+    () => ({ currentOrganization, setCurrentOrganization, isLoading, error, refreshOrganization }),
+    [currentOrganization, isLoading, error, refreshOrganization],
+  );
+
   return (
-    <OrganizationContext.Provider
-      value={{ currentOrganization, setCurrentOrganization, isLoading, error, refreshOrganization }}
-    >
+    <OrganizationContext.Provider value={value}>
       {children}
     </OrganizationContext.Provider>
   );

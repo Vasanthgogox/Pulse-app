@@ -10,6 +10,7 @@ import React, {
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
+import { setTripUnreadCount } from "@/lib/chatUnreadSignal";
 import { supabase } from "@/lib/supabase";
 import { getActiveTripMessageConversationId } from "../realtime/activeTripMessageScope";
 import * as chatService from "../services/chat.service";
@@ -584,6 +585,13 @@ export function TripChatProvider({
 
   // ── Conversation management ────────────────────────────────────────────────
   const getTotalUnreadCount = useCallback(() => totalUnreadCount, [totalUnreadCount]);
+
+  // Publish to the lightweight external signal so consumers like DemoTabBar
+  // can subscribe without statically importing this context (keeps the chat
+  // graph out of the startup chunk).
+  useEffect(() => {
+    setTripUnreadCount(totalUnreadCount);
+  }, [totalUnreadCount]);
 
   const initiateConversation = useCallback(
     async (params: InitiateConversationParams): Promise<string | null> => {

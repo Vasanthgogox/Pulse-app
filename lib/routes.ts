@@ -51,8 +51,6 @@ export const ROUTES = {
   WORKSPACE:         '/workspace'         as const,
   /** Personal identity: name, email, phone, personal avatar */
   MY_ACCOUNT:        '/account'           as const,
-  /** Workspace admin: company logo, KYC, TMS metrics */
-  COMPANY_PROFILE:   '/company-profile'   as const,
 
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,

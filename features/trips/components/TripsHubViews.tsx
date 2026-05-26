@@ -34,7 +34,7 @@ import {
 import { TripsHubTripCardToolbar } from "./TripsHubTripCardToolbar";
 
 export { MOBILE_TRIP_CANVAS_BG, TripsHubMobileTripListCanvas };
-import { Search, X } from "lucide-react-native";
+import { Plus, Search, X } from "lucide-react-native";
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import {
     LayoutAnimation,
@@ -989,6 +989,10 @@ export type TripsHubTableViewProps = {
       | "custom",
   ) => void;
   onOpenDateRangePicker?: () => void;
+  /** When set, renders an inline "Add Trip" button on the desktop toolbar row, anchored to the right after the search input. Hidden on mobile (the trips screen still owns mobile FAB placement). */
+  onAddTrip?: () => void;
+  /** Label for the inline Add Trip button (e.g. translated "Add trip"). Defaults to "Add Trip". */
+  addTripLabel?: string;
   /** When set, table body shows one page of rows after hub search/sort (full list still in `trips`). */
   pagination?: { page: number; pageSize: number };
   /** Fired with count of trips matching toolbar search/sort (full unpaginated length). */
@@ -1060,6 +1064,8 @@ export function TripsHubTableView({
   dateRangeFilter = "all",
   onDateRangeFilterChange,
   onOpenDateRangePicker,
+  onAddTrip,
+  addTripLabel,
   pagination,
   onDisplayedTripsLengthChange,
 }: TripsHubTableViewProps) {
@@ -1350,6 +1356,20 @@ export function TripsHubTableView({
             ) : null}
             {sortToolbarBtn}
             {tableSearchField}
+            {onAddTrip ? (
+              <TouchableOpacity
+                style={styles.auditAddTripBtn}
+                onPress={onAddTrip}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={addTripLabel ?? "Add trip"}
+              >
+                <Plus size={13} color="#ffffff" strokeWidth={2.4} />
+                <Text style={styles.auditAddTripBtnText} numberOfLines={1}>
+                  {addTripLabel ?? "Add Trip"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : (
           <>
@@ -3373,6 +3393,28 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#64748b",
     letterSpacing: 0.55,
+    textTransform: "uppercase",
+  },
+  auditAddTripBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 34,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: Theme.darkBackground,
+    shadowColor: "#020617",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  auditAddTripBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.7,
     textTransform: "uppercase",
   },
   /** Matches Chat `tabRow` — date presets + calendar (+ mobile sort) live inside this tray. */

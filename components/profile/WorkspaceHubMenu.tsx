@@ -1,5 +1,10 @@
 /**
- * Full-page workspace hub — same menu as ProfileMenuDrawer, without slide-over chrome.
+ * Workspace hub — left pane of the master/detail workspace shell.
+ *
+ * Layout matches the canonical reference: navy band with workspace name and
+ * close button, an overlapping rounded-square logo, three circular quick
+ * actions (My Account / Support / Alerts), a single "Workspace Management"
+ * list card, and a pinned identity footer with sign-out.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
@@ -18,12 +23,12 @@ import { useRouter } from "expo-router";
 import {
   Bell,
   Building2,
-  ChevronLeft,
   ChevronRight,
   HelpCircle,
   LogOut,
-  Settings,
+  Settings2,
   Users,
+  X,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
@@ -38,10 +43,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const PURPLE_DARK = "#1a237e";
-const PURPLE_MID = "#312e81";
-const PURPLE_TINT = "rgba(26,35,126,0.08)";
-const PURPLE_MUTED_ON_DARK = "rgba(255,255,255,0.62)";
+const NAVY = Theme.primary;
+const NAVY_MID = Theme.primaryLight;
+const NAVY_TINT = "rgba(26,35,126,0.08)";
+const NAVY_BORDER_SOFT = "rgba(26,35,126,0.12)";
+const NAVY_ON_DARK_MUTED = "rgba(255,255,255,0.62)";
+const NAVY_ON_DARK_EYEBROW = "rgba(255,255,255,0.78)";
 
 function orgInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -132,17 +139,17 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
     {
       id: "settings",
       label: "Workspace settings",
-      icon: <Building2 size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
+      icon: <Building2 size={18} color={NAVY} strokeWidth={2.2} />,
     },
     {
       id: "team",
       label: "Team members",
-      icon: <Users size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
+      icon: <Users size={18} color={NAVY} strokeWidth={2.2} />,
     },
     {
       id: "kyc",
       label: "Org identity & KYC",
-      icon: <Settings size={17} color={PURPLE_DARK} strokeWidth={2.2} />,
+      icon: <Settings2 size={18} color={NAVY} strokeWidth={2.2} />,
     },
   ];
 
@@ -153,36 +160,38 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
   return (
     <>
       <View style={styles.root}>
-        <View style={[styles.orgHeader, { paddingTop: insets.top + 10 }]}>
-          <View style={styles.orgHeaderGradientOverlay} />
-          {onExit ? (
-            <Pressable onPress={onExit} style={styles.exitBtn} hitSlop={8}>
-              <ChevronLeft size={20} color={PURPLE_MUTED_ON_DARK} strokeWidth={2.5} />
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => onSelectPanel("settings")}
-            style={styles.orgHeaderContent}
-            accessibilityRole="button"
-            accessibilityLabel="Open workspace settings"
-          >
-            {orgLogoUri ? (
-              <Image source={{ uri: orgLogoUri }} style={styles.orgLogo} />
-            ) : (
-              <View style={styles.orgLogoFallback}>
-                <Text style={styles.orgLogoInitials}>
-                  {orgInitials(orgName || "Q")}
-                </Text>
-              </View>
-            )}
-            <View style={styles.orgHeaderText}>
-              <Text style={styles.orgHeaderMeta}>WORKSPACE</Text>
-              <Text style={styles.orgHeaderName} numberOfLines={1}>
+        <View style={[styles.navyBand, { paddingTop: insets.top + 14 }]}>
+          <View style={styles.navyBandOverlay} />
+          <View style={styles.navyBandRow}>
+            <View style={styles.headerLogoWrap}>
+              {orgLogoUri ? (
+                <Image source={{ uri: orgLogoUri }} style={styles.headerLogoImage} />
+              ) : (
+                <View style={styles.headerLogoFallback}>
+                  <Text style={styles.headerLogoInitials}>
+                    {orgInitials(orgName || "Q")}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.navyBandText}>
+              <Text style={styles.navyEyebrow}>WORKSPACE</Text>
+              <Text style={styles.navyTitle} numberOfLines={1}>
                 {orgName || "My Organisation"}
               </Text>
             </View>
-            <ChevronRight size={16} color={PURPLE_MUTED_ON_DARK} strokeWidth={2} />
-          </Pressable>
+            {onExit ? (
+              <Pressable
+                onPress={onExit}
+                style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close workspace"
+              >
+                <X size={18} color="#fff" strokeWidth={2.4} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <ScrollView
@@ -194,9 +203,11 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.quickRow}>
             <Pressable
               style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() => navigate(ROUTES.MY_ACCOUNT)}
+              onPress={() => onSelectPanel("account")}
+              accessibilityRole="button"
+              accessibilityLabel="My account"
             >
-              <View style={styles.quickAvatarWrap}>
+              <View style={styles.quickCircle}>
                 {avatarUri ? (
                   <Image source={{ uri: avatarUri }} style={styles.quickAvatar} />
                 ) : (
@@ -219,18 +230,22 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                   ],
                 )
               }
+              accessibilityRole="button"
+              accessibilityLabel="Support"
             >
-              <View style={styles.quickIconWrap}>
-                <HelpCircle size={20} color={PURPLE_DARK} strokeWidth={2.2} />
+              <View style={styles.quickCircle}>
+                <HelpCircle size={22} color={NAVY} strokeWidth={2.2} />
               </View>
               <Text style={styles.quickLabel}>Support</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
               onPress={() => navigate("/notifications")}
+              accessibilityRole="button"
+              accessibilityLabel="Alerts"
             >
-              <View style={styles.quickIconWrap}>
-                <Bell size={20} color={PURPLE_DARK} strokeWidth={2.2} />
+              <View style={styles.quickCircle}>
+                <Bell size={22} color={Theme.teslaRed} strokeWidth={2.2} />
                 {notificationUnread > 0 ? <View style={styles.quickDot} /> : null}
               </View>
               <Text style={styles.quickLabel}>Alerts</Text>
@@ -240,71 +255,83 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionAccent} />
-              <Text style={styles.sectionTitle}>Workspace</Text>
+              <Text style={styles.sectionTitle}>Workspace Management</Text>
             </View>
-            {rows.map((row) => {
+            {rows.map((row, idx) => {
               const selected = activePanel === row.id;
+              const isFirst = idx === 0;
               return (
                 <Pressable
                   key={row.id}
                   onPress={() => onSelectPanel(row.id)}
                   style={({ pressed }) => [
                     styles.menuRow,
+                    isFirst && styles.menuRowFirst,
                     selected && styles.menuRowSelected,
                     pressed && !selected && styles.menuRowPressed,
                   ]}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  <View style={[styles.menuRowIcon, { backgroundColor: PURPLE_TINT }]}>
+                  <View style={[styles.menuRowIcon, selected && styles.menuRowIconSelected]}>
                     {row.icon}
                   </View>
                   <Text style={styles.menuRowLabel} numberOfLines={1}>
                     {row.label}
                   </Text>
-                  <ChevronRight size={15} color={Theme.textMuted} strokeWidth={2} />
+                  <ChevronRight
+                    size={16}
+                    color={selected ? NAVY : Theme.textMuted}
+                    strokeWidth={2}
+                  />
                 </Pressable>
               );
             })}
           </View>
         </ScrollView>
 
-        <View style={[styles.userFooterWrap, { paddingBottom: insets.bottom + 8 }]}>
-          <View style={styles.userFooterDivider} />
-          <Pressable
-            onPress={() => navigate(ROUTES.MY_ACCOUNT)}
-            style={({ pressed }) => [styles.userFooter, pressed && { opacity: 0.85 }]}
-          >
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.userAvatar} />
-            ) : (
-              <View style={styles.userAvatarFallback}>
-                <Text style={styles.userAvatarInitials}>
-                  {firstName.slice(0, 2).toUpperCase()}
+        <View style={[styles.footerWrap, { paddingBottom: insets.bottom + 10 }]}>
+          <View style={styles.footerDivider} />
+          <View style={styles.footerRow}>
+            <Pressable
+              onPress={() => onSelectPanel("account")}
+              style={({ pressed }) => [styles.footerIdentity, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Open my account"
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.footerAvatar} />
+              ) : (
+                <View style={styles.footerAvatarFallback}>
+                  <Text style={styles.footerAvatarInitials}>
+                    {firstName.slice(0, 2).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.footerText}>
+                <Text style={styles.footerName} numberOfLines={1}>
+                  {displayName}
+                </Text>
+                <Text style={styles.footerEmail} numberOfLines={1}>
+                  {email || "—"}
                 </Text>
               </View>
-            )}
-            <View style={styles.userFooterText}>
-              <Text style={styles.userFooterName} numberOfLines={1}>
-                {displayName}
-              </Text>
-              <Text style={styles.userFooterEmail} numberOfLines={1}>
-                {email || "—"}
-              </Text>
-            </View>
+            </Pressable>
             <Pressable
               onPress={() => setShowSignOutConfirm(true)}
               disabled={signingOut}
               style={({ pressed }) => [styles.signOutBtn, pressed && styles.signOutBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
               hitSlop={8}
             >
               {signingOut ? (
                 <LoadingIndicator size="small" color={Theme.textMuted} />
               ) : (
-                <LogOut size={17} color={Theme.textMuted} strokeWidth={2.2} />
+                <LogOut size={18} color={Theme.textMuted} strokeWidth={2.2} />
               )}
             </Pressable>
-          </Pressable>
+          </View>
         </View>
       </View>
 
@@ -360,207 +387,242 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Theme.screenBackground, minWidth: 0 },
-  orgHeader: {
-    backgroundColor: PURPLE_DARK,
+
+  // ── Navy band ───────────────────────────────────────────────────────────
+  navyBand: {
+    backgroundColor: NAVY,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 16,
+    paddingBottom: 18,
     position: "relative",
   },
-  orgHeaderGradientOverlay: {
+  navyBandOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: PURPLE_MID,
+    backgroundColor: NAVY_MID,
     opacity: 0.35,
   },
-  exitBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  orgHeaderContent: {
+  navyBandRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  orgLogo: {
+  headerLogoWrap: {
     width: 44,
     height: 44,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.25)",
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.28)",
+    padding: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
-  orgLogoFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.25)",
+  headerLogoImage: { width: "100%", height: "100%", borderRadius: 9 },
+  headerLogoFallback: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
-  orgLogoInitials: { fontSize: 16, fontWeight: "900", color: "#fff" },
-  orgHeaderText: { flex: 1, minWidth: 0, gap: 3 },
-  orgHeaderMeta: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: PURPLE_MUTED_ON_DARK,
-    letterSpacing: 1.8,
+  headerLogoInitials: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#fff",
+    letterSpacing: 0.4,
   },
-  orgHeaderName: {
-    fontSize: 16,
+  navyBandText: { flex: 1, minWidth: 0, gap: 4 },
+  navyEyebrow: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: NAVY_ON_DARK_EYEBROW,
+    letterSpacing: 2,
+  },
+  navyTitle: {
+    fontSize: 22,
     fontWeight: "800",
     color: "#fff",
-    letterSpacing: -0.2,
+    letterSpacing: -0.4,
   },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  closeBtnPressed: { backgroundColor: "rgba(255,255,255,0.24)" },
+
+  // ── Scrollable hub body ────────────────────────────────────────────────
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 16,
-    paddingBottom: 10,
-    gap: 14,
+    paddingTop: 24,
+    paddingBottom: 16,
+    gap: 22,
   },
+
+  // Quick actions
   quickRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-around",
-    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
-  quickAction: { flex: 1, alignItems: "center", gap: 7, minWidth: 0 },
-  quickIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: PURPLE_TINT,
+  quickAction: { flex: 1, alignItems: "center", gap: 10, minWidth: 0 },
+  quickCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
-    borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.12)",
+    overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
   },
+  quickAvatar: { width: "100%", height: "100%" },
+  quickAvatarInitials: { fontSize: 18, fontWeight: "800", color: NAVY },
   quickDot: {
     position: "absolute",
-    top: 3,
-    right: 3,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 8,
+    right: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: Theme.teslaRed,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: Theme.screenBackground,
   },
   quickLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
     textAlign: "center",
   },
-  quickAvatarWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: PURPLE_TINT,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.12)",
-  },
-  quickAvatar: { width: "100%", height: "100%" },
-  quickAvatarInitials: { fontSize: 15, fontWeight: "800", color: PURPLE_DARK },
+
+  // Workspace Management list card
   sectionCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    backgroundColor: Theme.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
-  sectionAccent: {
-    width: 3,
-    height: 14,
-    borderRadius: 2,
-    backgroundColor: PURPLE_DARK,
-  },
+  sectionAccent: { width: 3, height: 14, borderRadius: 2, backgroundColor: NAVY },
   sectionTitle: {
     fontSize: 11,
     fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   menuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 50,
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
-  menuRowPressed: { backgroundColor: Theme.surfaceGray },
+  menuRowFirst: { borderTopWidth: 0 },
+  menuRowPressed: { backgroundColor: Theme.surface },
   menuRowSelected: {
     backgroundColor: "#eef1f8",
-    borderLeftWidth: 3,
-    borderLeftColor: PURPLE_DARK,
-    paddingLeft: 11,
   },
   menuRowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+  },
+  menuRowIconSelected: {
+    backgroundColor: NAVY_TINT,
+    borderColor: NAVY_BORDER_SOFT,
   },
   menuRowLabel: {
     flex: 1,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
-  userFooterWrap: { backgroundColor: Theme.screenBackground },
-  userFooterDivider: {
+
+  // ── Footer identity ────────────────────────────────────────────────────
+  footerWrap: { backgroundColor: Theme.screenBackground },
+  footerDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
   },
-  userFooter: {
+  footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 10,
+    paddingTop: 14,
   },
-  userAvatar: { width: 36, height: 36, borderRadius: 11 },
-  userAvatarFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: PURPLE_TINT,
+  footerIdentity: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+  footerAvatar: { width: 40, height: 40, borderRadius: 14 },
+  footerAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: NAVY_TINT,
     alignItems: "center",
     justifyContent: "center",
   },
-  userAvatarInitials: { fontSize: 13, fontWeight: "800", color: PURPLE_DARK },
-  userFooterText: { flex: 1, minWidth: 0 },
-  userFooterName: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
-  userFooterEmail: { fontSize: 11, color: Theme.textMuted, marginTop: 1 },
+  footerAvatarInitials: { fontSize: 14, fontWeight: "800", color: NAVY },
+  footerText: { flex: 1, minWidth: 0 },
+  footerName: { fontSize: 14, fontWeight: "800", color: Theme.textPrimaryDark },
+  footerEmail: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
   signOutBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
   },
-  signOutBtnPressed: { backgroundColor: Theme.surfaceGray },
+  signOutBtnPressed: { backgroundColor: "rgba(232,33,39,0.08)" },
+
+  // Sign-out confirm modal
   confirmBackdrop: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.45)",

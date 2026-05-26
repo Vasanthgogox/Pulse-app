@@ -14,9 +14,9 @@ import {
   getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
-import { useProfileMenuDrawerOptional } from "@/contexts/ProfileMenuDrawerContext";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
+import { ROUTES } from "@/lib/routes";
 import { ChevronLeft } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -72,7 +72,6 @@ export function HomePageHeader({
   const insets = useSafeAreaInsets();
   const { profile, user } = useAuth();
   const { currentOrganization } = useOrganization();
-  const profileDrawer = useProfileMenuDrawerOptional();
   const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
 
@@ -149,11 +148,7 @@ export function HomePageHeader({
       onProfilePress();
       return;
     }
-    if (profileDrawer) {
-      profileDrawer.open();
-      return;
-    }
-    router.push("/(tabs)/profile");
+    router.push(ROUTES.WORKSPACE as Parameters<typeof router.push>[0]);
   };
 
   const handleInvitations = () => {

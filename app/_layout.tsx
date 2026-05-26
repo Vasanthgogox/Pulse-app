@@ -1,11 +1,14 @@
 import 'react-native-gesture-handler';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
+import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
+// First JS evaluation — mark parse start before any other import runs.
+markStartupPhase('js_parse_start');
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
-import { FloatingChatButton } from '@/components/FloatingChatButton';
-import { DemoTabBar, type DemoTabId } from '@/components/demo';
+import { DemoTabBar } from '@/components/demo/DemoTabBar';
+import type { DemoTabId } from '@/components/demo/DemoTabBar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
@@ -23,8 +26,8 @@ import {
   DemoTabBarScrollProvider,
   useDemoTabBarScroll,
 } from '@/contexts/DemoTabBarScrollContext';
-import * as authService from '@/features/auth';
-import { isSessionExpiredError } from '@/features/auth';
+import * as authService from '@/features/auth/services/auth.service';
+import { isSessionExpiredError } from '@/features/auth/services/auth.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
 import {
@@ -72,9 +75,8 @@ import { OrganizationProvider, useOptionalOrganization } from '@/contexts/Organi
 import { ActiveWorkspaceProvider } from '@/contexts/ActiveWorkspaceContext';
 import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { WalletProvider } from '@/contexts/WalletContext';
-import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
-import { IntegratedChatProvider } from '@/features/chat/contexts/IntegratedChatContext';
-import { GlobalSyncProvider } from '@/lib/globalSync';
+import { LazyChatProviders } from '@/components/LazyChatProviders';
+import { GlobalSyncProvider } from '@/lib/globalSync/GlobalSyncContext';
 
 function isNetworkError(error: Error): boolean {
   const msg = error.message;
@@ -297,6 +299,8 @@ export default function RootLayout() {
     );
   }
 
+  markStartupPhase('providers_mount');
+
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.ghRoot}>
@@ -380,41 +384,51 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <DemoTabBarScrollProvider>
-        <TripChatProvider isActive={isDispatcherChatRouteActive}>
-          <IntegratedChatProvider isActive={isDispatcherChatRouteActive}>
-            <View style={{ flex: 1 }}>
-              <GlobalOperationsToast />
-              <AppAlertHost />
-              <Stack screenOptions={routeStackScreenOptions}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
-                <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
-                <Stack.Screen name="forgot-password" options={{ animation: 'fade' }} />
-                <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
-                <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="(driver)" />
-                <Stack.Screen name="add-trip" />
-                <Stack.Screen name="network" />
-                <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
-                <Stack.Screen
-                  name="chat"
-                  options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
-                />
-                <Stack.Screen name="trip" options={{ animation: 'slide_from_right', headerShown: false }} />
-                <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
-                <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
-                <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
-                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
-                <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-              </Stack>
-              <NavigationLoadingOverlay />
-              <RootOverlayTabBar />
-              {isDesktopWeb ? <FloatingChatButton /> : null}
-            </View>
-          </IntegratedChatProvider>
-        </TripChatProvider>
+        {/*
+          Chat providers are lazy: ~1.1k LOC of realtime + store + service stays
+          out of the startup chunk. They re-wrap the tree after first idle.
+        */}
+        <LazyChatProviders isActive={isDispatcherChatRouteActive}>
+          <View style={{ flex: 1 }}>
+            <GlobalOperationsToast />
+            <AppAlertHost />
+            <Stack screenOptions={routeStackScreenOptions}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+              <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+              <Stack.Screen name="forgot-password" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/reset-password" options={{ animation: 'fade' }} />
+              <Stack.Screen name="sign-up" options={{ animation: 'fade' }} />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="(driver)" />
+              <Stack.Screen name="add-trip" />
+              <Stack.Screen name="network" />
+              <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen
+                name="chat"
+                options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
+              />
+              <Stack.Screen name="trip" options={{ animation: 'slide_from_right', headerShown: false }} />
+              <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+              <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
+              <Stack.Screen
+                name="workspace"
+                options={{
+                  presentation: 'transparentModal',
+                  animation: 'slide_from_right',
+                  headerShown: false,
+                  contentStyle: { flex: 1, backgroundColor: 'transparent' },
+                }}
+              />
+              <Stack.Screen name="+not-found" options={{ headerShown: false }} />
+            </Stack>
+            <NavigationLoadingOverlay />
+            <RootOverlayTabBar />
+          </View>
+        </LazyChatProviders>
       </DemoTabBarScrollProvider>
     </ThemeProvider>
   );
@@ -488,7 +502,7 @@ function RootOverlayTabBar() {
                   : ROUTES.TABS.RESOURCES) as '/'
         );
       }}
-      onProfilePress={() => router.push('/(tabs)/profile')}
+      onProfilePress={() => router.push(ROUTES.WORKSPACE)}
       onNotificationsPress={() => router.push('/notifications')}
     />
   );

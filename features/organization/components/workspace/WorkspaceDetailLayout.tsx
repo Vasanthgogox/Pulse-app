@@ -1,3 +1,9 @@
+/**
+ * Detail-pane shell shared by every workspace panel.
+ *
+ * Layout mirrors the reference: white chrome header, soft canvas body, and
+ * an optional sticky white footer for Cancel / Save Changes actions.
+ */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { WorkspacePanelChrome } from "@/features/organization/components/workspace/WorkspacePanelChrome";
@@ -20,6 +26,8 @@ type Props = {
   subtitle?: string;
   onBack: () => void;
   rightSlot?: React.ReactNode;
+  /** Sticky footer slot (e.g. Cancel + Save Changes). */
+  footerSlot?: React.ReactNode;
   children: React.ReactNode;
   /** When true, children fill remaining height (e.g. embedded lists). */
   fillBody?: boolean;
@@ -31,15 +39,21 @@ export function WorkspaceDetailLayout({
   subtitle,
   onBack,
   rightSlot,
+  footerSlot,
   children,
   fillBody = false,
   scrollProps,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const styles = workspaceDetailLayoutStyles;
+  const hasFooter = !!footerSlot;
 
   const body = fillBody ? (
-    <View style={[styles.fillBody, { paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.fillBody,
+        { paddingBottom: hasFooter ? 0 : insets.bottom },
+      ]}
+    >
       {children}
     </View>
   ) : (
@@ -47,7 +61,11 @@ export function WorkspaceDetailLayout({
       style={styles.scroll}
       contentContainerStyle={[
         styles.scrollContent,
-        { paddingBottom: insets.bottom + Layout.sectionSpacing + 8 },
+        {
+          paddingBottom: hasFooter
+            ? 24
+            : insets.bottom + Layout.sectionSpacing + 8,
+        },
       ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps={scrollProps?.keyboardShouldPersistTaps ?? "handled"}
@@ -70,11 +88,16 @@ export function WorkspaceDetailLayout({
       >
         {body}
       </KeyboardAvoidingView>
+      {hasFooter ? (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+          <View style={styles.footerInner}>{footerSlot}</View>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-export const workspaceDetailLayoutStyles = StyleSheet.create({
+const styles = StyleSheet.create({
   root: {
     flex: 1,
     minWidth: 0,
@@ -84,20 +107,39 @@ export const workspaceDetailLayoutStyles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 18,
-    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingHorizontal: 24,
     alignItems: "center",
   },
   contentColumn: {
     width: "100%",
     maxWidth: CONTENT_MAX_WIDTH,
-    gap: 16,
+    gap: 18,
     alignSelf: "center",
   },
   fillBody: {
     flex: 1,
     minHeight: 0,
-    paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  footer: {
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  footerInner: {
+    width: "100%",
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: "center",
   },
 });
+
+export const workspaceDetailLayoutStyles = styles;
