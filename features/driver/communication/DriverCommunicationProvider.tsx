@@ -47,8 +47,13 @@ export function DriverCommunicationProvider({
   const { profile } = useAuth();
   const uid = (profile as { uid?: string })?.uid ?? null;
 
-  const { activeLinkedDrivers, driverIds, driverIdsKey } =
+  const { activeLinkedDrivers, driverIdsKey } =
     useDriverHomeDriversQuery(uid);
+
+  const driverIds = useMemo(
+    () => activeLinkedDrivers.map((d) => d.id),
+    [activeLinkedDrivers],
+  );
 
   const driverIdsForPayment = useMemo(
     () => (communicationActive ? driverIds : []),
