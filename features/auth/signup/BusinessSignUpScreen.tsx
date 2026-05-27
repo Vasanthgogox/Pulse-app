@@ -1,17 +1,26 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { C, styles } from './businessSignUp.styles';
-import { STEP_LABELS, useBusinessSignUpFlow } from './hooks/useBusinessSignUpFlow';
+import { useBusinessSignUpFlow } from './hooks/useBusinessSignUpFlow';
+import { STEP_LABELS, SCROLL_BOTTOM_PAD } from './signUpConstants';
+import { SignUpMobileShell } from './SignUpMobileShell';
 import { AccountStep } from './steps/AccountStep';
 import { CompanyDetailsStep } from './steps/CompanyDetailsStep';
+import { CompanyLocationStep } from './steps/CompanyLocationStep';
 import { OrgStep } from './steps/OrgStep';
 import { OtpStep } from './steps/OtpStep';
 import { PhoneStep } from './steps/PhoneStep';
 import { SuccessStep } from './steps/SuccessStep';
-import { SCROLL_BOTTOM_PAD } from './signUpConstants';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 type PageBodyProps = {
   pageIndex: number;
@@ -45,16 +54,62 @@ const PageBody = React.memo(function PageBody({
   );
 });
 
+function BusinessStepContent({
+  flow,
+  step,
+}: {
+  flow: ReturnType<typeof useBusinessSignUpFlow>;
+  step: number;
+}) {
+  switch (step) {
+    case 0:
+      return <PhoneStep flow={flow} />;
+    case 1:
+      return <OtpStep flow={flow} />;
+    case 2:
+      return <OrgStep flow={flow} />;
+    case 3:
+      return <CompanyDetailsStep flow={flow} />;
+    case 4:
+      return <CompanyLocationStep flow={flow} />;
+    case 5:
+      return <AccountStep flow={flow} />;
+    case 6:
+      return <SuccessStep flow={flow} />;
+    default:
+      return null;
+  }
+}
+
 export default function BusinessSignUpScreen() {
   const insets = useSafeAreaInsets();
   const flow = useBusinessSignUpFlow();
 
   const bottomPad = insets.bottom + SCROLL_BOTTOM_PAD;
-  const backLabel = flow.step === 0 ? 'Back' : flow.step === 5 ? '' : 'Previous';
+  const backLabel = flow.step === 0 ? 'Back' : flow.step === 6 ? '' : 'Previous';
 
   const makeScrollRef = (i: number) => (el: ScrollView | null) => {
     flow.pageVerticalScrollRefs.current[i] = el;
   };
+
+  if (flow.useMobileLayout) {
+    const usesKeypadBody = flow.step === 0 || flow.step === 1;
+    return (
+      <SignUpMobileShell
+        backLabel={backLabel || 'Back'}
+        onBack={flow.handleBack}
+        stepLabels={STEP_LABELS}
+        currentStepIndex={Math.min(flow.step, STEP_LABELS.length - 1)}
+        hideProgress={flow.step >= 6}
+        bodyMode={usesKeypadBody ? 'keypad' : 'scroll'}
+        scrollBottomPad={insets.bottom + 32}
+      >
+        <View style={styles.mobileStepFlex}>
+          <BusinessStepContent flow={flow} step={flow.step} />
+        </View>
+      </SignUpMobileShell>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -62,7 +117,7 @@ export default function BusinessSignUpScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
     >
-      {flow.step < 5 ? (
+      {flow.step < 6 ? (
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.backBtn} onPress={flow.handleBack} hitSlop={12}>
             <FontAwesome name="chevron-left" size={16} color={C.muted} />
@@ -76,7 +131,9 @@ export default function BusinessSignUpScreen() {
       <View style={flow.isDesktop ? styles.panelShell : styles.mobileShell}>
         {flow.isDesktop ? (
           <View style={styles.leftPanel}>
-            <Text style={styles.leftLogo}>PULSE<Text style={styles.logoDot}>.</Text></Text>
+            <Text style={styles.leftLogo}>
+              PULSE<Text style={styles.logoDot}>.</Text>
+            </Text>
             <Text style={styles.leftTag}>Business Onboarding</Text>
             <Text style={styles.leftTitle}>Build your workspace.</Text>
             <Text style={styles.leftSub}>Organize your fleet and logistics with Pulse.</Text>
@@ -111,15 +168,19 @@ export default function BusinessSignUpScreen() {
             </PageBody>
 
             <PageBody pageIndex={4} pageWidth={flow.pageWidth} bottomPad={bottomPad} scrollRef={makeScrollRef(4)}>
-              <AccountStep flow={flow} />
+              <CompanyLocationStep flow={flow} />
             </PageBody>
 
             <PageBody pageIndex={5} pageWidth={flow.pageWidth} bottomPad={bottomPad} scrollRef={makeScrollRef(5)}>
+              <AccountStep flow={flow} />
+            </PageBody>
+
+            <PageBody pageIndex={6} pageWidth={flow.pageWidth} bottomPad={bottomPad} scrollRef={makeScrollRef(6)}>
               <SuccessStep flow={flow} />
             </PageBody>
           </ScrollView>
 
-          {flow.step < 5 ? (
+          {flow.step < 6 ? (
             <View style={[styles.dotsRow, { paddingBottom: insets.bottom + 10 }]}>
               {STEP_LABELS.map((label, i) => {
                 const done = i < flow.step;

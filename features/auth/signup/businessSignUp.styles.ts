@@ -17,6 +17,7 @@ export const C = {
 
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
+  mobileStepFlex: { flex: 1, minHeight: 0 },
   mobileShell: { flex: 1 },
   panelShell: { flex: 1, flexDirection: 'row', backgroundColor: '#020617' },
   leftPanel: { flex: 1, backgroundColor: '#000', paddingHorizontal: 52, paddingVertical: 48, justifyContent: 'center' },

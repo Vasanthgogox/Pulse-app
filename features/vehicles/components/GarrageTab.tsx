@@ -295,7 +295,7 @@ export function GarrageTab({
         {...tabBarScrollProps}
         onScroll={handleGarrageTableScroll}
         scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
-        stickyHeaderIndices={[stickyHeaderIndex]}
+        stickyHeaderIndices={viewTab !== "analytics" ? [stickyHeaderIndex] : []}
         refreshControl={
           onRefresh ? (
             <RefreshControl
@@ -332,24 +332,26 @@ export function GarrageTab({
             organizationId={organizationId}
           />
         )}
-        {viewTab !== "analytics" && <>
-        <View style={styles.listHeader}>
-          <View style={styles.headerEntityCol}>
-            <Text style={[styles.listHeaderCell, styles.ctHeaderLeft]} numberOfLines={1}>
-              {viewTab === "trips" ? "Trip" : "Vehicle Entity"}
-            </Text>
+        {viewTab !== "analytics" ? (
+          <View style={styles.listHeader}>
+            <View style={styles.headerEntityCol}>
+              <Text style={[styles.listHeaderCell, styles.ctHeaderLeft]} numberOfLines={1}>
+                {viewTab === "trips" ? "Trip" : "Vehicle Entity"}
+              </Text>
+            </View>
+            <View style={styles.headerTripsCol}>
+              <Text style={[styles.listHeaderCell, styles.ctHeaderCenter]} numberOfLines={1}>
+                Trips
+              </Text>
+            </View>
+            <View style={styles.headerOutstandingCol}>
+              <Text style={[styles.listHeaderCell, styles.ctHeaderRight]} numberOfLines={1}>
+                P&L
+              </Text>
+            </View>
           </View>
-          <View style={styles.headerTripsCol}>
-            <Text style={[styles.listHeaderCell, styles.ctHeaderCenter]} numberOfLines={1}>
-              Trips
-            </Text>
-          </View>
-          <View style={styles.headerOutstandingCol}>
-            <Text style={[styles.listHeaderCell, styles.ctHeaderRight]} numberOfLines={1}>
-              P&L
-            </Text>
-          </View>
-        </View>
+        ) : null}
+        {viewTab !== "analytics" ? (
         <View style={styles.listCard}>
           {viewTab === "trips" ? (
             filteredTripsList.length === 0 ? (
@@ -458,7 +460,7 @@ export function GarrageTab({
             ))
           )}
         </View>
-        </>}
+        ) : null}
       </ScrollView>
     </View>
   );

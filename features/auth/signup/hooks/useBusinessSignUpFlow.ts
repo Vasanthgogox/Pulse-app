@@ -49,6 +49,7 @@ export function useBusinessSignUpFlow() {
   const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
 
   const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const useMobileLayout = !isDesktop;
   const pageWidth = isDesktop ? Math.min(DESKTOP_MAX_PANEL_WIDTH, width - 120) : width;
 
   const [step, setStep] = useState(0);
@@ -98,6 +99,7 @@ export function useBusinessSignUpFlow() {
   const [step2Attempted, setStep2Attempted] = useState(false);
   const [step3Attempted, setStep3Attempted] = useState(false);
   const [step4Attempted, setStep4Attempted] = useState(false);
+  const [step5Attempted, setStep5Attempted] = useState(false);
 
   // ─── Derived / memoised ──────────────────────────────────────────────────
 
@@ -118,10 +120,13 @@ export function useBusinessSignUpFlow() {
       (operatingModel === 'NON_ASSET' || operatingModel === 'HYBRID') && !monthlyVolume
         ? 'Select your monthly shipment volume.' : null,
     employeeCount: !employeeCount ? 'Select your employee count.' : null,
-    city: !selectedLocation ? 'Select your city.' : null,
-  }), [businessType, fleetSize, monthlyVolume, employeeCount, selectedLocation, operatingModel]);
+  }), [businessType, fleetSize, monthlyVolume, employeeCount, operatingModel]);
 
   const step4Errors = useMemo(() => ({
+    city: !selectedLocation ? 'Select your city.' : null,
+  }), [selectedLocation]);
+
+  const step5Errors = useMemo(() => ({
     fullName: validateFullName(true)(fullName),
     email: !email.trim() ? 'Email is required.' : validateEmail(email),
     password: !password ? 'Password is required.' : validatePassword(password),
@@ -192,7 +197,7 @@ export function useBusinessSignUpFlow() {
 
   const handleBack = () => {
     if (step === 0) { router.back(); return; }
-    if (step === 5) { router.replace('/'); return; }
+    if (step === 6) { router.replace('/'); return; }
     goToPage(step - 1);
   };
 
@@ -296,9 +301,15 @@ export function useBusinessSignUpFlow() {
 
   const continueCompanyDetails = () => {
     setStep3Attempted(true);
-    const { businessType: bt, fleetSize: fs, monthlyVolume: mv, employeeCount: ec, city } = step3Errors;
-    if (bt || fs || mv || ec || city) return;
+    const { businessType: bt, fleetSize: fs, monthlyVolume: mv, employeeCount: ec } = step3Errors;
+    if (bt || fs || mv || ec) return;
     goToPage(4);
+  };
+
+  const continueCompanyLocation = () => {
+    setStep4Attempted(true);
+    if (step4Errors.city) return;
+    goToPage(5);
   };
 
   /**
@@ -332,8 +343,8 @@ export function useBusinessSignUpFlow() {
 
   const createAccount = async () => {
     if (!isOnline) return Alert.alert('No internet', 'Connect to create an account.');
-    setStep4Attempted(true);
-    const { fullName: fn, email: em, password: pw, confirmPassword: cp } = step4Errors;
+    setStep5Attempted(true);
+    const { fullName: fn, email: em, password: pw, confirmPassword: cp } = step5Errors;
     if (fn || em || pw || cp) return;
 
     const storedPhone = normalizeIndianPhoneForMetadata(phone);
@@ -359,11 +370,13 @@ export function useBusinessSignUpFlow() {
       zone: selectedLocation?.zone,
       businessType: businessType ?? undefined,
       employeeCount: employeeCount ?? undefined,
+      fleetSizeBand: fleetSize ?? undefined,
+      monthlyVolumeBand: monthlyVolume ?? undefined,
     });
     setLoading(false);
     if (result.error) return Alert.alert('Error', result.error.message);
     if (result.emailVerificationRequired) setEmailVerificationRequired(true);
-    goToPage(5);
+    goToPage(6);
   };
 
   const continueWithGoogle = async () => {
@@ -394,6 +407,8 @@ export function useBusinessSignUpFlow() {
       zone: selectedLocation?.zone,
       businessType: businessType ?? undefined,
       employeeCount: employeeCount ?? undefined,
+      fleetSizeBand: fleetSize ?? undefined,
+      monthlyVolumeBand: monthlyVolume ?? undefined,
     });
     if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
 
@@ -426,13 +441,14 @@ export function useBusinessSignUpFlow() {
 
   const scrollConfirmPasswordIntoView = () => {
     setTimeout(() => {
-      pageVerticalScrollRefs.current[4]?.scrollToEnd({ animated: true });
+      pageVerticalScrollRefs.current[5]?.scrollToEnd({ animated: true });
     }, CONFIRM_SCROLL_DELAY_MS);
   };
 
   return {
     // layout
     isDesktop,
+    useMobileLayout,
     pageWidth,
     scrollRef,
     pageVerticalScrollRefs,
@@ -481,7 +497,11 @@ export function useBusinessSignUpFlow() {
     step3Attempted,
     step3Errors,
 
-    // step 4
+    // step 4 (location)
+    step4Attempted,
+    step4Errors,
+
+    // step 5 (account)
     fullName,
     setFullName,
     email,
@@ -496,13 +516,13 @@ export function useBusinessSignUpFlow() {
     toggleShowConfirmPassword,
     loading,
     googleLoading,
-    step4Attempted,
-    step4Errors,
+    step5Attempted,
+    step5Errors,
     passwordStrength,
     confirmMismatch,
     scrollConfirmPasswordIntoView,
 
-    // step 5
+    // step 6
     emailVerificationRequired,
     resendingSecs,
 
@@ -511,6 +531,7 @@ export function useBusinessSignUpFlow() {
     verifyOtp,
     continueOrgCheck,
     continueCompanyDetails,
+    continueCompanyLocation,
     createAccount,
     continueWithGoogle,
     continueWithGoogleFromWelcome,

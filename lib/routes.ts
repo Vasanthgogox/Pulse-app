@@ -18,6 +18,13 @@ export const ROUTES = {
   /** Deep link / web URL target after user taps the reset link in email. */
   AUTH_RESET_PASSWORD: '/auth/reset-password',
   SIGN_UP: '/sign-up',
+  /** Persona-first onboarding hub (Phase 2). Legacy `/sign-up` remains valid. */
+  ONBOARDING: {
+    HUB: '/onboarding',
+    BUSINESS: '/onboarding/business',
+    DRIVER: '/onboarding/driver',
+    JOIN_TEAM: '/onboarding/join-team',
+  },
 
   TABS: {
     /** Fiscal / Cash ledger tab */

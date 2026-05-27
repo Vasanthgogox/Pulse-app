@@ -1,4 +1,4 @@
-import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { LazySuspenseInlineFallback } from "@/components/LazySuspenseFallback";
 import { lazy, Suspense } from "react";
 
 const FinanceScreen = lazy(() =>
@@ -7,10 +7,10 @@ const FinanceScreen = lazy(() =>
   })),
 );
 
-/** Tab chrome is already visible — avoid a second full-screen splash. */
+/** Tab chrome is already visible — show inline spinner while Metro loads the fiscal chunk. */
 export default function FinanceTab() {
   return (
-    <Suspense fallback={<LazySuspenseNullFallback />}>
+    <Suspense fallback={<LazySuspenseInlineFallback message="Loading finance…" />}>
       <FinanceScreen />
     </Suspense>
   );

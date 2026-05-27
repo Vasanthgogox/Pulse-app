@@ -32,6 +32,7 @@ export function isPastIndexBootPath(pathname: string): boolean {
     pathname === '/resources' ||
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||
+    pathname.startsWith('/onboarding') ||
     pathname.startsWith('/welcome') ||
     pathname.startsWith('/terminal-website') ||
     pathname.startsWith('/auth/')

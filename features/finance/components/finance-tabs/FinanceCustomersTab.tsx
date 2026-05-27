@@ -27,6 +27,8 @@ export function FinanceCustomersTab(props: FinanceTabBodyProps) {
     bottomInset,
     tripFinanceAdjustmentsByTripId,
     financeSubTab,
+    customerViewTab,
+    onCustomerViewTabChange,
   } = props;
 
   const entityAggregationLedger =
@@ -60,6 +62,8 @@ export function FinanceCustomersTab(props: FinanceTabBodyProps) {
       onRefresh={onRefresh}
       bottomInset={bottomInset}
       tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
+      viewTab={customerViewTab}
+      onViewTabChange={onCustomerViewTabChange}
       hideSummaryRow
     />
   );

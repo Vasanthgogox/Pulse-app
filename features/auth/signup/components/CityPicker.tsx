@@ -1,7 +1,15 @@
 import INDIA_LOCATIONS from '@/lib/data/indiaLocations.json';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useMemo, useState } from 'react';
-import { FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
 import { C, styles } from '../businessSignUp.styles';
 
@@ -9,34 +17,57 @@ type Zone = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'NORTHEAST';
 export type IndiaLocation = { city: string; state: string; zone: Zone };
 
 const ALL_LOCATIONS = INDIA_LOCATIONS as IndiaLocation[];
-const ITEM_HEIGHT = 58;
+const MAX_SEARCH_RESULTS = 80;
 
 const ZONE_LABELS: Record<Zone, string> = {
-  NORTH: 'North Zone', SOUTH: 'South Zone', EAST: 'East Zone',
-  WEST: 'West Zone', NORTHEAST: 'Northeast Zone',
+  NORTH: 'North Zone',
+  SOUTH: 'South Zone',
+  EAST: 'East Zone',
+  WEST: 'West Zone',
+  NORTHEAST: 'Northeast Zone',
 };
 
 const ZONE_COLORS: Record<Zone, { bg: string; text: string; border: string; bar: string }> = {
-  NORTH:     { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', bar: '#3b82f6' },
-  SOUTH:     { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0', bar: '#22c55e' },
-  EAST:      { bg: '#faf5ff', text: '#6b21a8', border: '#e9d5ff', bar: '#a855f7' },
-  WEST:      { bg: '#fffbeb', text: '#92400e', border: '#fde68a', bar: '#f59e0b' },
+  NORTH: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', bar: '#3b82f6' },
+  SOUTH: { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0', bar: '#22c55e' },
+  EAST: { bg: '#faf5ff', text: '#6b21a8', border: '#e9d5ff', bar: '#a855f7' },
+  WEST: { bg: '#fffbeb', text: '#92400e', border: '#fde68a', bar: '#f59e0b' },
   NORTHEAST: { bg: '#f0fdfa', text: '#134e4a', border: '#99f6e4', bar: '#14b8a6' },
 };
 
 const POPULAR_CITY_NAMES = [
-  'Mumbai', 'Delhi', 'Bangalore', 'Chennai', 'Hyderabad',
-  'Pune', 'Kolkata', 'Ahmedabad', 'Surat', 'Jaipur',
-  'Nagpur', 'Ludhiana', 'Indore', 'Kochi', 'Coimbatore',
+  'Mumbai',
+  'Delhi',
+  'Bangalore',
+  'Chennai',
+  'Hyderabad',
+  'Pune',
+  'Kolkata',
+  'Ahmedabad',
+  'Surat',
+  'Jaipur',
+  'Nagpur',
+  'Ludhiana',
+  'Indore',
+  'Kochi',
+  'Coimbatore',
 ];
 
-const POPULAR_CITIES_DATA = POPULAR_CITY_NAMES
-  .map(name => (INDIA_LOCATIONS as IndiaLocation[]).find(l => l.city === name))
-  .filter((l): l is IndiaLocation => !!l);
+const POPULAR_CITIES_DATA = POPULAR_CITY_NAMES.map((name) =>
+  (INDIA_LOCATIONS as IndiaLocation[]).find((l) => l.city === name),
+).filter((l): l is IndiaLocation => !!l);
 
 function HighlightText({
-  text, query, baseStyle, matchStyle,
-}: { text: string; query: string; baseStyle: StyleProp<TextStyle>; matchStyle: StyleProp<TextStyle> }) {
+  text,
+  query,
+  baseStyle,
+  matchStyle,
+}: {
+  text: string;
+  query: string;
+  baseStyle: StyleProp<TextStyle>;
+  matchStyle: StyleProp<TextStyle>;
+}) {
   const q = query.trim().toLowerCase();
   if (!q) return <Text style={baseStyle}>{text}</Text>;
   const lower = text.toLowerCase();
@@ -48,6 +79,45 @@ function HighlightText({
       <Text style={matchStyle}>{text.slice(idx, idx + q.length)}</Text>
       {text.slice(idx + q.length)}
     </Text>
+  );
+}
+
+function CityResultRow({
+  item,
+  query,
+  selected,
+  onSelect,
+}: {
+  item: IndiaLocation;
+  query: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const zc = ZONE_COLORS[item.zone];
+  return (
+    <TouchableOpacity
+      style={[styles.cityResultItem, selected && styles.cityResultItemActive]}
+      onPress={onSelect}
+    >
+      <View style={[styles.cityResultBar, { backgroundColor: zc.bar }]} />
+      <View style={styles.cityResultBody}>
+        <HighlightText
+          text={item.city}
+          query={query}
+          baseStyle={[styles.cityResultName, selected && { color: C.accent }]}
+          matchStyle={styles.cityResultNameMatch}
+        />
+        <Text style={styles.cityResultState}>{item.state}</Text>
+      </View>
+      <View
+        style={[styles.cityResultZonePill, { backgroundColor: zc.bg, borderColor: zc.border }]}
+      >
+        <Text style={[styles.cityResultZoneText, { color: zc.text }]}>{item.zone}</Text>
+      </View>
+      {selected ? (
+        <FontAwesome name="check-circle" size={16} color={C.accent} style={localStyles.checkIcon} />
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
@@ -65,13 +135,30 @@ export function CityPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
 
+  const trimmedQuery = query.trim();
+  const hasQuery = trimmedQuery.length > 0;
+
   const filteredLocations = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return ALL_LOCATIONS;
+    if (!hasQuery) return [];
+    const q = trimmedQuery.toLowerCase();
     return ALL_LOCATIONS.filter(
       (l) => l.city.toLowerCase().includes(q) || l.state.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [hasQuery, trimmedQuery]);
+
+  const visibleResults = filteredLocations.slice(0, MAX_SEARCH_RESULTS);
+  const hasMoreResults = filteredLocations.length > MAX_SEARCH_RESULTS;
+
+  const selectLocation = (loc: IndiaLocation) => {
+    onChange(loc);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const closePicker = () => {
+    setOpen(false);
+    setQuery('');
+  };
 
   return (
     <View>
@@ -79,17 +166,25 @@ export function CityPicker({
         value ? (
           <TouchableOpacity
             style={[styles.citySelectedCard, { borderLeftColor: ZONE_COLORS[value.zone].bar }]}
-            onPress={() => { setOpen(true); setQuery(''); }}
+            onPress={() => {
+              setOpen(true);
+              setQuery('');
+            }}
             activeOpacity={0.82}
           >
             <View style={styles.citySelectedInfo}>
               <Text style={styles.citySelectedName}>{value.city}</Text>
               <View style={styles.citySelectedMeta}>
                 <Text style={styles.citySelectedState}>{value.state}</Text>
-                <View style={[styles.cityZonePill, {
-                  backgroundColor: ZONE_COLORS[value.zone].bg,
-                  borderColor: ZONE_COLORS[value.zone].border,
-                }]}>
+                <View
+                  style={[
+                    styles.cityZonePill,
+                    {
+                      backgroundColor: ZONE_COLORS[value.zone].bg,
+                      borderColor: ZONE_COLORS[value.zone].border,
+                    },
+                  ]}
+                >
                   <Text style={[styles.cityZonePillText, { color: ZONE_COLORS[value.zone].text }]}>
                     {ZONE_LABELS[value.zone]}
                   </Text>
@@ -98,7 +193,10 @@ export function CityPicker({
             </View>
             <TouchableOpacity
               style={styles.cityClearBtn}
-              onPress={() => { onChange(null); setQuery(''); }}
+              onPress={() => {
+                onChange(null);
+                setQuery('');
+              }}
               hitSlop={12}
             >
               <FontAwesome name="times-circle" size={20} color="#cbd5e1" />
@@ -133,13 +231,13 @@ export function CityPicker({
                 <FontAwesome name="times-circle" size={16} color={C.muted} />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity onPress={() => { setOpen(false); setQuery(''); }} hitSlop={10}>
+              <TouchableOpacity onPress={closePicker} hitSlop={10}>
                 <FontAwesome name="times" size={16} color={C.muted} />
               </TouchableOpacity>
             )}
           </View>
 
-          {!query.trim() ? (
+          {!hasQuery ? (
             <View style={styles.popularSection}>
               <Text style={styles.pickerSectionLabel}>Popular freight hubs</Text>
               <ScrollView
@@ -152,80 +250,77 @@ export function CityPicker({
                   <TouchableOpacity
                     key={loc.city}
                     style={[styles.popularChip, { borderColor: ZONE_COLORS[loc.zone].border }]}
-                    onPress={() => { onChange(loc); setOpen(false); setQuery(''); }}
+                    onPress={() => selectLocation(loc)}
                   >
-                    <View style={[styles.popularChipDot, { backgroundColor: ZONE_COLORS[loc.zone].bar }]} />
+                    <View
+                      style={[styles.popularChipDot, { backgroundColor: ZONE_COLORS[loc.zone].bar }]}
+                    />
                     <Text style={styles.popularChipText}>{loc.city}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <View style={styles.pickerDivider} />
-              <Text style={styles.pickerSectionLabel}>All cities</Text>
+              <Text style={localStyles.searchHint}>
+                Type in the search box to find your city or district.
+              </Text>
             </View>
           ) : (
-            filteredLocations.length > 0 ? (
-              <Text style={styles.resultCount}>
-                {filteredLocations.length} result{filteredLocations.length !== 1 ? 's' : ''}
-              </Text>
-            ) : null
-          )}
+            <>
+              {filteredLocations.length > 0 ? (
+                <Text style={styles.resultCount}>
+                  {filteredLocations.length} result{filteredLocations.length !== 1 ? 's' : ''}
+                  {hasMoreResults ? ` — showing first ${MAX_SEARCH_RESULTS}` : ''}
+                </Text>
+              ) : null}
 
-          <FlatList
-            data={filteredLocations}
-            keyExtractor={(_, i) => String(i)}
-            keyboardShouldPersistTaps="handled"
-            getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
-            initialNumToRender={20}
-            maxToRenderPerBatch={20}
-            removeClippedSubviews
-            style={styles.cityResultsList}
-            renderItem={({ item }) => {
-              const active = value?.city === item.city && value?.state === item.state;
-              const zc = ZONE_COLORS[item.zone];
-              return (
-                <TouchableOpacity
-                  style={[styles.cityResultItem, active && styles.cityResultItemActive]}
-                  onPress={() => { onChange(item); setOpen(false); setQuery(''); }}
-                >
-                  <View style={[styles.cityResultBar, { backgroundColor: zc.bar }]} />
-                  <View style={styles.cityResultBody}>
-                    <HighlightText
-                      text={item.city}
-                      query={query}
-                      baseStyle={[styles.cityResultName, active && { color: C.accent }]}
-                      matchStyle={styles.cityResultNameMatch}
-                    />
-                    <Text style={styles.cityResultState}>{item.state}</Text>
+              <ScrollView
+                style={styles.cityResultsList}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+              >
+                {visibleResults.length > 0 ? (
+                  visibleResults.map((item, index) => {
+                    const active =
+                      value?.city === item.city && value?.state === item.state;
+                    return (
+                      <View key={`${item.city}-${item.state}-${index}`}>
+                        {index > 0 ? <View style={styles.cityResultSep} /> : null}
+                        <CityResultRow
+                          item={item}
+                          query={query}
+                          selected={!!active}
+                          onSelect={() => selectLocation(item)}
+                        />
+                      </View>
+                    );
+                  })
+                ) : (
+                  <View style={styles.cityEmptyState}>
+                    <FontAwesome name="map-o" size={28} color={C.border} />
+                    <Text style={styles.cityEmptyTitle}>No cities found</Text>
+                    <Text style={styles.cityEmptyHint}>
+                      Try a different spelling or district name.
+                    </Text>
                   </View>
-                  <View style={[styles.cityResultZonePill, { backgroundColor: zc.bg, borderColor: zc.border }]}>
-                    <Text style={[styles.cityResultZoneText, { color: zc.text }]}>{item.zone}</Text>
-                  </View>
-                  {active ? (
-                    <FontAwesome name="check-circle" size={16} color={C.accent} style={cityPickerStyles.checkIcon} />
-                  ) : null}
-                </TouchableOpacity>
-              );
-            }}
-            ItemSeparatorComponent={() => <View style={styles.cityResultSep} />}
-            ListEmptyComponent={
-              <View style={styles.cityEmptyState}>
-                <FontAwesome name="map-o" size={28} color={C.border} />
-                <Text style={styles.cityEmptyTitle}>No cities found</Text>
-                <Text style={styles.cityEmptyHint}>Try a different spelling or district name.</Text>
-              </View>
-            }
-          />
+                )}
+              </ScrollView>
+            </>
+          )}
         </View>
       )}
 
-      {attempted && error ? (
-        <Text style={styles.fieldError}>{error}</Text>
-      ) : null}
+      {attempted && error ? <Text style={styles.fieldError}>{error}</Text> : null}
     </View>
   );
 }
 
-const cityPickerStyles = StyleSheet.create({
+const localStyles = StyleSheet.create({
   checkIcon: { marginLeft: 8 },
+  searchHint: {
+    fontSize: 12,
+    color: C.muted,
+    lineHeight: 17,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
 });
-

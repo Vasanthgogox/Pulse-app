@@ -28,6 +28,7 @@ import {
 import { MotiView } from "moti";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
+import { AddTripWizardProgress } from "./AddTripWizardProgress";
 import type {
   AddTripCompleteOptions,
   AddTripCompleteResult,
@@ -297,6 +298,27 @@ export function AddTripModal({
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
     >
+      {wizardEnabled ? (
+        <AddTripWizardProgress
+          steps={[
+            { id: "route", label: "Route" },
+            { id: "client", label: "Client" },
+            { id: "allocation", label: "Allocation" },
+          ]}
+          currentStepId={wizardStep}
+        />
+      ) : null}
+      <MotiView
+        key={
+          wizardEnabled
+            ? `${wizardStep}-${allocationSubStep}`
+            : "create-trip-form"
+        }
+        from={{ opacity: 0, translateY: 14 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: "timing", duration: 360 }}
+        style={{ flex: 1, minHeight: 0 }}
+      >
       <AddTripFormFields
         state={form.state}
         setters={form.setters}
@@ -315,6 +337,7 @@ export function AddTripModal({
         }
         showInlineCta={false}
       />
+      </MotiView>
     </AddTripModalLayout>
   );
 }
