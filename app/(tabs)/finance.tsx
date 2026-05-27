@@ -1,17 +1,9 @@
-import { LazySuspenseInlineFallback } from "@/components/LazySuspenseFallback";
-import { lazy, Suspense } from "react";
+import { FinanceScreen } from '@/features/finance/components/FinanceScreen';
 
-const FinanceScreen = lazy(() =>
-  import("@/features/finance/components/FinanceScreen").then((m) => ({
-    default: m.FinanceScreen,
-  })),
-);
-
-/** Tab chrome is already visible — show inline spinner while Metro loads the fiscal chunk. */
+/**
+ * Eager import — finance is ~3k modules. Lazy route + lazy sub-tabs caused Metro
+ * "Requiring unknown module" on Expo Go; party lists rendered empty (headers only).
+ */
 export default function FinanceTab() {
-  return (
-    <Suspense fallback={<LazySuspenseInlineFallback message="Loading finance…" />}>
-      <FinanceScreen />
-    </Suspense>
-  );
+  return <FinanceScreen />;
 }

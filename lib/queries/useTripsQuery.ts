@@ -13,6 +13,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { isStartupComplete, markStartupPhase } from '@/lib/startupMetrics';
 
@@ -28,6 +29,7 @@ export function useTripsQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.realtime,
+    refetchOnMount: refetchOnMountIfEntityListEmpty,
   });
 }
 

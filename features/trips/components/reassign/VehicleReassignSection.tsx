@@ -77,16 +77,18 @@ export function VehicleReassignSection({
         </View>
       ) : null}
 
-      <ReassignSegmentedControl
-        options={[
-          { id: 'existing' as const, label: 'From fleet' },
-          { id: 'add' as const, label: 'Add new' },
-        ]}
-        value={mode}
-        onChange={onModeChange}
-      />
+      {!isAggregate ? (
+        <ReassignSegmentedControl
+          options={[
+            { id: 'existing' as const, label: 'From fleet' },
+            { id: 'add' as const, label: 'Add new' },
+          ]}
+          value={mode}
+          onChange={onModeChange}
+        />
+      ) : null}
 
-      {mode === 'existing' ? (
+      {!isAggregate && mode === 'existing' ? (
         <>
           <SearchBar
             value={search}
@@ -148,7 +150,7 @@ export function VehicleReassignSection({
         </>
       ) : null}
 
-      {mode === 'add' ? (
+      {!isAggregate && mode === 'add' ? (
         <AddVehicleForm
           organizationId={organizationId}
           onCreated={(id) => {

@@ -30,6 +30,7 @@ import * as authService from '@/features/auth/services/auth.service';
 import { isSessionExpiredError } from '@/features/auth/services/auth.service';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
+import { purgeEmptyEntityQueriesFromCache } from '@/lib/queries/entityListQueryOptions';
 import {
   installForegroundPruning,
   installRealtimeDiagnosticsGlobalHook,
@@ -306,12 +307,20 @@ export default function RootLayout() {
       <GestureHandlerRootView style={styles.ghRoot}>
         <PersistQueryClientProvider
           client={queryClient}
+          onSuccess={() => {
+            purgeEmptyEntityQueriesFromCache(queryClient);
+          }}
           persistOptions={{
             persister,
             maxAge: 24 * 60 * 60 * 1000,
             dehydrateOptions: {
-              shouldDehydrateQuery: (query) =>
-                query.state.status === 'success',
+              shouldDehydrateQuery: (query) => {
+                if (query.state.status !== 'success') return false;
+                const data = query.state.data;
+                // Never persist empty entity lists — they block refetch on cold start.
+                if (Array.isArray(data) && data.length === 0) return false;
+                return true;
+              },
             },
           }}
         >

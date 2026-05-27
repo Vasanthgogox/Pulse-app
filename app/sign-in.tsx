@@ -1,6 +1,12 @@
 import Layout from '@/constants/Layout';
-import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from '@/constants/Theme';
+import { GoogleBrandIcon } from '@/features/auth/components/GoogleBrandIcon';
+import { SignUpPulseField } from '@/features/auth/signup/SignUpPulseField';
+import { SignUpPulsePrimaryButton } from '@/features/auth/signup/SignUpPulsePrimaryButton';
+import { SignUpPulseTitle } from '@/features/auth/signup/SignUpPulseTitle';
+import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
+import { PULSE_SIGNUP_RADIUS } from '@/features/auth/signup/signUpPulseTheme';
+import { signUpMobileContentInner } from '@/features/auth/signup/signUpMobile.styles';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import { validateEmailRequired } from '@/lib/emailValidation';
@@ -8,6 +14,7 @@ import { getKeepSignedIn, setKeepSignedIn } from '@/lib/keepSignedInPreference';
 import { ROUTES } from '@/lib/routes';
 import { containsNullByte, validatePasswordForSignIn } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -15,9 +22,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -191,13 +198,151 @@ export default function SignIn() {
     }
   };
 
+  const formDisabled = loading || waitingForAuthState || !isOnline;
+
+  const renderSignInForm = () => (
+  <>
+    <SignUpPulseTitle
+      title="Sign in"
+      subtitle="Access your Pulse account dashboard."
+      centered={isDesktop}
+      compact
+    />
+
+    <SignUpPulseField
+      label="Email Address"
+      theme={DRIVER_SIGNUP}
+      value={email}
+      onChangeText={(t) => {
+        setSignInError(null);
+        setPasswordResetBanner(false);
+        setEmail(t);
+      }}
+      placeholder="you@example.com"
+      autoCapitalize="none"
+      autoCorrect={false}
+      keyboardType="email-address"
+      textContentType="username"
+      autoComplete="email"
+      maxLength={255}
+      editable={!formDisabled}
+    />
+
+    <SignUpPulseField
+      label="Password"
+      theme={DRIVER_SIGNUP}
+      value={password}
+      onChangeText={(t) => {
+        setSignInError(null);
+        setPassword(t);
+      }}
+      placeholder="Your password"
+      secureTextEntry={!showPass}
+      autoCapitalize="none"
+      autoCorrect={false}
+      textContentType="password"
+      autoComplete="password"
+      maxLength={128}
+      editable={!formDisabled}
+      trailing={
+        <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+          {showPass ? (
+            <EyeOff size={18} color={DRIVER_SIGNUP.muted} />
+          ) : (
+            <Eye size={18} color={DRIVER_SIGNUP.muted} />
+          )}
+        </Pressable>
+      }
+    />
+
+    {passwordResetBanner ? (
+      <Text style={styles.successBanner}>Password updated. Sign in with your new password.</Text>
+    ) : null}
+    {signInError || restoreError ? (
+      <Text style={styles.errorText}>
+        {signInError ?? restoreError?.message ?? 'Could not restore your session. Sign in again.'}
+      </Text>
+    ) : null}
+
+    <View style={styles.rowBetween}>
+      <Pressable
+        style={styles.keepRow}
+        onPress={() => {
+          const next = !keepSignedIn;
+          setKeepSignedInState(next);
+          void setKeepSignedIn(next);
+        }}
+      >
+        <FontAwesome
+          name={keepSignedIn ? 'check-square' : 'square-o'}
+          size={16}
+          color={keepSignedIn ? DRIVER_SIGNUP.primary : DRIVER_SIGNUP.muted}
+        />
+        <Text style={styles.keepText}>Remember me</Text>
+      </Pressable>
+      <Pressable
+        onPress={() =>
+          router.push(
+            `${ROUTES.FORGOT_PASSWORD}?email=${encodeURIComponent(email.trim())}` as Href,
+          )
+        }
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Text style={styles.forgotText}>Forgot password?</Text>
+      </Pressable>
+    </View>
+
+    <SignUpPulsePrimaryButton
+      testID="signin-submit-btn"
+      label="Enter dashboard"
+      onPress={handleSignIn}
+      disabled={formDisabled}
+      loading={loading || waitingForAuthState}
+      theme={DRIVER_SIGNUP}
+      style={styles.primaryBtn}
+    />
+
+    <View style={styles.orRow}>
+      <View style={styles.orLine} />
+      <Text style={styles.orText}>or</Text>
+      <View style={styles.orLine} />
+    </View>
+
+    <Pressable
+      onPress={handleGoogleSignIn}
+      disabled={googleLoading || formDisabled}
+      style={({ pressed }) => [
+        styles.googleBtn,
+        (googleLoading || formDisabled) && styles.googleBtnDisabled,
+        pressed && !googleLoading && !formDisabled && styles.googleBtnPressed,
+      ]}
+    >
+      {googleLoading ? (
+        <Text style={styles.googleBtnText}>Signing in…</Text>
+      ) : (
+        <>
+          <GoogleBrandIcon size={18} />
+          <Text style={styles.googleBtnText}>Continue with Google</Text>
+        </>
+      )}
+    </Pressable>
+
+    <View style={styles.signUpRow}>
+      <Text style={styles.signUpMuted}>New to Pulse? </Text>
+      <Pressable onPress={() => router.push(ROUTES.ONBOARDING.HUB)}>
+        <Text style={styles.signUpLink}>Create account</Text>
+      </Pressable>
+    </View>
+  </>
+  );
+
   const renderSignIn = () => (
     <View style={[styles.panelShell, isDesktop && styles.panelShellDesktop]}>
       {isDesktop ? (
         <View style={styles.leftPanel}>
           <Text style={styles.leftLogo}>PULSE<Text style={styles.logoDot}>.</Text></Text>
           <Text style={styles.leftTag}>System Access</Text>
-          <Text style={styles.leftTitle}>Welcome Back Commander.</Text>
+          <Text style={styles.leftTitle}>Welcome back.</Text>
           <Text style={styles.leftSubtitle}>
             Your fleet is waiting. Log in to synchronize your logs and check earnings.
           </Text>
@@ -210,120 +355,18 @@ export default function SignIn() {
             <View style={styles.rightPanelOrbB} />
           </>
         ) : null}
-        <Text style={[styles.formTitle, isDesktop && styles.formTitleDesktop]}>Sign in.</Text>
-        <Text style={[styles.formSubtitle, isDesktop && styles.formSubtitleDesktop]}>
-          Access your Pulse account dashboard.
-        </Text>
-
-        <TextInput
-          value={email}
-          onChangeText={(t) => {
-            setSignInError(null);
-            setPasswordResetBanner(false);
-            setEmail(t);
-          }}
-          placeholder="Email Address"
-          placeholderTextColor={isDesktop ? 'rgba(148,163,184,0.5)' : Theme.textMuted}
-          style={[styles.input, isDesktop && styles.inputDesktop]}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="username"
-          autoComplete="email"
-          maxLength={255}
-        />
-        <View style={styles.passwordWrap}>
-          <TextInput
-            value={password}
-            onChangeText={(t) => {
-              setSignInError(null);
-              setPassword(t);
-            }}
-            placeholder="Your Password"
-            placeholderTextColor={isDesktop ? 'rgba(148,163,184,0.5)' : Theme.textMuted}
-            style={[styles.input, isDesktop && styles.inputDesktop]}
-            secureTextEntry={!showPass}
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="password"
-            autoComplete="password"
-            maxLength={128}
-          />
-          <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn}>
-            <FontAwesome name={showPass ? 'eye-slash' : 'eye'} size={18} color={Theme.textMuted} />
-          </Pressable>
-        </View>
-        {passwordResetBanner ? (
-          <Text style={styles.successBanner}>Password updated. Sign in with your new password.</Text>
-        ) : null}
-        {signInError || restoreError ? (
-          <Text style={styles.errorText}>
-            {signInError ?? restoreError?.message ?? 'Could not restore your session. Sign in again.'}
-          </Text>
-        ) : null}
-
-        <View style={styles.rowBetween}>
-          <TouchableOpacity
-            style={styles.keepRow}
-            onPress={() => {
-              const next = !keepSignedIn;
-              setKeepSignedInState(next);
-              void setKeepSignedIn(next);
-            }}
+        {isDesktop ? (
+          <View style={styles.formColumn}>{renderSignInForm()}</View>
+        ) : (
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <FontAwesome
-              name={keepSignedIn ? 'check-square' : 'square-o'}
-              size={18}
-              color={keepSignedIn ? Theme.driverPrimary : Theme.textMuted}
-            />
-            <Text style={[styles.keepText, isDesktop && styles.keepTextDesktop]}>Remember Me</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() =>
-              router.push(
-                `${ROUTES.FORGOT_PASSWORD}?email=${encodeURIComponent(email.trim())}` as Href,
-              )
-            }
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          testID="signin-submit-btn"
-          onPress={handleSignIn}
-          style={[styles.primaryBtn, (loading || waitingForAuthState || !isOnline) && styles.disabledBtn]}
-          disabled={loading || waitingForAuthState || !isOnline}
-        >
-          {loading || waitingForAuthState ? (
-            <LoadingIndicator color={Theme.textOnPrimary} />
-          ) : (
-            <Text style={styles.primaryBtnText}>Enter Dashboard</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={handleGoogleSignIn}
-          style={[styles.googleBtn, (googleLoading || loading || waitingForAuthState || !isOnline) && styles.disabledBtn]}
-          disabled={googleLoading || loading || waitingForAuthState || !isOnline}
-        >
-          {googleLoading ? (
-            <LoadingIndicator color={Theme.textPrimaryDark} />
-          ) : (
-            <>
-              <FontAwesome name="google" size={14} color={Theme.textPrimaryDark} />
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.signUpRow}>
-          <Text style={[styles.signUpMuted, isDesktop && styles.signUpMutedDesktop]}>New to Pulse? </Text>
-          <TouchableOpacity onPress={() => router.push(ROUTES.WELCOME)} activeOpacity={0.8}>
-            <Text style={styles.signUpLink}>Create account</Text>
-          </TouchableOpacity>
-        </View>
+            {renderSignInForm()}
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -346,10 +389,13 @@ export default function SignIn() {
 
       {renderSignIn()}
 
-      <TouchableOpacity onPress={() => router.replace(ROUTES.WELCOME)} style={styles.backFloating}>
-        <FontAwesome name="chevron-left" size={14} color={Theme.textMuted} />
+      <Pressable
+        onPress={() => router.replace(ROUTES.ONBOARDING.HUB)}
+        style={[styles.backFloating, { bottom: insets.bottom + 12 }]}
+      >
+        <FontAwesome name="chevron-left" size={14} color={DRIVER_SIGNUP.muted} />
         <Text style={styles.backFloatingText}>Back</Text>
-      </TouchableOpacity>
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
@@ -357,7 +403,7 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: DRIVER_SIGNUP.bg,
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   containerDesktop: {
@@ -368,29 +414,24 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.negativeMuted,
     borderColor: Theme.negative,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: PULSE_SIGNUP_RADIUS.pill,
+    paddingVertical: 8,
     marginTop: 8,
-    marginBottom: 10,
+    marginBottom: 8,
+    marginHorizontal: Layout.screenPaddingHorizontal,
   },
   offlineText: {
     textAlign: 'center',
     color: Theme.negative,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   panelShell: {
     flex: 1,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    overflow: 'hidden',
     flexDirection: 'row',
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: DRIVER_SIGNUP.bg,
   },
   panelShellDesktop: {
-    borderRadius: 0,
-    borderWidth: 0,
     backgroundColor: '#020617',
   },
   leftPanel: {
@@ -401,46 +442,58 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   leftLogo: {
-    fontSize: 44,
+    fontSize: 36,
     fontWeight: '900',
     fontStyle: 'italic',
-    letterSpacing: -1.1,
+    letterSpacing: -1,
     color: Theme.textOnDark,
-    marginBottom: 14,
-  },
-  leftTag: {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
-    fontWeight: '700',
-    color: 'rgba(148,163,184,0.75)',
-    marginBottom: 18,
-  },
-  leftTitle: {
-    fontSize: 40,
-    fontWeight: '900',
-    color: Theme.textOnDark,
-    letterSpacing: -0.8,
     marginBottom: 12,
   },
+  leftTag: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    fontWeight: '700',
+    color: 'rgba(148,163,184,0.75)',
+    marginBottom: 14,
+  },
+  leftTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: Theme.textOnDark,
+    letterSpacing: -0.6,
+    marginBottom: 10,
+  },
   leftSubtitle: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 22,
     color: 'rgba(148,163,184,0.75)',
     maxWidth: 420,
   },
   rightPanel: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-    justifyContent: 'center',
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: DRIVER_SIGNUP.bg,
   },
   rightPanelDesktop: {
     paddingHorizontal: 48,
     paddingVertical: 48,
     backgroundColor: '#ffffff',
     overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  formColumn: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 24,
+    ...signUpMobileContentInner,
   },
   rightPanelOrbA: {
     position: 'absolute',
@@ -460,66 +513,32 @@ const styles = StyleSheet.create({
     left: -70,
     backgroundColor: 'rgba(15,23,42,0.06)',
   },
-  formTitle: {
-    fontSize: 44,
-    fontWeight: '900',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.8,
-  },
-  formTitleDesktop: {
-    color: Theme.textPrimaryDark,
-  },
-  formSubtitle: {
-    marginTop: 6,
-    marginBottom: 18,
-    fontSize: 14,
-    color: Theme.textMuted,
-  },
-  formSubtitleDesktop: {
-    color: Theme.textSecondary,
-  },
-  input: {
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: Theme.textPrimaryDark,
-    marginBottom: 12,
-  },
-  inputDesktop: {
-    backgroundColor: '#f8fafc',
-    borderColor: Theme.border,
-    color: Theme.textPrimaryDark,
-  },
-  passwordWrap: {
-    position: 'relative',
-  },
   eyeBtn: {
     position: 'absolute',
     right: 14,
     top: 14,
+    padding: 4,
   },
   errorText: {
     color: Theme.negative,
-    marginBottom: 8,
-    fontSize: 13,
+    marginTop: -8,
+    marginBottom: 12,
+    fontSize: 12,
     fontWeight: '600',
   },
   successBanner: {
     color: Theme.positive,
-    marginBottom: 10,
-    fontSize: 13,
+    marginTop: -8,
+    marginBottom: 12,
+    fontSize: 12,
     fontWeight: '600',
   },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 2,
-    marginBottom: 10,
+    marginBottom: 16,
+    marginTop: -4,
   },
   keepRow: {
     flexDirection: 'row',
@@ -528,55 +547,57 @@ const styles = StyleSheet.create({
   },
   keepText: {
     fontSize: 12,
-    color: Theme.textMuted,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  keepTextDesktop: {
-    color: Theme.textSecondary,
+    color: DRIVER_SIGNUP.muted,
+    fontWeight: '600',
   },
   forgotText: {
     fontSize: 12,
-    color: Theme.driverPrimary,
+    color: DRIVER_SIGNUP.primary,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
   primaryBtn: {
-    marginTop: 6,
-    backgroundColor: Theme.driverPrimary,
-    borderRadius: 999,
-    paddingVertical: 16,
+    marginTop: 0,
+    marginBottom: 4,
+  },
+  orRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 14,
+    gap: 12,
   },
-  disabledBtn: {
-    opacity: 0.6,
+  orLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: DRIVER_SIGNUP.border,
   },
-  primaryBtnText: {
-    color: Theme.textOnPrimary,
+  orText: {
     fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontWeight: '600',
+    color: DRIVER_SIGNUP.muted,
   },
   googleBtn: {
-    marginTop: 10,
-    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
+    borderRadius: PULSE_SIGNUP_RADIUS.button,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.networkCardBackground,
+    borderColor: DRIVER_SIGNUP.border,
+    backgroundColor: DRIVER_SIGNUP.bg,
+    marginBottom: 4,
+    minHeight: 48,
+  },
+  googleBtnDisabled: {
+    opacity: 0.5,
+  },
+  googleBtnPressed: {
+    backgroundColor: DRIVER_SIGNUP.surface,
   },
   googleBtnText: {
-    color: Theme.textPrimaryDark,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: '700',
+    color: DRIVER_SIGNUP.text,
   },
   logoDot: {
     color: Theme.driverPrimary,
@@ -584,39 +605,32 @@ const styles = StyleSheet.create({
   backFloating: {
     position: 'absolute',
     left: 18,
-    bottom: 16,
-    backgroundColor: Theme.surface,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.border,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
   },
   backFloatingText: {
-    color: Theme.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
+    color: DRIVER_SIGNUP.muted,
+    fontSize: 14,
+    fontWeight: '600',
   },
   signUpRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 20,
+    paddingBottom: 8,
   },
   signUpMuted: {
     fontSize: 13,
-    color: Theme.textMuted,
+    color: DRIVER_SIGNUP.muted,
     fontWeight: '500',
-  },
-  signUpMutedDesktop: {
-    color: Theme.textSecondary,
   },
   signUpLink: {
     fontSize: 13,
-    color: Theme.driverPrimary,
+    color: DRIVER_SIGNUP.primary,
     fontWeight: '700',
   },
 });

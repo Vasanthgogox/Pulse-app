@@ -14,7 +14,7 @@ export const DESKTOP_MAX_PANEL_WIDTH = 560;
 export const SCROLL_BOTTOM_PAD = 220;
 export const CONFIRM_SCROLL_DELAY_MS = 150;
 
-export const STEP_LABELS = ['Phone', 'Verify', 'Company', 'Details', 'Location', 'Account'] as const;
+export const STEP_LABELS = ['Phone', 'Verify', 'Company', 'Details', 'Location', 'Account', 'Logo', 'Photo'] as const;
 
 export const BUSINESS_ACTIVATION_HEADERS: Record<
   number,

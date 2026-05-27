@@ -42,7 +42,7 @@ import { ROUTES } from "@/lib/routes";
 import { useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -522,6 +522,85 @@ export default function LedgerSyncScreen() {
   const effectiveDueAmountIn = tripComputedDues.in ?? dueAmountInFromQuery;
   const effectiveDueAmountOut = tripComputedDues.out ?? dueAmountOutFromQuery;
 
+  const lastSubmittedDataRef = useRef<AddTransactionData | null>(null);
+
+  const navigateAfterLedgerSuccess = useCallback(
+    (data: AddTransactionData) => {
+      if (params.tripId && params.returnTo === "trip-ledger") {
+        const q = new URLSearchParams();
+        if (params.entityType) q.set("entityType", params.entityType);
+        if (params.entityId) q.set("entityId", params.entityId);
+        if (params.partyName) q.set("partyName", params.partyName);
+        const query = q.toString();
+        router.replace(
+          query ? `/trip-ledger/${params.tripId}?${query}` : `/trip-ledger/${params.tripId}`,
+        );
+        return;
+      }
+      if (params.tripId) {
+        router.replace(`/trip/${params.tripId}`);
+        return;
+      }
+      if (params.entityType && params.entityId) {
+        switch (params.entityType) {
+          case "CLIENT":
+            router.replace(`/client/${params.entityId}`);
+            return;
+          case "SUPPLIER":
+            router.replace(`/supplier/${params.entityId}`);
+            return;
+          case "DRIVER":
+            router.replace(`/driver/${params.entityId}`);
+            return;
+          case "VEHICLE":
+            router.replace(`/vehicle/${params.entityId}`);
+            return;
+          default:
+            router.replace(ROUTES.TABS.FINANCE as "/");
+            return;
+        }
+      }
+      const tripNavId = data.tripAllocations?.[0]?.tripId ?? data.tripId;
+      if (tripNavId) {
+        router.replace(`/trip/${tripNavId}`);
+        return;
+      }
+      const partyId = data.partyId ?? null;
+      const contactType = data.contactType ?? null;
+      if (partyId && partyId !== "misc") {
+        if (contactType === "client") {
+          router.replace(`/client/${partyId}`);
+          return;
+        }
+        if (contactType === "supplier") {
+          router.replace(`/supplier/${partyId}`);
+          return;
+        }
+        if (contactType === "driver") {
+          const driverId =
+            partyId === "driver-salary" ? (data.contactId ?? partyId) : partyId;
+          if (driverId) router.replace(`/driver/${driverId}`);
+          return;
+        }
+      }
+      router.replace(ROUTES.TABS.FINANCE as "/");
+    },
+    [
+      router,
+      params.tripId,
+      params.returnTo,
+      params.entityType,
+      params.entityId,
+      params.partyName,
+    ],
+  );
+
+  const handleSuccessDismiss = useCallback(() => {
+    const data = lastSubmittedDataRef.current;
+    if (data) navigateAfterLedgerSuccess(data);
+    else safeBack();
+  }, [navigateAfterLedgerSuccess, safeBack]);
+
   const handleSubmit = useCallback(
     async (data: AddTransactionData, options?: AddTransactionSubmitOptions) => {
       if (!orgId) return;
@@ -736,7 +815,7 @@ export default function LedgerSyncScreen() {
       const { error } = await doCreate;
       if (error) {
         Alert.alert(t("error"), error.message);
-        return;
+        throw new Error(error.message);
       }
 
       void queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
@@ -796,61 +875,7 @@ export default function LedgerSyncScreen() {
         await updateSalaryRequestStatus(params.salaryRequestId, "paid");
       }
 
-      // Navigate back to the detail page that opened add-entry so user sees updated data (avoid landing on Ops Agent tab).
-      if (params.tripId && params.returnTo === "trip-ledger") {
-        const q = new URLSearchParams();
-        if (params.entityType) q.set("entityType", params.entityType);
-        if (params.entityId) q.set("entityId", params.entityId);
-        if (params.partyName) q.set("partyName", params.partyName);
-        const query = q.toString();
-        router.replace(
-          query ? `/trip-ledger/${params.tripId}?${query}` : `/trip-ledger/${params.tripId}`,
-        );
-      } else if (params.tripId) {
-        router.replace(`/trip/${params.tripId}`);
-      } else if (params.entityType && params.entityId) {
-        switch (params.entityType) {
-          case "CLIENT":
-            router.replace(`/client/${params.entityId}`);
-            break;
-          case "SUPPLIER":
-            router.replace(`/supplier/${params.entityId}`);
-            break;
-          case "DRIVER":
-            router.replace(`/driver/${params.entityId}`);
-            break;
-          case "VEHICLE":
-            router.replace(`/vehicle/${params.entityId}`);
-            break;
-          default:
-            router.replace(ROUTES.TABS.FINANCE as '/');
-        }
-      } else {
-        // No context (e.g. opened from table view or generic add): go to the detail page where the entry is visible (trip or entity).
-        const tripNavId = data.tripAllocations?.[0]?.tripId ?? data.tripId;
-        if (tripNavId) {
-          router.replace(`/trip/${tripNavId}`);
-          return;
-        }
-        const partyId = data.partyId ?? null;
-        const contactType = data.contactType ?? null;
-        if (partyId && partyId !== "misc") {
-          if (contactType === "client") {
-            router.replace(`/client/${partyId}`);
-            return;
-          }
-          if (contactType === "supplier") {
-            router.replace(`/supplier/${partyId}`);
-            return;
-          }
-          if (contactType === "driver") {
-            const driverId = partyId === "driver-salary" ? (data.contactId ?? partyId) : partyId;
-            if (driverId) router.replace(`/driver/${driverId}`);
-            return;
-          }
-        }
-        router.replace(ROUTES.TABS.FINANCE as '/');
-      }
+      lastSubmittedDataRef.current = data;
     },
     [
       orgId,
@@ -1047,12 +1072,13 @@ export default function LedgerSyncScreen() {
   const isVehicleEntity = params.entityType === "VEHICLE" && Boolean(params.entityId);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <AddTransactionModal
         visible
         fullPage
         onClose={handleClose}
         onSubmit={handleSubmit}
+        onSuccessDismiss={handleSuccessDismiss}
         clients={clientPartyOptions}
         suppliers={supplierPartyOptions}
         drivers={drivers}

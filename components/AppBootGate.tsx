@@ -12,6 +12,7 @@ import { dumpStartupMetrics, markStartupPhase } from '@/lib/startupMetrics';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { usePathname } from 'expo-router';
+import { hydrateSignupFlowFlags } from '@/lib/onboarding/businessSignupBranding.util';
 
 // Routes that render without needing resolved auth state.
 const PUBLIC_ROUTES = new Set([
@@ -40,6 +41,10 @@ export function AppBootGate({ children }: AppBootGateProps) {
   const pathname = usePathname();
   const splashHidden = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    void hydrateSignupFlowFlags();
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setTimedOut(true), BOOT_HARD_TIMEOUT_MS);

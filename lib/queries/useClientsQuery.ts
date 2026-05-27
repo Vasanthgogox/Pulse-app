@@ -6,6 +6,8 @@ import {
   getClientsByOrganization,
   syncClientsWithCache,
 } from '@/features/clients/services/clients.service';
+import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { STALE } from '@/lib/queryClient';
@@ -20,12 +22,23 @@ export function useClientsQuery(orgId: string | null) {
         (qc.getQueryData(queryKeys.clients.finite(orgId ?? '')) as
           | Array<{ id: string }>
           | undefined) ?? [];
-      const res = await syncClientsWithCache(orgId!, existing as any);
-      if (res.error) throw res.error;
-      return res.clients;
+      return fetchEntityListWithFallback({
+        orgId: orgId!,
+        domain: 'clients',
+        cachedRows: existing as never[],
+        sync: async (id, cached) => {
+          const res = await syncClientsWithCache(id, cached as never[]);
+          return { error: res.error, rows: res.clients };
+        },
+        fetchDirect: async (id) => {
+          const res = await getClientsByOrganization(id);
+          return { error: res.error, rows: res.clients };
+        },
+      });
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
+    refetchOnMount: refetchOnMountIfEntityListEmpty,
   });
 }
 

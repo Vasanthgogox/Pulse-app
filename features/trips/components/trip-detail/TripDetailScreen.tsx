@@ -70,6 +70,8 @@ import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { ReassignSheet } from "../reassign/ReassignSheet";
 import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
+import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
+import { TripFinanceAdjustmentsPanel } from "@/features/trips/components/trip-detail/adjustment/TripFinanceAdjustmentsPanel";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
@@ -304,7 +306,6 @@ export default function TripDetailScreen({
   const [inlineAdjAmount, setInlineAdjAmount] = useState("");
   const [inlineAdjReason, setInlineAdjReason] = useState("");
   const [inlineAdjOtherReason, setInlineAdjOtherReason] = useState("");
-  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
   const [showReassignSheet, setShowReassignSheet] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
   const [provisionVoidReason, setProvisionVoidReason] = useState("");
@@ -324,6 +325,7 @@ export default function TripDetailScreen({
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
   const isDesktop = screenWidth >= 1024;
+  const useCompactAdjustmentWizard = screenWidth < 680;
   const desktopTab: "tracking" | "finance" =
     activeTab === "finance" ? "finance" : "tracking";
   const hPad = isMobile ? 12 : isTablet ? 16 : 24;
@@ -347,14 +349,6 @@ export default function TripDetailScreen({
     },
   );
   const isPingTimedOut = detail.isPingTimedOut ?? false;
-
-  useEffect(() => {
-    const tr = detail.trip;
-    if (!tr) return;
-    if (!detail.canAssign || isTripCompleted(tr)) {
-      setShowAssignmentManager(false);
-    }
-  }, [detail.trip, detail.canAssign]);
 
   // Must run before any early return (loading/error) — Rules of Hooks.
   // One cached/deduped migration RPC per aggregate assignable trip (not per render).
@@ -834,6 +828,20 @@ export default function TripDetailScreen({
         locationName: "locationName" in p ? p.locationName : null,
       }));
   }, [detail.locationTrailWithNames, detail.tripLocationPoints]);
+
+  const tripForAssignmentFlow = detail.trip;
+  const canChangeManifestAssetsForNav =
+    !!tripForAssignmentFlow &&
+    detail.canAssign &&
+    !isTripCompleted(tripForAssignmentFlow);
+
+  const openAssignmentFlow = useCallback(
+    (focus: "driver" | "vehicle") => {
+      if (!tripForAssignmentFlow?.id || !canChangeManifestAssetsForNav) return;
+      router.push(ROUTES.tripAssignment(tripForAssignmentFlow.id, focus) as never);
+    },
+    [tripForAssignmentFlow?.id, canChangeManifestAssetsForNav, router],
+  );
 
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
@@ -1363,82 +1371,8 @@ export default function TripDetailScreen({
     0,
     adjSales - collectedFromClient,
   );
-  const revenueAdjLineCount = detail.adjustments.filter(
-    (a) => a.type === "revenue" && !isAdjustmentVoided(a),
-  ).length;
-  const costAdjLineCount = detail.adjustments.filter(
-    (a) => a.type === "cost" && !isAdjustmentVoided(a),
-  ).length;
-  const selectedProvisionAdjustments = detail.adjustments.filter((adj) =>
-    showFinanceProvisionPanel === "client"
-      ? adj.type === "revenue"
-      : adj.type === "cost",
-  );
-  const provisionSummaryRows = [
-    { label: "Base Sale", value: formatINR(sales), tone: "sale" as const },
-    {
-      label: "Sale Adjusted",
-      value: formatINR(adjSales),
-      tone: "sale" as const,
-    },
-    { label: "Base Cost", value: formatINR(cost), tone: "cost" as const },
-    {
-      label: "Cost Adjusted",
-      value: formatINR(adjCost),
-      tone: "cost" as const,
-    },
-  ];
-
-  const revenueProvisionAdjustments = detail.adjustments.filter(
-    (a) => a.type === "revenue",
-  );
-  const costProvisionAdjustments = detail.adjustments.filter(
-    (a) => a.type === "cost",
-  );
-
-  const financeAdjustmentSummaryCardEl = (
-    <View style={neoStyles.adjustmentSummaryCard}>
-      <View style={neoStyles.adjustmentSummaryHeader}>
-        <Text style={neoStyles.adjustmentSummaryTitle}>Adjustment summary</Text>
-        <View style={neoStyles.adjustmentSummaryBadge}>
-          <Text style={neoStyles.adjustmentSummaryBadgeText}>
-            {detail.adjustments.length}
-          </Text>
-        </View>
-      </View>
-      <Text style={neoStyles.adjustmentSummaryHint}>
-        Totals after sale & cost provisions
-      </Text>
-      <View style={neoStyles.adjustmentSummaryRows}>
-        <View style={neoStyles.adjustmentSummaryStat}>
-          <Text style={neoStyles.adjustmentSummaryStatLabel}>
-            Total adjusted sale
-          </Text>
-          <Text style={neoStyles.adjustmentSummaryStatValueSale}>
-            {formatINR(adjSales)}
-          </Text>
-          <Text style={neoStyles.adjustmentSummaryStatMeta}>
-            Base {formatINR(sales)} · Net delta{" "}
-            {revenueSideDelta >= 0 ? "+" : "−"}
-            {formatINR(Math.abs(revenueSideDelta))} · {revenueAdjLineCount} line
-            {revenueAdjLineCount === 1 ? "" : "s"}
-          </Text>
-        </View>
-        <View style={neoStyles.adjustmentSummaryDivider} />
-        <View style={neoStyles.adjustmentSummaryStat}>
-          <Text style={neoStyles.adjustmentSummaryStatLabel}>
-            Total adjusted cost
-          </Text>
-          <Text style={neoStyles.adjustmentSummaryStatValueCost}>
-            {formatINR(adjCost)}
-          </Text>
-          <Text style={neoStyles.adjustmentSummaryStatMeta}>
-            Base {formatINR(cost)} · Net delta {costSideDelta >= 0 ? "+" : "−"}
-            {formatINR(Math.abs(costSideDelta))} · {costAdjLineCount} line
-            {costAdjLineCount === 1 ? "" : "s"}
-          </Text>
-        </View>
-      </View>
+  const financeCapturePaymentSlot = (
+    <View style={neoStyles.capturePaymentSlot}>
       <TouchableOpacity
         style={neoStyles.capturePaymentBtn}
         onPress={() => {
@@ -1504,6 +1438,25 @@ export default function TripDetailScreen({
     </View>
   );
 
+  const financeAdjustmentSummaryWrappedEl = (
+    <TripFinanceAdjustmentsPanel
+      adjustments={detail.adjustments}
+      sales={sales}
+      adjSales={adjSales}
+      revenueSideDelta={revenueSideDelta}
+      cost={cost}
+      adjCost={adjCost}
+      costSideDelta={costSideDelta}
+      clientName={clientNameForParty}
+      clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
+      supplierName={supplierNameForParty}
+      supplierAvatarSeed={trip.supplier_id ?? null}
+      lineMetaLabel={provisionLineMetaLabel}
+      onOpenProvision={setShowFinanceProvisionPanel}
+      capturePaymentSlot={financeCapturePaymentSlot}
+    />
+  );
+
   /** Shared mobile + desktop: net yield, sale/cost columns with adjustment line items, voyage expense row. */
   const financeManifestSummaryBlock = (
     <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
@@ -1546,7 +1499,12 @@ export default function TripDetailScreen({
           isDesktop && styles.refManifestHeroSplitDesktop,
         ]}
       >
-        <View style={styles.refManifestCol}>
+        <Pressable
+          style={styles.refManifestCol}
+          onPress={() => setShowFinanceProvisionPanel("client")}
+          accessibilityRole="button"
+          accessibilityLabel="Open client sale provision adjustments"
+        >
           <View style={styles.refManifestColHead}>
             <View style={styles.refManifestColHeadLeft}>
               <View
@@ -1554,13 +1512,6 @@ export default function TripDetailScreen({
               />
               <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setShowFinanceProvisionPanel("client")}
-              style={styles.refManifestMiniPlus}
-              activeOpacity={0.85}
-            >
-              <FontAwesome name="plus" size={10} color="#4f46e5" />
-            </TouchableOpacity>
           </View>
           <Text
             style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}
@@ -1576,76 +1527,22 @@ export default function TripDetailScreen({
               {formatINR(Math.abs(revenueSideDelta))}
             </Text>
           </View>
-          {revenueProvisionAdjustments.length > 0 ? (
-            <View style={neoStyles.financeRailBreakdown}>
-              {revenueProvisionAdjustments.map((adj) => {
-                const voided = isAdjustmentVoided(adj);
-                return (
-                  <View key={adj.id} style={neoStyles.financeRailBreakdownRow}>
-                    <View
-                      style={[
-                        neoStyles.financeRailBreakdownDot,
-                        neoStyles.financeRailBreakdownDotSale,
-                      ]}
-                    />
-                    <View style={neoStyles.financeRailBreakdownMid}>
-                      <Text
-                        style={[
-                          neoStyles.financeRailBreakdownReason,
-                          voided && neoStyles.financeRailBreakdownStruck,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {(adj.reason ?? "").trim() || "—"}
-                      </Text>
-                      <Text style={neoStyles.financeRailBreakdownMeta}>
-                        {provisionLineMetaLabel(adj)}
-                      </Text>
-                      {voided ? (
-                        <Text
-                          style={neoStyles.financeRailBreakdownVoidNote}
-                          numberOfLines={3}
-                        >
-                          Voided: {(adj.void_reason ?? "").trim() || "—"}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[
-                        neoStyles.financeRailBreakdownAmt,
-                        neoStyles.financeRailBreakdownAmtSale,
-                        voided && neoStyles.financeRailBreakdownStruck,
-                      ]}
-                    >
-                      {adj.impact === "plus" ? "+" : "−"}
-                      {formatINR(adj.amount)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          ) : null}
-        </View>
+        </Pressable>
 
         <View style={styles.refManifestHeroSep} />
 
-        <View style={[styles.refManifestCol, styles.refManifestColRight]}>
+        <Pressable
+          style={styles.refManifestCol}
+          onPress={() => setShowFinanceProvisionPanel("supplier")}
+          accessibilityRole="button"
+          accessibilityLabel="Open supplier cost provision adjustments"
+        >
           <View style={styles.refManifestColHead}>
-            <TouchableOpacity
-              onPress={() => setShowFinanceProvisionPanel("supplier")}
-              style={[
-                styles.refManifestMiniPlus,
-                styles.refManifestMiniPlusMuted,
-              ]}
-              activeOpacity={0.85}
-            >
-              <FontAwesome name="plus" size={10} color="#e11d48" />
-            </TouchableOpacity>
-            <View style={styles.refManifestColHeadRight}>
-              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
+            <View style={styles.refManifestColHeadLeft}>
               <View
                 style={[styles.refManifestDot, styles.refManifestDotCost]}
               />
+              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
             </View>
           </View>
           <Text
@@ -1654,12 +1551,7 @@ export default function TripDetailScreen({
             {formatINR(adjCost)}
           </Text>
           <View style={styles.refManifestMicroBox}>
-            <Text
-              style={[
-                styles.refManifestMicroLine,
-                styles.refManifestMicroRight,
-              ]}
-            >
+            <Text style={styles.refManifestMicroLine}>
               Base · {formatINR(cost)}
             </Text>
             <Text style={styles.refManifestMicroAdjCost}>
@@ -1667,56 +1559,7 @@ export default function TripDetailScreen({
               {formatINR(Math.abs(costSideDelta))}
             </Text>
           </View>
-          {costProvisionAdjustments.length > 0 ? (
-            <View style={neoStyles.financeRailBreakdown}>
-              {costProvisionAdjustments.map((adj) => {
-                const voided = isAdjustmentVoided(adj);
-                return (
-                  <View key={adj.id} style={neoStyles.financeRailBreakdownRow}>
-                    <View
-                      style={[
-                        neoStyles.financeRailBreakdownDot,
-                        neoStyles.financeRailBreakdownDotCost,
-                      ]}
-                    />
-                    <View style={neoStyles.financeRailBreakdownMid}>
-                      <Text
-                        style={[
-                          neoStyles.financeRailBreakdownReason,
-                          voided && neoStyles.financeRailBreakdownStruck,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {(adj.reason ?? "").trim() || "—"}
-                      </Text>
-                      <Text style={neoStyles.financeRailBreakdownMeta}>
-                        {provisionLineMetaLabel(adj)}
-                      </Text>
-                      {voided ? (
-                        <Text
-                          style={neoStyles.financeRailBreakdownVoidNote}
-                          numberOfLines={3}
-                        >
-                          Voided: {(adj.void_reason ?? "").trim() || "—"}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[
-                        neoStyles.financeRailBreakdownAmt,
-                        neoStyles.financeRailBreakdownAmtCost,
-                        voided && neoStyles.financeRailBreakdownStruck,
-                      ]}
-                    >
-                      {adj.impact === "plus" ? "+" : "−"}
-                      {formatINR(adj.amount)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          ) : null}
-        </View>
+        </Pressable>
       </View>
 
       <View style={styles.refSettleExpenseRow}>
@@ -1727,10 +1570,6 @@ export default function TripDetailScreen({
       </View>
     </View>
   );
-
-  const financeAdjustmentSummaryWrappedEl = financeAdjustmentSummaryCardEl ? (
-    <View style={{ marginTop: 12 }}>{financeAdjustmentSummaryCardEl}</View>
-  ) : null;
 
   const filteredFinanceRows = financeHistoryRows.filter((row) => {
     const q = searchTerm.trim().toLowerCase();
@@ -2260,9 +2099,10 @@ export default function TripDetailScreen({
                     <Feather name="user" size={14} color="#4f46e5" />
                   </View>
                   <TouchableOpacity
-                    onPress={() => setShowAssignmentManager(true)}
+                    onPress={() => openAssignmentFlow("driver")}
                     style={styles.refAssetChangeBtn}
                     activeOpacity={0.85}
+                    disabled={!canChangeManifestAssets}
                   >
                     <Text style={styles.refAssetChangeBtnText}>Change</Text>
                   </TouchableOpacity>
@@ -2289,9 +2129,10 @@ export default function TripDetailScreen({
                     <Feather name="truck" size={14} color="#fff" />
                   </View>
                   <TouchableOpacity
-                    onPress={() => setShowAssignmentManager(true)}
+                    onPress={() => openAssignmentFlow("vehicle")}
                     style={styles.refAssetChangeBtn}
                     activeOpacity={0.85}
+                    disabled={!canChangeManifestAssets}
                   >
                     <Text style={styles.refAssetChangeBtnText}>Change</Text>
                   </TouchableOpacity>
@@ -2540,198 +2381,6 @@ export default function TripDetailScreen({
                   <>
                     {financeManifestSummaryBlock}
                     {financeAdjustmentSummaryWrappedEl}
-
-                    {showFinanceProvisionPanel ? (
-                      <View style={styles.refProvisionWrap}>
-                        <View style={styles.refProvisionHeader}>
-                          <Text style={styles.refProvisionTitle}>
-                            Provision CN/DN (
-                            {showFinanceProvisionPanel === "client"
-                              ? "Client"
-                              : "Supplier"}
-                            )
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => setShowFinanceProvisionPanel(null)}
-                            hitSlop={10}
-                            style={styles.refProvisionClose}
-                            accessibilityLabel="Close provision panel"
-                          >
-                            <Feather name="x" size={18} color="#cbd5f5" />
-                          </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.refProvisionDnRow}>
-                          <TouchableOpacity
-                            style={[
-                              styles.refProvisionDnBtn,
-                              styles.refProvisionCnBtn,
-                            ]}
-                            onPress={() => {
-                              if (!showFinanceProvisionPanel) return;
-                              openInlineAdjustmentForm({
-                                type:
-                                  showFinanceProvisionPanel === "client"
-                                    ? "revenue"
-                                    : "cost",
-                                impact: "minus",
-                                reasonSeed: "Other",
-                              });
-                            }}
-                            activeOpacity={0.88}
-                          >
-                            <Feather name="plus" size={22} color="#a5b4fc" />
-                            <Text style={styles.refProvisionDnLabel}>
-                              Credit (CN)
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[
-                              styles.refProvisionDnBtn,
-                              styles.refProvisionDnBtnDebit,
-                            ]}
-                            onPress={() => {
-                              if (!showFinanceProvisionPanel) return;
-                              openInlineAdjustmentForm({
-                                type:
-                                  showFinanceProvisionPanel === "client"
-                                    ? "revenue"
-                                    : "cost",
-                                impact: "plus",
-                                reasonSeed: "Other",
-                              });
-                            }}
-                            activeOpacity={0.88}
-                          >
-                            <Feather name="minus" size={22} color="#fca5a5" />
-                            <Text style={styles.refProvisionDnLabel}>
-                              Debit (DN)
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {showInlineAdjustmentForm ? (
-                          <View style={styles.refInlineAdjustWrap}>
-                            <View style={styles.refInlineAdjustHead}>
-                              <View>
-                                <Text style={styles.refInlineAdjustTitle}>
-                                  Add Adjustment
-                                </Text>
-                                <Text style={styles.refInlineAdjustSub}>
-                                  modify trip amounts
-                                </Text>
-                                <View
-                                  style={[
-                                    styles.refInlineModeBadge,
-                                    inlineAdjImpact === "plus"
-                                      ? styles.refInlineModeBadgeDebit
-                                      : styles.refInlineModeBadgeCredit,
-                                  ]}
-                                >
-                                  <Text style={styles.refInlineModeBadgeTxt}>
-                                    {`${inlineAdjImpact === "plus" ? "Debit (DN)" : "Credit (CN)"} · ${
-                                      inlineAdjType === "revenue"
-                                        ? "Revenue (Sale)"
-                                        : "Cost (Supplier)"
-                                    }`}
-                                  </Text>
-                                </View>
-                              </View>
-                              <TouchableOpacity
-                                style={styles.refInlineAdjustClose}
-                                onPress={() =>
-                                  setShowInlineAdjustmentForm(false)
-                                }
-                                activeOpacity={0.85}
-                              >
-                                <Feather name="x" size={16} color="#475569" />
-                              </TouchableOpacity>
-                            </View>
-
-                            <Text style={styles.refInlineAdjustLabel}>
-                              Adjustment Type
-                            </Text>
-                            <Text style={styles.refInlineAdjustLockedMeta}>
-                              {`${inlineAdjType === "revenue" ? "Revenue (Sale)" : "Cost (Supplier)"} · ${
-                                inlineAdjImpact === "plus"
-                                  ? "Debit (DN)"
-                                  : "Credit (CN)"
-                              }`}
-                            </Text>
-
-                            <Text style={styles.refInlineAdjustLabel}>
-                              Amount
-                            </Text>
-                            <View style={styles.refInlineAmountRow}>
-                              <Text style={styles.refInlineCurrency}>₹</Text>
-                              <TextInput
-                                value={inlineAdjAmount}
-                                onChangeText={setInlineAdjAmount}
-                                style={styles.refInlineAmountInput}
-                                keyboardType="numeric"
-                                placeholder="0"
-                                placeholderTextColor="#64748b"
-                                maxLength={14}
-                              />
-                            </View>
-
-                            <Text style={styles.refInlineAdjustLabel}>
-                              Reason
-                            </Text>
-                            <View style={styles.refInlineReasonWrap}>
-                              {inlineReasonOptions.map((r) => (
-                                <TouchableOpacity
-                                  key={r}
-                                  style={[
-                                    styles.refInlineReasonChip,
-                                    inlineAdjReason === r &&
-                                      styles.refInlineReasonChipActive,
-                                  ]}
-                                  onPress={() => setInlineAdjReason(r)}
-                                  activeOpacity={0.82}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.refInlineReasonChipTxt,
-                                      inlineAdjReason === r &&
-                                        styles.refInlineReasonChipTxtActive,
-                                    ]}
-                                  >
-                                    {r}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-
-                            {inlineAdjReason === "Other" ? (
-                              <TextInput
-                                value={inlineAdjOtherReason}
-                                onChangeText={setInlineAdjOtherReason}
-                                style={styles.refInlineOtherInput}
-                                placeholder="Describe reason..."
-                                placeholderTextColor="#64748b"
-                                maxLength={80}
-                              />
-                            ) : null}
-
-                            <TouchableOpacity
-                              style={[
-                                styles.refInlineSaveBtn,
-                                !canSaveInlineAdjustment &&
-                                  styles.refInlineSaveBtnDisabled,
-                              ]}
-                              onPress={() => void saveInlineAdjustment()}
-                              disabled={!canSaveInlineAdjustment}
-                              activeOpacity={0.86}
-                            >
-                              <Text style={styles.refInlineSaveBtnTxt}>
-                                Save Adjustment
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        ) : null}
-                      </View>
-                    ) : null}
                   </>
                 ) : (
                   <>
@@ -3888,7 +3537,7 @@ export default function TripDetailScreen({
                       </View>
                       {canChangeManifestAssets ? (
                         <TouchableOpacity
-                          onPress={() => setShowAssignmentManager(true)}
+                          onPress={() => openAssignmentFlow("driver")}
                           style={neoStyles.assetChangeBtn}
                           activeOpacity={0.85}
                         >
@@ -3914,7 +3563,7 @@ export default function TripDetailScreen({
                       </View>
                       {canChangeManifestAssets ? (
                         <TouchableOpacity
-                          onPress={() => setShowAssignmentManager(true)}
+                          onPress={() => openAssignmentFlow("vehicle")}
                           style={neoStyles.assetChangeBtn}
                           activeOpacity={0.85}
                         >
@@ -4820,323 +4469,48 @@ export default function TripDetailScreen({
       </ScrollView>
 
       {/* ── Modals ────────────────────────────────────────────────────────────── */}
-      <TripAdjustmentModal
-        visible={detail.showAdjustmentModal}
-        preset={detail.adjustmentModalPreset}
-        onClose={detail.closeTripAdjustmentModal}
-        onSave={detail.handleSaveAdjustment}
-      />
-      <Modal
+      <ProvisionAdjustmentModal
         visible={!!showFinanceProvisionPanel}
-        animationType="fade"
-        transparent
-        onRequestClose={closeFinanceProvisionModal}
-      >
-        <View style={neoStyles.provisionModalBackdrop}>
-          <View style={neoStyles.provisionModalCard}>
-            <View style={neoStyles.provisionPanel}>
-              <View style={neoStyles.provisionHeader}>
-                <View>
-                  <Text style={neoStyles.provisionTitle}>
-                    Provision Adjustments
-                  </Text>
-                  <Text style={neoStyles.provisionSub}>
-                    {showFinanceProvisionPanel === "client"
-                      ? "Client sale adjustment"
-                      : "Supplier cost adjustment"}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={closeFinanceProvisionModal}
-                  style={neoStyles.provisionClose}
-                  activeOpacity={0.85}
-                >
-                  <Feather name="x" size={18} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={neoStyles.provisionSummaryGrid}>
-                {provisionSummaryRows.map((row) => (
-                  <View key={row.label} style={neoStyles.provisionSummaryCard}>
-                    <Text style={neoStyles.provisionSummaryLabel}>
-                      {row.label}
-                    </Text>
-                    <Text
-                      style={[
-                        neoStyles.provisionSummaryValue,
-                        row.tone === "cost" &&
-                          neoStyles.provisionSummaryValueCost,
-                      ]}
-                    >
-                      {row.value}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={neoStyles.provisionCnDnRow}>
-                <TouchableOpacity
-                  style={[
-                    neoStyles.provisionCnDnBtn,
-                    neoStyles.provisionCnDnBtnCredit,
-                  ]}
-                  onPress={() => {
-                    if (!showFinanceProvisionPanel) return;
-                    openInlineAdjustmentForm({
-                      type:
-                        showFinanceProvisionPanel === "client"
-                          ? "revenue"
-                          : "cost",
-                      impact: "minus",
-                      reasonSeed: "Other",
-                    });
-                  }}
-                  activeOpacity={0.88}
-                >
-                  <Feather name="plus" size={18} color="#a5b4fc" />
-                  <Text style={neoStyles.provisionCnDnLabel}>Credit (CN)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    neoStyles.provisionCnDnBtn,
-                    neoStyles.provisionCnDnBtnDebit,
-                  ]}
-                  onPress={() => {
-                    if (!showFinanceProvisionPanel) return;
-                    openInlineAdjustmentForm({
-                      type:
-                        showFinanceProvisionPanel === "client"
-                          ? "revenue"
-                          : "cost",
-                      impact: "plus",
-                      reasonSeed: "Other",
-                    });
-                  }}
-                  activeOpacity={0.88}
-                >
-                  <Feather name="minus" size={18} color="#fca5a5" />
-                  <Text style={neoStyles.provisionCnDnLabel}>Debit (DN)</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={neoStyles.provisionChips}>
-                {FINANCE_PROTOCOL_CHIPS.map((chip) => (
-                  <TouchableOpacity
-                    key={chip}
-                    style={neoStyles.provisionChip}
-                    onPress={() =>
-                      openInlineAdjustmentForm(
-                        showFinanceProvisionPanel === "supplier"
-                          ? protocolSupplierChipAdjustment(chip)
-                          : {
-                              type: "revenue",
-                              impact: "plus",
-                              reasonSeed: chip,
-                            },
-                      )
-                    }
-                    activeOpacity={0.86}
-                  >
-                    <Text style={neoStyles.provisionChipText}>{chip}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {showInlineAdjustmentForm ? (
-                <View style={neoStyles.provisionForm}>
-                  <View style={neoStyles.provisionFormHead}>
-                    <View>
-                      <Text style={neoStyles.provisionFormTitle}>
-                        {editingProvisionAdjustmentId
-                          ? "Edit adjustment"
-                          : "Add adjustment"}
-                      </Text>
-                      <Text style={neoStyles.provisionFormMeta}>
-                        {`${inlineAdjType === "revenue" ? "Sale / revenue" : "Supplier cost"} · ${
-                          inlineAdjImpact === "plus"
-                            ? "Debit note (DN)"
-                            : "Credit note (CN)"
-                        }`}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={neoStyles.provisionFormClose}
-                      onPress={() => {
-                        setShowInlineAdjustmentForm(false);
-                        setEditingProvisionAdjustmentId(null);
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Feather name="x" size={14} color="#475569" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <Text style={neoStyles.provisionInputLabel}>Amount</Text>
-                  <View style={neoStyles.provisionAmountRow}>
-                    <Text style={neoStyles.provisionCurrency}>₹</Text>
-                    <TextInput
-                      value={inlineAdjAmount}
-                      onChangeText={setInlineAdjAmount}
-                      style={neoStyles.provisionAmountInput}
-                      keyboardType="numeric"
-                      placeholder="0"
-                      placeholderTextColor="#94a3b8"
-                      maxLength={14}
-                    />
-                  </View>
-
-                  <Text style={neoStyles.provisionInputLabel}>Reason</Text>
-                  <View style={neoStyles.provisionReasonWrap}>
-                    {inlineReasonOptions.map((reason) => (
-                      <TouchableOpacity
-                        key={reason}
-                        style={[
-                          neoStyles.provisionReasonChip,
-                          inlineAdjReason === reason &&
-                            neoStyles.provisionReasonChipActive,
-                        ]}
-                        onPress={() => setInlineAdjReason(reason)}
-                        activeOpacity={0.82}
-                      >
-                        <Text
-                          style={[
-                            neoStyles.provisionReasonText,
-                            inlineAdjReason === reason &&
-                              neoStyles.provisionReasonTextActive,
-                          ]}
-                        >
-                          {reason}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  {inlineAdjReason === "Other" ? (
-                    <TextInput
-                      value={inlineAdjOtherReason}
-                      onChangeText={setInlineAdjOtherReason}
-                      style={neoStyles.provisionOtherInput}
-                      placeholder="Describe reason..."
-                      placeholderTextColor="#94a3b8"
-                      maxLength={80}
-                    />
-                  ) : null}
-
-                  <TouchableOpacity
-                    style={[
-                      neoStyles.provisionSaveBtn,
-                      !canSaveInlineAdjustment &&
-                        neoStyles.provisionSaveBtnDisabled,
-                    ]}
-                    onPress={() => void saveInlineAdjustment()}
-                    disabled={!canSaveInlineAdjustment}
-                    activeOpacity={0.86}
-                  >
-                    <Text style={neoStyles.provisionSaveText}>
-                      {editingProvisionAdjustmentId
-                        ? "Save changes"
-                        : "Save adjustment"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
-              <View style={neoStyles.provisionAppliedList}>
-                <Text style={neoStyles.provisionAppliedTitle}>
-                  Added adjustments
-                </Text>
-                {selectedProvisionAdjustments.length === 0 ? (
-                  <Text style={neoStyles.provisionAppliedEmpty}>
-                    No{" "}
-                    {showFinanceProvisionPanel === "client" ? "sale" : "cost"}{" "}
-                    adjustment added yet.
-                  </Text>
-                ) : (
-                  selectedProvisionAdjustments.map((adj) => {
-                    const voided = isAdjustmentVoided(adj);
-                    return (
-                      <View key={adj.id} style={neoStyles.provisionAppliedRow}>
-                        <View style={neoStyles.provisionAppliedInfo}>
-                          <Text
-                            style={[
-                              neoStyles.provisionAppliedReason,
-                              voided && neoStyles.financeRailBreakdownStruck,
-                            ]}
-                            numberOfLines={voided ? 2 : 1}
-                          >
-                            {adj.reason || "Adjustment"}
-                          </Text>
-                          <Text style={neoStyles.provisionAppliedMeta}>
-                            {adj.impact === "plus"
-                              ? "Debit note (DN)"
-                              : "Credit note (CN)"}
-                          </Text>
-                          {voided ? (
-                            <Text
-                              style={neoStyles.financeRailBreakdownVoidNote}
-                              numberOfLines={3}
-                            >
-                              Voided: {(adj.void_reason ?? "").trim() || "—"}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <Text
-                          style={[
-                            neoStyles.provisionAppliedAmount,
-                            voided && neoStyles.financeRailBreakdownStruck,
-                          ]}
-                        >
-                          {adj.impact === "plus" ? "+" : "−"}
-                          {formatINR(adj.amount)}
-                        </Text>
-                        {!voided ? (
-                          <View style={neoStyles.provisionAppliedActions}>
-                            <TouchableOpacity
-                              style={neoStyles.provisionAppliedEdit}
-                              onPress={() =>
-                                setProvisionConfirm({
-                                  mode: "edit",
-                                  adjustment: adj,
-                                })
-                              }
-                              activeOpacity={0.82}
-                              accessibilityLabel="Edit adjustment"
-                            >
-                              <Feather
-                                name="edit-2"
-                                size={12}
-                                color="#94a3b8"
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={neoStyles.provisionAppliedRemove}
-                              onPress={() => {
-                                setProvisionVoidReason("");
-                                setProvisionConfirm({
-                                  mode: "delete",
-                                  adjustment: adj,
-                                });
-                              }}
-                              activeOpacity={0.82}
-                              accessibilityLabel="Void adjustment"
-                            >
-                              <Feather
-                                name="trash-2"
-                                size={12}
-                                color="#94a3b8"
-                              />
-                            </TouchableOpacity>
-                          </View>
-                        ) : null}
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        side={showFinanceProvisionPanel}
+        onClose={closeFinanceProvisionModal}
+        onSave={detail.handleSaveAdjustment}
+        tripCode={getTripDisplayNumber(trip, currentOrganization?.id)}
+        partyLabel={
+          showFinanceProvisionPanel === "client"
+            ? (detail.displayClientName ?? trip.client_name ?? "Client")
+            : (detail.partnerName ?? trip.supplier_name ?? "Supplier")
+        }
+        clientName={clientNameForParty}
+        clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
+        supplierName={supplierNameForParty}
+        supplierAvatarSeed={trip.supplier_id ?? null}
+        sales={sales}
+        adjSales={adjSales}
+        cost={cost}
+        adjCost={adjCost}
+        revenueSideDelta={revenueSideDelta}
+        costSideDelta={costSideDelta}
+        adjustments={detail.adjustments}
+        lineMetaLabel={provisionLineMetaLabel}
+      />
+      {!useCompactAdjustmentWizard ? (
+        <TripAdjustmentModal
+          visible={detail.showAdjustmentModal}
+          preset={detail.adjustmentModalPreset}
+          onClose={detail.closeTripAdjustmentModal}
+          onSave={detail.handleSaveAdjustment}
+          tripCode={getTripDisplayNumber(trip, currentOrganization?.id)}
+          entryContextLabel={
+            trip
+              ? `${getTripDisplayNumber(trip, currentOrganization?.id)} · ${
+                  detail.adjustmentModalPreset?.type === "cost"
+                    ? (detail.partnerName ?? trip.supplier_name ?? "Supplier")
+                    : (detail.displayClientName ?? trip.client_name ?? "Client")
+                }`
+              : null
+          }
+        />
+      ) : null}
 
       <Modal
         visible={provisionConfirm !== null}
@@ -5296,80 +4670,6 @@ export default function TripDetailScreen({
           }}
         />
       ) : null}
-
-      <Modal
-        visible={showAssignmentManager}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAssignmentManager(false)}
-      >
-        <View style={styles.assignModalBackdrop}>
-          <View style={styles.assignModalCard}>
-            <View style={styles.assignModalHeader}>
-              <Text style={styles.assignModalTitle}>Current Assignment</Text>
-              <TouchableOpacity
-                onPress={() => setShowAssignmentManager(false)}
-                style={styles.assignModalClose}
-                activeOpacity={0.85}
-              >
-                <FontAwesome name="times" size={16} color="#0f172a" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {trip.organization_id ? (
-                <TripAssignmentBlock
-                  trip={trip}
-                  organizationId={currentOrganization?.id ?? ""}
-                  canAssign={detail.canAssign}
-                  onUpdated={async () => {
-                    await detail.handleAssignmentUpdated();
-                    setShowAssignmentManager(false);
-                  }}
-                  onBeforeRegisterNavigate={() =>
-                    setShowAssignmentManager(false)
-                  }
-                  partnerName={detail.partnerName}
-                  driverName={detail.driverName}
-                  vehicleLabel={
-                    isAggregate
-                      ? detail.displayVehicleFromInput.trim() ||
-                        detail.vehicleLabel ||
-                        null
-                      : detail.vehicleLabel
-                  }
-                  driverAvatarUri={detail.driverAvatarUri}
-                  showAssignByPhone={detail.showAssignByPhone}
-                  assignmentSource={detail.assignmentSource}
-                  currentUserId={detail.currentUserId}
-                  previousDriverName={detail.previousDriverName}
-                  latestReassignmentSummary={detail.latestReassignmentSummary}
-                  driverAssignOrgId={
-                    isAggregate ? (currentOrganization?.id ?? null) : null
-                  }
-                  onVehicleDisplayChange={(value) => {
-                    const normalized = formatIndianVehicleNumber(value ?? "");
-                    detail.setDisplayVehicleFromInput(normalized);
-                  }}
-                  inlineSection={
-                    (isAggregate || driverIsUnlinked) ? (
-                      <AggregateTripOtpPanel
-                        variant="sheet"
-                        tripNumber={getTripDisplayNumber(trip, currentOrganization?.id)}
-                        aggregateOtpState={aggregateOtpState}
-                        canGenerateAggregateOtp={canGenerateAggregateOtp}
-                        otpLockedByTripProgress={otpLockedByTripProgress}
-                        tripOtp={detail.tripOtp}
-                        onResendOtp={handleResendOtp}
-                        otpResending={otpResending}
-                      />
-                    ) : null
-                  }
-                />
-              ) : null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         visible={!!detail.selectedDoc}
@@ -7921,11 +7221,11 @@ const neoStyles = StyleSheet.create({
     letterSpacing: 0.7,
   },
   financeRailBreakdown: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
-    gap: 8,
+    gap: 6,
     width: "100%",
   },
   financeRailBreakdownRow: {
@@ -8049,15 +7349,17 @@ const neoStyles = StyleSheet.create({
   },
   adjustmentSummaryStatValueSale: {
     color: "#059669",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
-    fontStyle: "italic",
+    letterSpacing: -0.2,
+    lineHeight: 20,
   },
   adjustmentSummaryStatValueCost: {
     color: "#e11d48",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
-    fontStyle: "italic",
+    letterSpacing: -0.2,
+    lineHeight: 20,
   },
   adjustmentSummaryStatMeta: {
     color: "#cbd5e1",
@@ -8070,8 +7372,42 @@ const neoStyles = StyleSheet.create({
     height: 1,
     backgroundColor: "#f1f5f9",
   },
+  adjustmentSummaryCtas: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  adjustmentSummaryCtaSale: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.35)",
+    backgroundColor: "rgba(99,102,241,0.08)",
+    alignItems: "center",
+  },
+  adjustmentSummaryCtaCost: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(15,118,110,0.35)",
+    backgroundColor: "rgba(15,118,110,0.08)",
+    alignItems: "center",
+  },
+  adjustmentSummaryCtaText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: "#334155",
+  },
+  capturePaymentSlot: {
+    marginTop: 12,
+    gap: 6,
+  },
   capturePaymentBtn: {
-    marginTop: 16,
+    marginTop: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -10107,25 +9443,30 @@ const styles = StyleSheet.create({
   },
   refFinanceWrap: { gap: 14 },
   refFinanceManifestHero: {
-    paddingVertical: 28,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     overflow: "hidden",
+    alignItems: "stretch",
+    borderRadius: 24,
   },
   refManifestNetHuge: {
-    marginTop: 8,
-    fontSize: 44,
+    marginTop: 4,
+    fontSize: 22,
     fontWeight: "900",
-    letterSpacing: -1.2,
+    letterSpacing: -0.4,
     color: "#0f172a",
+    textAlign: "center",
+    alignSelf: "center",
   },
   refManifestHeroSplit: {
-    marginTop: 20,
-    paddingTop: 20,
+    marginTop: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: "#eef2f7",
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     width: "100%",
+    alignItems: "flex-start",
   },
   /** Wider gap between sale/cost columns on desktop trip finance. */
   refManifestHeroSplitDesktop: {
@@ -10133,20 +9474,19 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   refManifestCol: { flex: 1, minWidth: 0 },
-  refManifestColRight: { alignItems: "stretch" },
   refManifestHeroSep: {
     width: 1,
     alignSelf: "stretch",
     backgroundColor: "#eef2f7",
-    marginHorizontal: 4,
-    minHeight: 120,
+    marginHorizontal: 2,
+    minHeight: 72,
   },
   refManifestColHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-    gap: 6,
+    marginBottom: 6,
+    gap: 8,
   },
   refManifestColHeadLeft: {
     flexDirection: "row",
@@ -10155,51 +9495,46 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  refManifestColHeadRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "flex-end",
-  },
   refManifestColTitle: {
     fontSize: 9,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#64748b",
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 0.9,
+    flexShrink: 1,
   },
   refManifestDot: { width: 6, height: 6, borderRadius: 3 },
   refManifestDotSales: { backgroundColor: "#22c55e" },
   refManifestDotCost: { backgroundColor: "#fb7185" },
   refManifestMiniPlus: {
-    padding: 8,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  refManifestMiniPlusMuted: { marginRight: 4 },
+  refManifestMiniPlusMuted: {},
   refManifestColAmount: {
-    fontSize: 24,
+    fontSize: 16,
     fontWeight: "900",
-    letterSpacing: -0.8,
-    fontStyle: "italic",
+    letterSpacing: -0.3,
+    lineHeight: 20,
   },
   refManifestSalesAmt: { color: "#16a34a" },
   refManifestCostAmt: {
     color: "#e11d48",
-    textAlign: "right",
-    alignSelf: "stretch",
   },
   refManifestMicroBox: {
-    marginTop: 12,
-    borderRadius: 12,
+    marginTop: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#eef2f7",
-    backgroundColor: "rgba(248,250,252,0.7)",
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    gap: 4,
+    backgroundColor: "#f8fafc",
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    gap: 3,
   },
   refManifestMicroLine: {
     fontSize: 8,
@@ -10213,19 +9548,18 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   refManifestMicroAdjSales: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 8,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#16a34a",
     textTransform: "uppercase",
   },
   refManifestMicroAdjCost: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 8,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#e11d48",
     textTransform: "uppercase",
-    textAlign: "right",
   },
   refProvisionWrap: {
     backgroundColor: "#ffffff",
@@ -10284,6 +9618,36 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     letterSpacing: 1.2,
     textTransform: "uppercase",
+  },
+  refProvisionChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  refProvisionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+  },
+  refProvisionChipTxt: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#334155",
+  },
+  refProvisionFullBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  refProvisionFullBtnTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.primary,
   },
   refInlineAdjustWrap: {
     marginTop: 10,
@@ -10576,10 +9940,10 @@ const styles = StyleSheet.create({
   },
   refSettleCard: {
     backgroundColor: "#fff",
-    borderRadius: 34,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: "#e6edf5",
-    padding: 22,
+    padding: 16,
     alignItems: "center",
   },
   refSettleLabel: {
@@ -10606,18 +9970,18 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   refCollectionsRow: {
-    marginTop: 14,
+    marginTop: 12,
     width: "100%",
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
   },
   refCollectionsCard: {
     flex: 1,
     borderWidth: 1,
     borderColor: "#eef2f7",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     backgroundColor: "#f8fafc",
     alignItems: "flex-start",
     minWidth: 0,
@@ -10633,10 +9997,11 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   refCollectionsValue: {
-    marginTop: 4,
-    fontSize: 18,
+    marginTop: 3,
+    fontSize: 14,
     fontWeight: "900",
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
+    lineHeight: 18,
   },
   refCollectionsValueIn: {
     color: "#15803d",

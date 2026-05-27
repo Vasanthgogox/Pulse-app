@@ -10,6 +10,8 @@ export interface BidRow {
   post_id: string;
   bidder_organization_id: string;
   bidder_org_name: string | null;
+  bidder_org_logo_url: string | null;
+  bidder_org_avatar_seed: string | null;
   bidder_user_id: string;
   amount: number;
   note: string | null;
@@ -33,7 +35,7 @@ export async function getBidsForPost(
       status,
       created_at,
       updated_at,
-      organizations:bidder_organization_id ( name )
+      organizations:bidder_organization_id ( name, logo_url, avatar_seed, owner_id )
     `)
     .eq('post_id', postId)
     .order('created_at', { ascending: false });
@@ -53,12 +55,18 @@ export async function getBidsForPost(
     organizations: unknown;
   };
   const bids = ((data ?? []) as unknown as BidJoinRow[]).map((row) => {
-    const org = row.organizations as { name?: string } | null;
+    const org = row.organizations as {
+      name?: string;
+      logo_url?: string | null;
+      avatar_seed?: string | null;
+    } | null;
     return {
       id: row.id,
       post_id: row.post_id,
       bidder_organization_id: row.bidder_organization_id,
       bidder_org_name: org?.name ?? null,
+      bidder_org_logo_url: org?.logo_url ?? null,
+      bidder_org_avatar_seed: org?.avatar_seed ?? null,
       bidder_user_id: row.bidder_user_id,
       amount: row.amount,
       note: row.note,

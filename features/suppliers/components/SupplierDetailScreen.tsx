@@ -2826,7 +2826,10 @@ const styles = StyleSheet.create({
   emptyRowText: edc.emptyRowText,
   cashSection: { marginBottom: 24 },
   sharedSection: { marginBottom: 24 },
-  analyticsSection: { marginBottom: 24, paddingHorizontal: 16 },
+  analyticsSection: {
+    marginBottom: 24,
+    marginHorizontal: -Layout.screenPaddingHorizontal,
+  },
   sharedSectionWeb: { width: "100%", alignSelf: "stretch" },
   sharedCard: {
     backgroundColor: Theme.surface,

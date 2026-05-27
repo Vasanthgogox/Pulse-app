@@ -13,18 +13,17 @@ import {
 } from "@/lib/entityIdentity";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
-import { getProfileImageBatch } from "../services/finance.service";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { useDisputeMapQuery, useTransactionsQuery } from "@/lib/queries";
+import { useDisputeMapQuery, useDriverProfileImagesQuery, useTransactionsQuery } from "@/lib/queries";
 import {
   buildFinancialRowDataForLedgerRow,
   formatLedgerEntryDate,
@@ -123,8 +122,6 @@ export function LedgerTab({
   const isViewOnly = onAddTransactionPress === undefined;
   const isControlled = transactionsProp !== undefined;
   const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
-  const [profileImages, setProfileImages] = useState<Record<string, string>>({});
-  const attemptedProfileIds = useRef(new Set<string>());
   const viewMode = viewModeProp ?? "table";
 
   const clientById = new Map(clientRows.map(c => [c.id, c]));
@@ -179,6 +176,17 @@ export function LedgerTab({
   const rows = isControlled ? (transactionsProp ?? []) : cachedTransactions;
   const loading = isControlled ? false : queryLoading;
 
+  const driverIdsInRows = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of rows) {
+      const id = (row.contact_id ?? "").trim();
+      if (id && row.contact_type === "driver") ids.add(id);
+    }
+    return Array.from(ids);
+  }, [rows]);
+
+  const profileImages = useDriverProfileImagesQuery(driverIdsInRows);
+
   /** Transaction list (mobile / timeline) reads party_name directly; mirror web-resolved supplier/client labels. */
   const transactionListRows = useMemo(
     () =>
@@ -188,27 +196,6 @@ export function LedgerTab({
       })),
     [rows, clientRows, supplierRows, tripPartyMap, tripDetailsMap],
   );
-
-  useEffect(() => {
-    const fetchDriverProfileImages = async () => {
-      const driverIds = rows
-        .filter((row) => {
-          if (row.contact_type !== 'driver' || !row.contact_id) return false;
-          const id = row.contact_id;
-          if (driverProfileImageUrls[id] || attemptedProfileIds.current.has(id)) return false;
-          attemptedProfileIds.current.add(id);
-          return true;
-        })
-        .map((row) => row.contact_id as string);
-
-      if (driverIds.length === 0) return;
-      const fetched = await getProfileImageBatch(driverIds);
-      if (Object.keys(fetched).length > 0) {
-        setProfileImages((prev) => ({ ...prev, ...fetched }));
-      }
-    };
-    void fetchDriverProfileImages();
-  }, [rows, driverProfileImageUrls]);
 
   // Truck-related expense: contact_id/contact_type NULL; entity = vehicle_number (from row or trip) or party_name; LINK = route + vehicle badge only when trip.vehicle_id set. See docs/LEDGER_TRUCK_EXPENSE_AND_TRIP_DISPLAY.md for NULL handling (trip_id null, trip not in map, vehicle_id null).
 

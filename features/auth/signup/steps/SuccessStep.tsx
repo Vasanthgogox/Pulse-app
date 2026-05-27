@@ -1,20 +1,22 @@
 import { StyleSheet, View } from 'react-native';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 
-import { Surface } from '@/components/operational';
-import { ActivationCheckpointList, OnboardingFullPageFormStep } from '@/features/onboarding';
+import { USER_2D_AVATARS } from '@/constants/UserAvatars';
 import { ROUTES } from '@/lib/routes';
-import { colors } from '@/design-system/colors';
-import { space } from '@/design-system/spacing';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
+import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
+import { SignUpWorkspaceReadyCard } from '../components/SignUpWorkspaceReadyCard';
 
 export function SuccessStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
   const verifying = flow.emailVerificationRequired;
+  const profilePreset =
+    !flow.profilePreviewUri && flow.profileAvatarSeed
+      ? USER_2D_AVATARS.find((a) => a.seed === flow.profileAvatarSeed)
+      : undefined;
 
   return (
-    <OnboardingFullPageFormStep
+    <SignUpPulseFormStep
       title={verifying ? 'Verify to activate' : 'Workspace ready'}
       subtitle={
         verifying
@@ -28,23 +30,31 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
             : 'Resend verification'
           : 'Enter operations'
       }
-      onPrimary={verifying ? flow.resendVerification : () => router.replace(ROUTES.INDEX)}
+      onPrimary={
+        verifying
+          ? flow.resendVerification
+          : () => {
+              flow.finishBusinessSignup();
+              router.replace(ROUTES.INDEX);
+            }
+      }
       primaryDisabled={verifying && flow.resendingSecs > 0}
       secondaryAction={{
         label: 'Sign in on another device',
-        onPress: () => router.replace(ROUTES.SIGN_IN),
+        onPress: () => {
+          flow.finishBusinessSignup();
+          router.replace(ROUTES.SIGN_IN);
+        },
       }}
+      centerContent
     >
-      <Surface elevation={1} density="low">
-        <View style={styles.iconWrap}>
-          <FontAwesome
-            name={verifying ? 'envelope' : 'check-circle'}
-            size={32}
-            color={verifying ? colors.pending : colors.revenue}
-          />
-        </View>
-        <ActivationCheckpointList
-          density="high"
+      <View style={styles.cardWrap}>
+        <SignUpWorkspaceReadyCard
+          entityName={flow.orgName}
+          verifying={verifying}
+          profilePreviewUri={flow.profilePreviewUri}
+          profileImage={profilePreset?.image}
+          profilePhotoLabel="Profile photo selected"
           checkpoints={[
             { id: 'org', label: 'Organization created', status: 'complete' },
             {
@@ -60,14 +70,16 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
             },
           ]}
         />
-      </Surface>
-    </OnboardingFullPageFormStep>
+      </View>
+    </SignUpPulseFormStep>
   );
 }
 
 const styles = StyleSheet.create({
-  iconWrap: {
-    alignSelf: 'center',
-    marginBottom: space[4],
+  cardWrap: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 4,
+    paddingBottom: 8,
   },
 });

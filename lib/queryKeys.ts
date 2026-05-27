@@ -348,4 +348,12 @@ export const queryKeys = {
     vehiclePerformance: (orgId: string, vehicleId: string) =>
       ["q", "analytics", orgId, "vehicle", vehicleId, "performance"] as const,
   },
+
+  /** Linked-org display profiles (avatar URL + seed) fetched via batch RPC. */
+  linkedOrgDisplay: (ids: string[]) =>
+    ["q", "linked-org-display", ids.join("|")] as const,
+
+  /** Driver linked-user profile images (signed URLs) fetched via batch RPC. */
+  driverProfileImages: (ids: string[]) =>
+    ["q", "driver-profile-images", ids.join(",")] as const,
 } as const;

@@ -29,9 +29,9 @@ export function usePaginatedScroll<T>(
 
   useEffect(() => {
     if (!enabled) return;
-    setCount(pageSize);
+    setCount(source.length > 0 ? Math.min(pageSize, source.length) : 0);
     armRef.current = true;
-  }, [enabled, pageSize, resetKey]);
+  }, [enabled, pageSize, resetKey, source.length]);
 
   const visible = useMemo(() => {
     if (!enabled) return source as T[];

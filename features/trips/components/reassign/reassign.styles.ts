@@ -2,6 +2,30 @@ import Theme from '@/constants/Theme';
 import { Platform, StyleSheet } from 'react-native';
 
 export const reassignStyles = StyleSheet.create({
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.border,
+  },
+  reviewLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    width: 72,
+  },
+  reviewValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Theme.textPrimary,
+    textAlign: 'right',
+  },
   section: {
     marginBottom: 20,
   },

@@ -1,6 +1,5 @@
 export { OnboardingPersonaHub } from './components/OnboardingPersonaHub';
 export { JoinTeamOnboardingScreen } from './components/JoinTeamOnboardingScreen';
-export { OnboardingWelcomeEntry } from './components/OnboardingWelcomeEntry';
 export { OnboardingActivationShell } from './components/OnboardingActivationShell';
 export { OnboardingFullPageShell } from './components/OnboardingFullPageShell';
 export { OnboardingFullPageTitle } from './components/OnboardingFullPageTitle';

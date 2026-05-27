@@ -27,6 +27,9 @@ export {
   pulseStyles,
   pulseColumnCount,
   pulseBodyPadding,
+  pulseChartHeight,
+  pulseKpiGap,
   packKpiItems,
+  isPulseCompact,
   PULSE_RADIUS,
 } from "./pulseStyles";

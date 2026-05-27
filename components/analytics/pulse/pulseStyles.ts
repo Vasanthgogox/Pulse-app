@@ -1,12 +1,20 @@
 /**
- * Shared styles for Pulse analytics dashboards (web reference parity).
+ * Shared styles for Pulse analytics dashboards.
+ * Compact tokens apply on native / narrow viewports (party detail analytics tabs).
  */
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 import Theme from "@/constants/Theme";
 
 export const PULSE_RADIUS = 24;
+export const PULSE_RADIUS_COMPACT = 16;
 export const PULSE_CARD_BORDER = Theme.borderLight;
+
+/** Native phones and narrow embeds — single-column KPI cards, smaller type. */
+export function isPulseCompact(width: number): boolean {
+  if (Platform.OS !== "web") return true;
+  return width < 768;
+}
 
 export const pulseStyles = StyleSheet.create({
   canvas: {
@@ -34,6 +42,11 @@ export const pulseStyles = StyleSheet.create({
     color: Theme.cardWhite,
     letterSpacing: -0.5,
   },
+  heroTitleCompact: {
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
   heroSubtitle: {
     marginTop: 6,
     fontSize: 10,
@@ -41,6 +54,11 @@ export const pulseStyles = StyleSheet.create({
     color: Theme.analyticsHeroSubtitle,
     textTransform: "uppercase",
     letterSpacing: 1.2,
+  },
+  heroSubtitleCompact: {
+    marginTop: 4,
+    fontSize: 9,
+    letterSpacing: 0.9,
   },
   body: {
     paddingBottom: 48,
@@ -53,11 +71,19 @@ export const pulseStyles = StyleSheet.create({
   sectionBlock: {
     gap: 12,
   },
+  sectionBlockCompact: {
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "800",
     color: Theme.textBody,
     letterSpacing: -0.2,
+  },
+  sectionTitleCompact: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: -0.1,
   },
   sectionSubtitle: {
     fontSize: 10,
@@ -66,8 +92,15 @@ export const pulseStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
+  sectionSubtitleCompact: {
+    fontSize: 9,
+    letterSpacing: 0.6,
+  },
   kpiGrid: {
     gap: 12,
+  },
+  kpiGridCompact: {
+    gap: 8,
   },
   kpiRow: {
     flexDirection: "row",
@@ -75,7 +108,14 @@ export const pulseStyles = StyleSheet.create({
     gap: 12,
     alignItems: "stretch",
   },
+  kpiRowCompact: {
+    gap: 8,
+  },
   kpiCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  kpiCellCompact: {
     flex: 1,
     minWidth: 0,
   },
@@ -101,11 +141,21 @@ export const pulseStyles = StyleSheet.create({
     minHeight: 118,
     justifyContent: "space-between",
   },
+  kpiCardCompact: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    minHeight: 72,
+    justifyContent: "flex-end",
+  },
   kpiCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 8,
+  },
+  kpiCardHeaderCompact: {
+    marginBottom: 2,
   },
   kpiLabel: {
     flex: 1,
@@ -115,6 +165,10 @@ export const pulseStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+  kpiLabelCompact: {
+    fontSize: 9,
+    letterSpacing: 0.7,
+  },
   kpiIconWrap: {
     width: 36,
     height: 36,
@@ -123,11 +177,23 @@ export const pulseStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  kpiIconWrapCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+  },
   kpiValue: {
     fontSize: 28,
     fontWeight: "900",
     letterSpacing: -1,
     fontStyle: "italic",
+  },
+  kpiValueCompact: {
+    fontSize: 16,
+    fontWeight: "600",
+    fontStyle: "normal",
+    letterSpacing: -0.3,
+    marginTop: 0,
   },
   kpiFooter: {
     flexDirection: "row",
@@ -136,12 +202,20 @@ export const pulseStyles = StyleSheet.create({
     gap: 6,
     marginTop: 8,
   },
+  kpiFooterCompact: {
+    marginTop: 3,
+    gap: 4,
+  },
   kpiSub: {
     fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.6,
+  },
+  kpiSubCompact: {
+    fontSize: 9,
+    letterSpacing: 0.4,
   },
   trendChip: {
     flexDirection: "row",
@@ -203,6 +277,9 @@ export const pulseStyles = StyleSheet.create({
     borderColor: PULSE_CARD_BORDER,
     overflow: "hidden",
   },
+  panelCompact: {
+    borderRadius: PULSE_RADIUS_COMPACT,
+  },
   panelHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -213,12 +290,20 @@ export const pulseStyles = StyleSheet.create({
     borderBottomColor: Theme.borderLight,
     backgroundColor: "rgba(248,250,252,0.8)",
   },
+  panelHeaderCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
   panelTitle: {
     fontSize: 11,
     fontWeight: "800",
     color: Theme.textBody,
     textTransform: "uppercase",
     letterSpacing: 0.8,
+  },
+  panelTitleCompact: {
+    fontSize: 10,
+    letterSpacing: 0.6,
   },
   panelSubtitle: {
     marginTop: 3,
@@ -228,14 +313,27 @@ export const pulseStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  panelSubtitleCompact: {
+    fontSize: 8,
+    marginTop: 2,
+  },
   panelBody: {
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 16,
   },
+  panelBodyCompact: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 12,
+  },
   healthCard: {
     padding: 24,
     minHeight: 280,
+  },
+  healthCardCompact: {
+    padding: 14,
+    minHeight: 0,
   },
   levelChip: {
     position: "absolute",
@@ -264,6 +362,12 @@ export const pulseStyles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -2,
     fontStyle: "italic",
+  },
+  healthScoreValueCompact: {
+    fontSize: 36,
+    fontWeight: "700",
+    letterSpacing: -1,
+    fontStyle: "normal",
   },
   healthScoreMax: {
     fontSize: 14,
@@ -297,6 +401,25 @@ export const pulseStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 280,
+  },
+  gaugeCardCompact: {
+    padding: 14,
+    minHeight: 0,
+  },
+  scoreGridCompact: {
+    flexDirection: "column",
+    gap: 8,
+  },
+  scoreMainCompact: {
+    flex: 0,
+    minWidth: 0,
+    width: "100%",
+  },
+  scoreSideCompact: {
+    flex: 0,
+    minWidth: 0,
+    maxWidth: "100%",
+    width: "100%",
   },
   gaugeTitle: {
     marginTop: 8,
@@ -421,19 +544,56 @@ export const pulseStyles = StyleSheet.create({
   },
 });
 
-/** Responsive column count for KPI grids. */
+/** Responsive column count for KPI grids (party detail: 2-across on phone like Cash Flow). */
 export function pulseColumnCount(width: number): 1 | 2 | 3 | 4 {
+  if (isPulseCompact(width)) {
+    if (width >= 720) return 3;
+    return 2;
+  }
   if (width >= 1280) return 4;
   if (width >= 900) return 3;
   if (width >= 520) return 2;
   return 1;
 }
 
+/** Gap between KPI cells for the current viewport. */
+export function pulseKpiGap(width: number): number {
+  return isPulseCompact(width) ? 8 : 12;
+}
+
+/** Default chart height inside pulse panels. */
+export function pulseChartHeight(width: number): number {
+  return isPulseCompact(width) ? 128 : 168;
+}
+
 /** Horizontal padding for analytics shell body. */
-export function pulseBodyPadding(width: number): number {
+export function pulseBodyPadding(width: number, embedded = false): number {
+  if (embedded && isPulseCompact(width)) return 12;
   if (width >= 1280) return 32;
   if (width >= 768) return 24;
   return 16;
+}
+
+/** Hero vertical padding for the analytics shell header band. */
+export function pulseHeroPadding(width: number): {
+  paddingTop: number;
+  paddingBottom: number;
+} {
+  if (isPulseCompact(width)) {
+    return { paddingTop: 12, paddingBottom: 16 };
+  }
+  return { paddingTop: 28, paddingBottom: 40 };
+}
+
+/** Body overlap + section rhythm under the hero band. */
+export function pulseBodySpacing(width: number): {
+  marginTop: number;
+  gap: number;
+} {
+  if (isPulseCompact(width)) {
+    return { marginTop: -10, gap: 12 };
+  }
+  return { marginTop: -20, gap: 28 };
 }
 
 /** Pack KPI items into dense rows (no empty spacer cells). */

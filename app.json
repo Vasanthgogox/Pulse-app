@@ -55,6 +55,7 @@
           }
         }
       ],
+      "@maplibre/maplibre-react-native",
       [
         "expo-image-picker",
         {

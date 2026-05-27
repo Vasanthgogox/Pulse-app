@@ -884,6 +884,25 @@ export async function getSession(): Promise<{
   }
 }
 
+/** Access token expiry (ms since epoch) from persisted session — no getUser() round trip. */
+export async function getAccessTokenExpiresAtMs(): Promise<number | null> {
+  try {
+    const { data: { session }, error } = await supabase().auth.getSession();
+    if (error || !session?.expires_at) return null;
+    return session.expires_at * 1000;
+  } catch {
+    return null;
+  }
+}
+
+export function isAccessTokenFresh(
+  expiresAtMs: number | null,
+  minRemainingMs = 5 * 60 * 1000,
+): boolean {
+  if (expiresAtMs == null || !Number.isFinite(expiresAtMs)) return false;
+  return expiresAtMs - Date.now() > minRemainingMs;
+}
+
 /**
  * Refresh user and profile from server (network call).
  * Uses getUser() for latest metadata and queries public.profiles for DB-side updates.

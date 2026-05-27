@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import {
     getDriversByOrganization,
     searchExistingDriversByPhone,
+    updateDriver,
     type DriverRow,
 } from "@/features/drivers/services/drivers.service";
 import {
@@ -31,7 +32,9 @@ import {
     getVehiclesByOrganization,
     type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
+import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
+import { PULSE_TRIP } from "@/features/trips/components/add-trip/addTripPulseTheme";
 import {
     formatIndianVehicleNumber,
     formatIndianVehicleNumberInput,
@@ -103,6 +106,10 @@ export interface TripAssignmentBlockProps {
   inlineSection?: ReactNode;
   /** Close parent overlays (e.g. trip “Current assignment” sheet on web) before opening add-driver / add-vehicle. */
   onBeforeRegisterNavigate?: () => void;
+  /** When false, only picker modals render (used by full-page assignment flow). */
+  showManifestCard?: boolean;
+  /** Full-page trip assignment route — compact typography and full-screen pickers. */
+  fullPageFlow?: boolean;
 }
 
 export function TripAssignmentBlock({
@@ -125,6 +132,8 @@ export function TripAssignmentBlock({
   autoOpenPickerNonce = 0,
   inlineSection,
   onBeforeRegisterNavigate,
+  showManifestCard = true,
+  fullPageFlow = false,
 }: TripAssignmentBlockProps) {
   /** No assign/reassign when trip is completed or when view-only (e.g. load creator monitoring). */
   const effectiveCanAssign = canAssign && !isTripCompleted(trip) && !viewOnly;
@@ -148,6 +157,7 @@ export function TripAssignmentBlock({
   const [saving, setSaving] = useState(false);
   const [phoneSaving, setPhoneSaving] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
+  const [phoneDriverNameInput, setPhoneDriverNameInput] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneName, setPhoneName] = useState<string | null>(null);
   const [phoneDriverBusy, setPhoneDriverBusy] = useState(false);
@@ -201,6 +211,9 @@ export function TripAssignmentBlock({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && windowWidth >= 768;
+  const isMobileAssignFlow = !isDesktop || fullPageFlow;
+  const pickerPresentation =
+    fullPageFlow && Platform.OS !== "web" ? "fullScreen" : "pageSheet";
   const hasDriverAssigned = !!trip.driver_id;
   const hasVehicleAssigned =
     !!trip.vehicle_id || !!String(trip.vehicle_display_number ?? "").trim();
@@ -372,8 +385,23 @@ export function TripAssignmentBlock({
     };
   }, [phoneInput, driverAssignOrgId, organizationId, trip.id]);
 
+  const applyPhoneDriverDisplayName = useCallback(
+    async (driverId: string | null | undefined, orgForDriver: string) => {
+      const customName = phoneDriverNameInput.trim();
+      if (!driverId || customName.length < 2) return;
+      if (phoneName && customName === phoneName.trim()) return;
+      await updateDriver(orgForDriver, driverId, { name: customName });
+    },
+    [phoneDriverNameInput, phoneName],
+  );
+
   const assignByPhone = useCallback(async () => {
     const trimmed = phoneInput.trim();
+    const driverNameTrimmed = phoneDriverNameInput.trim();
+    if (!driverNameTrimmed || driverNameTrimmed.length < 2) {
+      setPhoneError("Enter driver name (at least 2 characters).");
+      return;
+    }
     if (!trimmed) {
       setPhoneError("Enter driver phone number.");
       return;
@@ -460,7 +488,7 @@ export function TripAssignmentBlock({
     }
 
     if (driverAssignOrgId) {
-      const { error: rpcErr } = await assignAggregateTripDriverByPhone(
+      const { error: rpcErr, trip: assignedTrip } = await assignAggregateTripDriverByPhone(
         trip.id,
         orgForDriver,
         trimmed,
@@ -471,6 +499,7 @@ export function TripAssignmentBlock({
         setPhoneError(humanizeTripIdInRpcError(rpcErr.message, trip));
         return;
       }
+      await applyPhoneDriverDisplayName(assignedTrip?.driver_id, orgForDriver);
       if (matchedVehicle) {
         const { error: vehicleErr } = await updateTripAssignment(
           trip.id,
@@ -481,7 +510,7 @@ export function TripAssignmentBlock({
           setPhoneError(humanizeTripIdInRpcError(vehicleErr.message, trip));
       }
     } else {
-      const { error } = await assignTripDriverByPhone(
+      const { error, trip: assignedTrip } = await assignTripDriverByPhone(
         trip.id,
         orgForDriver,
         trimmed,
@@ -492,6 +521,7 @@ export function TripAssignmentBlock({
         setPhoneError(humanizeTripIdInRpcError(error.message, trip));
         return;
       }
+      await applyPhoneDriverDisplayName(assignedTrip?.driver_id, orgForDriver);
       if (matchedVehicle) {
         const { error: vehicleErr } = await updateTripAssignment(
           trip.id,
@@ -568,6 +598,7 @@ export function TripAssignmentBlock({
 
     setShowPhoneModal(false);
     setPhoneInput("");
+    setPhoneDriverNameInput("");
     setPhoneName(null);
     setPhoneError(null);
     setPhoneVehicleInput("");
@@ -582,7 +613,9 @@ export function TripAssignmentBlock({
     organizationId,
     driverAssignOrgId,
     phoneInput,
+    phoneDriverNameInput,
     phoneVehicleInput,
+    applyPhoneDriverDisplayName,
     phoneModalVehicles,
     phoneModalIsReassign,
     currentUserId,
@@ -631,6 +664,12 @@ export function TripAssignmentBlock({
       setPhoneInput("");
       setPhoneError(null);
       setPhoneName(null);
+      const existingName = (
+        propsDriverName ??
+        trip.driver_display_name ??
+        ""
+      ).trim();
+      setPhoneDriverNameInput(existingName);
       const vehiclePrefill =
         initialVehicle != null && initialVehicle.trim() !== ""
           ? formatIndianVehicleNumber(
@@ -640,11 +679,20 @@ export function TripAssignmentBlock({
           : "";
       setPhoneVehicleInput(vehiclePrefill);
       setShowPhoneModal(true);
-      getVehiclesByOrganization(organizationId).then((r) =>
-        setPhoneModalVehicles(r.error ? [] : (r.vehicles ?? [])),
-      );
+      if (!showAssignByPhone) {
+        getVehiclesByOrganization(organizationId).then((r) =>
+          setPhoneModalVehicles(r.error ? [] : (r.vehicles ?? [])),
+        );
+      } else {
+        setPhoneModalVehicles([]);
+      }
     },
-    [organizationId],
+    [
+      organizationId,
+      showAssignByPhone,
+      propsDriverName,
+      trip.driver_display_name,
+    ],
   );
 
   const pilotText =
@@ -700,6 +748,13 @@ export function TripAssignmentBlock({
   const suppressAggregateVehicleAssignTap = showAssignByPhone && hasVehicle;
 
   const openDriverPicker = useCallback(() => {
+    if (showAssignByPhone) {
+      openPhoneModal(
+        hasDriver || !!(previousDriverName ?? "").trim(),
+        propsVehicleLabel ?? trip.vehicle_display_number ?? "",
+      );
+      return;
+    }
     setAssignMode("driver");
     setAssignSearch("");
     setPickDriverId(trip.driver_id);
@@ -722,9 +777,37 @@ export function TripAssignmentBlock({
       }
       setActiveDriverTripLabelById(labels);
     });
-  }, [organizationId, trip.driver_id, trip.id]);
+  }, [
+    organizationId,
+    trip.driver_id,
+    trip.id,
+    showAssignByPhone,
+    openPhoneModal,
+    hasDriver,
+    previousDriverName,
+    propsVehicleLabel,
+    trip.vehicle_display_number,
+  ]);
 
   const openVehiclePicker = useCallback(() => {
+    if (showAssignByPhone) {
+      setAssignMode("vehicle");
+      setAssignSearch("");
+      setPickVehicleId(null);
+      setPreviewVehicleId(null);
+      setVehicles([]);
+      if ((propsVehicleLabel ?? "").trim() !== "") {
+        const raw = (propsVehicleLabel ?? "").split("·")[0]?.trim() ?? "";
+        setPickerVehicleInput(raw ? formatIndianVehicleNumber(raw) : "");
+      } else if (trip.vehicle_display_number?.trim()) {
+        setPickerVehicleInput(
+          formatIndianVehicleNumber(trip.vehicle_display_number.trim()),
+        );
+      } else {
+        setPickerVehicleInput("");
+      }
+      return;
+    }
     setAssignMode("vehicle");
     setAssignSearch("");
     setPickVehicleId(trip.vehicle_id);
@@ -781,6 +864,9 @@ export function TripAssignmentBlock({
     openDriverPicker,
     openVehiclePicker,
   ]);
+
+  const aggregateDriverUsesPhone =
+    showAssignByPhone && assignMode === "driver";
 
   const saveDriverOnly = useCallback(
     async (driverId: string | null) => {
@@ -1136,18 +1222,22 @@ export function TripAssignmentBlock({
               This driver is already on another trip. Choose someone else.
             </Text>
           ) : null}
-          <TouchableOpacity
-            style={[
-              styles.allocExecuteBtn,
-              (busy || saving || !previewDriverId) && styles.allocExecuteBtnDis,
-            ]}
-            disabled={saving || busy || !previewDriverId}
-            onPress={() => void executePreviewAssignment()}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.allocExecuteBtnText}>Save assignment</Text>
-          </TouchableOpacity>
-          <Text style={styles.allocVerifyHint}>Check details before saving.</Text>
+          {isDesktop ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.allocExecuteBtn,
+                  (busy || saving || !previewDriverId) && styles.allocExecuteBtnDis,
+                ]}
+                disabled={saving || busy || !previewDriverId}
+                onPress={() => void executePreviewAssignment()}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.allocExecuteBtnText}>Save assignment</Text>
+              </TouchableOpacity>
+              <Text style={styles.allocVerifyHint}>Check details before saving.</Text>
+            </>
+          ) : null}
         </View>
       );
     }
@@ -1208,24 +1298,62 @@ export function TripAssignmentBlock({
             Vehicle is busy on another trip.
           </Text>
         ) : null}
-        <TouchableOpacity
-          style={[
-            styles.allocExecuteBtn,
-            (busy || saving || !previewVehicleId) && styles.allocExecuteBtnDis,
-          ]}
-          disabled={saving || busy || !previewVehicleId}
-          onPress={() => void executePreviewAssignment()}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.allocExecuteBtnText}>Save assignment</Text>
-        </TouchableOpacity>
-        <Text style={styles.allocVerifyHint}>Check details before saving.</Text>
+        {isDesktop ? (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.allocExecuteBtn,
+                (busy || saving || !previewVehicleId) && styles.allocExecuteBtnDis,
+              ]}
+              disabled={saving || busy || !previewVehicleId}
+              onPress={() => void executePreviewAssignment()}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.allocExecuteBtnText}>Save assignment</Text>
+            </TouchableOpacity>
+            <Text style={styles.allocVerifyHint}>Check details before saving.</Text>
+          </>
+        ) : null}
       </View>
     );
   };
 
+  const mobileAssignPreviewSummary = useMemo(() => {
+    if (assignMode === "driver") {
+      return previewDriverRow?.name?.trim() || "Select a driver";
+    }
+    if (assignMode === "vehicle") {
+      const v = previewVehicleRow;
+      if (!v) return "Select a vehicle";
+      return formatIndianVehicleNumber(v.vehicle_number ?? "") || "—";
+    }
+    return "";
+  }, [assignMode, previewDriverRow, previewVehicleRow]);
+
+  const mobileAssignSaveDisabled = useMemo(() => {
+    if (assignMode === "driver") {
+      return saving || previewDriverBusy || !previewDriverId;
+    }
+    if (assignMode === "vehicle") {
+      return saving || previewVehicleBusy || !previewVehicleId;
+    }
+    return true;
+  }, [
+    assignMode,
+    saving,
+    previewDriverBusy,
+    previewDriverId,
+    previewVehicleBusy,
+    previewVehicleId,
+  ]);
+
   return (
-    <View style={[styles.wrapper, styles.wrapperStretch]}>
+    <View
+      style={
+        showManifestCard ? [styles.wrapper, styles.wrapperStretch] : styles.pickersOnlyRoot
+      }
+    >
+      {showManifestCard ? (
       <View style={styles.manifestCard}>
         <View style={styles.manifestCardHeader}>
           <Text style={styles.manifestEyebrow}>Driver & vehicle</Text>
@@ -1283,14 +1411,24 @@ export function TripAssignmentBlock({
                   {hasDriver ? pilotText : "Not assigned"}
                 </Text>
                 {hasDriver ? (
-                  <View style={styles.manifestNodeMetaRow}>
-                    <Star size={12} color="#f59e0b" fill="#f59e0b" />
+                  showAssignByPhone ? (
                     <Text style={styles.manifestNodeMetaText}>
-                      Rated · Verified in your fleet
+                      Ad-hoc driver · OTP tracking
                     </Text>
-                  </View>
+                  ) : (
+                    <View style={styles.manifestNodeMetaRow}>
+                      <Star size={12} color="#f59e0b" fill="#f59e0b" />
+                      <Text style={styles.manifestNodeMetaText}>
+                        Rated · Verified in your fleet
+                      </Text>
+                    </View>
+                  )
                 ) : (
-                  <Text style={styles.manifestActionCue}>Tap to assign a driver</Text>
+                  <Text style={styles.manifestActionCue}>
+                    {showAssignByPhone
+                      ? "Tap to enter name & phone"
+                      : "Tap to assign a driver"}
+                  </Text>
                 )}
               </View>
               <View style={styles.manifestNodeFab}>
@@ -1381,102 +1519,147 @@ export function TripAssignmentBlock({
           <View style={styles.inlineSectionWrap}>{inlineSection}</View>
         ) : null}
       </View>
+      ) : null}
 
       {/* Driver / vehicle picker + summary */}
       <Modal
         visible={assignMode !== null}
         animationType={Platform.OS === "web" ? "fade" : "slide"}
         presentationStyle={
-          Platform.OS === "web" ? "overFullScreen" : "pageSheet"
+          Platform.OS === "web" ? "overFullScreen" : pickerPresentation
         }
-        transparent={Platform.OS === "web"}
+        transparent={Platform.OS === "web" && !fullPageFlow}
         onRequestClose={closeAssignModal}
       >
-        <View style={assignmentShellStyles.webModalBackdrop}>
+        <View
+          style={[
+            assignmentShellStyles.webModalBackdrop,
+            fullPageFlow && styles.fullPageBackdrop,
+          ]}
+        >
           <View
             style={[
               assignmentShellStyles.assignModalWrapSlate,
-              styles.assignModalWrapWide,
+              fullPageFlow ? styles.assignModalWrapFullPage : styles.assignModalWrapWide,
               { paddingTop: insets.top },
             ]}
           >
-            <View style={styles.allocModalHero}>
+            <View
+              style={[
+                styles.allocModalHero,
+                isMobileAssignFlow && styles.allocModalHeroPulse,
+              ]}
+            >
               <View style={styles.allocModalHeroText}>
-                <Text style={styles.allocModalTitle}>
+                <Text
+                  style={[
+                    styles.allocModalTitle,
+                    isMobileAssignFlow && styles.allocModalTitlePulse,
+                    fullPageFlow && styles.allocModalTitleCompact,
+                  ]}
+                >
                   {assignMode === "driver"
-                    ? "Choose driver"
-                    : "Choose vehicle"}
+                    ? showAssignByPhone
+                      ? "Driver details"
+                      : isMobileAssignFlow
+                        ? "Assign driver"
+                        : "Choose driver"
+                    : showAssignByPhone
+                      ? "Vehicle registration"
+                      : isMobileAssignFlow
+                        ? "Assign vehicle"
+                        : "Choose vehicle"}
                 </Text>
-                <Text style={styles.allocModalSubtitle}>
-                  {isDesktop
-                    ? "Select in the list, then confirm in the side panel."
-                    : "Select in the list, then tap Save assignment below."}
+                <Text
+                  style={[
+                    styles.allocModalSubtitle,
+                    isMobileAssignFlow && styles.allocModalSubtitlePulse,
+                  ]}
+                >
+                  {showAssignByPhone
+                    ? assignMode === "driver"
+                      ? "Use name and mobile — not your fleet roster."
+                      : "Enter the truck registration for this trip."
+                    : isDesktop
+                      ? "Select in the list, then confirm in the side panel."
+                      : "Fleet registry · same flow as trip allocation"}
                 </Text>
               </View>
               <TouchableOpacity
                 onPress={closeAssignModal}
-                style={styles.allocModalCloseBtn}
+                style={[
+                  styles.allocModalCloseBtn,
+                  isMobileAssignFlow && styles.allocModalCloseBtnPulse,
+                ]}
                 hitSlop={8}
                 accessibilityLabel="Close"
               >
-                <FontAwesome name="times" size={18} color={Theme.textMuted} />
+                <FontAwesome
+                  name="times"
+                  size={18}
+                  color={isMobileAssignFlow ? "#e2e8f0" : Theme.textMuted}
+                />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.allocToolbar}>
-              <View style={[styles.allocSearchBar, styles.allocSearchFlex]}>
-                <FontAwesome
-                  name="search"
-                  size={15}
-                  color={Theme.textMuted}
-                  style={styles.allocSearchIconInline}
-                />
-                <TextInput
-                  style={styles.allocSearchInput}
-                  value={assignSearch}
-                  onChangeText={setAssignSearch}
-                  placeholder={
-                    assignMode === "driver"
-                      ? "Search drivers…"
-                      : "Search vehicles…"
-                  }
-                  placeholderTextColor={Theme.textMuted}
-                />
+            {!showAssignByPhone ? (
+              <View style={styles.allocToolbar}>
+                <View style={[styles.allocSearchBar, styles.allocSearchFlex]}>
+                  <FontAwesome
+                    name="search"
+                    size={14}
+                    color={Theme.textMuted}
+                    style={styles.allocSearchIconInline}
+                  />
+                  <TextInput
+                    style={styles.allocSearchInput}
+                    value={assignSearch}
+                    onChangeText={setAssignSearch}
+                    placeholder={
+                      assignMode === "driver"
+                        ? "Search drivers…"
+                        : "Search vehicles…"
+                    }
+                    placeholderTextColor={Theme.textMuted}
+                  />
+                </View>
               </View>
-            </View>
+            ) : null}
 
-            <TouchableOpacity
-              style={styles.allocRegisterRow}
-              activeOpacity={0.85}
-              onPress={() => {
-                closeAssignModal();
-                onBeforeRegisterNavigate?.();
-                if (assignMode === "driver") {
-                  router.push("/(modals)/add-driver");
-                } else {
-                  router.push("/(modals)/add-vehicle");
-                }
-              }}
-            >
-              <View style={styles.allocRegisterLeft}>
-                <View style={styles.allocRegisterPlus}>
-                  <Plus size={28} color={Theme.textMuted} strokeWidth={3} />
+            {!showAssignByPhone ? (
+              <TouchableOpacity
+                style={styles.allocRegisterRow}
+                activeOpacity={0.85}
+                onPress={() => {
+                  closeAssignModal();
+                  onBeforeRegisterNavigate?.();
+                  if (assignMode === "driver") {
+                    router.push("/(modals)/add-driver");
+                  } else {
+                    router.push("/(modals)/add-vehicle");
+                  }
+                }}
+              >
+                <View style={styles.allocRegisterLeft}>
+                  <View style={styles.allocRegisterPlus}>
+                    <Plus size={24} color={Theme.textMuted} strokeWidth={3} />
+                  </View>
+                  <View>
+                    <Text style={styles.allocRegisterTitle}>
+                      {assignMode === "driver"
+                        ? "Add new driver"
+                        : "Add new vehicle"}
+                    </Text>
+                    <Text style={styles.allocRegisterHint}>
+                      Opens a short form; they appear in your fleet for next time.
+                    </Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.allocRegisterTitle}>
-                    {assignMode === "driver"
-                      ? "Add new driver"
-                      : "Add new vehicle"}
-                  </Text>
-                  <Text style={styles.allocRegisterHint}>
-                    Opens a short form; they appear in your fleet for next time.
-                  </Text>
+                <View style={styles.allocRegisterProto}>
+                  <Text style={styles.allocRegisterProtoText}>Add</Text>
                 </View>
-              </View>
-              <View style={styles.allocRegisterProto}>
-                <Text style={styles.allocRegisterProtoText}>Add</Text>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            ) : null}
 
             <View
               style={[
@@ -1500,7 +1683,32 @@ export function TripAssignmentBlock({
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
               >
-                {assignMode === "driver" ? (
+                {aggregateDriverUsesPhone ? (
+                  <View style={styles.aggregateRedirectCard}>
+                    <Text style={styles.aggregateRedirectTitle}>
+                      Aggregate trips use ad-hoc drivers
+                    </Text>
+                    <Text style={styles.aggregateRedirectBody}>
+                      Enter the driver&apos;s name and mobile number — not someone from
+                      your fleet roster.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.aggregateRedirectBtn}
+                      onPress={() => {
+                        closeAssignModal();
+                        openPhoneModal(
+                          hasDriver || !!(previousDriverName ?? "").trim(),
+                          propsVehicleLabel ?? trip.vehicle_display_number ?? "",
+                        );
+                      }}
+                      activeOpacity={0.9}
+                    >
+                      <Text style={styles.aggregateRedirectBtnText}>
+                        Enter name & phone
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : assignMode === "driver" ? (
                   filteredDrivers.length === 0 ? (
                     <Text style={styles.assignEmptyHint}>
                       No drivers in your list yet. Use “Add new driver” above.
@@ -1620,7 +1828,7 @@ export function TripAssignmentBlock({
                       })}
                     </View>
                   )
-                ) : (
+                ) : assignMode === "vehicle" ? (
                   <>
                     {showAssignByPhone ? (
                       <View style={styles.assignAdhocVehicleWrap}>
@@ -1659,14 +1867,12 @@ export function TripAssignmentBlock({
                         </TouchableOpacity>
                       </View>
                     ) : null}
-                    {filteredVehicles.length === 0 ? (
-                      showAssignByPhone ? null : (
-                        <Text style={styles.assignEmptyHint}>
-                          No vehicles in your list. Use “Add new vehicle” or enter
-                          a one-off registration above.
-                        </Text>
-                      )
-                    ) : (
+                    {!showAssignByPhone && filteredVehicles.length === 0 ? (
+                      <Text style={styles.assignEmptyHint}>
+                        No vehicles in your list. Use “Add new vehicle” or enter a
+                        one-off registration above.
+                      </Text>
+                    ) : !showAssignByPhone ? (
                       <View style={styles.allocGrid}>
                         {filteredVehicles.map((v) => {
                           const plate = formatIndianVehicleNumber(
@@ -1767,9 +1973,9 @@ export function TripAssignmentBlock({
                           );
                         })}
                       </View>
-                    )}
+                    ) : null}
                   </>
-                )}
+                ) : null}
 
                 {!isDesktop ? (
                   <View style={styles.allocSidebarMobile}>{renderAllocationSidebar()}</View>
@@ -1798,13 +2004,15 @@ export function TripAssignmentBlock({
                   { paddingBottom: Math.max(24, insets.bottom) },
                 ]}
               >
-                <TouchableOpacity
-                  style={styles.allocMobileFooterClose}
-                  onPress={closeAssignModal}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.allocMobileFooterCloseText}>Close</Text>
-                </TouchableOpacity>
+                <AssignmentFlowFooter
+                  summary={mobileAssignPreviewSummary}
+                  primaryLabel="Save assignment"
+                  onPrimaryPress={() => void executePreviewAssignment()}
+                  primaryDisabled={mobileAssignSaveDisabled}
+                  loading={saving}
+                  secondaryLabel="Close"
+                  onSecondaryPress={closeAssignModal}
+                />
               </View>
             ) : (
               <View
@@ -1830,18 +2038,24 @@ export function TripAssignmentBlock({
         visible={showPhoneModal}
         animationType={Platform.OS === "web" ? "fade" : "slide"}
         presentationStyle={
-          Platform.OS === "web" ? "overFullScreen" : "pageSheet"
+          Platform.OS === "web" ? "overFullScreen" : pickerPresentation
         }
-        transparent={Platform.OS === "web"}
+        transparent={Platform.OS === "web" && !fullPageFlow}
         onRequestClose={() => {
           setShowPhoneModal(false);
           setPhoneAssignOtpReveal(null);
         }}
       >
-        <View style={assignmentShellStyles.webModalBackdrop}>
+        <View
+          style={[
+            assignmentShellStyles.webModalBackdrop,
+            fullPageFlow && styles.fullPageBackdrop,
+          ]}
+        >
           <View
             style={[
               assignmentShellStyles.assignModalWrapSlate,
+              fullPageFlow && styles.assignModalWrapFullPage,
               { paddingTop: insets.top },
             ]}
           >
@@ -1916,6 +2130,7 @@ export function TripAssignmentBlock({
                       setShowPhoneModal(false);
                       setPhoneAssignOtpReveal(null);
                       setPhoneInput("");
+                      setPhoneDriverNameInput("");
                       setPhoneName(null);
                       setPhoneVehicleInput("");
                       setPhoneModalIsReassign(false);
@@ -1934,7 +2149,24 @@ export function TripAssignmentBlock({
                   contentContainerStyle={styles.assignModalScrollContent}
                   showsVerticalScrollIndicator={false}
                 >
-                  <Text style={styles.assignStepLabel}>Driver phone</Text>
+                  <Text style={styles.assignStepLabel}>Driver name</Text>
+                  <TextInput
+                    style={styles.phoneModalInput}
+                    placeholder="e.g. Suresh Kumar"
+                    placeholderTextColor={Theme.textMuted}
+                    value={phoneDriverNameInput}
+                    onChangeText={(v) => {
+                      setPhoneDriverNameInput(v);
+                      setPhoneError(null);
+                    }}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                  <Text
+                    style={[styles.assignStepLabel, styles.assignStepLabelSecond]}
+                  >
+                    Driver phone
+                  </Text>
                   <TextInput
                     style={styles.phoneModalInput}
                     placeholder="e.g. +91 98765 43210"
@@ -2050,6 +2282,65 @@ export function TripAssignmentBlock({
 const styles = StyleSheet.create({
   wrapper: { marginBottom: 12 },
   wrapperStretch: { alignSelf: "stretch" as const },
+  pickersOnlyRoot: {
+    width: 0,
+    height: 0,
+    overflow: "hidden",
+    opacity: 0,
+    position: "absolute",
+  },
+  fullPageBackdrop: {
+    flex: 1,
+    padding: 0,
+    backgroundColor: "#f8fafc",
+    ...Platform.select({
+      web: { justifyContent: "flex-start", alignItems: "stretch" } as object,
+      default: {},
+    }),
+  },
+  assignModalWrapFullPage: {
+    flex: 1,
+    width: "100%",
+    maxWidth: "100%",
+    maxHeight: "100%",
+    minHeight: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+  },
+  aggregateRedirectCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+    gap: 8,
+  },
+  aggregateRedirectTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  aggregateRedirectBody: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 15,
+  },
+  aggregateRedirectBtn: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: Theme.primary,
+    justifyContent: "center",
+  },
+  aggregateRedirectBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+  },
   card: {
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
@@ -3209,6 +3500,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 12,
+  },
+  allocModalHeroPulse: {
+    backgroundColor: PULSE_TRIP.headerNavy,
+    borderBottomColor: "rgba(255,255,255,0.12)",
+  },
+  allocModalTitlePulse: {
+    fontSize: 17,
+    color: "#f8fafc",
+  },
+  allocModalTitleCompact: {
+    fontSize: 15,
+  },
+  allocModalSubtitlePulse: {
+    color: "rgba(226,232,240,0.88)",
+    marginTop: 3,
+  },
+  allocModalCloseBtnPulse: {
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   allocToolbar: {
     flexDirection: "row",

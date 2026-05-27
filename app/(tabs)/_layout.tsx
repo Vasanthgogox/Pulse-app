@@ -24,6 +24,11 @@ import {
 } from '@/lib/preloadRoutes';
 import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
+import {
+  hydrateSignupFlowFlags,
+  isBusinessSignupBrandingActiveSync,
+  isDriverSignupSuccessActiveSync,
+} from '@/lib/onboarding/businessSignupBranding.util';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -150,6 +155,10 @@ export default function TabLayout() {
   const tabMountMarked = useRef(false);
 
   useEffect(() => {
+    void hydrateSignupFlowFlags();
+  }, []);
+
+  useEffect(() => {
     if (!tabMountMarked.current && !isStartupComplete()) {
       tabMountMarked.current = true;
       markStartupPhase('tab_mount');
@@ -166,6 +175,14 @@ export default function TabLayout() {
 
   useEffect(() => {
     if (loading) return;
+    if (isDriverSignupSuccessActiveSync()) {
+      router.replace('/driver-signup');
+      return;
+    }
+    if (isBusinessSignupBrandingActiveSync()) {
+      router.replace(ROUTES.ONBOARDING.BUSINESS);
+      return;
+    }
     if (!user) {
       router.replace(ROUTES.SIGN_IN_DIRECT);
       return;

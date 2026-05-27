@@ -2,90 +2,31 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { LoadingIndicator } from '@/components/LoadingIndicator';
-import { Surface } from '@/components/operational';
-import {
-  OnboardingFocusedField,
-  OnboardingFullPageFormStep,
-} from '@/features/onboarding';
-import { colors } from '@/design-system/colors';
-import { space } from '@/design-system/spacing';
-import { typography } from '@/design-system/typography';
-import { C } from '../businessSignUp.styles';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
+import { SignUpPulseField } from '../SignUpPulseField';
+import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
+import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function OrgStep({ flow }: { flow: SignUpFlow }) {
   const orgError =
-    (flow.step2Attempted && !flow.orgName.trim()
-      ? 'Enter your organization name.'
-      : null) ??
+    (flow.step2Attempted && !flow.orgName.trim() ? 'Enter your organization name.' : null) ??
     flow.orgTakenError ??
     null;
 
-  const availability = flow.orgCheck?.loading ? (
-    <View style={stylesStatus.row}>
-      <LoadingIndicator size="small" color={C.muted} />
-      <Text style={stylesStatus.hint}>Checking availability…</Text>
-    </View>
-  ) : flow.orgCheck?.taken ? (
-    <Surface elevation={0} density="medium" style={stylesStatus.banner}>
-      <FontAwesome name="exclamation-triangle" size={14} color={colors.pending} />
-      <View style={stylesStatus.bannerBody}>
-        <Text style={stylesStatus.bannerTitle}>Workspace already exists</Text>
-        <Text style={stylesStatus.bannerSub}>
-          Ask your administrator for a team invite — you cannot provision a duplicate
-          operator with this name.
-        </Text>
-      </View>
-    </Surface>
-  ) : flow.orgCheck && !flow.orgCheck.taken && flow.orgName.trim() ? (
-    <Text style={stylesStatus.ok}>Available — workspace will be provisioned</Text>
-  ) : null;
-
-  if (flow.useMobileLayout) {
-    return (
-      <OnboardingFullPageFormStep
-        title="Name your workspace"
-        subtitle="This becomes your operator identity on the Pulse network."
-        eyebrow="Workspace"
-        primaryLabel="Check availability"
-        onPrimary={flow.continueOrgCheck}
-        primaryDisabled={
-          !flow.orgName.trim() ||
-          !!flow.orgCheck?.loading ||
-          !!flow.orgCheck?.taken ||
-          flow.loading
-        }
-        primaryLoading={flow.loading || !!flow.orgCheck?.loading}
-      >
-        <OnboardingFocusedField
-          label="Company / organization name"
-          value={flow.orgName}
-          onChangeText={flow.setOrgName}
-          errorMessage={orgError}
-          hintMessage={
-            flow.orgCheck?.loading
-              ? 'Checking availability…'
-              : flow.orgCheck?.taken
-                ? 'This name is already registered.'
-                : flow.orgCheck && !flow.orgCheck.taken && flow.orgName.trim()
-                  ? 'Available — workspace will be provisioned.'
-                  : null
-          }
-          placeholder="e.g. GoGoX Logistics"
-          autoCapitalize="words"
-          autoFocus
-        />
-        {availability}
-      </OnboardingFullPageFormStep>
-    );
-  }
+  const hint =
+    flow.orgCheck?.loading
+      ? 'Checking availability…'
+      : flow.orgCheck?.taken
+        ? 'This name is already registered.'
+        : flow.orgCheck && !flow.orgCheck.taken && flow.orgName.trim()
+          ? 'Available! You will create this organization.'
+          : null;
 
   return (
-    <OnboardingFullPageFormStep
-      title="Name your workspace"
-      subtitle="This becomes your operator identity on the Pulse network."
-      eyebrow="Workspace"
-      primaryLabel="Continue provisioning"
+    <SignUpPulseFormStep
+      title="Your organization"
+      subtitle="Enter your company name. We'll check if it already exists on Pulse."
+      primaryLabel="Continue"
       onPrimary={flow.continueOrgCheck}
       primaryDisabled={
         !flow.orgName.trim() ||
@@ -95,20 +36,36 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
       }
       primaryLoading={flow.loading || !!flow.orgCheck?.loading}
     >
-      <OnboardingFocusedField
-        label="Company / organization name"
+      <SignUpPulseField
+        label="Company / Organization Name"
+        required
         value={flow.orgName}
         onChangeText={flow.setOrgName}
+        placeholder="e.g. Acme Logistics"
         autoCapitalize="words"
-        placeholder="e.g. GoGoX Logistics"
-        errorMessage={
-          flow.step2Attempted && !flow.orgName.trim()
-            ? 'Enter your organization name.'
-            : flow.orgTakenError
-        }
+        autoFocus
+        errorMessage={orgError}
+        hintMessage={hint}
       />
-      {availability}
-    </OnboardingFullPageFormStep>
+
+      {flow.orgCheck?.loading ? (
+        <View style={stylesStatus.row}>
+          <LoadingIndicator size="small" color={PULSE_SIGNUP.muted} />
+          <Text style={stylesStatus.hint}>Checking availability…</Text>
+        </View>
+      ) : flow.orgCheck?.taken ? (
+        <View style={stylesStatus.banner}>
+          <FontAwesome name="exclamation-triangle" size={14} color="#d97706" />
+          <View style={stylesStatus.bannerBody}>
+            <Text style={stylesStatus.bannerTitle}>Workspace already exists</Text>
+            <Text style={stylesStatus.bannerSub}>
+              Ask your administrator for a team invite — you cannot provision a duplicate operator
+              with this name.
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </SignUpPulseFormStep>
   );
 }
 
@@ -116,17 +73,25 @@ const stylesStatus = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space[2],
-    marginTop: space[2],
+    gap: 8,
+    marginTop: -8,
+    marginBottom: 16,
   },
   hint: {
-    ...typography.caption,
+    fontSize: 12,
+    color: PULSE_SIGNUP.muted,
+    fontWeight: '600',
   },
   banner: {
     flexDirection: 'row',
-    gap: space[3],
-    marginTop: space[3],
+    gap: 12,
+    marginTop: -8,
+    marginBottom: 16,
     backgroundColor: '#fffbeb',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    padding: 14,
   },
   bannerBody: {
     flex: 1,
@@ -134,7 +99,7 @@ const stylesStatus = StyleSheet.create({
   },
   bannerTitle: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#92400e',
     marginBottom: 4,
   },
@@ -142,11 +107,6 @@ const stylesStatus = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#78350f',
-  },
-  ok: {
-    fontSize: 13,
-    color: colors.revenue,
     fontWeight: '600',
-    marginTop: space[3],
   },
 });

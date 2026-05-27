@@ -27,7 +27,7 @@ export async function syncDomainRows<T>(params: SyncDomainParams<T>): Promise<T[
       policy: params.policy,
     });
 
-    if (mode.doFullSync) {
+    if (mode.doFullSync || params.currentRows.length === 0) {
       const rows = await params.getFull();
       bumpCacheMetric(params.domain, 'full_fetch');
       const maxUpdatedAt = extractMaxUpdatedAt(rows);

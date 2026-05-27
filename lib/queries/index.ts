@@ -114,3 +114,4 @@ export {
 } from './useTripLiveTrackingSeedQuery';
 export { fetchTripLiveTrackingSeed } from './fetchTripLiveTrackingSeed';
 export type { TripLiveTrackingSeed } from './fetchTripLiveTrackingSeed';
+export { useDriverProfileImagesQuery } from './useDriverProfileImagesQuery';

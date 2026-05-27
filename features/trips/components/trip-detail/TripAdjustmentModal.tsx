@@ -1,10 +1,12 @@
 /**
  * Modal to add a trip adjustment (revenue or cost, +/−).
- * Adjustments alter revenue (sales) or supplier cost — not in/out ledger.
+ * Narrow viewports use the step wizard + ticket review (ledger-style).
  */
 import Theme from "@/constants/Theme";
+import { TripAdjustmentMobileWizard } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentMobileWizard";
+import { TripAdjustmentSuccessView } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentSuccessView";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Modal,
   Platform,
@@ -13,6 +15,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,67 +34,188 @@ export interface TripAdjustmentModalProps {
     impact: TripAdjustmentImpact;
     amount: number;
     reason: string;
-  }) => void;
-  /** When set (e.g. Finance Overview shortcuts), seeds type/impact when the modal opens. */
+  }) => void | Promise<void>;
+  /** When set (e.g. provision CN/DN), seeds fields; omitted fields stay editable in the wizard. */
   preset?: {
-    type: TripAdjustmentType;
-    impact: TripAdjustmentImpact;
+    type?: TripAdjustmentType;
+    impact?: TripAdjustmentImpact;
     reasonSeed?: string | null;
   } | null;
+  entryContextLabel?: string | null;
+  tripCode?: string | null;
 }
 
-const BLUEPRINT_BG = "#111827";
+const MOBILE_WIZARD_MAX_WIDTH = 680;
+
+function applyPresetToDraft(
+  preset: TripAdjustmentModalProps["preset"],
+  setType: (t: TripAdjustmentType) => void,
+  setImpact: (i: TripAdjustmentImpact) => void,
+  setReason: (r: string) => void,
+  setOtherReason: (r: string) => void,
+) {
+  if (preset) {
+    setType(preset.type ?? "revenue");
+    setImpact(preset.impact ?? "plus");
+    const seed = preset.reasonSeed?.trim() ?? "";
+    const lane = preset.type ?? "revenue";
+    const opts = lane === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+    if (seed && (opts as readonly string[]).includes(seed)) {
+      setReason(seed);
+      setOtherReason("");
+    } else if (seed) {
+      setReason("Other");
+      setOtherReason(seed);
+    } else {
+      setReason("");
+      setOtherReason("");
+    }
+  } else {
+    setType("revenue");
+    setImpact("plus");
+    setReason("");
+    setOtherReason("");
+  }
+}
 
 export function TripAdjustmentModal({
   visible,
   onClose,
   onSave,
   preset = null,
+  entryContextLabel = null,
+  tripCode = null,
 }: TripAdjustmentModalProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const useMobileWizard = width < MOBILE_WIZARD_MAX_WIDTH;
+
   const [type, setType] = useState<TripAdjustmentType>("revenue");
   const [impact, setImpact] = useState<TripAdjustmentImpact>("plus");
   const [amountStr, setAmountStr] = useState("");
   const [reason, setReason] = useState("");
   const [otherReason, setOtherReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<{
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    amount: number;
+    reason: string;
+  } | null>(null);
 
-  const reasonOptions = type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+  const laneLocked = preset?.type != null;
+  const impactLocked = preset?.impact != null;
+  const reasonLocked = Boolean(preset?.reasonSeed?.trim());
+
+  const flowSessionKey = useMemo(
+    () =>
+      visible
+        ? `${preset?.type ?? "x"}-${preset?.impact ?? "x"}-${preset?.reasonSeed ?? ""}-${tripCode ?? ""}`
+        : "",
+    [visible, preset?.type, preset?.impact, preset?.reasonSeed, tripCode],
+  );
 
   useEffect(() => {
-    if (!visible) return;
-    if (preset) {
-      setType(preset.type);
-      setImpact(preset.impact);
-    } else {
-      setType("revenue");
-      setImpact("plus");
+    if (!visible) {
+      setSuccess(null);
+      setSubmitting(false);
+      return;
     }
+    applyPresetToDraft(preset, setType, setImpact, setReason, setOtherReason);
     setAmountStr("");
-    const seed = preset?.reasonSeed?.trim() ?? "";
-    const opts = preset ? (preset.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS) : REVENUE_REASON_OPTIONS;
-    if (seed && (opts as readonly string[]).includes(seed)) {
-      setReason(seed);
-      setOtherReason("");
-    } else {
-      setReason("");
-      setOtherReason("");
-    }
   }, [visible, preset]);
-  const selectedReason = reason === "Other" ? (otherReason.trim() || "Other") : reason;
 
-  const handleCommit = () => {
-    const amount = Math.round(parseFloat(amountStr.replace(/,/g, "")) || 0);
-    if (amount <= 0) return;
-    const finalReason = selectedReason || (type === "revenue" ? "Revenue adjustment" : "Cost adjustment");
-    onSave({ type, impact, amount, reason: finalReason });
+  const reasonOptions = type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+  const selectedReason = reason === "Other" ? otherReason.trim() || "Other" : reason;
+  const amountNum = Math.round(parseFloat(amountStr.replace(/,/g, "")) || 0);
+  const canCommit =
+    amountNum > 0 &&
+    (selectedReason.length > 0 || reasonOptions.length > 0);
+
+  const handleCommit = useCallback(async () => {
+    if (!canCommit || submitting) return;
+    const finalReason =
+      selectedReason || (type === "revenue" ? "Revenue adjustment" : "Cost adjustment");
+    setSubmitting(true);
+    try {
+      await onSave({ type, impact, amount: amountNum, reason: finalReason });
+      if (useMobileWizard) {
+        setSuccess({ type, impact, amount: amountNum, reason: finalReason });
+      } else {
+        setAmountStr("");
+        setReason("");
+        setOtherReason("");
+        onClose();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }, [
+    canCommit,
+    submitting,
+    selectedReason,
+    type,
+    impact,
+    amountNum,
+    onSave,
+    useMobileWizard,
+    onClose,
+  ]);
+
+  const handleSuccessDone = useCallback(() => {
+    setSuccess(null);
     setAmountStr("");
     setReason("");
     setOtherReason("");
     onClose();
-  };
+  }, [onClose]);
 
-  const amountNum = parseFloat(amountStr.replace(/,/g, "")) || 0;
-  const canCommit = amountNum > 0;
+  if (!visible) return null;
+
+  if (useMobileWizard && success) {
+    return (
+      <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={handleSuccessDone}>
+        <TripAdjustmentSuccessView
+          type={success.type}
+          impact={success.impact}
+          amount={success.amount}
+          reason={success.reason}
+          tripCode={tripCode}
+          onDone={handleSuccessDone}
+        />
+      </Modal>
+    );
+  }
+
+  if (useMobileWizard) {
+    return (
+      <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+        <TripAdjustmentMobileWizard
+          entryContextLabel={entryContextLabel}
+          tripCode={tripCode}
+          type={type}
+          onTypeChange={setType}
+          laneLocked={laneLocked}
+          impact={impact}
+          onImpactChange={setImpact}
+          impactLocked={impactLocked}
+          amountStr={amountStr}
+          onAmountChange={setAmountStr}
+          reason={reason}
+          onReasonChange={setReason}
+          otherReason={otherReason}
+          onOtherReasonChange={setOtherReason}
+          reasonLocked={reasonLocked}
+          showProtocolShortcuts={!reasonLocked}
+          canSubmit={canCommit}
+          submitting={submitting}
+          onSubmit={() => void handleCommit()}
+          onClose={onClose}
+          flowSessionKey={flowSessionKey}
+        />
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -118,12 +242,15 @@ export function TripAdjustmentModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Type: Revenue (Sale) | Cost (Supplier) */}
           <Text style={styles.sectionLabel}>Adjustment Type</Text>
           <View style={styles.typeRow}>
             <TouchableOpacity
               style={[styles.typeBtn, type === "revenue" && styles.typeBtnActive]}
-              onPress={() => { setType("revenue"); setReason(""); setOtherReason(""); }}
+              onPress={() => {
+                setType("revenue");
+                setReason("");
+                setOtherReason("");
+              }}
               activeOpacity={0.8}
             >
               <Text style={[styles.typeBtnText, type === "revenue" && styles.typeBtnTextActive]}>
@@ -132,7 +259,11 @@ export function TripAdjustmentModal({
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.typeBtn, type === "cost" && styles.typeBtnActive]}
-              onPress={() => { setType("cost"); setReason(""); setOtherReason(""); }}
+              onPress={() => {
+                setType("cost");
+                setReason("");
+                setOtherReason("");
+              }}
               activeOpacity={0.8}
             >
               <Text style={[styles.typeBtnText, type === "cost" && styles.typeBtnTextActive]}>
@@ -141,7 +272,6 @@ export function TripAdjustmentModal({
             </TouchableOpacity>
           </View>
 
-          {/* Impact: Addition | Deduction */}
           <Text style={styles.sectionLabel}>Impact</Text>
           <View style={styles.impactRow}>
             <TouchableOpacity
@@ -149,7 +279,12 @@ export function TripAdjustmentModal({
               onPress={() => setImpact("plus")}
               activeOpacity={0.8}
             >
-              <FontAwesome name="plus-circle" size={14} color={impact === "plus" ? Theme.textOnPrimary : Theme.textMuted} style={styles.impactIcon} />
+              <FontAwesome
+                name="plus-circle"
+                size={14}
+                color={impact === "plus" ? Theme.textOnPrimary : Theme.textMuted}
+                style={styles.impactIcon}
+              />
               <Text style={[styles.impactBtnText, impact === "plus" && styles.impactBtnTextActive]}>
                 Addition
               </Text>
@@ -159,14 +294,18 @@ export function TripAdjustmentModal({
               onPress={() => setImpact("minus")}
               activeOpacity={0.8}
             >
-              <FontAwesome name="minus-circle" size={14} color={impact === "minus" ? Theme.textOnPrimary : Theme.textMuted} style={styles.impactIcon} />
+              <FontAwesome
+                name="minus-circle"
+                size={14}
+                color={impact === "minus" ? Theme.textOnPrimary : Theme.textMuted}
+                style={styles.impactIcon}
+              />
               <Text style={[styles.impactBtnText, impact === "minus" && styles.impactBtnTextActive]}>
                 Deduction
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Amount */}
           <Text style={styles.sectionLabel}>Amount</Text>
           <View style={styles.amountWrap}>
             <Text style={styles.currencyPrefix}>₹</Text>
@@ -181,7 +320,6 @@ export function TripAdjustmentModal({
             />
           </View>
 
-          {/* Reason */}
           <Text style={styles.sectionLabel}>Reason</Text>
           <View style={styles.chipWrap}>
             {reasonOptions.map((r) => (
@@ -209,19 +347,23 @@ export function TripAdjustmentModal({
 
         <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
           <TouchableOpacity
-            style={[styles.commitBtn, !canCommit && styles.commitBtnDisabled]}
-            onPress={handleCommit}
-            disabled={!canCommit}
+            style={[styles.commitBtn, (!canCommit || submitting) && styles.commitBtnDisabled]}
+            onPress={() => void handleCommit()}
+            disabled={!canCommit || submitting}
             activeOpacity={0.9}
           >
             <FontAwesome name="check" size={16} color={Theme.primary} style={styles.commitIcon} />
-            <Text style={styles.commitBtnText}>Save Adjustment</Text>
+            <Text style={styles.commitBtnText}>
+              {submitting ? "Saving…" : "Save Adjustment"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 }
+
+const BLUEPRINT_BG = "#111827";
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: Theme.screenBackground },
@@ -347,7 +489,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
@@ -383,7 +525,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         outlineStyle: "none",
-      } as any,
+      } as object,
     }),
   },
   footer: {

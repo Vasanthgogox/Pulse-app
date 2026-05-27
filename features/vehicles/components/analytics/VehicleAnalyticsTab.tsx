@@ -18,6 +18,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { partyAnalyticsLayout } from "@/components/analytics/partyAnalyticsLayout";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
@@ -135,41 +136,41 @@ const KpiCard = memo(function KpiCard({
 const kpiStyles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 3,
-    minHeight: 80,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 2,
+    minHeight: 72,
     justifyContent: "flex-end",
   },
   cardWide: {
-    minHeight: 70,
+    minHeight: 72,
   },
   cardAlert: {
     backgroundColor: "rgba(232,33,39,0.04)",
     borderColor: "rgba(232,33,39,0.20)",
   },
   label: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   value: {
-    fontSize: 20,
-    fontWeight: "800",
-    fontStyle: "italic",
+    fontSize: 16,
+    fontWeight: "600",
+    fontStyle: "normal",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
     paddingLeft: Layout.currencyTextPaddingStart,
   },
   sub: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
   },
 });
@@ -589,7 +590,13 @@ export const VehicleAnalyticsTab = memo(function VehicleAnalyticsTab({
   }
 
   return (
-    <View style={[styles.root, isDesktop && styles.rootDesktop]}>
+    <View
+      style={[
+        styles.root,
+        partyAnalyticsLayout.inset,
+        isDesktop && styles.rootDesktop,
+      ]}
+    >
       {/* ── Intelligence overlay (Phase 5) ───────────────────────────────── */}
       <VehicleIntelligenceSection
         vehicle={vehicle}

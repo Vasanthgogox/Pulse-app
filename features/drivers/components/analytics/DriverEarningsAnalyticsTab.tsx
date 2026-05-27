@@ -27,6 +27,7 @@
  */
 
 import { useMemo } from "react";
+import { useWindowDimensions } from "react-native";
 
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
@@ -40,6 +41,7 @@ import {
   PulseSection,
   TrendBarChart,
   TrendLineChart,
+  pulseChartHeight,
   usePulseChartWidth,
   type PulseKpiItem,
   type TrendPoint,
@@ -201,8 +203,10 @@ export function DriverEarningsAnalyticsTab({
   driver,
   driverOffer,
 }: Props) {
+  const { width } = useWindowDimensions();
   const chartW = usePulseChartWidth();
   const chartWHalf = usePulseChartWidth({ columns: 2 });
+  const chartH = pulseChartHeight(width);
 
   const kpis = useMemo(
     () => computeDriverEarningsKpis(trips, driverTransactions, driverRequests, driverOffer),
@@ -362,6 +366,7 @@ export function DriverEarningsAnalyticsTab({
     <PulseAnalyticsShell
       title="Earnings intelligence"
       subtitle="Salary, incentives, advances and deductions over the last 6 months"
+      embedded
     >
       <PulseKpiGrid rows={earningsKpiRows} />
 
@@ -376,7 +381,7 @@ export function DriverEarningsAnalyticsTab({
           <TrendLineChart
             data={toLinePoints(months, "commission")}
             width={chartW}
-            height={168}
+            height={chartH}
             field="revenue"
             color={Theme.chartSeries1}
             gradientId="earningsGrad"
@@ -390,7 +395,7 @@ export function DriverEarningsAnalyticsTab({
             <TrendLineChart
               data={toLinePoints(months, "advance")}
               width={chartWHalf}
-              height={168}
+              height={chartH}
               field="revenue"
               color={Theme.chartSeries4}
               gradientId="advancesGrad"
@@ -403,7 +408,7 @@ export function DriverEarningsAnalyticsTab({
             <TrendBarChart
               data={toIncentiveBars(months)}
               width={chartWHalf}
-              height={168}
+              height={chartH}
               primaryField="revenue"
               secondaryField="expense"
               primaryColor={Theme.chartSeries1}

@@ -3,8 +3,11 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  getDriversByOrganization,
   syncDriversWithCache,
 } from '@/features/drivers/services/drivers.service';
+import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
@@ -17,12 +20,23 @@ export function useDriversQuery(orgId: string | null) {
         (qc.getQueryData(queryKeys.drivers.finite(orgId ?? '')) as
           | Array<{ id: string }>
           | undefined) ?? [];
-      const res = await syncDriversWithCache(orgId!, existing as any);
-      if (res.error) throw res.error;
-      return res.drivers;
+      return fetchEntityListWithFallback({
+        orgId: orgId!,
+        domain: 'drivers',
+        cachedRows: existing as never[],
+        sync: async (id, cached) => {
+          const res = await syncDriversWithCache(id, cached as never[]);
+          return { error: res.error, rows: res.drivers };
+        },
+        fetchDirect: async (id) => {
+          const res = await getDriversByOrganization(id);
+          return { error: res.error, rows: res.drivers };
+        },
+      });
     },
     enabled: !!orgId,
-    staleTime: STALE.slow,
+    staleTime: STALE.moderate,
+    refetchOnMount: refetchOnMountIfEntityListEmpty,
   });
 }
 

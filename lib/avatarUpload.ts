@@ -52,6 +52,123 @@ export interface PickAndUploadAvatarResult {
   error: Error | null;
 }
 
+export interface LocalAvatarPickResult {
+  previewUri: string | null;
+  base64: string | null;
+  error: Error | null;
+}
+
+async function readUploadBytes(
+  uri: string,
+  base64?: string | null,
+): Promise<ArrayBuffer | Uint8Array | null> {
+  const trimmed = typeof base64 === 'string' ? base64.trim() : '';
+  if (trimmed) return base64ToUint8Array(trimmed);
+  try {
+    const file = new File(uri);
+    return await file.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function uploadAvatarBytes(
+  userId: string,
+  uploadBytes: ArrayBuffer | Uint8Array,
+  previewUri: string,
+): Promise<PickAndUploadAvatarResult> {
+  const path = `${userId}/avatar-${Date.now()}.jpg`;
+  const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
+    contentType: 'image/jpeg',
+    upsert: false,
+  });
+
+  if (error) {
+    const msg = error.message || 'Upload failed';
+    const isRls = /row-level security|policy|rls/i.test(msg);
+    console.log('[Avatar Upload Error]', msg, 'isRls:', isRls, 'bucket:', AVATAR_BUCKET, 'path:', path);
+    return {
+      path: null,
+      previewUri: null,
+      error: new Error(
+        isRls
+          ? `Storage permissions blocked for bucket "${AVATAR_BUCKET}" (path: "${path}"). Supabase says: ${msg}. Add/verify RLS policies in docs/AVATAR_STORAGE_RLS.md.`
+          : msg,
+      ),
+    };
+  }
+
+  return { path, previewUri, error: null };
+}
+
+/** Pick a profile photo locally — upload after auth with `uploadAvatarFromLocal`. */
+export async function pickLocalAvatar(): Promise<LocalAvatarPickResult> {
+  try {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        return { previewUri: null, base64: null, error: new Error('Permission to access photos is required') };
+      }
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return { previewUri: null, base64: null, error: null };
+    }
+
+    const asset = result.assets[0];
+    let uri = asset.uri;
+    let base64 = typeof asset.base64 === 'string' ? asset.base64.trim() : null;
+
+    try {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: MAX_SIZE, height: MAX_SIZE } }],
+        { compress: QUALITY, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      uri = manipulated.uri;
+      if (manipulated.base64) base64 = manipulated.base64;
+    } catch {
+      // keep original
+    }
+
+    return { previewUri: uri, base64, error: null };
+  } catch (e) {
+    return {
+      previewUri: null,
+      base64: null,
+      error: e instanceof Error ? e : new Error('Failed to pick photo'),
+    };
+  }
+}
+
+export async function uploadAvatarFromLocal(
+  userId: string,
+  previewUri: string,
+  base64?: string | null,
+): Promise<PickAndUploadAvatarResult> {
+  try {
+    const uploadBytes = await readUploadBytes(previewUri, base64);
+    if (!uploadBytes || uploadBytes.byteLength === 0) {
+      return { path: null, previewUri: null, error: new Error('Could not read image file') };
+    }
+    return uploadAvatarBytes(userId, uploadBytes, previewUri);
+  } catch (e) {
+    return {
+      path: null,
+      previewUri: null,
+      error: e instanceof Error ? e : new Error('Failed to upload photo'),
+    };
+  }
+}
+
 /**
  * Request media library permission, pick an image, resize, upload to private Storage bucket.
  * Returns the storage path; caller should call authService.updateProfile({ avatar_url: path }).
@@ -94,41 +211,13 @@ export async function pickAndUploadAvatar(userId: string): Promise<PickAndUpload
     const path = `${userId}/avatar-${Date.now()}.jpg`;
     // Prefer ImagePicker base64 payload because it is stable across Expo runtimes.
     // Fallback to File.arrayBuffer() if base64 is unavailable on the current device.
-    let uploadBytes: ArrayBuffer | Uint8Array | null = null;
-    const base64 = typeof asset.base64 === 'string' ? asset.base64.trim() : '';
-    if (base64) {
-      uploadBytes = base64ToUint8Array(base64);
-    } else {
-      const file = new File(uri);
-      uploadBytes = await file.arrayBuffer();
-    }
+    const uploadBytes = await readUploadBytes(uri, asset.base64);
 
     if (!uploadBytes || uploadBytes.byteLength === 0) {
       return { path: null, previewUri: null, error: new Error('Could not read image file') };
     }
 
-    const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
-      contentType: 'image/jpeg',
-      upsert: false,
-    });
-
-    if (error) {
-      const msg = error.message || 'Upload failed';
-      const isRls = /row-level security|policy|rls/i.test(msg);
-      // Log for debugging
-      console.log("[Avatar Upload Error]", msg, "isRls:", isRls, "bucket:", AVATAR_BUCKET, "path:", path);
-      return {
-        path: null,
-        previewUri: null,
-        error: new Error(
-          isRls
-            ? `Storage permissions blocked for bucket "${AVATAR_BUCKET}" (path: "${path}"). Supabase says: ${msg}. Add/verify RLS policies in docs/AVATAR_STORAGE_RLS.md.`
-            : msg
-        ),
-      };
-    }
-
-    return { path, previewUri: uri, error: null };
+    return uploadAvatarBytes(userId, uploadBytes, uri);
   } catch (e) {
     return {
       path: null,

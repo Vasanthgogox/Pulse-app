@@ -1,0 +1,276 @@
+import { memo, type ReactNode } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ImageSourcePropType,
+} from 'react-native';
+import { UploadCloud } from 'lucide-react-native';
+
+import type { PresetAvatar } from '@/constants/DriverLevels';
+import { SignUpBrandingStepLayout } from './SignUpBrandingStepLayout';
+import { PULSE_SIGNUP_RADIUS, type SignUpTheme } from '../signUpPulseTheme';
+import { PULSE_SIGNUP } from '../signUpPulseTheme';
+
+export interface SignUpPhotoPickerStepProps {
+  title: string;
+  subtitle?: string | ReactNode;
+  previewUri?: string | null;
+  previewImage?: ImageSourcePropType;
+  previewFallback?: ReactNode;
+  presetAvatars?: readonly PresetAvatar[];
+  selectedPresetSeed?: string | null;
+  onPresetSelect?: (seed: string) => void;
+  onUpload: () => void;
+  uploading?: boolean;
+  uploadLabel?: string;
+  primaryLabel?: string;
+  onPrimary: () => void;
+  primaryLoading?: boolean;
+  onSkip?: () => void;
+  skipLabel?: string;
+  theme?: SignUpTheme;
+}
+
+export const SignUpPhotoPickerStep = memo(function SignUpPhotoPickerStep({
+  title,
+  subtitle,
+  previewUri,
+  previewImage,
+  previewFallback,
+  presetAvatars,
+  selectedPresetSeed,
+  onPresetSelect,
+  onUpload,
+  uploading = false,
+  uploadLabel = 'Upload from gallery',
+  primaryLabel = 'Continue',
+  onPrimary,
+  primaryLoading = false,
+  onSkip,
+  skipLabel = 'Skip for now',
+  theme = PULSE_SIGNUP,
+}: SignUpPhotoPickerStepProps) {
+  const styles = createStyles(theme);
+
+  return (
+    <SignUpBrandingStepLayout
+      title={title}
+      subtitle={subtitle}
+      primaryLabel={primaryLabel}
+      onPrimary={onPrimary}
+      primaryLoading={primaryLoading}
+      onSkip={onSkip}
+      skipLabel={skipLabel}
+      theme={theme}
+    >
+      <View style={styles.previewWrap}>
+        {previewImage ? (
+          <Image source={previewImage} style={styles.previewImage} resizeMode="cover" />
+        ) : previewUri ? (
+          <Image source={{ uri: previewUri }} style={styles.previewImage} resizeMode="cover" />
+        ) : (
+          previewFallback ?? <View style={styles.previewPlaceholder} />
+        )}
+      </View>
+
+      <Pressable
+        onPress={onUpload}
+        disabled={uploading}
+        style={({ pressed }) => [
+          styles.uploadBtn,
+          uploading && styles.uploadBtnDisabled,
+          pressed && !uploading && styles.uploadBtnPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={uploadLabel}
+      >
+        {uploading ? (
+          <ActivityIndicator color={theme.primary} size="small" />
+        ) : (
+          <>
+            <UploadCloud size={18} color={theme.primary} strokeWidth={2.5} />
+            <Text style={styles.uploadText}>{uploadLabel}</Text>
+          </>
+        )}
+      </Pressable>
+
+      {presetAvatars && presetAvatars.length > 0 && onPresetSelect ? (
+        <>
+          <Text style={styles.gridLabel}>Or choose a preset</Text>
+          <View style={styles.gridWrap}>
+            {presetAvatars.map((av) => {
+              const selected = selectedPresetSeed === av.seed;
+              return (
+                <Pressable
+                  key={av.seed}
+                  onPress={() => onPresetSelect(av.seed)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <Image source={av.image} style={styles.gridImage} resizeMode="cover" />
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+    </SignUpBrandingStepLayout>
+  );
+});
+
+/** Body-only picker for driver signup scroll pages. */
+export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
+  title,
+  subtitle,
+  previewUri,
+  previewImage,
+  previewFallback,
+  presetAvatars,
+  selectedPresetSeed,
+  onPresetSelect,
+  onUpload,
+  uploading = false,
+  uploadLabel = 'Upload photo',
+  theme = PULSE_SIGNUP,
+}: Omit<
+  SignUpPhotoPickerStepProps,
+  'onPrimary' | 'primaryLabel' | 'primaryLoading' | 'onSkip' | 'skipLabel'
+>) {
+  const styles = createStyles(theme);
+
+  return (
+    <View style={styles.body}>
+      <View style={styles.previewWrap}>
+        {previewImage ? (
+          <Image source={previewImage} style={styles.previewImage} resizeMode="cover" />
+        ) : previewUri ? (
+          <Image source={{ uri: previewUri }} style={styles.previewImage} resizeMode="cover" />
+        ) : (
+          previewFallback ?? <View style={styles.previewPlaceholder} />
+        )}
+      </View>
+      <Pressable
+        onPress={onUpload}
+        disabled={uploading}
+        style={({ pressed }) => [
+          styles.uploadBtn,
+          uploading && styles.uploadBtnDisabled,
+          pressed && !uploading && styles.uploadBtnPressed,
+        ]}
+      >
+        {uploading ? (
+          <ActivityIndicator color={theme.primary} size="small" />
+        ) : (
+          <>
+            <UploadCloud size={18} color={theme.primary} strokeWidth={2.5} />
+            <Text style={styles.uploadText}>{uploadLabel}</Text>
+          </>
+        )}
+      </Pressable>
+      {presetAvatars && presetAvatars.length > 0 && onPresetSelect ? (
+        <>
+          <Text style={styles.gridLabel}>Or choose a preset</Text>
+          <View style={styles.gridWrap}>
+            {presetAvatars.map((av) => {
+              const selected = selectedPresetSeed === av.seed;
+              return (
+                <Pressable
+                  key={av.seed}
+                  onPress={() => onPresetSelect(av.seed)}
+                  style={[styles.gridItem, selected && styles.gridItemSelected]}
+                >
+                  <Image source={av.image} style={styles.gridImage} resizeMode="cover" />
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+});
+
+function createStyles(theme: SignUpTheme) {
+  return StyleSheet.create({
+    body: {
+      width: '100%',
+    },
+    previewWrap: {
+      alignSelf: 'center',
+      width: 128,
+      height: 128,
+      borderRadius: PULSE_SIGNUP_RADIUS.card,
+      overflow: 'hidden',
+      borderWidth: 2,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      marginBottom: 20,
+    },
+    previewImage: {
+      width: '100%',
+      height: '100%',
+    },
+    previewPlaceholder: {
+      flex: 1,
+      backgroundColor: theme.primaryTint,
+    },
+    uploadBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      paddingVertical: 14,
+      borderRadius: PULSE_SIGNUP_RADIUS.button,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.bg,
+      marginBottom: 20,
+    },
+    uploadBtnDisabled: {
+      opacity: 0.6,
+    },
+    uploadBtnPressed: {
+      backgroundColor: theme.surface,
+    },
+    uploadText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.primary,
+    },
+    gridLabel: {
+      fontSize: 10,
+      fontWeight: '900',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: theme.muted,
+      marginBottom: 12,
+      paddingLeft: 4,
+    },
+    gridWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+      marginBottom: 8,
+    },
+    gridItem: {
+      width: 56,
+      height: 56,
+      borderRadius: 14,
+      overflow: 'hidden',
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    gridItemSelected: {
+      borderColor: theme.primary,
+    },
+    gridImage: {
+      width: '100%',
+      height: '100%',
+    },
+  });
+}

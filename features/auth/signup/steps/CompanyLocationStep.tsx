@@ -1,26 +1,26 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
-import {
-  OnboardingFocusedField,
-  OnboardingFullPageFormStep,
-} from '@/features/onboarding';
-import { CityPicker } from '../components/CityPicker';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
-import { colors } from '@/design-system/colors';
-import { space } from '@/design-system/spacing';
-import { typography } from '@/design-system/typography';
+import { CityPicker } from '../components/CityPicker';
+import { SignUpPulseField } from '../SignUpPulseField';
+import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
+import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
   return (
-    <OnboardingFullPageFormStep
-      title="Operational base"
-      subtitle={`Primary office location for ${flow.orgName}.`}
-      eyebrow="Location"
+    <SignUpPulseFormStep
+      title="Office location"
+      subtitle={
+        <Text style={styles.subtitle}>
+          Where is <Text style={styles.orgHighlight}>{flow.orgName}</Text> based?
+        </Text>
+      }
       primaryLabel="Continue"
       onPrimary={flow.continueCompanyLocation}
+      primaryDisabled={!flow.selectedLocation}
     >
-      <OnboardingFocusedField
-        label="Office address"
+      <SignUpPulseField
+        label="Office Address"
         value={flow.addressLine}
         onChangeText={flow.setAddressLine}
         placeholder="Building, street, area"
@@ -30,32 +30,43 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
         autoCapitalize="sentences"
       />
 
-      <View style={styles.cityGroup}>
-        <Text style={styles.cityLabel}>
-          City / district <Text style={styles.req}>*</Text>
-        </Text>
-        <CityPicker
-          value={flow.selectedLocation}
-          onChange={flow.setSelectedLocation}
-          attempted={flow.step4Attempted}
-          error={flow.step4Errors.city}
-        />
-      </View>
-    </OnboardingFullPageFormStep>
+      <Text style={styles.cityLabel}>
+        City / District <Text style={styles.req}>*</Text>
+      </Text>
+      <CityPicker
+        value={flow.selectedLocation}
+        onChange={flow.setSelectedLocation}
+        attempted={flow.step4Attempted}
+        error={flow.step4Errors.city}
+      />
+    </SignUpPulseFormStep>
   );
 }
 
 const styles = StyleSheet.create({
-  cityGroup: {
-    marginTop: space[2],
+  subtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: PULSE_SIGNUP.muted,
+    fontWeight: '500',
+    marginTop: 8,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  orgHighlight: {
+    fontWeight: '900',
+    color: PULSE_SIGNUP.primary,
   },
   cityLabel: {
-    ...typography.label,
     fontSize: 10,
-    marginBottom: space[2],
-    color: colors.textSecondary,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: PULSE_SIGNUP.muted,
+    marginBottom: 8,
+    paddingLeft: 4,
   },
   req: {
-    color: colors.cost,
+    color: '#ef4444',
   },
 });

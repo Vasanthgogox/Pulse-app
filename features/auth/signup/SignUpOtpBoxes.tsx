@@ -1,9 +1,7 @@
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors } from '@/design-system/colors';
-import { space } from '@/design-system/spacing';
-import { SIGNUP_MOBILE_TOKENS as T } from './signUpMobileTokens';
+import { PULSE_SIGNUP } from './signUpPulseTheme';
 
 export interface SignUpOtpBoxesProps {
   digits: string;
@@ -30,7 +28,7 @@ export const SignUpOtpBoxes = memo(function SignUpOtpBoxes({
               active && styles.boxActive,
             ]}
           >
-            <Text style={styles.digit}>{filled ? c : ''}</Text>
+            <Text style={[styles.digit, filled && styles.digitFilled]}>{filled ? c : ''}</Text>
           </View>
         );
       })}
@@ -43,30 +41,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignSelf: 'stretch',
-    gap: T.otpGap,
-    paddingVertical: space[2],
+    gap: 8,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
   box: {
-    width: T.otpBoxW,
-    height: T.otpBoxH,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.surface,
+    width: 48,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   boxFilled: {
-    borderColor: colors.brand,
-    backgroundColor: '#f0fdf4',
+    borderColor: PULSE_SIGNUP.primary,
   },
   boxActive: {
-    borderColor: colors.brand,
-    borderWidth: 1.5,
+    borderColor: PULSE_SIGNUP.primary,
+    opacity: 0.65,
+    shadowColor: PULSE_SIGNUP.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
   digit: {
-    fontSize: T.otpDigitSize,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontSize: 20,
+    fontWeight: '900',
+    color: 'transparent',
+  },
+  digitFilled: {
+    color: PULSE_SIGNUP.primary,
   },
 });

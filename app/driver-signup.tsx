@@ -7,7 +7,7 @@
  * Step 5: Success, go to app
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { ALL_PRESET_AVATARS, getAvatarUriForSeed } from '@/constants/DriverLevels';
+import { ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
@@ -32,6 +32,7 @@ import {
   Modal,
     NativeSyntheticEvent,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -43,10 +44,20 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SignUpMobileShell } from '@/features/auth/signup/SignUpMobileShell';
-import { SignUpKeypadStepLayout } from '@/features/auth/signup/SignUpKeypadStepLayout';
+import { SignUpPhotoPickerBody } from '@/features/auth/signup/components/SignUpPhotoPickerStep';
+import { DriverSignupSuccessStep } from '@/features/auth/signup/steps/DriverSignupSuccessStep';
+import { SignUpPulseKeypadStep } from '@/features/auth/signup/SignUpPulseKeypadStep';
 import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
 import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
-import { OnboardingKeypadLinkRow } from '@/features/onboarding';
+import { DRIVER_SIGNUP } from '@/features/auth/signup/signUpDriverTheme';
+import { updateProfile } from '@/features/auth';
+import { pickLocalAvatar, uploadAvatarFromLocal } from '@/lib/avatarUpload';
+import {
+  clearDriverSignupSuccess,
+  hydrateDriverSignupSuccessFlag,
+  setDriverSignupSuccessActive,
+} from '@/lib/onboarding/businessSignupBranding.util';
+import { ROUTES } from '@/lib/routes';
 import { signUpMobileStyles as mobileSignup } from '@/features/auth/signup/signUpMobile.styles';
 
 const DRIVER_AVATAR_STORAGE_KEY = 'driver_avatar_seed';
@@ -64,17 +75,33 @@ const DRIVER_STEP_LABELS = [
 
 // Professional wording per step (title + subtitle), no "Step 1/2" labels
 const STEP_CONTENT = [
-  { title: 'Welcome aboard as driver', subtitle: 'To sign up or log in, enter your number' },
-  { title: 'Enter 4 digit code', subtitle: 'We sent a code to your number. Enter the code in that message.' },
+  { title: 'Welcome aboard as driver', subtitle: 'Enter your Indian mobile number to get started.' },
+  { title: 'Verify your number', subtitle: 'Enter the 4-digit code we sent to your number.' },
   { title: 'Finish signing up', subtitle: 'Enter your name, email and password to complete your profile.' },
   { title: 'Driving license', subtitle: 'Upload or capture your driving license to continue.' },
   { title: 'Aadhaar', subtitle: 'Upload or capture your Aadhaar card to continue.' },
   { title: 'PAN', subtitle: 'Upload or capture your PAN card to continue.' },
-  { title: 'Choose your photo', subtitle: 'Pick a profile photo to finish your profile.' },
+  { title: 'Your profile photo', subtitle: 'Upload a photo or pick a preset to finish your driver profile.' },
   { title: "You're in", subtitle: 'Your account is ready. You can start using the driver app.' },
 ];
 
 const OTP_LENGTH = 4;
+
+const keypadFooterStyles = StyleSheet.create({
+  signIn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  signInText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: DRIVER_SIGNUP.muted,
+  },
+  signInLink: {
+    color: DRIVER_SIGNUP.primary,
+    fontWeight: '800',
+  },
+});
 
 const INDIA_DIAL_CODE = '91';
 
@@ -211,6 +238,9 @@ export default function DriverSignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [avatarSeed, setAvatarSeed] = useState(ALL_PRESET_AVATARS[0].seed);
+  const [profilePreviewUri, setProfilePreviewUri] = useState<string | null>(null);
+  const [profileLocalBase64, setProfileLocalBase64] = useState<string | null>(null);
+  const [profileUploading, setProfileUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -244,6 +274,16 @@ export default function DriverSignUpScreen() {
   const useMobileLayout = !isDesktop;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
 
+  useEffect(() => {
+    let cancelled = false;
+    void hydrateDriverSignupSuccessFlag().then((active) => {
+      if (!cancelled && active) setStep(7);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const pageBody = (pageIndex: number, content: React.ReactNode) => {
     if (useMobileLayout && pageIndex !== step) return null;
 
@@ -252,6 +292,7 @@ export default function DriverSignUpScreen() {
         style={[
           styles.pageContent,
           (pageIndex === 0 || pageIndex === 1) && styles.pageContentKeypad,
+          pageIndex === 7 && styles.pageContentSuccess,
         ]}
       >
         {content}
@@ -475,6 +516,7 @@ export default function DriverSignUpScreen() {
       return;
     }
     setLoading(true);
+    setDriverSignupSuccessActive(true);
     try {
       await AsyncStorage.setItem(DRIVER_AVATAR_STORAGE_KEY, avatarSeed);
       const { error } = await signUp({
@@ -492,10 +534,33 @@ export default function DriverSignUpScreen() {
       if (signInResult.error) {
         throw signInResult.error;
       }
+
+      goToPage(7);
+
       const {
         data: { user: signedInUser },
       } = await supabase().auth.getUser();
       if (signedInUser?.id) {
+        if (profilePreviewUri) {
+          const uploaded = await uploadAvatarFromLocal(
+            signedInUser.id,
+            profilePreviewUri,
+            profileLocalBase64,
+          );
+          if (uploaded.error) {
+            showAppAlert('Photo upload failed', uploaded.error.message);
+          } else if (uploaded.path) {
+            await updateProfile({
+              avatar_url: uploaded.path,
+              avatar_seed: null,
+            });
+          }
+        } else {
+          await updateProfile({
+            avatar_url: null,
+            avatar_seed: avatarSeed,
+          });
+        }
         const uploadResult = await uploadDriverDocuments(signedInUser.id);
         if (uploadResult.error) {
           showAppAlert(
@@ -506,8 +571,8 @@ export default function DriverSignUpScreen() {
         }
         await supabase().auth.refreshSession();
       }
-      goToPage(7);
     } catch (e) {
+      clearDriverSignupSuccess();
       const msg = e instanceof Error ? e.message : 'Sign up failed';
       showAppAlert(
         'Error',
@@ -518,7 +583,30 @@ export default function DriverSignUpScreen() {
     }
   };
 
+  const uploadDriverProfilePhoto = async () => {
+    setProfileUploading(true);
+    try {
+      const result = await pickLocalAvatar();
+      if (result.error) {
+        showAppAlert('Upload failed', result.error.message);
+        return;
+      }
+      if (!result.previewUri) return;
+      setProfilePreviewUri(result.previewUri);
+      setProfileLocalBase64(result.base64);
+    } finally {
+      setProfileUploading(false);
+    }
+  };
+
+  const selectDriverAvatarSeed = (seed: string) => {
+    setAvatarSeed(seed);
+    setProfilePreviewUri(null);
+    setProfileLocalBase64(null);
+  };
+
   const initializeHub = () => {
+    clearDriverSignupSuccess();
     router.replace('/');
   };
 
@@ -730,7 +818,8 @@ export default function DriverSignUpScreen() {
     <>
         {/* Step 1: Welcome – India phone only */}
         {pageBody(0, useMobileLayout ? (
-          <SignUpKeypadStepLayout
+          <SignUpPulseKeypadStep
+            theme={DRIVER_SIGNUP}
             title={STEP_CONTENT[0].title}
             subtitle={STEP_CONTENT[0].subtitle}
             value={phone}
@@ -747,36 +836,44 @@ export default function DriverSignUpScreen() {
               !!(phoneExistsCheck?.exists && phoneExistsCheck.email)
             }
             primaryLoading={loading || !!phoneExistsCheck?.loading}
-            primaryButtonLabel="Send OTP"
+            primaryLabel="Send OTP"
             errorMessage={phoneInlineError}
             hintMessage={
               phoneExistsCheck?.loading
-                ? 'Checking…'
+                ? 'Checking number…'
                 : phoneExistsCheck?.exists && phoneExistsCheck.email
                   ? 'This number is already registered.'
                   : null
             }
+            showGoogle
+            onGoogle={handleGoogleDriverSignIn}
+            googleDisabled={loading}
+            googleLoading={loading}
             footerAccessory={
-              <OnboardingKeypadLinkRow
-                links={[
-                  {
-                    label: 'Continue with Google',
-                    onPress: handleGoogleDriverSignIn,
-                    disabled: loading,
-                  },
-                  ...(phoneExistsCheck?.exists && phoneExistsCheck.email
-                    ? [
-                        {
-                          label: 'Sign in instead',
-                          onPress: () =>
-                            router.replace(
-                              `/sign-in?email=${encodeURIComponent(phoneExistsCheck.email!)}`,
-                            ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
+              <Pressable
+                onPress={() =>
+                  phoneExistsCheck?.exists && phoneExistsCheck.email
+                    ? router.replace(
+                        `/sign-in?email=${encodeURIComponent(phoneExistsCheck.email)}`,
+                      )
+                    : router.replace(ROUTES.SIGN_IN)
+                }
+                style={keypadFooterStyles.signIn}
+              >
+                <Text style={keypadFooterStyles.signInText}>
+                  {phoneExistsCheck?.exists && phoneExistsCheck.email ? (
+                    <>
+                      Already registered?{' '}
+                      <Text style={keypadFooterStyles.signInLink}>Sign in instead</Text>
+                    </>
+                  ) : (
+                    <>
+                      Already activated?{' '}
+                      <Text style={keypadFooterStyles.signInLink}>Sign in</Text>
+                    </>
+                  )}
+                </Text>
+              </Pressable>
             }
           />
         ) : (
@@ -825,31 +922,31 @@ export default function DriverSignUpScreen() {
 
         {/* Step 2: OTP entry */}
         {pageBody(1, useMobileLayout ? (
-          <SignUpKeypadStepLayout
+          <SignUpPulseKeypadStep
+            theme={DRIVER_SIGNUP}
             title={STEP_CONTENT[1].title}
-            subtitle={`We sent a code to ${phone.trim().length === 10 ? `+91 ${formatSignupPhoneDisplay(phone)}` : 'your number'}.`}
+            subtitle={
+              phone.trim().length === 10
+                ? `Enter the 4-digit code we sent to +91 ${formatSignupPhoneDisplay(phone)}`
+                : STEP_CONTENT[1].subtitle
+            }
             value={otpValue}
             onChange={(d) => setOtpValue(d.replace(/\D/g, '').slice(0, OTP_LENGTH))}
             maxDigits={OTP_LENGTH}
             formatDisplay={(d) => d}
-            fieldLabel="VERIFICATION CODE"
+            fieldLabel="Verification Code"
             emptyPlaceholder=""
-            customDisplay={
-              <SignUpOtpBoxes digits={otpValue} length={OTP_LENGTH} />
-            }
+            customDisplay={<SignUpOtpBoxes digits={otpValue} length={OTP_LENGTH} />}
             onPrimary={verifyOtpStep}
             primaryDisabled={otpValue.length < OTP_LENGTH}
             primaryLoading={loading}
-            primaryButtonLabel="Verify OTP"
+            primaryLabel="Verify OTP"
             footerAccessory={
-              <OnboardingKeypadLinkRow
-                links={[
-                  {
-                    label: 'Clear and re-enter',
-                    onPress: () => setOtpValue(''),
-                  },
-                ]}
-              />
+              <Pressable onPress={() => setOtpValue('')} style={keypadFooterStyles.signIn}>
+                <Text style={keypadFooterStyles.signInText}>
+                  <Text style={keypadFooterStyles.signInLink}>Clear and re-enter</Text>
+                </Text>
+              </Pressable>
             }
           />
         ) : (
@@ -1218,28 +1315,23 @@ export default function DriverSignUpScreen() {
         {/* Step 7: Avatar */}
         {pageBody(6, (
           <>
-            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
-              {STEP_CONTENT[6].title}
-            </Text>
-            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
-              {STEP_CONTENT[6].subtitle}
-            </Text>
-            <View style={styles.avatarPreviewWrap}>
-              <Image source={{ uri: getAvatarUriForSeed(avatarSeed) }} style={styles.avatarPreview} />
-            </View>
-            <View style={styles.avatarGrid}>
-              {ALL_PRESET_AVATARS.map((av) => (
-                <TouchableOpacity
-                  key={av.seed}
-                  style={[styles.avatarGridItem, avatarSeed === av.seed && styles.avatarGridItemActive]}
-                  onPress={() => setAvatarSeed(av.seed)}
-                  activeOpacity={0.8}
-                  disabled={loading}
-                >
-                  <Image source={av.image} style={styles.avatarGridImg} />
-                </TouchableOpacity>
-              ))}
-            </View>
+            <SignUpPhotoPickerBody
+              title={STEP_CONTENT[6].title}
+              subtitle={STEP_CONTENT[6].subtitle}
+              previewUri={profilePreviewUri}
+              previewImage={
+                profilePreviewUri
+                  ? undefined
+                  : ALL_PRESET_AVATARS.find((av) => av.seed === avatarSeed)?.image
+              }
+              presetAvatars={ALL_PRESET_AVATARS}
+              selectedPresetSeed={profilePreviewUri ? null : avatarSeed}
+              onPresetSelect={selectDriverAvatarSeed}
+              onUpload={() => void uploadDriverProfilePhoto()}
+              uploading={profileUploading}
+              uploadLabel="Upload profile photo"
+              theme={DRIVER_SIGNUP}
+            />
             <TouchableOpacity
               style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
               onPress={establishLink}
@@ -1257,16 +1349,22 @@ export default function DriverSignUpScreen() {
 
         {/* Step 8: Success */}
         {pageBody(7, (
-          <>
-            <View style={styles.crownWrap}>
-              <FontAwesome name="trophy" size={48} color={LIGHT.accent} />
-            </View>
-            <Text style={styles.successTitle}>{STEP_CONTENT[7].title}</Text>
-            <Text style={styles.successMessage}>{STEP_CONTENT[7].subtitle}</Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={initializeHub} activeOpacity={0.8}>
-              <Text style={styles.primaryBtnText}>Go to app</Text>
-            </TouchableOpacity>
-          </>
+          <DriverSignupSuccessStep
+            displayName={callsign}
+            onEnterApp={initializeHub}
+            profilePreviewUri={profilePreviewUri}
+            profileImage={
+              profilePreviewUri
+                ? undefined
+                : ALL_PRESET_AVATARS.find((av) => av.seed === avatarSeed)?.image
+            }
+            licenseUploaded={licenseUploaded}
+            aadhaarUploaded={aadhaarUploaded}
+            panUploaded={panUploaded}
+            licenseSkipped={licenseSkipped}
+            aadhaarSkipped={aadhaarSkipped}
+            panSkipped={panSkipped}
+          />
         ))}
     </>
   );
@@ -1426,7 +1524,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontStyle: 'italic',
     letterSpacing: -0.8,
-    color: Theme.driverPrimary,
+    color: Theme.driverEmerald,
   },
   pagesWrap: {
     flexGrow: 1,
@@ -1460,6 +1558,12 @@ const styles = StyleSheet.create({
     flex: 1,
     maxWidth: '100%',
     paddingHorizontal: 0,
+  },
+  pageContentSuccess: {
+    flex: 1,
+    maxWidth: '100%',
+    paddingHorizontal: 0,
+    minHeight: 0,
   },
   logoWrap: {
     width: 56,

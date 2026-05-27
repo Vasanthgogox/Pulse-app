@@ -8,7 +8,7 @@ export const ROUTES = {
   INDEX: '/',
   /** Marketing landing (web). */
   TERMINAL_WEBSITE: '/terminal-website',
-  /** Business vs driver entry; top “Sign In” goes to {@link ROUTES.SIGN_IN}. */
+  /** Legacy alias — redirects to {@link ROUTES.ONBOARDING.HUB}. */
   WELCOME: '/welcome',
   SIGN_IN: '/sign-in',
   /** Same as {@link ROUTES.SIGN_IN} — kept for existing call sites (logout, guards). */
@@ -64,6 +64,12 @@ export const ROUTES = {
 
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
+  /** Full-screen driver & vehicle assignment from trip detail (Change). */
+  tripAssignment: (tripId: string, focus?: 'driver' | 'vehicle') => {
+    const base = `/trip/${encodeURIComponent(tripId)}/assignment` as const;
+    if (!focus) return base;
+    return `${base}?focus=${focus}` as const;
+  },
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */
   ADD_CLIENT:     '/(modals)/add-client' as const,
   CREATE_INDENT:  '/create-indent'  as const,

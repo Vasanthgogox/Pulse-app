@@ -83,15 +83,12 @@ config.transformer = {
   minifierConfig: {
     compress: { reduce_funcs: false },
   },
-  // ── inlineRequires: defer module evaluation until first use ────────────────
-  // Largest single win for Metro graph performance: imports become lazy
-  // `require()` calls at the use site, so heavy modules don't evaluate at
-  // bundle start. Cuts cold-start parse cost on web by ~30-40% and lets
-  // unused branches stay dormant.
+  // inlineRequires defers native module init and can run gesture-handler / worklets
+  // before the RN runtime is ready ([runtime not ready]: RNGestureHandlerModule).
   getTransformOptions: async () => ({
     transform: {
       experimentalImportSupport: false,
-      inlineRequires: true,
+      inlineRequires: false,
     },
   }),
 };
@@ -111,10 +108,8 @@ config.resolver = {
     }
     // Native-only `framer-motion` stub — keeps moti from dragging the DOM-only
     // framer-motion bundle into iOS/Android builds. Web falls through.
-    if (
-      (platform === 'ios' || platform === 'android') &&
-      isFramerMotionRequest(moduleName)
-    ) {
+    // `platform` is occasionally undefined during Metro graph walks — treat as native.
+    if (platform !== 'web' && isFramerMotionRequest(moduleName)) {
       return {
         filePath: framerMotionNativeShimPath,
         type: 'sourceFile',

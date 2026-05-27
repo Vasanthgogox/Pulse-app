@@ -3,7 +3,7 @@
  */
 
 import { useMemo } from "react";
-import { Text, View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
@@ -23,6 +23,7 @@ import {
   PulsePanelGrid,
   PulseSection,
   pulseStyles,
+  pulseChartHeight,
   usePulseChartWidth,
   type PulseKpiItem,
   type TrendPoint,
@@ -105,7 +106,9 @@ export default function ClientAnalyticsTab({
   transactions,
   orgId,
 }: Props) {
+  const { width } = useWindowDimensions();
   const chartWidth = usePulseChartWidth();
+  const chartH = pulseChartHeight(width);
   const clientId = client?.id ?? null;
 
   const kpis = useMemo(
@@ -211,7 +214,7 @@ export default function ClientAnalyticsTab({
         {
           id: "revenue",
           label: "Total revenue",
-          value: formatINR(kpis.totalRevenue),
+          value: formatINRChip(kpis.totalRevenue),
           subtext: `${kpis.tripCount} trips · 12 mo`,
           valueColor: Theme.primary,
           iconName: "money",
@@ -219,7 +222,7 @@ export default function ClientAnalyticsTab({
         {
           id: "margin",
           label: "Net margin",
-          value: formatINR(kpis.netMargin),
+          value: formatINRChip(kpis.netMargin),
           subtext: `${kpis.marginPct.toFixed(1)}% margin`,
           valueColor:
             kpis.netMargin >= 0 ? Theme.positive : Theme.negative,
@@ -229,7 +232,7 @@ export default function ClientAnalyticsTab({
         {
           id: "outstanding",
           label: "Outstanding",
-          value: formatINR(kpis.outstanding),
+          value: formatINRChip(kpis.outstanding),
           subtext: `Avg delay ${kpis.avgPaymentDelayDays}d`,
           valueColor: Theme.negative,
           iconName: "exclamation-circle",
@@ -512,6 +515,7 @@ export default function ClientAnalyticsTab({
     <PulseAnalyticsShell
       title="Performance analytics"
       subtitle="Real-time insights across your logistics network"
+      embedded
     >
       <PulseKpiGrid rows={headerKpiRows} />
 
@@ -564,7 +568,7 @@ export default function ClientAnalyticsTab({
           <TrendLineChart
             data={toRevenuePoints(monthly)}
             width={chartWidth}
-            height={168}
+            height={chartH}
             field="revenue"
             color={Theme.chartSeries1}
             gradientId="clientRevTrend"
@@ -634,7 +638,7 @@ export default function ClientAnalyticsTab({
           <TrendLineChart
             data={toMarginLinePoints(monthly)}
             width={chartWidth}
-            height={168}
+            height={chartH}
             field="revenue"
             color={Theme.chartSeries2}
             gradientId="clientMarginTrend"
@@ -655,7 +659,7 @@ export default function ClientAnalyticsTab({
           <TrendBarChart
             data={toCollectionBars(monthly)}
             width={chartWidth}
-            height={168}
+            height={chartH}
             primaryField="revenue"
             secondaryField="expense"
             primaryColor={Theme.chartSeries2}

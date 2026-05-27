@@ -184,6 +184,12 @@ export interface TripDetailFinanceViewProps {
     amount: number;
     reason: string;
   }) => void | Promise<void>;
+  /** Opens full-page / modal adjustment wizard (mobile). When set, inline form is hidden. */
+  onOpenAdjustment?: (preset: {
+    type: TripAdjustmentType;
+    impact: TripAdjustmentImpact;
+    reasonSeed?: string | null;
+  }) => void;
   /** Soft-void an adjustment (requires reason); parent persists void state. */
   onRemoveAdjustment?: (
     adjustmentId: string,
@@ -1218,6 +1224,7 @@ export function TripDetailFinanceView({
   tripOtp: _tripOtp = null,
   partnerName = null,
   onSaveAdjustment,
+  onOpenAdjustment,
   onRemoveAdjustment,
   assignmentBlock,
   currentUserId = null,
@@ -2528,11 +2535,16 @@ export function TripDetailFinanceView({
                       <TouchableOpacity
                         style={[styles.provisionDnBtn, styles.provisionCnBtn]}
                         onPress={() => {
-                          openInlineAdjustment({
-                            type: "cost",
-                            impact: "minus",
+                          const preset = {
+                            type: "cost" as const,
+                            impact: "minus" as const,
                             reasonSeed: "Other",
-                          });
+                          };
+                          if (onOpenAdjustment) {
+                            onOpenAdjustment(preset);
+                          } else {
+                            openInlineAdjustment(preset);
+                          }
                           setShowFinanceProvisionPanel(false);
                         }}
                         activeOpacity={0.88}
@@ -2545,11 +2557,16 @@ export function TripDetailFinanceView({
                           styles.provisionDnBtnDebit,
                         ]}
                         onPress={() => {
-                          openInlineAdjustment({
-                            type: "cost",
-                            impact: "plus",
+                          const preset = {
+                            type: "cost" as const,
+                            impact: "plus" as const,
                             reasonSeed: "Other",
-                          });
+                          };
+                          if (onOpenAdjustment) {
+                            onOpenAdjustment(preset);
+                          } else {
+                            openInlineAdjustment(preset);
+                          }
                           setShowFinanceProvisionPanel(false);
                         }}
                         activeOpacity={0.88}
@@ -2568,7 +2585,11 @@ export function TripDetailFinanceView({
                           style={styles.provisionChip}
                           onPress={() => {
                             const preset = protocolSupplierChipAdjustment(chip);
-                            openInlineAdjustment(preset);
+                            if (onOpenAdjustment) {
+                              onOpenAdjustment(preset);
+                            } else {
+                              openInlineAdjustment(preset);
+                            }
                             setShowFinanceProvisionPanel(false);
                           }}
                           activeOpacity={0.82}
@@ -2590,10 +2611,12 @@ export function TripDetailFinanceView({
                       <TouchableOpacity
                         style={styles.provisionConfirm}
                         onPress={() => {
-                          openInlineAdjustment({
-                            type: "cost",
-                            impact: "plus",
-                          });
+                          const preset = { type: "cost" as const, impact: "plus" as const };
+                          if (onOpenAdjustment) {
+                            onOpenAdjustment(preset);
+                          } else {
+                            openInlineAdjustment(preset);
+                          }
                           setShowFinanceProvisionPanel(false);
                         }}
                         activeOpacity={0.85}
@@ -2607,6 +2630,7 @@ export function TripDetailFinanceView({
                 ) : null}
               </View>
 
+              {!onOpenAdjustment ? (
               <View style={styles.inlineAdjustmentWrap}>
                 <View style={styles.inlineAdjustmentHeader}>
                   <View>
@@ -2771,13 +2795,18 @@ export function TripDetailFinanceView({
                   <Text style={styles.inlineSaveBtnText}>Save Adjustment</Text>
                 </TouchableOpacity>
               </View>
+              ) : null}
             </View>
 
             {/* Actions & Commissions */}
             <View style={styles.financeFooter}>
               {onSaveAdjustment && (
                 <TouchableOpacity
-                  onPress={() => openInlineAdjustment()}
+                  onPress={() =>
+                    onOpenAdjustment
+                      ? onOpenAdjustment({ type: "revenue", impact: "plus" })
+                      : openInlineAdjustment()
+                  }
                   style={styles.financeAddBtn}
                   activeOpacity={0.8}
                 >

@@ -1,4 +1,7 @@
 import Theme from '@/constants/Theme';
+import { AddTripWizardProgress } from '@/features/trips/components/add-trip/AddTripWizardProgress';
+import { AssignmentFlowShell } from '@/features/trips/components/assignment/AssignmentFlowShell';
+import { AssignmentFlowFooter } from '@/features/trips/components/assignment/assignmentFlowFooter';
 import { assignmentShellStyles } from '@/features/trips/styles/assignmentShellShared';
 import { useDriverMaster } from '@/features/trips/hooks/useDriverMaster';
 import { useVehicleMaster } from '@/features/trips/hooks/useVehicleMaster';
@@ -12,22 +15,18 @@ import {
   isTripReassignStaleError,
   tripReassignStaleUserMessage,
 } from '@/features/trips/utils/tripReassignConflict.util';
-import {
-  effectiveKeyboardInset,
-  useKeyboardVisible,
-} from '@/lib/hooks/useKeyboardVisible';
 import { validatePhone } from '@/lib/phoneValidation';
 import { formatIndianVehicleNumber } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,6 +58,14 @@ type Props = {
 
 type OtpSuccess = { code: string; expires_at: string | null };
 
+type ReassignWizardStep = 'driver' | 'vehicle' | 'review';
+
+const REASSIGN_WIZARD_STEPS = [
+  { id: 'driver', label: 'Driver' },
+  { id: 'vehicle', label: 'Vehicle' },
+  { id: 'review', label: 'Confirm' },
+] as const;
+
 export function ReassignSheet({
   visible,
   onClose,
@@ -75,8 +82,8 @@ export function ReassignSheet({
   onVehicleDisplayChange,
 }: Props) {
   const insets = useSafeAreaInsets();
-  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight);
+  const { width: windowWidth } = useWindowDimensions();
+  const useMobileWizard = Platform.OS !== 'web' || windowWidth < 680;
   const { drivers, isLoading: driversLoading, refetch: refetchDrivers } =
     useDriverMaster(organizationId);
   const { vehicles, isLoading: vehiclesLoading, refetch: refetchVehicles } =
@@ -132,6 +139,7 @@ export function ReassignSheet({
     pendingVehicleId: string | null;
   } | null>(null);
   const [otpSuccess, setOtpSuccess] = useState<OtpSuccess | null>(null);
+  const [wizardStep, setWizardStep] = useState<ReassignWizardStep>('driver');
   const otpDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentDriverPhone = useMemo(() => {
@@ -145,7 +153,7 @@ export function ReassignSheet({
     if (!visible) return;
 
     const openGen = ++sheetOpenGenRef.current;
-    setDriverMode('existing');
+    setDriverMode(isAggregate ? 'phone' : 'existing');
     setVehicleMode('existing');
     setSelectedDriverId(trip.driver_id ?? null);
     setSelectedVehicleId(trip.vehicle_id ?? null);
@@ -155,6 +163,7 @@ export function ReassignSheet({
     setError(null);
     setPartialVehicleFailure(null);
     setOtpSuccess(null);
+    setWizardStep('driver');
     setStaleConflict(false);
     setTripUpdatedAtSnapshot(trip.updated_at ?? null);
 
@@ -432,6 +441,184 @@ export function ReassignSheet({
     return currentVehicleLabel ?? '—';
   }, [vehicles, selectedVehicleId, adHocPlate, currentVehicleLabel]);
 
+  const canContinueDriver = useMemo(() => {
+    if (driverModeIsPhone) {
+      const trimmed = phone.trim();
+      return trimmed.length > 0 && !validatePhone(trimmed);
+    }
+    return !!selectedDriverId;
+  }, [driverModeIsPhone, phone, selectedDriverId]);
+
+  const canContinueVehicle = useMemo(() => {
+    if (isAggregate) return !!(selectedVehicleId || adHocPlate.trim());
+    return !!selectedVehicleId;
+  }, [isAggregate, selectedVehicleId, adHocPlate]);
+
+  const wizardSubtitle = useMemo(() => {
+    if (wizardStep === 'driver') return 'Step 1 · Choose how to assign the driver';
+    if (wizardStep === 'vehicle') return 'Step 2 · Fleet vehicle or registration';
+    return 'Step 3 · Review — trip stage stays the same';
+  }, [wizardStep]);
+
+  const handleWizardPrimary = useCallback(() => {
+    if (wizardStep === 'driver') {
+      if (canContinueDriver) setWizardStep('vehicle');
+      return;
+    }
+    if (wizardStep === 'vehicle') {
+      if (canContinueVehicle) setWizardStep('review');
+      return;
+    }
+    void handleConfirm();
+  }, [wizardStep, canContinueDriver, canContinueVehicle, handleConfirm]);
+
+  const handleWizardBack = useCallback(() => {
+    if (wizardStep === 'vehicle') setWizardStep('driver');
+    else if (wizardStep === 'review') setWizardStep('vehicle');
+    else onClose();
+  }, [wizardStep, onClose]);
+
+  const wizardPrimaryDisabled = useMemo(() => {
+    if (wizardStep === 'driver') return !canContinueDriver;
+    if (wizardStep === 'vehicle') return !canContinueVehicle;
+    return !canConfirm;
+  }, [wizardStep, canContinueDriver, canContinueVehicle, canConfirm]);
+
+  const wizardPrimaryLabel = useMemo(() => {
+    if (wizardStep === 'review') {
+      return driverModeIsPhone ? 'Assign by phone' : 'Confirm reassignment';
+    }
+    return 'Continue';
+  }, [wizardStep, driverModeIsPhone]);
+
+  const bannerBlock = (
+    <>
+      {isAggregate && migrationChecking ? (
+        <View style={s.warningBanner}>
+          <ActivityIndicator color={Theme.primary} />
+          <Text style={[s.warningBannerText, { marginTop: 8 }]}>
+            Checking database migration for safe reassignment…
+          </Text>
+        </View>
+      ) : null}
+
+      {isAggregate && migrationBlocked ? (
+        <View style={s.warningBanner}>
+          <Text style={s.warningBannerText}>
+            Reassignment is temporarily unavailable: database migration 20260805140000 is not
+            applied. Ask your admin to run db push, then try again.
+          </Text>
+        </View>
+      ) : null}
+
+      {staleConflict ? (
+        <View style={s.partialBanner}>
+          <Text style={s.partialBannerText}>{tripReassignStaleUserMessage(error)}</Text>
+          <TouchableOpacity
+            style={s.retryBtn}
+            onPress={() => void handleReloadTrip()}
+            activeOpacity={0.9}
+          >
+            <Text style={s.retryBtnText}>Reload</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {partialVehicleFailure ? (
+        <View style={s.partialBanner}>
+          <Text style={s.partialBannerText}>
+            Driver updated. Vehicle update failed — retry?
+          </Text>
+          {partialVehicleFailure.vehicleError ? (
+            <Text style={s.inlineError}>{partialVehicleFailure.vehicleError}</Text>
+          ) : null}
+          <TouchableOpacity
+            style={s.retryBtn}
+            onPress={() => void handleRetryVehicle()}
+            disabled={saving}
+            activeOpacity={0.9}
+          >
+            {saving ? (
+              <ActivityIndicator color={Theme.textOnPrimary} size="small" />
+            ) : (
+              <Text style={s.retryBtnText}>Retry vehicle assignment</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : null}
+    </>
+  );
+
+  const driverSection = (
+    <View style={assignmentShellStyles.tripAssignSurfaceCard}>
+      <DriverReassignSection
+        organizationId={organizationId}
+        driverAssignOrgId={driverAssignOrgId}
+        tripId={trip.id}
+        isAggregate={isAggregate}
+        currentDriverId={trip.driver_id ?? null}
+        currentDriverName={currentDriverName}
+        drivers={drivers}
+        driversLoading={driversLoading}
+        busyDriverIds={busyDriverIds}
+        tripLabelByDriverId={busyDriverTripLabels}
+        mode={driverMode}
+        onModeChange={setDriverMode}
+        selectedDriverId={selectedDriverId}
+        onSelectDriverId={setSelectedDriverId}
+        phone={phone}
+        onPhoneChange={setPhone}
+        phoneBusy={phoneBusy}
+        onPhoneBusyChange={setPhoneBusy}
+      />
+    </View>
+  );
+
+  const vehicleSection = (
+    <View style={assignmentShellStyles.tripAssignSurfaceCard}>
+      <VehicleReassignSection
+        organizationId={organizationId}
+        isAggregate={isAggregate}
+        driverModeIsPhone={driverModeIsPhone}
+        currentVehicleId={trip.vehicle_id ?? null}
+        currentVehicleLabel={currentVehicleLabel}
+        vehicles={vehicles}
+        vehiclesLoading={vehiclesLoading}
+        busyVehicleIds={busyVehicleIds}
+        mode={vehicleMode}
+        onModeChange={setVehicleMode}
+        selectedVehicleId={selectedVehicleId}
+        onSelectVehicleId={handleSelectVehicleId}
+        adHocPlate={adHocPlate}
+        onAdHocPlateChange={setAdHocPlate}
+      />
+    </View>
+  );
+
+  const reviewSection = (
+    <View style={assignmentShellStyles.tripAssignSurfaceCard}>
+      <Text style={assignmentShellStyles.stepLabel}>Review reassignment</Text>
+      <View style={s.reviewRow}>
+        <Text style={s.reviewLabel}>Driver</Text>
+        <Text style={s.reviewValue} numberOfLines={2}>
+          {summaryDriver}
+        </Text>
+      </View>
+      <View style={s.reviewRow}>
+        <Text style={s.reviewLabel}>Vehicle</Text>
+        <Text style={s.reviewValue} numberOfLines={2}>
+          {summaryVehicle}
+        </Text>
+      </View>
+      {error ? <Text style={s.inlineError}>{error}</Text> : null}
+      {!hasChanges && meetsValidation ? (
+        <Text style={[s.rowSub, { marginTop: 8 }]}>
+          Change driver, vehicle, or phone to confirm reassignment.
+        </Text>
+      ) : null}
+    </View>
+  );
+
   if (!canAssign) return null;
 
   return (
@@ -443,49 +630,13 @@ export function ReassignSheet({
       onRequestClose={onClose}
     >
       <View style={assignmentShellStyles.webModalBackdrop}>
-        <KeyboardAvoidingView
-          style={{ flex: Platform.OS === 'web' ? 0 : 1, maxHeight: '100%' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-          keyboardVerticalOffset={insets.top}
-        >
-        <View
-          style={[
-            assignmentShellStyles.assignModalWrapSlate,
-            { paddingTop: insets.top, flex: Platform.OS === 'web' ? 0 : 1 },
-          ]}
-        >
+        {otpSuccess ? (
           <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingHorizontal: 20,
-              paddingVertical: 14,
-              backgroundColor: Theme.cardWhite,
-              borderBottomWidth: 1,
-              borderBottomColor: Theme.border,
-            }}
+            style={[
+              assignmentShellStyles.assignModalWrapSlate,
+              { paddingTop: insets.top, flex: Platform.OS === 'web' ? 0 : 1 },
+            ]}
           >
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: '700',
-                  color: Theme.textPrimary,
-                }}
-              >
-                Reassign trip
-              </Text>
-              <Text style={{ fontSize: 13, color: Theme.textSecondary, marginTop: 2 }}>
-                Pick driver and vehicle — trip stage stays the same.
-              </Text>
-            </View>
-            <TouchableOpacity onPress={onClose} hitSlop={12} activeOpacity={0.85}>
-              <FontAwesome name="times" size={18} color={Theme.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          {otpSuccess ? (
             <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
               <View style={s.otpSuccessCard}>
                 <FontAwesome name="check-circle" size={36} color={Theme.primary} />
@@ -512,152 +663,72 @@ export function ReassignSheet({
                 </TouchableOpacity>
               </View>
             </View>
-          ) : (
-            <>
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={{
-                  padding: 16,
-                  paddingBottom: 24 + insets.bottom,
-                }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                {isAggregate && migrationChecking ? (
-                  <View style={s.warningBanner}>
-                    <ActivityIndicator color={Theme.primary} />
-                    <Text style={[s.warningBannerText, { marginTop: 8 }]}>
-                      Checking database migration for safe reassignment…
-                    </Text>
-                  </View>
-                ) : null}
-
-                {isAggregate && migrationBlocked ? (
-                  <View style={s.warningBanner}>
-                    <Text style={s.warningBannerText}>
-                      Reassignment is temporarily unavailable: database migration{' '}
-                      20260805140000 (preserve trip status on reassign) is not applied on
-                      this environment. Ask your admin to run db push, then try again.
-                    </Text>
-                  </View>
-                ) : null}
-
-                {staleConflict ? (
-                  <View style={s.partialBanner}>
-                    <Text style={s.partialBannerText}>
-                      {tripReassignStaleUserMessage(error)}
-                    </Text>
-                    <TouchableOpacity
-                      style={s.retryBtn}
-                      onPress={() => void handleReloadTrip()}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={s.retryBtnText}>Reload</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-
-                {partialVehicleFailure ? (
-                  <View style={s.partialBanner}>
-                    <Text style={s.partialBannerText}>
-                      Driver updated. Vehicle update failed — retry?
-                    </Text>
-                    {partialVehicleFailure.vehicleError ? (
-                      <Text style={s.inlineError}>{partialVehicleFailure.vehicleError}</Text>
-                    ) : null}
-                    <TouchableOpacity
-                      style={s.retryBtn}
-                      onPress={() => void handleRetryVehicle()}
-                      disabled={saving}
-                      activeOpacity={0.9}
-                    >
-                      {saving ? (
-                        <ActivityIndicator color={Theme.textOnPrimary} size="small" />
-                      ) : (
-                        <Text style={s.retryBtnText}>Retry vehicle assignment</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-
-                <DriverReassignSection
-                  organizationId={organizationId}
-                  driverAssignOrgId={driverAssignOrgId}
-                  tripId={trip.id}
-                  isAggregate={isAggregate}
-                  currentDriverId={trip.driver_id ?? null}
-                  currentDriverName={currentDriverName}
-                  drivers={drivers}
-                  driversLoading={driversLoading}
-                  busyDriverIds={busyDriverIds}
-                  tripLabelByDriverId={busyDriverTripLabels}
-                  mode={driverMode}
-                  onModeChange={setDriverMode}
-                  selectedDriverId={selectedDriverId}
-                  onSelectDriverId={setSelectedDriverId}
-                  phone={phone}
-                  onPhoneChange={setPhone}
-                  phoneBusy={phoneBusy}
-                  onPhoneBusyChange={setPhoneBusy}
+          </View>
+        ) : (
+          <View
+            style={[
+              assignmentShellStyles.assignModalWrapSlate,
+              { flex: Platform.OS === 'web' ? 0 : 1 },
+            ]}
+          >
+            <AssignmentFlowShell
+              variant={useMobileWizard ? 'pulse' : 'slate'}
+              title="Reassign trip"
+              subtitle={
+                useMobileWizard
+                  ? wizardSubtitle
+                  : 'Pick driver and vehicle — trip stage stays the same.'
+              }
+              onClose={onClose}
+              onBack={useMobileWizard ? handleWizardBack : undefined}
+              showBack={useMobileWizard && wizardStep !== 'driver'}
+              submitting={saving}
+              progress={
+                useMobileWizard ? (
+                  <AddTripWizardProgress
+                    steps={REASSIGN_WIZARD_STEPS}
+                    currentStepId={wizardStep}
+                  />
+                ) : undefined
+              }
+              footer={
+                <AssignmentFlowFooter
+                  summary={
+                    wizardStep === 'review' || !useMobileWizard
+                      ? `${summaryDriver} · ${summaryVehicle}`
+                      : undefined
+                  }
+                  primaryLabel={useMobileWizard ? wizardPrimaryLabel : wizardPrimaryLabel}
+                  onPrimaryPress={useMobileWizard ? handleWizardPrimary : () => void handleConfirm()}
+                  primaryDisabled={
+                    useMobileWizard ? wizardPrimaryDisabled : !canConfirm
+                  }
+                  loading={saving}
                 />
-
-                <VehicleReassignSection
-                  organizationId={organizationId}
-                  isAggregate={isAggregate}
-                  driverModeIsPhone={driverModeIsPhone}
-                  currentVehicleId={trip.vehicle_id ?? null}
-                  currentVehicleLabel={currentVehicleLabel}
-                  vehicles={vehicles}
-                  vehiclesLoading={vehiclesLoading}
-                  busyVehicleIds={busyVehicleIds}
-                  mode={vehicleMode}
-                  onModeChange={setVehicleMode}
-                  selectedVehicleId={selectedVehicleId}
-                  onSelectVehicleId={handleSelectVehicleId}
-                  adHocPlate={adHocPlate}
-                  onAdHocPlateChange={setAdHocPlate}
-                />
-
-                {error ? <Text style={s.inlineError}>{error}</Text> : null}
-                {!hasChanges && meetsValidation ? (
-                  <Text style={[s.rowSub, { marginTop: 8 }]}>
-                    Change driver, vehicle, or phone to confirm reassignment.
-                  </Text>
-                ) : null}
-              </ScrollView>
-
-              <View
-                style={[
-                  s.footer,
-                  {
-                    paddingBottom: Math.max(16, insets.bottom) + keyboardInset,
-                  },
-                ]}
-              >
-                <Text style={s.footerSummary}>
-                  <Text style={s.footerSummaryStrong}>{summaryDriver}</Text>
-                  {' · '}
-                  <Text style={s.footerSummaryStrong}>{summaryVehicle}</Text>
-                </Text>
-                <TouchableOpacity
-                  style={[s.confirmBtn, !canConfirm && s.confirmBtnDisabled]}
-                  onPress={() => void handleConfirm()}
-                  disabled={!canConfirm}
-                  activeOpacity={0.9}
-                >
-                  {saving ? (
-                    <ActivityIndicator color={Theme.textOnPrimary} />
-                  ) : (
-                    <Text style={s.confirmBtnText}>
-                      {driverModeIsPhone ? 'Assign by phone' : 'Confirm reassignment'}
+              }
+            >
+              {bannerBlock}
+              {useMobileWizard ? (
+                <>
+                  {wizardStep === 'driver' ? driverSection : null}
+                  {wizardStep === 'vehicle' ? vehicleSection : null}
+                  {wizardStep === 'review' ? reviewSection : null}
+                </>
+              ) : (
+                <>
+                  {driverSection}
+                  {vehicleSection}
+                  {error ? <Text style={s.inlineError}>{error}</Text> : null}
+                  {!hasChanges && meetsValidation ? (
+                    <Text style={[s.rowSub, { marginTop: 8 }]}>
+                      Change driver, vehicle, or phone to confirm reassignment.
                     </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
-        </KeyboardAvoidingView>
+                  ) : null}
+                </>
+              )}
+            </AssignmentFlowShell>
+          </View>
+        )}
       </View>
     </Modal>
   );

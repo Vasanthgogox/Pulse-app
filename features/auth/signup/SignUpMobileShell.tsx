@@ -1,7 +1,9 @@
 import { memo, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { OnboardingFullPageShell } from '@/features/onboarding/components/OnboardingFullPageShell';
+import { SignUpPulseShell } from './SignUpPulseShell';
+import { DRIVER_SIGNUP } from './signUpDriverTheme';
+import { PULSE_SIGNUP } from './signUpPulseTheme';
 
 export interface SignUpMobileShellProps {
   brandLabel?: string;
@@ -16,10 +18,11 @@ export interface SignUpMobileShellProps {
   headerTitle?: string;
   headerSubtitle?: string;
   trustMode?: 'business' | 'driver';
+  isDesktop?: boolean;
 }
 
 /**
- * Full-page mobile activation shell — minimal top chrome, maximum input area.
+ * Full-page mobile activation shell — business (purple) or driver (green).
  */
 export const SignUpMobileShell = memo(function SignUpMobileShell({
   backLabel = 'Back',
@@ -28,17 +31,23 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
   currentStepIndex,
   hideProgress = false,
   children,
+  trustMode = 'business',
+  isDesktop = false,
 }: SignUpMobileShellProps) {
+  const theme = trustMode === 'driver' ? DRIVER_SIGNUP : PULSE_SIGNUP;
+
   return (
-    <OnboardingFullPageShell
+    <SignUpPulseShell
       onBack={onBack}
       backLabel={backLabel}
       currentStepIndex={currentStepIndex}
       stepLabels={stepLabels}
       hideProgress={hideProgress}
+      isDesktop={isDesktop}
+      theme={theme}
     >
       <View style={styles.body}>{children}</View>
-    </OnboardingFullPageShell>
+    </SignUpPulseShell>
   );
 });
 

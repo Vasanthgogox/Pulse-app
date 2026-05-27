@@ -5,11 +5,20 @@ import {
   checkOrganizationNameTaken,
   resendVerificationEmail,
   setPendingOAuthMetadata,
+  updateProfile,
   type OperatingModel,
 } from '@/features/auth';
+import { getOrganizationsForUser } from '@/features/organization/services/organization.service';
 import { validateEmail } from '@/lib/emailValidation';
 import { formatMobileNumber } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
+import {
+  clearBusinessSignupBranding,
+  hydrateBusinessSignupBrandingFlag,
+  persistBusinessSignupBrandingStep,
+  readBusinessSignupBrandingStep,
+  setBusinessSignupBrandingActive,
+} from '@/lib/onboarding/businessSignupBranding.util';
 import {
   extractIndianMobileTenDigits,
   isPhoneValid,
@@ -17,6 +26,13 @@ import {
   validatePhone,
 } from '@/lib/phoneValidation';
 import { validateFullName, validatePassword } from '@/lib/validation';
+import {
+  pickAndUploadAvatar,
+  pickAndUploadOrgLogo,
+  updateOrganizationLogo,
+} from '@/lib/avatarUpload';
+import { DEFAULT_USER_2D_AVATAR_SEED } from '@/constants/UserAvatars';
+import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, useWindowDimensions } from 'react-native';
@@ -44,7 +60,7 @@ export function useBusinessSignUpFlow() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const isOnline = useIsOnline();
-  const { signUp, signInWithGoogle } = useAuth();
+  const { signUp, signIn, signInWithGoogle, refreshSession } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
 
@@ -91,10 +107,23 @@ export function useBusinessSignUpFlow() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Step 5
+  // Step 5 (account)
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [resendingSecs, setResendingSecs] = useState(0);
   const resendEmailCountdown = useCountdown();
+
+  // Step 6 — workspace logo (post-auth)
+  const [provisionedOrgId, setProvisionedOrgId] = useState<string | null>(null);
+  const [logoPreviewUri, setLogoPreviewUri] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [pendingLogoPath, setPendingLogoPath] = useState<string | null>(null);
+
+  // Step 7 — profile photo (post-auth)
+  const [profileAvatarSeed, setProfileAvatarSeed] = useState<string>(DEFAULT_USER_2D_AVATAR_SEED);
+  const [profilePreviewUri, setProfilePreviewUri] = useState<string | null>(null);
+  const [profileAvatarPath, setProfileAvatarPath] = useState<string | null>(null);
+  const [profileUploading, setProfileUploading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const [step2Attempted, setStep2Attempted] = useState(false);
   const [step3Attempted, setStep3Attempted] = useState(false);
@@ -182,6 +211,43 @@ export function useBusinessSignUpFlow() {
     return () => { if (orgCheckRef.current) clearTimeout(orgCheckRef.current); };
   }, [orgName, isOnline]);
 
+  // Restore branding steps after auth refresh / navigation bounce.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const active = await hydrateBusinessSignupBrandingFlag();
+      if (cancelled || !active) return;
+      const savedStep = await readBusinessSignupBrandingStep();
+      if (cancelled || savedStep == null) return;
+      setStep(savedStep);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Resolve org when entering branding steps (trigger may lag sign-up).
+  useEffect(() => {
+    if (step !== 6 && step !== 7) return;
+    let cancelled = false;
+    void (async () => {
+      await ensureAuthSession();
+      if (cancelled || provisionedOrgId) return;
+      const orgId = await resolveProvisionedOrgId();
+      if (!cancelled && orgId) setProvisionedOrgId(orgId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (step >= 6 && step <= 8) {
+      setBusinessSignupBrandingActive(true);
+      void persistBusinessSignupBrandingStep(step);
+    }
+  }, [step]);
+
   // Cleanup debounce timers on unmount (countdowns clean themselves via useCountdown).
   useEffect(() => () => {
     if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current);
@@ -192,13 +258,53 @@ export function useBusinessSignUpFlow() {
 
   const goToPage = (index: number) => {
     setStep(index);
+    if (index >= 6 && index <= 8) {
+      setBusinessSignupBrandingActive(true);
+      void persistBusinessSignupBrandingStep(index);
+    }
     scrollRef.current?.scrollTo({ x: index * pageWidth, animated: true });
   };
 
   const handleBack = () => {
     if (step === 0) { router.back(); return; }
-    if (step === 6) { router.replace('/'); return; }
+    if (step === 8) {
+      clearBusinessSignupBranding();
+      router.replace('/');
+      return;
+    }
     goToPage(step - 1);
+  };
+
+  const resolveProvisionedOrgId = async (): Promise<string | null> => {
+    const trimmed = orgName.trim().toLowerCase();
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const { organizations, error } = await getOrganizationsForUser();
+      if (error) {
+        console.warn('[signup] resolve org failed:', error.message);
+      } else if (organizations.length > 0) {
+        const match =
+          organizations.find((o) => o.name.trim().toLowerCase() === trimmed) ?? organizations[0];
+        if (match?.id) return match.id;
+      }
+      if (attempt < 5) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
+    return null;
+  };
+
+  const ensureAuthSession = async (): Promise<boolean> => {
+    const { data: { session } } = await supabase().auth.getSession();
+    if (session?.user?.id) return true;
+
+    const signInResult = await signIn(email.trim(), password, true);
+    if (!signInResult.error) {
+      await refreshSession();
+      return true;
+    }
+
+    const { data: { session: afterSignIn } } = await supabase().auth.getSession();
+    return !!afterSignIn?.user?.id;
   };
 
   // ─── Setters with side-effects ───────────────────────────────────────────
@@ -372,7 +478,16 @@ export function useBusinessSignUpFlow() {
     setLoading(false);
     if (result.error) return Alert.alert('Error', result.error.message);
     if (result.emailVerificationRequired) setEmailVerificationRequired(true);
+
+    // Advance to branding before auth refresh so index boot guard cannot skip logo/photo.
+    setBusinessSignupBrandingActive(true);
     goToPage(6);
+
+    setLoading(true);
+    await ensureAuthSession();
+    const orgId = await resolveProvisionedOrgId();
+    setProvisionedOrgId(orgId);
+    setLoading(false);
   };
 
   const continueWithGoogle = async () => {
@@ -433,6 +548,132 @@ export function useBusinessSignUpFlow() {
     const { error: resendErr } = await resendVerificationEmail(email.trim());
     if (resendErr) { Alert.alert('Error', resendErr.message); return; }
     resendEmailCountdown.start(EMAIL_RESEND_SECS, setResendingSecs);
+  };
+
+  const uploadOrgLogo = async () => {
+    setLogoUploading(true);
+    try {
+      const hasSession = await ensureAuthSession();
+      if (!hasSession) {
+        Alert.alert(
+          'Sign in required',
+          'Confirm your email or sign in to upload a logo. You can skip and add one later in settings.',
+        );
+        return;
+      }
+
+      let orgId = provisionedOrgId;
+      if (!orgId) {
+        orgId = await resolveProvisionedOrgId();
+        if (orgId) setProvisionedOrgId(orgId);
+      }
+      if (!orgId) {
+        Alert.alert(
+          'Workspace provisioning',
+          'Your workspace is still being created. Skip for now and upload a logo from workspace settings.',
+        );
+        return;
+      }
+
+      const result = await pickAndUploadOrgLogo(orgId);
+      if (result.error) {
+        Alert.alert('Upload failed', result.error.message);
+        return;
+      }
+      if (!result.path) return;
+      const { error } = await updateOrganizationLogo(orgId, result.path);
+      if (error) {
+        Alert.alert('Save failed', error.message);
+        return;
+      }
+      setPendingLogoPath(result.path);
+      if (result.previewUri) setLogoPreviewUri(result.previewUri);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const continueFromLogo = () => goToPage(7);
+  const skipOrgLogo = () => goToPage(7);
+
+  const selectProfileAvatarSeed = (seed: string) => {
+    setProfileAvatarSeed(seed);
+    setProfileAvatarPath(null);
+    setProfilePreviewUri(null);
+  };
+
+  const uploadProfilePhoto = async () => {
+    setProfileUploading(true);
+    try {
+      const hasSession = await ensureAuthSession();
+      if (!hasSession) {
+        Alert.alert(
+          'Sign in required',
+          'Confirm your email to upload a photo, or pick a preset and continue.',
+        );
+        return;
+      }
+
+      const { data: { user } } = await supabase().auth.getUser();
+      if (!user?.id) return;
+
+      const result = await pickAndUploadAvatar(user.id);
+      if (result.error) {
+        Alert.alert('Upload failed', result.error.message);
+        return;
+      }
+      if (!result.path) return;
+      setProfileAvatarPath(result.path);
+      setProfileAvatarSeed('');
+      if (result.previewUri) setProfilePreviewUri(result.previewUri);
+    } finally {
+      setProfileUploading(false);
+    }
+  };
+
+  const persistProfilePhoto = async (): Promise<boolean> => {
+    setProfileSaving(true);
+    try {
+      const { data: { session } } = await supabase().auth.getSession();
+      if (!session?.user?.id) {
+        // Email verification pending — advance without blocking onboarding.
+        return true;
+      }
+
+      if (profileAvatarPath) {
+        const { error } = await updateProfile({
+          avatar_url: profileAvatarPath,
+          avatar_seed: null,
+        });
+        if (error) {
+          Alert.alert('Save failed', error.message);
+          return false;
+        }
+      } else if (profileAvatarSeed) {
+        const { error } = await updateProfile({
+          avatar_url: null,
+          avatar_seed: profileAvatarSeed,
+        });
+        if (error) {
+          Alert.alert('Save failed', error.message);
+          return false;
+        }
+      }
+      await refreshSession();
+      return true;
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const continueFromProfilePhoto = async () => {
+    const ok = await persistProfilePhoto();
+    if (ok) goToPage(8);
+  };
+
+  const skipProfilePhoto = async () => {
+    const ok = await persistProfilePhoto();
+    if (ok) goToPage(8);
   };
 
   const scrollConfirmPasswordIntoView = () => {
@@ -518,7 +759,20 @@ export function useBusinessSignUpFlow() {
     confirmMismatch,
     scrollConfirmPasswordIntoView,
 
-    // step 6
+    // step 6 — logo
+    provisionedOrgId,
+    logoPreviewUri,
+    logoUploading,
+    pendingLogoPath,
+
+    // step 7 — profile photo
+    profileAvatarSeed,
+    profilePreviewUri,
+    profileAvatarPath,
+    profileUploading,
+    profileSaving,
+
+    // step 8 — success
     emailVerificationRequired,
     resendingSecs,
 
@@ -532,6 +786,14 @@ export function useBusinessSignUpFlow() {
     continueWithGoogle,
     continueWithGoogleFromWelcome,
     resendVerification,
+    uploadOrgLogo,
+    continueFromLogo,
+    skipOrgLogo,
+    selectProfileAvatarSeed,
+    uploadProfilePhoto,
+    continueFromProfilePhoto,
+    skipProfilePhoto,
+    finishBusinessSignup: clearBusinessSignupBranding,
   };
 }
 

@@ -17,8 +17,11 @@ import type { AuthUser } from "@/features/auth/services/auth.service";
 import * as authService from "@/features/auth/services/auth.service";
 import {
   areUserProfilesEqual,
+  AUTH_RESTORE_REFRESH_TIMEOUT_MS,
+  AUTH_SESSION_FRESH_MS,
   AUTH_TIMEOUT_MS,
   AuthError,
+  PROFILE_VERIFY_TIMEOUT_MS,
   authErrorFromUnknown,
   authProfileToUserProfile,
   freezeInDev,
@@ -256,13 +259,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getVerifiedDbProfile = useCallback(
     async (uid: string): Promise<authService.AuthProfile | null> => {
       try {
-        const dbProfile = await withTimeout(authService.getProfile(uid), AUTH_TIMEOUT_MS);
-        if (dbProfile) return dbProfile;
+        return await withTimeout(
+          (async () => {
+            const dbProfile = await authService.getProfile(uid);
+            if (dbProfile) return dbProfile;
 
-        const provision = await authService.ensureCurrentUserProfile();
-        if (provision.error) return null;
+            const provision = await authService.ensureCurrentUserProfile();
+            if (provision.error) return null;
 
-        return await withTimeout(authService.getProfile(uid), AUTH_TIMEOUT_MS);
+            return await authService.getProfile(uid);
+          })(),
+          PROFILE_VERIFY_TIMEOUT_MS,
+        );
       } catch (e) {
         logAuthError("profile_verification_error", e, { uid });
         return null;
@@ -386,37 +394,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(nextUser);
             setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
             setStatus("authenticated");
+            const tokenExpiresAtMs =
+              await authService.getAccessTokenExpiresAtMs();
+            const tokenFresh = authService.isAccessTokenFresh(
+              tokenExpiresAtMs,
+              AUTH_SESSION_FRESH_MS,
+            );
             try {
-              const refreshed = await withTimeout(
-                authService.refreshSession(),
-                AUTH_TIMEOUT_MS,
-              );
-              if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
-                nextUser = refreshed.user;
-                nextProfile = refreshed.profile;
-                verifiedDbProfile = await getVerifiedDbProfile(refreshed.user.uid);
+              if (tokenFresh) {
+                logAuth("restore_skip_refresh_token_fresh", {
+                  uid: session.user.uid,
+                });
+                verifiedDbProfile = await getVerifiedDbProfile(
+                  session.user.uid,
+                );
                 if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
                 if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(refreshed.profile, verifiedDbProfile);
+                  nextProfile = mergeAuthProfiles(
+                    session.profile,
+                    verifiedDbProfile,
+                  );
                   setRoleVerified(true);
                 } else {
                   setRoleVerified(false);
                 }
-              } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                verifiedDbProfile = await getVerifiedDbProfile(session.user.uid);
-                if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(session.profile, verifiedDbProfile);
-                  setRoleVerified(true);
-                } else {
-                  setRoleVerified(false);
+              } else {
+                const refreshed = await withTimeout(
+                  authService.refreshSession(),
+                  AUTH_RESTORE_REFRESH_TIMEOUT_MS,
+                );
+                if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
+                  nextUser = refreshed.user;
+                  nextProfile = refreshed.profile;
+                  verifiedDbProfile = await getVerifiedDbProfile(
+                    refreshed.user.uid,
+                  );
+                  if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                  if (verifiedDbProfile) {
+                    nextProfile = mergeAuthProfiles(
+                      refreshed.profile,
+                      verifiedDbProfile,
+                    );
+                    setRoleVerified(true);
+                  } else {
+                    setRoleVerified(false);
+                  }
+                } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                  verifiedDbProfile = await getVerifiedDbProfile(
+                    session.user.uid,
+                  );
+                  if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                  if (verifiedDbProfile) {
+                    nextProfile = mergeAuthProfiles(
+                      session.profile,
+                      verifiedDbProfile,
+                    );
+                    setRoleVerified(true);
+                  } else {
+                    setRoleVerified(false);
+                  }
                 }
               }
             } catch (e) {
               if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                setRoleVerified(false);
                 if (e instanceof TimeoutError) {
-                  logAuthError("restore_refresh_timeout", e);
+                  logAuth(
+                    "restore_refresh_timeout",
+                    { uid: session.user.uid },
+                    "warn",
+                  );
+                } else {
+                  logAuthError("restore_refresh_error", e, {
+                    uid: session.user.uid,
+                  });
+                }
+                verifiedDbProfile =
+                  verifiedDbProfile ??
+                  (await getVerifiedDbProfile(session.user.uid).catch(
+                    () => null,
+                  ));
+                setRoleVerified(!!verifiedDbProfile);
+                if (verifiedDbProfile) {
+                  nextProfile = mergeAuthProfiles(
+                    session.profile,
+                    verifiedDbProfile,
+                  );
                 }
               }
             }

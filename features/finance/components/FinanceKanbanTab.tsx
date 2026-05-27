@@ -11,7 +11,7 @@ import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import React, { useMemo, useState, type ReactNode } from 'react';
+import React, { useCallback, useMemo, useState, type ReactNode } from 'react';
 import Animated, { FadeInDown, FadeInUp, FadeOutUp, Layout } from 'react-native-reanimated';
 import {
   Image,
@@ -329,10 +329,10 @@ export function FinanceKanbanTab({
     [driverRows],
   );
 
-  const getResolvedPartyName = (row: LedgerRow): string => {
+  const getResolvedPartyName = useCallback((row: LedgerRow): string => {
     const contactType = row.contact_type;
     const tripId = row.trip_id;
-    
+
     // 1) Explicit contact on transaction
     if (contactType === 'client' && row.contact_id) {
       return clientById.get(row.contact_id)?.name || row.party_name || "—";
@@ -379,9 +379,11 @@ export function FinanceKanbanTab({
     const fallbackPn = row.party_name;
     if (fallbackPn && !isPlaceholderLedgerPartyName(fallbackPn)) return fallbackPn;
     return "—";
-  };
+  }, [clientById, supplierById, tripPartyMap, tripDetailsMap]);
 
-  const getRowCategory = (row: LedgerRow): ColumnType | 'other' => {
+  // Memoize so columns useMemo can depend on it — tripPartyMap arrives async and
+  // changes categorization for rows that have no explicit contact_type.
+  const getRowCategory = useCallback((row: LedgerRow): ColumnType | 'other' => {
     const hasAmtIn = (row.amount_in ?? 0) > 0;
     const hasAmtOut = (row.amount_out ?? 0) > 0;
     const contactType = row.contact_type;
@@ -390,7 +392,6 @@ export function FinanceKanbanTab({
 
     if (isDriver) return 'drivers';
 
-    // Integration check for category
     let resolvedContactType = contactType;
     if (!resolvedContactType && row.trip_id && tripPartyMap[row.trip_id]) {
       const pm = tripPartyMap[row.trip_id];
@@ -414,7 +415,19 @@ export function FinanceKanbanTab({
     if (hasAmtOut) return 'suppliers';
 
     return 'other';
-  };
+  }, [tripPartyMap, getVehicleNumberForTripId]);
+
+  // O(n) trip-rows index — eliminates the O(n²) scan in buildFinancialRowData.
+  const tripIdToRows = useMemo(() => {
+    const m = new Map<string, LedgerRow[]>();
+    for (const row of transactions) {
+      if (row.trip_id) {
+        const arr = m.get(row.trip_id);
+        if (arr) arr.push(row); else m.set(row.trip_id, [row]);
+      }
+    }
+    return m;
+  }, [transactions]);
 
   const columns = useMemo(() => {
     const cols: Record<ColumnType, LedgerRow[]> = {
@@ -423,16 +436,12 @@ export function FinanceKanbanTab({
       garage: [],
       drivers: [],
     };
-
     transactions.forEach((row) => {
       const cat = getRowCategory(row);
-      if (cat !== 'other') {
-        cols[cat].push(row);
-      }
+      if (cat !== 'other') cols[cat].push(row);
     });
-
     return cols;
-  }, [transactions, getVehicleNumberForTripId]);
+  }, [transactions, getRowCategory]);
 
   const buildFinancialRowData = (row: LedgerRow): FinancialRowData => {
     const cat = getRowCategory(row);
@@ -445,37 +454,33 @@ export function FinanceKanbanTab({
 
     const tripDetail = row.trip_id != null && tripDetailsMap[row.trip_id] ? tripDetailsMap[row.trip_id] : null;
     
-    const sameTripTransactions = row.trip_id != null
-      ? transactions
-          .filter((r) => r.trip_id != null && r.trip_id === row.trip_id)
-          .map((r) => {
-            const rCat = getRowCategory(r);
-            const rvNum = r.vehicle_number ?? (r.trip_id != null ? (getVehicleNumberForTripId?.(r.trip_id) ?? null) : null);
-            let rParty = getResolvedPartyName(r);
-            if (rCat === "garage" && rvNum) {
-              rParty = formatIndianVehicleNumber(rvNum);
-            }
+    const sameTrip = row.trip_id != null ? (tripIdToRows.get(row.trip_id) ?? []) : [];
 
-            return {
-              id: r.id,
-              date: formatTxDate(r.transaction_date),
-              typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
-              in: r.amount_in ?? 0,
-              out: r.amount_out ?? 0,
-              party: rParty,
-            };
-          })
+    const sameTripTransactions = sameTrip.length > 0
+      ? sameTrip.map((r) => {
+          const rCat = getRowCategory(r);
+          const rvNum = r.vehicle_number ?? (r.trip_id != null ? (getVehicleNumberForTripId?.(r.trip_id) ?? null) : null);
+          let rParty = getResolvedPartyName(r);
+          if (rCat === "garage" && rvNum) {
+            rParty = formatIndianVehicleNumber(rvNum);
+          }
+          return {
+            id: r.id,
+            date: formatTxDate(r.transaction_date),
+            typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
+            in: r.amount_in ?? 0,
+            out: r.amount_out ?? 0,
+            party: rParty,
+          };
+        })
       : undefined;
 
-    const summary = row.trip_id != null
-      ? (() => {
-          const sameTrip = transactions.filter((r) => r.trip_id != null && r.trip_id === row.trip_id);
-          return {
-            received: sameTrip.reduce((s, r) => s + (r.amount_in ?? 0), 0),
-            paid: sameTrip.reduce((s, r) => s + (r.amount_out ?? 0), 0),
-            entryCount: sameTrip.length,
-          };
-        })()
+    const summary = sameTrip.length > 0
+      ? {
+          received: sameTrip.reduce((s, r) => s + (r.amount_in ?? 0), 0),
+          paid: sameTrip.reduce((s, r) => s + (r.amount_out ?? 0), 0),
+          entryCount: sameTrip.length,
+        }
       : undefined;
 
     return {

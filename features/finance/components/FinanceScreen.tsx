@@ -49,7 +49,9 @@ import {
 import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { useDriverProfileImagesQuery } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
+import { clearAllDomainCacheMetaForOrg } from "@/lib/cache/cacheMetadataStore";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -67,10 +69,7 @@ import { useFinanceEntities } from "../hooks/useFinanceEntities";
 import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
-import {
-    getProfileImageBatch,
-    updateLedgerEntry,
-} from "../services/finance.service";
+import { updateLedgerEntry } from "../services/finance.service";
 import { createReportRow } from "../lib/reportRow.util";
 import type { FinanceSubTab } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
@@ -272,41 +271,16 @@ export function FinanceScreen() {
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
   const [tabTotals, setTabTotals] = useState({ totalIn: 0, totalOut: 0 });
   const [refreshing, setRefreshing] = useState(false);
-  const [profileImages, setProfileImages] = useState<Record<string, string>>(
-    {},
-  );
-  // Tracks IDs that have been attempted (success OR failure) — prevents
-  // infinite re-fetch when Storage returns 400 (URL not found) for an ID.
-  const attemptedProfileIds = useRef(new Set<string>());
+  const driverIdsForProfiles = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of ledgerTransactions ?? []) {
+      const id = (row.contact_id ?? "").trim();
+      if (id && row.contact_type === "driver") ids.add(id);
+    }
+    return Array.from(ids);
+  }, [ledgerTransactions]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchProfileImages = async () => {
-      const driverIds: string[] = [];
-      for (const row of filteredLedgerForDisplay) {
-        const id = (row.contact_id ?? "").trim();
-        const type = row.contact_type;
-        if (!id || type !== "driver") continue;
-        if (attemptedProfileIds.current.has(id)) continue;
-        attemptedProfileIds.current.add(id);
-        driverIds.push(id);
-      }
-
-      if (driverIds.length === 0) return;
-      const next = await getProfileImageBatch(driverIds);
-
-      if (cancelled) return;
-      if (Object.keys(next).length > 0) {
-        setProfileImages((prev) => ({ ...prev, ...next }));
-      }
-    };
-
-    void fetchProfileImages();
-    return () => {
-      cancelled = true;
-    };
-  }, [filteredLedgerForDisplay]);
+  const profileImages = useDriverProfileImagesQuery(driverIdsForProfiles);
 
   const isAnyFilterActive = useMemo(
     () => ledgerAnyFilterActive || entityFilter !== "all",
@@ -1289,17 +1263,82 @@ export function FinanceScreen() {
   );
 
   const handleRefresh = useCallback(async () => {
+    const org = currentOrganization?.id;
     setRefreshing(true);
     setLedgerRefreshKey((k) => k + 1);
     setEntitiesRefreshKey((k) => k + 1);
-    const timeoutId = setTimeout(() => setRefreshing(false), 15000);
     try {
+      if (org) {
+        await clearAllDomainCacheMetaForOrg(org);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.clients.all(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.trips.all(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.indents.all(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all(org) }),
+        ]);
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: queryKeys.clients.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.suppliers.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.drivers.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.vehicles.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.trips.finite(org) }),
+        ]);
+      }
       await refetchLedger();
     } finally {
-      clearTimeout(timeoutId);
       setRefreshing(false);
     }
-  }, [refetchLedger]);
+  }, [currentOrganization?.id, queryClient, refetchLedger]);
+
+  /** Recover from persisted empty party caches when opening Finance party tabs. */
+  useFocusEffect(
+    useCallback(() => {
+      const org = currentOrganization?.id;
+      if (!org || entitiesLoading) return;
+
+      const partyTab =
+        financeSubTab === "customers" ||
+        financeSubTab === "suppliers" ||
+        financeSubTab === "drivers" ||
+        financeSubTab === "garage";
+      if (!partyTab) return;
+
+      const partyListEmpty =
+        (financeSubTab === "customers" && clientRows.length === 0) ||
+        (financeSubTab === "suppliers" && supplierRows.length === 0) ||
+        (financeSubTab === "drivers" && driverRows.length === 0) ||
+        (financeSubTab === "garage" && vehicleRows.length === 0);
+      if (!partyListEmpty) return;
+
+      void (async () => {
+        await clearAllDomainCacheMetaForOrg(org);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.clients.finite(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.finite(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.drivers.finite(org) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.finite(org) }),
+        ]);
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: queryKeys.clients.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.suppliers.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.drivers.finite(org) }),
+          queryClient.refetchQueries({ queryKey: queryKeys.vehicles.finite(org) }),
+        ]);
+      })();
+    }, [
+      currentOrganization?.id,
+      entitiesLoading,
+      financeSubTab,
+      clientRows.length,
+      supplierRows.length,
+      driverRows.length,
+      vehicleRows.length,
+      queryClient,
+    ]),
+  );
 
   if (!canAccess) {
     return (
@@ -1769,21 +1808,27 @@ export function FinanceScreen() {
               params.set("partyId", String(entity.data.id));
             const pending = entity.data.pending;
             const due = entity.data.due;
-            if (
-              entity.entityType === "CLIENT" &&
-              pending != null &&
-              pending > 0
-            ) {
-              params.set("dueAmountIn", String(pending));
+            if (entity.entityType === "CLIENT") {
+              params.set("defaultType", "in");
+              if (pending != null && pending > 0) {
+                params.set("dueAmountIn", String(pending));
+              }
             }
-            if (entity.entityType === "SUPPLIER" && due != null && due > 0) {
-              params.set("dueAmountOut", String(due));
+            if (entity.entityType === "SUPPLIER") {
+              params.set("defaultType", "out");
+              if (due != null && due > 0) {
+                params.set("dueAmountOut", String(due));
+              }
             }
             if (entity.entityType === "DRIVER") {
+              params.set("defaultType", "out");
               const driverDue = pending ?? due;
               if (driverDue != null && driverDue > 0) {
                 params.set("dueAmountOut", String(driverDue));
               }
+            }
+            if (entity.entityType === "VEHICLE") {
+              params.set("defaultType", "out");
             }
           }
           router.push(`/(modals)/ledger-sync?${params.toString()}` as const);

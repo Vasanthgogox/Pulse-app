@@ -1,38 +1,22 @@
 /**
- * Sub-tab bodies: cash is eager (default path); other tabs lazy-load on first visit.
+ * Finance sub-tab bodies — eager imports so party lists bundle with FinanceScreen.
  */
-import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
-import { FinanceCashTab } from "./finance-tabs/FinanceCashTab";
-import { lazy, Suspense, type ComponentType } from "react";
-import type { FinanceTabBodyProps } from "./FinanceTabBody.types";
-import type { FinanceSubTab } from "../types";
+import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
+import type { ComponentType } from 'react';
+import type { FinanceSubTab } from '../types';
+import { FinanceCashTab } from './finance-tabs/FinanceCashTab';
+import { FinanceCustomersTab } from './finance-tabs/FinanceCustomersTab';
+import { FinanceDriversTab } from './finance-tabs/FinanceDriversTab';
+import { FinanceGarageTab } from './finance-tabs/FinanceGarageTab';
+import { FinanceSuppliersTab } from './finance-tabs/FinanceSuppliersTab';
+import type { FinanceTabBodyProps } from './FinanceTabBody.types';
 
-export type { FinanceTabBodyProps } from "./FinanceTabBody.types";
+export type { FinanceTabBodyProps } from './FinanceTabBody.types';
 
-const FinanceCustomersTab = lazy(() =>
-  import("./finance-tabs/FinanceCustomersTab").then((m) => ({
-    default: m.FinanceCustomersTab,
-  })),
-);
-const FinanceSuppliersTab = lazy(() =>
-  import("./finance-tabs/FinanceSuppliersTab").then((m) => ({
-    default: m.FinanceSuppliersTab,
-  })),
-);
-const FinanceGarageTab = lazy(() =>
-  import("./finance-tabs/FinanceGarageTab").then((m) => ({
-    default: m.FinanceGarageTab,
-  })),
-);
-const FinanceDriversTab = lazy(() =>
-  import("./finance-tabs/FinanceDriversTab").then((m) => ({
-    default: m.FinanceDriversTab,
-  })),
-);
-
-const LAZY_TAB_COMPONENTS: Partial<
+const TAB_COMPONENTS: Partial<
   Record<FinanceSubTab, ComponentType<FinanceTabBodyProps>>
 > = {
+  cash: FinanceCashTab,
   customers: FinanceCustomersTab,
   suppliers: FinanceSuppliersTab,
   garage: FinanceGarageTab,
@@ -40,16 +24,12 @@ const LAZY_TAB_COMPONENTS: Partial<
 };
 
 export function FinanceTabBody(props: FinanceTabBodyProps) {
-  if (props.financeSubTab === "cash") {
-    return <FinanceCashTab {...props} />;
-  }
-
-  const TabPanel = LAZY_TAB_COMPONENTS[props.financeSubTab];
+  const TabPanel = TAB_COMPONENTS[props.financeSubTab];
   if (!TabPanel) return null;
 
-  return (
-    <Suspense fallback={<LazySuspenseNullFallback />}>
-      <TabPanel {...props} />
-    </Suspense>
-  );
+  if (props.entitiesLoading && props.financeSubTab !== 'cash') {
+    return <LazySuspenseInlineFallback message="Loading parties…" />;
+  }
+
+  return <TabPanel {...props} />;
 }

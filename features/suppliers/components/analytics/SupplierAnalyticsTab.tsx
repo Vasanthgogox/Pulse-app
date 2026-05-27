@@ -23,7 +23,7 @@
  */
 
 import { useMemo } from "react";
-import { Text, View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
@@ -41,6 +41,7 @@ import {
   TrendBarChart,
   TrendLineChart,
   pulseStyles,
+  pulseChartHeight,
   usePulseChartWidth,
   type PulseKpiItem,
   type TrendPoint,
@@ -129,7 +130,9 @@ export default function SupplierAnalyticsTab({
   transactions,
   orgId,
 }: Props) {
+  const { width } = useWindowDimensions();
   const chartWidth = usePulseChartWidth();
+  const chartH = pulseChartHeight(width);
   const supplierId = supplier?.id ?? null;
 
   // ── Server score ──
@@ -517,6 +520,7 @@ export default function SupplierAnalyticsTab({
     <PulseAnalyticsShell
       title="Supplier reliability"
       subtitle="Composite score across completion, on-time, cancellation, availability, pricing"
+      embedded
     >
       <PulseKpiGrid rows={headerKpiRows} />
 
@@ -572,7 +576,7 @@ export default function SupplierAnalyticsTab({
               tripCount: m.trips,
             }))}
             width={chartWidth}
-            height={168}
+            height={chartH}
             field="revenue"
             color={Theme.chartSeries2}
             gradientId="supplierOnTimeTrend"
@@ -592,7 +596,7 @@ export default function SupplierAnalyticsTab({
           <TrendLineChart
             data={toPayableLine(monthly)}
             width={chartWidth}
-            height={168}
+            height={chartH}
             field="revenue"
             color={Theme.chartSeries4}
             gradientId="supplierPayableTrend"
@@ -602,7 +606,7 @@ export default function SupplierAnalyticsTab({
           title="Paid vs outstanding"
           subtitle="Green = settled, red = still payable per month"
         >
-          <TrendBarChart data={toPaidVsOutstanding(monthly)} width={chartWidth} height={168} />
+          <TrendBarChart data={toPaidVsOutstanding(monthly)} width={chartWidth} height={chartH} />
         </PulseChartPanel>
         <PulseChartPanel
           title="Margin contribution"
@@ -611,7 +615,7 @@ export default function SupplierAnalyticsTab({
           <TrendLineChart
             data={toMarginLine(monthly)}
             width={chartWidth}
-            height={168}
+            height={chartH}
             field="revenue"
             color={Theme.chartSeries2}
             gradientId="supplierMarginTrend"

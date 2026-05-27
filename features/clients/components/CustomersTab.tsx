@@ -1975,13 +1975,30 @@ export function CustomersTab({
     );
   }
 
-  if (!hasCustomers && !hasPendingInvites) {
+  if (!hasCustomers) {
     return (
-      <View style={styles.emptyState}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.emptyState,
+          { paddingBottom: bottomInset + insets.bottom, flexGrow: 1 },
+        ]}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.teslaRed}
+            />
+          ) : undefined
+        }
+      >
+        {topContent}
         <Text style={styles.emptyText}>
-          No customers. Add clients from Home.
+          {hasPendingInvites
+            ? 'No customer records loaded. Pull to refresh or add clients from Home.'
+            : 'No customers. Add clients from Home.'}
         </Text>
-      </View>
+      </ScrollView>
     );
   }
 

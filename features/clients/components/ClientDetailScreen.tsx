@@ -3406,7 +3406,10 @@ const styles = StyleSheet.create({
   },
   sharedSection: { marginBottom: 24 },
   sharedSectionWeb: { width: "100%", alignSelf: "stretch" },
-  analyticsSection: { marginBottom: 24, paddingHorizontal: 16 },
+  analyticsSection: {
+    marginBottom: 24,
+    marginHorizontal: -Layout.screenPaddingHorizontal,
+  },
   sharedCard: {
     backgroundColor: Theme.surface,
     borderWidth: 1,

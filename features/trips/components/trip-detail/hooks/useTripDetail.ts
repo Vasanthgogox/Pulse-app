@@ -34,6 +34,10 @@ import {
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip, getCapabilitiesFromProfile } from "@/lib/capabilities";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
+import {
+  isIntegratedClientRow,
+  isIntegratedSupplierRow,
+} from "@/features/trips/visibility/tripVisibility";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import {
     useShipperDisplayNamesQuery,
@@ -168,6 +172,29 @@ function emptyTripPartyAvatarFields(): TripPartyAvatarFields {
 function nStr(s: string | null | undefined): string | null {
   const v = (s ?? "").trim();
   return v.length ? v : null;
+}
+
+function pickClientDisplayName(
+  client: { name?: string | null; contact_person?: string | null } | null | undefined,
+): string | null {
+  if (!client) return null;
+  return (client.name || client.contact_person || "").trim() || null;
+}
+
+function pickSupplierDisplayName(
+  supplier: {
+    company_name?: string | null;
+    name?: string | null;
+    contact_person?: string | null;
+  } | null | undefined,
+): string | null {
+  if (!supplier) return null;
+  return (
+    supplier.company_name ||
+    supplier.name ||
+    supplier.contact_person ||
+    ""
+  ).trim() || null;
 }
 
 export interface UseTripDetailOptions {
@@ -319,8 +346,8 @@ export function useTripDetail({
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   /** When opening the modal from Finance Overview (shortcuts / protocol chips may seed reason). */
   const [adjustmentModalPreset, setAdjustmentModalPreset] = useState<{
-    type: TripAdjustmentType;
-    impact: TripAdjustmentImpact;
+    type?: TripAdjustmentType;
+    impact?: TripAdjustmentImpact;
     reasonSeed?: string | null;
   } | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
@@ -1156,6 +1183,11 @@ export function useTripDetail({
     setSupplierAvatarUri(null);
     setClientPartyAvatarFields(null);
     setSupplierPartyAvatarFields(null);
+    if (!bundleActive || !bundleSeededRef.current) {
+      setClientPartyRes(null);
+      setSupplierPartyRes(null);
+      setPartnerName(null);
+    }
     if (!trip || !ownerOrg) return;
 
     void (async () => {
@@ -1204,6 +1236,18 @@ export function useTripDetail({
         if (!cancelled) {
           setClientPartyAvatarFields(fields);
           setClientAvatarUri(uri);
+        }
+        let clientRow = details.client;
+        if (!clientRow) {
+          const { client } = await getClientById(ownerOrg, trip.client_id);
+          clientRow = client;
+        }
+        if (!cancelled && clientRow) {
+          setClientPartyRes({
+            name: pickClientDisplayName(clientRow),
+            integrated: isIntegratedClientRow(clientRow),
+            orgId: nStr(clientRow.linked_organization_id),
+          });
         }
       }
 
@@ -1260,6 +1304,38 @@ export function useTripDetail({
           setSupplierPartyAvatarFields(fields);
           setSupplierAvatarUri(uri);
         }
+
+        const pick = pickSupplierDisplayName;
+        let supplierRow = details.supplier;
+        if (!supplierRow) {
+          const { supplier, error: errOwner } = await getSupplierById(ownerOrg, trip.supplier_id);
+          if (!errOwner) supplierRow = supplier;
+        }
+        if (!supplierRow && viewerOrgId && viewerOrgId !== ownerOrg) {
+          const { supplier, error: errViewer } = await getSupplierById(
+            viewerOrgId,
+            trip.supplier_id,
+          );
+          if (!errViewer) supplierRow = supplier;
+        }
+        const fallback = (trip.supplier_name ?? "").trim() || null;
+        const supplierName = supplierRow ? pick(supplierRow) ?? fallback : fallback;
+        if (!cancelled) {
+          setPartnerName(supplierName);
+          if (supplierRow || supplierName) {
+            setSupplierPartyRes({
+              name: supplierName,
+              integrated: supplierRow
+                ? isIntegratedSupplierRow(supplierRow)
+                : false,
+              orgId: supplierRow
+                ? nStr(supplierRow.linked_organization_id)
+                : null,
+            });
+          } else {
+            setSupplierPartyRes(null);
+          }
+        }
       }
     })();
 
@@ -1270,9 +1346,28 @@ export function useTripDetail({
     trip?.id,
     trip?.client_id,
     trip?.supplier_id,
+    trip?.supplier_name,
     trip?.organization_id,
     currentOrganization?.id,
+    bundleActive,
   ]);
+
+  useEffect(() => {
+    if (!trip) {
+      setCounterpartyIntegrated(null);
+      setPartnerOrgId(null);
+      return;
+    }
+    if (!clientPartyRes && !supplierPartyRes) {
+      setCounterpartyIntegrated(null);
+      setPartnerOrgId(null);
+      return;
+    }
+    setCounterpartyIntegrated(
+      !!(clientPartyRes?.integrated || supplierPartyRes?.integrated),
+    );
+    setPartnerOrgId(supplierPartyRes?.orgId ?? clientPartyRes?.orgId ?? null);
+  }, [trip, clientPartyRes, supplierPartyRes]);
 
   useEffect(() => {
     setDisplayVehicleFromInput("");
@@ -1625,8 +1720,8 @@ export function useTripDetail({
   const openTripAdjustmentModal = useCallback(
     (
       preset: {
-        type: TripAdjustmentType;
-        impact: TripAdjustmentImpact;
+        type?: TripAdjustmentType;
+        impact?: TripAdjustmentImpact;
         reasonSeed?: string | null;
       } | null = null,
     ) => {
@@ -1896,6 +1991,40 @@ export function useTripDetail({
       const v = bundle.vehicle;
       setVehicleLabel([v.vehicle_number, v.vehicle_type].filter(Boolean).join(' · '));
       setVehicleDocs((v.documents ?? null) as unknown as VehicleDocuments | null);
+    }
+
+    const tripRow = bundle.trip as unknown as TripRow;
+    if (bundle.client_detail?.client) {
+      const c = bundle.client_detail.client;
+      const linkedId = nStr(c.linked_organization_id);
+      setClientPartyRes({
+        name: pickClientDisplayName(c),
+        integrated: !!linkedId,
+        orgId: linkedId,
+      });
+    } else {
+      setClientPartyRes(null);
+    }
+
+    if (bundle.supplier_detail?.supplier) {
+      const s = bundle.supplier_detail.supplier;
+      const linkedId = nStr(s.linked_organization_id);
+      const supplierName =
+        pickSupplierDisplayName(s) ?? nStr(tripRow.supplier_name);
+      setPartnerName(supplierName);
+      setSupplierPartyRes({
+        name: supplierName,
+        integrated: !!linkedId,
+        orgId: linkedId,
+      });
+    } else {
+      const fallbackSupplierName = nStr(tripRow.supplier_name);
+      setPartnerName(fallbackSupplierName);
+      setSupplierPartyRes(
+        fallbackSupplierName
+          ? { name: fallbackSupplierName, integrated: false, orgId: null }
+          : null,
+      );
     }
   }, [bundle]);
 

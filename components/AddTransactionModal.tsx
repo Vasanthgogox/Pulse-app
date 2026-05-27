@@ -3,108 +3,109 @@
  * Ledger entry form: Ledger title, IN / OUT toggle, amount, party + trip dropdowns, SAVE ENTRY.
  */
 import { LedgerFlowGuardAlert } from "@/components/LedgerFlowGuardAlert";
+import type { TripLedgerSmartTag } from "@/components/TripLedgerFinancialSummary";
+import { LedgerEntrySuccessView } from "@/components/ledger/LedgerEntrySuccessView";
+import { LedgerMobileWizard, type LedgerPaymentTypeItem } from "@/components/ledger/LedgerMobileWizard";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
-import Layout from "@/constants/Layout";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import Layout from "@/constants/Layout";
 import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
 import Theme from "@/constants/Theme";
+import type { DriverOffer } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import { formatIndianVehicleNumber, formatINR } from "@/lib/format";
 import {
-  computeTripEntryFinancialSnapshot,
-  type TripEntryFinancialSnapshot,
+    computeTripEntryFinancialSnapshot,
+    type TripEntryFinancialSnapshot,
 } from "@/features/finance/utils/computeTripEntryFinancials.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
-import type { DriverOffer } from "@/features/drivers/services/drivers.service";
 import { isTripCompleted } from "@/features/trips/services/trips.service";
-import type { TripLedgerSmartTag } from "@/components/TripLedgerFinancialSummary";
 import {
-  buildMissionTripPendingChips,
-  deriveLedgerLockedEntityType,
-  isTripSmartTagSelectable,
-  ledgerDisplayClientDue,
-  ledgerDisplayDriverDue,
-  ledgerDisplaySupplierDue,
-  ledgerLockedPartyFlowGuard,
-  ledgerLockedPartyPreferredFlow,
-  type LedgerFlowGuardAlertContent,
-  ledgerTripDueWeightForContext,
-  ledgerTripNoDueHeroMessage,
-  ledgerTripNoDueTagLabel,
-  type LedgerLockedEntityType,
-} from "@/lib/ledgerPartySmartTagPolicy";
-import { VALIDATION, dateISO } from "@/lib/validation";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import {
-  isCrossOrgIntegrationTrip,
-  isIntegratedClientRow,
-  isIntegratedSupplierRow,
-  isLoadBasedTrip,
+    isCrossOrgIntegrationTrip,
+    isIntegratedClientRow,
+    isIntegratedSupplierRow,
+    isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
+import { formatIndianVehicleNumber, formatINR } from "@/lib/format";
 import {
-  AlertTriangle,
-  ArrowLeftRight,
-  ArrowUpRight,
-  Banknote,
-  Ban,
-  Building2,
-  ChevronLeft,
-  ChevronDown,
-  Check,
-  CheckCircle2,
-  CircleEllipsis,
-  Clock,
-  CreditCard,
-  FileText,
-  Fuel,
-  Hash,
-  MinusCircle,
-  Package,
-  ParkingCircle,
-  Percent,
-  PlusCircle,
-  Route,
-  Search,
-  Shield,
-  X,
-  Sliders,
-  Smartphone,
-  Sparkles,
-  Star,
-  Ticket,
-  Timer,
-  Truck,
-  Undo2,
-  User,
-  Wallet,
-  Wrench,
-} from "lucide-react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+    buildMissionTripPendingChips,
+    deriveLedgerLockedEntityType,
+    isTripSmartTagSelectable,
+    ledgerDisplayClientDue,
+    ledgerDisplayDriverDue,
+    ledgerDisplaySupplierDue,
+    ledgerLockedPartyFlowGuard,
+    ledgerLockedPartyPreferredFlow,
+    ledgerTripDueWeightForContext,
+    ledgerTripNoDueHeroMessage,
+    ledgerTripNoDueTagLabel,
+    type LedgerFlowGuardAlertContent,
+    type LedgerLockedEntityType,
+} from "@/lib/ledgerPartySmartTagPolicy";
+import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
+import { dateISO, VALIDATION } from "@/lib/validation";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import {
+    AlertTriangle,
+    ArrowLeftRight,
+    ArrowUpRight,
+    Ban,
+    Banknote,
+    Building2,
+    Check,
+    CheckCircle2,
+    ChevronLeft,
+    CircleEllipsis,
+    Clock,
+    CreditCard,
+    FileText,
+    Fuel,
+    Hash,
+    MinusCircle,
+    Package,
+    ParkingCircle,
+    Percent,
+    PlusCircle,
+    Route,
+    Search,
+    Shield,
+    Sliders,
+    Smartphone,
+    Sparkles,
+    Star,
+    Ticket,
+    Timer,
+    Truck,
+    Undo2,
+    User,
+    Wallet,
+    Wrench,
+    X
+} from "lucide-react-native";
 import React, {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    useCallback,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import {
-  Alert,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -694,7 +695,9 @@ interface AddTransactionModalProps {
   onSubmit: (
     data: AddTransactionData,
     options?: AddTransactionSubmitOptions,
-  ) => void;
+  ) => void | Promise<void>;
+  /** Full-page ledger: navigate after animated success screen (replaces immediate onClose). */
+  onSuccessDismiss?: () => void;
   clients: PartyOption[];
   /** Optional suppliers — shown in party dropdown when partyContext is 'all' or 'suppliers'; used for Cash OUT + trip auto-tag. */
   suppliers?: PartyOption[];
@@ -773,6 +776,7 @@ export function AddTransactionModal({
   visible,
   onClose,
   onSubmit,
+  onSuccessDismiss,
   clients,
   suppliers = [],
   drivers = [],
@@ -906,6 +910,20 @@ export function AddTransactionModal({
   /** Full-page ledger: show reconciliation summary in a confirm overlay before save. */
   const [ledgerSubmitConfirmVisible, setLedgerSubmitConfirmVisible] =
     useState(false);
+  const [ledgerSubmitting, setLedgerSubmitting] = useState(false);
+  const [ledgerSuccess, setLedgerSuccess] = useState<{
+    isEditMode: boolean;
+    type: "in" | "out";
+    amount: number;
+    partyName: string;
+    partyEntityType?: PartyEntityType;
+    partyAvatarUrl?: string | null;
+    partyAvatarSeed?: string | null;
+    partyIsIntegrated?: boolean;
+    tripSummary?: string | null;
+    paymentModeLabel?: string | null;
+    referenceSummary?: string | null;
+  } | null>(null);
   const [ledgerFlowGuardAlert, setLedgerFlowGuardAlert] =
     useState<LedgerFlowGuardAlertContent | null>(null);
   const [ledgerSyncDatePickerVisible, setLedgerSyncDatePickerVisible] = useState(false);
@@ -2174,6 +2192,207 @@ export function AddTransactionModal({
     !supplierNeedsTrip &&
     !entryDateError;
 
+  const ledgerMobileFlow = fullPage && stackTripFinancialBand;
+
+  const ledgerWizardFromPartyContext = Boolean(
+    entryContextLabel ||
+      isPartyLocked ||
+      lockedEntityTypeProp ||
+      (dueAmountIn != null && dueAmountIn > 0) ||
+      (dueAmountOut != null && dueAmountOut > 0),
+  );
+
+  const ledgerWizardTrips = useMemo(() => {
+    const source =
+      ledgerWizardFromPartyContext || partyId != null || tripLocked
+        ? filteredTrips
+        : ledgerMissionTripsBase;
+    return source.map((t) => {
+      const due = getLedgerTripDueWeight(t as TripOption);
+      return {
+        id: t.id,
+        trip_number: t.trip_number,
+        route_label: t.route_label ?? null,
+        trip_date: t.trip_date ?? null,
+        client_name: t.client_name ?? null,
+        supplier_name: (t as { supplier_name?: string | null }).supplier_name ?? null,
+        dueAmount: due > 0 ? due : null,
+      };
+    });
+  }, [
+    ledgerWizardFromPartyContext,
+    partyId,
+    tripLocked,
+    filteredTrips,
+    ledgerMissionTripsBase,
+    getLedgerTripDueWeight,
+  ]);
+
+  const ledgerWizardPartyOptions = useMemo(
+    () =>
+      partyOptions.map((p) => {
+        let entityType: PartyEntityType = "client";
+        if (safeSuppliers.some((s) => s.id === p.id)) entityType = "supplier";
+        else if (safeDrivers.some((d) => d.id === p.id)) entityType = "driver";
+        return {
+          id: p.id,
+          name: p.name,
+          avatar_url: p.avatar_url ?? null,
+          avatar_seed: p.avatar_seed ?? null,
+          entityType,
+          is_integrated: p.is_integrated === true,
+        };
+      }),
+    [partyOptions, safeClients, safeSuppliers, safeDrivers],
+  );
+
+  const ledgerPartyVisual = useMemo(() => {
+    const id = effectivePartyId;
+    const name = (effectivePartyName ?? "").trim() || "—";
+    if (!id || id === "misc" || id === "driver-salary") {
+      return {
+        name,
+        partyEntityType: "client" as PartyEntityType,
+        partyAvatarUrl: null as string | null,
+        partyAvatarSeed: null as string | null,
+        partyIsIntegrated: false,
+      };
+    }
+    const client = safeClients.find((c) => c.id === id);
+    if (client) {
+      return {
+        name: client.name || name,
+        partyEntityType: "client" as PartyEntityType,
+        partyAvatarUrl: client.avatar_url ?? null,
+        partyAvatarSeed: client.avatar_seed ?? null,
+        partyIsIntegrated: client.is_integrated === true,
+      };
+    }
+    const supplier = safeSuppliers.find((s) => s.id === id);
+    if (supplier) {
+      return {
+        name: supplier.name || name,
+        partyEntityType: "supplier" as PartyEntityType,
+        partyAvatarUrl: supplier.avatar_url ?? null,
+        partyAvatarSeed: supplier.avatar_seed ?? null,
+        partyIsIntegrated: false,
+      };
+    }
+    const driver = safeDrivers.find((d) => d.id === id);
+    if (driver) {
+      return {
+        name: driver.name || name,
+        partyEntityType: "driver" as PartyEntityType,
+        partyAvatarUrl: driver.avatar_url ?? null,
+        partyAvatarSeed: driver.avatar_seed ?? null,
+        partyIsIntegrated: false,
+      };
+    }
+    return {
+      name,
+      partyEntityType: "client" as PartyEntityType,
+      partyAvatarUrl: null,
+      partyAvatarSeed: null,
+      partyIsIntegrated: false,
+    };
+  }, [effectivePartyId, effectivePartyName, safeClients, safeSuppliers, safeDrivers]);
+
+  const ledgerWizardFlowSessionKey = useMemo(
+    () =>
+      [
+        entryContextLabel ?? "",
+        lockedPartyId ?? "",
+        defaultTripId ?? "",
+        defaultType ?? "",
+        type,
+        String(visible),
+      ].join("|"),
+    [
+      entryContextLabel,
+      lockedPartyId,
+      defaultTripId,
+      defaultType,
+      type,
+      visible,
+    ],
+  );
+
+  useEffect(() => {
+    if (!visible || !fullPage) return;
+    if (ledgerWizardFromPartyContext) {
+      setMissionTripFilterDue("has_due");
+    }
+  }, [visible, fullPage, ledgerWizardFromPartyContext]);
+
+  useEffect(() => {
+    if (!visible || !ledgerMobileFlow || isEditMode || lockedAmount != null) return;
+    if (amountStr.replace(/,/g, "").trim()) return;
+    const partyDue = type === "in" ? dueAmountIn : dueAmountOut;
+    if (partyDue != null && partyDue > 0) {
+      setAmountStr(formatAmountDuePlaceholder(partyDue));
+    }
+  }, [
+    visible,
+    ledgerMobileFlow,
+    isEditMode,
+    lockedAmount,
+    amountStr,
+    type,
+    dueAmountIn,
+    dueAmountOut,
+  ]);
+
+  const ledgerWizardPaymentTypeItems = useMemo((): LedgerPaymentTypeItem[] => {
+    if (type === "in") {
+      return categoriesForPicker.map((cat) => ({
+        key: cat,
+        label: cat,
+        kind: cat,
+        selected: category === cat,
+        onPress: () => setCategory(cat),
+      }));
+    }
+    if (isDriverPayment) {
+      return [
+        ...DRIVER_PAYMENT_TYPES.map((opt) => ({
+          key: opt.type,
+          label: opt.label,
+          kind: opt.type,
+          selected: driverPaymentType === opt.type,
+          onPress: () => {
+            setDriverPaymentType(opt.type);
+            setCategory(null);
+          },
+        })),
+        ...VEHICLE_CATEGORIES.map((cat) => ({
+          key: `vehicle-${cat}`,
+          label: cat,
+          kind: cat,
+          selected: driverPaymentType == null && category === cat,
+          onPress: () => {
+            setDriverPaymentType(null);
+            setCategory(cat);
+          },
+        })),
+      ];
+    }
+    return categoriesForPicker.map((cat) => ({
+      key: cat,
+      label: cat,
+      kind: cat,
+      selected: category === cat,
+      onPress: () => setCategory(cat),
+    }));
+  }, [
+    type,
+    categoriesForPicker,
+    category,
+    isDriverPayment,
+    driverPaymentType,
+  ]);
+
+  const ledgerWizardShowPaymentType = ledgerWizardPaymentTypeItems.length > 0;
+
   useEffect(() => {
     if (!paymentModeId) {
       setPaymentModeExpanded(true);
@@ -2917,21 +3136,70 @@ export function AddTransactionModal({
       paymentMode: paymentModeId,
       paymentReference: paymentReference.trim() || null,
     };
-    if (isEditMode && initialEntry?.id) {
-      onSubmit(data, { entryId: initialEntry.id });
-      // Parent closes modal after update succeeds
-    } else {
-      onSubmit(data);
-      setAmountStr("");
-      setPartyId(null);
-      setSelectedTripIds([]);
-      setCategory(null);
-      setDriverPaymentType(null);
-      onClose();
-    }
+    const modeName = data.paymentMode
+      ? data.paymentMode === "UPI"
+        ? "UPI"
+        : data.paymentMode === "BANK"
+          ? "Bank Transfer"
+          : data.paymentMode === "CHEQUE"
+            ? "Cheque"
+            : data.paymentMode === "CASH"
+              ? "Cash"
+              : data.paymentMode
+      : null;
+    const tripSummary =
+      ledgerReconDetailRows.find((r) => r.label === "Voyage Identity")?.value ?? null;
+
+    void (async () => {
+      if (ledgerSubmitting) return;
+      setLedgerSubmitting(true);
+      try {
+        if (isEditMode && initialEntry?.id) {
+          await Promise.resolve(onSubmit(data, { entryId: initialEntry.id }));
+        } else {
+          await Promise.resolve(onSubmit(data));
+        }
+        if (fullPage) {
+          setLedgerSuccess({
+            isEditMode,
+            type,
+            amount,
+            partyName: ledgerPartyVisual.name,
+            partyEntityType: ledgerPartyVisual.partyEntityType,
+            partyAvatarUrl: ledgerPartyVisual.partyAvatarUrl,
+            partyAvatarSeed: ledgerPartyVisual.partyAvatarSeed,
+            partyIsIntegrated: ledgerPartyVisual.partyIsIntegrated,
+            tripSummary,
+            paymentModeLabel: modeName,
+            referenceSummary: isLedgerCashPaymentMode(paymentModeId)
+              ? "— (cash)"
+              : paymentReference.trim() || "—",
+          });
+          return;
+        }
+        setAmountStr("");
+        setPartyId(null);
+        setSelectedTripIds([]);
+        setCategory(null);
+        setDriverPaymentType(null);
+        onClose();
+      } finally {
+        setLedgerSubmitting(false);
+      }
+    })();
   };
 
+  const handleLedgerSuccessDone = useCallback(() => {
+    setLedgerSuccess(null);
+    if (onSuccessDismiss) {
+      onSuccessDismiss();
+      return;
+    }
+    onClose();
+  }, [onSuccessDismiss, onClose]);
+
   const handleClose = () => {
+    setLedgerSuccess(null);
     setLedgerSubmitConfirmVisible(false);
     setLedgerSyncDatePickerVisible(false);
     setShowPartyPicker(false);
@@ -2966,7 +3234,7 @@ export function AddTransactionModal({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    if (fullPage) {
+    if (fullPage && !ledgerMobileFlow) {
       Keyboard.dismiss();
       closeAllPickers();
       setLedgerSubmitConfirmVisible(true);
@@ -4845,6 +5113,67 @@ export function AddTransactionModal({
               {renderLedgerSyncV2()}
             </View>
           </View>
+        ) : (fullPage && ledgerMobileFlow) ? (
+          <View style={[styles.panelScroll, styles.panelScrollViewportFit]}>
+            <View
+              style={[
+                styles.panelScrollInner,
+                styles.panelScrollInnerFullPageLedger,
+                { flex: 1, minHeight: 0 },
+              ]}
+            >
+              <LedgerMobileWizard
+                isEditMode={isEditMode}
+                entryContextLabel={entryContextLabel}
+                type={type}
+                onTypeChange={requestLedgerFlowType}
+                typeLocked={Boolean(defaultType) || tripLocked || isEditMode}
+                amountStr={amountStr}
+                onAmountChange={setAmountStr}
+                amountPlaceholder={ledgerAmountPlaceholder}
+                partyId={partyId}
+                onPartySelect={setPartyId}
+                partyOptions={ledgerWizardPartyOptions}
+                partyLocked={isPartyLocked || tripLocked}
+                partyDisplayName={effectivePartyName}
+                partyAvatarUrl={ledgerPartyVisual.partyAvatarUrl}
+                partyAvatarSeed={ledgerPartyVisual.partyAvatarSeed}
+                partyEntityType={ledgerPartyVisual.partyEntityType}
+                partyIsIntegrated={ledgerPartyVisual.partyIsIntegrated}
+                hidePartyStep={partyOptions.length === 0}
+                submitting={ledgerSubmitting}
+                selectedTripId={selectedTripIds[0] ?? null}
+                onTripSelect={(id) => {
+                  const trip = id ? resolveTripOptionById(id) : null;
+                  selectMissionTrip(trip);
+                }}
+                trips={ledgerWizardTrips}
+                tripLocked={tripLocked}
+                tripDisplay={tripNumber || lockedTripDisplay || null}
+                tripBeforeAmount={ledgerWizardFromPartyContext && !tripLocked}
+                defaultTripDueFilter={
+                  ledgerWizardFromPartyContext ? "has_due" : "all"
+                }
+                paymentTypeItems={ledgerWizardPaymentTypeItems}
+                showPaymentTypeStep={ledgerWizardShowPaymentType}
+                paymentModeId={paymentModeId}
+                onPaymentModeSelect={setPaymentModeId}
+                paymentReference={paymentReference}
+                onPaymentReferenceChange={setPaymentReference}
+                entryDate={entryDate}
+                onEntryDateChange={setEntryDate}
+                reconRows={ledgerReconDetailRows}
+                canSubmit={canSubmit}
+                onSubmit={() => {
+                  Keyboard.dismiss();
+                  commitLedgerSubmit();
+                }}
+                onClose={onClose}
+                flowSessionKey={ledgerWizardFlowSessionKey}
+                compact
+              />
+            </View>
+          </View>
         ) : (
         <ScrollView
           ref={scrollRef}
@@ -5868,7 +6197,7 @@ export function AddTransactionModal({
         </ScrollView>
         )}
 
-        {fullPage && (
+        {fullPage && !ledgerMobileFlow && (
           <View
             style={[
               styles.fullPageFooter,
@@ -6036,6 +6365,25 @@ export function AddTransactionModal({
     }
     return null;
   };
+
+  if (fullPage && ledgerSuccess) {
+    return (
+      <LedgerEntrySuccessView
+        isEditMode={ledgerSuccess.isEditMode}
+        type={ledgerSuccess.type}
+        amount={ledgerSuccess.amount}
+        partyName={ledgerSuccess.partyName}
+        partyEntityType={ledgerSuccess.partyEntityType}
+        partyAvatarUrl={ledgerSuccess.partyAvatarUrl}
+        partyAvatarSeed={ledgerSuccess.partyAvatarSeed}
+        partyIsIntegrated={ledgerSuccess.partyIsIntegrated}
+        tripSummary={ledgerSuccess.tripSummary}
+        paymentModeLabel={ledgerSuccess.paymentModeLabel}
+        referenceSummary={ledgerSuccess.referenceSummary}
+        onDone={handleLedgerSuccessDone}
+      />
+    );
+  }
 
   if (fullPage) {
     return (

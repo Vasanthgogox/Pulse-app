@@ -13,6 +13,9 @@ import type { DriverPresenceRow } from '@/features/tracking/services/driverPrese
 import type { TripCheckpointRow } from '@/features/tracking/services/tripCheckpoints.service';
 import { useTripLiveTrackingSeedQuery } from '@/lib/queries/useTripLiveTrackingSeedQuery';
 
+/** Stable fallback — inline `?? []` creates a new reference every render and breaks effect deps. */
+const EMPTY_TRAIL: TripCheckpointRow[] = [];
+
 export type TrackingUiSnapshot = {
   recordedAt: string | null;
   stale: boolean;
@@ -46,7 +49,10 @@ export function useTripLiveTracking({
   );
 
   const presence = seedQuery.data?.presence ?? null;
-  const trail = seedQuery.data?.checkpoints ?? [];
+  const trail = useMemo(
+    () => seedQuery.data?.checkpoints ?? EMPTY_TRAIL,
+    [seedQuery.data?.checkpoints],
+  );
 
   const snapshot = useMemo((): TrackingUiSnapshot => {
     if (!presence) {

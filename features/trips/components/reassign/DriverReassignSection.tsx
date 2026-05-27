@@ -78,20 +78,24 @@ export function DriverReassignSection({
   const phoneLookupRequestRef = useRef(0);
 
   const segmentOptions = useMemo(() => {
-    const opts: { id: DriverReassignMode; label: string }[] = [
-      { id: 'existing', label: 'From fleet' },
-      { id: 'add', label: 'Add new' },
-    ];
     if (isAggregate) {
-      opts.push({ id: 'phone', label: 'Assign by phone' });
+      return [{ id: 'phone' as const, label: 'Name & phone' }];
     }
-    return opts;
+    return [
+      { id: 'existing' as const, label: 'From fleet' },
+      { id: 'add' as const, label: 'Add new' },
+      { id: 'phone' as const, label: 'Assign by phone' },
+    ];
   }, [isAggregate]);
 
   const filtered = useMemo(
     () => filterDriversForReassign(drivers, debouncedSearch),
     [drivers, debouncedSearch],
   );
+
+  useEffect(() => {
+    if (isAggregate && mode !== 'phone') onModeChange('phone');
+  }, [isAggregate, mode, onModeChange]);
 
   useEffect(() => {
     if (mode !== 'phone') {
@@ -162,16 +166,18 @@ export function DriverReassignSection({
         </View>
       ) : null}
 
-      <ReassignSegmentedControl
-        options={segmentOptions}
-        value={mode}
-        onChange={(id) => {
-          onModeChange(id);
-          if (id === 'phone') onSelectDriverId(null);
-        }}
-      />
+      {!isAggregate ? (
+        <ReassignSegmentedControl
+          options={segmentOptions}
+          value={mode}
+          onChange={(id) => {
+            onModeChange(id);
+            if (id === 'phone') onSelectDriverId(null);
+          }}
+        />
+      ) : null}
 
-      {mode === 'existing' ? (
+      {!isAggregate && mode === 'existing' ? (
         <>
           <SearchBar
             value={search}
@@ -234,7 +240,7 @@ export function DriverReassignSection({
         </>
       ) : null}
 
-      {mode === 'add' ? (
+      {!isAggregate && mode === 'add' ? (
         <AddDriverForm
           organizationId={organizationId}
           onCreated={(id) => {
@@ -244,7 +250,7 @@ export function DriverReassignSection({
         />
       ) : null}
 
-      {mode === 'phone' ? (
+      {mode === 'phone' || isAggregate ? (
         <View style={s.form}>
           <Text style={s.label}>Driver phone</Text>
           <TextInput

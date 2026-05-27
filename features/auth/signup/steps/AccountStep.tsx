@@ -1,42 +1,33 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
-import {
-  OnboardingFocusedField,
-  OnboardingFullPageFormStep,
-  OnboardingKeypadAltRow,
-} from '@/features/onboarding';
-import { OperationalButton } from '@/components/operational';
-import { colors } from '@/design-system/colors';
-import { C, styles } from '../businessSignUp.styles';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
+import { SignUpPulseField } from '../SignUpPulseField';
+import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
+import { SignUpPulsePrimaryButton } from '../SignUpPulsePrimaryButton';
+import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function AccountStep({ flow }: { flow: SignUpFlow }) {
+  const canSubmit =
+    !!flow.fullName.trim() &&
+    !!flow.email.trim() &&
+    flow.password.length >= 6 &&
+    flow.password === flow.confirmPassword &&
+    !flow.loading &&
+    !flow.googleLoading;
+
   return (
-    <OnboardingFullPageFormStep
-      title="Secure your account"
-      subtitle="Final credentials before workspace activation."
-      eyebrow="Account"
-      primaryLabel="Activate account"
+    <SignUpPulseFormStep
+      title="Create account"
+      subtitle="Enter your email and password to finish."
+      primaryLabel="Create account"
       onPrimary={flow.createAccount}
-      primaryDisabled={flow.loading || flow.googleLoading}
-      primaryLoading={flow.loading}
-      footerAccessory={
-        <OnboardingKeypadAltRow>
-          <OperationalButton
-            intent="utility"
-            label="Continue with Google"
-            onPress={flow.continueWithGoogle}
-            disabled={flow.loading || flow.googleLoading}
-            loading={flow.googleLoading}
-            fullWidth
-            icon={<FontAwesome name="google" size={14} color={colors.textPrimary} />}
-          />
-        </OnboardingKeypadAltRow>
-      }
+      inlinePrimary
     >
-      <OnboardingFocusedField
-        label="Full name"
+      <SignUpPulseField
+        label="Full Name"
+        required
         value={flow.fullName}
         onChangeText={flow.setFullName}
         placeholder="Your name"
@@ -45,8 +36,9 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         errorMessage={flow.step5Attempted ? flow.step5Errors.fullName : null}
       />
 
-      <OnboardingFocusedField
-        label="Email address"
+      <SignUpPulseField
+        label="Email Address"
+        required
         value={flow.email}
         onChangeText={flow.setEmail}
         placeholder="you@example.com"
@@ -56,108 +48,102 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         errorMessage={flow.step5Attempted ? flow.step5Errors.email : null}
       />
 
-      <View style={styles.fieldGroup}>
-        <Text
-          style={[
-            styles.label,
-            flow.step5Attempted && flow.step5Errors.password ? styles.labelError : null,
-          ]}
-        >
-          Password <Text style={styles.req}>*</Text>
-        </Text>
-        <View style={styles.passwordRow}>
-          <TextInput
-            style={[
-              styles.inputPassword,
-              flow.step5Attempted && flow.step5Errors.password ? styles.inputError : null,
-            ]}
-            placeholder="At least 6 characters"
-            placeholderTextColor={C.placeholder}
-            value={flow.password}
-            onChangeText={flow.setPassword}
-            secureTextEntry={!flow.showPassword}
-            editable={!flow.loading}
-          />
-          <TouchableOpacity onPress={flow.toggleShowPassword} style={styles.eyeBtn}>
-            <FontAwesome
-              name={flow.showPassword ? 'eye-slash' : 'eye'}
-              size={18}
-              color={C.muted}
-            />
-          </TouchableOpacity>
-        </View>
-        <View style={[styles.strengthWrap, { opacity: flow.password.length >= 6 ? 1 : 0 }]}>
-          <View style={styles.strengthBar}>
-            {([1, 2, 3, 4] as const).map((seg) => (
-              <View
-                key={seg}
-                style={[
-                  styles.strengthSeg,
-                  flow.passwordStrength >= seg &&
-                    (flow.passwordStrength <= 1
-                      ? styles.strengthWeak
-                      : flow.passwordStrength === 2
-                        ? styles.strengthFair
-                        : flow.passwordStrength === 3
-                          ? styles.strengthGood
-                          : styles.strengthStrong),
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-        {flow.step5Attempted && flow.step5Errors.password ? (
-          <Text style={styles.fieldError}>{flow.step5Errors.password}</Text>
-        ) : null}
-      </View>
+      <SignUpPulseField
+        label="Password"
+        required
+        value={flow.password}
+        onChangeText={flow.setPassword}
+        placeholder="At least 6 characters"
+        secureTextEntry={!flow.showPassword}
+        editable={!flow.loading}
+        errorMessage={flow.step5Attempted ? flow.step5Errors.password : null}
+        trailing={
+          <Pressable onPress={flow.toggleShowPassword} style={styles.eyeBtn} hitSlop={8}>
+            {flow.showPassword ? (
+              <EyeOff size={18} color={PULSE_SIGNUP.muted} />
+            ) : (
+              <Eye size={18} color={PULSE_SIGNUP.muted} />
+            )}
+          </Pressable>
+        }
+      />
 
-      <View style={styles.fieldGroup}>
-        <Text
-          style={[
-            styles.label,
-            (flow.step5Attempted && flow.step5Errors.confirmPassword) || flow.confirmMismatch
-              ? styles.labelError
-              : null,
-          ]}
-        >
-          Confirm password <Text style={styles.req}>*</Text>
-        </Text>
-        <View style={styles.passwordRow}>
-          <TextInput
-            style={[
-              styles.inputPassword,
-              (flow.step5Attempted && flow.step5Errors.confirmPassword) || flow.confirmMismatch
-                ? styles.inputError
-                : flow.confirmPassword.length > 0 &&
-                    !flow.confirmMismatch &&
-                    flow.password === flow.confirmPassword
-                  ? styles.inputSuccess
-                  : null,
-            ]}
-            placeholder="Re-enter password"
-            placeholderTextColor={C.placeholder}
-            value={flow.confirmPassword}
-            onChangeText={flow.setConfirmPassword}
-            secureTextEntry={!flow.showConfirmPassword}
-            editable={!flow.loading}
-            onFocus={flow.scrollConfirmPasswordIntoView}
-          />
-          <TouchableOpacity onPress={flow.toggleShowConfirmPassword} style={styles.eyeBtn}>
-            <FontAwesome
-              name={flow.showConfirmPassword ? 'eye-slash' : 'eye'}
-              size={18}
-              color={C.muted}
-            />
-          </TouchableOpacity>
-        </View>
-        {flow.confirmMismatch ? (
-          <Text style={styles.fieldError}>Passwords do not match.</Text>
-        ) : flow.confirmPassword.length > 0 && flow.password === flow.confirmPassword ? (
-          <Text style={styles.fieldSuccess}>Passwords match.</Text>
-        ) : flow.step5Attempted && flow.step5Errors.confirmPassword ? (
-          <Text style={styles.fieldError}>{flow.step5Errors.confirmPassword}</Text>
-        ) : null}
-      </View>
-    </OnboardingFullPageFormStep>
+      <SignUpPulseField
+        label="Confirm Password"
+        required
+        value={flow.confirmPassword}
+        onChangeText={flow.setConfirmPassword}
+        placeholder="Re-enter password"
+        secureTextEntry={!flow.showConfirmPassword}
+        editable={!flow.loading}
+        onFocus={flow.scrollConfirmPasswordIntoView}
+        errorMessage={
+          flow.confirmMismatch
+            ? 'Passwords do not match.'
+            : flow.step5Attempted
+              ? flow.step5Errors.confirmPassword
+              : null
+        }
+        trailing={
+          <Pressable onPress={flow.toggleShowConfirmPassword} style={styles.eyeBtn} hitSlop={8}>
+            {flow.showConfirmPassword ? (
+              <EyeOff size={18} color={PULSE_SIGNUP.muted} />
+            ) : (
+              <Eye size={18} color={PULSE_SIGNUP.muted} />
+            )}
+          </Pressable>
+        }
+      />
+
+      <SignUpPulsePrimaryButton
+        label="Create account"
+        onPress={flow.createAccount}
+        disabled={!canSubmit}
+        loading={flow.loading}
+        style={styles.createBtn}
+      />
+
+      <Pressable
+        onPress={flow.continueWithGoogle}
+        disabled={flow.loading || flow.googleLoading}
+        style={({ pressed }) => [styles.googleBtn, pressed && styles.googlePressed]}
+      >
+        <FontAwesome name="google" size={18} color="#4285F4" />
+        <Text style={styles.googleText}>Continue with Google</Text>
+      </Pressable>
+    </SignUpPulseFormStep>
   );
 }
+
+const styles = StyleSheet.create({
+  eyeBtn: {
+    position: 'absolute',
+    right: 14,
+    top: 16,
+    padding: 4,
+  },
+  createBtn: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: PULSE_SIGNUP.border,
+    backgroundColor: PULSE_SIGNUP.bg,
+    marginBottom: 8,
+  },
+  googlePressed: {
+    backgroundColor: PULSE_SIGNUP.surface,
+  },
+  googleText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#374151',
+  },
+});

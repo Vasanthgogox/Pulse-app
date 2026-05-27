@@ -3,8 +3,11 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  getVehiclesByOrganization,
   syncVehiclesWithCache,
 } from '@/features/vehicles/services/vehicles.service';
+import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
@@ -17,12 +20,23 @@ export function useVehiclesQuery(orgId: string | null) {
         (qc.getQueryData(queryKeys.vehicles.finite(orgId ?? '')) as
           | Array<{ id: string }>
           | undefined) ?? [];
-      const res = await syncVehiclesWithCache(orgId!, existing as any);
-      if (res.error) throw res.error;
-      return res.vehicles;
+      return fetchEntityListWithFallback({
+        orgId: orgId!,
+        domain: 'vehicles',
+        cachedRows: existing as never[],
+        sync: async (id, cached) => {
+          const res = await syncVehiclesWithCache(id, cached as never[]);
+          return { error: res.error, rows: res.vehicles };
+        },
+        fetchDirect: async (id) => {
+          const res = await getVehiclesByOrganization(id);
+          return { error: res.error, rows: res.vehicles };
+        },
+      });
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
+    refetchOnMount: refetchOnMountIfEntityListEmpty,
   });
 }
 

@@ -13,6 +13,10 @@ import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
 import { DriverCommunicationProvider } from '@/features/driver/communication';
 import { ROUTES } from '@/lib/routes';
 import {
+  hydrateDriverSignupSuccessFlag,
+  isDriverSignupSuccessActiveSync,
+} from '@/lib/onboarding/businessSignupBranding.util';
+import {
   PlusJakartaSans_400Regular,
   PlusJakartaSans_500Medium,
   PlusJakartaSans_600SemiBold,
@@ -85,7 +89,17 @@ export default function DriverAppLayout() {
   };
 
   useEffect(() => {
+    void hydrateDriverSignupSuccessFlag();
+  }, []);
+
+  useEffect(() => {
     if (loading) return;
+
+    if (isDriverSignupSuccessActiveSync()) {
+      logDriverGate('redirect_driver_signup_success', {});
+      router.replace('/driver-signup');
+      return;
+    }
 
     if (!user) {
       logDriverGate('redirect_sign_in_missing_user', {});

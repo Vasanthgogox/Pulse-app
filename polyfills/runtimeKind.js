@@ -1,9 +1,8 @@
 /**
  * react-native-worklets boot-order polyfill.
  *
- * Metro's `inlineRequires` transform (enabled in metro.config.js for cold-start
- * perf) defers module-body evaluation until first member access. That ordering
- * causes `react-native-worklets/lib/module/PlatformChecker/index.js` to read
+ * When Metro `inlineRequires` is enabled, deferred module-body evaluation can
+ * cause `react-native-worklets/lib/module/PlatformChecker/index.js` to read
  * `globalThis.__RUNTIME_KIND` BEFORE `runtimeKind.js` has had a chance to set
  * it, so `SHOULD_BE_USE_WEB` stays `false` on web and the library walks the
  * native serialization path. That throws `createSerializableObject should

@@ -10,6 +10,7 @@ import type { IndentRow } from "@/features/indents/services/indents.service";
 import { type SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import { type VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import { getAvailablePeriodOptions } from "@/features/vehicles/pnl";
 import { formatLedgerDate } from "@/lib/format";
 import type { ConnectionRequestRow } from "@/features/connections/services/connectionRequests.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
@@ -118,18 +119,16 @@ export function useFinanceEntities({
     setPendingDriverSalaryRequests(salaryRequestsFromQuery);
   }, [salaryRequestsFromQuery]);
 
+  // Only block party tabs on the core entity queries — offers, connections, indents, and
+  // cross-org trips are supplementary and must not prevent tabs from rendering.
+  // tripsAsSupplierLoading is omitted intentionally: it's derived from useTripsQuery,
+  // so tripsLoading already covers it.
   const entitiesLoading =
     clientsLoading ||
     tripsLoading ||
     suppliersLoading ||
     vehiclesLoading ||
-    driversLoading ||
-    offersLoading ||
-    connLoading ||
-    tripsAsClientLoading ||
-    tripsAsSupplierLoading ||
-    (shouldLoadTripSubcontracts && subcontractsLoading) ||
-    indentsForFinanceLoading;
+    driversLoading;
 
   const clients = useMemo(
     () =>
@@ -212,27 +211,19 @@ export function useFinanceEntities({
     if (!includeGaragePeriodOptions || tripRows.length === 0) {
       return;
     }
-    let cancelled = false;
-    void import("@/features/vehicles/pnl").then(({ getAvailablePeriodOptions }) => {
-      if (!cancelled) {
-        const next = getAvailablePeriodOptions(tripRows) ?? [];
-        setGaragePeriodOptions((prev) => {
-          if (
-            prev.length === next.length &&
-            prev.every(
-              (opt, idx) =>
-                opt.value === next[idx]?.value && opt.label === next[idx]?.label,
-            )
-          ) {
-            return prev;
-          }
-          return next;
-        });
+    const next = getAvailablePeriodOptions(tripRows) ?? [];
+    setGaragePeriodOptions((prev) => {
+      if (
+        prev.length === next.length &&
+        prev.every(
+          (opt, idx) =>
+            opt.value === next[idx]?.value && opt.label === next[idx]?.label,
+        )
+      ) {
+        return prev;
       }
+      return next;
     });
-    return () => {
-      cancelled = true;
-    };
   }, [includeGaragePeriodOptions, tripRows]);
 
   return {

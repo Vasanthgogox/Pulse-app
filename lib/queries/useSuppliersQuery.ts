@@ -3,8 +3,11 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  getSuppliersByOrganization,
   syncSuppliersWithCache,
 } from '@/features/suppliers/services/suppliers.service';
+import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
@@ -17,12 +20,23 @@ export function useSuppliersQuery(orgId: string | null) {
         (qc.getQueryData(queryKeys.suppliers.finite(orgId ?? '')) as
           | Array<{ id: string }>
           | undefined) ?? [];
-      const res = await syncSuppliersWithCache(orgId!, existing as any);
-      if (res.error) throw res.error;
-      return res.suppliers;
+      return fetchEntityListWithFallback({
+        orgId: orgId!,
+        domain: 'suppliers',
+        cachedRows: existing as never[],
+        sync: async (id, cached) => {
+          const res = await syncSuppliersWithCache(id, cached as never[]);
+          return { error: res.error, rows: res.suppliers };
+        },
+        fetchDirect: async (id) => {
+          const res = await getSuppliersByOrganization(id);
+          return { error: res.error, rows: res.suppliers };
+        },
+      });
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
+    refetchOnMount: refetchOnMountIfEntityListEmpty,
   });
 }
 

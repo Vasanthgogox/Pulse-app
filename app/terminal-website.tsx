@@ -440,7 +440,7 @@ export default function TerminalWebsitePage() {
     const handler = (event: MessageEvent) => {
       if (event.data?.type !== PULSE_SIGN_IN_NAV || event.data?.v !== 1) return;
       if (iframeRef.current?.contentWindow !== event.source) return;
-      router.push(ROUTES.WELCOME);
+      router.push(ROUTES.ONBOARDING.HUB);
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
@@ -453,7 +453,7 @@ export default function TerminalWebsitePage() {
           Pulse<Text style={styles.nativeTitleDot}>.</Text> Website
         </Text>
         <Text style={styles.nativeBody}>This page is designed for web. Continue to sign in.</Text>
-        <Pressable onPress={() => router.push(ROUTES.WELCOME)} style={styles.nativeBtn}>
+        <Pressable onPress={() => router.push(ROUTES.ONBOARDING.HUB)} style={styles.nativeBtn}>
           <Text style={styles.nativeBtnText}>Go to Sign In</Text>
         </Pressable>
       </View>

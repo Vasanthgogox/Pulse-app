@@ -12,10 +12,15 @@ import {
 } from '@/lib/indexBootRedirect.util';
 import { getLastTabRoute } from '@/lib/lastRoute';
 import { preloadTabForRoute } from '@/lib/preloadRoutes';
-import { DEFAULT_DRIVER_ROUTE } from '@/lib/routes';
+import {
+  hydrateSignupFlowFlags,
+  isBusinessSignupBrandingActiveSync,
+  isDriverSignupSuccessActiveSync,
+} from '@/lib/onboarding/businessSignupBranding.util';
+import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
 import { useIsFocused } from '@react-navigation/native';
 import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -36,6 +41,13 @@ export default function Index() {
   const pathname = usePathname();
   const isFocused = useIsFocused();
   const uid = user?.uid ?? null;
+  const [brandingGateHydrated, setBrandingGateHydrated] = useState(false);
+
+  useEffect(() => {
+    void hydrateSignupFlowFlags().finally(() => {
+      setBrandingGateHydrated(true);
+    });
+  }, []);
 
   const logRouteDecision = (event: string, details: Record<string, unknown>) => {
     if (!__DEV__) return;
@@ -43,9 +55,25 @@ export default function Index() {
   };
 
   useEffect(() => {
-    if (!isFocused || loading) return;
+    if (!isFocused || loading || !brandingGateHydrated) return;
 
     if (Platform.OS === 'web' && pathname !== '/' && pathname !== '') {
+      return;
+    }
+
+    if (isBusinessSignupBrandingActiveSync()) {
+      if (pathname === '/' || pathname === '') {
+        logRouteDecision('redirect_business_signup_branding_resume', { uid, pathname });
+        router.replace(ROUTES.ONBOARDING.BUSINESS);
+      }
+      return;
+    }
+
+    if (isDriverSignupSuccessActiveSync()) {
+      if (pathname === '/' || pathname === '') {
+        logRouteDecision('redirect_driver_signup_success_resume', { uid, pathname });
+        router.replace('/driver-signup' as '/');
+      }
       return;
     }
 
@@ -65,6 +93,13 @@ export default function Index() {
     if (!profile) return;
 
     if (profile.role === 'driver') {
+      if (isDriverSignupSuccessActiveSync()) {
+        logRouteDecision('block_driver_redirect_signup_success', { uid, pathname });
+        if (pathname === '/' || pathname === '') {
+          router.replace('/driver-signup' as '/');
+        }
+        return;
+      }
       if (!roleVerified) {
         logRouteDecision('block_driver_redirect_unverified_role', {
           uid,
@@ -87,7 +122,7 @@ export default function Index() {
       logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
       router.replace(route as '/');
     });
-  }, [uid, profile, roleVerified, loading, pathname, router, isFocused]);
+  }, [uid, profile, roleVerified, loading, pathname, router, isFocused, brandingGateHydrated]);
 
   const splashVariant = useMemo(() => {
     if (loading) return 'session' as const;
