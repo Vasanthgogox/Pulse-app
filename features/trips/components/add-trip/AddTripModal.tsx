@@ -76,6 +76,8 @@ export function AddTripModal({
     "route",
   );
   const form = useAddTripForm();
+  /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
   const [regenerating, setRegenerating] = useState(false);
@@ -117,6 +119,11 @@ export function AddTripModal({
     return form.validationIssues.filter((i) => stepFieldSet.has(i.field));
   }, [wizardEnabled, stepFieldSet, form.validationIssues]);
 
+  const visibleIssues = validationAttempted ? stepIssues : [];
+  const visibleValidationMessage = validationAttempted
+    ? (stepIssues[0]?.message ?? null)
+    : null;
+
   const stepCanAdvance = wizardEnabled
     ? stepIssues.length === 0
     : form.canSubmit;
@@ -136,6 +143,7 @@ export function AddTripModal({
     : undefined;
 
   const handleSubmit = async () => {
+    setValidationAttempted(true);
     if (!form.canSubmit || submitting) return;
     const validationErr = form.getValidationError();
     if (validationErr) {
@@ -169,6 +177,7 @@ export function AddTripModal({
   };
 
   const handleWizardPrimary = () => {
+    setValidationAttempted(true);
     if (!wizardEnabled) {
       void handleSubmit();
       return;
@@ -252,8 +261,8 @@ export function AddTripModal({
       submitLabel={wizardSubmitLabel}
       canSubmit={stepCanAdvance}
       submitting={submitting}
-      lockPrimaryUntilValid
-      validationMessage={stepIssues[0]?.message ?? null}
+      lockPrimaryUntilValid={validationAttempted}
+      validationMessage={visibleValidationMessage}
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
     >
@@ -266,8 +275,9 @@ export function AddTripModal({
         refetchClients={refetchClients}
         onSubmit={handleWizardPrimary}
         canSubmit={stepCanAdvance}
-        validationIssues={stepIssues}
-        validationMessage={stepIssues[0]?.message ?? null}
+        enablePrimaryWhenInvalid={validationAttempted}
+        validationIssues={visibleIssues}
+        validationMessage={visibleValidationMessage}
         wizardSection={wizardEnabled ? wizardStep : undefined}
         showInlineCta={false}
       />
