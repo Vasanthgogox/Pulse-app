@@ -479,7 +479,7 @@ function NetworkScreenInner() {
    *  synthetic faces at the source, but we re-check here so any future
    *  caller is also safe. */
   const handleOpenMutualProfile = useCallback(
-    (row: MutualConnectionRow) => {
+    (row: Pick<MutualConnectionRow, "id" | "name">) => {
       const looksLikeOrgUuid =
         typeof row.id === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.id);
@@ -504,6 +504,37 @@ function NetworkScreenInner() {
     },
     [handleOpenProfileFromDiscover],
   );
+
+  /** Live pending row for the org currently shown in the profile modal.
+   *  Must run before any early return so hook order stays stable across
+   *  logout/login and requests vs dashboard view. */
+  const profileLivePending = useMemo(() => {
+    if (!selectedProfileNode) return null;
+    const row = (sentQ.data ?? []).find(
+      (r) =>
+        r.to_organization_id === selectedProfileNode.id &&
+        r.status === "pending",
+    );
+    if (!row) return null;
+    const role: ConnectionInviteRole | null = row.request_shipper_client
+      ? "client"
+      : row.request_carrier_supplier
+        ? "supplier"
+        : null;
+    return { row, role };
+  }, [sentQ.data, selectedProfileNode]);
+
+  /** Authoritative status for CTA rendering: starts from the snapshot
+   *  status but is overridden whenever `sentQ` shows a live pending row
+   *  for this org. */
+  const profileEffectiveStatus: NetworkProfileNode["status"] | null =
+    selectedProfileNode
+      ? selectedProfileNode.status === "CONNECTED"
+        ? "CONNECTED"
+        : profileLivePending
+          ? "REQUEST SENT"
+          : selectedProfileNode.status
+      : null;
 
   if (!orgId) {
     if (orgLoading) {
@@ -571,39 +602,6 @@ function NetworkScreenInner() {
       is_integrated: item.is_integrated,
     });
   };
-
-  /** Live pending row for the org currently shown in the profile modal.
-   *  Sourced from the same `sentQ` cache the rest of the screen uses, so
-   *  it updates immediately after send/cancel without re-opening the
-   *  modal. */
-  const profileLivePending = useMemo(() => {
-    if (!selectedProfileNode) return null;
-    const row = (sentQ.data ?? []).find(
-      (r) =>
-        r.to_organization_id === selectedProfileNode.id &&
-        r.status === "pending",
-    );
-    if (!row) return null;
-    const role: ConnectionInviteRole | null = row.request_shipper_client
-      ? "client"
-      : row.request_carrier_supplier
-        ? "supplier"
-        : null;
-    return { row, role };
-  }, [sentQ.data, selectedProfileNode]);
-
-  /** Authoritative status for CTA rendering: starts from the snapshot
-   *  status but is overridden whenever `sentQ` shows a live pending row
-   *  for this org. This is what stops the modal from showing "Send
-   *  protocol" right after a successful send. */
-  const profileEffectiveStatus: NetworkProfileNode["status"] | null =
-    selectedProfileNode
-      ? selectedProfileNode.status === "CONNECTED"
-        ? "CONNECTED"
-        : profileLivePending
-          ? "REQUEST SENT"
-          : selectedProfileNode.status
-      : null;
 
   const handleSendProtocolFromProfile = () => {
     if (!selectedProfileNode || !orgId) return;
