@@ -11,23 +11,19 @@
  * Core auth logic (profile merge, comparison, timeout, circuit-breaker)
  * lives in lib/authEngine.
  */
-import { Platform } from "react-native";
+import { useMobileKeepSignedInSignOut } from "@/features/auth/hooks/useMobileKeepSignedInSignOut";
+import { useWebKeepSignedInSignOut } from "@/features/auth/hooks/useWebKeepSignedInSignOut";
 import type { AuthUser } from "@/features/auth/services/auth.service";
 import * as authService from "@/features/auth/services/auth.service";
-import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
-import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
-import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
 import {
-  type AuthStatus,
-  type UserProfile,
+  areUserProfilesEqual,
   AUTH_TIMEOUT_MS,
   AuthError,
+  authErrorFromUnknown,
   authProfileToUserProfile,
-  areUserProfilesEqual,
   freezeInDev,
   isCircuitBreakerTripped,
   isForceExpiredSessionEnabled,
-  authErrorFromUnknown,
   logAuth,
   logAuthError,
   mergeAuthProfiles,
@@ -35,9 +31,12 @@ import {
   resetCircuitBreaker,
   TimeoutError,
   withTimeout,
+  type AuthStatus,
+  type UserProfile,
 } from "@/lib/authEngine";
-import { useMobileKeepSignedInSignOut } from "@/features/auth/hooks/useMobileKeepSignedInSignOut";
-import { useWebKeepSignedInSignOut } from "@/features/auth/hooks/useWebKeepSignedInSignOut";
+import { clearStaleAuthOnFirstLaunch } from "@/lib/firstLaunch";
+import { getKeepSignedIn, setKeepSignedIn } from "@/lib/keepSignedInPreference";
+import { clearAllRealtimeChannels } from "@/lib/realtimeRegistry";
 import {
   createContext,
   useCallback,
@@ -48,12 +47,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { markStartupPhase } from "@/lib/startupMetrics";
+import { Platform } from "react-native";
 
-export type { UserProfile } from "@/lib/authEngine";
-export type { AuthStatus } from "@/lib/authEngine";
 export { AuthError } from "@/lib/authEngine";
-export type { AuthErrorCode } from "@/lib/authEngine";
+export type { AuthErrorCode, AuthStatus, UserProfile } from "@/lib/authEngine";
 
 // ---------------------------------------------------------------------------
 // Context type — narrow public surface
@@ -74,22 +71,7 @@ interface AuthContextType {
   refreshSession: () => Promise<void>;
   signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
   signInWithGoogle: (keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName?: string,
-    role?: authService.UserRole,
-    operatingModel?: authService.OperatingModel,
-    phone?: string,
-    companyName?: string,
-    addressLine?: string,
-    city?: string,
-    state?: string,
-    zone?: string,
-    businessType?: string,
-    employeeCount?: string,
-    skipOrgCreation?: boolean,
-  ) => Promise<{ error: Error | null; emailVerificationRequired?: boolean }>;
+  signUp: (options: authService.SignUpOptions) => Promise<{ error: Error | null; emailVerificationRequired?: boolean }>;
   signOut: () => Promise<void>;
 }
 
@@ -307,7 +289,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     restoringRef.current = true;
-    markStartupPhase('auth_restoring');
 
     // Dev toggle: skip restore and jump straight to expired
     if (isForceExpiredSessionEnabled()) {
@@ -380,17 +361,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        // getKeepSignedIn is a local AsyncStorage read — run in parallel with the network getSession call.
-        const [session, keep] = await Promise.all([
-          withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null),
-          getKeepSignedIn(),
-        ]);
+        const session = await withTimeout(authService.getSession(), AUTH_TIMEOUT_MS).catch(() => null);
         if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
         if (session) {
           // On web there is no AppState "background" event, so the keep-signed-in
           // preference has no meaning for page reloads — always restore the session.
-          const effectiveKeep = Platform.OS === 'web' ? true : keep;
-          if (!effectiveKeep) {
+          const keep = Platform.OS === 'web' ? true : await getKeepSignedIn();
+          if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+          if (!keep) {
             signOutRequestedRef.current = true;
             await authService.signOut();
             if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
@@ -476,7 +454,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         restoringRef.current = false;
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-          markStartupPhase('auth_resolved');
           setStatus((prev) => (prev === "restoring" ? "unauthenticated" : prev));
         }
       }
@@ -569,37 +546,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const signUp = useCallback(async (
-    email: string,
-    password: string,
-    fullName?: string,
-    role?: authService.UserRole,
-    operatingModel?: authService.OperatingModel,
-    phone?: string,
-    companyName?: string,
-    addressLine?: string,
-    city?: string,
-    state?: string,
-    zone?: string,
-    businessType?: string,
-    employeeCount?: string,
-    skipOrgCreation?: boolean,
+    options: authService.SignUpOptions,
   ) => {
-    const result = await authService.signUp({
-      email,
-      password,
-      fullName,
-      phone,
-      companyName,
-      role,
-      operatingModel,
-      addressLine,
-      city,
-      state,
-      zone,
-      businessType,
-      employeeCount,
-      skipOrgCreation,
-    });
+    const result = await authService.signUp(options);
     if (!result.error) {
       setRestoreError(null);
       await refreshSessionInternal();
@@ -730,5 +679,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </AuthContext.Provider>
+
   );
 }

@@ -436,14 +436,14 @@ export default function DriverSignUpScreen() {
     setLoading(true);
     try {
       await AsyncStorage.setItem(DRIVER_AVATAR_STORAGE_KEY, avatarSeed);
-      const { error } = await signUp(
-        email.trim(),
+      const { error } = await signUp({
+        email: email.trim(),
         password,
-        callsign.trim(),
-        'driver',
-        'ASSET_BASED',
-        fullPhoneForApi || undefined
-      );
+        fullName: callsign.trim(),
+        role: 'driver',
+        operatingModel: 'ASSET_BASED',
+        phone: fullPhoneForApi || undefined,
+      });
       if (error && !error.message.toLowerCase().includes('already registered')) {
         throw error;
       }
