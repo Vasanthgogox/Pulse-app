@@ -20,6 +20,16 @@ import {
     shareDraftIndent,
     updateIndentDraft,
 } from "@/features/indents/services/indents.service";
+import {
+  INDENT_WIZARD_STEPS,
+  indentStepCanAdvance,
+  indentWizardStepLabel,
+  type IndentWizardStep,
+} from "@/features/indents/components/create-indent/createIndentWizardSteps";
+import type { FormState } from "@/features/indents/components/create-indent/createIndentForm.types";
+import { IndentWizardMobileStep } from "@/features/indents/components/create-indent/IndentWizardMobileStep";
+import { SmartInput } from "@/components/mobile-input";
+import { ADD_TRIP_FORM } from "@/features/trips/components/add-trip/addTripFormTokens";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import {
@@ -55,7 +65,6 @@ import {
     CheckCircle2,
     Clock,
     FileEdit,
-    IndianRupee,
     Info,
     MapPin,
     Navigation,
@@ -123,19 +132,6 @@ function validateForm(state: FormState): Record<string, string> {
     if (pickupDateErr) errors.pickup_date = pickupDateErr;
   }
   return errors;
-}
-
-interface FormState {
-  client_name: string;
-  client_id: string | null;
-  pickup_area: string;
-  drop_location: string;
-  vehicle_type: string;
-  load_type: string;
-  weight: string;
-  client_price: string;
-  supplier_target: string;
-  pickup_date: string;
 }
 
 function toISODate(d: Date): string {
@@ -378,14 +374,18 @@ export default function CreateIndentScreen() {
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
   const isMobileWizard = Platform.OS !== "web" && windowWidth < 600;
-  const [wizardStep, setWizardStep] = useState<"route" | "commercial" | "load">(
-    "route",
-  );
+  const isDenseForm = isMobileWizard || (Platform.OS !== "web" && windowWidth < 600);
+  const [wizardStep, setWizardStep] = useState<IndentWizardStep>("route");
 
   useEffect(() => {
     if (!isMobileWizard) return;
     setWizardStep("route");
   }, [isMobileWizard, orgId, routeDraftId]);
+
+  useEffect(() => {
+    if (!isMobileWizard || wizardStep !== "client") return;
+    if (!form.client_id?.trim()) setClientListExpanded(true);
+  }, [form.client_id, isMobileWizard, wizardStep]);
 
   const [alertState, setAlertState] = useState<{
     visible: boolean;
@@ -690,12 +690,9 @@ export default function CreateIndentScreen() {
 
   const handleBackPress = useCallback(() => {
     if (isMobileWizard) {
-      if (wizardStep === "load") {
-        setWizardStep("commercial");
-        return;
-      }
-      if (wizardStep === "commercial") {
-        setWizardStep("route");
+      const idx = INDENT_WIZARD_STEPS.indexOf(wizardStep);
+      if (idx > 0) {
+        setWizardStep(INDENT_WIZARD_STEPS[idx - 1]!);
         return;
       }
     }
@@ -926,6 +923,16 @@ export default function CreateIndentScreen() {
     color: Theme.textPrimary,
     backgroundColor: Theme.surfaceForm,
   };
+  const fieldLabelStyle = [
+    styles.fieldLabel,
+    labelStyle,
+    isDenseForm && styles.fieldLabelDense,
+  ];
+  const denseInputStyle = [
+    styles.formFieldInput,
+    inputStyle,
+    isDenseForm && styles.formFieldInputDense,
+  ];
 
   const canSubmit =
     !submitting &&
@@ -944,38 +951,22 @@ export default function CreateIndentScreen() {
 
   const stepCanAdvance = useMemo(() => {
     if (!isMobileWizard) return canSubmit;
-    const t = (s: string | null | undefined) => (s ?? "").trim();
-    if (wizardStep === "route") {
-      return Boolean(
-        t(form.pickup_area) &&
-          t(form.drop_location) &&
-          t(form.pickup_date) &&
-          t(form.weight),
-      );
-    }
-    if (wizardStep === "commercial") {
-      return Boolean(
-        form.client_id?.trim() &&
-          t(form.client_name) &&
-          t(form.client_price) &&
-          t(form.supplier_target),
-      );
-    }
-    return Boolean(t(form.vehicle_type) && t(form.load_type));
+    return indentStepCanAdvance(wizardStep, form);
   }, [canSubmit, form, isMobileWizard, wizardStep]);
 
+  const wizardStepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
+  const isLastWizardStep =
+    wizardStepIndex >= 0 &&
+    wizardStepIndex === INDENT_WIZARD_STEPS.length - 1;
+
   const wizardSubmitLabel = isMobileWizard
-    ? wizardStep === "load"
+    ? isLastWizardStep
       ? "Share to Network"
       : "Continue"
     : "Share to Network";
 
   const wizardSubtitle = isMobileWizard
-    ? wizardStep === "route"
-      ? "Route"
-      : wizardStep === "commercial"
-        ? "Client & Commercials"
-        : "Load"
+    ? indentWizardStepLabel(wizardStep)
     : "Deploy New Load";
 
   const handleWizardPrimary = () => {
@@ -988,16 +979,17 @@ export default function CreateIndentScreen() {
       showDialog("Missing details", "Fill the required fields to continue.");
       return;
     }
-    if (wizardStep === "route") {
-      setWizardStep("commercial");
-      return;
-    }
-    if (wizardStep === "commercial") {
-      setWizardStep("load");
+    if (!isLastWizardStep) {
+      setWizardStep(INDENT_WIZARD_STEPS[wizardStepIndex + 1]!);
       return;
     }
     void handleSubmit();
   };
+
+  const showWizardStep = useCallback(
+    (step: IndentWizardStep) => !isMobileWizard || wizardStep === step,
+    [isMobileWizard, wizardStep],
+  );
 
   const canSaveDraft =
     Boolean(orgId) && !submitting && hasIndentDraftProgress(form);
@@ -1075,11 +1067,12 @@ export default function CreateIndentScreen() {
                     ]}
                   >
               {/* 01 Route */}
-              {!isMobileWizard || wizardStep === "route" ? (
+              {showWizardStep("route") ? (
                 <View
                   style={[
                     styles.card,
                     isCompactMobile && styles.cardCompact,
+                    isMobileWizard && styles.cardWizardStep,
                     desktopFormGrid && styles.cardGridRouteWeb,
                   ]}
                 >
@@ -1118,7 +1111,8 @@ export default function CreateIndentScreen() {
                         webTextInputOutline,
                         errors.pickup_area && styles.inputError,
                       ]}
-                      labelStyle={[styles.fieldLabel, labelStyle]}
+                      labelStyle={fieldLabelStyle}
+                      compact={isDenseForm}
                       onDropdownOpenChange={setPickupDropdownOpen}
                     />
                     {errors.pickup_area ? (
@@ -1150,7 +1144,8 @@ export default function CreateIndentScreen() {
                         webTextInputOutline,
                         errors.drop_location && styles.inputError,
                       ]}
-                      labelStyle={[styles.fieldLabel, labelStyle]}
+                      labelStyle={fieldLabelStyle}
+                      compact={isDenseForm}
                       onDropdownOpenChange={setDropDropdownOpen}
                     />
                     {errors.drop_location ? (
@@ -1165,10 +1160,13 @@ export default function CreateIndentScreen() {
                   style={[styles.gridRow, isWide && styles.gridRowWide]}
                 >
                   <View style={styles.gridCol}>
-                    <Text style={[styles.fieldLabel, labelStyle]}>
-                      Trip start date
-                    </Text>
-                    <View style={styles.quickDateRow}>
+                    <Text style={fieldLabelStyle}>Trip start date</Text>
+                    <View
+                      style={[
+                        styles.quickDateRow,
+                        isDenseForm && styles.quickDateRowDense,
+                      ]}
+                    >
                       {[
                         { label: "Today", get: getToday },
                         { label: "Tomorrow", get: getTomorrow },
@@ -1181,6 +1179,7 @@ export default function CreateIndentScreen() {
                             key={label}
                             style={[
                               styles.quickDateChip,
+                              isDenseForm && styles.quickDateChipDense,
                               isActive && styles.quickDateChipActive,
                             ]}
                             onPress={() => update({ pickup_date: iso })}
@@ -1189,6 +1188,7 @@ export default function CreateIndentScreen() {
                             <Text
                               style={[
                                 styles.quickDateChipText,
+                                isDenseForm && styles.quickDateChipTextDense,
                                 isActive && styles.quickDateChipTextActive,
                               ]}
                             >
@@ -1312,29 +1312,33 @@ export default function CreateIndentScreen() {
                       <Text style={styles.errorText}>{errors.pickup_date}</Text>
                     ) : null}
                   </View>
-                  <View style={styles.gridCol}>
-                    <Text style={[styles.fieldLabel, labelStyle]}>Tons</Text>
-                    <TextInput
-                      style={[
-                        styles.formFieldInput,
-                        webTextInputOutline,
-                        errors.weight && styles.inputError,
-                      ]}
-                      value={form.weight}
-                      onChangeText={(t) =>
-                        update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
-                      }
-                      ref={weightInputRef}
-                      placeholder="Enter load weight in tons"
-                      placeholderTextColor={Theme.placeholder}
-                      keyboardType="decimal-pad"
-                      returnKeyType="done"
-                      onSubmitEditing={openPickupDateNext}
-                    />
-                    {errors.weight ? (
-                      <Text style={styles.errorText}>{errors.weight}</Text>
-                    ) : null}
-                  </View>
+                  {!isMobileWizard ? (
+                    <View style={styles.gridCol}>
+                      <Text style={fieldLabelStyle}>Tons</Text>
+                      <TextInput
+                        style={[
+                          ...denseInputStyle,
+                          webTextInputOutline,
+                          errors.weight && styles.inputError,
+                        ]}
+                        value={form.weight}
+                        onChangeText={(t) =>
+                          update({
+                            weight: t.replace(/[^\d.]/g, "").slice(0, 12),
+                          })
+                        }
+                        ref={weightInputRef}
+                        placeholder="Enter load weight in tons"
+                        placeholderTextColor={Theme.placeholder}
+                        keyboardType="decimal-pad"
+                        returnKeyType="done"
+                        onSubmitEditing={openPickupDateNext}
+                      />
+                      {errors.weight ? (
+                        <Text style={styles.errorText}>{errors.weight}</Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
 
                 {form.pickup_area.trim() && form.drop_location.trim() ? (
@@ -1381,12 +1385,13 @@ export default function CreateIndentScreen() {
                 </View>
               ) : null}
 
-              {/* 02 Commercial */}
-              {!isMobileWizard || wizardStep === "commercial" ? (
+              {/* 02 Client */}
+              {(!isMobileWizard || showWizardStep("client")) ? (
                 <View
                   style={[
                     styles.card,
                     isCompactMobile && styles.cardCompact,
+                    isMobileWizard && styles.cardWizardStep,
                     desktopFormGrid && styles.cardGridClientWeb,
                   ]}
                 >
@@ -1397,7 +1402,7 @@ export default function CreateIndentScreen() {
                   <Text
                     style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
                   >
-                    Client & Commercials
+                    {isMobileWizard ? "Select client" : "Client & Commercials"}
                   </Text>
                 </View>
                 <View
@@ -1579,53 +1584,32 @@ export default function CreateIndentScreen() {
                     ) : null}
                   </View>
 
+                  {!isMobileWizard ? (
                   <View style={styles.gridCol}>
-                    <Text style={[styles.fieldLabel, labelStyle]}>
-                      Client sales price (₹) *
-                    </Text>
-                    <View
-                      style={[
-                        styles.priceShell,
-                        form.client_id &&
-                          !errors.client_price &&
-                          styles.priceShellSelected,
-                        errors.client_price && styles.priceShellError,
-                      ]}
-                    >
-                      <IndianRupee
-                        size={14}
-                        color={
-                          form.client_id && !errors.client_price
-                            ? Theme.iconPrimary
-                            : Theme.iconMuted
-                        }
-                        style={styles.priceRupeeInline}
-                      />
-                      <TextInput
-                        style={[
-                          styles.priceInput,
-                          webTextInputOutline,
-                          isCompactMobile && styles.priceInputCompact,
-                          errors.client_price && styles.inputError,
-                        ]}
-                        value={form.client_price}
-                        onChangeText={(t) => update({ client_price: t })}
-                        ref={clientPriceInputRef}
-                        placeholder="0"
-                        placeholderTextColor={Theme.placeholder}
-                        keyboardType="decimal-pad"
-                        autoCorrect={false}
-                        returnKeyType="next"
-                        onSubmitEditing={() =>
-                          focusField(supplierTargetInputRef)
-                        }
-                      />
-                    </View>
-                    {errors.client_price ? (
-                      <Text style={styles.errorText}>
-                        {errors.client_price}
-                      </Text>
-                    ) : null}
+                    <SmartInput
+                      type="currency"
+                      label="Client sale price"
+                      value={form.client_price}
+                      onChange={(raw) => update({ client_price: raw })}
+                      variant="field"
+                      required
+                      partyPreview={
+                        selectedClientRow
+                          ? {
+                              name: selectedClientRow.name ?? "Client",
+                              subtitle: selectedClientRow.address ?? undefined,
+                              entityType: "client",
+                              avatarUrl:
+                                (selectedClientRow as { avatar_url?: string | null })
+                                  .avatar_url ?? null,
+                              avatarSeed:
+                                (selectedClientRow as { avatar_seed?: string | null })
+                                  .avatar_seed ?? null,
+                            }
+                          : undefined
+                      }
+                      errorMessage={errors.client_price}
+                    />
                     <View style={styles.infoCallout}>
                       <Info size={16} color={Theme.iconPrimary} />
                       <Text style={styles.infoCalloutText}>
@@ -1634,54 +1618,239 @@ export default function CreateIndentScreen() {
                       </Text>
                     </View>
                   </View>
+                  ) : null}
                 </View>
 
+                {!isMobileWizard ? (
                 <View style={styles.supplierSection}>
                   <View style={styles.supplierLabelRow}>
-                    <Text style={[styles.fieldLabel, labelStyle]}>
-                      Supplier target (₹)
-                    </Text>
+                    <Text style={fieldLabelStyle}>Supplier target (₹)</Text>
                     <View style={styles.estBadge}>
                       <Text style={styles.estBadgeText}>Est. target</Text>
                     </View>
                   </View>
-                  <View style={styles.priceShell}>
-                    <IndianRupee
-                      size={14}
-                      color={Theme.primary}
-                      style={styles.priceRupeeInline}
-                    />
-                      <TextInput
-                        style={[
-                          styles.priceInput,
-                          webTextInputOutline,
-                          isCompactMobile && styles.priceInputCompact,
-                          styles.supplierPriceInput,
-                          errors.supplier_target && styles.inputError,
-                        ]}
-                      value={form.supplier_target}
-                      onChangeText={(t) => update({ supplier_target: t })}
-                      ref={supplierTargetInputRef}
-                      placeholder="0"
-                      placeholderTextColor={Theme.placeholder}
-                      keyboardType="decimal-pad"
-                      autoCorrect={false}
-                      returnKeyType="next"
-                      onSubmitEditing={() => focusField(weightInputRef)}
-                    />
-                  </View>
-                  {errors.supplier_target ? (
-                    <Text style={styles.errorText}>
-                      {errors.supplier_target}
-                    </Text>
-                  ) : null}
+                  <SmartInput
+                    type="currency"
+                    label="Supplier target"
+                    value={form.supplier_target}
+                    onChange={(raw) => update({ supplier_target: raw })}
+                    variant="field"
+                    placeholder="Optional estimate"
+                    errorMessage={errors.supplier_target}
+                  />
                 </View>
+                ) : null}
 
                 </View>
               ) : null}
 
-              {/* 03 Load */}
-              {!isMobileWizard || wizardStep === "load" ? (
+              {/* 02b Commercials (mobile wizard) */}
+              {isMobileWizard && showWizardStep("prices") ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    styles.cardWizardStep,
+                  ]}
+                >
+                  <View style={styles.cardHead}>
+                    <View style={styles.stepBadge}>
+                      <Text style={styles.stepBadgeText}>02</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.cardTitle,
+                        isCompactMobile && styles.cardTitleCompact,
+                      ]}
+                    >
+                      Commercials
+                    </Text>
+                  </View>
+                  {selectedClientRow ? (
+                    <View style={[styles.clientCard, styles.selectionSummaryCard, { marginBottom: 12 }]}>
+                      <View style={styles.clientMain}>
+                        <PartyAvatar
+                          name={selectedClientRow.name ?? "Client"}
+                          avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
+                          size={32}
+                          style={styles.clientAvatarOn}
+                        />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
+                            {selectedClientRow.name}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
+                  <SmartInput
+                    type="currency"
+                    label="Client sale price"
+                    value={form.client_price}
+                    onChange={(raw) => update({ client_price: raw })}
+                    variant="field"
+                    required
+                    partyPreview={
+                      selectedClientRow
+                        ? {
+                            name: selectedClientRow.name ?? "Client",
+                            subtitle: selectedClientRow.address ?? undefined,
+                            entityType: "client",
+                            avatarUrl:
+                              (selectedClientRow as { avatar_url?: string | null })
+                                .avatar_url ?? null,
+                            avatarSeed:
+                              (selectedClientRow as { avatar_seed?: string | null })
+                                .avatar_seed ?? null,
+                          }
+                        : undefined
+                    }
+                    errorMessage={errors.client_price}
+                  />
+                  <View style={[styles.infoCallout, { marginTop: 8 }]}>
+                    <Info size={14} color={Theme.iconPrimary} />
+                    <Text style={styles.infoCalloutText}>
+                      Revenue should match what you bill this client for this lane.
+                    </Text>
+                  </View>
+                  <View style={[styles.supplierSection, { marginTop: 16, paddingTop: 0, borderTopWidth: 0 }]}>
+                    <View style={styles.supplierLabelRow}>
+                      <Text style={fieldLabelStyle}>Supplier target (₹)</Text>
+                      <View style={styles.estBadge}>
+                        <Text style={styles.estBadgeText}>Est. target</Text>
+                      </View>
+                    </View>
+                    <SmartInput
+                      type="currency"
+                      label="Supplier target"
+                      value={form.supplier_target}
+                      onChange={(raw) => update({ supplier_target: raw })}
+                      variant="field"
+                      errorMessage={errors.supplier_target}
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              {/* 03 Load — mobile wizard steps */}
+              {isMobileWizard && showWizardStep("vehicle") ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    styles.cardWizardStep,
+                  ]}
+                >
+                  <View style={styles.cardHead}>
+                    <View style={styles.stepBadge}>
+                      <Text style={styles.stepBadgeText}>03</Text>
+                    </View>
+                    <Text
+                      style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                    >
+                      Load specifics
+                    </Text>
+                  </View>
+                  <IndentWizardMobileStep
+                    step="vehicle"
+                    mode={vehicleTypeIsOther ? "text" : "picker"}
+                    value={form.vehicle_type}
+                    placeholder={
+                      vehicleTypeIsOther ? "Type vehicle" : "Select vehicle"
+                    }
+                    onPressPicker={() => setVehicleTypePickerOpen(true)}
+                    onChangeText={(t) => update({ vehicle_type: t })}
+                    hasError={Boolean(errors.vehicle_type)}
+                    inputRef={vehicleTypeInputRef}
+                    footerExtra={
+                      vehicleTypeIsOther ? (
+                        <TouchableOpacity
+                          onPress={() => setVehicleTypePickerOpen(true)}
+                          style={styles.switchToPresetLink}
+                        >
+                          <Text style={styles.switchToPresetLinkText}>
+                            Choose from list instead
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null
+                    }
+                  />
+                  {errors.vehicle_type ? (
+                    <Text style={styles.errorText}>{errors.vehicle_type}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {isMobileWizard && showWizardStep("loadType") ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    styles.cardWizardStep,
+                  ]}
+                >
+                  <View style={styles.cardHead}>
+                    <View style={styles.stepBadge}>
+                      <Text style={styles.stepBadgeText}>03</Text>
+                    </View>
+                    <Text
+                      style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                    >
+                      Load specifics
+                    </Text>
+                  </View>
+                  <IndentWizardMobileStep
+                    step="loadType"
+                    mode="picker"
+                    value={form.load_type}
+                    placeholder="Select load category"
+                    onPressPicker={() => setLoadTypePickerOpen(true)}
+                    hasError={Boolean(errors.load_type)}
+                  />
+                  {errors.load_type ? (
+                    <Text style={styles.errorText}>{errors.load_type}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {isMobileWizard && showWizardStep("weight") ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    styles.cardWizardStep,
+                  ]}
+                >
+                  <View style={styles.cardHead}>
+                    <View style={styles.stepBadge}>
+                      <Text style={styles.stepBadgeText}>03</Text>
+                    </View>
+                    <Text
+                      style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                    >
+                      Load specifics
+                    </Text>
+                  </View>
+                  <IndentWizardMobileStep
+                    step="weight"
+                    mode="text"
+                    value={form.weight}
+                    placeholder="e.g. 18.5"
+                    onChangeText={(t) =>
+                      update({ weight: t.replace(/[^\d.]/g, "").slice(0, 12) })
+                    }
+                    hasError={Boolean(errors.weight)}
+                    inputRef={weightInputRef}
+                    keyboardType="decimal-pad"
+                  />
+                  {errors.weight ? (
+                    <Text style={styles.errorText}>{errors.weight}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/* 03 Load — desktop / wide */}
+              {!isMobileWizard ? (
                 <View
                   style={[
                     styles.card,
@@ -1798,7 +1967,6 @@ export default function CreateIndentScreen() {
 
                 </View>
               ) : null}
-                </View>
 
               <View style={styles.actionFooterBar}>
                 <View
@@ -1885,6 +2053,7 @@ export default function CreateIndentScreen() {
                 </View>
 
               </View>
+            </View>
             </View>
           </ScrollView>
 
@@ -3008,6 +3177,13 @@ const styles = StyleSheet.create({
     marginBottom: 3,
     color: Theme.textMutedDemo,
   },
+  fieldLabelDense: {
+    fontSize: ADD_TRIP_FORM.labelSize,
+    marginBottom: ADD_TRIP_FORM.labelSpacing,
+    letterSpacing: 0.45,
+    lineHeight: ADD_TRIP_FORM.labelLine,
+    textTransform: "uppercase",
+  },
   formFieldShell: {
     borderRadius: 11,
     paddingHorizontal: 9,
@@ -3024,13 +3200,39 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     fontSize: 10,
     fontWeight: "400",
-    fontStyle: "italic",
+    fontStyle: "normal",
     minHeight: 36,
     marginBottom: 6,
     borderWidth: 1,
     borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
+  },
+  formFieldInputDense: {
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    paddingHorizontal: ADD_TRIP_FORM.fieldPadH,
+    paddingVertical: ADD_TRIP_FORM.fieldPadV,
+    fontSize: ADD_TRIP_FORM.fieldFontSize,
+    lineHeight: ADD_TRIP_FORM.fieldLineHeight,
+    minHeight: ADD_TRIP_FORM.fieldHeight,
+    marginBottom: ADD_TRIP_FORM.fieldGap,
+  },
+  cardWizardStep: {
+    flexGrow: 1,
+    minHeight: 320,
+  },
+  quickDateRowDense: {
+    gap: 4,
+    marginBottom: 4,
+  },
+  quickDateChipDense: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  quickDateChipTextDense: {
+    fontSize: 11,
+    fontStyle: "normal",
+    letterSpacing: 0.3,
   },
   gridRow: { gap: 10 },
   gridRowWide: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
@@ -3078,11 +3280,11 @@ const styles = StyleSheet.create({
   routePreviewHeroText: {
     flex: 1,
     minWidth: 0,
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 10,
-    lineHeight: 14,
-    letterSpacing: 0.2,
+    fontSize: 14,
+    fontWeight: "600",
     fontStyle: "normal",
+    lineHeight: 18,
+    letterSpacing: 0,
     color: Theme.textPrimaryDark,
   },
   routePreviewMetrics: {

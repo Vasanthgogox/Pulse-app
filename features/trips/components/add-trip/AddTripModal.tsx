@@ -37,6 +37,12 @@ import type {
 } from "./types";
 import { useAddTripForm } from "./useAddTripForm";
 import { useClientsForTrip } from "./useClientsForTrip";
+import {
+  allocationSubStepFields,
+  allocationSubStepLabel,
+  getAllocationSubSteps,
+  type AllocationSubStep,
+} from "./allocationWizardSteps";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -75,6 +81,8 @@ export function AddTripModal({
   const [wizardStep, setWizardStep] = useState<"route" | "client" | "allocation">(
     "route",
   );
+  const [allocationSubStep, setAllocationSubStep] =
+    useState<AllocationSubStep>("supply");
   const form = useAddTripForm();
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
@@ -88,7 +96,20 @@ export function AddTripModal({
   useEffect(() => {
     if (!wizardEnabled) return;
     setWizardStep("route");
+    setAllocationSubStep("supply");
   }, [wizardEnabled, organizationId]);
+
+  const allocationSteps = useMemo(
+    () => getAllocationSubSteps(form.state),
+    [form.state.supplySource, form.state.assignLater],
+  );
+
+  useEffect(() => {
+    if (!wizardEnabled || wizardStep !== "allocation") return;
+    setAllocationSubStep((prev) =>
+      allocationSteps.includes(prev) ? prev : allocationSteps[0] ?? "supply",
+    );
+  }, [wizardEnabled, wizardStep, allocationSteps]);
 
   const stepFieldSet = useMemo(() => {
     if (!wizardEnabled) return null;
@@ -98,19 +119,8 @@ export function AddTripModal({
     if (wizardStep === "client") {
       return new Set(["client", "clientPrice"]);
     }
-    return new Set([
-      "partner",
-      "partnerRate",
-      "vehicleNumber",
-      "driverName",
-      "driverPhone",
-      "driverConfirm",
-      "advancePaid",
-      "notes",
-      "assetDriver",
-      "assetVehicle",
-    ]);
-  }, [wizardEnabled, wizardStep]);
+    return allocationSubStepFields(allocationSubStep, form.state);
+  }, [wizardEnabled, wizardStep, allocationSubStep, form.state.supplySource, form.state.assignLater]);
 
   const stepIssues = useMemo(() => {
     if (!wizardEnabled || !stepFieldSet) return form.validationIssues;
@@ -121,10 +131,20 @@ export function AddTripModal({
     ? stepIssues.length === 0
     : form.canSubmit;
 
+  const allocationStepIndex = allocationSteps.indexOf(allocationSubStep);
+  const isLastAllocationStep =
+    wizardStep === "allocation" &&
+    allocationStepIndex >= 0 &&
+    allocationStepIndex === allocationSteps.length - 1;
+
   const wizardSubmitLabel = wizardEnabled
     ? wizardStep === "allocation"
-      ? "Create Trip"
-      : "Continue"
+      ? isLastAllocationStep
+        ? "Create Trip"
+        : "Continue"
+      : wizardStep === "route" || wizardStep === "client"
+        ? "Continue"
+        : "Create Trip"
     : "Create Trip";
 
   const wizardSubtitle = wizardEnabled
@@ -132,7 +152,7 @@ export function AddTripModal({
       ? "Route"
       : wizardStep === "client"
         ? "Client & Price"
-        : "Allocation"
+        : `Allocation · ${allocationSubStepLabel(allocationSubStep)}`
     : undefined;
 
   const handleSubmit = async () => {
@@ -186,7 +206,13 @@ export function AddTripModal({
         Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
         return;
       }
+      setAllocationSubStep(getAllocationSubSteps(form.state)[0] ?? "supply");
       setWizardStep("allocation");
+      return;
+    }
+    const allocIdx = allocationSteps.indexOf(allocationSubStep);
+    if (allocIdx >= 0 && allocIdx < allocationSteps.length - 1) {
+      setAllocationSubStep(allocationSteps[allocIdx + 1]!);
       return;
     }
     void handleSubmit();
@@ -198,6 +224,11 @@ export function AddTripModal({
       return;
     }
     if (wizardStep === "allocation") {
+      const allocIdx = allocationSteps.indexOf(allocationSubStep);
+      if (allocIdx > 0) {
+        setAllocationSubStep(allocationSteps[allocIdx - 1]!);
+        return;
+      }
       setWizardStep("client");
       return;
     }
@@ -269,6 +300,9 @@ export function AddTripModal({
         validationIssues={stepIssues}
         validationMessage={stepIssues[0]?.message ?? null}
         wizardSection={wizardEnabled ? wizardStep : undefined}
+        allocationSubStep={
+          wizardEnabled && wizardStep === "allocation" ? allocationSubStep : undefined
+        }
         showInlineCta={false}
       />
     </AddTripModalLayout>
