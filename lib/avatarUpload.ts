@@ -220,17 +220,7 @@ export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUpload
   }
 }
 
-/** Save the organization logo storage path to the organizations table. */
-export async function updateOrganizationLogo(
-  orgId: string,
-  logoPath: string | null,
-): Promise<{ error: Error | null }> {
-  const { error } = await supabase()
-    .from('organizations')
-    .update({ logo_url: logoPath })
-    .eq('id', orgId);
-  return { error: error ? new Error(error.message) : null };
-}
+export { updateOrganizationLogo } from '@/features/organization/services/organization.service';
 
 /** Image file extensions supported for avatar object discovery. */
 const AVATAR_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];

@@ -1,15 +1,11 @@
 import { useRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-export function OtpInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const digits = value.padEnd(6, ' ').split('').slice(0, 6);
+import { C } from '../businessSignUp.styles';
+import { OTP_LENGTH } from '../signUpConstants';
 
+export function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const digits = value.padEnd(OTP_LENGTH, ' ').split('').slice(0, OTP_LENGTH);
   const refs = useRef<(TextInput | null)[]>([]);
 
   const handleChange = (idx: number, char: string) => {
@@ -22,21 +18,21 @@ export function OtpInput({
     }
     const d = clean[clean.length - 1];
     const next = value.slice(0, idx) + d + value.slice(idx + 1);
-    onChange(next.slice(0, 6));
-    if (idx < 5) refs.current[idx + 1]?.focus();
+    onChange(next.slice(0, OTP_LENGTH));
+    if (idx < OTP_LENGTH - 1) refs.current[idx + 1]?.focus();
   };
 
   return (
     <View style={otpStyles.row}>
-      {Array.from({ length: 6 }).map((_, i) => {
+      {Array.from({ length: OTP_LENGTH }).map((_, i) => {
         const filled = digits[i].trim() !== '';
         return (
           <TextInput
             key={i}
-            ref={(r) => { refs.current[i] = r; }}
+            ref={r => { refs.current[i] = r; }}
             style={[otpStyles.box, filled && otpStyles.boxFilled]}
             value={filled ? digits[i] : ''}
-            onChangeText={(t) => handleChange(i, t)}
+            onChangeText={t => handleChange(i, t)}
             keyboardType="number-pad"
             maxLength={1}
             selectTextOnFocus
@@ -55,10 +51,17 @@ export function OtpInput({
 const otpStyles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginVertical: 8 },
   box: {
-    width: 46, height: 56, borderRadius: 12, borderWidth: 1.5, borderColor: '#e2e8f0',
-    textAlign: 'center', fontSize: 22, fontWeight: '700', color: '#0f172a',
-    backgroundColor: '#f8fafc',
+    width: 46,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '700',
+    color: C.text,
+    backgroundColor: C.surface,
   },
-  boxFilled: { borderColor: '#22c55e', backgroundColor: '#f0fdf4' },
+  // Uses the accent (green) from C to stay in sync with the design system.
+  boxFilled: { borderColor: C.accent, backgroundColor: '#f0fdf4' },
 });
-

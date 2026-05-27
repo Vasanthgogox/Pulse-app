@@ -207,6 +207,7 @@ export const styles = StyleSheet.create({
     backgroundColor: C.warningBg, borderRadius: 10, borderWidth: 1, borderColor: C.warningBorder, padding: 12,
   },
   joinNoticeText: { flex: 1, fontSize: 13, color: '#78350f', lineHeight: 18 },
+  joinNoticeOrg: { fontWeight: '700' },
 
   // Primary button
   primaryBtn: {
@@ -242,6 +243,7 @@ export const styles = StyleSheet.create({
   },
   successTitle: { fontSize: 28, fontWeight: '900', color: C.text, letterSpacing: -0.4, marginBottom: 12, textAlign: 'center' },
   successSub: { fontSize: 14, color: C.muted, textAlign: 'center', lineHeight: 20, marginBottom: 24, maxWidth: 300 },
+  successEmailBold: { fontWeight: '700' },
   inviteHintCard: {
     flexDirection: 'row', gap: 12, backgroundColor: '#f0fdf4', borderRadius: 12,
     borderWidth: 1, borderColor: '#bbf7d0', padding: 14, marginBottom: 24, width: '100%',
@@ -265,6 +267,10 @@ export const styles = StyleSheet.create({
   strengthGood: { backgroundColor: '#22c55e' },
   strengthStrong: { backgroundColor: '#16a34a' },
   strengthLabel: { fontSize: 11, fontWeight: '700', minWidth: 44, textAlign: 'right' },
+  strengthLabelWeak: { color: C.error },
+  strengthLabelFair: { color: C.warning },
+  strengthLabelGood: { color: '#22c55e' },
+  strengthLabelStrong: { color: '#16a34a' },
 
   // Step dots
   dotsRow: {

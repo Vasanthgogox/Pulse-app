@@ -126,6 +126,11 @@ export async function getOrganizationsForUser(): Promise<{
       const orgs = orgsData;
 
       if (!orgError && orgs?.length) {
+        void repairMissingOrganizationOwners(
+          orgs.filter((o) => o.owner_id == null).map((o) => o.id),
+          memberships,
+          user.id,
+        );
         return {
           error: null,
           organizations: orgs.map(mapToCurrentOrganization),
@@ -182,28 +187,92 @@ export type OrganizationLocation = {
   address_line: string | null;
 };
 
+/** Best-effort: set organizations.owner_id when null but caller is active owner member. */
+async function repairMissingOrganizationOwners(
+  orgIds: string[],
+  memberships: { organization_id: string; role: string; status: string }[],
+  userId: string,
+): Promise<void> {
+  const ownerOrgIds = new Set(
+    memberships
+      .filter(
+        (m) =>
+          m.role === "owner" &&
+          m.status === "active" &&
+          orgIds.includes(m.organization_id),
+      )
+      .map((m) => m.organization_id),
+  );
+  if (!ownerOrgIds.size) return;
+
+  await Promise.all(
+    [...ownerOrgIds].map(async (orgId) => {
+      const { error } = await supabase()
+        .from("organizations")
+        .update({ owner_id: userId })
+        .eq("id", orgId)
+        .is("owner_id", null);
+      if (error && __DEV__) {
+        console.warn("[repairMissingOrganizationOwners]", orgId, error.message);
+      }
+    }),
+  );
+}
+
 export async function updateOrganizationName(
   orgId: string,
   name: string,
 ): Promise<{ error: Error | null }> {
   const trimmed = name.trim();
   if (!trimmed) return { error: new Error("Organisation name cannot be empty") };
-  const { error } = await supabase()
+  const { data, error } = await supabase()
     .from("organizations")
     .update({ name: trimmed })
-    .eq("id", orgId);
-  return { error: error ? new Error(error.message) : null };
+    .eq("id", orgId)
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: new Error(error.message) };
+  if (!data) {
+    return {
+      error: new Error(
+        "Could not save workspace name. You may not have permission for this workspace.",
+      ),
+    };
+  }
+  return { error: null };
 }
 
 export async function updateOrganizationLogo(
   orgId: string,
   logoPath: string | null,
 ): Promise<{ error: Error | null }> {
-  const { error } = await supabase()
+  const { error: rpcError } = await supabase().rpc("update_organization_logo", {
+    p_org_id: orgId,
+    p_logo_url: logoPath,
+  });
+
+  if (!rpcError) return { error: null };
+
+  if (!isMissingRpcError(rpcError)) {
+    return { error: new Error(rpcError.message) };
+  }
+
+  const { data, error } = await supabase()
     .from("organizations")
     .update({ logo_url: logoPath })
-    .eq("id", orgId);
-  return { error: error ? new Error(error.message) : null };
+    .eq("id", orgId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: new Error(error.message) };
+  if (!data) {
+    return {
+      error: new Error(
+        "Could not save workspace logo. Apply the latest database migration or ask an admin to fix workspace ownership.",
+      ),
+    };
+  }
+  return { error: null };
 }
 
 export async function getOrganizationLocationsByIds(orgIds: string[]): Promise<{

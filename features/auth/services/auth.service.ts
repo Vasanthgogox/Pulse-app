@@ -107,20 +107,22 @@ function mapSupabaseUserToAuth(user: SupabaseUser): {
 }
 
 /** Map public.profiles row to AuthProfile. */
-function mapDbProfileToAuth(profile: any): AuthProfile {
+function mapDbProfileToAuth(profile: Record<string, unknown>): AuthProfile {
+  const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+  const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
   return {
-    uid: profile.id,
-    email: profile.email || "",
-    displayName: profile.full_name || profile.email?.split("@")[0] || "User",
-    full_name: profile.full_name,
-    role: (profile.role === "driver" ? "driver" : "user") as UserRole,
-    aggregated: profile.aggregated !== false,
-    asset: profile.asset !== false,
-    company_name: profile.company_name,
-    phone: profile.phone,
-    avatar_url: profile.avatar_url,
-    avatar_seed: profile.avatar_seed,
-    status_text: profile.bio, // Profiles table uses 'bio' for status_text
+    uid: str(profile.id) ?? '',
+    email: str(profile.email) ?? '',
+    displayName: str(profile.full_name) || str(profile.email)?.split('@')[0] || 'User',
+    full_name: str(profile.full_name),
+    role: (profile.role === 'driver' ? 'driver' : 'user') as UserRole,
+    aggregated: bool(profile.aggregated, true),
+    asset: bool(profile.asset, true),
+    company_name: str(profile.company_name),
+    phone: str(profile.phone),
+    avatar_url: str(profile.avatar_url),
+    avatar_seed: str(profile.avatar_seed),
+    status_text: str(profile.bio), // profiles table uses 'bio' for status_text
     memberships: {},
   };
 }
@@ -615,7 +617,24 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
     if (pending.businessType?.trim()) orgUpdates.business_type = pending.businessType.trim();
     if (pending.employeeCount?.trim()) orgUpdates.employee_count = pending.employeeCount.trim();
     if (Object.keys(orgUpdates).length > 0) {
-      await supabase().from("organizations").update(orgUpdates).eq("owner_id", userId);
+      const { data: membership } = await supabase()
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .in("role", ["owner", "admin"])
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const orgFilter = membership?.organization_id
+        ? { column: "id" as const, value: membership.organization_id }
+        : { column: "owner_id" as const, value: userId };
+
+      await supabase()
+        .from("organizations")
+        .update(orgUpdates)
+        .eq(orgFilter.column, orgFilter.value);
     }
   }
 

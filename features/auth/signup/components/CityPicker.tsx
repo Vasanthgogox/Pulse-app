@@ -1,7 +1,8 @@
 import INDIA_LOCATIONS from '@/lib/data/indiaLocations.json';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useMemo, useState } from 'react';
-import { FlatList, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import type { StyleProp, TextStyle } from 'react-native';
 import { C, styles } from '../businessSignUp.styles';
 
 type Zone = 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | 'NORTHEAST';
@@ -35,7 +36,7 @@ const POPULAR_CITIES_DATA = POPULAR_CITY_NAMES
 
 function HighlightText({
   text, query, baseStyle, matchStyle,
-}: { text: string; query: string; baseStyle: object; matchStyle: object }) {
+}: { text: string; query: string; baseStyle: StyleProp<TextStyle>; matchStyle: StyleProp<TextStyle> }) {
   const q = query.trim().toLowerCase();
   if (!q) return <Text style={baseStyle}>{text}</Text>;
   const lower = text.toLowerCase();
@@ -200,7 +201,7 @@ export function CityPicker({
                     <Text style={[styles.cityResultZoneText, { color: zc.text }]}>{item.zone}</Text>
                   </View>
                   {active ? (
-                    <FontAwesome name="check-circle" size={16} color={C.accent} style={{ marginLeft: 8 }} />
+                    <FontAwesome name="check-circle" size={16} color={C.accent} style={cityPickerStyles.checkIcon} />
                   ) : null}
                 </TouchableOpacity>
               );
@@ -223,4 +224,8 @@ export function CityPicker({
     </View>
   );
 }
+
+const cityPickerStyles = StyleSheet.create({
+  checkIcon: { marginLeft: 8 },
+});
 

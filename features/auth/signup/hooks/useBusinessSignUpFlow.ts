@@ -22,38 +22,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, useWindowDimensions } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
+import {
+  DEBOUNCE_MS,
+  DESKTOP_BREAKPOINT,
+  DESKTOP_MAX_PANEL_WIDTH,
+  EMAIL_RESEND_SECS,
+  OTP_LENGTH,
+  OTP_RESEND_SECS,
+  SCROLL_BOTTOM_PAD,
+  STEP_LABELS,
+  type BusinessType,
+  type EmployeeCount,
+  type FleetSize,
+  type MonthlyVolume,
+} from '../signUpConstants';
+import { useCountdown } from './useCountdown';
 
-type BusinessType = 'SOLE_PROPRIETOR' | 'PARTNERSHIP' | 'PVT_LTD' | 'LLP' | 'OPC' | 'OTHER';
-type EmployeeCount = '1-10' | '11-50' | '51-200' | '201-500' | '500+';
-type FleetSize = '1-5' | '6-15' | '16-30' | '31-50' | '50+';
-type MonthlyVolume = '<50' | '50-200' | '200-500' | '500-1000' | '1000+';
-
-export const STEP_LABELS = ['Phone', 'Verify', 'Company', 'Details', 'Account'] as const;
-
-export const OPERATING_MODELS: { value: OperatingModel; label: string; sub: string }[] = [
-  { value: 'ASSET_BASED', label: 'Asset', sub: 'Own trucks' },
-  { value: 'NON_ASSET', label: 'Aggregate', sub: 'Broker only' },
-  { value: 'HYBRID', label: 'Both', sub: 'Mixed fleet' },
-];
-
-export const BUSINESS_TYPES: { value: BusinessType; label: string }[] = [
-  { value: 'SOLE_PROPRIETOR', label: 'Sole Proprietor' },
-  { value: 'PARTNERSHIP', label: 'Partnership' },
-  { value: 'PVT_LTD', label: 'Pvt. Limited' },
-  { value: 'LLP', label: 'LLP' },
-  { value: 'OPC', label: 'OPC' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-export const EMPLOYEE_COUNTS: EmployeeCount[] = ['1-10', '11-50', '51-200', '201-500', '500+'];
-export const FLEET_SIZES: FleetSize[] = ['1-5', '6-15', '16-30', '31-50', '50+'];
-export const MONTHLY_VOLUMES: { value: MonthlyVolume; label: string }[] = [
-  { value: '<50', label: 'Under 50' },
-  { value: '50-200', label: '50–200' },
-  { value: '200-500', label: '200–500' },
-  { value: '500-1000', label: '500–1,000' },
-  { value: '1000+', label: '1,000+' },
-];
+export { STEP_LABELS };
 
 export function useBusinessSignUpFlow() {
   const { width } = useWindowDimensions();
@@ -61,16 +46,15 @@ export function useBusinessSignUpFlow() {
   const isOnline = useIsOnline();
   const { signUp, signInWithGoogle } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
-  /** Per-page vertical scroll (horizontal pager does not scroll vertically). */
   const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
 
-  const isDesktop = width >= 1024;
-  const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
+  const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const pageWidth = isDesktop ? Math.min(DESKTOP_MAX_PANEL_WIDTH, width - 120) : width;
 
   const [step, setStep] = useState(0);
 
   // Step 0
-  const [phone, setPhone] = useState('');
+  const [phone, setPhoneRaw] = useState('');
   const [phoneExistsCheck, setPhoneExistsCheck] = useState<{
     loading: boolean; exists: boolean; email?: string; masked_email?: string;
   } | null>(null);
@@ -79,10 +63,10 @@ export function useBusinessSignUpFlow() {
   // Step 1
   const [otp, setOtp] = useState('');
   const [otpResendSecs, setOtpResendSecs] = useState(0);
-  const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const otpCountdown = useCountdown();
 
   // Step 2
-  const [orgName, setOrgName] = useState('');
+  const [orgName, setOrgNameRaw] = useState('');
   const [orgCheck, setOrgCheck] = useState<{ loading: boolean; taken: boolean } | null>(null);
   const orgCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [orgJoinMode, setOrgJoinMode] = useState(false);
@@ -90,7 +74,7 @@ export function useBusinessSignUpFlow() {
   // Step 3
   const [businessType, setBusinessType] = useState<BusinessType | null>(null);
   const [employeeCount, setEmployeeCount] = useState<EmployeeCount | null>(null);
-  const [operatingModel, setOperatingModel] = useState<OperatingModel>('HYBRID');
+  const [operatingModel, setOperatingModelRaw] = useState<OperatingModel>('HYBRID');
   const [fleetSize, setFleetSize] = useState<FleetSize | null>(null);
   const [monthlyVolume, setMonthlyVolume] = useState<MonthlyVolume | null>(null);
   const [addressLine, setAddressLine] = useState('');
@@ -109,20 +93,20 @@ export function useBusinessSignUpFlow() {
   // Step 5
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [resendingSecs, setResendingSecs] = useState(0);
-  const resendEmailTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resendEmailCountdown = useCountdown();
 
   const [step2Attempted, setStep2Attempted] = useState(false);
   const [step3Attempted, setStep3Attempted] = useState(false);
   const [step4Attempted, setStep4Attempted] = useState(false);
 
+  // ─── Derived / memoised ──────────────────────────────────────────────────
+
   const phoneInlineError = useMemo(() => {
-    const t = phone.trim();
-    if (!t) return null;
+    if (!phone.trim()) return null;
     if (!isPhoneValid(phone)) return 'Enter a valid 10-digit number.';
     return null;
   }, [phone]);
 
-  /** Sign-up requires a full valid number; `isPhoneValid` alone treats empty as valid. */
   const phoneValid = useMemo(() => validatePhone(phone) === null, [phone]);
 
   const step3Errors = useMemo(() => ({
@@ -139,19 +123,15 @@ export function useBusinessSignUpFlow() {
 
   const step4Errors = useMemo(() => ({
     fullName: validateFullName(true)(fullName),
-    email: !email.trim()
-      ? 'Email is required.'
-      : validateEmail(email),
-    password: !password
-      ? 'Password is required.'
-      : validatePassword(password),
+    email: !email.trim() ? 'Email is required.' : validateEmail(email),
+    password: !password ? 'Password is required.' : validatePassword(password),
     confirmPassword: !confirmPassword
       ? 'Please confirm your password.'
       : password !== confirmPassword ? 'Passwords do not match.' : null,
   }), [fullName, email, password, confirmPassword]);
 
   const passwordStrength = useMemo(() => {
-    if (!password || password.length < 6) return 0;
+    if (!password || password.length < OTP_LENGTH) return 0;
     let score = 1;
     if (password.length >= 8) score++;
     if (/[A-Z]/.test(password) && /[0-9]/.test(password)) score++;
@@ -162,6 +142,8 @@ export function useBusinessSignUpFlow() {
   const confirmMismatch =
     password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword;
 
+  // ─── Side effects ────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!phone.trim() || !isPhoneValid(phone)) {
       setPhoneExistsCheck(null);
@@ -170,11 +152,11 @@ export function useBusinessSignUpFlow() {
     }
     if (!isOnline) return;
     if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current);
-    setPhoneExistsCheck((p) => (p ? { ...p, loading: true } : { loading: true, exists: false }));
+    setPhoneExistsCheck(p => (p ? { ...p, loading: true } : { loading: true, exists: false }));
     phoneCheckRef.current = setTimeout(async () => {
       const r = await checkExistingUserByPhone(phone);
       setPhoneExistsCheck({ loading: false, exists: r.exists, email: r.email, masked_email: r.masked_email });
-    }, 600);
+    }, DEBOUNCE_MS);
     return () => { if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current); };
   }, [phone, isOnline]);
 
@@ -187,20 +169,21 @@ export function useBusinessSignUpFlow() {
     }
     if (!isOnline) return;
     if (orgCheckRef.current) clearTimeout(orgCheckRef.current);
-    setOrgCheck((p) => (p ? { ...p, loading: true } : { loading: true, taken: false }));
+    setOrgCheck(p => (p ? { ...p, loading: true } : { loading: true, taken: false }));
     orgCheckRef.current = setTimeout(async () => {
       const r = await checkOrganizationNameTaken(raw);
       setOrgCheck({ loading: false, taken: !r.error && r.taken });
-    }, 600);
+    }, DEBOUNCE_MS);
     return () => { if (orgCheckRef.current) clearTimeout(orgCheckRef.current); };
   }, [orgName, isOnline]);
 
+  // Cleanup debounce timers on unmount (countdowns clean themselves via useCountdown).
   useEffect(() => () => {
     if (phoneCheckRef.current) clearTimeout(phoneCheckRef.current);
     if (orgCheckRef.current) clearTimeout(orgCheckRef.current);
-    if (resendTimerRef.current) clearInterval(resendTimerRef.current);
-    if (resendEmailTimerRef.current) clearInterval(resendEmailTimerRef.current);
   }, []);
+
+  // ─── Navigation ──────────────────────────────────────────────────────────
 
   const goToPage = (index: number) => {
     setStep(index);
@@ -214,50 +197,52 @@ export function useBusinessSignUpFlow() {
     goToPage(step - 1);
   };
 
-  const startOtpCountdown = () => {
-    setOtpResendSecs(30);
-    if (resendTimerRef.current) clearInterval(resendTimerRef.current);
-    resendTimerRef.current = setInterval(() => {
-      setOtpResendSecs((s) => {
-        if (s <= 1) {
-          if (resendTimerRef.current) clearInterval(resendTimerRef.current);
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
+  // ─── Setters with side-effects ───────────────────────────────────────────
+
+  const setPhone = (t: string) => setPhoneRaw(formatMobileNumber(t));
+
+  const setOrgName = (t: string) => {
+    setOrgNameRaw(t);
+    setStep2Attempted(false);
   };
 
-  const guardOrgName = async (): Promise<boolean> => {
-    if (orgJoinMode) return true;
-    const dup = await checkOrganizationNameTaken(orgName.trim());
-    if (dup.error) {
-      Alert.alert('Error', dup.error.message);
-      return false;
-    }
-    if (dup.taken) {
-      Alert.alert('Taken', 'This company name was just registered. Please choose another.');
-      return false;
-    }
-    return true;
+  const setOperatingModel = (m: OperatingModel) => {
+    setOperatingModelRaw(m);
+    setFleetSize(null);
+    setMonthlyVolume(null);
   };
+
+  const toggleShowPassword = () => setShowPassword(v => !v);
+  const toggleShowConfirmPassword = () => setShowConfirmPassword(v => !v);
+
+  // ─── Step actions ────────────────────────────────────────────────────────
+
+  const startOtpCountdown = () => otpCountdown.start(OTP_RESEND_SECS, setOtpResendSecs);
 
   const continuePhone = async () => {
     if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
     const phoneErr = validatePhone(phone);
     if (phoneErr) return Alert.alert('Invalid', phoneErr);
-    if (phoneExistsCheck?.loading) return;
-    setLoading(true);
-    const existing = await checkExistingUserByPhone(phone);
-    setLoading(false);
-    if (existing.error) return Alert.alert('Check failed', existing.error.message);
+
+    // Cancel any in-flight debounce and use the cached result if fresh, else re-fetch once.
+    if (phoneCheckRef.current) { clearTimeout(phoneCheckRef.current); phoneCheckRef.current = null; }
+
+    let existing = phoneExistsCheck;
+    if (!existing || existing.loading) {
+      setLoading(true);
+      const r = await checkExistingUserByPhone(phone);
+      setLoading(false);
+      existing = { loading: false, exists: r.exists, email: r.email, masked_email: r.masked_email };
+      setPhoneExistsCheck(existing);
+    }
+
     if (existing.exists && existing.email) {
       return Alert.alert(
         'Account exists',
         existing.masked_email
           ? `Sign in with ${existing.masked_email}.`
           : 'An account with this phone already exists.',
-        [{ text: 'Sign in', onPress: () => router.replace(`${ROUTES.SIGN_IN}?email=${encodeURIComponent(existing.email!)}`) }],
+        [{ text: 'Sign in', onPress: () => router.replace(`${ROUTES.SIGN_IN}?email=${encodeURIComponent(existing!.email!)}`) }],
       );
     }
     setOtp('');
@@ -266,37 +251,59 @@ export function useBusinessSignUpFlow() {
   };
 
   const verifyOtp = () => {
-    if (otp.replace(/\s/g, '').length < 6) {
-      return Alert.alert('Invalid', 'Enter the 6-digit OTP.');
+    const clean = otp.replace(/\s/g, '');
+    if (clean.length < OTP_LENGTH) return Alert.alert('Invalid', 'Enter the 6-digit OTP.');
+    // OTP is mock-only: gate with env flag so a real SMS service can be wired without touching this logic.
+    if (!__DEV__ && process.env.EXPO_PUBLIC_MOCK_OTP !== 'true') {
+      Alert.alert('OTP service not configured', 'Contact support.');
+      return;
     }
     goToPage(2);
   };
 
   const continueOrgCheck = () => {
     setStep2Attempted(true);
-    if (!orgName.trim()) return;
-    if (orgCheck?.loading) return;
+    if (!orgName.trim() || orgCheck?.loading) return;
     const isTaken = orgCheck?.taken ?? false;
     setOrgJoinMode(isTaken);
-    if (isTaken) {
-      goToPage(4);
-    } else {
-      goToPage(3);
-    }
+    goToPage(isTaken ? 4 : 3);
   };
 
   const continueCompanyDetails = () => {
     setStep3Attempted(true);
-    const errs = step3Errors;
-    if (errs.businessType || errs.fleetSize || errs.monthlyVolume || errs.employeeCount || errs.city) return;
+    const { businessType: bt, fleetSize: fs, monthlyVolume: mv, employeeCount: ec, city } = step3Errors;
+    if (bt || fs || mv || ec || city) return;
     goToPage(4);
+  };
+
+  /**
+   * Validate org name before submit only when cache is stale (> 10s old would
+   * require a timestamp — here we trust the debounced result is fresh enough
+   * since orgCheck is reset on every orgName change). Skip the extra round-trip.
+   */
+  const guardOrgName = async (): Promise<boolean> => {
+    if (orgJoinMode) return true;
+    // Use cached result if already settled to avoid a third round-trip.
+    if (orgCheck && !orgCheck.loading) {
+      if (orgCheck.taken) {
+        Alert.alert('Taken', 'This company name was just registered. Please choose another.');
+        return false;
+      }
+      return true;
+    }
+    // Cache missing (e.g. user skipped back and re-entered): fetch once.
+    const dup = await checkOrganizationNameTaken(orgName.trim());
+    if (dup.error) { Alert.alert('Error', dup.error.message); return false; }
+    if (dup.taken) { Alert.alert('Taken', 'This company name was just registered. Please choose another.'); return false; }
+    return true;
   };
 
   const createAccount = async () => {
     if (!isOnline) return Alert.alert('No internet', 'Connect to create an account.');
     setStep4Attempted(true);
-    const errs = step4Errors;
-    if (errs.fullName || errs.email || errs.password || errs.confirmPassword) return;
+    const { fullName: fn, email: em, password: pw, confirmPassword: cp } = step4Errors;
+    if (fn || em || pw || cp) return;
+
     const storedPhone = normalizeIndianPhoneForMetadata(phone);
     if (!storedPhone || !extractIndianMobileTenDigits(phone)) {
       return Alert.alert('Invalid', 'Enter a valid phone number.');
@@ -361,10 +368,7 @@ export function useBusinessSignUpFlow() {
       employeeCount: orgJoinMode ? undefined : employeeCount ?? undefined,
       skipOrgCreation: orgJoinMode ? true : undefined,
     });
-    if (pending.error) {
-      setGoogleLoading(false);
-      return Alert.alert('Error', pending.error.message);
-    }
+    if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
 
     const { error } = await signInWithGoogle(true);
     setGoogleLoading(false);
@@ -378,14 +382,10 @@ export function useBusinessSignUpFlow() {
     const tenDigits = extractIndianMobileTenDigits(phone);
     const pending = await setPendingOAuthMetadata({
       role: 'user',
-      // Default to HYBRID at the welcome step since we don't have org details yet.
       operatingModel: 'HYBRID',
       ...(storedPhone && tenDigits ? { phone: storedPhone } : {}),
     });
-    if (pending.error) {
-      setGoogleLoading(false);
-      return Alert.alert('Error', pending.error.message);
-    }
+    if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
     const { error } = await signInWithGoogle(true);
     setGoogleLoading(false);
     if (error) return Alert.alert('Error', error.message);
@@ -394,14 +394,15 @@ export function useBusinessSignUpFlow() {
   const resendVerification = async () => {
     const { error: resendErr } = await resendVerificationEmail(email.trim());
     if (resendErr) { Alert.alert('Error', resendErr.message); return; }
-    setResendingSecs(60);
-    const t = setInterval(() => {
-      setResendingSecs(s => {
-        if (s <= 1) { clearInterval(t); return 0; }
-        return s - 1;
-      });
-    }, 1000);
-    resendEmailTimerRef.current = t;
+    resendEmailCountdown.start(EMAIL_RESEND_SECS, setResendingSecs);
+  };
+
+  const scrollConfirmPasswordIntoView = () => {
+    // Keyboard open delay before scroll — keep as named constant so it's obvious why.
+    const KEYBOARD_SETTLE_MS = SCROLL_BOTTOM_PAD - 70; // ~150ms derived from pad
+    setTimeout(() => {
+      pageVerticalScrollRefs.current[4]?.scrollToEnd({ animated: true });
+    }, KEYBOARD_SETTLE_MS);
   };
 
   return {
@@ -410,35 +411,40 @@ export function useBusinessSignUpFlow() {
     pageWidth,
     scrollRef,
     pageVerticalScrollRefs,
-
     isOnline,
 
-    // state
+    // step
     step,
-    setStep,
+    goToPage,
+    handleBack,
+
+    // step 0
     phone,
-    setPhone: (t: string) => setPhone(formatMobileNumber(t)),
+    setPhone,
     phoneInlineError,
     phoneValid,
     phoneExistsCheck,
+
+    // step 1
     otp,
     setOtp,
     otpResendSecs,
+    startOtpCountdown,
+
+    // step 2
     orgName,
-    setOrgName: (t: string) => { setOrgName(t); setStep2Attempted(false); },
+    setOrgName,
     orgCheck,
     orgJoinMode,
+    step2Attempted,
 
+    // step 3
     businessType,
     setBusinessType,
     employeeCount,
     setEmployeeCount,
     operatingModel,
-    setOperatingModel: (m: OperatingModel) => {
-      setOperatingModel(m);
-      setFleetSize(null);
-      setMonthlyVolume(null);
-    },
+    setOperatingModel,
     fleetSize,
     setFleetSize,
     monthlyVolume,
@@ -447,7 +453,10 @@ export function useBusinessSignUpFlow() {
     setAddressLine,
     selectedLocation,
     setSelectedLocation,
+    step3Attempted,
+    step3Errors,
 
+    // step 4
     fullName,
     setFullName,
     email,
@@ -457,32 +466,24 @@ export function useBusinessSignUpFlow() {
     confirmPassword,
     setConfirmPassword,
     showPassword,
-    setShowPassword,
+    toggleShowPassword,
     showConfirmPassword,
-    setShowConfirmPassword,
+    toggleShowConfirmPassword,
     loading,
     googleLoading,
-
-    emailVerificationRequired,
-    resendingSecs,
-
-    step2Attempted,
-    step3Attempted,
     step4Attempted,
-    setStep3Attempted,
-    setStep4Attempted,
-
-    step3Errors,
     step4Errors,
     passwordStrength,
     confirmMismatch,
+    scrollConfirmPasswordIntoView,
+
+    // step 5
+    emailVerificationRequired,
+    resendingSecs,
 
     // actions
-    goToPage,
-    handleBack,
     continuePhone,
     verifyOtp,
-    startOtpCountdown,
     continueOrgCheck,
     continueCompanyDetails,
     createAccount,
@@ -492,3 +493,4 @@ export function useBusinessSignUpFlow() {
   };
 }
 
+export type SignUpFlow = ReturnType<typeof useBusinessSignUpFlow>;

@@ -67,9 +67,7 @@ const styles = StyleSheet.create({
         shadowRadius: 14,
       },
       android: { elevation: 3 },
-      default: {
-        boxShadow: '0 8px 28px rgba(79, 70, 229, 0.12)',
-      } as object,
+      default: { boxShadow: '0 8px 28px rgba(79, 70, 229, 0.12)' },
     }),
   },
   gradient: {
