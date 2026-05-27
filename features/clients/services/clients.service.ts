@@ -1,6 +1,7 @@
 /**
  * Clients service — Supabase only (mobile). Same DB as Q-unified-base.
  */
+import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { syncDomainRows } from '@/lib/cache/domainSync';
@@ -86,11 +87,28 @@ export async function getClientsByOrganization(
     if (error) return { error: new Error(error.message), clients: [] };
     const raw = (data ?? []) as unknown as ClientRow[];
     const hasMore = raw.length > limit;
-    return { error: null, clients: hasMore ? raw.slice(0, limit) : raw, hasMore };
+    const page = hasMore ? raw.slice(0, limit) : raw;
+    return {
+      error: null,
+      clients: await enrichConnectionPartnerAvatars(
+        orgId,
+        page,
+        'get_clients_with_profiles',
+      ),
+      hasMore,
+    };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), clients: [] };
-  return { error: null, clients: (data ?? []) as unknown as ClientRow[] };
+  const rows = (data ?? []) as unknown as ClientRow[];
+  return {
+    error: null,
+    clients: await enrichConnectionPartnerAvatars(
+      orgId,
+      rows,
+      'get_clients_with_profiles',
+    ),
+  };
 }
 
 export async function getClientsDelta(
@@ -150,7 +168,12 @@ export async function syncClientsWithCache(
           compare: (a, b) => a.name.localeCompare(b.name),
         }),
     });
-    return { error: null, clients };
+    const enriched = await enrichConnectionPartnerAvatars(
+      orgId,
+      clients,
+      'get_clients_with_profiles',
+    );
+    return { error: null, clients: enriched };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), clients: currentRows };
   }

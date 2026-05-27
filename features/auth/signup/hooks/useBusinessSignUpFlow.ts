@@ -256,11 +256,7 @@ export function useBusinessSignUpFlow() {
   const verifyOtp = () => {
     const clean = otp.replace(/\s/g, '');
     if (clean.length < OTP_LENGTH) return Alert.alert('Invalid', 'Enter the 6-digit OTP.');
-    // OTP is mock-only: gate with env flag so a real SMS service can be wired without touching this logic.
-    if (!__DEV__ && process.env.EXPO_PUBLIC_MOCK_OTP !== 'true') {
-      Alert.alert('OTP service not configured', 'Contact support.');
-      return;
-    }
+    // Mock OTP in all environments until a real SMS provider is wired.
     goToPage(2);
   };
 

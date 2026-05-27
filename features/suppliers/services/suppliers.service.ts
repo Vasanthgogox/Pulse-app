@@ -5,6 +5,7 @@ import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 import type { DeltaResponse } from '@/lib/cache/deltaTypes';
+import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
 import { supabase } from '@/lib/supabase';
 
 export interface SupplierRow {
@@ -84,11 +85,28 @@ export async function getSuppliersByOrganization(
     if (error) return { error: new Error(error.message), suppliers: [] };
     const raw = (data ?? []) as unknown as SupplierRow[];
     const hasMore = raw.length > limit;
-    return { error: null, suppliers: hasMore ? raw.slice(0, limit) : raw, hasMore };
+    const page = hasMore ? raw.slice(0, limit) : raw;
+    return {
+      error: null,
+      suppliers: await enrichConnectionPartnerAvatars(
+        orgId,
+        page,
+        'get_suppliers_with_profiles',
+      ),
+      hasMore,
+    };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), suppliers: [] };
-  return { error: null, suppliers: (data ?? []) as unknown as SupplierRow[] };
+  const rows = (data ?? []) as unknown as SupplierRow[];
+  return {
+    error: null,
+    suppliers: await enrichConnectionPartnerAvatars(
+      orgId,
+      rows,
+      'get_suppliers_with_profiles',
+    ),
+  };
 }
 
 export async function getSuppliersDelta(
@@ -141,7 +159,12 @@ export async function syncSuppliersWithCache(orgId: string, currentRows: Supplie
           compare: (a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''),
         }),
     });
-    return { error: null, suppliers };
+    const enriched = await enrichConnectionPartnerAvatars(
+      orgId,
+      suppliers,
+      'get_suppliers_with_profiles',
+    );
+    return { error: null, suppliers: enriched };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), suppliers: currentRows };
   }
