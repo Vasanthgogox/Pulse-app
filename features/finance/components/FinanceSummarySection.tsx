@@ -51,6 +51,10 @@ export interface FinanceSummarySectionProps {
   ) => void;
   driverViewTab?: "list" | "analytics";
   onDriverViewTabChange?: (v: "list" | "analytics") => void;
+  customerViewTab?: "list" | "analytics";
+  onCustomerViewTabChange?: (v: "list" | "analytics") => void;
+  supplierViewTab?: "list" | "analytics";
+  onSupplierViewTabChange?: (v: "list" | "analytics") => void;
   showPeriodFilter?: boolean;
   periodFilter?: FinancePeriodFilter;
   onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
@@ -190,6 +194,10 @@ export function FinanceSummarySection({
   onGarageViewTabChange,
   driverViewTab,
   onDriverViewTabChange,
+  customerViewTab,
+  onCustomerViewTabChange,
+  supplierViewTab,
+  onSupplierViewTabChange,
   showPeriodFilter,
   periodFilter,
   onPeriodFilterChange,
@@ -284,6 +292,10 @@ export function FinanceSummarySection({
               onGarageViewTabChange={onGarageViewTabChange}
               driverViewTab={driverViewTab}
               onDriverViewTabChange={onDriverViewTabChange}
+              customerViewTab={customerViewTab}
+              onCustomerViewTabChange={onCustomerViewTabChange}
+              supplierViewTab={supplierViewTab}
+              onSupplierViewTabChange={onSupplierViewTabChange}
               showPeriodFilter={showPeriodFilter}
               periodFilter={periodFilter}
               onPeriodFilterChange={onPeriodFilterChange}
@@ -509,6 +521,10 @@ export function FinanceSummarySection({
             onGarageViewTabChange={onGarageViewTabChange}
             driverViewTab={driverViewTab}
             onDriverViewTabChange={onDriverViewTabChange}
+            customerViewTab={customerViewTab}
+            onCustomerViewTabChange={onCustomerViewTabChange}
+            supplierViewTab={supplierViewTab}
+            onSupplierViewTabChange={onSupplierViewTabChange}
             showPeriodFilter={showPeriodFilter}
             periodFilter={periodFilter}
             onPeriodFilterChange={onPeriodFilterChange}

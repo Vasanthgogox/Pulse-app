@@ -16,24 +16,30 @@ const ROWS: KeypadKey[][] = [
   ['.', '0', '⌫'],
 ];
 
-/** How fast successive deletes fire during long-press (ms between each). */
 const LONG_PRESS_DELETE_INTERVAL_MS = 60;
-/** Initial delay before rapid-delete kicks in (ms). */
 const LONG_PRESS_DELETE_DELAY_MS = 400;
+
+const KEY_H = 64;
+const KEY_H_PAY = 56;
+const KEY_H_PAY_COMPACT = 46;
 
 interface DecimalKeypadProps {
   onKey: (key: KeypadKey) => void;
   showDecimal?: boolean;
-  /** Light tray + white keys (GPay-style). */
   variant?: 'default' | 'pay';
+  size?: 'default' | 'compact';
 }
 
 export const DecimalKeypad = memo(function DecimalKeypad({
   onKey,
   showDecimal = true,
   variant = 'default',
+  size = 'default',
 }: DecimalKeypadProps) {
   const isPay = variant === 'pay';
+  const isCompact = size === 'compact';
+  const keyHeight = isPay ? (isCompact ? KEY_H_PAY_COMPACT : KEY_H_PAY) : KEY_H;
+  const keyTextSize = isCompact ? 22 : 26;
   const deleteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -50,7 +56,6 @@ export const DecimalKeypad = memo(function DecimalKeypad({
 
   const handleDeleteLongPress = useCallback(() => {
     triggerFeedback('delete');
-    // After initial delay, fire deletes rapidly
     deleteTimeoutRef.current = setTimeout(() => {
       deleteIntervalRef.current = setInterval(() => {
         onKey('⌫');
@@ -67,17 +72,36 @@ export const DecimalKeypad = memo(function DecimalKeypad({
     [onKey],
   );
 
+  const keyBase = (isSpecial: boolean) => [
+    styles.key,
+    { height: keyHeight, minHeight: Math.min(44, keyHeight) },
+    isPay && styles.keyPay,
+    isPay && isCompact && styles.keyPayCompact,
+    isPay && isSpecial && styles.keyPaySpecial,
+    !isPay && isSpecial && styles.keySpecial,
+  ];
+
   return (
-    <View style={[styles.grid, isPay && styles.gridPay]}>
+    <View
+      style={[
+        styles.grid,
+        isPay && styles.gridPay,
+        isPay && isCompact && styles.gridPayCompact,
+      ]}
+    >
       {ROWS.map((row, rowIdx) => (
-        <View key={rowIdx} style={styles.row}>
+        <View key={rowIdx} style={[styles.row, isCompact && styles.rowCompact]}>
           {row.map((key) => {
             if (key === '.' && !showDecimal) {
               return (
                 <View
-                  key="dot-spacer"
-                  style={[styles.keySpacer, isPay && styles.keySpacerPay]}
-                />
+                  key="dot-disabled"
+                  style={[keyBase(true), styles.keyDisabled, { height: keyHeight }]}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={[styles.keyText, styles.keyTextDisabled]}>.</Text>
+                </View>
               );
             }
 
@@ -88,12 +112,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
               return (
                 <TouchableOpacity
                   key={key}
-                  style={[
-                    styles.key,
-                    isPay && styles.keyPay,
-                    isPay && styles.keyPaySpecial,
-                    !isPay && styles.keySpecial,
-                  ]}
+                  style={keyBase(true)}
                   onPress={() => handleKey('⌫')}
                   onLongPress={handleDeleteLongPress}
                   onPressOut={stopRapidDelete}
@@ -103,7 +122,15 @@ export const DecimalKeypad = memo(function DecimalKeypad({
                   accessibilityLabel="Delete last digit"
                   accessibilityHint="Hold to delete multiple digits"
                 >
-                  <Text style={[styles.keyText, styles.keyTextBackspace]}>⌫</Text>
+                  <Text
+                    style={[
+                      styles.keyText,
+                      styles.keyTextBackspace,
+                      { fontSize: isCompact ? 18 : 20 },
+                    ]}
+                  >
+                    ⌫
+                  </Text>
                 </TouchableOpacity>
               );
             }
@@ -111,18 +138,19 @@ export const DecimalKeypad = memo(function DecimalKeypad({
             return (
               <TouchableOpacity
                 key={key}
-                style={[
-                  styles.key,
-                  isPay && styles.keyPay,
-                  isPay && isSpecial && styles.keyPaySpecial,
-                  !isPay && isSpecial && styles.keySpecial,
-                ]}
+                style={keyBase(isSpecial)}
                 onPress={() => handleKey(key)}
                 activeOpacity={0.55}
                 accessibilityRole="button"
                 accessibilityLabel={`Key ${key}`}
               >
-                <Text style={[styles.keyText, isSpecial && styles.keyTextSpecial]}>
+                <Text
+                  style={[
+                    styles.keyText,
+                    isSpecial && styles.keyTextSpecial,
+                    { fontSize: isSpecial ? keyTextSize - 4 : keyTextSize },
+                  ]}
+                >
                   {key}
                 </Text>
               </TouchableOpacity>
@@ -134,47 +162,54 @@ export const DecimalKeypad = memo(function DecimalKeypad({
   );
 });
 
-const KEY_H = 64;
-const KEY_H_PAY = 56;
-
 const styles = StyleSheet.create({
   grid: {
     width: '100%',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     gap: 4,
   },
   gridPay: {
     backgroundColor: Theme.surfaceGray,
-    paddingTop: 10,
-    paddingBottom: 8,
-    paddingHorizontal: 10,
-    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 6,
+    paddingHorizontal: 8,
+    gap: 5,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.border,
+  },
+  gridPayCompact: {
+    paddingTop: 4,
+    paddingBottom: 4,
+    gap: 4,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
   },
   row: {
     flexDirection: 'row',
     gap: 4,
   },
+  rowCompact: {
+    gap: 3,
+  },
   key: {
     flex: 1,
-    height: KEY_H,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Theme.surface,
-    borderRadius: 14,
-    minWidth: 44,
-    minHeight: 44,
+    borderRadius: 12,
+    minWidth: 40,
   },
   keyPay: {
-    height: KEY_H_PAY,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
+    borderRadius: 10,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+  },
+  keyPayCompact: {
+    borderRadius: 8,
   },
   keyPaySpecial: {
     backgroundColor: Theme.cardWhite,
@@ -182,25 +217,22 @@ const styles = StyleSheet.create({
   keySpecial: {
     backgroundColor: Theme.surfaceGray,
   },
-  keySpacer: {
-    flex: 1,
-    height: KEY_H,
+  keyDisabled: {
+    backgroundColor: Theme.surfaceGray,
+    opacity: 0.45,
   },
-  keySpacerPay: {
-    height: KEY_H_PAY,
+  keyTextDisabled: {
+    color: Theme.textMuted,
+    fontWeight: '400',
   },
   keyText: {
-    fontSize: 26,
     fontWeight: '500',
     color: Theme.textPrimary,
-    lineHeight: 30,
   },
   keyTextSpecial: {
-    fontSize: 22,
     color: Theme.textBody,
   },
   keyTextBackspace: {
-    fontSize: 20,
     color: Theme.textSecondary,
   },
 });

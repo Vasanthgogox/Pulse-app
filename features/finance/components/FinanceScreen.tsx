@@ -40,6 +40,8 @@ import {
 } from "@/features/trips/visibility/tripVisibility";
 import type { DriversViewTab } from "@/features/drivers/components/DriversTab";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
+import type { CustomersViewTab } from "@/features/clients/components/CustomersTab";
+import type { SuppliersViewTab } from "@/features/suppliers/components/SuppliersTab";
 import {
     canAccessFinance,
     getCapabilitiesFromProfile,
@@ -354,6 +356,8 @@ export function FinanceScreen() {
     useState<TripEntryContext | null>(null);
   const [garageViewTab, setGarageViewTab] = useState<GarrageViewTab>("vehicle");
   const [driverViewTab, setDriverViewTab] = useState<DriversViewTab>("list");
+  const [customerViewTab, setCustomerViewTab] = useState<CustomersViewTab>("list");
+  const [supplierViewTab, setSupplierViewTab] = useState<SuppliersViewTab>("list");
 
   const onSuccessNavigateToDetail = useCallback(
     (data: import("@/components/AddTransactionModal").AddTransactionData) => {
@@ -1409,6 +1413,14 @@ export function FinanceScreen() {
         }
         driverViewTab={financeSubTab === "drivers" ? driverViewTab : undefined}
         onDriverViewTabChange={setDriverViewTab}
+        customerViewTab={
+          financeSubTab === "customers" ? customerViewTab : undefined
+        }
+        onCustomerViewTabChange={setCustomerViewTab}
+        supplierViewTab={
+          financeSubTab === "suppliers" ? supplierViewTab : undefined
+        }
+        onSupplierViewTabChange={setSupplierViewTab}
         showPeriodFilter={false}
         periodFilter={financePeriodFilter}
         onPeriodFilterChange={setFinancePeriodFilter}
@@ -1473,6 +1485,10 @@ export function FinanceScreen() {
               onGarageViewTabChange={setGarageViewTab}
               driverViewTab={driverViewTab}
               onDriverViewTabChange={setDriverViewTab}
+              customerViewTab={customerViewTab}
+              onCustomerViewTabChange={setCustomerViewTab}
+              supplierViewTab={supplierViewTab}
+              onSupplierViewTabChange={setSupplierViewTab}
               onTripSelect={(tripId) => router.push(`/trip/${tripId}` as const)}
               refreshing={refreshing}
               onRefresh={handleRefresh}

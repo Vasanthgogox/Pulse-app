@@ -149,6 +149,10 @@ export interface SignUpOptions {
   businessType?: string;
   /** Number of employees band, e.g. "1-10", "11-50", "51-200", "201-500", "500+". */
   employeeCount?: string;
+  /** Own-fleet size band from signup (stored in auth metadata; org column TBD). */
+  fleetSizeBand?: string;
+  /** Monthly shipment volume band for broker / hybrid (auth metadata). */
+  monthlyVolumeBand?: string;
   /** When true the DB trigger skips org + membership creation (user is joining an existing org). */
   skipOrgCreation?: boolean;
 }
@@ -165,6 +169,8 @@ export interface PendingOAuthOnboardingMetadata {
   zone?: string;
   businessType?: string;
   employeeCount?: string;
+  fleetSizeBand?: string;
+  monthlyVolumeBand?: string;
   skipOrgCreation?: boolean;
 }
 
@@ -184,6 +190,8 @@ export async function signUp({
   zone,
   businessType,
   employeeCount,
+  fleetSizeBand,
+  monthlyVolumeBand,
   skipOrgCreation,
 }: SignUpOptions): Promise<SignInResult> {
   const emailErr = validateEmail(email ?? "");
@@ -226,6 +234,8 @@ export async function signUp({
     if (zone?.trim()) metadata.zone = zone.trim();
     if (businessType?.trim()) metadata.business_type = businessType.trim();
     if (employeeCount?.trim()) metadata.employee_count = employeeCount.trim();
+    if (fleetSizeBand?.trim()) metadata.fleet_size_band = fleetSizeBand.trim();
+    if (monthlyVolumeBand?.trim()) metadata.monthly_volume_band = monthlyVolumeBand.trim();
     if (skipOrgCreation) metadata.skip_org_creation = true;
     // Canonical E.164-style India (+91…) for profiles.phone and metadata; RPCs normalize to 10 digits for lookup.
     if (phone != null && phone !== "") {
@@ -577,6 +587,8 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   if (pending.zone?.trim()) authData.zone = pending.zone.trim();
   if (pending.businessType?.trim()) authData.business_type = pending.businessType.trim();
   if (pending.employeeCount?.trim()) authData.employee_count = pending.employeeCount.trim();
+  if (pending.fleetSizeBand?.trim()) authData.fleet_size_band = pending.fleetSizeBand.trim();
+  if (pending.monthlyVolumeBand?.trim()) authData.monthly_volume_band = pending.monthlyVolumeBand.trim();
   if (pending.skipOrgCreation) authData.skip_org_creation = true;
   if (pending.phone != null && pending.phone !== "") {
     const e164 = normalizeIndianPhoneForMetadata(pending.phone);

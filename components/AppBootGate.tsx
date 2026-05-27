@@ -21,7 +21,13 @@ const PUBLIC_ROUTES = new Set([
   '/welcome',
   '/forgot-password',
   '/auth/reset-password',
+  '/onboarding',
 ]);
+
+function isPublicAuthRoute(pathname: string): boolean {
+  if (PUBLIC_ROUTES.has(pathname)) return true;
+  return pathname.startsWith('/onboarding/');
+}
 
 const BOOT_HARD_TIMEOUT_MS = 8_000;
 
@@ -43,7 +49,7 @@ export function AppBootGate({ children }: AppBootGateProps) {
   const bootReady = useMemo(() => {
     if (timedOut) return true;
     // Public auth pages render immediately — no need to wait for session restore.
-    if (PUBLIC_ROUTES.has(pathname)) return true;
+    if (isPublicAuthRoute(pathname)) return true;
     // Only block on auth state — workspace/org data loads behind the scenes
     // after navigation is unblocked. Each screen shows its own skeleton while
     // workspace data streams in (avoids blocking the entire app on org fetch).

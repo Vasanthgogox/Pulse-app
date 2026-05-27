@@ -42,8 +42,25 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SignUpMobileShell } from '@/features/auth/signup/SignUpMobileShell';
+import { SignUpKeypadStepLayout } from '@/features/auth/signup/SignUpKeypadStepLayout';
+import { SignUpOtpBoxes } from '@/features/auth/signup/SignUpOtpBoxes';
+import { formatSignupPhoneDisplay } from '@/features/auth/signup/signUpKeypad.util';
+import { OnboardingKeypadLinkRow } from '@/features/onboarding';
+import { signUpMobileStyles as mobileSignup } from '@/features/auth/signup/signUpMobile.styles';
 
 const DRIVER_AVATAR_STORAGE_KEY = 'driver_avatar_seed';
+
+const DRIVER_STEP_LABELS = [
+  'Phone',
+  'Verify',
+  'Account',
+  'License',
+  'Aadhaar',
+  'PAN',
+  'Photo',
+  'Done',
+] as const;
 
 // Professional wording per step (title + subtitle), no "Step 1/2" labels
 const STEP_CONTENT = [
@@ -224,28 +241,52 @@ export default function DriverSignUpScreen() {
   /** Step index 2: approximate Y from top of scroll content for keyboard scroll. */
   const PROFILE_FIELD_SCROLL_Y = { callsign: 0, email: 112, password: 224, confirmPassword: 336 } as const;
   const isDesktop = width >= 1024;
+  const useMobileLayout = !isDesktop;
   const pageWidth = isDesktop ? Math.min(560, width - 120) : width;
 
-  const pageBody = (pageIndex: number, content: React.ReactNode) => (
-    <View key={pageIndex} style={[styles.page, { width: pageWidth }]}>
-      <ScrollView
-        ref={(el) => {
-          pageVerticalScrollRefs.current[pageIndex] = el;
-        }}
-        style={styles.pageInnerScroll}
-        contentContainerStyle={[
-          styles.pageInnerScrollContent,
-          { paddingBottom: insets.bottom + 88 },
+  const pageBody = (pageIndex: number, content: React.ReactNode) => {
+    if (useMobileLayout && pageIndex !== step) return null;
+
+    const inner = (
+      <View
+        style={[
+          styles.pageContent,
+          (pageIndex === 0 || pageIndex === 1) && styles.pageContentKeypad,
         ]}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator
-        nestedScrollEnabled
       >
-        <View style={styles.pageContent}>{content}</View>
-      </ScrollView>
-    </View>
-  );
+        {content}
+      </View>
+    );
+
+    if (useMobileLayout) {
+      return (
+        <View key={`driver-step-${pageIndex}`} style={styles.mobileStepFlex}>
+          {inner}
+        </View>
+      );
+    }
+
+    return (
+      <View key={pageIndex} style={[styles.page, { width: pageWidth }]}>
+        <ScrollView
+          ref={(el) => {
+            pageVerticalScrollRefs.current[pageIndex] = el;
+          }}
+          style={styles.pageInnerScroll}
+          contentContainerStyle={[
+            styles.pageInnerScrollContent,
+            { paddingBottom: insets.bottom + 88 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+        >
+          {inner}
+        </ScrollView>
+      </View>
+    );
+  };
 
   /** Extra scroll offset so focused field stays above keyboard. Use larger offset on iOS when focusing password so the field stays above the "Strong Password" / autofill bar. */
   const SCROLL_OFFSET_DEFAULT = 100;
@@ -685,38 +726,64 @@ export default function DriverSignUpScreen() {
     }
   };
 
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'web' ? undefined : 'padding'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
-    >
-      <TouchableOpacity
-        style={[styles.backLink, isDesktop && styles.backLinkDesktop, { paddingTop: insets.top + 8 }]}
-        onPress={handleBack}
-        hitSlop={12}
-      >
-        <FontAwesome name="chevron-left" size={20} color={LIGHT.textMuted} />
-        <Text style={styles.backLinkText}>{step === 0 ? 'Back to sign up' : 'Back'}</Text>
-      </TouchableOpacity>
-      <View style={[styles.brandRow, isDesktop && styles.brandRowDesktop]}>
-        <Text style={styles.brandText}>PULSE.</Text>
-      </View>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-        style={[styles.pagesScroller, isDesktop && styles.pagesScrollerDesktop]}
-        contentContainerStyle={styles.pagesWrap}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
+  const stepPages = (
+    <>
         {/* Step 1: Welcome – India phone only */}
-        {pageBody(0, (
+        {pageBody(0, useMobileLayout ? (
+          <SignUpKeypadStepLayout
+            title={STEP_CONTENT[0].title}
+            subtitle={STEP_CONTENT[0].subtitle}
+            value={phone}
+            onChange={(d) => setPhone(formatMobileNumber(d))}
+            maxDigits={10}
+            formatDisplay={formatSignupPhoneDisplay}
+            displayFlag="🇮🇳"
+            displayPrefix="+91"
+            emptyPlaceholder="000 000 0000"
+            onPrimary={validatePhoneStep}
+            primaryDisabled={
+              !isPhoneStepValid(phone) ||
+              !!phoneExistsCheck?.loading ||
+              !!(phoneExistsCheck?.exists && phoneExistsCheck.email)
+            }
+            primaryLoading={loading || !!phoneExistsCheck?.loading}
+            primaryButtonLabel="Send OTP"
+            errorMessage={phoneInlineError}
+            hintMessage={
+              phoneExistsCheck?.loading
+                ? 'Checking…'
+                : phoneExistsCheck?.exists && phoneExistsCheck.email
+                  ? 'This number is already registered.'
+                  : null
+            }
+            footerAccessory={
+              <OnboardingKeypadLinkRow
+                links={[
+                  {
+                    label: 'Continue with Google',
+                    onPress: handleGoogleDriverSignIn,
+                    disabled: loading,
+                  },
+                  ...(phoneExistsCheck?.exists && phoneExistsCheck.email
+                    ? [
+                        {
+                          label: 'Sign in instead',
+                          onPress: () =>
+                            router.replace(
+                              `/sign-in?email=${encodeURIComponent(phoneExistsCheck.email!)}`,
+                            ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            }
+          />
+        ) : (
           <>
-            <Text style={[styles.mainTitle, styles.mainTitleWelcome]}>{STEP_CONTENT[0].title}</Text>
+            <Text style={[styles.mainTitle, styles.mainTitleWelcome]}>
+              {STEP_CONTENT[0].title}
+            </Text>
             <Text style={styles.subTitle}>{STEP_CONTENT[0].subtitle}</Text>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Phone</Text>
@@ -731,45 +798,24 @@ export default function DriverSignUpScreen() {
                   onChangeText={(text) => setPhone(formatMobileNumber(text))}
                   keyboardType="phone-pad"
                   maxLength={10}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="tel"
                   editable={!loading}
-                  cursorColor={LIGHT.text}
-                  selectionColor="rgba(15,23,42,0.2)"
                 />
               </View>
-              {phoneInlineError ? <Text style={styles.fieldError}>{phoneInlineError}</Text> : null}
-              {phoneExistsCheck?.loading ? (
-                <Text style={styles.phoneExistsHint}>Checking…</Text>
-              ) : phoneExistsCheck?.exists && phoneExistsCheck.email ? (
-                <View style={styles.phoneExistsRow}>
-                  <Text style={styles.phoneExistsText}>This number is already registered. </Text>
-                  <TouchableOpacity
-                    onPress={() =>
-                      router.replace(`/sign-in?email=${encodeURIComponent(phoneExistsCheck.email!)}`)}
-                    hitSlop={8}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.phoneExistsLink}>Sign in</Text>
-                  </TouchableOpacity>
-                </View>
+              {phoneInlineError ? (
+                <Text style={styles.fieldError}>{phoneInlineError}</Text>
               ) : null}
             </View>
             <TouchableOpacity
               style={[styles.primaryBtn, (!isPhoneStepValid(phone) || loading) && styles.primaryBtnDisabled]}
               onPress={validatePhoneStep}
               disabled={!isPhoneStepValid(phone) || loading}
-              activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Continue with phone</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.googleBtn, loading && styles.primaryBtnDisabled]}
               onPress={handleGoogleDriverSignIn}
               disabled={loading}
-              activeOpacity={0.85}
             >
               <FontAwesome name="google" size={18} color={LIGHT.text} />
               <Text style={styles.googleBtnText}>Continue with Google</Text>
@@ -778,7 +824,35 @@ export default function DriverSignUpScreen() {
         ))}
 
         {/* Step 2: OTP entry */}
-        {pageBody(1, (
+        {pageBody(1, useMobileLayout ? (
+          <SignUpKeypadStepLayout
+            title={STEP_CONTENT[1].title}
+            subtitle={`We sent a code to ${phone.trim().length === 10 ? `+91 ${formatSignupPhoneDisplay(phone)}` : 'your number'}.`}
+            value={otpValue}
+            onChange={(d) => setOtpValue(d.replace(/\D/g, '').slice(0, OTP_LENGTH))}
+            maxDigits={OTP_LENGTH}
+            formatDisplay={(d) => d}
+            fieldLabel="VERIFICATION CODE"
+            emptyPlaceholder=""
+            customDisplay={
+              <SignUpOtpBoxes digits={otpValue} length={OTP_LENGTH} />
+            }
+            onPrimary={verifyOtpStep}
+            primaryDisabled={otpValue.length < OTP_LENGTH}
+            primaryLoading={loading}
+            primaryButtonLabel="Verify OTP"
+            footerAccessory={
+              <OnboardingKeypadLinkRow
+                links={[
+                  {
+                    label: 'Clear and re-enter',
+                    onPress: () => setOtpValue(''),
+                  },
+                ]}
+              />
+            }
+          />
+        ) : (
           <>
             <Text style={styles.mainTitle}>{STEP_CONTENT[1].title}</Text>
             <Text style={styles.subTitle}>
@@ -815,16 +889,8 @@ export default function DriverSignUpScreen() {
               style={[styles.primaryBtn, (otpValue.length !== OTP_LENGTH || loading) && styles.primaryBtnDisabled]}
               onPress={verifyOtpStep}
               disabled={otpValue.length !== OTP_LENGTH || loading}
-              activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>Verify OTP</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.tryAgainLink}
-              onPress={() => {}}
-              hitSlop={12}
-            >
-              <Text style={styles.tryAgainText}>Didn&apos;t get it? Try again</Text>
             </TouchableOpacity>
           </>
         ))}
@@ -832,8 +898,12 @@ export default function DriverSignUpScreen() {
         {/* Step 3: Your details */}
         {pageBody(2, (
           <>
-            <Text style={styles.mainTitle}>{STEP_CONTENT[2].title}</Text>
-            <Text style={styles.subTitle}>{STEP_CONTENT[2].subtitle}</Text>
+            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
+              {STEP_CONTENT[2].title}
+            </Text>
+            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
+              {STEP_CONTENT[2].subtitle}
+            </Text>
             <View style={styles.inputGroup}>
               <Text style={styles.fieldLabel}>Full name</Text>
               <View style={styles.inputWrap}>
@@ -959,8 +1029,12 @@ export default function DriverSignUpScreen() {
         {/* Step 4: Driving license */}
         {pageBody(3, (
           <>
-            <Text style={styles.mainTitle}>{STEP_CONTENT[3].title}</Text>
-            <Text style={styles.subTitle}>{STEP_CONTENT[3].subtitle}</Text>
+            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
+              {STEP_CONTENT[3].title}
+            </Text>
+            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
+              {STEP_CONTENT[3].subtitle}
+            </Text>
             <View style={styles.docActionsWrap}>
               <TouchableOpacity
                 style={styles.docActionBtn}
@@ -1018,8 +1092,12 @@ export default function DriverSignUpScreen() {
         {/* Step 5: Aadhaar */}
         {pageBody(4, (
           <>
-            <Text style={styles.mainTitle}>{STEP_CONTENT[4].title}</Text>
-            <Text style={styles.subTitle}>{STEP_CONTENT[4].subtitle}</Text>
+            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
+              {STEP_CONTENT[4].title}
+            </Text>
+            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
+              {STEP_CONTENT[4].subtitle}
+            </Text>
             <View style={styles.docActionsWrap}>
               <TouchableOpacity
                 style={styles.docActionBtn}
@@ -1077,8 +1155,12 @@ export default function DriverSignUpScreen() {
         {/* Step 6: PAN */}
         {pageBody(5, (
           <>
-            <Text style={styles.mainTitle}>{STEP_CONTENT[5].title}</Text>
-            <Text style={styles.subTitle}>{STEP_CONTENT[5].subtitle}</Text>
+            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
+              {STEP_CONTENT[5].title}
+            </Text>
+            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
+              {STEP_CONTENT[5].subtitle}
+            </Text>
             <View style={styles.docActionsWrap}>
               <TouchableOpacity
                 style={styles.docActionBtn}
@@ -1136,8 +1218,12 @@ export default function DriverSignUpScreen() {
         {/* Step 7: Avatar */}
         {pageBody(6, (
           <>
-            <Text style={styles.mainTitle}>{STEP_CONTENT[6].title}</Text>
-            <Text style={styles.subTitle}>{STEP_CONTENT[6].subtitle}</Text>
+            <Text style={useMobileLayout ? mobileSignup.stepTitle : styles.mainTitle}>
+              {STEP_CONTENT[6].title}
+            </Text>
+            <Text style={useMobileLayout ? mobileSignup.stepSub : styles.subTitle}>
+              {STEP_CONTENT[6].subtitle}
+            </Text>
             <View style={styles.avatarPreviewWrap}>
               <Image source={{ uri: getAvatarUriForSeed(avatarSeed) }} style={styles.avatarPreview} />
             </View>
@@ -1182,6 +1268,83 @@ export default function DriverSignUpScreen() {
             </TouchableOpacity>
           </>
         ))}
+    </>
+  );
+
+  if (useMobileLayout) {
+    const usesKeypadBody = step === 0 || step === 1;
+    return (
+      <>
+        <SignUpMobileShell
+          backLabel={step === 0 ? 'Back' : 'Previous'}
+          onBack={handleBack}
+          stepLabels={DRIVER_STEP_LABELS.slice(0, 7)}
+          currentStepIndex={Math.min(step, 6)}
+          hideProgress={step >= 7}
+          bodyMode={usesKeypadBody ? 'keypad' : 'scroll'}
+          scrollBottomPad={insets.bottom + 24}
+          trustMode="driver"
+        >
+          {stepPages}
+        </SignUpMobileShell>
+        <Modal
+          visible={previewDocUri != null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreviewDocUri(null)}
+        >
+          <View style={styles.previewBackdrop}>
+            <View style={styles.previewCard}>
+              {previewDocUri ? (
+                <Image
+                  source={{ uri: previewDocUri }}
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
+              ) : null}
+              <TouchableOpacity
+                style={styles.previewCloseBtn}
+                onPress={() => setPreviewDocUri(null)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.previewCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 20 : 0}
+    >
+      <TouchableOpacity
+        style={[styles.backLink, isDesktop && styles.backLinkDesktop, { paddingTop: insets.top + 8 }]}
+        onPress={handleBack}
+        hitSlop={12}
+      >
+        <FontAwesome name="chevron-left" size={20} color={LIGHT.textMuted} />
+        <Text style={styles.backLinkText}>{step === 0 ? 'Back to sign up' : 'Back'}</Text>
+      </TouchableOpacity>
+      <View style={[styles.brandRow, isDesktop && styles.brandRowDesktop]}>
+        <Text style={styles.brandText}>PULSE.</Text>
+      </View>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        scrollEnabled={false}
+        showsHorizontalScrollIndicator={false}
+        style={[styles.pagesScroller, isDesktop && styles.pagesScrollerDesktop]}
+        contentContainerStyle={styles.pagesWrap}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
+        {stepPages}
       </ScrollView>
 
       <Modal
@@ -1224,6 +1387,10 @@ export default function DriverSignUpScreen() {
 }
 
 const styles = StyleSheet.create({
+  mobileStepFlex: {
+    flex: 1,
+    minHeight: 0,
+  },
   container: {
     flex: 1,
     backgroundColor: LIGHT.background,
@@ -1284,9 +1451,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   pageContent: {
-    maxWidth: 360,
-    alignSelf: 'center',
     width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+  },
+  pageContentKeypad: {
+    flex: 1,
+    maxWidth: '100%',
+    paddingHorizontal: 0,
   },
   logoWrap: {
     width: 56,

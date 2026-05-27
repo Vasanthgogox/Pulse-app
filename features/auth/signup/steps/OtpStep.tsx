@@ -1,46 +1,93 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
-import { C, styles } from '../businessSignUp.styles';
+import {
+  OnboardingFullPageFormStep,
+  OnboardingKeypadLinkRow,
+  OnboardingKeypadStep,
+} from '@/features/onboarding';
 import { MockOtpNotice } from '../components/MockOtpNotice';
 import { OtpInput } from '../components/OtpInput';
+import { SignUpOtpBoxes } from '../SignUpOtpBoxes';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { OTP_LENGTH } from '../signUpConstants';
+import { colors } from '@/design-system/colors';
+import { space } from '@/design-system/spacing';
 
 export function OtpStep({ flow }: { flow: SignUpFlow }) {
+  const cleanOtp = flow.otp.replace(/\s/g, '');
+
+  if (flow.useMobileLayout) {
+    return (
+      <OnboardingKeypadStep
+        title="Enter verification code"
+        subtitle={`6-digit code sent to +91 ${flow.phone}`}
+        value={cleanOtp}
+        onChange={flow.setOtp}
+        maxDigits={OTP_LENGTH}
+        formatDisplay={(d) => d}
+        fieldLabel="VERIFICATION CODE"
+        emptyPlaceholder=""
+        customDisplay={<SignUpOtpBoxes digits={cleanOtp} length={OTP_LENGTH} />}
+        onPrimary={flow.verifyOtp}
+        primaryDisabled={cleanOtp.length < OTP_LENGTH}
+        primaryLoading={flow.loading}
+        primaryButtonLabel="Confirm code"
+        footerAccessory={
+          <OnboardingKeypadLinkRow
+            links={[
+              {
+                label:
+                  flow.otpResendSecs > 0
+                    ? `Resend in ${flow.otpResendSecs}s`
+                    : 'Resend code',
+                onPress: () => {
+                  if (flow.otpResendSecs > 0) return;
+                  flow.setOtp('');
+                  flow.startOtpCountdown();
+                },
+                disabled: flow.otpResendSecs > 0,
+              },
+            ]}
+          />
+        }
+      />
+    );
+  }
+
   return (
-    <>
-      <View style={styles.otpIconWrap}>
-        <FontAwesome name="mobile" size={36} color={C.accent} />
-      </View>
-      <Text style={styles.pageTitle}>Verify your number</Text>
-      <Text style={styles.pageSub}>
-        We would send a code to{'\n'}
-        <Text style={styles.phoneHighlight}>+91 {flow.phone}</Text>
-        {' '}— use mock verification below.
-      </Text>
-
+    <OnboardingFullPageFormStep
+      title="Enter verification code"
+      subtitle={`6-digit code sent to +91 ${flow.phone}`}
+      primaryLabel="Confirm code"
+      onPrimary={flow.verifyOtp}
+      primaryDisabled={cleanOtp.length < OTP_LENGTH || flow.loading}
+      primaryLoading={flow.loading}
+      secondaryAction={
+        flow.otpResendSecs > 0
+          ? undefined
+          : {
+              label: 'Resend code',
+              onPress: () => {
+                flow.setOtp('');
+                flow.startOtpCountdown();
+              },
+            }
+      }
+    >
       <MockOtpNotice />
-
       <OtpInput value={flow.otp} onChange={flow.setOtp} />
-
-      <TouchableOpacity
-        style={[styles.primaryBtn, flow.otp.replace(/\s/g, '').length < OTP_LENGTH && styles.primaryBtnDisabled]}
-        onPress={flow.verifyOtp}
-        disabled={flow.otp.replace(/\s/g, '').length < OTP_LENGTH}
-      >
-        <Text style={styles.primaryBtnText}>Verify OTP</Text>
-      </TouchableOpacity>
-
-      <View style={styles.resendRow}>
-        {flow.otpResendSecs > 0 ? (
-          <Text style={styles.resendCountdown}>Resend in {flow.otpResendSecs}s</Text>
-        ) : (
-          <TouchableOpacity onPress={() => { flow.setOtp(''); flow.startOtpCountdown(); }}>
-            <Text style={styles.altLink}>Resend OTP</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </>
+      {flow.otpResendSecs > 0 ? (
+        <Text style={styles.hint}>Resend in {flow.otpResendSecs}s</Text>
+      ) : null}
+    </OnboardingFullPageFormStep>
   );
 }
+
+const styles = StyleSheet.create({
+  hint: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: space[3],
+    textAlign: 'center',
+  },
+});

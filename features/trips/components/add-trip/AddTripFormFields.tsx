@@ -70,6 +70,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ROUTES } from "@/lib/routes";
 import { ADD_TRIP_FORM } from "./addTripFormTokens";
+import { PULSE_TRIP, PULSE_TRIP_RADIUS } from "./addTripPulseTheme";
 import type { AllocationSubStep } from "./allocationWizardSteps";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
@@ -929,7 +930,7 @@ export function AddTripFormFields({
                 <View style={styles.routePreviewHero}>
                   <ArrowRight
                     size={16}
-                    color={Theme.teslaRed}
+                    color={PULSE_TRIP.indigo}
                     strokeWidth={2}
                   />
                   <Text style={styles.routePreviewHeroText} numberOfLines={2}>
@@ -2713,7 +2714,7 @@ export function AddTripFormFields({
 const styles = StyleSheet.create({
   pageWrap: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: PULSE_TRIP.screenBg,
   },
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: {
@@ -2876,30 +2877,30 @@ const styles = StyleSheet.create({
     }),
   },
   card: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
+    backgroundColor: PULSE_TRIP.cardBg,
+    borderRadius: PULSE_TRIP_RADIUS.card,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    padding: 14,
-    marginBottom: 12,
+    borderColor: PULSE_TRIP.border,
+    padding: 18,
+    marginBottom: ADD_TRIP_FORM.cardGap,
     ...Platform.select<ViewStyle>({
       web: {
-        boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
+        boxShadow: "0 4px 15px rgba(79, 70, 229, 0.05)",
       },
       default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 2 },
+        shadowColor: PULSE_TRIP.indigo,
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowRadius: 16,
+        elevation: 3,
       },
     }),
   },
   cardDense: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingHorizontal: ADD_TRIP_FORM.cardPad,
+    paddingVertical: ADD_TRIP_FORM.cardPad,
+    borderRadius: PULSE_TRIP_RADIUS.cardDense,
+    marginBottom: ADD_TRIP_FORM.cardGap,
   },
   cardAllocWizardStep: {
     flexGrow: 1,
@@ -2914,11 +2915,11 @@ const styles = StyleSheet.create({
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    paddingBottom: 6,
-    marginBottom: 8,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_TRIP.border,
+    paddingBottom: 10,
+    marginBottom: 12,
   },
   stepBadgeDense: {
     width: 20,
@@ -2926,31 +2927,31 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   stepBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    backgroundColor: Theme.darkBackground,
+    width: 28,
+    height: 28,
+    borderRadius: PULSE_TRIP_RADIUS.badge,
+    backgroundColor: PULSE_TRIP.indigo,
     alignItems: "center",
     justifyContent: "center",
   },
   stepBadgeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnPrimary,
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   cardTitle: {
     flex: 1,
     minWidth: 0,
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 9,
-    letterSpacing: 0.3,
+    fontSize: 11,
+    letterSpacing: 0.8,
     fontStyle: "normal",
-    fontWeight: "800",
-    color: Theme.darkBackground,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    color: PULSE_TRIP.text,
   },
   cardTitleDense: {
-    fontSize: 8,
-    letterSpacing: 0.4,
+    fontSize: 10,
+    letterSpacing: 0.9,
   },
   gridRowDense: { gap: 6 },
   gridRow: { gap: 10 },
@@ -3168,16 +3169,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   label: {
-    ...FinanceTxnTypography.fieldLabel,
-    marginBottom: 3,
-    color: Theme.textMutedDemo,
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: ADD_TRIP_FORM.labelSpacing,
+    letterSpacing: 0.6,
+    lineHeight: ADD_TRIP_FORM.labelLine,
+    textTransform: "uppercase",
+    color: PULSE_TRIP.textMuted,
   },
   labelDense: {
     fontSize: ADD_TRIP_FORM.labelSize,
     marginBottom: ADD_TRIP_FORM.labelSpacing,
-    letterSpacing: 0.45,
+    letterSpacing: 0.6,
     lineHeight: ADD_TRIP_FORM.labelLine,
     textTransform: "uppercase",
+    color: PULSE_TRIP.textMuted,
   },
   input: {
     borderRadius: 11,
@@ -3197,9 +3203,12 @@ const styles = StyleSheet.create({
     fontSize: ADD_TRIP_FORM.fieldFontSize,
     lineHeight: ADD_TRIP_FORM.fieldLineHeight,
     fontStyle: "normal",
-    fontWeight: "400",
+    fontWeight: "500",
     minHeight: ADD_TRIP_FORM.fieldHeight,
     marginBottom: ADD_TRIP_FORM.fieldGap,
+    borderWidth: 1,
+    borderColor: PULSE_TRIP.border,
+    backgroundColor: "#f8fafc",
   },
   /** Align with `clientCard` in aggregate partner pane (card 03). */
   inputMatchSelectionCardDense: {
@@ -3260,10 +3269,13 @@ const styles = StyleSheet.create({
   iconInputDense: {
     minHeight: ADD_TRIP_FORM.fieldHeight,
     paddingVertical: ADD_TRIP_FORM.fieldPadV,
-    paddingLeft: 32,
+    paddingLeft: 36,
     fontSize: ADD_TRIP_FORM.fieldFontSize,
     lineHeight: ADD_TRIP_FORM.fieldLineHeight,
     fontStyle: "normal",
+    fontWeight: "500",
+    borderColor: PULSE_TRIP.border,
+    backgroundColor: "#f8fafc",
   },
   iconInput: {
     borderRadius: 11,
@@ -3404,8 +3416,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
   },
   quickDateChipActive: {
-    borderColor: Theme.iconPrimary,
-    backgroundColor: Theme.surfaceLight,
+    borderColor: PULSE_TRIP.indigo,
+    backgroundColor: PULSE_TRIP.indigoLight,
   },
   quickDateChipPressed: {
     opacity: 0.82,
@@ -3423,7 +3435,8 @@ const styles = StyleSheet.create({
     fontStyle: "normal",
   },
   quickDateChipTextActive: {
-    color: Theme.iconPrimary,
+    color: PULSE_TRIP.indigo,
+    fontWeight: "800",
   },
   dateTouchable: {
     justifyContent: "center",
@@ -3481,22 +3494,22 @@ const styles = StyleSheet.create({
     color: Theme.iconPrimary,
   },
   routePreviewPanel: {
-    marginTop: 4,
-    marginBottom: 10,
-    borderRadius: 12,
+    marginTop: 6,
+    marginBottom: 12,
+    borderRadius: PULSE_TRIP_RADIUS.cardDense,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
+    borderColor: PULSE_TRIP.border,
+    backgroundColor: PULSE_TRIP.cardBg,
     ...Platform.select<ViewStyle>({
       web: {
-        boxShadow: "0 2px 12px rgba(15,23,42,0.07)",
+        boxShadow: "0 4px 20px rgba(79, 70, 229, 0.06)",
       },
       default: {
-        shadowColor: Theme.shadow,
-        shadowOffset: { width: 0, height: 3 },
+        shadowColor: PULSE_TRIP.indigo,
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,
-        shadowRadius: 10,
+        shadowRadius: 14,
         elevation: 3,
       },
     }),
@@ -3504,12 +3517,12 @@ const styles = StyleSheet.create({
   routePreviewHero: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: Theme.surfaceGray,
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: PULSE_TRIP.indigoLight,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    borderBottomColor: PULSE_TRIP.border,
   },
   routePreviewHeroText: {
     flex: 1,
@@ -3613,8 +3626,8 @@ const styles = StyleSheet.create({
   },
   /** Picker list: highlight chosen row (light card). */
   clientCardRowSelected: {
-    borderColor: Theme.darkGreen,
-    backgroundColor: Theme.cardWhite,
+    borderColor: PULSE_TRIP.indigo,
+    backgroundColor: PULSE_TRIP.indigoLight,
   },
   /** Minimized selected party — dark chip only after choice. */
   selectionSummaryCard: {
@@ -3823,12 +3836,12 @@ const styles = StyleSheet.create({
   infoCallout: {
     flexDirection: "row",
     gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 11,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.04)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: PULSE_TRIP_RADIUS.input,
+    backgroundColor: PULSE_TRIP.indigoLight,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "rgba(79, 70, 229, 0.15)",
     alignItems: "flex-start",
   },
   infoCalloutWideSpan: {
@@ -4108,18 +4121,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Theme.darkBackground,
-    paddingVertical: 11,
-    borderRadius: 12,
-    minHeight: 44,
+    backgroundColor: PULSE_TRIP.indigo,
+    paddingVertical: 16,
+    borderRadius: PULSE_TRIP_RADIUS.btn,
+    minHeight: 52,
     ...Platform.select<ViewStyle>({
-      web: { boxShadow: "0 8px 24px rgba(0,0,0,0.35)" },
+      web: { boxShadow: "0 10px 20px rgba(79, 70, 229, 0.2)" },
       default: {
-        shadowColor: Theme.darkBackground,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-        elevation: 4,
+        shadowColor: PULSE_TRIP.indigo,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.28,
+        shadowRadius: 14,
+        elevation: 5,
       },
     }),
   },
@@ -4146,7 +4159,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 200,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    backgroundColor: PULSE_TRIP.indigoMuted,
     zIndex: -1,
   },
   blobB: {
@@ -4156,7 +4169,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 200,
-    backgroundColor: "rgba(232, 33, 39, 0.06)",
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
     zIndex: -1,
   },
   mutedSmall: {

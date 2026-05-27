@@ -288,30 +288,26 @@ export function DriversTab({
             />
           </View>
         )}
-        {viewTab === "analytics" ? (
-          <FleetDriverAnalyticsTab
-            rows={rows}
-            drivers={drivers}
-          />
-        ) : (
-          <>
-            <View style={styles.tableHeader}>
-              <View style={styles.headerEntityCol}>
-                <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
-                  Driver Entity
-                </Text>
-              </View>
-              <View style={styles.headerTripsCol}>
-                <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
-                  Trips
-                </Text>
-              </View>
-              <View style={styles.headerPendingCol}>
-                <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-                  Pending
-                </Text>
-              </View>
+        {viewTab !== "analytics" ? (
+          <View style={styles.tableHeader}>
+            <View style={styles.headerEntityCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
+                Driver Entity
+              </Text>
             </View>
+            <View style={styles.headerTripsCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
+                Trips
+              </Text>
+            </View>
+            <View style={styles.headerPendingCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                Pending
+              </Text>
+            </View>
+          </View>
+        ) : null}
+        {viewTab !== "analytics" ? (
             <View style={styles.tableCard}>
               {visibleDriverRows.map((data) => {
                 const pending = data.pending ?? 0;
@@ -372,8 +368,13 @@ export function DriversTab({
                 );
               })}
             </View>
-          </>
-        )}
+        ) : null}
+        {viewTab === "analytics" ? (
+          <FleetDriverAnalyticsTab
+            rows={rows}
+            drivers={drivers}
+          />
+        ) : null}
       </ScrollView>
     </View>
   );

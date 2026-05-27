@@ -1,60 +1,76 @@
-import { LoadingIndicator } from '@/components/LoadingIndicator';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import {
+  OnboardingFocusedField,
+  OnboardingFullPageFormStep,
+  OnboardingKeypadAltRow,
+} from '@/features/onboarding';
+import { OperationalButton } from '@/components/operational';
+import { colors } from '@/design-system/colors';
 import { C, styles } from '../businessSignUp.styles';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 
 export function AccountStep({ flow }: { flow: SignUpFlow }) {
   return (
-    <>
-      <Text style={styles.pageTitle}>Create account</Text>
-      <Text style={styles.pageSub}>Enter your email and password to finish.</Text>
+    <OnboardingFullPageFormStep
+      title="Secure your account"
+      subtitle="Final credentials before workspace activation."
+      eyebrow="Account"
+      primaryLabel="Activate account"
+      onPrimary={flow.createAccount}
+      primaryDisabled={flow.loading || flow.googleLoading}
+      primaryLoading={flow.loading}
+      footerAccessory={
+        <OnboardingKeypadAltRow>
+          <OperationalButton
+            intent="utility"
+            label="Continue with Google"
+            onPress={flow.continueWithGoogle}
+            disabled={flow.loading || flow.googleLoading}
+            loading={flow.googleLoading}
+            fullWidth
+            icon={<FontAwesome name="google" size={14} color={colors.textPrimary} />}
+          />
+        </OnboardingKeypadAltRow>
+      }
+    >
+      <OnboardingFocusedField
+        label="Full name"
+        value={flow.fullName}
+        onChangeText={flow.setFullName}
+        placeholder="Your name"
+        autoCapitalize="words"
+        editable={!flow.loading}
+        errorMessage={flow.step5Attempted ? flow.step5Errors.fullName : null}
+      />
+
+      <OnboardingFocusedField
+        label="Email address"
+        value={flow.email}
+        onChangeText={flow.setEmail}
+        placeholder="you@example.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        editable={!flow.loading}
+        errorMessage={flow.step5Attempted ? flow.step5Errors.email : null}
+      />
 
       <View style={styles.fieldGroup}>
-        <Text style={[styles.label, flow.step4Attempted && flow.step4Errors.fullName ? styles.labelError : null]}>
-          Full name <Text style={styles.req}>*</Text>
-        </Text>
-        <TextInput
-          style={[styles.input, flow.step4Attempted && flow.step4Errors.fullName ? styles.inputError : null]}
-          placeholder="Your name"
-          placeholderTextColor={C.placeholder}
-          value={flow.fullName}
-          onChangeText={flow.setFullName}
-          autoCapitalize="words"
-          editable={!flow.loading}
-        />
-        {flow.step4Attempted && flow.step4Errors.fullName
-          ? <Text style={styles.fieldError}>{flow.step4Errors.fullName}</Text>
-          : null}
-      </View>
-
-      <View style={styles.fieldGroup}>
-        <Text style={[styles.label, flow.step4Attempted && flow.step4Errors.email ? styles.labelError : null]}>
-          Email address <Text style={styles.req}>*</Text>
-        </Text>
-        <TextInput
-          style={[styles.input, flow.step4Attempted && flow.step4Errors.email ? styles.inputError : null]}
-          placeholder="you@example.com"
-          placeholderTextColor={C.placeholder}
-          value={flow.email}
-          onChangeText={flow.setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!flow.loading}
-        />
-        {flow.step4Attempted && flow.step4Errors.email
-          ? <Text style={styles.fieldError}>{flow.step4Errors.email}</Text>
-          : null}
-      </View>
-
-      <View style={styles.fieldGroup}>
-        <Text style={[styles.label, flow.step4Attempted && flow.step4Errors.password ? styles.labelError : null]}>
+        <Text
+          style={[
+            styles.label,
+            flow.step5Attempted && flow.step5Errors.password ? styles.labelError : null,
+          ]}
+        >
           Password <Text style={styles.req}>*</Text>
         </Text>
         <View style={styles.passwordRow}>
           <TextInput
-            style={[styles.inputPassword, flow.step4Attempted && flow.step4Errors.password ? styles.inputError : null]}
+            style={[
+              styles.inputPassword,
+              flow.step5Attempted && flow.step5Errors.password ? styles.inputError : null,
+            ]}
             placeholder="At least 6 characters"
             placeholderTextColor={C.placeholder}
             value={flow.password}
@@ -63,60 +79,58 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
             editable={!flow.loading}
           />
           <TouchableOpacity onPress={flow.toggleShowPassword} style={styles.eyeBtn}>
-            <FontAwesome name={flow.showPassword ? 'eye-slash' : 'eye'} size={18} color={C.muted} />
+            <FontAwesome
+              name={flow.showPassword ? 'eye-slash' : 'eye'}
+              size={18}
+              color={C.muted}
+            />
           </TouchableOpacity>
         </View>
-
         <View style={[styles.strengthWrap, { opacity: flow.password.length >= 6 ? 1 : 0 }]}>
           <View style={styles.strengthBar}>
-            {([1, 2, 3, 4] as const).map(seg => (
+            {([1, 2, 3, 4] as const).map((seg) => (
               <View
                 key={seg}
                 style={[
                   styles.strengthSeg,
-                  flow.passwordStrength >= seg && (
-                    flow.passwordStrength <= 1 ? styles.strengthWeak :
-                    flow.passwordStrength === 2 ? styles.strengthFair :
-                    flow.passwordStrength === 3 ? styles.strengthGood :
-                    styles.strengthStrong
-                  ),
+                  flow.passwordStrength >= seg &&
+                    (flow.passwordStrength <= 1
+                      ? styles.strengthWeak
+                      : flow.passwordStrength === 2
+                        ? styles.strengthFair
+                        : flow.passwordStrength === 3
+                          ? styles.strengthGood
+                          : styles.strengthStrong),
                 ]}
               />
             ))}
           </View>
-          <Text style={[
-            styles.strengthLabel,
-            flow.passwordStrength <= 1 ? styles.strengthLabelWeak :
-            flow.passwordStrength === 2 ? styles.strengthLabelFair :
-            flow.passwordStrength === 3 ? styles.strengthLabelGood :
-            styles.strengthLabelStrong,
-          ]}>
-            {flow.passwordStrength <= 1 ? 'Weak' :
-             flow.passwordStrength === 2 ? 'Fair' :
-             flow.passwordStrength === 3 ? 'Good' : 'Strong'}
-          </Text>
         </View>
-
-        {flow.step4Attempted && flow.step4Errors.password
-          ? <Text style={styles.fieldError}>{flow.step4Errors.password}</Text>
-          : null}
+        {flow.step5Attempted && flow.step5Errors.password ? (
+          <Text style={styles.fieldError}>{flow.step5Errors.password}</Text>
+        ) : null}
       </View>
 
       <View style={styles.fieldGroup}>
-        <Text style={[
-          styles.label,
-          (flow.step4Attempted && flow.step4Errors.confirmPassword) || flow.confirmMismatch
-            ? styles.labelError : null,
-        ]}>
+        <Text
+          style={[
+            styles.label,
+            (flow.step5Attempted && flow.step5Errors.confirmPassword) || flow.confirmMismatch
+              ? styles.labelError
+              : null,
+          ]}
+        >
           Confirm password <Text style={styles.req}>*</Text>
         </Text>
         <View style={styles.passwordRow}>
           <TextInput
             style={[
               styles.inputPassword,
-              (flow.step4Attempted && flow.step4Errors.confirmPassword) || flow.confirmMismatch
+              (flow.step5Attempted && flow.step5Errors.confirmPassword) || flow.confirmMismatch
                 ? styles.inputError
-                : flow.confirmPassword.length > 0 && !flow.confirmMismatch && flow.password === flow.confirmPassword
+                : flow.confirmPassword.length > 0 &&
+                    !flow.confirmMismatch &&
+                    flow.password === flow.confirmPassword
                   ? styles.inputSuccess
                   : null,
             ]}
@@ -129,44 +143,21 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
             onFocus={flow.scrollConfirmPasswordIntoView}
           />
           <TouchableOpacity onPress={flow.toggleShowConfirmPassword} style={styles.eyeBtn}>
-            <FontAwesome name={flow.showConfirmPassword ? 'eye-slash' : 'eye'} size={18} color={C.muted} />
+            <FontAwesome
+              name={flow.showConfirmPassword ? 'eye-slash' : 'eye'}
+              size={18}
+              color={C.muted}
+            />
           </TouchableOpacity>
         </View>
         {flow.confirmMismatch ? (
           <Text style={styles.fieldError}>Passwords do not match.</Text>
         ) : flow.confirmPassword.length > 0 && flow.password === flow.confirmPassword ? (
           <Text style={styles.fieldSuccess}>Passwords match.</Text>
-        ) : flow.step4Attempted && flow.step4Errors.confirmPassword ? (
-          <Text style={styles.fieldError}>{flow.step4Errors.confirmPassword}</Text>
+        ) : flow.step5Attempted && flow.step5Errors.confirmPassword ? (
+          <Text style={styles.fieldError}>{flow.step5Errors.confirmPassword}</Text>
         ) : null}
       </View>
-
-      <TouchableOpacity
-        style={[styles.primaryBtn, flow.loading && styles.primaryBtnDisabled]}
-        onPress={flow.createAccount}
-        disabled={flow.loading || flow.googleLoading}
-      >
-        {flow.loading
-          ? <LoadingIndicator color="#fff" />
-          : <Text style={styles.primaryBtnText}>Create account</Text>}
-      </TouchableOpacity>
-
-      <View style={styles.altRow}>
-        <Text style={styles.altText}>or</Text>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.googleBtn, (flow.loading || flow.googleLoading) && styles.primaryBtnDisabled]}
-        onPress={flow.continueWithGoogle}
-        disabled={flow.loading || flow.googleLoading}
-      >
-        {flow.googleLoading
-          ? <LoadingIndicator color={C.text} />
-          : <>
-              <FontAwesome name="google" size={14} color={C.text} />
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
-            </>}
-      </TouchableOpacity>
-    </>
+    </OnboardingFullPageFormStep>
   );
 }

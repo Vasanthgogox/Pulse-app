@@ -5,6 +5,7 @@
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import { PULSE_TRIP, PULSE_TRIP_RADIUS } from "./addTripPulseTheme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useOptionalKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
@@ -105,7 +106,7 @@ export function AddTripModalLayout({
         <View style={[styles.topBarMain, isCompactMobile && styles.topBarMainCompact]}>
           <View style={[styles.topBarLeft, isCompactMobile && styles.topBarLeftCompact]}>
             <TouchableOpacity style={styles.topBarBackBtn} onPress={onClose} activeOpacity={0.85}>
-              <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
+              <FontAwesome name="chevron-left" size={16} color={PULSE_TRIP.text} />
             </TouchableOpacity>
             <View style={styles.topBarTextWrap}>
               <Text style={styles.topBarTitle}>{title}</Text>
@@ -194,7 +195,7 @@ export function AddTripModalLayout({
                   <FontAwesome
                     name="check-circle"
                     size={18}
-                    color={Theme.buttonMatteBlackText}
+                    color="#ffffff"
                     style={styles.submitIcon}
                   />
                   <Text style={styles.submitBtnText}>{submitLabel}</Text>
@@ -216,20 +217,20 @@ export function AddTripModalLayout({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: PULSE_TRIP.screenBg,
   },
   topBar: {
     width: "100%",
-    paddingBottom: 10,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.screenBackground,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    backgroundColor: PULSE_TRIP.cardBg,
     borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    shadowColor: Theme.shadow,
+    borderBottomColor: PULSE_TRIP.border,
+    shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
   },
   topBarCompact: {
     paddingHorizontal: 10,
@@ -254,14 +255,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   topBarBackBtn: {
-    width: 34,
-    height: 34,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surfaceForm,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 0,
     marginRight: 10,
   },
   topBarTextWrap: {
@@ -269,19 +269,19 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   topBarTitle: {
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 12,
-    letterSpacing: 0.3,
-    color: Theme.textPrimaryDark,
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    color: PULSE_TRIP.text,
   },
   topBarSubtitle: {
-    ...FinanceTxnTypography.routeWhy,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     fontStyle: "normal",
-    marginTop: 3,
-    letterSpacing: 0.25,
-    color: Theme.textSecondary,
+    marginTop: 4,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: PULSE_TRIP.indigo,
   },
   topBarActions: {
     flexDirection: "row",
@@ -312,11 +312,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   topBarSaveBtn: {
-    minHeight: 38,
-    paddingVertical: 9,
+    minHeight: 40,
+    paddingVertical: 10,
     paddingHorizontal: 18,
-    borderRadius: 11,
-    backgroundColor: Theme.darkBackground,
+    borderRadius: PULSE_TRIP_RADIUS.chip,
+    backgroundColor: PULSE_TRIP.indigo,
+    shadowColor: PULSE_TRIP.indigo,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   topBarSaveBtnDisabled: {
     opacity: 0.5,
@@ -353,8 +358,10 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 4,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 8,
+    backgroundColor: PULSE_TRIP.cardBg,
+    paddingHorizontal: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: PULSE_TRIP.border,
   },
   footerDense: {
     marginTop: 2,
@@ -364,15 +371,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.buttonMatteBlack,
-    paddingVertical: 12,
-    borderRadius: 16,
-    minHeight: Layout.minTouchTargetSize + 12,
-    shadowColor: Theme.buttonMatteBlack,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 3,
+    backgroundColor: PULSE_TRIP.indigo,
+    paddingVertical: 16,
+    borderRadius: PULSE_TRIP_RADIUS.btn,
+    minHeight: Layout.minTouchTargetSize + 8,
+    shadowColor: PULSE_TRIP.indigo,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 5,
   },
   submitBtnDense: {
     paddingVertical: 10,
@@ -386,11 +393,11 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   submitBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.buttonMatteBlackText,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
     textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.6,
   },
   footerHint: {
     fontSize: 11,
