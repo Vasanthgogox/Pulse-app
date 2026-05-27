@@ -933,7 +933,7 @@ export function FinanceScreen() {
 
   useEffect(() => {
     if (financeSubTab !== "garage" || !showReportModal) {
-      setGarageReportTransactions([]);
+      setGarageReportTransactions((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     const organizationId = currentOrganization?.id ?? null;

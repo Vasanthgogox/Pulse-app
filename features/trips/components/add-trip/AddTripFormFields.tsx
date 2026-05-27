@@ -70,7 +70,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ROUTES } from "@/lib/routes";
 import { ADD_TRIP_FORM } from "./addTripFormTokens";
+import type { AllocationSubStep } from "./allocationWizardSteps";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
+import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { LocationSearchField } from "./LocationSearchField";
 import type { AddTripFormState } from "./types";
 import type { AddTripIssueField, AddTripValidationIssue } from "./useAddTripForm";
@@ -150,6 +152,8 @@ export interface AddTripFormFieldsProps {
    * When unset, renders the full 01/02/03 cards.
    */
   wizardSection?: "route" | "client" | "allocation";
+  /** Mobile allocation sub-step (one screen at a time). */
+  allocationSubStep?: AllocationSubStep;
 }
 
 export function AddTripFormFields({
@@ -167,6 +171,7 @@ export function AddTripFormFields({
   showInlineCta = true,
   enablePrimaryWhenInvalid = false,
   wizardSection,
+  allocationSubStep,
 }: AddTripFormFieldsProps) {
   void refetchClients;
   const invalidSet = useMemo(
@@ -245,6 +250,36 @@ export function AddTripFormFields({
   const showClientCard = wizardSection == null || wizardSection === "client";
   const showAllocationCard =
     wizardSection == null || wizardSection === "allocation";
+  const mobileAllocWizard = allocationSubStep != null;
+  const showAlloc = useCallback(
+    (step: AllocationSubStep) =>
+      allocationSubStep == null || allocationSubStep === step,
+    [allocationSubStep],
+  );
+  const showDriverNameField =
+    !mobileAllocWizard || allocationSubStep === "driverName";
+  const showDriverPhoneField =
+    !mobileAllocWizard || allocationSubStep === "driverPhone";
+  const showVehicleField =
+    !mobileAllocWizard || allocationSubStep === "vehicle";
+  /** Asset fleet pickers share the supply sub-step on mobile (not separate steps). */
+  const showAssetFleetInline =
+    mobileAllocWizard &&
+    allocationSubStep === "supply" &&
+    state.supplySource === "asset" &&
+    !state.assignLater;
+  /** Aggregate partner list on the supply sub-step (mobile). */
+  const showAggregatePartnerInline =
+    mobileAllocWizard &&
+    allocationSubStep === "supply" &&
+    state.supplySource === "aggregate";
+  const aggregateTrackingStep = showDriverNameField
+    ? ("driverName" as const)
+    : showDriverPhoneField
+      ? ("driverPhone" as const)
+      : showVehicleField
+        ? ("vehicle" as const)
+        : null;
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   /** Expanded picker vs minimized summary chip — start collapsed when a value is already set. */
   const [clientListExpanded, setClientListExpanded] = useState(() => !state.clientId);
@@ -388,10 +423,29 @@ export function AddTripFormFields({
   const fetchSuppliers = useCallback(() => {
     if (!organizationId) return;
     setSuppliersLoading(true);
-    getSuppliersByOrganization(organizationId).then((r) => {
-      setSuppliers(r.error ? [] : r.suppliers);
-      setSuppliersLoading(false);
-    });
+    void getSuppliersByOrganization(organizationId)
+      .then((r) => {
+        if (r.error) {
+          if (__DEV__) {
+            console.warn("[AddTrip] load suppliers:", r.error.message);
+          }
+          setSuppliers([]);
+          return;
+        }
+        setSuppliers(r.suppliers);
+      })
+      .catch((e) => {
+        if (__DEV__) {
+          console.warn(
+            "[AddTrip] load suppliers:",
+            e instanceof Error ? e.message : e,
+          );
+        }
+        setSuppliers([]);
+      })
+      .finally(() => {
+        setSuppliersLoading(false);
+      });
   }, [organizationId]);
 
   useEffect(() => {
@@ -419,8 +473,10 @@ export function AddTripFormFields({
   }, [state.vehicleId, vehicleIdsOnActiveTrip, setters]);
 
   useEffect(() => {
-    if (organizationId && state.supplySource === "aggregate") fetchSuppliers();
-  }, [organizationId, state.supplySource, fetchSuppliers]);
+    if (!organizationId || state.supplySource !== "aggregate") return;
+    fetchSuppliers();
+    if (!state.supplierId) setPartnerListExpanded(true);
+  }, [organizationId, state.supplySource, fetchSuppliers, state.supplierId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1112,6 +1168,21 @@ export function AddTripFormFields({
                   onChange={(raw) => setters.setClientPrice(raw)}
                   variant="field"
                   required
+                  partyPreview={
+                    selectedClientRow
+                      ? {
+                          name: selectedClientRow.name ?? "Client",
+                          subtitle: selectedClientRow.address ?? undefined,
+                          entityType: "client",
+                          avatarUrl:
+                            (selectedClientRow as { avatar_url?: string | null })
+                              .avatar_url ?? null,
+                          avatarSeed:
+                            (selectedClientRow as { avatar_seed?: string | null })
+                              .avatar_seed ?? null,
+                        }
+                      : undefined
+                  }
                   errorMessage={invalid("clientPrice") ? "Enter a sale price" : undefined}
                 />
                 {!isWide ? (
@@ -1146,6 +1217,9 @@ export function AddTripFormFields({
                 styles.card,
                 isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardGridSupplyWeb,
+                mobileAllocWizard &&
+                  aggregateTrackingStep != null &&
+                  styles.cardAllocWizardStep,
               ]}
             >
             <View style={[styles.cardHead, styles.cardHeadWithTrailingAction, isDenseForm && styles.cardHeadDense]}>
@@ -1182,6 +1256,8 @@ export function AddTripFormFields({
               </TouchableOpacity>
             </View>
 
+            {showAlloc("supply") ? (
+            <>
             <View
               style={[
                 styles.supplyModeRow,
@@ -1200,9 +1276,11 @@ export function AddTripFormFields({
                 </View>
                 <View style={styles.assignLaterMergedWrap}>
                   <Text
-                    style={styles.assignLaterMergedText}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
+                    style={[
+                      styles.assignLaterMergedText,
+                      isDenseForm && styles.assignLaterMergedTextDense,
+                    ]}
+                    numberOfLines={isDenseForm ? 2 : 1}
                   >
                     <Text style={styles.assignLaterTitleInline}>Assign later </Text>
                     <Text style={styles.assignLaterSubInline}>
@@ -1299,8 +1377,14 @@ export function AddTripFormFields({
                   : "Add vehicle number and driver phone on the trip screen before the trip starts."}
               </Text>
             ) : null}
+            </>
+            ) : null}
 
-            {supplyIsAsset ? (
+            {supplyIsAsset &&
+            (!mobileAllocWizard ||
+              showAlloc("fleetDriver") ||
+              showAlloc("fleetVehicle") ||
+              showAssetFleetInline) ? (
               <>
                 {busyFleetHintAsset ? (
                   <View style={styles.warnBanner}>
@@ -1325,7 +1409,8 @@ export function AddTripFormFields({
                   </View>
                 ) : null}
 
-                {!state.assignLater ? (
+                {!state.assignLater &&
+                (showAlloc("fleetDriver") || !mobileAllocWizard || showAssetFleetInline) ? (
                   <View
                     style={[
                       styles.gridRow,
@@ -1568,6 +1653,7 @@ export function AddTripFormFields({
                         </View>
                       </View>
                     </View>
+                    {(showAlloc("fleetVehicle") || !mobileAllocWizard || showAssetFleetInline) ? (
                     <View
                       style={[
                         styles.gridCol,
@@ -1798,6 +1884,7 @@ export function AddTripFormFields({
                         </View>
                       </View>
                     </View>
+                    ) : null}
                   </View>
                 ) : null}
               </>
@@ -1807,15 +1894,19 @@ export function AddTripFormFields({
                   style={[
                     styles.aggregateSplit,
                     allocationWideLayout && styles.aggregateSplitWide,
+                    mobileAllocWizard && styles.aggregateSplitMobileWizard,
                   ]}
                 >
+                  {(showAlloc("partner") ||
+                    !mobileAllocWizard ||
+                    showAggregatePartnerInline) ? (
                   <View
                     style={[
                       styles.aggregateLeftPane,
                       allocationWideLayout && styles.aggregatePaneWide,
                       invalid("partner") && styles.fieldGroupRing,
                     ]}
-                  >
+                >
                 <View
                   style={[
                     allocationWideLayout
@@ -1975,6 +2066,12 @@ export function AddTripFormFields({
                 )}
                 </View>
                   </View>
+                  ) : null}
+                  {(showAlloc("rates") ||
+                    showAlloc("driverName") ||
+                    showAlloc("driverPhone") ||
+                    showAlloc("vehicle") ||
+                    !mobileAllocWizard) ? (
                   <View
                     style={[
                       styles.aggregateRightPane,
@@ -2030,7 +2127,7 @@ export function AddTripFormFields({
                       </View>
                     </View>
                   </>
-                ) : (
+                ) : (showAlloc("rates") || !mobileAllocWizard) ? (
                 <View
                   style={[
                     styles.gridRow,
@@ -2045,6 +2142,37 @@ export function AddTripFormFields({
                       onChange={(raw) => setters.setSupplierRate(raw)}
                       variant="field"
                       required
+                      partyPreview={
+                        selectedSupplierRow
+                          ? {
+                              name:
+                                selectedSupplierRow.company_name?.trim() ||
+                                selectedSupplierRow.name?.trim() ||
+                                "Partner",
+                              subtitle: [
+                                selectedSupplierRow.supplier_type,
+                                selectedSupplierRow.phone,
+                              ]
+                                .filter(Boolean)
+                                .join(" · "),
+                              entityType: "supplier",
+                              avatarUrl:
+                                (selectedSupplierRow as { avatar_url?: string | null })
+                                  .avatar_url ?? null,
+                              avatarSeed:
+                                (selectedSupplierRow as { avatar_seed?: string | null })
+                                  .avatar_seed ?? null,
+                              organizationImageUrl:
+                                (selectedSupplierRow as {
+                                  organization_avatar_url?: string | null;
+                                }).organization_avatar_url ?? null,
+                              organizationAvatarSeed:
+                                (selectedSupplierRow as {
+                                  organization_avatar_seed?: string | null;
+                                }).organization_avatar_seed ?? null,
+                            }
+                          : undefined
+                      }
                       errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
                     />
                   </View>
@@ -2059,10 +2187,165 @@ export function AddTripFormFields({
                     />
                   </View>
                 </View>
-                )}
+                ) : null}
 
-                {!state.assignLater ? (
+                {!state.assignLater &&
+                (showDriverNameField ||
+                  showDriverPhoneField ||
+                  showVehicleField) ? (
                   <>
+                    {mobileAllocWizard && aggregateTrackingStep ? (
+                      <AggregateTrackingMobileStep
+                        step={aggregateTrackingStep}
+                        driverName={state.aggregateDriverName}
+                        onDriverNameChange={(t) =>
+                          onPadValueChange(setters.setAggregateDriverName, t)
+                        }
+                        driverPhone={state.driverPhone}
+                        onDriverPhoneChange={(v) =>
+                          setters.setDriverPhone(formatMobileNumber(v))
+                        }
+                        vehicleText={state.aggregateVehicleText}
+                        onVehicleTextChange={(v) =>
+                          setters.setAggregateVehicleText(
+                            formatIndianVehicleNumberInput(v),
+                          )
+                        }
+                        invalid={invalid}
+                        driverNameInputRef={aggregateDriverNameInputRef}
+                        driverPhoneInputRef={driverPhoneInputRef}
+                        vehicleInputRef={aggregateVehicleInputRef}
+                        inputAccessoryViewID={kbAccessoryId}
+                        onFocusDriverName={() => {
+                          focusPadField(
+                            () => focusNextField(driverPhoneInputRef),
+                            state.aggregateDriverName,
+                          );
+                        }}
+                        onFocusDriverPhone={() => {
+                          focusPadField(
+                            () => focusNextField(aggregateVehicleInputRef),
+                            state.driverPhone,
+                          );
+                        }}
+                        onFocusVehicle={() => {
+                          focusPadField(
+                            finishPadFieldEntry,
+                            state.aggregateVehicleText,
+                            "Next",
+                          );
+                        }}
+                        phoneDigitHint={
+                          state.driverPhone.length > 0 &&
+                          state.driverPhone.length < 10
+                            ? `${state.driverPhone.length}/10 digits`
+                            : null
+                        }
+                        phoneValidationMessage={
+                          state.driverPhone.trim() &&
+                          validatePhone(state.driverPhone.trim())
+                            ? validatePhone(state.driverPhone.trim())
+                            : null
+                        }
+                        phoneExtras={
+                          showDriverPhoneField ? (
+                            <>
+                              {state.driverPhoneTripConflict ? (
+                                <View
+                                  style={[
+                                    styles.driverConfirmCard,
+                                    styles.driverConfirmCardError,
+                                    { marginTop: 12 },
+                                  ]}
+                                  accessibilityRole="alert"
+                                >
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text
+                                      style={[
+                                        styles.driverConfirmMain,
+                                        { color: Theme.destructive },
+                                      ]}
+                                      numberOfLines={2}
+                                    >
+                                      {state.driverPhoneName?.trim()
+                                        ? `${state.driverPhoneName.trim()} is already on a trip`
+                                        : "This driver is already on a trip"}
+                                    </Text>
+                                    <Text style={styles.driverConfirmSub}>
+                                      {state.driverPhoneTripConflictLabel
+                                        ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
+                                        : "Driver is Busy / On Trip. Use a different number or complete the current trip first."}
+                                    </Text>
+                                  </View>
+                                  <AlertCircle
+                                    size={20}
+                                    color={Theme.destructive}
+                                  />
+                                </View>
+                              ) : state.driverPhoneName ? (
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    const nextConfirmed = !state.driverPhoneConfirmed;
+                                    const resolved =
+                                      state.driverPhoneName?.trim() ?? "";
+                                    if (
+                                      nextConfirmed &&
+                                      resolved &&
+                                      !state.aggregateDriverName.trim()
+                                    ) {
+                                      setters.setAggregateDriverName(resolved);
+                                    }
+                                    setters.setDriverPhoneConfirmed(nextConfirmed);
+                                  }}
+                                  style={[
+                                    styles.driverConfirmCard,
+                                    { marginTop: 12 },
+                                    state.driverPhoneConfirmed &&
+                                      styles.driverConfirmCardConfirmed,
+                                    invalid("driverConfirm") &&
+                                      styles.driverConfirmCardError,
+                                  ]}
+                                >
+                                  <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text
+                                      style={[
+                                        styles.driverConfirmMain,
+                                        state.driverPhoneConfirmed &&
+                                          styles.driverConfirmMainOnDark,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {state.driverPhoneConfirmed
+                                        ? `Confirmed: ${state.driverPhoneName}`
+                                        : `Found: ${state.driverPhoneName}`}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.driverConfirmSub,
+                                        state.driverPhoneConfirmed &&
+                                          styles.driverConfirmSubOnDark,
+                                      ]}
+                                    >
+                                      {state.driverPhoneConfirmed
+                                        ? "Tap again to change"
+                                        : "Tap to confirm before creating the trip"}
+                                    </Text>
+                                  </View>
+                                  <CheckCircle2
+                                    size={18}
+                                    color={
+                                      state.driverPhoneConfirmed
+                                        ? Theme.textOnPrimary
+                                        : Theme.iconPrimary
+                                    }
+                                  />
+                                </TouchableOpacity>
+                              ) : null}
+                            </>
+                          ) : null
+                        }
+                      />
+                    ) : (
                     <View
                       style={[
                         styles.gridRow,
@@ -2071,7 +2354,8 @@ export function AddTripFormFields({
                         driverVehicleSideBySide && styles.gridRowWide,
                       ]}
                     >
-                      <View style={styles.gridCol}>
+                      {showDriverNameField ? (
+                      <View style={[styles.gridCol, mobileAllocWizard && styles.allocWizardFieldCol]}>
                         <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                           Driver name (tracking) *
                         </Text>
@@ -2108,7 +2392,9 @@ export function AddTripFormFields({
                           />
                         </View>
                       </View>
-                      <View style={styles.gridCol}>
+                      ) : null}
+                      {showDriverPhoneField ? (
+                      <View style={[styles.gridCol, mobileAllocWizard && styles.allocWizardFieldCol]}>
                         <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
                           Driver phone (tracking) *
                         </Text>
@@ -2166,9 +2452,12 @@ export function AddTripFormFields({
                           </Text>
                         ) : null}
                       </View>
+                      ) : null}
+                      {showVehicleField ? (
                       <View
                         style={[
                           styles.gridCol,
+                          mobileAllocWizard && styles.allocWizardFieldCol,
                           !driverVehicleSideBySide && styles.gridColFleetVehicle,
                         ]}
                       >
@@ -2212,8 +2501,12 @@ export function AddTripFormFields({
                           />
                         </View>
                       </View>
+                      ) : null}
                     </View>
-                    {state.driverPhoneTripConflict ? (
+                    )}
+                    {showDriverPhoneField &&
+                    !mobileAllocWizard &&
+                    state.driverPhoneTripConflict ? (
                       <View
                         style={[
                           styles.driverConfirmCard,
@@ -2244,7 +2537,9 @@ export function AddTripFormFields({
                           color={Theme.destructive}
                         />
                       </View>
-                    ) : state.driverPhoneName ? (
+                    ) : showDriverPhoneField &&
+                      !mobileAllocWizard &&
+                      state.driverPhoneName ? (
                         <TouchableOpacity
                           onPress={() => {
                             const nextConfirmed = !state.driverPhoneConfirmed;
@@ -2314,6 +2609,7 @@ export function AddTripFormFields({
                 )}
                 </View>
                   </View>
+                  ) : null}
                 </View>
               </>
             )}
@@ -2441,33 +2737,31 @@ const styles = StyleSheet.create({
   },
   /** Desktop web: row1 route|client; row2 supply full width; row3 CTA. */
   formColumnGridWeb: Platform.select<ViewStyle>({
+    // CSS grid is not in ViewStyle — intentional RN-Web extension
     web: {
       display: "grid",
       gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
       gap: 16,
       alignItems: "start",
       gridAutoRows: "min-content",
-    } as ViewStyle,
+    } as unknown as ViewStyle,
     default: {},
   }),
   ctaGridSpanWeb: Platform.select<ViewStyle>({
-    web: {
-      gridColumn: "1 / -1",
-      gridRow: 3,
-    } as ViewStyle,
+    web: { gridColumn: "1 / -1", gridRow: 3 } as unknown as ViewStyle,
     default: {},
   }),
   /** Desktop grid: route|client row1; supply spans row2 (notes via modal). */
   cardGridRouteWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: 1, gridRow: 1 } as ViewStyle,
+    web: { gridColumn: 1, gridRow: 1 } as unknown as ViewStyle,
     default: {},
   }),
   cardGridClientWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: 2, gridRow: 1 } as ViewStyle,
+    web: { gridColumn: 2, gridRow: 1 } as unknown as ViewStyle,
     default: {},
   }),
   cardGridSupplyWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: "1 / -1", gridRow: 2 } as ViewStyle,
+    web: { gridColumn: "1 / -1", gridRow: 2 } as unknown as ViewStyle,
     default: {},
   }),
   cardHeadWithTrailingAction: {
@@ -2607,6 +2901,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
+  cardAllocWizardStep: {
+    flexGrow: 1,
+    minHeight: 320,
+    paddingBottom: 8,
+  },
   cardHeadDense: {
     paddingBottom: 4,
     marginBottom: 6,
@@ -2684,6 +2983,15 @@ const styles = StyleSheet.create({
   },
   aggregateSplit: {
     gap: 10,
+  },
+  aggregateSplitMobileWizard: {
+    flexDirection: "column",
+    gap: 8,
+  },
+  allocWizardFieldCol: {
+    flexBasis: "auto",
+    width: "100%",
+    maxWidth: "100%",
   },
   aggregateSplitWide: {
     flexDirection: "row",
@@ -2964,10 +3272,10 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     fontSize: 10,
     fontWeight: "400",
-    fontStyle: "italic",
+    fontStyle: "normal",
     minHeight: 36,
-    borderWidth: 2,
-    borderColor: Theme.borderLight,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceForm,
     color: Theme.textPrimary,
     alignSelf: "stretch",
@@ -3008,9 +3316,9 @@ const styles = StyleSheet.create({
   inPhoneOuter: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: 11,
-    borderColor: Theme.borderLight,
+    borderColor: Theme.borderInput,
     backgroundColor: Theme.surfaceForm,
     minHeight: 36,
     paddingLeft: 9,
@@ -3042,7 +3350,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     fontSize: 10,
     fontWeight: "400",
-    fontStyle: "italic",
+    fontStyle: "normal",
     color: Theme.textPrimary,
     ...Platform.select({
       web: {
@@ -3108,12 +3416,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   quickDateChipText: {
-    ...FinanceTxnTypography.chatFilterPill,
-    fontSize: 8,
-    letterSpacing: 0.45,
+    fontSize: 11,
+    letterSpacing: 0.3,
     fontWeight: "600",
     color: Theme.textMuted,
-    fontStyle: "italic",
+    fontStyle: "normal",
   },
   quickDateChipTextActive: {
     color: Theme.iconPrimary,
@@ -3207,10 +3514,11 @@ const styles = StyleSheet.create({
   routePreviewHeroText: {
     flex: 1,
     minWidth: 0,
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 10,
-    lineHeight: 14,
-    letterSpacing: 0.2,
+    fontSize: 14,
+    fontWeight: "600",
+    fontStyle: "normal",
+    lineHeight: 18,
+    letterSpacing: 0,
     color: Theme.textPrimaryDark,
   },
   routePreviewMetrics: {
@@ -3676,6 +3984,10 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  assignLaterMergedTextDense: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
   assignLaterTitleInline: {
     fontSize: 12,
     fontWeight: "600",
@@ -3739,14 +4051,14 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   inputErrorOutline: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: Theme.destructive,
   },
   fieldGroupRing: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Theme.destructive,
-    borderRadius: 12,
-    padding: 6,
+    borderRadius: ADD_TRIP_FORM.fieldRadius,
+    padding: 4,
   },
   validationChecklist: {
     width: "100%",
