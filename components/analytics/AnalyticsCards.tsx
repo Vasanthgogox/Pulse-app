@@ -19,19 +19,24 @@
  * analytics tabs and refactored existing tabs land visually identical.
  */
 
-import { memo, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type ViewStyle,
 } from "react-native";
 
 import { Theme } from "@/constants/Theme";
 
 import type { ScoreLevel } from "@/features/analytics";
+
+import { resolveAnalyticsColumns } from "./analyticsLayout";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KPICard
@@ -180,6 +185,17 @@ export const KPIHeader = memo(function KPIHeader({
   subtitle,
   rightAction,
 }: KPIHeaderProps) {
+  const { width } = useWindowDimensions();
+  const effectiveColumns = resolveAnalyticsColumns(width, columns);
+
+  const rows = useMemo(() => {
+    const out: Array<ReadonlyArray<KPICardProps & { id: string }>> = [];
+    for (let i = 0; i < cards.length; i += effectiveColumns) {
+      out.push(cards.slice(i, i + effectiveColumns));
+    }
+    return out;
+  }, [cards, effectiveColumns]);
+
   return (
     <View style={headerStyles.container}>
       {(title || rightAction) && (
@@ -196,17 +212,21 @@ export const KPIHeader = memo(function KPIHeader({
         </View>
       )}
       <View style={headerStyles.grid}>
-        {cards.map((c) => {
-          const { id, ...rest } = c;
-          return (
-            <View
-              key={id}
-              style={[headerStyles.gridCell, { flexBasis: `${100 / columns}%` }]}
-            >
-              <KPICard {...rest} />
-            </View>
-          );
-        })}
+        {rows.map((row, rowIndex) => (
+          <View key={`kpi-row-${rowIndex}`} style={headerStyles.gridRow}>
+            {row.map((c) => {
+              const { id, containerStyle, ...rest } = c;
+              return (
+                <View key={id} style={headerStyles.gridCell}>
+                  <KPICard
+                    {...rest}
+                    containerStyle={[headerStyles.cellCard, containerStyle]}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -253,6 +273,95 @@ const SCORE_LEVEL_PALETTE: Record<
   unknown: { bg: Theme.surface, fg: Theme.textMuted, label: "Insufficient data" },
 };
 
+function AnimatedSubScoreBar({
+  label,
+  value,
+  max,
+  color,
+  delayMs,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color: string;
+  delayMs: number;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+
+  useEffect(() => {
+    anim.setValue(0);
+    const t = setTimeout(() => {
+      Animated.timing(anim, {
+        toValue: pct,
+        duration: 720,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    }, delayMs);
+    return () => clearTimeout(t);
+  }, [anim, pct, delayMs]);
+
+  const width = anim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+  });
+
+  return (
+    <View style={scoreStyles.subRow}>
+      <Text style={scoreStyles.subLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <View style={scoreStyles.subTrack}>
+        <Animated.View
+          style={[
+            scoreStyles.subFill,
+            { width, backgroundColor: color },
+          ]}
+        />
+      </View>
+      <Text style={scoreStyles.subValue}>{Math.round(value)}</Text>
+    </View>
+  );
+}
+
+function AnimatedScoreValue({
+  score,
+  color,
+  loading,
+}: {
+  score: number;
+  color: string;
+  loading?: boolean;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    if (loading || !Number.isFinite(score)) return;
+    anim.setValue(0);
+    const id = anim.addListener(({ value: v }) => {
+      setDisplay(Math.round(v));
+    });
+    Animated.timing(anim, {
+      toValue: score,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+    return () => {
+      anim.removeListener(id);
+    };
+  }, [anim, score, loading]);
+
+  if (loading) return <ActivityIndicator color={color} />;
+  return (
+    <Text style={[scoreStyles.scoreValue, { color }]}>
+      {Number.isFinite(score) ? display : "—"}
+    </Text>
+  );
+}
+
 export const ScoreCard = memo(function ScoreCard({
   title,
   score,
@@ -263,8 +372,34 @@ export const ScoreCard = memo(function ScoreCard({
   loading,
 }: ScoreCardProps) {
   const palette = SCORE_LEVEL_PALETTE[level];
+  const cardEntrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    cardEntrance.setValue(0);
+    Animated.timing(cardEntrance, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [title, score, cardEntrance]);
+
+  const cardOpacity = cardEntrance;
+  const cardTranslateY = cardEntrance.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8, 0],
+  });
+
   return (
-    <View style={scoreStyles.card}>
+    <Animated.View
+      style={[
+        scoreStyles.card,
+        {
+          opacity: cardOpacity,
+          transform: [{ translateY: cardTranslateY }],
+        },
+      ]}
+    >
       <View style={scoreStyles.headerRow}>
         <Text style={scoreStyles.title}>{title}</Text>
         <View
@@ -280,16 +415,12 @@ export const ScoreCard = memo(function ScoreCard({
       </View>
 
       <View style={scoreStyles.scoreRow}>
-        {loading ? (
-          <ActivityIndicator color={palette.fg} />
-        ) : (
-          <>
-            <Text style={[scoreStyles.scoreValue, { color: palette.fg }]}>
-              {Number.isFinite(score) ? Math.round(score) : "—"}
-            </Text>
-            <Text style={scoreStyles.scoreMax}>/ 100</Text>
-          </>
-        )}
+        <AnimatedScoreValue
+          score={score}
+          color={palette.fg}
+          loading={loading}
+        />
+        {!loading ? <Text style={scoreStyles.scoreMax}>/ 100</Text> : null}
       </View>
       {caption ? <Text style={scoreStyles.caption}>{caption}</Text> : null}
 
@@ -316,32 +447,19 @@ export const ScoreCard = memo(function ScoreCard({
 
       {subScores && subScores.length > 0 ? (
         <View style={scoreStyles.subStack}>
-          {subScores.map((s) => {
-            const max = s.max ?? 100;
-            const pct = max > 0 ? Math.min(100, Math.max(0, (s.value / max) * 100)) : 0;
-            return (
-              <View key={s.label} style={scoreStyles.subRow}>
-                <Text style={scoreStyles.subLabel} numberOfLines={1}>
-                  {s.label}
-                </Text>
-                <View style={scoreStyles.subTrack}>
-                  <View
-                    style={[
-                      scoreStyles.subFill,
-                      {
-                        width: `${pct}%`,
-                        backgroundColor: palette.fg,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={scoreStyles.subValue}>{Math.round(s.value)}</Text>
-              </View>
-            );
-          })}
+          {subScores.map((s, index) => (
+            <AnimatedSubScoreBar
+              key={s.label}
+              label={s.label}
+              value={s.value}
+              max={s.max ?? 100}
+              color={palette.fg}
+              delayMs={80 + index * 70}
+            />
+          ))}
         </View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 });
 
@@ -416,15 +534,16 @@ export const ChartCard = memo(function ChartCard({
 const kpiStyles = StyleSheet.create({
   card: {
     flex: 1,
+    alignSelf: "stretch",
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    gap: 3,
-    minHeight: 92,
-    justifyContent: "flex-end",
+    gap: 4,
+    minHeight: 104,
+    justifyContent: "flex-start",
   },
   cardWide: {
     minHeight: 78,
@@ -516,27 +635,32 @@ const headerStyles = StyleSheet.create({
     marginLeft: 8,
   },
   grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
-    rowGap: 10,
+  },
+  gridRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "stretch",
   },
   gridCell: {
-    flexGrow: 1,
-    flexShrink: 1,
-    // Subtract gap so 2-col / 3-col / 4-col grids land flush at edges.
-    paddingRight: 0,
+    flex: 1,
+    minWidth: 0,
+  },
+  cellCard: {
+    height: "100%",
   },
 });
 
 const scoreStyles = StyleSheet.create({
   card: {
+    flex: 1,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     borderRadius: 18,
     padding: 16,
     gap: 10,
+    minHeight: 240,
   },
   headerRow: {
     flexDirection: "row",
@@ -614,13 +738,14 @@ const scoreStyles = StyleSheet.create({
   },
   subTrack: {
     flex: 1,
-    height: 6,
+    height: 8,
     backgroundColor: Theme.surface,
     borderRadius: 999,
     overflow: "hidden",
   },
   subFill: {
     height: "100%",
+    borderRadius: 999,
   },
   subValue: {
     width: 30,

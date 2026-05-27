@@ -3,6 +3,7 @@
  * Shows list of disputed items; user can select one and raise dispute.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { SmartInput } from "@/components/mobile-input";
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -334,17 +335,15 @@ export function DisputeAuditSheet({
                 {reasonCodeError ? (
                   <Text style={styles.formErrorText}>{reasonCodeError}</Text>
                 ) : null}
-                <TextInput
-                  style={[styles.input, proposedAmountError && styles.inputError]}
-                  placeholder="Proposed amount (optional)"
-                  placeholderTextColor={Theme.textMuted}
+                <SmartInput
+                  type="currency"
+                  label="Proposed amount"
                   value={proposedAmount}
-                  onChangeText={setProposedAmount}
-                  keyboardType="numeric"
+                  onChange={(raw) => setProposedAmount(raw === '0' ? '' : raw)}
+                  variant="field"
+                  placeholder="Optional"
+                  errorMessage={proposedAmountError ?? undefined}
                 />
-                {proposedAmountError ? (
-                  <Text style={styles.formErrorText}>{proposedAmountError}</Text>
-                ) : null}
                 <TouchableOpacity
                   style={[styles.submitBtn, (submitting || !canRaiseDispute) && styles.submitBtnDisabled]}
                   onPress={handleRaiseDispute}

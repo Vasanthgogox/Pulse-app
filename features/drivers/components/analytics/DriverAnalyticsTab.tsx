@@ -27,12 +27,8 @@ import type { LedgerRow } from "@/features/finance";
 import type { SalaryRequestRow } from "@/features/drivers/services/salaryRequests.service";
 import type { DriverRow } from "../../services/drivers.service";
 import type { RatingRow } from "@/features/ratings";
-// Reuse SVG chart primitives from vehicle analytics (same app, same dep)
-import {
-  LineChart,
-  RevExpBarChart,
-  UtilizationRing,
-} from "@/features/vehicles/components/analytics/AnalyticsChart";
+import { TrendBarChart, TrendLineChart } from "@/components/analytics";
+import { UtilizationRing } from "@/features/vehicles/components/analytics/AnalyticsChart";
 import {
   computeDocCompliance,
   computeDriverKpiSummary,
@@ -828,7 +824,7 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
         <SectionHeader title="Earnings Trends" sub={`${period} view`} />
 
         <ChartCard title="Earnings (Commission Due)">
-          <LineChart
+          <TrendLineChart
             data={earningsLinePoints}
             width={chartWidth}
             height={chartH}
@@ -839,7 +835,7 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
         </ChartCard>
 
         <ChartCard title="Payments Received">
-          <LineChart
+          <TrendLineChart
             data={paidLinePoints}
             width={chartWidth}
             height={chartH}
@@ -858,7 +854,13 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
             </View>
           }
         >
-          <RevExpBarChart data={revExpPoints} width={chartWidth} height={isTablet ? 185 : 160} />
+          <TrendBarChart
+            data={revExpPoints}
+            width={chartWidth}
+            height={isTablet ? 185 : 168}
+            primaryField="revenue"
+            secondaryField="expense"
+          />
         </ChartCard>
 
         {/* ── Performance Score ─────────────────────────────────────────── */}

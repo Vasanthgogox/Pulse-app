@@ -23,24 +23,28 @@
  */
 
 import { useMemo } from "react";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Text, View } from "react-native";
 
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
 
 import {
-  ChartCard,
-  HBarChart,
-  InsightsPanel,
-  KPIHeader,
-  RiskMeter,
-  ScoreCard,
-  SectionHeader,
+  PulseAnalyticsShell,
+  PulseChartPanel,
+  PulseGaugePanel,
+  PulseHealthRow,
+  PulseHealthScorePanel,
+  PulseInsightsPanel,
+  PulseKpiGrid,
+  PulseLaneBar,
+  PulseSection,
+  TrendBarChart,
+  TrendLineChart,
+  pulseStyles,
+  usePulseChartWidth,
+  type PulseKpiItem,
+  type TrendPoint,
 } from "@/components/analytics";
-import {
-  LineChart,
-  RevExpBarChart,
-} from "@/features/vehicles/components/analytics/AnalyticsChart";
 
 import { useSupplierReliabilityScoreQuery } from "@/lib/queries/useAnalyticsQueries";
 
@@ -80,16 +84,7 @@ interface Props {
 // Chart projections — adapt monthly trend onto `PeriodPoint` shape.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ChartPoint {
-  label: string;
-  revenue: number;
-  expense: number;
-  profit: number;
-  margin: number;
-  tripCount: number;
-}
-
-function toPayableLine(months: readonly SupplierMonthlyTrendPoint[]): ChartPoint[] {
+function toPayableLine(months: readonly SupplierMonthlyTrendPoint[]): TrendPoint[] {
   return months.map((m) => ({
     label: m.label,
     revenue: m.payable,
@@ -100,7 +95,7 @@ function toPayableLine(months: readonly SupplierMonthlyTrendPoint[]): ChartPoint
   }));
 }
 
-function toMarginLine(months: readonly SupplierMonthlyTrendPoint[]): ChartPoint[] {
+function toMarginLine(months: readonly SupplierMonthlyTrendPoint[]): TrendPoint[] {
   return months.map((m) => ({
     label: m.label,
     revenue: m.margin,
@@ -113,7 +108,7 @@ function toMarginLine(months: readonly SupplierMonthlyTrendPoint[]): ChartPoint[
 
 function toPaidVsOutstanding(
   months: readonly SupplierMonthlyTrendPoint[],
-): ChartPoint[] {
+): TrendPoint[] {
   return months.map((m) => ({
     label: m.label,
     revenue: m.paid,
@@ -134,8 +129,7 @@ export default function SupplierAnalyticsTab({
   transactions,
   orgId,
 }: Props) {
-  const { width } = useWindowDimensions();
-  const chartWidth = Math.max(280, Math.min(width - 64, 720));
+  const chartWidth = usePulseChartWidth();
   const supplierId = supplier?.id ?? null;
 
   // ── Server score ──
@@ -193,445 +187,477 @@ export default function SupplierAnalyticsTab({
   // Render
   // ─────────────────────────────────────────────────────────────────────────
 
-  return (
-    <View style={styles.root}>
-      {/* 1. Header KPIs */}
-      <KPIHeader
-        columns={4}
-        cards={[
-          {
-            id: "trips",
-            label: "Trips executed",
-            value: `${kpis.tripsExecuted}`,
-            sub: `${operations.completionPct.toFixed(0)}% completion`,
-            accent: Theme.chartSeries1,
-          },
-          {
-            id: "revenue",
-            label: "Revenue handled",
-            value: formatINR(kpis.revenueHandled),
-            sub: "Last 12 months",
-            accent: Theme.chartSeries5,
-          },
-          {
-            id: "margin",
-            label: "Margin contribution",
-            value: formatINR(kpis.marginContribution),
-            sub: `${kpis.marginContributionPct.toFixed(1)}% margin`,
-            accent:
-              kpis.marginContribution >= 0
-                ? Theme.chartSeries2
-                : Theme.chartSeries4,
-          },
-          {
-            id: "outstanding",
-            label: "Payable outstanding",
-            value: formatINR(kpis.outstanding),
-            sub: `Avg ${financial.avgSettlementDays}d settlement`,
-            accent:
-              kpis.outstanding > 0 ? Theme.chartSeries4 : Theme.chartSeries2,
-            alert: kpis.outstanding > 0 && financial.avgSettlementDays >= 30,
-          },
-          {
-            id: "ontime",
-            label: "On-time availability",
-            value: `${kpis.onTimePct}%`,
-            sub: `${operations.onTime}/${operations.onTimeEligible} trips`,
-            accent:
-              kpis.onTimePct >= 85
-                ? Theme.chartSeries2
-                : kpis.onTimePct >= 60
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-          {
-            id: "vehicle-quality",
-            label: "Vehicle quality",
-            value: `${kpis.vehicleQualityScore}`,
-            sub: "Completion + on-time blend",
-            accent:
-              kpis.vehicleQualityScore >= 85
-                ? Theme.chartSeries2
-                : kpis.vehicleQualityScore >= 60
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-          {
-            id: "cancellation",
-            label: "Cancellation",
-            value: `${kpis.cancellationRatePct.toFixed(1)}%`,
-            sub: `${operations.tripsCancelled} cancelled`,
-            accent:
-              kpis.cancellationRatePct >= 10
-                ? Theme.chartSeries4
-                : Theme.chartSeries3,
-            alert: kpis.cancellationRatePct >= 15,
-          },
-          {
-            id: "reliability",
-            label: "Reliability score",
-            value: `${kpis.reliabilityScore}`,
-            sub: score ? "Composite 0-100" : "Insufficient data",
-            accent:
-              kpis.reliabilityScore >= 80
-                ? Theme.chartSeries2
-                : kpis.reliabilityScore >= 60
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-        ]}
-      />
+  const maxLaneRate = pricing.lanes.length
+    ? Math.max(...pricing.lanes.map((l) => l.avgRate))
+    : 1
 
-      {/* 2. Reliability Score */}
-      <SectionHeader
-        title="Supplier reliability"
+  const headerKpiRows = useMemo(
+    (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
+      [
+        {
+          id: "trips",
+          label: "Trips executed",
+          value: `${kpis.tripsExecuted}`,
+          subtext: `${operations.completionPct.toFixed(0)}% completion`,
+          valueColor: Theme.primary,
+          iconName: "truck",
+        },
+        {
+          id: "revenue",
+          label: "Revenue handled",
+          value: formatINR(kpis.revenueHandled),
+          subtext: "Last 12 months",
+          valueColor: Theme.textBody,
+          iconName: "money",
+        },
+        {
+          id: "margin",
+          label: "Margin contribution",
+          value: formatINR(kpis.marginContribution),
+          subtext: `${kpis.marginContributionPct.toFixed(1)}% margin`,
+          valueColor:
+            kpis.marginContribution >= 0 ? Theme.positive : Theme.negative,
+          iconName: "line-chart",
+        },
+        {
+          id: "outstanding",
+          label: "Payable outstanding",
+          value: formatINR(kpis.outstanding),
+          subtext: `Avg ${financial.avgSettlementDays}d settlement`,
+          valueColor: Theme.negative,
+          iconName: "exclamation-circle",
+        },
+      ],
+      [
+        {
+          id: "ontime",
+          label: "On-time availability",
+          value: `${kpis.onTimePct}%`,
+          subtext: `${operations.onTime}/${operations.onTimeEligible} trips`,
+          valueColor:
+            kpis.onTimePct >= 85
+              ? Theme.positive
+              : kpis.onTimePct >= 60
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "clock-o",
+        },
+        {
+          id: "vehicle-quality",
+          label: "Vehicle quality",
+          value: `${kpis.vehicleQualityScore}`,
+          subtext: "Completion + on-time blend",
+          valueColor:
+            kpis.vehicleQualityScore >= 85
+              ? Theme.positive
+              : kpis.vehicleQualityScore >= 60
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "star",
+        },
+        {
+          id: "cancellation",
+          label: "Cancellation",
+          value: `${kpis.cancellationRatePct.toFixed(1)}%`,
+          subtext: `${operations.tripsCancelled} cancelled`,
+          valueColor:
+            kpis.cancellationRatePct >= 10 ? Theme.negative : Theme.warning,
+          iconName: "times-circle",
+        },
+        {
+          id: "reliability",
+          label: "Reliability score",
+          value: `${kpis.reliabilityScore}`,
+          subtext: score ? "Composite 0-100" : "Insufficient data",
+          valueColor:
+            kpis.reliabilityScore >= 80
+              ? Theme.positive
+              : kpis.reliabilityScore >= 60
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "shield",
+        },
+      ],
+    ],
+    [kpis, operations, financial, score],
+  )
+
+  const opsKpiRows = useMemo(
+    (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
+      [
+        {
+          id: "o-accept",
+          label: "Acceptance",
+          value: `${operations.acceptancePct.toFixed(0)}%`,
+          subtext: "Trips not declined/cancelled",
+          valueColor:
+            operations.acceptancePct >= 90
+              ? Theme.positive
+              : operations.acceptancePct >= 70
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "check",
+        },
+        {
+          id: "o-completion",
+          label: "Completion",
+          value: `${operations.completionPct.toFixed(0)}%`,
+          subtext: `${operations.tripsCompleted}/${operations.tripsTotal}`,
+          valueColor: Theme.positive,
+          iconName: "check-circle",
+        },
+        {
+          id: "o-ontime",
+          label: "On-time",
+          value: `${operations.onTimePct}%`,
+          subtext: `${operations.onTime}/${operations.onTimeEligible}`,
+          valueColor:
+            operations.onTimePct >= 85
+              ? Theme.positive
+              : operations.onTimePct >= 60
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "clock-o",
+        },
+        null,
+      ],
+      [
+        {
+          id: "o-cancel",
+          label: "Cancellations",
+          value: `${operations.tripsCancelled}`,
+          subtext: `${operations.cancellationPct.toFixed(1)}% of total`,
+          valueColor: Theme.negative,
+          iconName: "ban",
+        },
+        {
+          id: "o-disputes",
+          label: "Disputes",
+          value: `${operations.disputeCount}`,
+          subtext: "Flagged trips",
+          valueColor:
+            operations.disputeCount > 0 ? Theme.negative : Theme.positive,
+          iconName: "flag",
+        },
+        {
+          id: "o-turnaround",
+          label: "Turnaround",
+          value: `${operations.averageTurnaroundDays}d`,
+          subtext: "Pickup → complete",
+          valueColor: Theme.primary,
+          iconName: "refresh",
+        },
+        null,
+      ],
+    ],
+    [operations],
+  )
+
+  const financialKpiRows = useMemo(
+    (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
+      [
+        {
+          id: "f-payable",
+          label: "Total payable",
+          value: formatINR(financial.payable),
+          subtext: "Last 12 months",
+          valueColor: Theme.negative,
+          iconName: "credit-card",
+        },
+        {
+          id: "f-paid",
+          label: "Paid out",
+          value: formatINR(financial.paid),
+          subtext: "Settled to date",
+          valueColor: Theme.positive,
+          iconName: "money",
+        },
+        {
+          id: "f-outstanding",
+          label: "Outstanding",
+          value: formatINR(financial.outstanding),
+          subtext:
+            financial.payable > 0
+              ? `${((financial.outstanding / financial.payable) * 100).toFixed(0)}% of payable`
+              : "—",
+          valueColor:
+            financial.outstanding > 0 ? Theme.negative : Theme.positive,
+          iconName: "exclamation-circle",
+        },
+        null,
+      ],
+      [
+        {
+          id: "f-advance",
+          label: "Advances paid",
+          value: formatINR(financial.advancesPaid),
+          subtext: "Pre-payment usage",
+          valueColor: Theme.warning,
+          iconName: "arrow-up",
+        },
+        {
+          id: "f-settlement",
+          label: "Settlement",
+          value: `${financial.avgSettlementDays}d`,
+          subtext: "Pickup → payment avg",
+          valueColor:
+            financial.avgSettlementDays <= 7
+              ? Theme.positive
+              : financial.avgSettlementDays <= 30
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "clock-o",
+        },
+        {
+          id: "f-margin",
+          label: "Margin %",
+          value: `${kpis.marginContributionPct.toFixed(1)}%`,
+          subtext: `${formatINRChip(financial.contractProfitability)} contract`,
+          valueColor:
+            kpis.marginContributionPct >= 15
+              ? Theme.positive
+              : kpis.marginContributionPct >= 5
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "percent",
+        },
+        null,
+      ],
+    ],
+    [financial, kpis],
+  )
+
+  const pricingKpiRows = useMemo(
+    (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
+      [
+        {
+          id: "p-avg",
+          label: "Avg rate / trip",
+          value: formatINR(pricing.rateAvg),
+          subtext: "Last 12 months",
+          valueColor: Theme.primary,
+          iconName: "money",
+        },
+        {
+          id: "p-stddev",
+          label: "Rate stddev",
+          value: formatINR(pricing.rateStddev),
+          subtext: `CV ${pricing.cv}`,
+          valueColor:
+            pricing.cv <= 0.1
+              ? Theme.positive
+              : pricing.cv <= 0.3
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "bar-chart",
+        },
+        {
+          id: "p-stability",
+          label: "Stability score",
+          value: `${pricing.stabilityScore}`,
+          subtext: pricing.stabilityScore >= 80 ? "Predictable" : "Volatile",
+          valueColor:
+            pricing.stabilityScore >= 80
+              ? Theme.positive
+              : pricing.stabilityScore >= 50
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "shield",
+        },
+        null,
+      ],
+      [
+        {
+          id: "p-perkm-avg",
+          label: "Avg rate / km",
+          value: `₹${pricing.perKmAvg.toFixed(2)}`,
+          subtext: "Across all trips",
+          valueColor: Theme.textBody,
+          iconName: "road",
+        },
+        {
+          id: "p-perkm-sd",
+          label: "Per-km stddev",
+          value: `₹${pricing.perKmStddev.toFixed(2)}`,
+          subtext: "Spread",
+          valueColor: Theme.textBody,
+          iconName: "line-chart",
+        },
+        {
+          id: "p-lanes",
+          label: "Active lanes",
+          value: `${pricing.lanes.length}`,
+          subtext: "Repeat-trip routes",
+          valueColor: Theme.warning,
+          iconName: "map",
+        },
+        null,
+      ],
+    ],
+    [pricing],
+  )
+
+  const healthBars = score
+    ? [
+        { label: "Completion", percent: score.completionScore },
+        { label: "On-time", percent: score.onTimeScore, color: Theme.positive },
+        {
+          label: "Cancellation",
+          percent: score.cancellationScore,
+          color: score.cancellationScore < 50 ? Theme.negative : Theme.primary,
+        },
+        { label: "Availability", percent: score.availabilityScore },
+        { label: "Pricing", percent: score.pricingScore },
+      ]
+    : []
+
+  const primaryBadge = badges[0] ? badgeLabel(badges[0]) : undefined
+
+  return (
+    <PulseAnalyticsShell
+      title="Supplier reliability"
+      subtitle="Composite score across completion, on-time, cancellation, availability, pricing"
+    >
+      <PulseKpiGrid rows={headerKpiRows} />
+
+      <PulseSection
+        title="Reliability score"
         subtitle="Composite 0-100 across completion, on-time, cancellation, availability, pricing"
-      />
-      <View style={styles.scoreRow}>
-        <View style={styles.scoreCol}>
-          {score ? (
-            <ScoreCard
-              title="Reliability score"
-              score={Math.round(score.score)}
-              level={score.level}
-              caption={`${score.breakdown.tripsTotal} trips · last 6 months`}
-              subScores={[
-                { label: "Completion", value: Math.round(score.completionScore) },
-                { label: "On-time", value: Math.round(score.onTimeScore) },
-                { label: "Cancellation", value: Math.round(score.cancellationScore) },
-                { label: "Availability", value: Math.round(score.availabilityScore) },
-                { label: "Pricing", value: Math.round(score.pricingScore) },
-              ]}
-              badges={badges.map((b) => ({
-                label: badgeLabel(b),
-                tone: badgeTone(b),
-              }))}
-            />
-          ) : (
-            <ScoreCard
-              title="Reliability score"
-              score={0}
-              level="unknown"
-              caption="Not enough trip history yet"
-            />
-          )}
-        </View>
-        <View style={styles.scoreCol}>
-          <View style={styles.meterCard}>
-            <RiskMeter
+      >
+        <PulseHealthRow
+          score={
+            score ? (
+              <PulseHealthScorePanel
+                title="Reliability score"
+                score={Math.round(score.score)}
+                level={score.level}
+                caption={`${score.breakdown.tripsTotal} trips · last 6 months`}
+                badgeLabel={primaryBadge}
+                bars={healthBars}
+              />
+            ) : (
+              <PulseHealthScorePanel
+                title="Reliability score"
+                score={0}
+                level="unknown"
+                caption="Not enough trip history yet"
+                bars={[]}
+              />
+            )
+          }
+          gauge={
+            <PulseGaugePanel
               value={kpis.onTimePct}
               level={scoreLevelFromValue(kpis.onTimePct)}
               label="On-time availability"
               caption={`${operations.onTime}/${operations.onTimeEligible} eligible trips`}
-              size={150}
-              stroke={14}
             />
-          </View>
-        </View>
-      </View>
+          }
+        />
+      </PulseSection>
 
-      {/* 3. Operational Intelligence */}
-      <SectionHeader
+      <PulseSection
         title="Operational intelligence"
         subtitle="Trip lifecycle quality — acceptance, completion, cancellation, disputes"
-      />
-      <KPIHeader
-        columns={3}
-        cards={[
-          {
-            id: "o-accept",
-            label: "Acceptance",
-            value: `${operations.acceptancePct.toFixed(0)}%`,
-            sub: "Trips not declined/cancelled",
-            accent:
-              operations.acceptancePct >= 90
-                ? Theme.chartSeries2
-                : operations.acceptancePct >= 70
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-          {
-            id: "o-completion",
-            label: "Completion",
-            value: `${operations.completionPct.toFixed(0)}%`,
-            sub: `${operations.tripsCompleted}/${operations.tripsTotal}`,
-            accent: Theme.chartSeries2,
-          },
-          {
-            id: "o-ontime",
-            label: "On-time",
-            value: `${operations.onTimePct}%`,
-            sub: `${operations.onTime}/${operations.onTimeEligible}`,
-            accent:
-              operations.onTimePct >= 85
-                ? Theme.chartSeries2
-                : operations.onTimePct >= 60
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-          {
-            id: "o-cancel",
-            label: "Cancellations",
-            value: `${operations.tripsCancelled}`,
-            sub: `${operations.cancellationPct.toFixed(1)}% of total`,
-            accent:
-              operations.cancellationPct >= 10
-                ? Theme.chartSeries4
-                : Theme.chartSeries3,
-            alert: operations.cancellationPct >= 15,
-          },
-          {
-            id: "o-disputes",
-            label: "Disputes",
-            value: `${operations.disputeCount}`,
-            sub: "Flagged trips",
-            accent:
-              operations.disputeCount > 0
-                ? Theme.chartSeries4
-                : Theme.chartSeries2,
-            alert: operations.disputeCount >= 3,
-          },
-          {
-            id: "o-turnaround",
-            label: "Turnaround",
-            value: `${operations.averageTurnaroundDays}d`,
-            sub: "Pickup → complete",
-            accent: Theme.chartSeries5,
-          },
-        ]}
-      />
-
-      <ChartCard
-        title="On-time delivery trend"
-        subtitle="Monthly on-time %"
       >
-        <LineChart
-          data={monthly.map((m) => ({
-            label: m.label,
-            revenue: m.onTimePct,
-            expense: 0,
-            profit: 0,
-            margin: 0,
-            tripCount: m.trips,
-          }))}
-          width={chartWidth}
-          height={140}
-          field="revenue"
-          color={Theme.chartSeries2}
-          gradientId="supplierOnTimeTrend"
-        />
-      </ChartCard>
+        <PulseKpiGrid rows={opsKpiRows} />
+        <PulseChartPanel title="On-time delivery trend" subtitle="Monthly on-time %">
+          <TrendLineChart
+            data={monthly.map((m) => ({
+              label: m.label,
+              revenue: m.onTimePct,
+              expense: 0,
+              profit: 0,
+              margin: 0,
+              tripCount: m.trips,
+            }))}
+            width={chartWidth}
+            height={168}
+            field="revenue"
+            color={Theme.chartSeries2}
+            gradientId="supplierOnTimeTrend"
+          />
+        </PulseChartPanel>
+      </PulseSection>
 
-      {/* 4. Financial Intelligence */}
-      <SectionHeader
+      <PulseSection
         title="Financial intelligence"
         subtitle="Payable trend, settlement velocity, margin contribution"
-      />
-      <KPIHeader
-        columns={3}
-        cards={[
-          {
-            id: "f-payable",
-            label: "Total payable",
-            value: formatINR(financial.payable),
-            sub: "Last 12 months",
-            accent: Theme.chartSeries4,
-          },
-          {
-            id: "f-paid",
-            label: "Paid out",
-            value: formatINR(financial.paid),
-            sub: "Settled to date",
-            accent: Theme.chartSeries2,
-          },
-          {
-            id: "f-outstanding",
-            label: "Outstanding",
-            value: formatINR(financial.outstanding),
-            sub:
-              financial.payable > 0
-                ? `${((financial.outstanding / financial.payable) * 100).toFixed(0)}% of payable`
-                : "—",
-            accent:
-              financial.outstanding > 0
-                ? Theme.chartSeries4
-                : Theme.chartSeries2,
-            alert: financial.outstanding > 0 && financial.avgSettlementDays >= 30,
-          },
-          {
-            id: "f-advance",
-            label: "Advances paid",
-            value: formatINR(financial.advancesPaid),
-            sub: "Pre-payment usage",
-            accent: Theme.chartSeries3,
-          },
-          {
-            id: "f-settlement",
-            label: "Settlement",
-            value: `${financial.avgSettlementDays}d`,
-            sub: "Pickup → payment avg",
-            accent:
-              financial.avgSettlementDays <= 7
-                ? Theme.chartSeries2
-                : financial.avgSettlementDays <= 30
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-            alert: financial.avgSettlementDays >= 45,
-          },
-          {
-            id: "f-margin",
-            label: "Margin %",
-            value: `${kpis.marginContributionPct.toFixed(1)}%`,
-            sub: `${formatINRChip(financial.contractProfitability)} contract`,
-            accent:
-              kpis.marginContributionPct >= 15
-                ? Theme.chartSeries2
-                : kpis.marginContributionPct >= 5
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-        ]}
-      />
-
-      <ChartCard
-        title="Payable trend"
-        subtitle="Total supplier payable per month"
       >
-        <LineChart
-          data={toPayableLine(monthly)}
-          width={chartWidth}
-          height={150}
-          field="revenue"
-          color={Theme.chartSeries4}
-          gradientId="supplierPayableTrend"
-        />
-      </ChartCard>
+        <PulseKpiGrid rows={financialKpiRows} />
+        <PulseChartPanel
+          title="Payable trend"
+          subtitle="Total supplier payable per month"
+        >
+          <TrendLineChart
+            data={toPayableLine(monthly)}
+            width={chartWidth}
+            height={168}
+            field="revenue"
+            color={Theme.chartSeries4}
+            gradientId="supplierPayableTrend"
+          />
+        </PulseChartPanel>
+        <PulseChartPanel
+          title="Paid vs outstanding"
+          subtitle="Green = settled, red = still payable per month"
+        >
+          <TrendBarChart data={toPaidVsOutstanding(monthly)} width={chartWidth} height={168} />
+        </PulseChartPanel>
+        <PulseChartPanel
+          title="Margin contribution"
+          subtitle="Net margin you earn on this supplier per month"
+        >
+          <TrendLineChart
+            data={toMarginLine(monthly)}
+            width={chartWidth}
+            height={168}
+            field="revenue"
+            color={Theme.chartSeries2}
+            gradientId="supplierMarginTrend"
+          />
+        </PulseChartPanel>
+      </PulseSection>
 
-      <ChartCard
-        title="Paid vs outstanding"
-        subtitle="Green = settled, red = still payable per month"
-      >
-        <RevExpBarChart
-          data={toPaidVsOutstanding(monthly)}
-          width={chartWidth}
-          height={160}
-        />
-      </ChartCard>
-
-      <ChartCard
-        title="Margin contribution"
-        subtitle="Net margin you earn on this supplier per month"
-      >
-        <LineChart
-          data={toMarginLine(monthly)}
-          width={chartWidth}
-          height={140}
-          field="revenue"
-          color={Theme.chartSeries2}
-          gradientId="supplierMarginTrend"
-        />
-      </ChartCard>
-
-      {/* 5. Pricing Stability */}
-      <SectionHeader
+      <PulseSection
         title="Pricing stability"
         subtitle="Lower variance = predictable cost-to-serve"
-      />
-      <KPIHeader
-        columns={3}
-        cards={[
-          {
-            id: "p-avg",
-            label: "Avg rate / trip",
-            value: formatINR(pricing.rateAvg),
-            sub: "Last 12 months",
-            accent: Theme.chartSeries1,
-          },
-          {
-            id: "p-stddev",
-            label: "Rate stddev",
-            value: formatINR(pricing.rateStddev),
-            sub: `CV ${pricing.cv}`,
-            accent:
-              pricing.cv <= 0.1
-                ? Theme.chartSeries2
-                : pricing.cv <= 0.3
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-          {
-            id: "p-stability",
-            label: "Stability score",
-            value: `${pricing.stabilityScore}`,
-            sub: pricing.stabilityScore >= 80 ? "Predictable" : "Volatile",
-            accent:
-              pricing.stabilityScore >= 80
-                ? Theme.chartSeries2
-                : pricing.stabilityScore >= 50
-                  ? Theme.chartSeries3
-                  : Theme.chartSeries4,
-          },
-          {
-            id: "p-perkm-avg",
-            label: "Avg rate / km",
-            value: `₹${pricing.perKmAvg.toFixed(2)}`,
-            sub: "Across all trips",
-            accent: Theme.chartSeries5,
-          },
-          {
-            id: "p-perkm-sd",
-            label: "Per-km stddev",
-            value: `₹${pricing.perKmStddev.toFixed(2)}`,
-            sub: "Spread",
-            accent: Theme.chartSeries6,
-          },
-          {
-            id: "p-lanes",
-            label: "Active lanes",
-            value: `${pricing.lanes.length}`,
-            sub: "Repeat-trip routes",
-            accent: Theme.chartSeries3,
-          },
-        ]}
-      />
-
-      <ChartCard
-        title="Top lanes — average supplier rate"
-        subtitle="Bar colour reflects pricing volatility (CV)"
       >
-        {pricing.lanes.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              Not enough repeat trips for lane-level pricing analysis
-            </Text>
-          </View>
-        ) : (
-          <HBarChart
-            width={chartWidth}
-            items={pricing.lanes.map((l) => ({
-              id: l.id,
-              label: l.label,
-              value: l.avgRate,
-              // hue: lower CV is healthier — invert so 0 CV → high "positive"
-              hue: Math.max(0, 30 - l.cv * 100),
-              display: formatINRChip(l.avgRate),
-            }))}
-            hueThresholds={{ positive: 20, neutral: 10 }}
-            labelWidth={120}
-            valueWidth={64}
-            formatValue={(v) => formatINRChip(v)}
-          />
-        )}
-      </ChartCard>
+        <PulseKpiGrid rows={pricingKpiRows} />
+        <PulseChartPanel
+          title="Top lanes — average supplier rate"
+          subtitle="Bar colour reflects pricing volatility (CV)"
+        >
+          {pricing.lanes.length === 0 ? (
+            <View style={pulseStyles.empty}>
+              <Text style={pulseStyles.emptyText}>
+                Not enough repeat trips for lane-level pricing analysis
+              </Text>
+            </View>
+          ) : (
+            pricing.lanes.map((l) => (
+              <PulseLaneBar
+                key={l.id}
+                id={l.id}
+                label={l.label}
+                value={formatINRChip(l.avgRate)}
+                percent={(l.avgRate / maxLaneRate) * 100}
+                marginLabel={l.cv <= 0.1 ? "Stable" : undefined}
+              />
+            ))
+          )}
+        </PulseChartPanel>
+      </PulseSection>
 
-      {/* 6. Insights */}
       {insights.length > 0 ? (
-        <View style={styles.insights}>
-          <SectionHeader title="What the data is telling you" />
-          <InsightsPanel insights={insights} />
-        </View>
+        <PulseInsightsPanel
+          insights={insights.map((i) => ({
+            message: i.message,
+            tone: i.tone,
+          }))}
+        />
       ) : null}
-    </View>
+    </PulseAnalyticsShell>
   );
 }
 
@@ -650,65 +676,3 @@ function badgeLabel(b: string): string {
     default: return b;
   }
 }
-
-function badgeTone(
-  b: string,
-): "excellent" | "good" | "warning" | "critical" | "info" {
-  switch (b) {
-    case "preferred":
-      return "excellent";
-    case "reliable":
-    case "best_value":
-      return "good";
-    case "low_quality":
-    case "frequent_canceller":
-      return "warning";
-    case "high_risk":
-      return "critical";
-    default:
-      return "info";
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  root: {
-    gap: 16,
-    paddingVertical: 12,
-  },
-  scoreRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  scoreCol: {
-    flex: 1,
-    minWidth: 280,
-  },
-  meterCard: {
-    backgroundColor: Theme.surface,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 220,
-  },
-  empty: {
-    paddingVertical: 24,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 12,
-    color: Theme.textMuted,
-    textAlign: "center",
-    paddingHorizontal: 16,
-  },
-  insights: {
-    gap: 8,
-  },
-});

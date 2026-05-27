@@ -5,9 +5,8 @@ import { ThemedAlertModal } from '@/components/ThemedAlertModal';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { PartyRegistrationPortal } from '@/features/finance/components/PartyRegistrationPortal';
 import { usePartyPortalRouteHandlers } from '@/features/finance/hooks/usePartyPortalRouteHandlers';
-import { AddDriverModal, type DriverFormData, inviteDriver, createDriver } from '@/features/drivers';
+import { type DriverFormData, inviteDriver } from '@/features/drivers';
 import { queryKeys } from '@/lib/queryKeys';
-import { Platform } from 'react-native';
 import { closeModal } from './add-driver-closeModal';
 
 export { closeModal };
@@ -71,58 +70,25 @@ export default function AddDriverScreen() {
       });
       return;
     }
-    // Invite sent in-app: AddDriverModal closes after onComplete resolves.
+    // Invite sent in-app: portal closes after onComplete resolves.
   };
-
-  /** Add Driver (direct) — creates driver row without invite wording. */
-  const handleAddDriver = async (data: DriverFormData) => {
-    if (!currentOrganization?.id) throw new Error('No organization selected.');
-    const orgId = currentOrganization.id;
-    const { error } = await createDriver(orgId, data);
-    if (error) throw error;
-    await queryClient.refetchQueries({ queryKey: queryKeys.drivers.all(orgId) });
-    // Dismiss: AddDriverModal calls onClose after this promise resolves — avoid double navigation.
-  };
-
-  if (Platform.OS === 'web') {
-    return (
-      <>
-        <PartyRegistrationPortal
-          visible
-          initialKind="driver"
-          onClose={() => closeModal(router as CloseModalRouter)}
-          organizationId={partyPortal.organizationId}
-          noOrganizationMessage={
-            currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
-          }
-          onRefreshOrganization={partyPortal.refreshOrganization}
-          onAddClient={partyPortal.handleAddClientComplete}
-          onAddSupplier={partyPortal.handleAddSupplierComplete}
-          onAddDriver={partyPortal.handleAddDriverDirect}
-          onAddVehicle={partyPortal.handleAddVehicleComplete}
-          onInviteDriver={handleInvite}
-        />
-        <ThemedAlertModal
-          visible={themedInfo != null}
-          title={themedInfo?.title ?? ''}
-          message={themedInfo?.message ?? ''}
-          okText="OK"
-          variant={themedInfo?.variant === 'warning' ? 'warning' : 'neutral'}
-          okVariant="primary"
-          onOk={onThemedInfoOk}
-          onRequestClose={onThemedInfoOk}
-        />
-      </>
-    );
-  }
 
   return (
     <>
-      <AddDriverModal
+      <PartyRegistrationPortal
+        visible
+        initialKind="driver"
         onClose={() => closeModal(router as CloseModalRouter)}
-        onComplete={handleInvite}
-        onAddDriver={handleAddDriver}
-        salariedOnly
+        organizationId={partyPortal.organizationId}
+        noOrganizationMessage={
+          currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
+        }
+        onRefreshOrganization={partyPortal.refreshOrganization}
+        onAddClient={partyPortal.handleAddClientComplete}
+        onAddSupplier={partyPortal.handleAddSupplierComplete}
+        onAddDriver={partyPortal.handleAddDriverDirect}
+        onAddVehicle={partyPortal.handleAddVehicleComplete}
+        onInviteDriver={handleInvite}
       />
       <ThemedAlertModal
         visible={themedInfo != null}

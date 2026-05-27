@@ -5,6 +5,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { SmartInput } from "@/components/mobile-input";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
     getDriversByOrganization,
@@ -144,6 +145,11 @@ export interface AddTripFormFieldsProps {
   showInlineCta?: boolean;
   /** Keep Create Trip tappable while invalid; parent passes empty validationIssues until submit attempt. */
   enablePrimaryWhenInvalid?: boolean;
+  /**
+   * Mobile wizard mode: show a single section card at a time.
+   * When unset, renders the full 01/02/03 cards.
+   */
+  wizardSection?: "route" | "client" | "allocation";
 }
 
 export function AddTripFormFields({
@@ -160,6 +166,7 @@ export function AddTripFormFields({
   submitting = false,
   showInlineCta = true,
   enablePrimaryWhenInvalid = false,
+  wizardSection,
 }: AddTripFormFieldsProps) {
   void refetchClients;
   const invalidSet = useMemo(
@@ -234,6 +241,10 @@ export function AddTripFormFields({
     Platform.OS === "web" && winW >= 1080 && !isCompactMobile;
   /** Desktop form shell: use viewport minus padding, capped so ultra-wide stays readable. */
   const desktopFormMaxWidth = Math.min(winW - 28, 1680);
+  const showRouteCard = wizardSection == null || wizardSection === "route";
+  const showClientCard = wizardSection == null || wizardSection === "client";
+  const showAllocationCard =
+    wizardSection == null || wizardSection === "allocation";
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   /** Expanded picker vs minimized summary chip — start collapsed when a value is already set. */
   const [clientListExpanded, setClientListExpanded] = useState(() => !state.clientId);
@@ -630,13 +641,14 @@ export function AddTripFormFields({
               ]}
             >
           {/* 01 Route */}
-          <View
-            style={[
-              styles.card,
-              isDenseForm && styles.cardDense,
-              desktopFormGrid && styles.cardGridRouteWeb,
-            ]}
-          >
+          {showRouteCard ? (
+            <View
+              style={[
+                styles.card,
+                isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardGridRouteWeb,
+              ]}
+            >
             <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense]}>
               <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
                 <Text style={styles.stepBadgeText}>01</Text>
@@ -899,15 +911,17 @@ export function AddTripFormFields({
               </View>
             ) : null}
           </View>
+          ) : null}
 
           {/* 02 Client & Commercials */}
-          <View
-            style={[
-              styles.card,
-              isDenseForm && styles.cardDense,
-              desktopFormGrid && styles.cardGridClientWeb,
-            ]}
-          >
+          {showClientCard ? (
+            <View
+              style={[
+                styles.card,
+                isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardGridClientWeb,
+              ]}
+            >
             <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense]}>
               <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
                 <Text style={styles.stepBadgeText}>02</Text>
@@ -1091,65 +1105,15 @@ export function AddTripFormFields({
               </View>
 
               <View style={styles.gridCol}>
-                <View
-                  style={isWide ? styles.clientCommercialsHeaderBand : undefined}
-                >
-                  <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                    Client sales price (₹) *
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.priceWrapShell,
-                    isDenseForm && styles.priceWrapShellDense,
-                    isWide && !isDenseForm && styles.priceWrapShellWideColumn,
-                    state.clientId &&
-                      !invalid("clientPrice") &&
-                      styles.priceWrapShellSelected,
-                    invalid("clientPrice") && styles.priceWrapShellError,
-                  ]}
-                >
-                  <IndianRupee
-                    size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                    color={
-                      state.clientId && !invalid("clientPrice")
-                        ? Theme.iconPrimary
-                        : Theme.iconMuted
-                    }
-                    style={styles.priceRupeeIcon}
-                  />
-                  <TextInput
-                    style={[
-                      styles.priceInput,
-                      isDenseForm && styles.priceInputDense,
-                      isCompactMobile &&
-                        Platform.OS === "web" &&
-                        styles.mobileWebNoZoomInput,
-                    ]}
-                    placeholder="0"
-                    placeholderTextColor={Theme.placeholder}
-                    value={state.clientPrice}
-                    onChangeText={(t) => onPadValueChange(setters.setClientPrice, t)}
-                    ref={clientPriceInputRef}
-                    keyboardType="decimal-pad"
-                    autoCorrect={false}
-                    inputAccessoryViewID={kbAccessoryId}
-                    onFocus={() => {
-                      focusPadField(() => {
-                        if (supplyIsAsset) {
-                          if (state.assignLater) {
-                            finishPadFieldEntry();
-                          } else {
-                            openPickerNext("driver");
-                          }
-                          return;
-                        }
-                        focusNextField(supplierRateInputRef);
-                      }, state.clientPrice);
-                    }}
-                    blurOnSubmit={false}
-                  />
-                </View>
+                <SmartInput
+                  type="currency"
+                  label="Client sale price"
+                  value={state.clientPrice}
+                  onChange={(raw) => setters.setClientPrice(raw)}
+                  variant="field"
+                  required
+                  errorMessage={invalid("clientPrice") ? "Enter a sale price" : undefined}
+                />
                 {!isWide ? (
                   <View style={[styles.infoCallout, isDenseForm && styles.infoCalloutDense]}>
                     <Info size={isDenseForm ? 14 : 16} color={Theme.iconPrimary} />
@@ -1173,15 +1137,17 @@ export function AddTripFormFields({
               </View>
             ) : null}
           </View>
+          ) : null}
 
           {/* 03 Supply & Allocation */}
-          <View
-            style={[
-              styles.card,
-              isDenseForm && styles.cardDense,
-              desktopFormGrid && styles.cardGridSupplyWeb,
-            ]}
-          >
+          {showAllocationCard ? (
+            <View
+              style={[
+                styles.card,
+                isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardGridSupplyWeb,
+              ]}
+            >
             <View style={[styles.cardHead, styles.cardHeadWithTrailingAction, isDenseForm && styles.cardHeadDense]}>
               <View style={styles.cardHeadTitleCluster}>
                 <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
@@ -2042,105 +2008,25 @@ export function AddTripFormFields({
                     </View>
                     <View style={[styles.gridRow, styles.gridRowWide]}>
                       <View style={styles.gridCol}>
-                        <View
-                          style={[
-                            styles.priceWrapShell,
-                            styles.aggregateRateInputFlush,
-                            isDenseForm && styles.priceWrapShellDense,
-                            state.supplierId &&
-                              !invalid("partnerRate") &&
-                              styles.priceWrapShellSelected,
-                            invalid("partnerRate") && styles.priceWrapShellError,
-                          ]}
-                        >
-                          <IndianRupee
-                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                            color={
-                              state.supplierId && !invalid("partnerRate")
-                                ? Theme.iconPrimary
-                                : Theme.iconMuted
-                            }
-                            style={styles.priceRupeeIcon}
-                          />
-                          <TextInput
-                            style={[
-                              styles.priceInput,
-                              isDenseForm && styles.priceInputDense,
-                              isCompactMobile &&
-                                Platform.OS === "web" &&
-                                styles.mobileWebNoZoomInput,
-                            ]}
-                            placeholder="0"
-                            placeholderTextColor={Theme.placeholder}
-                            value={state.supplierRate}
-                            onChangeText={(t) =>
-                              onPadValueChange(setters.setSupplierRate, t)
-                            }
-                            ref={supplierRateInputRef}
-                            keyboardType="decimal-pad"
-                            autoCorrect={false}
-                            inputAccessoryViewID={kbAccessoryId}
-                            onFocus={() => {
-                              focusPadField(
-                                () => focusNextField(advancePaidInputRef),
-                                state.supplierRate,
-                              );
-                            }}
-                            blurOnSubmit={false}
-                          />
-                        </View>
+                        <SmartInput
+                          type="currency"
+                          label="Partner rate"
+                          value={state.supplierRate}
+                          onChange={(raw) => setters.setSupplierRate(raw)}
+                          variant="field"
+                          required
+                          errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
+                        />
                       </View>
                       <View style={styles.gridCol}>
-                        <View
-                          style={[
-                            styles.priceWrapShell,
-                            styles.aggregateRateInputFlush,
-                            isDenseForm && styles.priceWrapShellDense,
-                            state.supplierId &&
-                              !invalid("advancePaid") &&
-                              styles.priceWrapShellSelected,
-                            invalid("advancePaid") && styles.priceWrapShellError,
-                          ]}
-                        >
-                          <IndianRupee
-                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                            color={
-                              state.supplierId && !invalid("advancePaid")
-                                ? Theme.iconPrimary
-                                : Theme.iconMuted
-                            }
-                            style={styles.priceRupeeIcon}
-                          />
-                          <TextInput
-                            style={[
-                              styles.priceInput,
-                              isDenseForm && styles.priceInputDense,
-                              isCompactMobile &&
-                                Platform.OS === "web" &&
-                                styles.mobileWebNoZoomInput,
-                            ]}
-                            placeholder="Optional"
-                            placeholderTextColor={Theme.placeholder}
-                            value={state.advancePaid}
-                            onChangeText={(t) =>
-                              onPadValueChange(setters.setAdvancePaid, t)
-                            }
-                            ref={advancePaidInputRef}
-                            keyboardType="decimal-pad"
-                            autoCorrect={false}
-                            inputAccessoryViewID={kbAccessoryId}
-                            onFocus={() => {
-                              focusPadField(() => {
-                                if (state.assignLater) {
-                                  finishPadFieldEntry();
-                                } else {
-                                  focusNextField(aggregateDriverNameInputRef);
-                                }
-                              }, state.advancePaid);
-                            }}
-                            blurOnSubmit={false}
-                          />
-                        </View>
+                        <SmartInput
+                          type="currency"
+                          label="Advance paid"
+                          value={state.advancePaid}
+                          onChange={(raw) => setters.setAdvancePaid(raw)}
+                          variant="field"
+                          placeholder="Optional"
+                        />
                       </View>
                     </View>
                   </>
@@ -2152,109 +2038,25 @@ export function AddTripFormFields({
                   ]}
                 >
                   <View style={styles.gridCol}>
-                    <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                      Partner rate (₹) *
-                    </Text>
-                    <View
-                      style={[
-                        styles.priceWrapShell,
-                        isDenseForm && styles.priceWrapShellDense,
-                        state.supplierId &&
-                          !invalid("partnerRate") &&
-                          styles.priceWrapShellSelected,
-                        invalid("partnerRate") && styles.priceWrapShellError,
-                      ]}
-                    >
-                      <IndianRupee
-                        size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                        color={
-                          state.supplierId && !invalid("partnerRate")
-                            ? Theme.iconPrimary
-                            : Theme.iconMuted
-                        }
-                        style={styles.priceRupeeIcon}
-                      />
-                      <TextInput
-                        style={[
-                          styles.priceInput,
-                          isDenseForm && styles.priceInputDense,
-                          isCompactMobile &&
-                            Platform.OS === "web" &&
-                            styles.mobileWebNoZoomInput,
-                        ]}
-                        placeholder="0"
-                        placeholderTextColor={Theme.placeholder}
-                        value={state.supplierRate}
-                        onChangeText={(t) =>
-                          onPadValueChange(setters.setSupplierRate, t)
-                        }
-                        ref={supplierRateInputRef}
-                        keyboardType="decimal-pad"
-                        autoCorrect={false}
-                        inputAccessoryViewID={kbAccessoryId}
-                        onFocus={() => {
-                          focusPadField(
-                            () => focusNextField(advancePaidInputRef),
-                            state.supplierRate,
-                          );
-                        }}
-                        blurOnSubmit={false}
-                      />
-                    </View>
+                    <SmartInput
+                      type="currency"
+                      label="Partner rate"
+                      value={state.supplierRate}
+                      onChange={(raw) => setters.setSupplierRate(raw)}
+                      variant="field"
+                      required
+                      errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
+                    />
                   </View>
                   <View style={styles.gridCol}>
-                    <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                      Advance paid (₹)
-                    </Text>
-                    <View
-                      style={[
-                        styles.priceWrapShell,
-                        isDenseForm && styles.priceWrapShellDense,
-                        state.supplierId &&
-                          !invalid("advancePaid") &&
-                          styles.priceWrapShellSelected,
-                        invalid("advancePaid") && styles.priceWrapShellError,
-                      ]}
-                    >
-                      <IndianRupee
-                        size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                        color={
-                          state.supplierId && !invalid("advancePaid")
-                            ? Theme.iconPrimary
-                            : Theme.iconMuted
-                        }
-                        style={styles.priceRupeeIcon}
-                      />
-                      <TextInput
-                        style={[
-                          styles.priceInput,
-                          isDenseForm && styles.priceInputDense,
-                          isCompactMobile &&
-                            Platform.OS === "web" &&
-                            styles.mobileWebNoZoomInput,
-                        ]}
-                        placeholder="Optional"
-                        placeholderTextColor={Theme.placeholder}
-                        value={state.advancePaid}
-                        onChangeText={(t) =>
-                          onPadValueChange(setters.setAdvancePaid, t)
-                        }
-                        ref={advancePaidInputRef}
-                        keyboardType="decimal-pad"
-                        autoCorrect={false}
-                        inputAccessoryViewID={kbAccessoryId}
-                        onFocus={() => {
-                          focusPadField(() => {
-                            if (state.assignLater) {
-                              finishPadFieldEntry();
-                            } else {
-                              focusNextField(aggregateDriverNameInputRef);
-                            }
-                          }, state.advancePaid);
-                        }}
-                        blurOnSubmit={false}
-                      />
-                    </View>
+                    <SmartInput
+                      type="currency"
+                      label="Advance paid"
+                      value={state.advancePaid}
+                      onChange={(raw) => setters.setAdvancePaid(raw)}
+                      variant="field"
+                      placeholder="Optional"
+                    />
                   </View>
                 </View>
                 )}
@@ -2517,6 +2319,7 @@ export function AddTripFormFields({
             )}
 
           </View>
+          ) : null}
 
           {showInlineCta ? (
             <View
@@ -2554,8 +2357,8 @@ export function AddTripFormFields({
               ) : null}
             </View>
           ) : null}
-            </View>
           </View>
+        </View>
         </View>
       </ScrollView>
 
