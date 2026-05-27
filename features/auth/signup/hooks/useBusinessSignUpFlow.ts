@@ -23,13 +23,13 @@ import { Alert, ScrollView, useWindowDimensions } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
 import {
+  CONFIRM_SCROLL_DELAY_MS,
   DEBOUNCE_MS,
   DESKTOP_BREAKPOINT,
   DESKTOP_MAX_PANEL_WIDTH,
   EMAIL_RESEND_SECS,
   OTP_LENGTH,
   OTP_RESEND_SECS,
-  SCROLL_BOTTOM_PAD,
   STEP_LABELS,
   type BusinessType,
   type EmployeeCount,
@@ -69,7 +69,7 @@ export function useBusinessSignUpFlow() {
   const [orgName, setOrgNameRaw] = useState('');
   const [orgCheck, setOrgCheck] = useState<{ loading: boolean; taken: boolean } | null>(null);
   const orgCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [orgJoinMode, setOrgJoinMode] = useState(false);
+  const [orgTakenError, setOrgTakenError] = useState<string | null>(null);
 
   // Step 3
   const [businessType, setBusinessType] = useState<BusinessType | null>(null);
@@ -193,7 +193,6 @@ export function useBusinessSignUpFlow() {
   const handleBack = () => {
     if (step === 0) { router.back(); return; }
     if (step === 5) { router.replace('/'); return; }
-    if (step === 4 && orgJoinMode) { goToPage(2); return; }
     goToPage(step - 1);
   };
 
@@ -204,7 +203,11 @@ export function useBusinessSignUpFlow() {
   const setOrgName = (t: string) => {
     setOrgNameRaw(t);
     setStep2Attempted(false);
+    setOrgTakenError(null);
   };
+
+  const orgTakenMessage = (name: string) =>
+    `The workspace '${name}' is already registered. Please ask your company's administrator to send you an invite.`;
 
   const setOperatingModel = (m: OperatingModel) => {
     setOperatingModelRaw(m);
@@ -261,12 +264,34 @@ export function useBusinessSignUpFlow() {
     goToPage(2);
   };
 
-  const continueOrgCheck = () => {
+  const continueOrgCheck = async () => {
     setStep2Attempted(true);
-    if (!orgName.trim() || orgCheck?.loading) return;
-    const isTaken = orgCheck?.taken ?? false;
-    setOrgJoinMode(isTaken);
-    goToPage(isTaken ? 4 : 3);
+    const trimmed = orgName.trim();
+    if (!trimmed) return;
+    if (!isOnline) return Alert.alert('No internet', 'Connect to continue.');
+
+    if (orgCheckRef.current) {
+      clearTimeout(orgCheckRef.current);
+      orgCheckRef.current = null;
+    }
+
+    let check = orgCheck;
+    if (!check || check.loading) {
+      setLoading(true);
+      const r = await checkOrganizationNameTaken(trimmed);
+      setLoading(false);
+      if (r.error) return Alert.alert('Error', r.error.message);
+      check = { loading: false, taken: r.taken };
+      setOrgCheck(check);
+    }
+
+    if (check.taken) {
+      setOrgTakenError(orgTakenMessage(trimmed));
+      return;
+    }
+
+    setOrgTakenError(null);
+    goToPage(3);
   };
 
   const continueCompanyDetails = () => {
@@ -282,19 +307,26 @@ export function useBusinessSignUpFlow() {
    * since orgCheck is reset on every orgName change). Skip the extra round-trip.
    */
   const guardOrgName = async (): Promise<boolean> => {
-    if (orgJoinMode) return true;
-    // Use cached result if already settled to avoid a third round-trip.
+    const trimmed = orgName.trim();
     if (orgCheck && !orgCheck.loading) {
       if (orgCheck.taken) {
-        Alert.alert('Taken', 'This company name was just registered. Please choose another.');
+        setOrgTakenError(orgTakenMessage(trimmed));
+        goToPage(2);
         return false;
       }
       return true;
     }
-    // Cache missing (e.g. user skipped back and re-entered): fetch once.
-    const dup = await checkOrganizationNameTaken(orgName.trim());
-    if (dup.error) { Alert.alert('Error', dup.error.message); return false; }
-    if (dup.taken) { Alert.alert('Taken', 'This company name was just registered. Please choose another.'); return false; }
+    const dup = await checkOrganizationNameTaken(trimmed);
+    if (dup.error) {
+      Alert.alert('Error', dup.error.message);
+      return false;
+    }
+    if (dup.taken) {
+      setOrgCheck({ loading: false, taken: true });
+      setOrgTakenError(orgTakenMessage(trimmed));
+      goToPage(2);
+      return false;
+    }
     return true;
   };
 
@@ -319,18 +351,14 @@ export function useBusinessSignUpFlow() {
       fullName: fullName.trim(),
       role: 'user',
       phone: storedPhone,
-      ...(orgJoinMode
-        ? { skipOrgCreation: true }
-        : {
-            operatingModel,
-            companyName: orgName.trim(),
-            addressLine: addressLine.trim() || undefined,
-            city: selectedLocation?.city,
-            state: selectedLocation?.state,
-            zone: selectedLocation?.zone,
-            businessType: businessType ?? undefined,
-            employeeCount: employeeCount ?? undefined,
-          }),
+      operatingModel,
+      companyName: orgName.trim(),
+      addressLine: addressLine.trim() || undefined,
+      city: selectedLocation?.city,
+      state: selectedLocation?.state,
+      zone: selectedLocation?.zone,
+      businessType: businessType ?? undefined,
+      employeeCount: employeeCount ?? undefined,
     });
     setLoading(false);
     if (result.error) return Alert.alert('Error', result.error.message);
@@ -357,16 +385,15 @@ export function useBusinessSignUpFlow() {
     const pending = await setPendingOAuthMetadata({
       fullName: trimmedName || undefined,
       phone: storedPhone,
-      companyName: orgJoinMode ? undefined : orgName.trim(),
+      companyName: orgName.trim(),
       role: 'user',
-      operatingModel: orgJoinMode ? undefined : operatingModel,
-      addressLine: orgJoinMode ? undefined : addressLine.trim() || undefined,
-      city: orgJoinMode ? undefined : selectedLocation?.city,
-      state: orgJoinMode ? undefined : selectedLocation?.state,
-      zone: orgJoinMode ? undefined : selectedLocation?.zone,
-      businessType: orgJoinMode ? undefined : businessType ?? undefined,
-      employeeCount: orgJoinMode ? undefined : employeeCount ?? undefined,
-      skipOrgCreation: orgJoinMode ? true : undefined,
+      operatingModel,
+      addressLine: addressLine.trim() || undefined,
+      city: selectedLocation?.city,
+      state: selectedLocation?.state,
+      zone: selectedLocation?.zone,
+      businessType: businessType ?? undefined,
+      employeeCount: employeeCount ?? undefined,
     });
     if (pending.error) { setGoogleLoading(false); return Alert.alert('Error', pending.error.message); }
 
@@ -398,11 +425,9 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollConfirmPasswordIntoView = () => {
-    // Keyboard open delay before scroll — keep as named constant so it's obvious why.
-    const KEYBOARD_SETTLE_MS = SCROLL_BOTTOM_PAD - 70; // ~150ms derived from pad
     setTimeout(() => {
       pageVerticalScrollRefs.current[4]?.scrollToEnd({ animated: true });
-    }, KEYBOARD_SETTLE_MS);
+    }, CONFIRM_SCROLL_DELAY_MS);
   };
 
   return {
@@ -435,7 +460,7 @@ export function useBusinessSignUpFlow() {
     orgName,
     setOrgName,
     orgCheck,
-    orgJoinMode,
+    orgTakenError,
     step2Attempted,
 
     // step 3

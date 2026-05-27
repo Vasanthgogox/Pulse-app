@@ -1,3 +1,4 @@
+import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { Text, TouchableOpacity, View } from 'react-native';
@@ -34,31 +35,21 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
               {flow.resendingSecs > 0 ? `Resend in ${flow.resendingSecs}s` : 'Resend verification email'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.altRow} onPress={() => router.replace('/sign-in')}>
+          <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
             <Text style={styles.altLink}>Already verified? Sign in</Text>
           </TouchableOpacity>
         </>
       ) : (
         <>
-          <Text style={styles.successTitle}>
-            {flow.orgJoinMode ? 'Account created!' : "You're in!"}
+          <Text style={styles.successTitle}>You&apos;re in!</Text>
+          <Text style={styles.successSub}>
+            Your workspace <Text style={styles.successEmailBold}>{flow.orgName}</Text> is ready.
+            Start managing your fleet.
           </Text>
-          {flow.orgJoinMode ? (
-            <Text style={styles.successSub}>
-              Your account is ready. To join{' '}
-              <Text style={styles.successEmailBold}>{flow.orgName}</Text>, ask their admin
-              to invite you as a team member.
-            </Text>
-          ) : (
-            <Text style={styles.successSub}>
-              Your workspace <Text style={styles.successEmailBold}>{flow.orgName}</Text> is ready.
-              Start managing your fleet.
-            </Text>
-          )}
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/')}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace(ROUTES.INDEX)}>
             <Text style={styles.primaryBtnText}>Go to app</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.altRow} onPress={() => router.replace('/sign-in')}>
+          <TouchableOpacity style={styles.altRow} onPress={() => router.replace(ROUTES.SIGN_IN)}>
             <Text style={styles.altLink}>Already have an account? Sign in</Text>
           </TouchableOpacity>
         </>

@@ -16,7 +16,12 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
           Company / Organization name <Text style={styles.req}>*</Text>
         </Text>
         <TextInput
-          style={[styles.input, flow.step2Attempted && !flow.orgName.trim() ? styles.inputError : null]}
+          style={[
+            styles.input,
+            (flow.step2Attempted && !flow.orgName.trim()) || flow.orgCheck?.taken || flow.orgTakenError
+              ? styles.inputError
+              : null,
+          ]}
           placeholder="e.g. GoGoX Logistics"
           placeholderTextColor={C.placeholder}
           value={flow.orgName}
@@ -26,6 +31,9 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
         {flow.step2Attempted && !flow.orgName.trim()
           ? <Text style={styles.fieldError}>Enter your organization name.</Text>
           : null}
+        {flow.orgTakenError ? (
+          <Text style={styles.fieldError}>{flow.orgTakenError}</Text>
+        ) : null}
         {flow.orgCheck?.loading ? (
           <View style={styles.orgStatusRow}>
             <LoadingIndicator size="small" color={C.muted} />
@@ -34,10 +42,11 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
         ) : flow.orgCheck?.taken ? (
           <View style={styles.orgExistsBanner}>
             <FontAwesome name="exclamation-triangle" size={14} color={C.warning} />
-            <View style={{ flex: 1 }}>
+            <View style={styles.orgExistsBody}>
               <Text style={styles.orgExistsTitle}>Organization already registered</Text>
               <Text style={styles.orgExistsSub}>
-                Ask their admin to invite you as a team member after you create your account.
+                This name is taken. Ask your company&apos;s administrator to send you a team invite — you cannot
+                create a new workspace with this name.
               </Text>
             </View>
           </View>
@@ -50,13 +59,20 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
       </View>
 
       <TouchableOpacity
-        style={[styles.primaryBtn, (!flow.orgName.trim() || flow.orgCheck?.loading) && styles.primaryBtnDisabled]}
+        style={[
+          styles.primaryBtn,
+          (!flow.orgName.trim() || flow.orgCheck?.loading || flow.orgCheck?.taken || flow.loading) &&
+            styles.primaryBtnDisabled,
+        ]}
         onPress={flow.continueOrgCheck}
-        disabled={!flow.orgName.trim() || !!flow.orgCheck?.loading}
+        disabled={
+          !flow.orgName.trim() ||
+          !!flow.orgCheck?.loading ||
+          !!flow.orgCheck?.taken ||
+          flow.loading
+        }
       >
-        <Text style={styles.primaryBtnText}>
-          {flow.orgCheck?.taken ? 'Continue to create account' : 'Continue'}
-        </Text>
+        <Text style={styles.primaryBtnText}>Continue</Text>
       </TouchableOpacity>
     </>
   );

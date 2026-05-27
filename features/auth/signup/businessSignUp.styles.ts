@@ -69,6 +69,7 @@ export const styles = StyleSheet.create({
     backgroundColor: C.warningBg, borderRadius: 10, borderWidth: 1, borderColor: C.warningBorder,
     padding: 12,
   },
+  orgExistsBody: { flex: 1 },
   orgExistsTitle: { fontSize: 13, fontWeight: '700', color: '#92400e', marginBottom: 3 },
   orgExistsSub: { fontSize: 12, color: '#78350f', lineHeight: 17 },
   orgAvailBanner: {
@@ -200,14 +201,6 @@ export const styles = StyleSheet.create({
   cityEmptyState: { alignItems: 'center', paddingVertical: 36, gap: 8 },
   cityEmptyTitle: { fontSize: 14, fontWeight: '700', color: C.muted },
   cityEmptyHint: { fontSize: 12, color: C.placeholder, textAlign: 'center', maxWidth: 200 },
-
-  // Join notice banner (on account step)
-  joinNoticeBanner: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 18,
-    backgroundColor: C.warningBg, borderRadius: 10, borderWidth: 1, borderColor: C.warningBorder, padding: 12,
-  },
-  joinNoticeText: { flex: 1, fontSize: 13, color: '#78350f', lineHeight: 18 },
-  joinNoticeOrg: { fontWeight: '700' },
 
   // Primary button
   primaryBtn: {

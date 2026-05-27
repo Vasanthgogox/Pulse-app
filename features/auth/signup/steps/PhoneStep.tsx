@@ -1,4 +1,5 @@
 import { LoadingIndicator } from '@/components/LoadingIndicator';
+import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -73,7 +74,7 @@ export function PhoneStep({ flow }: { flow: SignUpFlow }) {
 
       <View style={styles.altRow}>
         <Text style={styles.altText}>Already have an account? </Text>
-        <TouchableOpacity onPress={() => router.replace('/sign-in')}>
+        <TouchableOpacity onPress={() => router.replace(ROUTES.SIGN_IN)}>
           <Text style={styles.altLink}>Sign in</Text>
         </TouchableOpacity>
       </View>

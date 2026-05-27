@@ -9,17 +9,7 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
   return (
     <>
       <Text style={styles.pageTitle}>Create account</Text>
-      {flow.orgJoinMode ? (
-        <View style={styles.joinNoticeBanner}>
-          <FontAwesome name="info-circle" size={14} color={C.warning} />
-          <Text style={styles.joinNoticeText}>
-            <Text style={styles.joinNoticeOrg}>{flow.orgName}</Text> already exists.
-            {' '}After signing up, ask their admin to invite you as a team member.
-          </Text>
-        </View>
-      ) : (
-        <Text style={styles.pageSub}>Enter your email and password to finish.</Text>
-      )}
+      <Text style={styles.pageSub}>Enter your email and password to finish.</Text>
 
       <View style={styles.fieldGroup}>
         <Text style={[styles.label, flow.step4Attempted && flow.step4Errors.fullName ? styles.labelError : null]}>
