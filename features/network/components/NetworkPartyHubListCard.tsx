@@ -21,7 +21,7 @@ import {
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { SPLIT_STACK_BREAKPOINT } from "@/features/network/constants/networkHubGrid";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Building2, CheckCircle2, Phone, Send, Verified } from "lucide-react-native";
+import { Building2, Phone, Send } from "lucide-react-native";
 import { useMemo } from "react";
 import {
   Platform,
@@ -47,7 +47,6 @@ export type NetworkPartyHubListCardProps = {
   totalTrips?: number | null;
   ratingValue?: number | null;
   mutualCount?: number;
-  showVerified?: boolean;
   showOnline?: boolean;
   viewerOrgId?: string | null;
   onPressCard?: () => void;
@@ -76,7 +75,6 @@ export function NetworkPartyHubListCard({
   totalTrips,
   ratingValue,
   mutualCount = 0,
-  showVerified = false,
   showOnline = false,
   viewerOrgId,
   onPressCard,
@@ -122,11 +120,48 @@ export function NetworkPartyHubListCard({
     [connectionActionLabel, connectionIntegrated, t],
   );
 
-  const avatarSize = nativeListRow ? 40 : mobileGrid ? 32 : compact ? 36 : 40;
+  const avatarSize = nativeListRow ? 48 : mobileGrid ? 40 : compact ? 40 : 44;
   const metricsCompact = compact || mobileGrid || nativeListRow;
   const metricsMobile = mobileGrid || nativeListRow;
-  /** Hide redundant Connected chip only on 2-up mobile web grid; show on native + desktop. */
-  const showConnectionAction = !connectionIntegrated || !mobileGrid;
+
+  /** Split rolePills into:
+   *   - `rolePill` — the relationship category (CLIENT / SUPPLIER / DRIVER)
+   *     that tells the viewer *how* they are connected to this party. Rendered
+   *     inline under the party name as a small colored chip with role-specific
+   *     tone (indigo / green / amber).
+   *   - `integrationPill` — "INTEGRATED" status, hoisted out and floated at
+   *     the card's top-right corner.
+   *  The role chip lives in the identity column so it can never collide with
+   *  the floating INTEGRATED badge anchored to the top-right. */
+  const integrationPill = useMemo(
+    () => rolePills.find((p) => p.label === "INTEGRATED") ?? null,
+    [rolePills],
+  );
+  const rolePill = useMemo(
+    () =>
+      rolePills.find(
+        (p) =>
+          p.label === "CLIENT" ||
+          p.label === "SUPPLIER" ||
+          p.label === "DRIVER",
+      ) ?? null,
+    [rolePills],
+  );
+  /** CONNECTED status pill is dropped whenever the card already carries
+   *  the floating INTEGRATED badge — they convey the same signal (this
+   *  org is a confirmed peer). Without integration tier info to display,
+   *  the status pill still mounts so the viewer has at least one explicit
+   *  "you're connected" affordance. Primary CTAs (CONNECT / pending) are
+   *  always rendered. Mobile-grid continues to hide the redundant pill
+   *  in 2-up cells regardless. */
+  const showConnectionAction =
+    !connectionIntegrated || (!integrationPill && !mobileGrid);
+  /** Right-aligned safety margin so the role chip never slides beneath
+   *  the floating INTEGRATED badge. The new compact-size badge (~50 px
+   *  wide at fontSize 6) needs much less reserved space than the prior
+   *  default-size badge — 72 px clears the badge + its 12 px right
+   *  inset with a small breathing buffer. */
+  const integrationOffsetGuard = integrationPill ? 72 : 0;
 
   const metricsTiles = nativeListRow ? (
     <View style={styles.nativeFooterMetrics}>
@@ -136,7 +171,7 @@ export function NetworkPartyHubListCard({
             viewerOrgId={viewerOrgId!}
             targetOrgId={partyId}
             mutualCount={mutualCount}
-            faceSize={18}
+            faceSize={32}
             showSectionLabel={false}
             compact
             onPressMutual={onPressMutual}
@@ -154,7 +189,7 @@ export function NetworkPartyHubListCard({
             viewerOrgId={viewerOrgId!}
             targetOrgId={partyId}
             mutualCount={mutualCount}
-            faceSize={mobileGrid ? 16 : compact ? 18 : 20}
+            faceSize={mobileGrid ? 30 : compact ? 34 : 36}
             showSectionLabel={false}
             compact
             onPressMutual={onPressMutual}
@@ -178,7 +213,7 @@ export function NetworkPartyHubListCard({
           onPress={onConnectionAction}
           disabled={connectionActionDisabled}
           loading={loading}
-          leadingIcon={<Send size={12} color={Theme.primary} strokeWidth={2.2} />}
+          leadingIcon={<Send size={13} color={Theme.primary} strokeWidth={2.4} />}
         />
       )}
     </View>
@@ -188,6 +223,11 @@ export function NetworkPartyHubListCard({
     const avatarPressHandler = onOpenProfile ?? onPressCard;
     return (
       <View style={nativeStyles.card}>
+        {integrationPill ? (
+          <View style={styles.integrationPillTopRight} pointerEvents="none">
+            <NetworkHubGlassBadge pill={integrationPill} size="compact" />
+          </View>
+        ) : null}
         <View style={nativeStyles.headerPressable}>
           <Pressable
             onPress={avatarPressHandler}
@@ -200,7 +240,7 @@ export function NetworkPartyHubListCard({
             accessibilityRole="button"
             accessibilityLabel={displayName}
           >
-            <View style={styles.avatarWrap}>
+            <View style={styles.avatarWrapNative}>
               <PartyAvatar
                 name={displayName}
                 initialsColorSeed={partyId}
@@ -218,6 +258,7 @@ export function NetworkPartyHubListCard({
             disabled={!onPressCard}
             style={({ pressed }) => [
               nativeStyles.identity,
+              integrationOffsetGuard > 0 && { paddingRight: integrationOffsetGuard },
               pressed && onPressCard && nativeStyles.headerPressed,
             ]}
             accessibilityRole="button"
@@ -227,20 +268,33 @@ export function NetworkPartyHubListCard({
               {displayName}
             </Text>
 
-            {rolePills.length > 0 ? (
-              <View style={styles.badgesRow}>
-                {rolePills.map((pill) => (
-                  <NetworkHubGlassBadge key={pill.label} pill={pill} />
-                ))}
-              </View>
-            ) : null}
-
             {showPhone ? (
               <View style={styles.phoneRow}>
                 <Phone size={9} color={Theme.textMuted} strokeWidth={2.2} />
                 <Text style={styles.phoneText} numberOfLines={1}>
                   {phone}
                 </Text>
+              </View>
+            ) : null}
+
+            {rolePill ? (
+              <View style={styles.rolePillRow}>
+                <View
+                  style={[
+                    styles.rolePillChip,
+                    {
+                      backgroundColor: rolePill.backgroundColor,
+                      borderColor: rolePill.borderColor ?? "transparent",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.rolePillChipText, { color: rolePill.color }]}
+                    numberOfLines={1}
+                  >
+                    {rolePill.label}
+                  </Text>
+                </View>
               </View>
             ) : null}
           </Pressable>
@@ -272,6 +326,16 @@ export function NetworkPartyHubListCard({
           mobileGrid && networkHubListCardChromeStyles.cardMobileGrid,
         ]}
       >
+        {integrationPill ? (
+          <View style={styles.integrationPillTopRight} pointerEvents="none">
+            {/* Always use the compact badge size so the corner pill peers
+             *  with the role chip (DRIVER / CLIENT / SUPPLIER), which we
+             *  matched to compact dimensions earlier. The default-size
+             *  badge was disproportionately large for the card's current
+             *  density. */}
+            <NetworkHubGlassBadge pill={integrationPill} size="compact" />
+          </View>
+        ) : null}
         <View
           style={[
             styles.row,
@@ -311,7 +375,13 @@ export function NetworkPartyHubListCard({
               {showOnline ? <View style={styles.onlineDot} /> : null}
             </Pressable>
 
-            <View style={[styles.identity, mobileGrid && styles.identityMobileGrid]}>
+            <View
+              style={[
+                styles.identity,
+                mobileGrid && styles.identityMobileGrid,
+                integrationOffsetGuard > 0 && { paddingRight: integrationOffsetGuard },
+              ]}
+            >
               <Text
                 style={[
                   styles.partyName,
@@ -323,15 +393,31 @@ export function NetworkPartyHubListCard({
                 {displayName}
               </Text>
 
-              {rolePills.length > 0 ? (
-                <View style={[styles.badgesRow, mobileGrid && styles.badgesRowMobileGrid]}>
-                  {rolePills.map((pill) => (
-                    <NetworkHubGlassBadge
-                      key={pill.label}
-                      pill={pill}
-                      size={mobileGrid ? "compact" : "default"}
-                    />
-                  ))}
+              {rolePill ? (
+                <View style={styles.rolePillRow}>
+                  <View
+                    style={[
+                      styles.rolePillChip,
+                      {
+                        backgroundColor: rolePill.backgroundColor,
+                        borderColor: rolePill.borderColor ?? "transparent",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.rolePillChipText, { color: rolePill.color }]}
+                      numberOfLines={1}
+                    >
+                      {rolePill.label}
+                    </Text>
+                  </View>
+                </View>
+              ) : !mobileGrid && partyType.trim().length > 0 ? (
+                <View style={styles.roleSubLine}>
+                  <Building2 size={9} color={Theme.textMuted} strokeWidth={2.2} />
+                  <Text style={styles.roleSubLineText} numberOfLines={1}>
+                    {partyType}
+                  </Text>
                 </View>
               ) : null}
 
@@ -362,20 +448,6 @@ export function NetworkPartyHubListCard({
 
             {showConnectionAction ? (
               <View style={[styles.actionCol, mobileGrid && styles.actionColMobileGrid]}>
-                {!mobileGrid ? (
-                  <View style={styles.actionMetaRow}>
-                    <Building2 size={9} color={Theme.textMuted} strokeWidth={2.2} />
-                    <Text style={styles.roleChipText} numberOfLines={1}>
-                      {partyType}
-                    </Text>
-                    {showVerified ? (
-                      <Verified size={12} color={Theme.primary} strokeWidth={2.4} />
-                    ) : (
-                      <CheckCircle2 size={10} color={Theme.primary} strokeWidth={2.2} />
-                    )}
-                  </View>
-                ) : null}
-
                 {connectionIntegrated ? (
                   <NetworkHubGlassButton
                     variant="connected"
@@ -392,9 +464,9 @@ export function NetworkPartyHubListCard({
                     loading={loading}
                     leadingIcon={
                       <Send
-                        size={mobileGrid ? 10 : 12}
+                        size={mobileGrid ? 11 : 13}
                         color={Theme.primary}
-                        strokeWidth={2.2}
+                        strokeWidth={2.4}
                       />
                     }
                   />

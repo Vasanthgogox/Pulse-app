@@ -1592,9 +1592,9 @@ const styles = StyleSheet.create({
   summary: {
     padding: 20,
     borderRadius: 12,
-    backgroundColor: "rgba(26,35,126,0.06)",
+    backgroundColor: "rgba(79,70,229,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.12)",
+    borderColor: "rgba(79,70,229,0.12)",
   },
   summaryTitle: {
     fontSize: 13,
@@ -1790,8 +1790,8 @@ const styles = StyleSheet.create({
   tableActionBtn: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.25)",
-    backgroundColor: "rgba(26,35,126,0.06)",
+    borderColor: "rgba(79,70,229,0.25)",
+    backgroundColor: "rgba(79,70,229,0.06)",
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1824,7 +1824,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: "rgba(26,35,126,0.1)",
+    backgroundColor: "rgba(79,70,229,0.1)",
     color: Theme.primary,
   },
   selectAllBtn: { marginLeft: "auto" },
@@ -1848,7 +1848,7 @@ const styles = StyleSheet.create({
   },
   cardSelected: {
     borderColor: Theme.primary,
-    backgroundColor: "rgba(26,35,126,0.03)",
+    backgroundColor: "rgba(79,70,229,0.03)",
   },
   cardTop: {
     flexDirection: "row",

@@ -10,12 +10,30 @@ import { StyleSheet } from "react-native";
 export const hubListCardStyles = StyleSheet.create({
   card: networkHubListCardChromeStyles.card,
   cardCompact: networkHubListCardChromeStyles.cardCompact,
+  /** Row uses `alignItems: flex-start` (not center) so the avatar's
+   *  TOP edge and the name's TOP edge share the same Y position
+   *  regardless of how much content the identity column carries
+   *  (e.g. AHMED has a phone line, AMAN LOGS doesn't). With
+   *  center-aligned children, the name would slide vertically as
+   *  content height varied and cards in the same grid row would
+   *  visually disagree.
+   *
+   *  `flex: 1` stretches the row to fill the card vertically so
+   *  cards stretched to the same height by their grid container
+   *  share an internal layout — the right-column's
+   *  `alignSelf: flex-end` then lands metrics at the SAME Y across
+   *  all cards in the row, level with the bottom card padding.
+   *
+   *  `minHeight: 48` matches the avatar column so cards without
+   *  phone lines don't collapse shorter than cards with one. */
   row: {
+    flex: 1,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
     minWidth: 0,
+    minHeight: 48,
   },
   rowCompact: {
     flexDirection: "column",
@@ -25,13 +43,18 @@ export const hubListCardStyles = StyleSheet.create({
   left: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
     minWidth: 0,
   },
   leftCompact: {
     gap: 10,
   },
+  /** Avatar column tightened from 56→48 to peer with the smaller role
+   *  chip / INTEGRATED badge scale. Combined with reducing
+   *  `avatarSize` in the parent (44 default), this trims ~12 px of
+   *  vertical chrome per card and keeps the identity column more
+   *  proportional to its now-compact pills. */
   avatarCol: {
     width: 48,
     height: 48,
@@ -40,7 +63,23 @@ export const hubListCardStyles = StyleSheet.create({
     flexShrink: 0,
     position: "relative",
   },
-  avatarWrap: networkHubListCardChromeStyles.avatarWrap,
+  /** Desktop / hub card avatar wrap — 46×46 to peer with the new
+   *  48 px column and the smaller 44 px `PartyAvatar` rendered inside. */
+  avatarWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: networkHubListCardChromeStyles.avatarWrap.borderRadius,
+    backgroundColor: networkHubListCardChromeStyles.avatarWrap.backgroundColor,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderWidth: networkHubListCardChromeStyles.avatarWrap.borderWidth,
+    borderColor: networkHubListCardChromeStyles.avatarWrap.borderColor,
+  },
+  /** Native list-row avatar wrap — 52×52 (full chrome size) so the
+   *  larger 48 px `PartyAvatar` rendered in the native path is never
+   *  clipped. */
+  avatarWrapNative: networkHubListCardChromeStyles.avatarWrap,
   onlineDot: {
     position: "absolute",
     right: 1,
@@ -53,11 +92,18 @@ export const hubListCardStyles = StyleSheet.create({
     borderColor: Theme.networkHubListCardBackground,
     zIndex: 2,
   },
+  /** Identity content is top-anchored to match the row's top-align —
+   *  the party name always sits on the same baseline as the avatar's
+   *  top edge across cards, regardless of whether a phone or extra
+   *  meta line is present. A small `paddingTop` accounts for the
+   *  avatar wrap's border so the name visually aligns with the top
+   *  of the avatar's content, not the chrome border. */
   identity: {
     flex: 1,
     minWidth: 0,
     gap: 3,
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    paddingTop: 1,
     paddingLeft: 2,
   },
   partyName: {
@@ -92,8 +138,8 @@ export const hubListCardStyles = StyleSheet.create({
     width: "100%",
   },
   avatarColMobileGrid: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
   },
   identityMobileGrid: {
     flex: 1,
@@ -171,12 +217,79 @@ export const hubListCardStyles = StyleSheet.create({
     lineHeight: 11,
     flexShrink: 1,
   },
+  /** Subtitle line under the party name carrying the role label
+   *  (e.g. "Supplier partner"). Moved here from the right-side action
+   *  column to prevent collision with the floating "INTEGRATED" pill
+   *  anchored at the card's top-right. */
+  roleSubLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minWidth: 0,
+    marginTop: 1,
+  },
+  roleSubLineText: {
+    ...FinanceTxnTypography.routeWhy,
+    lineHeight: 12,
+    flexShrink: 1,
+  },
+  /** Colored category chip sitting under the party name — tells the
+   *  viewer *how* they are connected (CLIENT / SUPPLIER / DRIVER).
+   *  Background, border and text colour are passed in per role
+   *  (`networkBadgeClient*` / `networkBadgeSupplier*` / `networkBadgeDriver*`)
+   *  so the chip carries the same tone palette as the other badges
+   *  in the network surfaces. */
+  rolePillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    minWidth: 0,
+    marginTop: 2,
+    gap: 4,
+  },
+  /** Role chip dimensions are deliberately matched to the floating
+   *  INTEGRATED badge (`NetworkHubGlassBadge` size="compact"). Both
+   *  chips now share the same height (~12-14 px), padding (5 / 2),
+   *  font size (6 px), letter-spacing (0.7), and line-height (9 px)
+   *  so DRIVER / CLIENT / SUPPLIER reads as a peer to INTEGRATED
+   *  rather than dominating it visually. */
+  rolePillChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+    maxWidth: "100%",
+    minHeight: 12,
+  },
+  rolePillChipText: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    lineHeight: 9,
+    flexShrink: 1,
+  },
   badgesRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     gap: 6,
     marginTop: 2,
+  },
+  /** Floating "INTEGRATED" status pill anchored to the top-right of the
+   *  card. Replaces the inline role + integration badges row so the name
+   *  and metrics get more horizontal real estate and the card reads as a
+   *  single composed unit. Pulled tighter into the corner (8/10 instead
+   *  of 10/12) since the badge itself is now compact-sized — the prior
+   *  inset was calibrated for the larger default-size badge. */
+  integrationPillTopRight: {
+    position: "absolute",
+    top: 8,
+    right: 10,
+    zIndex: 3,
   },
   badge: {
     paddingHorizontal: 6,
@@ -201,24 +314,37 @@ export const hubListCardStyles = StyleSheet.create({
     flexShrink: 1,
     lineHeight: 11,
   },
+  /** Right column is end-anchored vertically so the metrics tile row
+   *  sits at the BOTTOM-right of the card, leaving a clean gap below
+   *  the floating INTEGRATED badge at the top-right corner. With both
+   *  metrics + badge at fixed positions (top vs bottom corner), the
+   *  right side reads as a stable bookend layout instead of metrics
+   *  floating at row-center where they crowd the badge. */
   right: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     flexShrink: 0,
+    alignSelf: "flex-end",
   },
   rightCompact: {
     justifyContent: "space-between",
     width: "100%",
+    alignSelf: "stretch",
   },
   metricsRow: networkHubListCardChromeStyles.metricsRow,
   metricsRowCompact: networkHubListCardChromeStyles.metricsRowCompact,
+  /** Holds up to 3 overlapping faces + an optional +N overflow chip.
+   *  Sized for the desktop card faces (32 px) which the parent passes
+   *  in: 32 + 2·22 ≈ 76 px → 100 px ceiling absorbs the overflow chip
+   *  comfortably while no longer hogging horizontal real estate on
+   *  the now-narrower cards. */
   mutualsSlot: {
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 2,
     marginRight: 2,
-    maxWidth: 56,
+    maxWidth: 100,
     overflow: "hidden",
   },
   actionMetaRow: {
@@ -229,11 +355,15 @@ export const hubListCardStyles = StyleSheet.create({
     width: "100%",
     flexShrink: 0,
   },
+  /** Action column no longer reserves 100 px — the CONNECTED status
+   *  pill is intrinsically smaller now (~70 px) and the column may
+   *  be empty altogether when the INTEGRATED badge supersedes it.
+   *  Letting the column size to its content frees the metrics row
+   *  to sit closer to the identity column. */
   actionCol: {
     alignItems: "flex-end",
     justifyContent: "center",
     gap: 6,
-    minWidth: 100,
   },
   connectedBtn: {
     flexDirection: "row",

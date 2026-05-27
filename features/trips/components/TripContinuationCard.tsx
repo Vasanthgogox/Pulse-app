@@ -34,8 +34,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-const PURPLE = '#1a237e';
-const PURPLE_TINT = 'rgba(26,35,126,0.08)';
+const PURPLE = '#4F46E5';
+const PURPLE_TINT = 'rgba(79,70,229,0.08)';
 const TEAL = '#0f766e';
 const TEAL_TINT = 'rgba(15,118,110,0.08)';
 const AMBER = '#d97706';

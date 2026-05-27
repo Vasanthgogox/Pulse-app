@@ -27,7 +27,7 @@ import {
 } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-const PURPLE = "#1a237e";
+const PURPLE = "#4F46E5";
 
 type NoticeKind = "success" | "error" | "info";
 
@@ -207,7 +207,7 @@ function ConfirmOverlay({
         <View
           style={[
             styles.confirmIconWrap,
-            { backgroundColor: destructive ? "rgba(220,38,38,0.1)" : "rgba(26,35,126,0.1)" },
+            { backgroundColor: destructive ? "rgba(220,38,38,0.1)" : "rgba(79,70,229,0.1)" },
           ]}
         >
           <AlertTriangle
@@ -266,7 +266,7 @@ const noticePalette: Record<
   },
   info: {
     accent: PURPLE,
-    iconBg: "rgba(26,35,126,0.1)",
+    iconBg: "rgba(79,70,229,0.1)",
     Icon: Info,
   },
 };

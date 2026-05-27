@@ -52,6 +52,9 @@ export const ROUTES = {
   /** Personal identity: name, email, phone, personal avatar */
   MY_ACCOUNT:        '/account'           as const,
 
+  /** Compliance & Document Intelligence hub — opened from header icons. */
+  DOCUMENTS_CENTER: '/documents-center' as const,
+
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */

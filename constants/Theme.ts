@@ -6,11 +6,19 @@
  */
 
 export const Theme = {
-  // ---- Primary (dark blue for headers and primary actions) ----
-  /** Active tab, FAB, primary actions, headers */
-  primary: "#1a237e",
-  /** Dark blue variant for date selection section */
-  primaryLight: "#283593",
+  // ---- Primary (Pulse indigo for headers and primary actions) ----
+  /** Active tab, FAB, primary actions, headers.
+   *
+   *  Indigo-600 (`#4F46E5`) — one shade darker than the lighter Pulse
+   *  purple `actionAccent` (`#6366F1`). Picked so headers / "Send
+   *  protocol" buttons read as the same brand purple family as the Add
+   *  pills, with enough contrast on white surfaces and the navy hue of
+   *  the legacy palette retired in favour of indigo. */
+  primary: "#4F46E5",
+  /** Slightly lighter primary — used for the date selection section
+   *  and any "primary-light" gradient stop. Stays warmer than `primary`
+   *  but still in the indigo family (matches `actionAccent`). */
+  primaryLight: "#6366F1",
   /** Dark gray for strong text */
   primaryText: "#1a1a1a",
 
@@ -40,6 +48,20 @@ export const Theme = {
   darkBackground: "#000000",
   darkSurface: "#1a1a1a",
   darkInputBg: "#333333",
+
+  // ---- Action accent (Pulse purple) ----
+  /** Canonical "Pulse purple" used by the Pulse broadcast button and all
+   *  primary call-to-action pills (Add Trip / Add Indent / Add Load). This
+   *  is the single source of truth for the app's purple — match Pulse,
+   *  never pick a new violet. */
+  actionAccent: "#6366F1",
+  /** Slightly deeper Indigo-600 — used as a 1px inner border to give the
+   *  Pulse-purple pill subtle depth without changing its perceived hue. */
+  actionAccentBorder: "#4F46E5",
+  /** Pulse-tinted shadow for the soft "glow" elevation under action pills.
+   *  Same hue as the Pulse button shadow, with a modest alpha so it reads
+   *  as elevation rather than neon. */
+  actionAccentShadow: "rgba(99,102,241,0.32)",
 
   /** White card background (legacy alias; prefer surface for new code) */
   cardWhite: "#ffffff",
@@ -152,7 +174,7 @@ export const Theme = {
   avatarSlateText: "#333333",
 
   // ---- Buttons ----
-  buttonPrimary: "#1a237e",
+  buttonPrimary: "#4F46E5",
   buttonPrimaryText: "#ffffff",
   buttonSecondaryBackground: "#4b5563", // Temporary comment to force refresh
   buttonSecondary: "#047857",
@@ -194,7 +216,11 @@ export const Theme = {
   pulseTabClusterThumbTop: "rgba(255,255,255,0.34)",
   pulseTabClusterThumbMid: "rgba(255,255,255,0.16)",
   pulseTabClusterThumbBottom: "rgba(255,255,255,0.07)",
-  pulseTabClusterThumbAccent: "rgba(99,102,241,0.14)",
+  /* Subtle indigo bleed beneath the cluster glass thumb. Pulled up from
+   *  the previous 14% to 26% so the active Cash/Trips/Loads tab carries
+   *  a visible Pulse-purple wash — ties the matte-black cluster to the
+   *  solid indigo Home/Chat edge chips for a unified purple/black bar. */
+  pulseTabClusterThumbAccent: "rgba(99,102,241,0.26)",
   pulseTabClusterThumbBorder: "rgba(255,255,255,0.32)",
   pulseTabClusterThumbSpecular: "rgba(255,255,255,0.45)",
   pulseTabClusterIconActive: "#FFFFFF",
@@ -315,11 +341,11 @@ export const Theme = {
   networkHubListCardPrimaryTintBg: "#F5F6FF",
   networkHubListCardPrimaryTintBorder: "#C7D2FE",
   networkSectionLabel: "#64748B",
-  networkClientTintBg: "rgba(26,35,126,0.10)",
+  networkClientTintBg: "rgba(79,70,229,0.10)",
   networkSupplierTintBg: "rgba(21,128,61,0.10)",
   networkDriverTintBg: "rgba(180,83,9,0.12)",
-  networkMessageTintBg: "rgba(26,35,126,0.08)",
-  networkMessageTintBorder: "rgba(26,35,126,0.20)",
+  networkMessageTintBg: "rgba(79,70,229,0.08)",
+  networkMessageTintBorder: "rgba(79,70,229,0.20)",
   /** Frosted glass surfaces (Load Marketplace quick cards). */
   networkGlassSurface: "rgba(255,255,255,0.78)",
   networkGlassSurfacePressed: "rgba(255,255,255,0.62)",
@@ -339,7 +365,7 @@ export const Theme = {
   /** Solid-fill hub role badges — glass gradient + rim (connections list). */
   networkBadgeClientBg: "#E4E8F4",
   networkBadgeClientGradientTop: "#F5F6FC",
-  networkBadgeClientText: "#2E3A8C",
+  networkBadgeClientText: "#4338CA",
   networkBadgeClientBorder: "rgba(255,255,255,0.85)",
   networkBadgeSupplierBg: "#D8F5E4",
   networkBadgeSupplierGradientTop: "#F0FDF6",
@@ -381,6 +407,66 @@ export const Theme = {
   financeCardGreenTo: "#115e59",
   financeCardCashFrom: "#0e7490",
   financeCardCashTo: "#164e63",
+
+  // ---- Analytics chart series + score levels ----
+  /** Canonical 6-slot chart series palette used across the analytics
+   *  modules (Driver / Client / Supplier). Picked so the first 4 slots
+   *  match the existing inline hex usage in
+   *  `features/vehicles/components/analytics/analyticsUtils.ts`
+   *  (`EXPENSE_COLOR_MAP`) — meaning we can later replace those literals
+   *  with `Theme.chartSeries.series1..4` without changing rendered hues.
+   *  When you need more than 6 series, cycle back to series1. */
+  chartSeries1: "#4F46E5", // indigo  — primary metric (revenue, headline)
+  chartSeries2: "#15803D", // green   — positive (profit, on-time, paid)
+  chartSeries3: "#E82127", // red     — negative (expense, outstanding)
+  chartSeries4: "#F97316", // orange  — secondary (fuel, advance)
+  chartSeries5: "#0EA5E9", // sky     — tertiary (toll, KM)
+  chartSeries6: "#94A3B8", // slate   — "other" / neutral baseline
+
+  /** Soft fills for grouped/stacked bars (alpha-blended series above).
+   *  Use these as the "area" under a line chart or as the bar fill when
+   *  the stroke is `chartSeriesN`. */
+  chartFill1: "rgba(79,70,229,0.14)",
+  chartFill2: "rgba(21,128,61,0.14)",
+  chartFill3: "rgba(232,33,39,0.14)",
+  chartFill4: "rgba(249,115,22,0.14)",
+  chartFill5: "rgba(14,165,233,0.14)",
+  chartFill6: "rgba(148,163,184,0.18)",
+
+  /** Score-level palette — used by `ScoreCard` / `RiskMeter` and any
+   *  badge that surfaces a 0–100 score. Same level union as
+   *  `complianceScore` (`excellent | good | warning | critical`),
+   *  but tuned slightly cooler so analytics surfaces feel distinct
+   *  from compliance reds. */
+  scoreExcellentBg: "#DCFCE7",
+  scoreExcellentFg: "#166534",
+  scoreGoodBg: "#DBEAFE",
+  scoreGoodFg: "#1D4ED8",
+  scoreWarningBg: "#FEF3C7",
+  scoreWarningFg: "#B45309",
+  scoreCriticalBg: "#FEE2E2",
+  scoreCriticalFg: "#B91C1C",
+
+  /** Heatmap cell palette — graduated greens for "healthy" and reds
+   *  for "at-risk". Used by `Heatmap` (aging / risk grid). */
+  heatmapHealthy: "#15803D",
+  heatmapNoticeBg: "#FEF3C7",
+  heatmapNoticeFg: "#92400E",
+  heatmapWarningBg: "#FFE4B5",
+  heatmapWarningFg: "#9A3412",
+  heatmapCriticalBg: "#FECACA",
+  heatmapCriticalFg: "#991B1B",
+  heatmapEmpty: "#F1F5F9",
+
+  /** Rank-badge palette (gold / silver / bronze) — used by leaderboards.
+   *  Replaces the duplicated `RANK_BADGE` literal map currently inline
+   *  in 4 analytics files. */
+  rankGoldBg: "#FEF3C7",
+  rankGoldFg: "#B45309",
+  rankSilverBg: "#F1F5F9",
+  rankSilverFg: "#475569",
+  rankBronzeBg: "#FEF2F2",
+  rankBronzeFg: "#B45309",
 } as const;
 
 export type ThemeColors = typeof Theme;

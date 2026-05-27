@@ -17,6 +17,10 @@ export type MutualFace = {
   id: string;
   name: string;
   avatar_seed?: string | null;
+  /** Resolved avatar URL (org logo → owner profile avatar). When `null`,
+   *  the face renders the seed-derived placeholder so the layout stays
+   *  consistent. */
+  avatar_url?: string | null;
 };
 
 export type MutualAvatarStackProps = {
@@ -51,14 +55,25 @@ export function MutualAvatarStack({
 }: MutualAvatarStackProps) {
   const visibleFaces = Math.min(MAX_VISIBLE, Math.max(0, mutualCount));
   const overflow = mutualCount > MAX_VISIBLE ? mutualCount - MAX_VISIBLE : 0;
-  const resolvedFaces = useMemo(() => {
+  /**
+   * "Real" faces come from the resolved `mutuals` array (each entry has
+   * a true org UUID and the real organization name). "Synthetic" faces
+   * are placeholder seeds we render while the mutual list is still
+   * loading — they let the avatar stack take its final layout shape
+   * without snapping in once the query resolves, but they must NEVER
+   * be tappable: their `id` is a fake `${orgId}-mutual-N` string that
+   * would break any downstream profile lookup, which is exactly the
+   * "MUTUAL 1 / NOT AVAILABLE / 0 trips" stuck-state we used to see.
+   */
+  const resolvedFaces = useMemo<Array<MutualFace & { isReal: boolean }>>(() => {
     if (mutuals?.length) {
-      return mutuals.slice(0, visibleFaces);
+      return mutuals.slice(0, visibleFaces).map((m) => ({ ...m, isReal: true }));
     }
     return mutualSeeds(orgId, visibleFaces).map((seed, index) => ({
       id: seed,
       name: `Mutual ${index + 1}`,
       avatar_seed: seed,
+      isReal: false,
     }));
   }, [mutuals, orgId, visibleFaces]);
 
@@ -78,6 +93,31 @@ export function MutualAvatarStack({
           minWidth: stackWidth,
           alignSelf: "flex-start",
         },
+        /**
+         * IMPORTANT: tap target sizing.
+         *
+         * `faceSlot` is applied to the OUTER element (the `Pressable`
+         * for tappable faces, or a plain `View` for synthetic
+         * placeholders). It owns:
+         *   - the avatar diameter (so `Pressable` has an explicit
+         *     hit area equal to what the user sees), and
+         *   - the overlap shift (`marginLeft: -overlap`) for non-first
+         *     faces, so the `Pressable`'s bounding box moves with the
+         *     visible avatar instead of staying at its natural slot.
+         *
+         * Previously the overlap lived on the inner `faceWrap` view,
+         * which left the `Pressable`'s bounding box anchored to the
+         * natural (non-overlapped) slot — taps on overlapping avatars
+         * landed on the adjacent sibling's `Pressable` and the wrong
+         * profile (or none at all) was opened.
+         */
+        faceSlot: {
+          width: faceSize,
+          height: faceSize,
+        },
+        faceSlotOverlap: {
+          marginLeft: -overlap,
+        },
         faceWrap: {
           width: faceSize,
           height: faceSize,
@@ -88,9 +128,6 @@ export function MutualAvatarStack({
           overflow: "hidden",
           alignItems: "center",
           justifyContent: "center",
-        },
-        faceOverlap: {
-          marginLeft: -overlap,
         },
         overflowWrap: {
           backgroundColor: overflowColor,
@@ -111,19 +148,30 @@ export function MutualAvatarStack({
     label ??
     `${mutualCount} mutual connection${mutualCount === 1 ? "" : "s"}`;
 
-  const renderFace = (face: MutualFace, index: number) => {
+  const renderFace = (
+    face: MutualFace & { isReal: boolean },
+    index: number,
+  ) => {
+    /**
+     * Real mutuals: only render a photo when we actually have one
+     * (`avatar_url` = org `logo_url` → owner profile avatar). When no
+     * photo exists, fall back to the party's **initials** (e.g. "AC"
+     * for "Amilthan Client") — same style as the main party avatar in
+     * the profile card. We deliberately suppress the `avatar_seed`
+     * DiceBear cartoon for real mutuals so the row stays visually
+     * consistent and the avatar genuinely represents that party.
+     *
+     * Synthetic placeholder faces (shown briefly while mutuals load)
+     * still use `face.avatar_seed`/`face.id` so the stack settles into
+     * its final layout shape without snapping when data resolves.
+     */
     const inner = (
-      <View
-        style={[
-          dynamic.faceWrap,
-          index > 0 && dynamic.faceOverlap,
-          { zIndex: index + 1 },
-        ]}
-      >
+      <View style={dynamic.faceWrap}>
         <PartyAvatar
           name={face.name}
           initialsColorSeed={face.id}
-          avatarSeed={face.avatar_seed ?? face.id}
+          avatarSeed={face.isReal ? null : (face.avatar_seed ?? face.id)}
+          avatarUrl={face.avatar_url ?? null}
           entityType="client"
           size={faceSize}
           borderStyle={styles.faceImage}
@@ -132,9 +180,45 @@ export function MutualAvatarStack({
       </View>
     );
 
-    if (!onPressFace) {
+    const slotStyle = [
+      dynamic.faceSlot,
+      index > 0 && dynamic.faceSlotOverlap,
+      { zIndex: index + 1 },
+    ];
+
+    /**
+     * Tap fallback for synthetic placeholders.
+     *
+     * Real mutual faces always fire `onPressFace` (open that org's
+     * profile). Synthetic placeholders historically rendered into a
+     * plain `View` and silently swallowed taps, which is what the
+     * "mutual icon not opening profile" report was hitting whenever
+     * the resolved mutuals query returned empty even though
+     * `mutualCount > 0`. We now route placeholder taps to
+     * `onPressOverflow` (the "view all mutuals" handler) so the user
+     * always gets a meaningful response — they land on the mutual
+     * connections list and can pick the party from there.
+     */
+    const placeholderPress =
+      !face.isReal && onPressOverflow ? onPressOverflow : null;
+
+    if (!onPressFace || !face.isReal) {
+      if (placeholderPress) {
+        return (
+          <Pressable
+            key={face.id}
+            onPress={placeholderPress}
+            style={({ pressed }) => [slotStyle, pressed && { opacity: 0.88 }]}
+            accessibilityRole="button"
+            accessibilityLabel={caption}
+            hitSlop={4}
+          >
+            {inner}
+          </Pressable>
+        );
+      }
       return (
-        <View key={face.id} style={{ zIndex: index + 1 }}>
+        <View key={face.id} style={slotStyle}>
           {inner}
         </View>
       );
@@ -143,8 +227,18 @@ export function MutualAvatarStack({
     return (
       <Pressable
         key={face.id}
-        onPress={() => onPressFace(face, index)}
-        style={({ pressed }) => [{ zIndex: index + 1 }, pressed && { opacity: 0.88 }]}
+        onPress={() =>
+          onPressFace(
+            {
+              id: face.id,
+              name: face.name,
+              avatar_seed: face.avatar_seed,
+              avatar_url: face.avatar_url ?? null,
+            },
+            index,
+          )
+        }
+        style={({ pressed }) => [slotStyle, pressed && { opacity: 0.88 }]}
         accessibilityRole="button"
         accessibilityLabel={face.name}
         hitSlop={4}
@@ -154,33 +248,30 @@ export function MutualAvatarStack({
     );
   };
 
+  const overflowSlotStyle = [
+    dynamic.faceSlot,
+    dynamic.faceSlotOverlap,
+    { zIndex: MAX_VISIBLE + 1 },
+  ];
+
   const overflowChip = overflow > 0 ? (
     onPressOverflow ? (
       <Pressable
         onPress={onPressOverflow}
-        style={({ pressed }) => [
-          dynamic.faceWrap,
-          dynamic.faceOverlap,
-          dynamic.overflowWrap,
-          { zIndex: MAX_VISIBLE + 1 },
-          pressed && { opacity: 0.88 },
-        ]}
+        style={({ pressed }) => [overflowSlotStyle, pressed && { opacity: 0.88 }]}
         accessibilityRole="button"
         accessibilityLabel={`${overflow} more mutual connections`}
         hitSlop={4}
       >
-        <Text style={dynamic.overflowText}>+{overflow}</Text>
+        <View style={[dynamic.faceWrap, dynamic.overflowWrap]}>
+          <Text style={dynamic.overflowText}>+{overflow}</Text>
+        </View>
       </Pressable>
     ) : (
-      <View
-        style={[
-          dynamic.faceWrap,
-          dynamic.faceOverlap,
-          dynamic.overflowWrap,
-          { zIndex: MAX_VISIBLE + 1 },
-        ]}
-      >
-        <Text style={dynamic.overflowText}>+{overflow}</Text>
+      <View style={overflowSlotStyle}>
+        <View style={[dynamic.faceWrap, dynamic.overflowWrap]}>
+          <Text style={dynamic.overflowText}>+{overflow}</Text>
+        </View>
       </View>
     )
   ) : null;

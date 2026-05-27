@@ -11,7 +11,7 @@ export const CHAT_MOBILE = {
   headerBg: "#FFFFFF",
   headerBorder: "#E5E7EB",
   bubbleMaxWidthPct: "82%",
-  avatarSize: 28,
+  avatarSize: 40,
   bubbleFontSize: 13.5,
   bubbleLineHeight: 19,
   bubblePadH: 11,
@@ -20,7 +20,7 @@ export const CHAT_MOBILE = {
   headerTitleSize: 15,
   headerSubtitleSize: 11,
   listRowPad: 10,
-  listAvatar: 44,
+  listAvatar: 56,
   listTitleSize: 13,
   listPreviewSize: 12,
   listTimeSize: 10,
@@ -42,7 +42,7 @@ export const CHAT_MOBILE = {
   eventSubSize: 10,
   eventAmountSize: 13,
   eventTimeSize: 10,
-  eventAvatar: 36,
+  eventAvatar: 42,
   eventCardGap: 8,
 } as const;
 

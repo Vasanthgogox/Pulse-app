@@ -30,6 +30,8 @@ import { useTripsQuery } from '@/lib/queries/useTripsQuery';
 import { usePaginatedScroll } from '@/lib/usePaginatedScroll';
 import type { DriverRow, DriverOffer } from '../services/drivers.service';
 import type { VehicleRow } from '@/features/vehicles/services/vehicles.service';
+import { FleetDriverAnalyticsTab } from "./analytics/FleetDriverAnalyticsTab";
+import type { FleetDriverRow } from "./analytics/FleetDriverAnalyticsTab";
 
 /** Minimal ledger row for aggregation (compatible with LedgerTx). */
 export interface LedgerRowForDriver {
@@ -38,6 +40,8 @@ export interface LedgerRowForDriver {
   amount_in?: number;
   amount_out?: number;
 }
+
+export type DriversViewTab = "list" | "analytics";
 
 export interface DriversTabProps {
   organizationId: string | null;
@@ -64,6 +68,8 @@ export interface DriversTabProps {
   bottomInset?: number;
   /** Desktop finance parity: hide summary strip under hero/cards. */
   hideSummaryRow?: boolean;
+  viewTab?: DriversViewTab;
+  onViewTabChange?: (v: DriversViewTab) => void;
 }
 
 export function DriversTab({
@@ -84,6 +90,8 @@ export function DriversTab({
   onRefresh,
   bottomInset = 100,
   hideSummaryRow = false,
+  viewTab = "list" as DriversViewTab,
+  onViewTabChange,
 }: DriversTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -221,7 +229,7 @@ export function DriversTab({
   if (loading || parentLoading) {
     return <Text style={styles.loading}>Loading…</Text>;
   }
-  if (filteredRows.length === 0) {
+  if (filteredRows.length === 0 && viewTab !== "analytics") {
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyText}>No drivers. Add drivers from Resources.</Text>
@@ -253,7 +261,7 @@ export function DriversTab({
         {...tabBarScrollProps}
         onScroll={handleDriverTableScroll}
         scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
-        stickyHeaderIndices={[stickyHeaderIndex]}
+        stickyHeaderIndices={viewTab !== "analytics" ? [stickyHeaderIndex] : []}
         refreshControl={
           onRefresh ? (
             <RefreshControl
@@ -265,7 +273,7 @@ export function DriversTab({
         }
       >
         {topContent}
-        {!hideSummaryRow && (
+        {!hideSummaryRow && viewTab !== "analytics" && (
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>Total Pending</Text>
@@ -280,83 +288,92 @@ export function DriversTab({
             />
           </View>
         )}
-        <View style={styles.tableHeader}>
-          <View style={styles.headerEntityCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
-              Driver Entity
-            </Text>
-          </View>
-          <View style={styles.headerTripsCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
-              Trips
-            </Text>
-          </View>
-          <View style={styles.headerPendingCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-              Pending
-            </Text>
-          </View>
-        </View>
-        <View style={styles.tableCard}>
-          {visibleDriverRows.map((data) => {
-            const pending = data.pending ?? 0;
-            const paid = data.paid ?? 0;
-            const tripCount = data.trips ?? 0;
-            const isDisconnected =
-              data.left_at != null && String(data.left_at).trim() !== '';
-            const isIntegrated = !isDisconnected && !!data.is_integrated;
-            const driver = driverById.get(data.id);
-            return (
-              <TouchableOpacity
-                key={data.id}
-                style={styles.tableRow}
-                onPress={() =>
-                  onRowSelect
-                    ? onRowSelect(data, 'DRIVER', 'drivers')
-                    : router.push(`/driver/${data.id}`)
-                }
-                activeOpacity={0.7}
-              >
-                <EntityAvatar
-                  name={data.name ?? ''}
-                  avatarUrl={driver?.avatar_url}
-                  avatarSeed={driver?.avatar_seed}
-                  entityType="driver"
-                  isIntegrated={isIntegrated}
-                />
-                <View style={[styles.tableCell, styles.ctEntity]}>
-                  <View style={styles.tableEntityHeader}>
-                    <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
-                      {data.name ?? '—'}
-                    </Text>
-                  </View>
-                  <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                    Earned: ₹{(data.due ?? 0) >= 1000 ? `${((data.due ?? 0) / 1000).toFixed(1)}k` : (data.due ?? 0).toLocaleString('en-IN')}
-                  </Text>
-                </View>
-                <View style={[styles.tableCell, styles.ctTrips]}>
-                  <View style={styles.tripsPill}>
-                    <Text style={styles.tripsPillText}>{tripCount}</Text>
-                  </View>
-                </View>
-                <View style={[styles.tableCell, styles.ctPending]}>
-                  <Text
-                    style={[
-                      styles.tablePendingValue,
-                      pending > 0 ? styles.tablePendingDue : styles.tablePendingSettled,
-                    ]}
-                    numberOfLines={1}
+        {viewTab === "analytics" ? (
+          <FleetDriverAnalyticsTab
+            rows={rows}
+            drivers={drivers}
+          />
+        ) : (
+          <>
+            <View style={styles.tableHeader}>
+              <View style={styles.headerEntityCol}>
+                <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
+                  Driver Entity
+                </Text>
+              </View>
+              <View style={styles.headerTripsCol}>
+                <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
+                  Trips
+                </Text>
+              </View>
+              <View style={styles.headerPendingCol}>
+                <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                  Pending
+                </Text>
+              </View>
+            </View>
+            <View style={styles.tableCard}>
+              {visibleDriverRows.map((data) => {
+                const pending = data.pending ?? 0;
+                const paid = data.paid ?? 0;
+                const tripCount = data.trips ?? 0;
+                const isDisconnected =
+                  data.left_at != null && String(data.left_at).trim() !== '';
+                const isIntegrated = !isDisconnected && !!data.is_integrated;
+                const driver = driverById.get(data.id);
+                return (
+                  <TouchableOpacity
+                    key={data.id}
+                    style={styles.tableRow}
+                    onPress={() =>
+                      onRowSelect
+                        ? onRowSelect(data, 'DRIVER', 'drivers')
+                        : router.push(`/driver/${data.id}`)
+                    }
+                    activeOpacity={0.7}
                   >
-                    ₹{pending.toLocaleString('en-IN')}
-                  </Text>
-                  <Text style={styles.tablePaidLabel} numberOfLines={1}>
-                    Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString('en-IN')}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                    <EntityAvatar
+                      name={data.name ?? ''}
+                      avatarUrl={driver?.avatar_url}
+                      avatarSeed={driver?.avatar_seed}
+                      entityType="driver"
+                      isIntegrated={isIntegrated}
+                    />
+                    <View style={[styles.tableCell, styles.ctEntity]}>
+                      <View style={styles.tableEntityHeader}>
+                        <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                          {data.name ?? '—'}
+                        </Text>
+                      </View>
+                      <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
+                        Earned: ₹{(data.due ?? 0) >= 1000 ? `${((data.due ?? 0) / 1000).toFixed(1)}k` : (data.due ?? 0).toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                    <View style={[styles.tableCell, styles.ctTrips]}>
+                      <View style={styles.tripsPill}>
+                        <Text style={styles.tripsPillText}>{tripCount}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.tableCell, styles.ctPending]}>
+                      <Text
+                        style={[
+                          styles.tablePendingValue,
+                          pending > 0 ? styles.tablePendingDue : styles.tablePendingSettled,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        ₹{pending.toLocaleString('en-IN')}
+                      </Text>
+                      <Text style={styles.tablePaidLabel} numberOfLines={1}>
+                        Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );

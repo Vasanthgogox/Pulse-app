@@ -10,7 +10,13 @@ export type ContactPhoneEntry = {
   normalized: string;
 };
 
-const MAX_CONTACT_PAGES = 200;
+/** Page size for `Contacts.getContactsAsync`. We paginate until exhausted
+ *  or we hit `MAX_CONTACTS_HARD_CAP` to keep memory predictable on devices
+ *  with very large address books. */
+const CONTACTS_PAGE_SIZE = 500;
+/** Safety ceiling — keeps us under 10 paged calls on the worst-case
+ *  address book (~5k contacts), which is still cheap. */
+const MAX_CONTACTS_HARD_CAP = 5000;
 
 function contactDisplayName(contact: {
   name?: string;
@@ -41,31 +47,49 @@ export async function loadContactPhonesForNetworkLookup(): Promise<{
       return { entries: [], error: "permission_denied" };
     }
 
-    const { data } = await Contacts.getContactsAsync({
-      fields: [
-        Contacts.Fields.PhoneNumbers,
-        Contacts.Fields.Name,
-        Contacts.Fields.FirstName,
-        Contacts.Fields.LastName,
-      ],
-      pageSize: MAX_CONTACT_PAGES,
-    });
+    const fields = [
+      Contacts.Fields.PhoneNumbers,
+      Contacts.Fields.Name,
+      Contacts.Fields.FirstName,
+      Contacts.Fields.LastName,
+    ];
 
+    /** Walk every page of the address book — `getContactsAsync` returns
+     *  at most `pageSize` rows, so we must loop until `hasNextPage` is
+     *  false (or we hit the hard cap). The previous implementation only
+     *  read the first 200 entries, which silently dropped recommendations
+     *  for any contact whose phone lived later in the book. */
     const byNormalized = new Map<string, ContactPhoneEntry>();
-    for (const contact of data ?? []) {
-      const contactName = contactDisplayName(contact);
-      for (const pn of contact.phoneNumbers ?? []) {
-        const raw = (pn.number ?? pn.digits ?? "").trim();
-        if (!raw) continue;
-        const normalized = normalizePhoneForInviteeLookup(raw);
-        if (normalized.length < 8) continue;
-        if (byNormalized.has(normalized)) continue;
-        byNormalized.set(normalized, {
-          contactName,
-          phoneRaw: raw,
-          normalized,
-        });
+    let pageOffset = 0;
+    let totalRead = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, hasNextPage } = await Contacts.getContactsAsync({
+        fields,
+        pageSize: CONTACTS_PAGE_SIZE,
+        pageOffset,
+      });
+      const rows = data ?? [];
+      for (const contact of rows) {
+        const contactName = contactDisplayName(contact);
+        for (const pn of contact.phoneNumbers ?? []) {
+          const raw = (pn.number ?? pn.digits ?? "").trim();
+          if (!raw) continue;
+          const normalized = normalizePhoneForInviteeLookup(raw);
+          if (normalized.length < 8) continue;
+          if (byNormalized.has(normalized)) continue;
+          byNormalized.set(normalized, {
+            contactName,
+            phoneRaw: raw,
+            normalized,
+          });
+        }
       }
+      totalRead += rows.length;
+      if (!hasNextPage || rows.length === 0 || totalRead >= MAX_CONTACTS_HARD_CAP) {
+        break;
+      }
+      pageOffset += CONTACTS_PAGE_SIZE;
     }
 
     return { entries: [...byNormalized.values()], error: null };

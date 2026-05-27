@@ -31,7 +31,7 @@ export const discoverListCardStyles = StyleSheet.create({
     minWidth: 0,
   },
   avatarCol: {
-    width: 48,
+    width: 56,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -46,19 +46,20 @@ export const discoverListCardStyles = StyleSheet.create({
   },
   partyName: {
     ...FinanceTxnTypography.partyTitle,
-    lineHeight: 16,
-    fontWeight: "700",
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
   },
   partyNameCompact: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 16,
   },
   partyNameMobileGrid: {
-    fontSize: 9,
-    lineHeight: 11,
-    fontWeight: "700",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
     letterSpacing: 0,
@@ -76,8 +77,8 @@ export const discoverListCardStyles = StyleSheet.create({
     width: "100%",
   },
   avatarColMobileGrid: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
   },
   identityMobileGrid: {
     flex: 1,
@@ -125,9 +126,9 @@ export const discoverListCardStyles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   partyNameNativeList: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "500",
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: "700",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.15,
@@ -136,12 +137,18 @@ export const discoverListCardStyles = StyleSheet.create({
   leftPressed: {
     opacity: 0.92,
   },
+  /** Footer metrics block on native list rows. We deliberately do NOT
+   *  flex this to fill the row — the action pill must keep its slot
+   *  next to the metrics. With `flex: 1` the metrics block grabbed all
+   *  available horizontal space and visually hid the CONNECT / REQUEST
+   *  SENT pill (the parent `footerBody` then had no room left to
+   *  honour `justifyContent: space-between`). Letting it size to
+   *  content + `flexShrink: 1` keeps the long-card layout balanced. */
   nativeFooterMetrics: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    flexShrink: 0,
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   nativeActionWrap: {
@@ -264,5 +271,24 @@ export const discoverListCardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  /** Small "Client" / "Supplier" tag rendered immediately before the
+   *  "Request sent" status button so the viewer can tell which role
+   *  was used when the invitation was sent. */
+  pendingRolePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.networkHubListCardBorder,
+    backgroundColor: Theme.networkHubListCardActionBg,
+    flexShrink: 0,
+  },
+  pendingRolePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    color: Theme.textSecondary,
   },
 });

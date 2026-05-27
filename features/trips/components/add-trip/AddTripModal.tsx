@@ -754,7 +754,7 @@ const otpStyles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1.5,
     borderColor: Theme.primary,
-    backgroundColor: "rgba(26, 35, 126, 0.05)",
+    backgroundColor: "rgba(79, 70, 229, 0.05)",
   },
   regenerateBtnDisabled: {
     opacity: 0.55,

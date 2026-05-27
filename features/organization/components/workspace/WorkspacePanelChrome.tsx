@@ -25,7 +25,7 @@ export function WorkspacePanelChrome({
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top + 14 }]}>
+    <View style={[styles.wrap, { paddingTop: insets.top + 10 }]}>
       <View style={styles.bar}>
         <Pressable
           onPress={onBack}
@@ -34,7 +34,7 @@ export function WorkspacePanelChrome({
           accessibilityRole="button"
           accessibilityLabel="Back to workspace menu"
         >
-          <ArrowLeft size={20} color={Theme.textPrimaryDark} strokeWidth={2.4} />
+          <ArrowLeft size={16} color={Theme.textPrimaryDark} strokeWidth={2.4} />
         </Pressable>
         <View style={styles.titleBlock}>
           <Text style={styles.title} numberOfLines={1}>
@@ -52,6 +52,15 @@ export function WorkspacePanelChrome({
   );
 }
 
+/**
+ * Detail-pane chrome matches the hub-menu density (see WorkspaceHubMenu).
+ * Title drops to 17 / weight 800 / letter -0.3 to peer with the hub's
+ * `navyTitle`; back chip drops to 34 px (was 42) so it lines up with
+ * the hub's `menuRowIcon`. Eyebrow drops to 9 / 1.4 to match the hub
+ * eyebrow + section header scale. These three values are the spine
+ * of every workspace detail header (Settings, Team, KYC, Account,
+ * Account Edit) so the entire panel family stays visually consistent.
+ */
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: Theme.cardWhite,
@@ -66,15 +75,15 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    paddingHorizontal: 24,
-    paddingBottom: 18,
-    minHeight: 64,
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    minHeight: 50,
   },
   backBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
@@ -87,24 +96,24 @@ const styles = StyleSheet.create({
   titleBlock: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 2,
   },
   title: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
-    lineHeight: 26,
+    letterSpacing: -0.3,
+    lineHeight: 22,
   },
   subtitle: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   rightSlot: {
-    minWidth: 42,
+    minWidth: 34,
     alignItems: "flex-end",
     justifyContent: "center",
   },

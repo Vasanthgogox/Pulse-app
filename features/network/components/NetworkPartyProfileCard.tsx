@@ -404,7 +404,7 @@ export function NetworkPartyProfileCard({
           viewerOrgId={viewerOrgId}
           targetOrgId={partyId}
           mutualCount={mutualCount}
-          faceSize={listMobile ? 22 : NETWORK_PARTY_MUTUAL_FACE_LIST}
+          faceSize={listMobile ? 30 : NETWORK_PARTY_MUTUAL_FACE_LIST}
           showSectionLabel
           sectionLabel={t("networkDiscoverMutuals")}
           compact={listMobile}

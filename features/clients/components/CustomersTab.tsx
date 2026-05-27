@@ -44,6 +44,8 @@ import type { ClientRow } from "../services/clients.service";
 
 export type EntityType = "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
 
+export type CustomersViewTab = "list" | "analytics";
+
 /** Compact ₹ for secondary lines when space is tight. */
 function formatCustomerAmountCompact(value: number): string {
   const abs = Math.abs(value);
@@ -1811,6 +1813,9 @@ export interface CustomersTabProps {
   tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
   /** Desktop finance parity: hide summary strip under hero/cards. */
   hideSummaryRow?: boolean;
+  /** View mode for the customers tab (list | analytics). */
+  viewTab?: CustomersViewTab;
+  onViewTabChange?: (v: CustomersViewTab) => void;
 }
 
 export function CustomersTab({
@@ -1834,6 +1839,8 @@ export function CustomersTab({
   bottomInset = 100,
   tripFinanceAdjustmentsByTripId,
   hideSummaryRow = false,
+  viewTab,
+  onViewTabChange,
 }: CustomersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();

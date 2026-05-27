@@ -45,8 +45,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const NAVY = Theme.primary;
 const NAVY_MID = Theme.primaryLight;
-const NAVY_TINT = "rgba(26,35,126,0.08)";
-const NAVY_BORDER_SOFT = "rgba(26,35,126,0.12)";
+const NAVY_TINT = "rgba(79,70,229,0.08)";
+const NAVY_BORDER_SOFT = "rgba(79,70,229,0.12)";
 const NAVY_ON_DARK_MUTED = "rgba(255,255,255,0.62)";
 const NAVY_ON_DARK_EYEBROW = "rgba(255,255,255,0.78)";
 
@@ -139,17 +139,17 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
     {
       id: "settings",
       label: "Workspace settings",
-      icon: <Building2 size={18} color={NAVY} strokeWidth={2.2} />,
+      icon: <Building2 size={14} color={NAVY} strokeWidth={2.2} />,
     },
     {
       id: "team",
       label: "Team members",
-      icon: <Users size={18} color={NAVY} strokeWidth={2.2} />,
+      icon: <Users size={14} color={NAVY} strokeWidth={2.2} />,
     },
     {
       id: "kyc",
       label: "Org identity & KYC",
-      icon: <Settings2 size={18} color={NAVY} strokeWidth={2.2} />,
+      icon: <Settings2 size={14} color={NAVY} strokeWidth={2.2} />,
     },
   ];
 
@@ -160,7 +160,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
   return (
     <>
       <View style={styles.root}>
-        <View style={[styles.navyBand, { paddingTop: insets.top + 14 }]}>
+        <View style={[styles.navyBand, { paddingTop: insets.top + 10 }]}>
           <View style={styles.navyBandOverlay} />
           <View style={styles.navyBandRow}>
             <View style={styles.headerLogoWrap}>
@@ -188,7 +188,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                 accessibilityRole="button"
                 accessibilityLabel="Close workspace"
               >
-                <X size={18} color="#fff" strokeWidth={2.4} />
+                <X size={14} color="#fff" strokeWidth={2.4} />
               </Pressable>
             ) : null}
           </View>
@@ -234,7 +234,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
               accessibilityLabel="Support"
             >
               <View style={styles.quickCircle}>
-                <HelpCircle size={22} color={NAVY} strokeWidth={2.2} />
+                <HelpCircle size={18} color={NAVY} strokeWidth={2.2} />
               </View>
               <Text style={styles.quickLabel}>Support</Text>
             </Pressable>
@@ -245,7 +245,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
               accessibilityLabel="Alerts"
             >
               <View style={styles.quickCircle}>
-                <Bell size={22} color={Theme.teslaRed} strokeWidth={2.2} />
+                <Bell size={18} color={Theme.teslaRed} strokeWidth={2.2} />
                 {notificationUnread > 0 ? <View style={styles.quickDot} /> : null}
               </View>
               <Text style={styles.quickLabel}>Alerts</Text>
@@ -280,7 +280,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                     {row.label}
                   </Text>
                   <ChevronRight
-                    size={16}
+                    size={14}
                     color={selected ? NAVY : Theme.textMuted}
                     strokeWidth={2}
                   />
@@ -328,7 +328,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
               {signingOut ? (
                 <LoadingIndicator size="small" color={Theme.textMuted} />
               ) : (
-                <LogOut size={18} color={Theme.textMuted} strokeWidth={2.2} />
+                <LogOut size={14} color={Theme.textMuted} strokeWidth={2.2} />
               )}
             </Pressable>
           </View>
@@ -385,6 +385,16 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
   );
 }
 
+/**
+ * Hub-menu styling deliberately tracks the rest of the app's compact
+ * density (network cards, detail forms): typography drops roughly one
+ * step (22 → 18 title, 14 → 12 row label, 10 → 9 eyebrow), interactive
+ * surfaces shrink in lockstep (44 → 36 logo, 64 → 52 quick circle,
+ * 40 → 34 row icon, 40 → 32 footer chips), and section gaps tighten
+ * (22 → 16). The 380–480 px flex card width set in `app/workspace.tsx`
+ * was making everything here read too sparse — this brings the hub
+ * back to a comfortable density at that width.
+ */
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Theme.screenBackground, minWidth: 0 },
 
@@ -392,7 +402,7 @@ const styles = StyleSheet.create({
   navyBand: {
     backgroundColor: NAVY,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 18,
+    paddingBottom: 14,
     position: "relative",
   },
   navyBandOverlay: {
@@ -403,52 +413,52 @@ const styles = StyleSheet.create({
   navyBandRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   headerLogoWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.14)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.28)",
-    padding: 3,
+    padding: 2,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  headerLogoImage: { width: "100%", height: "100%", borderRadius: 9 },
+  headerLogoImage: { width: "100%", height: "100%", borderRadius: 8 },
   headerLogoFallback: {
     width: "100%",
     height: "100%",
-    borderRadius: 9,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
   headerLogoInitials: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "900",
     color: "#fff",
     letterSpacing: 0.4,
   },
-  navyBandText: { flex: 1, minWidth: 0, gap: 4 },
+  navyBandText: { flex: 1, minWidth: 0, gap: 2 },
   navyEyebrow: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: NAVY_ON_DARK_EYEBROW,
-    letterSpacing: 2,
+    letterSpacing: 1.6,
   },
   navyTitle: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: "800",
     color: "#fff",
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.14)",
@@ -459,9 +469,9 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 24,
-    paddingBottom: 16,
-    gap: 22,
+    paddingTop: 18,
+    paddingBottom: 14,
+    gap: 16,
   },
 
   // Quick actions
@@ -471,11 +481,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingHorizontal: 4,
   },
-  quickAction: { flex: 1, alignItems: "center", gap: 10, minWidth: 0 },
+  quickAction: { flex: 1, alignItems: "center", gap: 8, minWidth: 0 },
   quickCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
@@ -485,68 +495,68 @@ const styles = StyleSheet.create({
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 1,
   },
   quickAvatar: { width: "100%", height: "100%" },
-  quickAvatarInitials: { fontSize: 18, fontWeight: "800", color: NAVY },
+  quickAvatarInitials: { fontSize: 15, fontWeight: "800", color: NAVY },
   quickDot: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: Theme.teslaRed,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
   },
   quickLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
+    letterSpacing: -0.05,
     textAlign: "center",
   },
 
   // Workspace Management list card
   sectionCard: {
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 1,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
     backgroundColor: Theme.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
-  sectionAccent: { width: 3, height: 14, borderRadius: 2, backgroundColor: NAVY },
+  sectionAccent: { width: 2, height: 10, borderRadius: 1, backgroundColor: NAVY },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   menuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
@@ -556,9 +566,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#eef1f8",
   },
   menuRowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,
@@ -571,10 +581,10 @@ const styles = StyleSheet.create({
   },
   menuRowLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
+    letterSpacing: -0.05,
   },
 
   // ── Footer identity ────────────────────────────────────────────────────
@@ -586,34 +596,34 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 14,
+    paddingTop: 12,
   },
   footerIdentity: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     minWidth: 0,
   },
-  footerAvatar: { width: 40, height: 40, borderRadius: 14 },
+  footerAvatar: { width: 32, height: 32, borderRadius: 11 },
   footerAvatarFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 11,
     backgroundColor: NAVY_TINT,
     alignItems: "center",
     justifyContent: "center",
   },
-  footerAvatarInitials: { fontSize: 14, fontWeight: "800", color: NAVY },
+  footerAvatarInitials: { fontSize: 12, fontWeight: "800", color: NAVY },
   footerText: { flex: 1, minWidth: 0 },
-  footerName: { fontSize: 14, fontWeight: "800", color: Theme.textPrimaryDark },
-  footerEmail: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
+  footerName: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
+  footerEmail: { fontSize: 10, color: Theme.textMuted, marginTop: 1 },
   signOutBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.surface,

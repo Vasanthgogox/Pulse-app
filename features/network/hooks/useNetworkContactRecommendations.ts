@@ -12,6 +12,10 @@ export type NetworkContactRecommendation = {
   contactName: string;
   invitee: ConnectionInviteeByPhone;
   displayName: string;
+  /** Driver accounts are surfaced so the viewer can see "this person is
+   *  already on Pulse as a driver", but you can't send a B2B connection
+   *  request to a driver — the UI renders these with a disabled CTA. */
+  isDriver: boolean;
 };
 
 type UseNetworkContactRecommendationsOptions = {
@@ -65,9 +69,10 @@ export function useNetworkContactRecommendations({
 
       for (const [normalizedPhone, invitee] of inviteesByPhone) {
         if (!invitee.organization_id || invitee.organization_id === orgId) continue;
-        if (inviteeProfileIsDriver(invitee.profile_role)) continue;
+        // Already-connected orgs are skipped so the panel only shows actionable / new matches.
         if (connectedOrgIds.has(invitee.organization_id)) continue;
 
+        const isDriver = inviteeProfileIsDriver(invitee.profile_role);
         const company =
           inviteeSuggestedCompanyName(invitee) ||
           invitee.organization_name ||
@@ -77,11 +82,18 @@ export function useNetworkContactRecommendations({
           contactName: nameByPhone.get(normalizedPhone) ?? invitee.full_name,
           invitee,
           displayName: company.trim() || invitee.full_name || invitee.phone,
+          isDriver,
         });
       }
 
-      next.sort((a, b) => a.displayName.localeCompare(b.displayName));
-      setRecommendations(next.slice(0, 12));
+      /** Surface drivers *after* org accounts. Drivers can't be invited
+       *  to connect, so they're informational; the actionable matches
+       *  should land at the top of the horizontal list. */
+      next.sort((a, b) => {
+        if (a.isDriver !== b.isDriver) return a.isDriver ? 1 : -1;
+        return a.displayName.localeCompare(b.displayName);
+      });
+      setRecommendations(next.slice(0, 24));
     } finally {
       setLoading(false);
       setLoadedOnce(true);

@@ -1727,7 +1727,7 @@ function TripRowItem({
             {
               backgroundColor:
                 trip.invoice_status_display === "Invoiced"
-                  ? "rgba(26,35,126,0.1)"
+                  ? "rgba(79,70,229,0.1)"
                   : trip.invoice_status_display === "Ready for Invoice"
                     ? "rgba(5,150,105,0.1)"
                     : trip.invoice_status_display === "Received"
@@ -2179,10 +2179,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 16,
     padding: 16,
-    backgroundColor: "rgba(26,35,126,0.04)",
+    backgroundColor: "rgba(79,70,229,0.04)",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.1)",
+    borderColor: "rgba(79,70,229,0.1)",
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
@@ -2191,7 +2191,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(26,35,126,0.1)",
+    backgroundColor: "rgba(79,70,229,0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2611,7 +2611,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(5,150,105,0.1)",
   },
   tableBadgeInvoiced: {
-    backgroundColor: "rgba(26,35,126,0.1)",
+    backgroundColor: "rgba(79,70,229,0.1)",
   },
   tableActionBtn: {
     borderRadius: 8,
@@ -2625,8 +2625,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   tableActionPending: {
-    borderColor: "rgba(26,35,126,0.25)",
-    backgroundColor: "rgba(26,35,126,0.05)",
+    borderColor: "rgba(79,70,229,0.25)",
+    backgroundColor: "rgba(79,70,229,0.05)",
   },
   tableActionReceived: {
     borderColor: "rgba(180,83,9,0.25)",
@@ -2892,7 +2892,7 @@ const styles = StyleSheet.create({
   },
   activeFilterChip: {
     borderRadius: 999,
-    backgroundColor: "rgba(26,35,126,0.1)",
+    backgroundColor: "rgba(79,70,229,0.1)",
     paddingHorizontal: 10,
     paddingVertical: 6,
   },

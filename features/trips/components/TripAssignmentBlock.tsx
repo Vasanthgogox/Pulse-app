@@ -263,11 +263,24 @@ export function TripAssignmentBlock({
     }
   }, [showAssignByPhone, organizationId]);
 
+  // "Latest callback" ref: callers (e.g. TripDetailScreen) pass inline arrow
+  // functions for `onVehicleDisplayChange`, so the prop identity changes on
+  // every parent render. Including it in the effect deps below would cause
+  // the effect to run every render, call back to the parent's setState, and
+  // produce an infinite "Maximum update depth exceeded" loop. The ref lets us
+  // invoke the latest callback without making the effect re-run on identity
+  // changes — the effect now only fires when `cardVehicleInput` or
+  // `showAssignByPhone` actually change.
+  const onVehicleDisplayChangeRef = useRef(onVehicleDisplayChange);
   useEffect(() => {
-    if (showAssignByPhone && onVehicleDisplayChange) {
-      onVehicleDisplayChange(cardVehicleInput);
+    onVehicleDisplayChangeRef.current = onVehicleDisplayChange;
+  }, [onVehicleDisplayChange]);
+
+  useEffect(() => {
+    if (showAssignByPhone) {
+      onVehicleDisplayChangeRef.current?.(cardVehicleInput);
     }
-  }, [showAssignByPhone, onVehicleDisplayChange, cardVehicleInput]);
+  }, [showAssignByPhone, cardVehicleInput]);
 
   const resolveVehicleIdFromInput = useCallback(
     (input: string, vehicleList: VehicleRow[]) => {

@@ -1,0 +1,234 @@
+/**
+ * Hydrates a NetworkProfileNode-shaped snapshot for a target organization.
+ *
+ * Used whenever the profile modal is opened from a sparse data source
+ * (e.g. a mutual-connection row that only carries id + name + avatar_seed).
+ * The caller should optimistically open the modal with whatever it has, then
+ * patch the selected node with the snapshot returned here so the user sees the
+ * actual organization's role, location, mutuals, rating, phone and integration
+ * status instead of placeholder defaults.
+ */
+import { supabase } from "@/lib/supabase";
+import { getMutualConnections } from "@/features/network/services/mutual-connections.service";
+
+export type NetworkProfileSnapshotRole = "CLIENT" | "SUPPLIER" | "DRIVER";
+export type NetworkProfileSnapshotStatus = "CONNECTED" | "REQUEST SENT" | "LIVE";
+
+export type NetworkProfileSnapshot = {
+  id: string;
+  name: string;
+  type: NetworkProfileSnapshotRole;
+  location: string;
+  status: NetworkProfileSnapshotStatus;
+  rating: number | null;
+  mutuals: number;
+  phone: string | null;
+  avatar_url: string | null;
+  avatar_seed: string | null;
+  is_integrated: boolean;
+};
+
+function formatLocation(
+  city: string | null | undefined,
+  state: string | null | undefined,
+  addressLine: string | null | undefined,
+): string {
+  const cs = [city, state]
+    .map((v) => v?.trim() ?? "")
+    .filter((v) => v.length > 0)
+    .join(", ")
+    .trim();
+  if (cs) return cs;
+  const fallback = addressLine?.trim() ?? "";
+  return fallback || "Not available";
+}
+
+function isMissingColumnError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return /does not exist|undefined column|undefined_table|undefined_function/i.test(
+    message,
+  );
+}
+
+export async function getOrgProfileSnapshot(
+  viewerOrgId: string,
+  targetOrgId: string,
+): Promise<{ error: Error | null; snapshot: NetworkProfileSnapshot | null }> {
+  if (!viewerOrgId || !targetOrgId) {
+    return { error: null, snapshot: null };
+  }
+
+  // 1) Organization row — prefer logo_url column when available.
+  let orgRow:
+    | {
+        id: string;
+        name: string;
+        avatar_seed: string | null;
+        logo_url: string | null;
+        city: string | null;
+        state: string | null;
+        address_line: string | null;
+        owner_id: string | null;
+      }
+    | null = null;
+
+  const orgWithLogo = await supabase()
+    .from("organizations")
+    .select("id, name, avatar_seed, logo_url, city, state, address_line, owner_id")
+    .eq("id", targetOrgId)
+    .maybeSingle();
+
+  if (orgWithLogo.error && isMissingColumnError(orgWithLogo.error.message)) {
+    const fallback = await supabase()
+      .from("organizations")
+      .select("id, name, avatar_seed, city, state, address_line, owner_id")
+      .eq("id", targetOrgId)
+      .maybeSingle();
+    if (fallback.error) {
+      return { error: new Error(fallback.error.message), snapshot: null };
+    }
+    if (fallback.data) {
+      orgRow = {
+        ...(fallback.data as {
+          id: string;
+          name: string;
+          avatar_seed: string | null;
+          city: string | null;
+          state: string | null;
+          address_line: string | null;
+          owner_id: string | null;
+        }),
+        logo_url: null,
+      };
+    }
+  } else if (orgWithLogo.error) {
+    return { error: new Error(orgWithLogo.error.message), snapshot: null };
+  } else if (orgWithLogo.data) {
+    orgRow = orgWithLogo.data as typeof orgRow;
+  }
+
+  if (!orgRow) {
+    return { error: null, snapshot: null };
+  }
+
+  // 2) Connection request between viewer and target (either direction).
+  const connRes = await supabase()
+    .from("connection_requests")
+    .select(
+      "status, from_organization_id, to_organization_id, request_shipper_client, request_carrier_supplier",
+    )
+    .or(
+      [
+        `and(from_organization_id.eq.${viewerOrgId},to_organization_id.eq.${targetOrgId})`,
+        `and(from_organization_id.eq.${targetOrgId},to_organization_id.eq.${viewerOrgId})`,
+      ].join(","),
+    )
+    .limit(1)
+    .maybeSingle();
+
+  let status: NetworkProfileSnapshotStatus = "LIVE";
+  let isIntegrated = false;
+  if (connRes.data) {
+    const row = connRes.data as { status?: string | null };
+    const s = String(row.status ?? "").toLowerCase();
+    if (s === "approved") {
+      status = "CONNECTED";
+      isIntegrated = true;
+    } else if (s === "pending") {
+      status = "REQUEST SENT";
+    }
+  }
+
+  // 3) Existing relationship in viewer's clients / suppliers / drivers tables.
+  let role: NetworkProfileSnapshotRole = "SUPPLIER";
+
+  const clientLink = await supabase()
+    .from("clients")
+    .select("id")
+    .eq("organization_id", viewerOrgId)
+    .eq("linked_organization_id", targetOrgId)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (clientLink.data?.id) {
+    role = "CLIENT";
+  } else {
+    const supplierLink = await supabase()
+      .from("suppliers")
+      .select("id")
+      .eq("organization_id", viewerOrgId)
+      .eq("linked_organization_id", targetOrgId)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+    if (supplierLink.data?.id) role = "SUPPLIER";
+  }
+
+  // 4) Owner profile — best-effort fetch of phone + personal avatar so we
+  //    can fall back to the user's avatar when the organization has no
+  //    branding logo set yet. Resolution priority for the snapshot:
+  //      organizations.logo_url  →  profiles.avatar_url  →  seed/initials.
+  //    Mirrors `get_connection_partner_display` and the network hub list
+  //    RPCs so every surface that shows a partner resolves the same face.
+  let phone: string | null = null;
+  let ownerAvatarUrl: string | null = null;
+  if (orgRow.owner_id) {
+    const profileRes = await supabase()
+      .from("profiles")
+      .select("phone, avatar_url")
+      .eq("id", orgRow.owner_id)
+      .maybeSingle();
+    if (!profileRes.error && profileRes.data) {
+      const row = profileRes.data as {
+        phone?: string | null;
+        avatar_url?: string | null;
+      };
+      phone = row.phone && row.phone.trim().length > 0 ? row.phone : null;
+      ownerAvatarUrl =
+        row.avatar_url && row.avatar_url.trim().length > 0
+          ? row.avatar_url
+          : null;
+    }
+  }
+  const resolvedLogoUrl =
+    orgRow.logo_url && orgRow.logo_url.trim().length > 0
+      ? orgRow.logo_url
+      : null;
+  const resolvedAvatarUrl = resolvedLogoUrl ?? ownerAvatarUrl;
+
+  // 5) Mutual connections (best-effort).
+  let mutuals = 0;
+  if (viewerOrgId !== targetOrgId) {
+    const mutualsRes = await getMutualConnections(viewerOrgId, targetOrgId);
+    mutuals = mutualsRes.error ? 0 : mutualsRes.mutuals.length;
+  }
+
+  // 6) Rating — average viewer-given scores for this org (best-effort).
+  let rating: number | null = null;
+  const ratingRes = await supabase()
+    .from("ratings")
+    .select("score")
+    .eq("organization_id", viewerOrgId)
+    .eq("rated_id", targetOrgId);
+  if (!ratingRes.error && Array.isArray(ratingRes.data) && ratingRes.data.length > 0) {
+    const rows = ratingRes.data as Array<{ score: number | null }>;
+    const total = rows.reduce((acc, r) => acc + Number(r.score ?? 0), 0);
+    rating = Number((total / rows.length).toFixed(2));
+  }
+
+  const snapshot: NetworkProfileSnapshot = {
+    id: orgRow.id,
+    name: orgRow.name,
+    type: role,
+    location: formatLocation(orgRow.city, orgRow.state, orgRow.address_line),
+    status,
+    rating,
+    mutuals,
+    phone,
+    avatar_url: resolvedAvatarUrl,
+    avatar_seed: orgRow.avatar_seed,
+    is_integrated: isIntegrated,
+  };
+
+  return { error: null, snapshot };
+}

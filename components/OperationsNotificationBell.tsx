@@ -58,7 +58,7 @@ function SidebarRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean 
     ) : item.kind === "success" ? (
       <CheckCircle2 size={16} color="#16a34a" />
     ) : (
-      <Truck size={16} color="#1a237e" />
+      <Truck size={16} color="#4F46E5" />
     );
   const money = formatMoneyInr(item.amount);
 
@@ -370,9 +370,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: "rgba(26,35,126,0.12)",
+    backgroundColor: "rgba(79,70,229,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(26,35,126,0.25)",
+    borderColor: "rgba(79,70,229,0.25)",
   },
   feedbackBadgeText: {
     fontSize: 9,

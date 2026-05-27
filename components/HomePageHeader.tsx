@@ -5,6 +5,7 @@ import {
   AnimatedBellHeaderIcon,
   AnimatedInboxHeaderIcon,
 } from "@/components/HomeHeaderAnimatedIcons";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -31,7 +32,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const ICON_SIZE = 22;
+const ICON_SIZE = 26;
 
 export interface HomePageHeaderProps {
   title?: string;
@@ -41,6 +42,8 @@ export interface HomePageHeaderProps {
   onProfilePress?: () => void;
   onInvitationsPress?: () => void;
   onNotificationsPress?: () => void;
+  /** Compliance & Documents Center — defaults to routing `/documents-center`. */
+  onDocumentsPress?: () => void;
   invitationBadgeCount?: number;
   skipSafeAreaTop?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -64,6 +67,7 @@ export function HomePageHeader({
   onProfilePress,
   onInvitationsPress,
   onNotificationsPress,
+  onDocumentsPress,
   invitationBadgeCount = 0,
   skipSafeAreaTop = false,
   style,
@@ -163,6 +167,14 @@ export function HomePageHeader({
     router.push("/notifications");
   };
 
+  const handleDocuments = () => {
+    if (onDocumentsPress) {
+      onDocumentsPress();
+      return;
+    }
+    router.push(ROUTES.DOCUMENTS_CENTER as Parameters<typeof router.push>[0]);
+  };
+
   return (
     <View style={[styles.wrap, { paddingTop: topPad }, style]}>
       <View style={styles.row}>
@@ -217,6 +229,19 @@ export function HomePageHeader({
             <Badge count={invitationBadgeCount} />
           </Pressable>
           <Pressable
+            onPress={handleDocuments}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Open documents center"
+            hitSlop={6}
+          >
+            <FontAwesome
+              name="folder-open"
+              size={ICON_SIZE - 6}
+              color={Theme.textPrimaryDark}
+            />
+          </Pressable>
+          <Pressable
             onPress={handleNotifications}
             style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
             accessibilityRole="button"
@@ -243,13 +268,13 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    minHeight: 36,
+    gap: 10,
+    minHeight: 44,
   },
   avatarBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: Theme.borderInput,
     overflow: "hidden",
@@ -267,7 +292,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   avatarInitials: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
@@ -278,26 +303,28 @@ const styles = StyleSheet.create({
   },
   title: {
     ...Typography.headerTitle,
+    fontSize: 13,
     color: Theme.textPrimaryDark,
-    lineHeight: 14,
+    lineHeight: 16,
+    letterSpacing: 0.6,
   },
   subtitle: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.textMuted,
     marginTop: 2,
-    lineHeight: 12,
-    letterSpacing: 0.15,
+    lineHeight: 14,
+    letterSpacing: 0.1,
   },
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     flexShrink: 0,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
+    width: 42,
+    height: 42,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -308,12 +335,12 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 0,
-    right: 0,
-    minWidth: 14,
-    height: 14,
-    paddingHorizontal: 3,
-    borderRadius: 7,
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
     backgroundColor: Theme.teslaRed,
     alignItems: "center",
     justifyContent: "center",
@@ -321,7 +348,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   badgeText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textOnPrimary,
   },

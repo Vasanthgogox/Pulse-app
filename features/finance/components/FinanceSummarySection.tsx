@@ -45,10 +45,12 @@ export interface FinanceSummarySectionProps {
   garagePeriodOptions?: { value: string; label: string }[];
   garagePeriod?: string;
   onGaragePeriodChange?: (v: string) => void;
-  garageViewTab?: "vehicle" | "trips" | "revenue" | "profit";
+  garageViewTab?: "vehicle" | "trips" | "revenue" | "profit" | "analytics";
   onGarageViewTabChange?: (
-    v: "vehicle" | "trips" | "revenue" | "profit",
+    v: "vehicle" | "trips" | "revenue" | "profit" | "analytics",
   ) => void;
+  driverViewTab?: "list" | "analytics";
+  onDriverViewTabChange?: (v: "list" | "analytics") => void;
   showPeriodFilter?: boolean;
   periodFilter?: FinancePeriodFilter;
   onPeriodFilterChange?: (p: FinancePeriodFilter) => void;
@@ -186,6 +188,8 @@ export function FinanceSummarySection({
   onGaragePeriodChange,
   garageViewTab,
   onGarageViewTabChange,
+  driverViewTab,
+  onDriverViewTabChange,
   showPeriodFilter,
   periodFilter,
   onPeriodFilterChange,
@@ -278,6 +282,8 @@ export function FinanceSummarySection({
               onGaragePeriodChange={onGaragePeriodChange}
               garageViewTab={garageViewTab}
               onGarageViewTabChange={onGarageViewTabChange}
+              driverViewTab={driverViewTab}
+              onDriverViewTabChange={onDriverViewTabChange}
               showPeriodFilter={showPeriodFilter}
               periodFilter={periodFilter}
               onPeriodFilterChange={onPeriodFilterChange}
@@ -501,6 +507,8 @@ export function FinanceSummarySection({
             onGaragePeriodChange={onGaragePeriodChange}
             garageViewTab={garageViewTab}
             onGarageViewTabChange={onGarageViewTabChange}
+            driverViewTab={driverViewTab}
+            onDriverViewTabChange={onDriverViewTabChange}
             showPeriodFilter={showPeriodFilter}
             periodFilter={periodFilter}
             onPeriodFilterChange={onPeriodFilterChange}

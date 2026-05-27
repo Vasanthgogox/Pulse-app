@@ -83,7 +83,7 @@ const roleStyles = StyleSheet.create({
   },
   rowSelected: {
     borderColor: Theme.primary,
-    backgroundColor: "rgba(26,35,126,0.03)",
+    backgroundColor: "rgba(79,70,229,0.03)",
   },
   radio: {
     width: 20,

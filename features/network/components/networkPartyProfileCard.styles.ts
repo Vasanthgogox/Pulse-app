@@ -7,8 +7,8 @@ import {
 import { hubCardSectionDivider } from "@/features/network/components/networkHubListCardChrome";
 import { StyleSheet } from "react-native";
 
-export const NETWORK_PARTY_MUTUAL_FACE_GRID = 24;
-export const NETWORK_PARTY_MUTUAL_FACE_LIST = 26;
+export const NETWORK_PARTY_MUTUAL_FACE_GRID = 32;
+export const NETWORK_PARTY_MUTUAL_FACE_LIST = 34;
 export const NETWORK_PROFILE_CARD_LIST_HEIGHT = 88;
 export const NETWORK_PROFILE_CARD_LIST_HEIGHT_MOBILE = 76;
 

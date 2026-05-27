@@ -195,9 +195,12 @@ export function NetworkLoadsQuickCards({
   );
 
   if (sidebar) {
+    /** Desktop wide layout (web ≥ 1180px) — the parent rail already labels
+     *  this region next to the Stories strip, so we drop the redundant
+     *  "Load marketplace" section header and let the Give/Get cards speak
+     *  for themselves. */
     return (
       <View style={styles.wrapSidebar}>
-        <SectionHeader sidebar />
         <View style={styles.railSidebar}>
           {ACTIONS.map((action) => renderCard(action, "sidebar"))}
         </View>

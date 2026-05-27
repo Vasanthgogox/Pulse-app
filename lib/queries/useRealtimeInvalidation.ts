@@ -76,6 +76,21 @@ export function useRealtimeTripsInvalidation(organizationId: string | null) {
         if (assignmentChanged) {
           qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
         }
+
+        // Unlinked counterparties change when: a new trip is inserted/deleted, OR
+        // when the name or FK fields change on UPDATE. GPS pings (last_location_at)
+        // and status updates must NOT trigger this — they're the hot path.
+        const counterpartyChanged =
+          payload.eventType !== 'UPDATE' ||
+          newRow?.supplier_name !== oldRow?.supplier_name ||
+          newRow?.client_name !== oldRow?.client_name ||
+          newRow?.supplier_id !== oldRow?.supplier_id ||
+          newRow?.client_id !== oldRow?.client_id;
+        if (counterpartyChanged) {
+          qc.invalidateQueries({
+            queryKey: queryKeys.unlinkedCounterparties(organizationId),
+          });
+        }
       },
     );
   }, [organizationId, qc]);
