@@ -7,6 +7,7 @@ import Theme from '@/constants/Theme';
 import { formatIndianVehicleNumber } from '@/lib/format';
 import { VALIDATION, dateISO } from '@/lib/validation';
 import type { CreateLedgerEntryData } from '@/features/finance/services/finance.service';
+import { SmartInput } from '@/components/mobile-input';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import React, { useEffect, useState } from 'react';
 import {
@@ -353,29 +354,15 @@ export function AddVehicleEntryModal({
             </View>
 
             <View style={styles.amountBlock}>
-              <Text style={styles.amountLabel}>AMOUNT (INR)</Text>
-              <View style={styles.amountRow}>
-                <Text
-                  style={[
-                    styles.amountSymbol,
-                    type === 'in' ? styles.amountSymbolIn : styles.amountSymbolOut,
-                  ]}
-                >
-                  ₹
-                </Text>
-                <TextInput
-                  style={styles.amountInput}
-                  placeholder="0.00"
-                  placeholderTextColor={Theme.textMutedDemo}
-                  value={amountStr}
-                  onChangeText={setAmountStr}
-                  keyboardType="decimal-pad"
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
-                  editable={visible}
-                />
-              </View>
+              <SmartInput
+                type="currency"
+                label="Amount (INR)"
+                value={amountStr}
+                onChange={(raw) => setAmountStr(raw === '0' ? '' : raw)}
+                variant="field"
+                valueColor={type === 'in' ? 'positive' : 'negative'}
+                required
+              />
             </View>
 
             <View style={styles.fieldRow}>

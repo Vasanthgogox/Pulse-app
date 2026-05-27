@@ -1,30 +1,23 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { PartyRegistrationPortal } from '@/features/finance/components/PartyRegistrationPortal';
-import { usePartyPortalRouteHandlers } from '@/features/finance/hooks/usePartyPortalRouteHandlers';
-import {
-  AddSupplierModal,
-  type SupplierFormData,
-  type SupplierInviteeMatch,
-} from '@/features/suppliers/components/AddSupplierModal';
-import { createSupplier } from '@/features/suppliers/services/suppliers.service';
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { PartyRegistrationPortal } from "@/features/finance/components/PartyRegistrationPortal";
+import { usePartyPortalRouteHandlers } from "@/features/finance/hooks/usePartyPortalRouteHandlers";
+import type { SupplierInviteeMatch } from "@/features/suppliers/components/AddSupplierModal";
 import {
   getConnectionInviteeByPhone,
   createConnectionRequest,
-} from '@/features/connections/services/connectionRequests.service';
-import { queryKeys } from '@/lib/queryKeys';
-import { ROUTES } from '@/lib/routes';
-import { useQueryClient } from '@tanstack/react-query';
-import { Platform } from 'react-native';
+} from "@/features/connections/services/connectionRequests.service";
+import { ROUTES } from "@/lib/routes";
 
 export default function AddSupplierScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
-  const queryClient = useQueryClient();
   const partyPortal = usePartyPortalRouteHandlers();
   const { currentOrganization } = useOrganization();
-  const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
-  const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
+  const returnToParam = Array.isArray(params.returnTo)
+    ? params.returnTo[0]
+    : params.returnTo;
+  const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
 
   const closeModal = () => {
     if (router.canGoBack()) {
@@ -35,24 +28,11 @@ export default function AddSupplierScreen() {
       router.replace(returnTo as Parameters<typeof router.replace>[0]);
       return;
     }
-    router.replace(ROUTES.TABS.NETWORK as '/');
-  };
-
-  const handleComplete = async (data: SupplierFormData) => {
-    if (!currentOrganization?.id) return;
-    const orgId = currentOrganization.id;
-    const { error } = await createSupplier(orgId, {
-      company_name: data.companyName || undefined,
-      contact_person: data.name,
-      phone: data.phone,
-    });
-    if (error) throw error;
-    await queryClient.refetchQueries({ queryKey: queryKeys.suppliers.all(orgId) });
-    closeModal();
+    router.replace(ROUTES.TABS.NETWORK as "/");
   };
 
   const searchInviteeByPhone = async (
-    phone: string
+    phone: string,
   ): Promise<SupplierInviteeMatch | null> => {
     const { error, invitee } = await getConnectionInviteeByPhone(phone);
     if (error || !invitee) return null;
@@ -68,45 +48,30 @@ export default function AddSupplierScreen() {
 
   const handleSendSupplierInvitation = async (toOrgId: string) => {
     if (!currentOrganization?.id) return;
-    const { error, alreadyInvited } = await createConnectionRequest(
+    const { error } = await createConnectionRequest(
       currentOrganization.id,
       toOrgId,
-      { requestShipperClient: false, requestCarrierSupplier: true }
+      { requestShipperClient: false, requestCarrierSupplier: true },
     );
     if (error) throw error;
-    if (alreadyInvited) {
-      // Still close; they can see in Network > Requests
-    }
-    /** Caller closes (`AddSupplierModal.onClose` / `PartyRegistrationPortal.onClose`). */
   };
 
-  if (Platform.OS === 'web') {
-    return (
-      <PartyRegistrationPortal
-        visible
-        initialKind="supplier"
-        onClose={closeModal}
-        organizationId={partyPortal.organizationId}
-        noOrganizationMessage={
-          currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
-        }
-        onRefreshOrganization={partyPortal.refreshOrganization}
-        onAddClient={partyPortal.handleAddClientComplete}
-        onAddSupplier={partyPortal.handleAddSupplierComplete}
-        onAddDriver={partyPortal.handleAddDriverDirect}
-        onAddVehicle={partyPortal.handleAddVehicleComplete}
-        searchInviteeByPhone={searchInviteeByPhone}
-        onSendSupplierInvitation={handleSendSupplierInvitation}
-      />
-    );
-  }
-
   return (
-    <AddSupplierModal
+    <PartyRegistrationPortal
+      visible
+      initialKind="supplier"
       onClose={closeModal}
-      onComplete={handleComplete}
+      organizationId={partyPortal.organizationId}
+      noOrganizationMessage={
+        currentOrganization ? null : partyPortal.NO_ORG_MESSAGE
+      }
+      onRefreshOrganization={partyPortal.refreshOrganization}
+      onAddClient={partyPortal.handleAddClientComplete}
+      onAddSupplier={partyPortal.handleAddSupplierComplete}
+      onAddDriver={partyPortal.handleAddDriverDirect}
+      onAddVehicle={partyPortal.handleAddVehicleComplete}
       searchInviteeByPhone={searchInviteeByPhone}
-      onSendInvitation={handleSendSupplierInvitation}
+      onSendSupplierInvitation={handleSendSupplierInvitation}
     />
   );
 }

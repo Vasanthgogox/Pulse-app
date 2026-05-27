@@ -377,6 +377,16 @@ export default function CreateIndentScreen() {
     : params.draftId;
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
+  const isMobileWizard = Platform.OS !== "web" && windowWidth < 600;
+  const [wizardStep, setWizardStep] = useState<"route" | "commercial" | "load">(
+    "route",
+  );
+
+  useEffect(() => {
+    if (!isMobileWizard) return;
+    setWizardStep("route");
+  }, [isMobileWizard, orgId, routeDraftId]);
+
   const [alertState, setAlertState] = useState<{
     visible: boolean;
     title: string;
@@ -679,6 +689,16 @@ export default function CreateIndentScreen() {
   );
 
   const handleBackPress = useCallback(() => {
+    if (isMobileWizard) {
+      if (wizardStep === "load") {
+        setWizardStep("commercial");
+        return;
+      }
+      if (wizardStep === "commercial") {
+        setWizardStep("route");
+        return;
+      }
+    }
     const hasUnsavedChanges =
       JSON.stringify(form) !== JSON.stringify(lastSavedForm);
     if (!hasUnsavedChanges) {
@@ -692,7 +712,9 @@ export default function CreateIndentScreen() {
     ).then((confirmed) => {
       if (confirmed) safeBack();
     });
-  }, [form, lastSavedForm, safeBack, confirmDialog]);
+  }, [confirmDialog, form, isMobileWizard, lastSavedForm, safeBack, wizardStep]);
+
+  // Wizard-specific submit/labels are derived after `canSubmit` is computed.
 
   const buildPayload = useCallback((): CreateIndentInput => {
     const payload: CreateIndentInput = {
@@ -920,6 +942,63 @@ export default function CreateIndentScreen() {
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) >= 0;
 
+  const stepCanAdvance = useMemo(() => {
+    if (!isMobileWizard) return canSubmit;
+    const t = (s: string | null | undefined) => (s ?? "").trim();
+    if (wizardStep === "route") {
+      return Boolean(
+        t(form.pickup_area) &&
+          t(form.drop_location) &&
+          t(form.pickup_date) &&
+          t(form.weight),
+      );
+    }
+    if (wizardStep === "commercial") {
+      return Boolean(
+        form.client_id?.trim() &&
+          t(form.client_name) &&
+          t(form.client_price) &&
+          t(form.supplier_target),
+      );
+    }
+    return Boolean(t(form.vehicle_type) && t(form.load_type));
+  }, [canSubmit, form, isMobileWizard, wizardStep]);
+
+  const wizardSubmitLabel = isMobileWizard
+    ? wizardStep === "load"
+      ? "Share to Network"
+      : "Continue"
+    : "Share to Network";
+
+  const wizardSubtitle = isMobileWizard
+    ? wizardStep === "route"
+      ? "Route"
+      : wizardStep === "commercial"
+        ? "Client & Commercials"
+        : "Load"
+    : "Deploy New Load";
+
+  const handleWizardPrimary = () => {
+    if (!isMobileWizard) {
+      void handleSubmit();
+      return;
+    }
+    if (!stepCanAdvance) {
+      setErrors(validateForm(form));
+      showDialog("Missing details", "Fill the required fields to continue.");
+      return;
+    }
+    if (wizardStep === "route") {
+      setWizardStep("commercial");
+      return;
+    }
+    if (wizardStep === "commercial") {
+      setWizardStep("load");
+      return;
+    }
+    void handleSubmit();
+  };
+
   const canSaveDraft =
     Boolean(orgId) && !submitting && hasIndentDraftProgress(form);
 
@@ -936,13 +1015,13 @@ export default function CreateIndentScreen() {
       <StatusBar style="light" />
       <AddTripModalLayout
         title="Create Indent"
-        subtitle="Deploy New Load"
-        submitLabel="Share to Network"
-        canSubmit={canSubmit}
+        subtitle={wizardSubtitle}
+        submitLabel={wizardSubmitLabel}
+        canSubmit={stepCanAdvance}
         submitting={submitting}
         validationMessage="Fill route, client, commercials, and load details to share"
         onClose={handleBackPress}
-        onSubmit={handleSubmit}
+        onSubmit={handleWizardPrimary}
       >
         <View style={styles.pageWrap}>
           <ScrollView
@@ -996,13 +1075,14 @@ export default function CreateIndentScreen() {
                     ]}
                   >
               {/* 01 Route */}
-              <View
-                style={[
-                  styles.card,
-                  isCompactMobile && styles.cardCompact,
-                  desktopFormGrid && styles.cardGridRouteWeb,
-                ]}
-              >
+              {!isMobileWizard || wizardStep === "route" ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    desktopFormGrid && styles.cardGridRouteWeb,
+                  ]}
+                >
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>01</Text>
@@ -1298,16 +1378,18 @@ export default function CreateIndentScreen() {
                     ) : null}
                   </View>
                 ) : null}
-              </View>
+                </View>
+              ) : null}
 
               {/* 02 Commercial */}
-              <View
-                style={[
-                  styles.card,
-                  isCompactMobile && styles.cardCompact,
-                  desktopFormGrid && styles.cardGridClientWeb,
-                ]}
-              >
+              {!isMobileWizard || wizardStep === "commercial" ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    desktopFormGrid && styles.cardGridClientWeb,
+                  ]}
+                >
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>02</Text>
@@ -1595,16 +1677,18 @@ export default function CreateIndentScreen() {
                   ) : null}
                 </View>
 
-              </View>
+                </View>
+              ) : null}
 
               {/* 03 Load */}
-              <View
-                style={[
-                  styles.card,
-                  isCompactMobile && styles.cardCompact,
-                  desktopFormGrid && styles.cardGridLoadWeb,
-                ]}
-              >
+              {!isMobileWizard || wizardStep === "load" ? (
+                <View
+                  style={[
+                    styles.card,
+                    isCompactMobile && styles.cardCompact,
+                    desktopFormGrid && styles.cardGridLoadWeb,
+                  ]}
+                >
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>03</Text>
@@ -1712,7 +1796,8 @@ export default function CreateIndentScreen() {
                   </View>
                 </View>
 
-              </View>
+                </View>
+              ) : null}
                 </View>
 
               <View style={styles.actionFooterBar}>

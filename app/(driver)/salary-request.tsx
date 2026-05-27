@@ -24,6 +24,7 @@ import * as driversService from '@/features/drivers/services/drivers.service';
 import * as salaryRequestsService from '@/features/drivers/services/salaryRequests.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { NeededByCalendar } from '@/components/driver/NeededByCalendar';
+import { SmartInput } from '@/components/mobile-input';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
   ArrowLeft,
@@ -1094,21 +1095,15 @@ export default function SalaryRequestScreen() {
                         </TouchableOpacity>
                       </View>
                       <View style={styles.formCol}>
-                        <Text style={[styles.fieldLabelCaps, { color: colors.textMuted }]}>Amount</Text>
-                        <View
-                          style={[styles.inputShellPremium, { borderColor: colors.borderSubtle, backgroundColor: colors.inputBg }]}
-                        >
-                          <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>₹</Text>
-                          <TextInput
-                            style={[styles.amountInput, { color: colors.text }]}
-                            value={salaryRequestAmount}
-                            onChangeText={setSalaryRequestAmount}
-                            placeholder="0.00"
-                            placeholderTextColor={colors.placeholder}
-                            keyboardType="number-pad"
-                            editable={!salaryRequestSubmitting && salaryRequestType !== 'trip_based'}
-                          />
-                        </View>
+                        <SmartInput
+                          type="currency"
+                          label="Amount"
+                          value={salaryRequestAmount}
+                          onChange={(raw) => setSalaryRequestAmount(raw)}
+                          variant="field"
+                          disabled={salaryRequestSubmitting || salaryRequestType === 'trip_based'}
+                          placeholder={salaryRequestType === 'trip_based' ? 'Auto-calculated' : '0.00'}
+                        />
                         {salaryRequestType === 'trip_based' ? (
                           <Text style={[styles.hint, { color: colors.textMuted, marginTop: 6 }]}>
                             Amount is auto-calculated from selected trips.

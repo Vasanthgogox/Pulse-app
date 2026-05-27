@@ -11,7 +11,7 @@
  * `features/vehicles/components/analytics/AnalyticsChart.tsx`.
  */
 
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -68,6 +68,23 @@ export const RiskMeter = memo(function RiskMeter({
   const anim = useRef(new Animated.Value(0)).current;
   const clamped = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
   const color = colorOverride ?? LEVEL_COLORS[level];
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const counter = new Animated.Value(0);
+    const id = counter.addListener(({ value: v }) => {
+      setDisplayValue(Math.round(v));
+    });
+    Animated.timing(counter, {
+      toValue: clamped,
+      duration: 900,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+    return () => {
+      counter.removeListener(id);
+    };
+  }, [clamped]);
 
   // Three-quarter ring (270°) — feels more "gauge-like" than a full circle.
   const radius = (size - stroke) / 2;
@@ -135,7 +152,7 @@ export const RiskMeter = memo(function RiskMeter({
             numberOfLines={1}
             adjustsFontSizeToFit
           >
-            {Math.round(clamped)}
+            {displayValue}
           </Text>
           <Text style={styles.scale}>/ 100</Text>
         </View>

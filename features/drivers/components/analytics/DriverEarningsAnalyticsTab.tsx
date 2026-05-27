@@ -27,21 +27,23 @@
  */
 
 import { useMemo } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
 
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
 
 import {
-  ChartCard,
-  KPIHeader,
-  SectionHeader,
-  InsightsPanel,
+  PulseAnalyticsShell,
+  PulseChartPanel,
+  PulseInsightsPanel,
+  PulseKpiGrid,
+  PulsePanelGrid,
+  PulseSection,
+  TrendBarChart,
+  TrendLineChart,
+  usePulseChartWidth,
+  type PulseKpiItem,
+  type TrendPoint,
 } from "@/components/analytics";
-import {
-  LineChart,
-  RevExpBarChart,
-} from "@/features/vehicles/components/analytics/AnalyticsChart";
 
 import type { LedgerRow } from "@/features/finance";
 import type { SalaryRequestRow } from "@/features/drivers/services/salaryRequests.service";
@@ -73,21 +75,12 @@ interface Props {
 // Chart projections
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ChartPoint {
-  label: string;
-  revenue: number;
-  expense: number;
-  profit: number;
-  margin: number;
-  tripCount: number;
-}
-
 /** Project earnings-by-month onto the chart-primitive shape, where
  *  `revenue` is what we want to plot. */
 function toLinePoints(
   months: readonly DriverEarningsMonth[],
   field: "commission" | "advance" | "netReceived" | "bonus",
-): ChartPoint[] {
+): TrendPoint[] {
   return months.map((m) => ({
     label: m.label,
     revenue: m[field],
@@ -99,7 +92,7 @@ function toLinePoints(
 }
 
 /** Project for the rev-vs-commission grouped bar chart. */
-function toIncentiveBars(months: readonly DriverEarningsMonth[]): ChartPoint[] {
+function toIncentiveBars(months: readonly DriverEarningsMonth[]): TrendPoint[] {
   return months.map((m) => ({
     label: m.label,
     revenue: m.commission, // earned commission as "headline"
@@ -208,8 +201,8 @@ export function DriverEarningsAnalyticsTab({
   driver,
   driverOffer,
 }: Props) {
-  const { width } = useWindowDimensions();
-  const chartW = Math.min(width - 32 - 32, 720);
+  const chartW = usePulseChartWidth();
+  const chartWHalf = usePulseChartWidth({ columns: 2 });
 
   const kpis = useMemo(
     () => computeDriverEarningsKpis(trips, driverTransactions, driverRequests, driverOffer),
@@ -228,183 +221,213 @@ export function DriverEarningsAnalyticsTab({
 
   const insights = useMemo(() => deriveInsights(months, kpis), [months, kpis]);
 
-  return (
-    <View style={styles.wrap}>
-      {/* ── Earnings KPI header ─────────────────────────────────────────── */}
-      <SectionHeader
-        title="Earnings Intelligence"
-        subtitle="Salary, incentives, advances and deductions over the last 6 months"
-      />
-      <KPIHeader
-        columns={2}
-        cards={[
-          {
-            id: "salary-paid",
-            label: "Salary paid",
-            value: formatINR(kpis.salaryPaid),
-            sub: "Settled to date",
-            accent: Theme.chartSeries2,
-          },
-          {
-            id: "pending-salary",
-            label: "Pending salary",
-            value: formatINR(kpis.pendingSalary),
-            sub: "Awaiting approval",
-            accent: kpis.pendingSalary > 0 ? Theme.chartSeries4 : Theme.textMuted,
-            alert: kpis.pendingSalary > 0,
-          },
-          {
-            id: "incentives",
-            label: "Trip incentives",
-            value: formatINR(kpis.tripIncentives),
-            sub: "Commission earned",
-            accent: Theme.chartSeries1,
-          },
-          {
-            id: "advances",
-            label: "Advances",
-            value: formatINR(kpis.advanceTotal),
-            sub: "Outstanding",
-            accent: Theme.chartSeries4,
-          },
-          {
-            id: "deductions",
-            label: "Deductions",
-            value: formatINR(kpis.deductions),
-            sub: "Penalties / recoveries",
-            accent: kpis.deductions > 0 ? Theme.chartSeries3 : Theme.textMuted,
-          },
-          {
-            id: "fuel",
-            label: "Fuel recovery",
-            value: formatINR(kpis.fuelRecovery),
-            sub: "Fuel adjustments",
-            accent: Theme.chartSeries5,
-          },
-          {
-            id: "bonus",
-            label: "Bonus",
-            value: formatINR(kpis.bonusTotal),
-            sub: "Performance bonuses",
-            accent: Theme.chartSeries2,
-          },
-          {
-            id: "monthly",
-            label: "Monthly earnings",
-            value: formatINR(kpis.monthlyEarnings),
-            sub: "Avg last 3 months",
-            accent: Theme.chartSeries1,
-          },
-        ]}
-      />
+  const earningsKpiRows = useMemo(
+    (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
+      [
+        {
+          id: "salary-paid",
+          label: "Salary paid",
+          value: formatINR(kpis.salaryPaid),
+          subtext: "Settled to date",
+          valueColor: Theme.positive,
+          iconName: "money",
+        },
+        {
+          id: "pending-salary",
+          label: "Pending salary",
+          value: formatINR(kpis.pendingSalary),
+          subtext: "Awaiting approval",
+          valueColor: kpis.pendingSalary > 0 ? Theme.negative : Theme.textMuted,
+          iconName: "clock-o",
+        },
+        {
+          id: "incentives",
+          label: "Trip incentives",
+          value: formatINR(kpis.tripIncentives),
+          subtext: "Commission earned",
+          valueColor: Theme.primary,
+          iconName: "line-chart",
+        },
+        {
+          id: "advances",
+          label: "Advances",
+          value: formatINR(kpis.advanceTotal),
+          subtext: "Outstanding",
+          valueColor: Theme.negative,
+          iconName: "credit-card",
+        },
+      ],
+      [
+        {
+          id: "deductions",
+          label: "Deductions",
+          value: formatINR(kpis.deductions),
+          subtext: "Penalties / recoveries",
+          valueColor: kpis.deductions > 0 ? Theme.warning : Theme.textMuted,
+          iconName: "minus-circle",
+        },
+        {
+          id: "fuel",
+          label: "Fuel recovery",
+          value: formatINR(kpis.fuelRecovery),
+          subtext: "Fuel adjustments",
+          valueColor: Theme.textBody,
+          iconName: "tint",
+        },
+        {
+          id: "bonus",
+          label: "Bonus",
+          value: formatINR(kpis.bonusTotal),
+          subtext: "Performance bonuses",
+          valueColor: Theme.positive,
+          iconName: "star",
+        },
+        {
+          id: "monthly",
+          label: "Monthly earnings",
+          value: formatINR(kpis.monthlyEarnings),
+          subtext: "Avg last 3 months",
+          valueColor: Theme.primary,
+          iconName: "calendar",
+        },
+      ],
+    ],
+    [kpis],
+  );
 
-      {/* ── Trend charts ─────────────────────────────────────────────────── */}
-      <SectionHeader
+  const productivityKpiRows = useMemo(
+    (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
+      [
+        {
+          id: "p-rev-day",
+          label: "Revenue / day",
+          value: formatINR(productivity.revenuePerDay),
+          subtext: "Per active day",
+          valueColor: Theme.primary,
+          iconName: "money",
+        },
+        {
+          id: "p-trips-week",
+          label: "Trips / week",
+          value: productivity.tripsPerWeek.toFixed(1),
+          subtext: "Throughput",
+          valueColor: Theme.textBody,
+          iconName: "truck",
+        },
+        {
+          id: "p-km",
+          label: "KM driven",
+          value: Math.round(productivity.kmDriven).toLocaleString("en-IN"),
+          subtext: "Total distance",
+          valueColor: Theme.positive,
+          iconName: "road",
+        },
+        {
+          id: "p-rev-km",
+          label: "Revenue / km",
+          value: `₹${productivity.revenuePerKm.toFixed(2)}`,
+          subtext: "Yield per km",
+          valueColor: Theme.primary,
+          iconName: "line-chart",
+        },
+      ],
+      [
+        {
+          id: "p-active",
+          label: "Active days",
+          value: String(productivity.activeDays),
+          subtext: "Days with trips",
+          valueColor: Theme.positive,
+          iconName: "check",
+        },
+        {
+          id: "p-idle",
+          label: "Idle days",
+          value: String(productivity.idleDays),
+          subtext: "Days without trips",
+          valueColor:
+            productivity.idleDays > productivity.activeDays
+              ? Theme.warning
+              : Theme.textMuted,
+          iconName: "pause",
+        },
+        null,
+        null,
+      ],
+    ],
+    [productivity],
+  );
+
+  return (
+    <PulseAnalyticsShell
+      title="Earnings intelligence"
+      subtitle="Salary, incentives, advances and deductions over the last 6 months"
+    >
+      <PulseKpiGrid rows={earningsKpiRows} />
+
+      <PulseSection
         title="Earnings trends"
         subtitle="Monthly commission, advances and net received"
-      />
-      <View style={styles.chartGrid}>
-        <ChartCard title="Earnings trend" subtitle="Commission earned per month">
-          <LineChart
+      >
+        <PulseChartPanel
+          title="Earnings trend"
+          subtitle="Commission earned per month"
+        >
+          <TrendLineChart
             data={toLinePoints(months, "commission")}
             width={chartW}
+            height={168}
             field="revenue"
             color={Theme.chartSeries1}
             gradientId="earningsGrad"
           />
-        </ChartCard>
-        <ChartCard title="Advances trend" subtitle="Advances drawn per month">
-          <LineChart
-            data={toLinePoints(months, "advance")}
-            width={chartW}
-            field="revenue"
-            color={Theme.chartSeries4}
-            gradientId="advancesGrad"
-          />
-        </ChartCard>
-        <ChartCard
-          title="Incentive performance"
-          subtitle="Commission earned vs paid"
-        >
-          <RevExpBarChart data={toIncentiveBars(months)} width={chartW} />
-        </ChartCard>
-      </View>
+        </PulseChartPanel>
+        <PulsePanelGrid>
+          <PulseChartPanel
+            title="Advances trend"
+            subtitle="Advances drawn per month"
+          >
+            <TrendLineChart
+              data={toLinePoints(months, "advance")}
+              width={chartWHalf}
+              height={168}
+              field="revenue"
+              color={Theme.chartSeries4}
+              gradientId="advancesGrad"
+            />
+          </PulseChartPanel>
+          <PulseChartPanel
+            title="Incentive performance"
+            subtitle="Commission earned vs paid"
+          >
+            <TrendBarChart
+              data={toIncentiveBars(months)}
+              width={chartWHalf}
+              height={168}
+              primaryField="revenue"
+              secondaryField="expense"
+              primaryColor={Theme.chartSeries1}
+              secondaryColor={Theme.chartSeries5}
+            />
+          </PulseChartPanel>
+        </PulsePanelGrid>
+      </PulseSection>
 
-      {/* ── Productivity Intelligence ───────────────────────────────────── */}
-      <SectionHeader
-        title="Productivity Intelligence"
+      <PulseSection
+        title="Productivity intelligence"
         subtitle="Last 90 days — measure throughput vs idle time"
-      />
-      <KPIHeader
-        columns={2}
-        cards={[
-          {
-            id: "p-rev-day",
-            label: "Revenue / Day",
-            value: formatINR(productivity.revenuePerDay),
-            sub: "Per active day",
-            accent: Theme.chartSeries1,
-          },
-          {
-            id: "p-trips-week",
-            label: "Trips / Week",
-            value: productivity.tripsPerWeek.toFixed(1),
-            sub: "Throughput",
-            accent: Theme.chartSeries5,
-          },
-          {
-            id: "p-km",
-            label: "KM Driven",
-            value: Math.round(productivity.kmDriven).toLocaleString("en-IN"),
-            sub: "Total distance",
-            accent: Theme.chartSeries2,
-          },
-          {
-            id: "p-rev-km",
-            label: "Revenue / KM",
-            value: `₹${productivity.revenuePerKm.toFixed(2)}`,
-            sub: "Yield per km",
-            accent: Theme.chartSeries1,
-          },
-          {
-            id: "p-active",
-            label: "Active Days",
-            value: String(productivity.activeDays),
-            sub: "Days with trips",
-            accent: Theme.chartSeries2,
-          },
-          {
-            id: "p-idle",
-            label: "Idle Days",
-            value: String(productivity.idleDays),
-            sub: "Days without trips",
-            accent:
-              productivity.idleDays > productivity.activeDays
-                ? Theme.chartSeries3
-                : Theme.textMuted,
-            alert: productivity.idleDays > productivity.activeDays * 2,
-          },
-        ]}
-      />
+      >
+        <PulseKpiGrid rows={productivityKpiRows} />
+      </PulseSection>
 
-      {/* ── Auto Insights ───────────────────────────────────────────────── */}
       {insights.length > 0 ? (
-        <>
-          <SectionHeader title="Auto insights" />
-          <InsightsPanel insights={insights} />
-        </>
+        <PulseInsightsPanel
+          insights={insights.map((i) => ({
+            message: i.message,
+            tone: i.tone,
+          }))}
+        />
       ) : null}
-    </View>
+    </PulseAnalyticsShell>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 14,
-  },
-  chartGrid: {
-    gap: 10,
-  },
-});

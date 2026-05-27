@@ -22,6 +22,12 @@ export const Theme = {
   /** Dark gray for strong text */
   primaryText: "#1a1a1a",
 
+  /** Analytics hero banner (Pulse desktop reference) */
+  analyticsHeroBg: "#2B3171",
+  /** Analytics page canvas */
+  analyticsCanvas: "#F8F9FB",
+  analyticsHeroSubtitle: "#C7D2FE",
+
   // ---- Backgrounds ----
   screenBackground: "#ffffff",
   /** Cards, search bar (slate-50) */

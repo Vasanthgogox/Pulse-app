@@ -2,6 +2,7 @@
  * BidModal — Submit Quotation (Bid Hub) modal.
  * Extracted from LoadCenterView.tsx.
  */
+import { SmartInput } from "@/components/mobile-input";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { createDirectQuote, getIndentDisplayNumber, type DirectQuoteRow, type IndentRow } from "@/features/indents";
@@ -208,26 +209,24 @@ export function BidModal({
             ) : null}
             <View style={styles.bidInputBlock}>
               <Text style={styles.bidSectionTitle}>Financial proposal</Text>
-              <Text style={styles.quoteLabel}>Your price (₹)</Text>
-              <TextInput
-                style={styles.quoteInput}
-                keyboardType="numeric"
-                placeholder={
+              <SmartInput
+                type="currency"
+                label="Your price"
+                context={
                   load
                     ? (() => {
-                        const target =
-                          load.supplier_target ?? load.client_price;
+                        const target = load.supplier_target ?? load.client_price;
                         return target != null && Number(target) > 0
                           ? `Target rate: ${formatINR(Number(target))}`
-                          : "Target price (₹)";
+                          : undefined;
                       })()
-                    : "Target price (₹)"
+                    : undefined
                 }
-                placeholderTextColor={Theme.textMuted}
                 value={quoteAmount}
-                onChangeText={(raw) =>
-                  setQuoteAmount(raw.replace(/[^\d]/g, ""))
-                }
+                onChange={(raw) => setQuoteAmount(raw)}
+                variant="field"
+                placeholder="Enter bid amount"
+                allowDecimal={false}
               />
               {activeBidQuote ? (
                 <View style={styles.previousBidWrap}>

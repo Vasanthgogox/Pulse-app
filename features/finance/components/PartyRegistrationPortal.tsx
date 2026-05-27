@@ -1,7 +1,6 @@
 /**
- * Web fullscreen party addition flow (Finance). Native: no-op.
+ * Party addition flow (Finance): desktop sheet or mobile full-screen wizards.
  * Steps: fill form → review and confirm → Finance entity handlers.
- * Single light-column layout (header + scroll body).
  */
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
@@ -28,6 +27,21 @@ import {
   normalizeBodyLengthKey,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import { partyAddModalChromeStyles } from "@/components/PartyAddModalChrome";
+import {
+  PartyContactMobileWizard,
+  nextStepAfterContactImport,
+  type PartyContactWizardFieldStep,
+} from "@/components/party/PartyContactMobileWizard";
+import {
+  PartyDriverMobileWizard,
+  nextStepAfterDriverImport,
+  type PartyDriverWizardStep,
+} from "@/components/party/PartyDriverMobileWizard";
+import { PartyMobileWizardReview } from "@/components/party/PartyMobileWizardReview";
+import {
+  PartyVehicleMobileWizard,
+  type PartyVehicleWizardStep,
+} from "@/components/party/PartyVehicleMobileWizard";
 import { showAppAlert } from "@/lib/appAlert";
 import { validateEmail } from "@/lib/emailValidation";
 import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
@@ -268,12 +282,10 @@ function vehiclePayloadFromInputs(
 }
 
 export function PartyRegistrationPortal(props: PartyRegistrationPortalProps) {
-  if (Platform.OS !== "web") {
-    return null;
-  }
+  if (!props.visible) return null;
 
   const { width } = useWindowDimensions();
-  const isWide = width >= 720;
+  const isWide = Platform.OS === "web" && width >= 720;
 
   return <PartyRegistrationPortalInner {...props} layoutWide={isWide} />;
 }
@@ -302,6 +314,12 @@ function PartyRegistrationPortalInner(
   const { t } = useLanguage();
   const [kind, setKind] = useState<PartyRegistrationKind>(initialKind);
   const [step, setStep] = useState<"form" | "review">("form");
+  const [contactWizardStep, setContactWizardStep] =
+    useState<PartyContactWizardFieldStep>("source");
+  const [driverWizardStep, setDriverWizardStep] =
+    useState<PartyDriverWizardStep>("source");
+  const [vehicleWizardStep, setVehicleWizardStep] =
+    useState<PartyVehicleWizardStep>("registration");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -396,6 +414,9 @@ function PartyRegistrationPortalInner(
     if (!visible) return;
     setKind(initialKind);
     setStep("form");
+    setContactWizardStep("source");
+    setDriverWizardStep("source");
+    setVehicleWizardStep("registration");
     setFormError(null);
     setSubmitting(false);
     setImportLoading(false);
@@ -829,21 +850,37 @@ function PartyRegistrationPortalInner(
       if (result.ok) {
         setImportError(null);
         if (kind === "driver") {
+          const digits = result.contact.phone
+            .replace(/^\+91/, "")
+            .replace(/^\+/, "");
           setDriverName(result.contact.name);
-          setDriverPhone(
-            formatMobileNumber(
-              result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""),
-            ),
-          );
+          setDriverPhone(formatMobileNumber(digits));
           setDriverExistingMatches([]);
           setDriverPhoneLookupError(null);
+          if (!layoutWide) {
+            setDriverWizardStep(
+              nextStepAfterDriverImport(
+                result.contact.name,
+                digits,
+                driverDl,
+              ),
+            );
+          }
         } else {
+          const digits = result.contact.phone
+            .replace(/^\+91/, "")
+            .replace(/^\+/, "");
           setContactName(result.contact.name);
-          setPhoneDigits(result.contact.phone.replace(/^\+91/, "").replace(/^\+/, ""));
+          setPhoneDigits(formatMobileNumber(digits));
           if (kind === "client" || kind === "supplier") {
             setInviteeMatch(null);
             setSearchedNoResult(false);
             setDriverRegisteredAtPhone(false);
+            if (!layoutWide) {
+              setContactWizardStep(
+                nextStepAfterContactImport("", result.contact.name, digits),
+              );
+            }
           }
         }
       } else if (result.reason !== "cancelled") {
@@ -1127,6 +1164,855 @@ function PartyRegistrationPortalInner(
     visualViewportHeight < viewportH
       ? viewportH - visualViewportHeight
       : 0;
+
+  const useContactWizard =
+    !layoutWide && (kind === "client" || kind === "supplier");
+  const useDriverWizard = !layoutWide && kind === "driver";
+  const useVehicleWizard = !layoutWide && kind === "vehicle";
+  const isDriverReviewTone = kind === "driver";
+  const driverCompensationBitsCount =
+    (driverPayableAmount != null && driverPayableAmount > 0 ? 1 : 0) +
+    (driverCommissionPercent != null && driverCommissionPercent > 0 ? 1 : 0) +
+    (driverCommissionPerKm != null && driverCommissionPerKm > 0 ? 1 : 0);
+  const driverFixedSalaryLabel =
+    driverPayableAmount != null && driverPayableAmount > 0
+      ? `₹${driverPayableAmount.toLocaleString("en-IN")}`
+      : "Not set";
+  const driverTripCommissionLabel =
+    driverCommissionPercent != null && driverCommissionPercent > 0
+      ? `${driverCommissionPercent}%`
+      : driverCommissionPerKm != null && driverCommissionPerKm > 0
+        ? `₹${driverCommissionPerKm}/km`
+        : "Not set";
+
+  const orgBannerMobile = !organizationId ? (
+    <View style={[styles.banner, { marginHorizontal: 20 }]}>
+      <FontAwesome name="warning" size={16} color="#92400e" />
+      <Text style={styles.bannerText}>
+        {noOrganizationMessage ?? "No organization loaded."}
+      </Text>
+    </View>
+  ) : null;
+
+  const mobileWizardSummaryContent =
+    kind === "driver" ? (
+      <View style={styles.driverPreviewRoot}>
+        <View style={styles.driverPreviewHero}>
+          <Text style={styles.driverPreviewKicker}>Fleet invitation</Text>
+          <Text style={styles.driverPreviewTitle}>Join your fleet driver team</Text>
+          <Text style={styles.driverPreviewName} numberOfLines={1}>
+            {driverName.trim() || "Driver"}
+          </Text>
+          <View style={styles.driverPreviewMetaRow}>
+            <Text style={styles.driverPreviewMeta} numberOfLines={1}>
+              {driverPhonePretty || "No mobile"}
+            </Text>
+            <Text style={styles.driverPreviewMetaDot}>•</Text>
+            <Text style={styles.driverPreviewMeta} numberOfLines={1}>
+              {driverDl.trim().toUpperCase() || "No licence"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.driverPreviewBody}>
+          <View style={styles.driverPreviewSectionHeader}>
+            <Text style={styles.driverPreviewSectionTitle}>Your offer</Text>
+            <View style={styles.driverPreviewBenefitsPill}>
+              <Text style={styles.driverPreviewBenefitsText}>
+                {Math.max(driverCompensationBitsCount, 1)} benefits
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.driverPreviewOfferGrid}>
+            <View style={[styles.driverPreviewOfferCard, styles.driverPreviewOfferCardPrimary]}>
+              <Text style={styles.driverPreviewOfferValue}>{driverFixedSalaryLabel}</Text>
+              <Text style={styles.driverPreviewOfferLabel}>Fixed salary</Text>
+            </View>
+            <View style={styles.driverPreviewOfferCard}>
+              <Text style={styles.driverPreviewOfferValue}>{driverTripCommissionLabel}</Text>
+              <Text style={styles.driverPreviewOfferLabel}>Trip commission</Text>
+            </View>
+          </View>
+
+          <View style={styles.driverPreviewNextCard}>
+            <Text style={styles.driverPreviewNextTitle}>What happens next</Text>
+            <Text style={styles.driverPreviewNextLine}>
+              → Driver can receive trip assignments from this fleet
+            </Text>
+            <Text style={styles.driverPreviewNextLine}>
+              → Earnings and commissions are tracked automatically
+            </Text>
+            <Text style={styles.driverPreviewNextLine}>
+              → Saved records stay private to your organization
+            </Text>
+          </View>
+
+          <View style={styles.driverPreviewStatusBar}>
+            <ShieldCheck size={15} color="#166534" strokeWidth={2.4} />
+            <Text style={styles.driverPreviewStatusText}>
+              Invitation preview stays active until you save this driver.
+            </Text>
+          </View>
+        </View>
+      </View>
+    ) : (
+      <View
+        style={[
+          styles.summaryDetailsCard,
+          isDriverReviewTone && styles.summaryDetailsCardDriver,
+        ]}
+      >
+        <Text
+          style={[
+            styles.summaryDetailsHeading,
+            isDriverReviewTone && styles.summaryDetailsHeadingDriver,
+          ]}
+        >
+          Details
+        </Text>
+        {summaryLinesData.map((line, idx) => (
+          <SummaryDetailRow
+            key={`${line.label}-${idx}`}
+            label={line.label}
+            value={line.value}
+            Icon={line.Icon}
+            emphasized={!!line.emphasis}
+            isLast={false}
+            tone={isDriverReviewTone ? "driver" : "default"}
+          />
+        ))}
+        <SummaryDetailRow
+          label="Ready to save"
+          value={READY_TO_SAVE_SUMMARY_COPY}
+          Icon={ShieldCheck}
+          emphasized
+          isLast
+          iconColor={isDriverReviewTone ? "#16a34a" : "#1d4ed8"}
+          valueMaxLines={12}
+          valueProse
+          tone={isDriverReviewTone ? "driver" : "default"}
+        />
+      </View>
+    );
+
+  const driverReviewFooterExtra =
+    kind === "driver" &&
+    onInviteDriver &&
+    driverExistingMatches.length > 0 &&
+    !driverExistingMatches.some((m) => m.is_in_fleet === true) &&
+    !driverPreferOfflineOnly ? (
+      <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+        <Pressable
+          onPress={handleAddDriverOfflineInstead}
+          disabled={submitting}
+          style={styles.clientOfflineLink}
+        >
+          <Text style={styles.clientOfflineLinkText}>
+            Add as offline driver instead
+          </Text>
+        </Pressable>
+      </View>
+    ) : null;
+
+  const contactWizardCanAdvance =
+    contactWizardStep === "organization" ||
+    (contactWizardStep === "contact" && contactName.trim().length >= 2) ||
+    (contactWizardStep === "phone" &&
+      contactName.trim().length >= 2 &&
+      !validatePhone(phoneDigits) &&
+      !driverRegisteredAtPhone);
+
+  const handleContactWizardAdvance = () => {
+    setFormError(null);
+    if (contactWizardStep === "organization") {
+      setContactWizardStep("contact");
+      return;
+    }
+    if (contactWizardStep === "contact") {
+      if (contactName.trim().length < 2) {
+        setFormError("Enter the contact person's name.");
+        return;
+      }
+      setContactWizardStep("phone");
+      return;
+    }
+    if (contactWizardStep === "phone") {
+      goReview();
+    }
+  };
+
+  const contactWizardPhoneExtras =
+    showPhoneInviteeUi && contactWizardStep === "phone" ? (
+      <>
+        <Text style={styles.clientPhoneLookupHint}>
+          Search by number to find someone on the platform and invite their
+          organization.
+        </Text>
+        {phoneDigits.trim().replace(/\s+/g, "").length >=
+          MIN_PHONE_LENGTH_FOR_SEARCH && phoneSearchLoading ? (
+          <View style={styles.clientLookupLoadingRow}>
+            <ActivityIndicator size="small" color="#2563eb" />
+            <Text style={styles.clientLookupLoadingText}>Looking up…</Text>
+          </View>
+        ) : null}
+        {inviteeMatch ? (
+          <View style={styles.clientInviteeCard}>
+            <Text style={styles.clientInviteeLabel}>
+              {inviteeIsDriver
+                ? t("inviteeRegisteredDriver")
+                : t("inviteeFoundOnPlatform")}
+            </Text>
+            <Text style={styles.clientInviteeName}>
+              {inviteeMatch.full_name || inviteeMatch.phone}
+            </Text>
+            <Text style={styles.clientInviteeHint}>
+              {inviteeIsDriver
+                ? kind === "supplier"
+                  ? t("addSupplierInviteeHintDriver")
+                  : t("addClientInviteeHintDriver")
+                : kind === "supplier"
+                  ? t("addSupplierInviteeHintDefault")
+                  : t("addClientInviteeHintDefault")}
+            </Text>
+            {!inviteeIsDriver ? (
+              <Pressable
+                onPress={handleAddAsOfflineInstead}
+                disabled={submitting}
+                style={styles.clientOfflineLink}
+                testID="party-add-offline-btn"
+              >
+                <Text style={styles.clientOfflineLinkText}>
+                  Add as offline instead
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : searchedNoResult ? (
+          <Text style={styles.clientNoMatchHint}>
+            No account with this number. Add as offline below.
+          </Text>
+        ) : null}
+      </>
+    ) : null;
+
+  const driverWizardPhoneExtras =
+    onInviteDriver && driverWizardStep === "phone" ? (
+      <>
+        <Text style={styles.clientPhoneLookupHint}>
+          {t("existingDriverOnPlatform")}. If this number matches a driver
+          account, you can send an in-app invitation on the next step.
+        </Text>
+        {driverPhone.trim().replace(/\s+/g, "").length >=
+          MIN_PHONE_LENGTH_FOR_SEARCH && driverPhoneLookupLoading ? (
+          <View style={styles.clientLookupLoadingRow}>
+            <ActivityIndicator size="small" color="#2563eb" />
+            <Text style={styles.clientLookupLoadingText}>Looking up…</Text>
+          </View>
+        ) : null}
+        {driverPhoneLookupError ? (
+          <Text style={styles.importContactsError}>{driverPhoneLookupError}</Text>
+        ) : null}
+        {driverExistingMatches.length > 0 ? (
+          <View style={styles.clientInviteeCard}>
+            <Text style={styles.clientInviteeLabel}>
+              {driverExistingMatches.some((m) => m.is_in_fleet)
+                ? t("existingDriverInFleet")
+                : t("existingDriverNotInFleet")}
+            </Text>
+            <Text style={styles.clientInviteeName}>
+              {driverExistingMatches[0]?.full_name ||
+                driverExistingMatches[0]?.phone ||
+                "—"}
+            </Text>
+            <Text style={styles.clientInviteeHint}>
+              {driverExistingMatches.some((m) => m.is_in_fleet)
+                ? t("existingDriverInFleetDetail")
+                : "Tap Continue, then use Send request on the review screen to invite them in the app."}
+            </Text>
+            {!driverExistingMatches.some((m) => m.is_in_fleet === true) ? (
+              driverPreferOfflineOnly ? (
+                <Text style={styles.clientInviteeHint}>
+                  Offline fleet record only — no in-app invite will be sent.
+                </Text>
+              ) : (
+                <Pressable
+                  onPress={handleAddDriverOfflineInstead}
+                  disabled={submitting}
+                  style={styles.clientOfflineLink}
+                  testID="party-driver-add-offline-btn"
+                >
+                  <Text style={styles.clientOfflineLinkText}>
+                    Add as offline driver instead
+                  </Text>
+                </Pressable>
+              )
+            ) : null}
+          </View>
+        ) : null}
+      </>
+    ) : null;
+
+  const driverWizardCanAdvance =
+    driverWizardStep === "source" ||
+    (driverWizardStep === "name" && driverName.trim().length >= 2) ||
+    (driverWizardStep === "phone" &&
+      !validatePhone(driverPhone) &&
+      !(
+        onInviteDriver &&
+        driverExistingMatches.some((m) => m.is_in_fleet === true)
+      )) ||
+    (driverWizardStep === "license" &&
+      driverDl.trim().length > 0 &&
+      !dlError(driverDl)) ||
+    driverWizardStep === "extras";
+
+  const handleDriverWizardAdvance = () => {
+    setFormError(null);
+    if (driverWizardStep === "source") {
+      setDriverWizardStep("name");
+      return;
+    }
+    if (driverWizardStep === "name") {
+      if (driverName.trim().length < 2) {
+        setFormError("Enter the driver's name.");
+        return;
+      }
+      setDriverWizardStep("phone");
+      return;
+    }
+    if (driverWizardStep === "phone") {
+      const pErr = validatePhone(driverPhone);
+      if (pErr) {
+        setFormError(pErr);
+        return;
+      }
+      if (
+        onInviteDriver &&
+        driverExistingMatches.some((m) => m.is_in_fleet === true)
+      ) {
+        setFormError(t("existingDriverInFleetDetail"));
+        return;
+      }
+      setDriverWizardStep("license");
+      return;
+    }
+    if (driverWizardStep === "license") {
+      if (!driverDl.trim()) {
+        setFormError("Enter the driving licence number.");
+        return;
+      }
+      const dl = dlError(driverDl);
+      if (dl) {
+        setFormError(dl);
+        return;
+      }
+      setDriverWizardStep("extras");
+      return;
+    }
+    if (driverWizardStep === "extras") {
+      goReview();
+    }
+  };
+
+  const vehicleWizardCanAdvance =
+    (vehicleWizardStep === "registration" &&
+      !validateIndianVehicleNumber(vehicleReg)) ||
+    (vehicleWizardStep === "category" && Boolean(vehicleCategory.trim())) ||
+    (vehicleWizardStep === "model" && Boolean(vehicleModel.trim())) ||
+    (vehicleWizardStep === "specs" &&
+      Boolean(vehicleCapacity.trim()) &&
+      Boolean(vehicleBodyFt.trim()));
+
+  const handleVehicleWizardAdvance = () => {
+    setFormError(null);
+    if (vehicleWizardStep === "registration") {
+      const regErr = validateIndianVehicleNumber(vehicleReg);
+      if (regErr) {
+        setFormError(regErr);
+        return;
+      }
+      setVehicleWizardStep("category");
+      return;
+    }
+    if (vehicleWizardStep === "category") {
+      if (!vehicleCategory.trim()) {
+        setFormError("Select a vehicle category.");
+        return;
+      }
+      setVehicleWizardStep("model");
+      return;
+    }
+    if (vehicleWizardStep === "model") {
+      if (!vehicleModel.trim()) {
+        setFormError("Select or enter a model.");
+        return;
+      }
+      setVehicleWizardStep("specs");
+      return;
+    }
+    if (vehicleWizardStep === "specs") {
+      if (!vehicleCapacity.trim() || !vehicleBodyFt.trim()) {
+        setFormError("Enter load capacity and body length.");
+        return;
+      }
+      goReview();
+    }
+  };
+
+  const vehicleWizardCapacityHint = renderPortalSpecHint(
+    capacityRecommendations,
+    vehicleCapacity,
+  );
+  const vehicleWizardAxleHint = renderPortalSpecHint(
+    axleRecommendations,
+    vehicleAxle,
+  );
+
+  const renderVehiclePickerModals = () => (
+    <>
+      <Modal
+        visible={modelPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModelPickerOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.vehiclePickBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setModelPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.vehiclePickSheet,
+              {
+                paddingBottom: insets.bottom + 16,
+                maxHeight: Dimensions.get("window").height * 0.72,
+              },
+            ]}
+          >
+            <Text style={styles.vehiclePickTitle}>Model</Text>
+            <Text style={styles.vehiclePickHint}>
+              Presets for the selected category, or Other to type manually.
+            </Text>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              style={styles.vehiclePickScroll}
+            >
+              {getModelSelectOptions(vehicleCategory).map((opt) => (
+                <TouchableOpacity
+                  key={`model-${normalizeBodyLengthKey(opt)}`}
+                  style={[
+                    styles.vehiclePickRow,
+                    normalizeBodyLengthKey(vehicleModel) ===
+                      normalizeBodyLengthKey(opt) &&
+                      !modelIsOther &&
+                      styles.vehiclePickRowActive,
+                  ]}
+                  onPress={() => {
+                    setModelIsOther(false);
+                    setVehicleModel(opt);
+                    setModelPickerOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.vehiclePickRowText,
+                      normalizeBodyLengthKey(vehicleModel) ===
+                        normalizeBodyLengthKey(opt) &&
+                        !modelIsOther &&
+                        styles.vehiclePickRowTextActive,
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[
+                  styles.vehiclePickRow,
+                  modelIsOther && styles.vehiclePickRowActive,
+                ]}
+                onPress={() => {
+                  setModelIsOther(true);
+                  setVehicleModel("");
+                  setModelPickerOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.vehiclePickRowText,
+                    modelIsOther && styles.vehiclePickRowTextActive,
+                  ]}
+                >
+                  {OTHER_LABEL} — type manually
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.vehiclePickDone}
+              onPress={() => setModelPickerOpen(false)}
+            >
+              <Text style={styles.vehiclePickDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={bodyLengthPickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBodyLengthPickerOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.vehiclePickBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setBodyLengthPickerOpen(false)}
+          />
+          <View
+            style={[
+              styles.vehiclePickSheet,
+              {
+                paddingBottom: insets.bottom + 16,
+                maxHeight: Dimensions.get("window").height * 0.72,
+              },
+            ]}
+          >
+            <Text style={styles.vehiclePickTitle}>Body length</Text>
+            <Text style={styles.vehiclePickHint}>
+              Choose a preset or Other for a custom value.
+            </Text>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              style={styles.vehiclePickScroll}
+            >
+              {BODY_LENGTH_SELECT_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={normalizeBodyLengthKey(opt)}
+                  style={[
+                    styles.vehiclePickRow,
+                    normalizeBodyLengthKey(vehicleBodyFt) ===
+                      normalizeBodyLengthKey(opt) &&
+                      !bodyLengthIsOther &&
+                      styles.vehiclePickRowActive,
+                  ]}
+                  onPress={() => {
+                    setBodyLengthIsOther(false);
+                    setVehicleBodyFt(opt);
+                    setBodyLengthPickerOpen(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.vehiclePickRowText,
+                      normalizeBodyLengthKey(vehicleBodyFt) ===
+                        normalizeBodyLengthKey(opt) &&
+                        !bodyLengthIsOther &&
+                        styles.vehiclePickRowTextActive,
+                    ]}
+                  >
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[
+                  styles.vehiclePickRow,
+                  bodyLengthIsOther && styles.vehiclePickRowActive,
+                ]}
+                onPress={() => {
+                  setBodyLengthIsOther(true);
+                  setVehicleBodyFt("");
+                  setBodyLengthPickerOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.vehiclePickRowText,
+                    bodyLengthIsOther && styles.vehiclePickRowTextActive,
+                  ]}
+                >
+                  {OTHER_LABEL} — type manually
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.vehiclePickDone}
+              onPress={() => setBodyLengthPickerOpen(false)}
+            >
+              <Text style={styles.vehiclePickDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
+  );
+
+  if (useContactWizard) {
+    return (
+      <>
+        <Modal
+          visible
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={onClose}
+        >
+          {step === "form" ? (
+            <PartyContactMobileWizard
+              entityTitle={formTitle.toUpperCase()}
+              subtitle="Fill required fields and continue."
+              wizardStep={contactWizardStep}
+              onWizardStepChange={setContactWizardStep}
+              onClose={onClose}
+              orgLabel={
+                kind === "client"
+                  ? "Organization / billing name"
+                  : "Supplier company name"
+              }
+              orgValue={orgOrCompanyName}
+              onOrgChange={setOrgOrCompanyName}
+              orgOptional
+              contactLabel="Primary contact"
+              contactValue={contactName}
+              onContactChange={setContactName}
+              phoneValue={phoneDigits}
+              onPhoneChange={handlePhoneLookupChange}
+              importLoading={importLoading}
+              contactPickerAvailable={contactPickerAvailable}
+              importError={importError}
+              onImportContacts={() => void handleImportFromContacts()}
+              formError={formError}
+              noOrganizationBanner={
+                !organizationId ? (
+                  <View style={[styles.banner, { marginHorizontal: 20 }]}>
+                    <FontAwesome name="warning" size={16} color="#92400e" />
+                    <Text style={styles.bannerText}>
+                      {noOrganizationMessage ?? "No organization loaded."}
+                    </Text>
+                  </View>
+                ) : null
+              }
+              phoneStepExtras={contactWizardPhoneExtras}
+              canAdvance={contactWizardCanAdvance}
+              onAdvance={handleContactWizardAdvance}
+              advanceLabel={
+                contactWizardStep === "phone" ? "Review" : "Continue"
+              }
+            />
+          ) : (
+            <View
+              style={[
+                styles.mobileWizardReviewRoot,
+                { paddingTop: insets.top, paddingBottom: insets.bottom },
+              ]}
+            >
+              <View style={styles.mobileWizardReviewHeader}>
+                <Pressable
+                  style={styles.backBtnLight}
+                  onPress={() => {
+                    setStep("form");
+                    setContactWizardStep("phone");
+                  }}
+                  hitSlop={12}
+                >
+                  <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
+                </Pressable>
+                <Text style={styles.mobileWizardReviewTitle}>Review</Text>
+                <View style={{ width: 40 }} />
+              </View>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.mobileWizardReviewScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {mobileWizardSummaryContent}
+              </ScrollView>
+              <View
+                style={[
+                  styles.mobileWizardReviewFooter,
+                  { paddingBottom: insets.bottom + 12 },
+                ]}
+              >
+                <Pressable
+                  style={styles.reviewGhostBtnWide}
+                  onPress={() => {
+                    setStep("form");
+                    setContactWizardStep("phone");
+                  }}
+                >
+                  <Text style={styles.ghostBtnText}>← Edit details</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.confirmBtn,
+                    styles.confirmBtnFlexible,
+                    (!organizationId || submitting) && styles.primaryBtnDisabled,
+                  ]}
+                  onPress={() => void confirmSave()}
+                  disabled={!organizationId || submitting}
+                  testID="party-save-btn"
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Check size={22} color="#fff" strokeWidth={2.8} />
+                      <Text style={styles.confirmBtnText}>{reviewSaveLabel}</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </Modal>
+      </>
+    );
+  }
+
+  if (useDriverWizard) {
+    return (
+      <>
+        <Modal
+          visible
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={onClose}
+        >
+          {step === "form" ? (
+            <PartyDriverMobileWizard
+              entityTitle={formTitle.toUpperCase()}
+              wizardStep={driverWizardStep}
+              onWizardStepChange={setDriverWizardStep}
+              onClose={onClose}
+              driverName={driverName}
+              onDriverNameChange={setDriverName}
+              driverPhone={driverPhone}
+              onDriverPhoneChange={
+                onInviteDriver
+                  ? handleDriverPhoneLookupChange
+                  : (x) => setDriverPhone(x.replace(/[^\d+]/g, ""))
+              }
+              phoneMaxLength={onInviteDriver ? 10 : 14}
+              driverDl={driverDl}
+              onDriverDlChange={setDriverDl}
+              driverEmail={driverEmail}
+              onDriverEmailChange={setDriverEmail}
+              driverPayableAmount={driverPayableAmount}
+              onDriverPayableAmountChange={setDriverPayableAmount}
+              driverCommissionPercent={driverCommissionPercent}
+              onDriverCommissionPercentChange={setDriverCommissionPercent}
+              driverCommissionPerKm={driverCommissionPerKm}
+              onDriverCommissionPerKmChange={setDriverCommissionPerKm}
+              importLoading={importLoading}
+              contactPickerAvailable={contactPickerAvailable}
+              importError={importError}
+              onImportContacts={() => void handleImportFromContacts()}
+              formError={formError}
+              noOrganizationBanner={orgBannerMobile}
+              phoneStepExtras={driverWizardPhoneExtras}
+              canAdvance={driverWizardCanAdvance}
+              onAdvance={handleDriverWizardAdvance}
+              advanceLabel={
+                driverWizardStep === "extras" ? "Review" : "Continue"
+              }
+            />
+          ) : (
+            <PartyMobileWizardReview
+              onBackToEdit={() => {
+                setStep("form");
+                setDriverWizardStep("extras");
+              }}
+              summaryContent={mobileWizardSummaryContent}
+              footerExtra={driverReviewFooterExtra}
+              reviewSaveLabel={reviewSaveLabel}
+              submitting={submitting}
+              organizationId={organizationId}
+              onConfirm={() => void confirmSave()}
+            />
+          )}
+        </Modal>
+      </>
+    );
+  }
+
+  if (useVehicleWizard) {
+    return (
+      <>
+        <Modal
+          visible
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={onClose}
+        >
+          {step === "form" ? (
+            <PartyVehicleMobileWizard
+              entityTitle={formTitle.toUpperCase()}
+              wizardStep={vehicleWizardStep}
+              onWizardStepChange={setVehicleWizardStep}
+              onClose={onClose}
+              vehicleReg={vehicleReg}
+              onVehicleRegChange={setVehicleReg}
+              vehicleCategory={vehicleCategory}
+              onVehicleCategoryChange={setVehicleCategory}
+              vehicleModel={vehicleModel}
+              onVehicleModelChange={setVehicleModel}
+              modelIsOther={modelIsOther}
+              onOpenModelPicker={() => setModelPickerOpen(true)}
+              onChooseModelFromList={() => {
+                setModelIsOther(false);
+                setModelPickerOpen(true);
+              }}
+              vehicleCapacity={vehicleCapacity}
+              onVehicleCapacityChange={setVehicleCapacity}
+              vehicleBodyFt={vehicleBodyFt}
+              onVehicleBodyFtChange={setVehicleBodyFt}
+              bodyLengthIsOther={bodyLengthIsOther}
+              onOpenBodyLengthPicker={() => setBodyLengthPickerOpen(true)}
+              onChooseBodyLengthFromList={() => {
+                setBodyLengthIsOther(false);
+                setBodyLengthPickerOpen(true);
+              }}
+              vehicleAxle={vehicleAxle}
+              onVehicleAxleChange={setVehicleAxle}
+              capacityHint={vehicleWizardCapacityHint}
+              axleHint={vehicleWizardAxleHint}
+              formError={formError}
+              noOrganizationBanner={orgBannerMobile}
+              canAdvance={vehicleWizardCanAdvance}
+              onAdvance={handleVehicleWizardAdvance}
+              advanceLabel={
+                vehicleWizardStep === "specs" ? "Review" : "Continue"
+              }
+            />
+          ) : (
+            <PartyMobileWizardReview
+              onBackToEdit={() => {
+                setStep("form");
+                setVehicleWizardStep("specs");
+              }}
+              summaryContent={mobileWizardSummaryContent}
+              reviewSaveLabel={reviewSaveLabel}
+              submitting={submitting}
+              organizationId={organizationId}
+              onConfirm={() => void confirmSave()}
+            />
+          )}
+        </Modal>
+        {renderVehiclePickerModals()}
+      </>
+    );
+  }
 
   return (
     <>
@@ -1830,29 +2716,7 @@ function PartyRegistrationPortalInner(
                   layoutWide && styles.summarySheetDesktop,
                 ]}
               >
-                <View style={styles.summaryDetailsCard}>
-                  <Text style={styles.summaryDetailsHeading}>Details</Text>
-                  {summaryLinesData.map((line, idx) => (
-                    <SummaryDetailRow
-                      key={`${line.label}-${idx}`}
-                      label={line.label}
-                      value={line.value}
-                      Icon={line.Icon}
-                      emphasized={!!line.emphasis}
-                      isLast={false}
-                    />
-                  ))}
-                  <SummaryDetailRow
-                    label="Ready to save"
-                    value={READY_TO_SAVE_SUMMARY_COPY}
-                    Icon={ShieldCheck}
-                    emphasized
-                    isLast
-                    iconColor="#1d4ed8"
-                    valueMaxLines={12}
-                    valueProse
-                  />
-                </View>
+                {mobileWizardSummaryContent}
               </View>
             )}
 
@@ -1940,191 +2804,7 @@ function PartyRegistrationPortalInner(
       </View>
     </Modal>
 
-      <Modal
-        visible={modelPickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModelPickerOpen(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.vehiclePickBackdrop}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setModelPickerOpen(false)}
-          />
-          <View
-            style={[
-              styles.vehiclePickSheet,
-              {
-                paddingBottom: insets.bottom + 16,
-                maxHeight: Dimensions.get("window").height * 0.72,
-              },
-            ]}
-          >
-            <Text style={styles.vehiclePickTitle}>Model</Text>
-            <Text style={styles.vehiclePickHint}>
-              Presets for the selected category, or Other to type manually.
-            </Text>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator
-              style={styles.vehiclePickScroll}
-            >
-              {getModelSelectOptions(vehicleCategory).map((opt) => (
-                <TouchableOpacity
-                  key={`model-${normalizeBodyLengthKey(opt)}`}
-                  style={[
-                    styles.vehiclePickRow,
-                    normalizeBodyLengthKey(vehicleModel) ===
-                      normalizeBodyLengthKey(opt) &&
-                      !modelIsOther &&
-                      styles.vehiclePickRowActive,
-                  ]}
-                  onPress={() => {
-                    setModelIsOther(false);
-                    setVehicleModel(opt);
-                    setModelPickerOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.vehiclePickRowText,
-                      normalizeBodyLengthKey(vehicleModel) ===
-                        normalizeBodyLengthKey(opt) &&
-                        !modelIsOther &&
-                        styles.vehiclePickRowTextActive,
-                    ]}
-                  >
-                    {opt}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[
-                  styles.vehiclePickRow,
-                  modelIsOther && styles.vehiclePickRowActive,
-                ]}
-                onPress={() => {
-                  setModelIsOther(true);
-                  setVehicleModel("");
-                  setModelPickerOpen(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.vehiclePickRowText,
-                    modelIsOther && styles.vehiclePickRowTextActive,
-                  ]}
-                >
-                  {OTHER_LABEL} — type manually
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.vehiclePickDone}
-              onPress={() => setModelPickerOpen(false)}
-            >
-              <Text style={styles.vehiclePickDoneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
-        visible={bodyLengthPickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setBodyLengthPickerOpen(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.vehiclePickBackdrop}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setBodyLengthPickerOpen(false)}
-          />
-          <View
-            style={[
-              styles.vehiclePickSheet,
-              {
-                paddingBottom: insets.bottom + 16,
-                maxHeight: Dimensions.get("window").height * 0.72,
-              },
-            ]}
-          >
-            <Text style={styles.vehiclePickTitle}>Body length</Text>
-            <Text style={styles.vehiclePickHint}>
-              Choose a preset or Other for a custom value.
-            </Text>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator
-              style={styles.vehiclePickScroll}
-            >
-              {BODY_LENGTH_SELECT_OPTIONS.map((opt) => (
-                <TouchableOpacity
-                  key={normalizeBodyLengthKey(opt)}
-                  style={[
-                    styles.vehiclePickRow,
-                    normalizeBodyLengthKey(vehicleBodyFt) ===
-                      normalizeBodyLengthKey(opt) &&
-                      !bodyLengthIsOther &&
-                      styles.vehiclePickRowActive,
-                  ]}
-                  onPress={() => {
-                    setBodyLengthIsOther(false);
-                    setVehicleBodyFt(opt);
-                    setBodyLengthPickerOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.vehiclePickRowText,
-                      normalizeBodyLengthKey(vehicleBodyFt) ===
-                        normalizeBodyLengthKey(opt) &&
-                        !bodyLengthIsOther &&
-                        styles.vehiclePickRowTextActive,
-                    ]}
-                  >
-                    {opt}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[
-                  styles.vehiclePickRow,
-                  bodyLengthIsOther && styles.vehiclePickRowActive,
-                ]}
-                onPress={() => {
-                  setBodyLengthIsOther(true);
-                  setVehicleBodyFt("");
-                  setBodyLengthPickerOpen(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.vehiclePickRowText,
-                    bodyLengthIsOther && styles.vehiclePickRowTextActive,
-                  ]}
-                >
-                  {OTHER_LABEL} — type manually
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.vehiclePickDone}
-              onPress={() => setBodyLengthPickerOpen(false)}
-            >
-              <Text style={styles.vehiclePickDoneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {kind === "vehicle" ? renderVehiclePickerModals() : null}
     </>
   );
 }
@@ -2156,6 +2836,7 @@ function SummaryDetailRow({
   iconColor,
   valueMaxLines = 4,
   valueProse,
+  tone = "default",
 }: {
   label: string;
   value: string;
@@ -2166,27 +2847,53 @@ function SummaryDetailRow({
   valueMaxLines?: number;
   /** Long explanatory copy: same row chrome, readable body text (not headline-sized). */
   valueProse?: boolean;
+  tone?: "default" | "driver";
 }) {
   const display = value?.trim() || "—";
+  const isDriverTone = tone === "driver";
   return (
     <View
       style={[
         styles.summaryDetailRow,
+        isDriverTone && styles.summaryDetailRowDriver,
         emphasized && styles.summaryDetailRowEmphasis,
+        emphasized && isDriverTone && styles.summaryDetailRowEmphasisDriver,
         isLast && styles.summaryDetailRowLast,
       ]}
     >
-      <View style={styles.summaryDetailAccent} />
-      <View style={styles.summaryDetailIconBubble}>
-        <Icon size={18} color={iconColor ?? "#334155"} strokeWidth={2.2} />
+      <View
+        style={[
+          styles.summaryDetailAccent,
+          isDriverTone && styles.summaryDetailAccentDriver,
+        ]}
+      />
+      <View
+        style={[
+          styles.summaryDetailIconBubble,
+          isDriverTone && styles.summaryDetailIconBubbleDriver,
+        ]}
+      >
+        <Icon
+          size={18}
+          color={iconColor ?? (isDriverTone ? "#15803d" : "#334155")}
+          strokeWidth={2.2}
+        />
       </View>
       <View style={styles.summaryDetailCopy}>
-        <Text style={styles.summaryDetailLabel}>{label}</Text>
+        <Text
+          style={[
+            styles.summaryDetailLabel,
+            isDriverTone && styles.summaryDetailLabelDriver,
+          ]}
+        >
+          {label}
+        </Text>
         <Text
           style={[
             styles.summaryDetailValue,
             !valueProse && emphasized && styles.summaryDetailValueEmphasis,
             valueProse && styles.summaryDetailValueProse,
+            valueProse && isDriverTone && styles.summaryDetailValueProseDriver,
           ]}
           numberOfLines={valueMaxLines}
         >
@@ -2563,6 +3270,33 @@ const styles = StyleSheet.create({
     color: "#fff",
     letterSpacing: 0.75,
   },
+  mobileWizardReviewRoot: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  mobileWizardReviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  mobileWizardReviewTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  mobileWizardReviewScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+  },
+  mobileWizardReviewFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
   ghostBtn: {
     marginTop: 12,
     marginBottom: 8,
@@ -2652,9 +3386,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     gap: 0,
   },
+  summaryDetailsCardDriver: {
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 16,
+  },
   summaryDetailsHeading: {
     ...FinanceTxnTypography.columnTitle,
     marginBottom: 10,
+  },
+  summaryDetailsHeadingDriver: {
+    color: "#166534",
+    letterSpacing: 1.1,
   },
 
   summaryDetailRow: {
@@ -2677,9 +3421,23 @@ const styles = StyleSheet.create({
       default: { backgroundColor: "#fafbff" },
     }),
   },
+  summaryDetailRowDriver: {
+    borderColor: "#bbf7d0",
+    backgroundColor: "#ffffff",
+  },
+  summaryDetailRowEmphasisDriver: {
+    borderColor: "#4ade80",
+    ...Platform.select({
+      web: { backgroundColor: "#f7fff8" } as object,
+      default: { backgroundColor: "#f7fff8" },
+    }),
+  },
   summaryDetailAccent: {
     width: 4,
     backgroundColor: "#3b82f6",
+  },
+  summaryDetailAccentDriver: {
+    backgroundColor: "#22c55e",
   },
   summaryDetailIconBubble: {
     width: 48,
@@ -2688,6 +3446,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
     borderRightWidth: 1,
     borderRightColor: "#f1f5f9",
+  },
+  summaryDetailIconBubbleDriver: {
+    backgroundColor: "#f0fdf4",
+    borderRightColor: "#dcfce7",
   },
   summaryDetailCopy: {
     flex: 1,
@@ -2699,6 +3461,9 @@ const styles = StyleSheet.create({
   summaryDetailLabel: {
     ...FinanceTxnTypography.fieldLabel,
     marginBottom: 3,
+  },
+  summaryDetailLabelDriver: {
+    color: "#16a34a",
   },
   summaryDetailValue: {
     ...FinanceTxnTypography.fieldValue,
@@ -2716,6 +3481,152 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
     color: Theme.textSecondary,
+  },
+  summaryDetailValueProseDriver: {
+    color: "#166534",
+  },
+  driverPreviewRoot: {
+    borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#86efac",
+    backgroundColor: "#ffffff",
+  },
+  driverPreviewHero: {
+    backgroundColor: "#047857",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  driverPreviewKicker: {
+    ...FinanceTxnTypography.fieldLabel,
+    color: "#a7f3d0",
+    letterSpacing: 1.2,
+  },
+  driverPreviewTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 20,
+    color: "#ecfdf5",
+    lineHeight: 24,
+  },
+  driverPreviewName: {
+    ...FinanceTxnTypography.buttonLabel,
+    fontSize: 14,
+    color: "#ffffff",
+  },
+  driverPreviewMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  driverPreviewMeta: {
+    ...FinanceTxnTypography.routeWhy,
+    color: "#d1fae5",
+    fontSize: 10,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  driverPreviewMetaDot: {
+    color: "#6ee7b7",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  driverPreviewBody: {
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  driverPreviewSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  driverPreviewSectionTitle: {
+    ...FinanceTxnTypography.fieldLabel,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1.1,
+  },
+  driverPreviewBenefitsPill: {
+    backgroundColor: "#dcfce7",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  driverPreviewBenefitsText: {
+    ...FinanceTxnTypography.fieldValue,
+    color: "#166534",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  driverPreviewOfferGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  driverPreviewOfferCard: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    padding: 12,
+    minHeight: 92,
+    justifyContent: "space-between",
+  },
+  driverPreviewOfferCardPrimary: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#bbf7d0",
+  },
+  driverPreviewOfferValue: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 17,
+    color: "#0f172a",
+  },
+  driverPreviewOfferLabel: {
+    ...FinanceTxnTypography.fieldLabel,
+    color: "#0f766e",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  driverPreviewNextCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 7,
+  },
+  driverPreviewNextTitle: {
+    ...FinanceTxnTypography.partyTitle,
+    fontSize: 14,
+    color: "#0f172a",
+  },
+  driverPreviewNextLine: {
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 11,
+    color: "#475569",
+    lineHeight: 15,
+  },
+  driverPreviewStatusBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#86efac",
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  driverPreviewStatusText: {
+    ...FinanceTxnTypography.fieldValue,
+    fontSize: 10,
+    color: "#166534",
+    flex: 1,
+    lineHeight: 14,
   },
 
   importContactsWrap: {

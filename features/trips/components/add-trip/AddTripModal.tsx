@@ -70,6 +70,11 @@ export function AddTripModal({
   onClose,
   onComplete,
 }: AddTripModalProps) {
+  const { width: winW } = useWindowDimensions();
+  const wizardEnabled = Platform.OS !== "web" && winW < 600;
+  const [wizardStep, setWizardStep] = useState<"route" | "client" | "allocation">(
+    "route",
+  );
   const form = useAddTripForm();
   const [submitting, setSubmitting] = useState(false);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
@@ -79,6 +84,56 @@ export function AddTripModal({
     loading: clientsLoading,
     refetch: refetchClients,
   } = useClientsForTrip(organizationId);
+
+  useEffect(() => {
+    if (!wizardEnabled) return;
+    setWizardStep("route");
+  }, [wizardEnabled, organizationId]);
+
+  const stepFieldSet = useMemo(() => {
+    if (!wizardEnabled) return null;
+    if (wizardStep === "route") {
+      return new Set(["pickup", "drop", "tripDate", "tons"]);
+    }
+    if (wizardStep === "client") {
+      return new Set(["client", "clientPrice"]);
+    }
+    return new Set([
+      "partner",
+      "partnerRate",
+      "vehicleNumber",
+      "driverName",
+      "driverPhone",
+      "driverConfirm",
+      "advancePaid",
+      "notes",
+      "assetDriver",
+      "assetVehicle",
+    ]);
+  }, [wizardEnabled, wizardStep]);
+
+  const stepIssues = useMemo(() => {
+    if (!wizardEnabled || !stepFieldSet) return form.validationIssues;
+    return form.validationIssues.filter((i) => stepFieldSet.has(i.field));
+  }, [wizardEnabled, stepFieldSet, form.validationIssues]);
+
+  const stepCanAdvance = wizardEnabled
+    ? stepIssues.length === 0
+    : form.canSubmit;
+
+  const wizardSubmitLabel = wizardEnabled
+    ? wizardStep === "allocation"
+      ? "Create Trip"
+      : "Continue"
+    : "Create Trip";
+
+  const wizardSubtitle = wizardEnabled
+    ? wizardStep === "route"
+      ? "Route"
+      : wizardStep === "client"
+        ? "Client & Price"
+        : "Allocation"
+    : undefined;
 
   const handleSubmit = async () => {
     if (!form.canSubmit || submitting) return;
@@ -111,6 +166,46 @@ export function AddTripModal({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleWizardPrimary = () => {
+    if (!wizardEnabled) {
+      void handleSubmit();
+      return;
+    }
+    if (wizardStep === "route") {
+      if (stepIssues.length > 0) {
+        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
+        return;
+      }
+      setWizardStep("client");
+      return;
+    }
+    if (wizardStep === "client") {
+      if (stepIssues.length > 0) {
+        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
+        return;
+      }
+      setWizardStep("allocation");
+      return;
+    }
+    void handleSubmit();
+  };
+
+  const handleWizardBackOrClose = () => {
+    if (!wizardEnabled) {
+      onClose();
+      return;
+    }
+    if (wizardStep === "allocation") {
+      setWizardStep("client");
+      return;
+    }
+    if (wizardStep === "client") {
+      setWizardStep("route");
+      return;
+    }
+    onClose();
   };
 
   const handleRegenerateOtp = async () => {
@@ -153,11 +248,14 @@ export function AddTripModal({
   return (
     <AddTripModalLayout
       title="Create Trip"
-      submitLabel="Create Trip"
-      canSubmit={form.canSubmit}
+      subtitle={wizardSubtitle ?? undefined}
+      submitLabel={wizardSubmitLabel}
+      canSubmit={stepCanAdvance}
       submitting={submitting}
-      onClose={onClose}
-      onSubmit={handleSubmit}
+      lockPrimaryUntilValid
+      validationMessage={stepIssues[0]?.message ?? null}
+      onClose={handleWizardBackOrClose}
+      onSubmit={handleWizardPrimary}
     >
       <AddTripFormFields
         state={form.state}
@@ -166,6 +264,11 @@ export function AddTripModal({
         clientsLoading={clientsLoading}
         organizationId={organizationId}
         refetchClients={refetchClients}
+        onSubmit={handleWizardPrimary}
+        canSubmit={stepCanAdvance}
+        validationIssues={stepIssues}
+        validationMessage={stepIssues[0]?.message ?? null}
+        wizardSection={wizardEnabled ? wizardStep : undefined}
         showInlineCta={false}
       />
     </AddTripModalLayout>

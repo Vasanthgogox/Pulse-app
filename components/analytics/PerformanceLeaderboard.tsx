@@ -141,15 +141,17 @@ export const HBarChart = memo(function HBarChart({
 }: HBarChartProps) {
   const barAnim = useRef(new Animated.Value(0)).current;
 
+  const itemsKey = items.map((i) => `${i.id}:${i.value}`).join("|");
+
   useEffect(() => {
     barAnim.setValue(0);
     Animated.timing(barAnim, {
       toValue: 1,
-      duration: 700,
+      duration: 820,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [items.length, barAnim]);
+  }, [itemsKey, barAnim]);
 
   const maxVal = Math.max(...items.map((i) => i.value), 1);
   const chartW = Math.max(1, width - labelWidth - valueWidth - 8);
@@ -160,9 +162,11 @@ export const HBarChart = memo(function HBarChart({
       {items.map((item, i) => {
         const y = i * (rowHeight + gap);
         const finalW = (item.value / maxVal) * chartW;
+        const stagger = 0.12 + (i / Math.max(items.length, 1)) * 0.88;
         const animW = barAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [0, Math.max(2, finalW)],
+          inputRange: [0, stagger, 1],
+          outputRange: [0, 0, Math.max(2, finalW)],
+          extrapolate: "clamp",
         });
         const hue = item.hue ?? item.value;
         const barColor =

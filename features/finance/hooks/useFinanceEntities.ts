@@ -195,14 +195,39 @@ export function useFinanceEntities({
   >([]);
 
   useEffect(() => {
+    if (
+      (includeGaragePeriodOptions && tripRows.length > 0) ||
+      garagePeriodOptions.length === 0
+    ) {
+      return;
+    }
+    setGaragePeriodOptions([]);
+  }, [
+    includeGaragePeriodOptions,
+    tripRows.length,
+    garagePeriodOptions.length,
+  ]);
+
+  useEffect(() => {
     if (!includeGaragePeriodOptions || tripRows.length === 0) {
-      setGaragePeriodOptions([]);
       return;
     }
     let cancelled = false;
     void import("@/features/vehicles/pnl").then(({ getAvailablePeriodOptions }) => {
       if (!cancelled) {
-        setGaragePeriodOptions(getAvailablePeriodOptions(tripRows));
+        const next = getAvailablePeriodOptions(tripRows) ?? [];
+        setGaragePeriodOptions((prev) => {
+          if (
+            prev.length === next.length &&
+            prev.every(
+              (opt, idx) =>
+                opt.value === next[idx]?.value && opt.label === next[idx]?.label,
+            )
+          ) {
+            return prev;
+          }
+          return next;
+        });
       }
     });
     return () => {
