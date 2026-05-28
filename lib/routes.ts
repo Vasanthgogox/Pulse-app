@@ -56,6 +56,8 @@ export const ROUTES = {
   BRANDING_SETTINGS: '/branding-settings' as const,
   /** Canonical org hub: logo, name, KYC, team, invoice branding. */
   WORKSPACE:         '/workspace'         as const,
+  /** Business intelligence command center with cross-filter analytics. */
+  BUSINESS_PULSE:    '/business-pulse'    as const,
   /** Personal identity: name, email, phone, personal avatar */
   MY_ACCOUNT:        '/account'           as const,
 
@@ -78,6 +80,8 @@ export const ROUTES = {
     `/trip/${encodeURIComponent(tripId)}/operations/fuel` as const,
   tripTollEntry: (tripId: string) =>
     `/trip/${encodeURIComponent(tripId)}/operations/toll` as const,
+  tripExpenses: (tripId: string) =>
+    `/trip/${encodeURIComponent(tripId)}/operations/expenses` as const,
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */
   ADD_CLIENT:     '/(modals)/add-client' as const,
   CREATE_INDENT:  '/create-indent'  as const,

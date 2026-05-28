@@ -67,26 +67,6 @@ export async function executeVehiclePostingRuntime(input: {
     }
     return { error: null, posted: false, reason: "approval_pending" as const };
   }
-  if (String(input.paymentOwner ?? "").toLowerCase() === "driver") {
-    if (sourceTableType) {
-      await updateSourcePostingState({
-        sourceType: sourceTableType,
-        sourceId: input.sourceId,
-        state: "approved",
-      });
-    }
-    return { error: null, posted: false, reason: "driver_reimbursement" as const };
-  }
-  if (String(input.paymentOwner ?? "").toLowerCase() === "supplier") {
-    if (sourceTableType) {
-      await updateSourcePostingState({
-        sourceType: sourceTableType,
-        sourceId: input.sourceId,
-        state: "approved",
-      });
-    }
-    return { error: null, posted: false, reason: "supplier_adjustment" as const };
-  }
   if (String(input.paymentOwner ?? "").toLowerCase() === "unknown") {
     if (sourceTableType) {
       await updateSourcePostingState({
@@ -164,7 +144,15 @@ export async function executeVehiclePostingRuntime(input: {
     amount: Math.max(0, Number(input.amount) || 0),
     approved_by: input.approvedBy ?? null,
     posted_at: new Date().toISOString(),
-    metadata: input.metadata ?? {},
+    metadata: {
+      ...(input.metadata ?? {}),
+      settlement_scope:
+        String(input.paymentOwner ?? "").toLowerCase() === "driver"
+          ? "driver_payable"
+          : String(input.paymentOwner ?? "").toLowerCase() === "supplier"
+            ? "vendor_payable"
+            : "organization_expense",
+    },
   };
   const inserted = await supabase().from("vehicle_ledger_entries").insert(payload).select("id").single();
   if (inserted.error) {

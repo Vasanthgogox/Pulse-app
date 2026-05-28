@@ -5,6 +5,8 @@ import type {
 } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { EntityIntelWidgetRow } from "@/components/entityIntel/EntityIntelWidgetRow";
+import { pickEntityReport } from "@/components/entityIntel/pickEntityReport";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
@@ -30,6 +32,11 @@ import {
 } from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
 import { TreasuryDetailLayout } from "@/features/finance/components/TreasuryDetailLayout";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
+import {
+  buildClientPnLReport,
+  buildClientReceivableReport,
+  formatReportInr,
+} from "@/features/finance/lib/entityDetailReports.util";
 import {
     getTripSubcontracts,
     type TripSubcontractRow,
@@ -300,6 +307,9 @@ export default function ClientDetailScreen({
   >({});
   const [, setOrgTrips] = useState<TripRow[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [clientReportKind, setClientReportKind] = useState<"receivable" | "pnl" | "ledger">(
+    "receivable",
+  );
   /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
   const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
     useState(0);
@@ -1467,10 +1477,10 @@ export default function ClientDetailScreen({
     () => (detailSubTab === "trips" ? tripReportTransactions : sortedTx),
     [detailSubTab, sortedTx, tripReportTransactions],
   );
-  const tripTableReport = useMemo(() => {
-    if (detailSubTab !== "trips") return undefined;
+  const clientTripReportRows = useMemo(() => {
+    if (detailSubTab !== "trips") return [];
     const billTo = client?.name || client?.contact_person || t("client");
-    const rows = missionRows.map((row) => {
+    return missionRows.map((row) => {
       const key = String(row.trip.id).trim().toLowerCase();
       const meta = tripTransactionMetaById[key] ?? {
         count: 0,
@@ -1494,35 +1504,17 @@ export default function ClientDetailScreen({
         route: row.route,
         model: isAggregateTrip ? "Aggregate" : "Asset",
         supplier: supplierForReport,
-        sales: formatINR(row.sales),
-        cost: formatINR(cost),
-        pnl: formatINR(pnl),
+        sales: formatReportInr(row.sales),
+        cost: formatReportInr(cost),
+        pnl: formatReportInr(pnl),
         margin,
-        received: formatINR(row.paid),
-        due: formatINR(row.due),
+        received: formatReportInr(row.paid),
+        due: formatReportInr(row.due),
         txns: meta.count,
         lastTxn: meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—",
       };
     });
-    return {
-      columns: [
-        { key: "trip", label: "Trip" },
-        { key: "route", label: "Route" },
-        { key: "model", label: "Model" },
-        { key: "supplier", label: "Supplier" },
-        { key: "sales", label: "Sales", align: "right" as const },
-        { key: "cost", label: "Cost", align: "right" as const },
-        { key: "pnl", label: "P&L", align: "right" as const },
-        { key: "margin", label: "Margin %", align: "right" as const },
-        { key: "received", label: "Received", align: "right" as const },
-        { key: "due", label: "Due", align: "right" as const },
-        { key: "txns", label: "Txns", align: "right" as const },
-        { key: "lastTxn", label: "Last Txn", align: "right" as const },
-      ],
-      rows,
-    };
   }, [
-    aggregateSupplierLabel,
     client?.contact_person,
     client?.name,
     detailSubTab,
@@ -1532,6 +1524,95 @@ export default function ClientDetailScreen({
     tripTransactionMetaById,
     tripExpenseById,
     getTripCostForClientView,
+  ]);
+
+  const clientReceivableReport = useMemo(
+    () =>
+      detailSubTab === "trips"
+        ? buildClientReceivableReport(
+            clientTripReportRows.map((row) => ({
+              trip: row.trip,
+              route: row.route,
+              sales: row.sales,
+              received: row.received,
+              due: row.due,
+              txns: row.txns,
+              lastTxn: row.lastTxn,
+            })),
+          )
+        : undefined,
+    [clientTripReportRows, detailSubTab],
+  );
+
+  const clientPnLReport = useMemo(
+    () =>
+      detailSubTab === "trips" ? buildClientPnLReport(clientTripReportRows) : undefined,
+    [clientTripReportRows, detailSubTab],
+  );
+
+  const clientPnLTotalInr = useMemo(() => {
+    if (detailSubTab !== "trips") return 0;
+    const billTo = client?.name || client?.contact_person || t("client");
+    return missionRows.reduce((sum, row) => {
+      const key = String(row.trip.id).trim().toLowerCase();
+      const expenseCaptured = tripExpenseById[key] ?? 0;
+      const cost = getTripCostForClientView(row.trip, expenseCaptured, billTo);
+      return sum + (row.sales - cost);
+    }, 0);
+  }, [
+    client?.contact_person,
+    client?.name,
+    detailSubTab,
+    getTripCostForClientView,
+    missionRows,
+    t,
+    tripExpenseById,
+  ]);
+
+  const clientCollectionPct = useMemo(() => {
+    const billed = missionRows.reduce((s, r) => s + r.sales, 0);
+    const received = missionRows.reduce((s, r) => s + r.paid, 0);
+    return billed > 0 ? Math.min(100, Math.round((received / billed) * 100)) : 0;
+  }, [missionRows]);
+
+  const openClientReport = useCallback((kind: "receivable" | "pnl" | "ledger") => {
+    setClientReportKind(kind);
+    setShowReportModal(true);
+  }, []);
+
+  const handleClientDownloadPress = useCallback(() => {
+    if (detailSubTab === "shared") {
+      setSharedLedgerDownloadSignal((n) => n + 1);
+      return;
+    }
+    if (detailSubTab === "trips") {
+      pickEntityReport(
+        "Client report",
+        [
+          { id: "receivable", label: "Receivable statement" },
+          { id: "pnl", label: "P&L performance" },
+          { id: "ledger", label: "Ledger transactions" },
+        ],
+        (id) =>
+          openClientReport(
+            id === "pnl" ? "pnl" : id === "ledger" ? "ledger" : "receivable",
+          ),
+      );
+      return;
+    }
+    openClientReport("ledger");
+  }, [detailSubTab, openClientReport]);
+
+  const activeClientCustomReport = useMemo(() => {
+    if (detailSubTab !== "trips") return undefined;
+    if (clientReportKind === "pnl") return clientPnLReport;
+    if (clientReportKind === "receivable") return clientReceivableReport;
+    return undefined;
+  }, [
+    clientPnLReport,
+    clientReceivableReport,
+    clientReportKind,
+    detailSubTab,
   ]);
 
   if (loading) {
@@ -1654,13 +1735,7 @@ export default function ClientDetailScreen({
           ) : null}
           <TouchableOpacity
             style={styles.downloadBtn}
-            onPress={() => {
-              if (detailSubTab === "shared") {
-                setSharedLedgerDownloadSignal((n) => n + 1);
-              } else {
-                setShowReportModal(true);
-              }
-            }}
+            onPress={handleClientDownloadPress}
             activeOpacity={0.8}
             accessibilityLabel={
               detailSubTab === "shared"
@@ -1982,6 +2057,41 @@ export default function ClientDetailScreen({
             </TouchableOpacity>
           ))}
         </View>
+
+        {detailSubTab === "trips" ? (
+          <EntityIntelWidgetRow
+            widgets={[
+              {
+                id: "pnl",
+                label: "Trip P&L",
+                value: formatINR(clientPnLTotalInr),
+                tone: clientPnLTotalInr >= 0 ? "good" : "bad",
+                hint: "View P&L report",
+                onPress: () => openClientReport("pnl"),
+              },
+              {
+                id: "receivable",
+                label: "Receivable due",
+                value: formatINR(due),
+                tone: due > 0 ? "warn" : "good",
+                hint: "View receivable report",
+                onPress: () => openClientReport("receivable"),
+              },
+              {
+                id: "collection",
+                label: "Collection rate",
+                value: `${clientCollectionPct}%`,
+                tone:
+                  clientCollectionPct >= 80
+                    ? "good"
+                    : clientCollectionPct >= 50
+                      ? "warn"
+                      : "bad",
+                hint: "Received vs billed",
+              },
+            ]}
+          />
+        ) : null}
 
         {detailSubTab === "trips" && (
           <View style={styles.tripDatePillWrap}>
@@ -2663,9 +2773,18 @@ export default function ClientDetailScreen({
             onClose={() => setShowReportModal(false)}
             transactions={reportTransactions}
             title={
-              clientName ? `${t("ledgerFor")}${clientName}` : t("ledgerReport")
+              clientReportKind === "pnl"
+                ? `${clientName || t("client")} — P&L performance`
+                : clientReportKind === "receivable"
+                  ? `${clientName || t("client")} — Receivable statement`
+                  : clientName
+                    ? `${t("ledgerFor")}${clientName}`
+                    : t("ledgerReport")
             }
-            customReport={tripTableReport}
+            customReport={activeClientCustomReport}
+            hideCashSummary={
+              clientReportKind === "pnl" || clientReportKind === "receivable"
+            }
           />
         </Suspense>
       ) : null}

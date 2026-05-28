@@ -15,9 +15,9 @@ export function selectOperationsHubSections(trip: TripRow): string[] {
   }
   return [
     "Verification",
-    "Toll",
-    "Supplier Operations",
-    "Trip Notes",
-    "Coordination Costs",
+    "Commercial Cost",
+    "Supplier Adjustments",
+    "Brokerage Margin",
+    "Settlement Exposure",
   ];
 }

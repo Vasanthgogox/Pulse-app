@@ -64,18 +64,6 @@ const PERIOD_OPTIONS: Array<{ value: AnalyticsPeriod; label: string }> = [
   { value: "lifetime", label: "Lifetime" },
 ];
 
-// Convert PeriodPoints to the shape expected by vehicle chart primitives
-function toRevExpPoints(pts: PeriodPoint[]) {
-  return pts.map((p) => ({
-    label: p.label,
-    revenue: p.revenue,
-    expense: p.earnings,   // show earnings as the "expense" slot for comparison
-    profit: p.revenue - p.earnings,
-    margin: p.revenue > 0 ? ((p.revenue - p.earnings) / p.revenue) * 100 : 0,
-    tripCount: p.tripCount,
-  }));
-}
-
 function toLinePoints(pts: PeriodPoint[], field: "earnings" | "paid") {
   return pts.map((p) => ({
     label: p.label,
@@ -721,28 +709,16 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
     () => toLinePoints(periodPoints, "paid"),
     [periodPoints],
   );
-  const revExpPoints = useMemo(
-    () => toRevExpPoints(periodPoints),
-    [periodPoints],
-  );
-
-  const marginColor =
-    kpi.totalRevenue > 0
-      ? ((kpi.totalRevenue - kpi.totalEarnings) / kpi.totalRevenue) * 100 >= 20
-        ? Theme.darkGreen
-        : Theme.warning
-      : Theme.textMuted;
-
   // ── KPI items array ──────────────────────────────────────────────────────
   const kpiItems = useMemo(() => [
-    { id: "rev", label: "Revenue Generated", value: formatINRChip(kpi.totalRevenue), sub: `${kpi.tripsTotal} trips`, accent: Theme.primary },
-    { id: "earn", label: "Total Earnings", value: formatINRChip(kpi.totalEarnings), sub: "Commission + Salary", accent: Theme.darkGreen },
-    { id: "trips", label: "Trips Completed", value: String(kpi.tripsCompleted), sub: `of ${kpi.tripsTotal} assigned` },
-    { id: "vehs", label: "Vehicles Operated", value: String(kpi.vehiclesOperated), sub: "Unique vehicles" },
-    { id: "salary", label: "Monthly Salary", value: kpi.monthlySalary ? formatINRChip(kpi.monthlySalary) : "—", sub: kpi.monthlySalary ? "Fixed per month" : "Commission-based" },
-    { id: "pending", label: "Pending Balance", value: kpi.pendingBalance > 0 ? formatINRChip(kpi.pendingBalance) : "₹ 0", sub: kpi.pendingBalance > 0 ? "Unpaid earnings" : "Fully settled", accent: kpi.pendingBalance > 0 ? Theme.teslaRed : Theme.darkGreen, alert: kpi.pendingBalance > 0 },
-    { id: "settle", label: "Settlement Health", value: `${kpi.settlementHealth}%`, sub: kpi.settlementHealth >= 80 ? "Good" : kpi.settlementHealth >= 50 ? "Partial" : "Behind", accent: kpi.settlementHealth >= 80 ? Theme.darkGreen : kpi.settlementHealth >= 50 ? Theme.warning : Theme.teslaRed },
-    { id: "rating", label: "Driver Rating", value: kpi.driverRating > 0 ? kpi.driverRating.toFixed(1) : "—", sub: kpi.driverRating > 0 ? "Average score" : "No ratings yet", accent: kpi.driverRating >= 4 ? Theme.darkGreen : kpi.driverRating >= 2.5 ? Theme.warning : kpi.driverRating > 0 ? Theme.teslaRed : Theme.textMuted },
+    { id: "contract", label: "Contract value", value: formatINRChip(kpi.totalEarnings), sub: "Commission due (all trips)", accent: Theme.primary },
+    { id: "pending", label: "Payable due", value: kpi.pendingBalance > 0 ? formatINRChip(kpi.pendingBalance) : "₹ 0", sub: kpi.pendingBalance > 0 ? "Unpaid to driver" : "Fully settled", accent: kpi.pendingBalance > 0 ? Theme.teslaRed : Theme.darkGreen, alert: kpi.pendingBalance > 0 },
+    { id: "paid", label: "Paid out", value: formatINRChip(kpi.totalPaid), sub: "Settled to date", accent: Theme.darkGreen },
+    { id: "settle", label: "Settlement health", value: `${kpi.settlementHealth}%`, sub: kpi.settlementHealth >= 80 ? "Good" : kpi.settlementHealth >= 50 ? "Partial" : "Behind", accent: kpi.settlementHealth >= 80 ? Theme.darkGreen : kpi.settlementHealth >= 50 ? Theme.warning : Theme.teslaRed },
+    { id: "perf", label: "Performance", value: `${kpi.performanceScore}`, sub: "Composite 0–100", accent: kpi.performanceScore >= 75 ? Theme.darkGreen : kpi.performanceScore >= 50 ? Theme.warning : Theme.teslaRed },
+    { id: "trips", label: "Trips completed", value: String(kpi.tripsCompleted), sub: `of ${kpi.tripsTotal} assigned` },
+    { id: "salary", label: "Monthly salary", value: kpi.monthlySalary ? formatINRChip(kpi.monthlySalary) : "—", sub: kpi.monthlySalary ? "Fixed per month" : "Commission-based" },
+    { id: "rating", label: "Driver rating", value: kpi.driverRating > 0 ? kpi.driverRating.toFixed(1) : "—", sub: kpi.driverRating > 0 ? "Average score" : "No ratings yet", accent: kpi.driverRating >= 4 ? Theme.darkGreen : kpi.driverRating >= 2.5 ? Theme.warning : kpi.driverRating > 0 ? Theme.teslaRed : Theme.textMuted },
   ], [kpi]);
 
   const kpiRows = useMemo(() => {
@@ -778,6 +754,12 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
       showsVerticalScrollIndicator={false}
     >
       <View style={[rootStyles.content, isDesktop && rootStyles.contentDesktop]}>
+        <View style={rootStyles.hero}>
+          <Text style={rootStyles.heroTitle}>Driver finance analytics</Text>
+          <Text style={rootStyles.heroSub}>
+            {(driver?.name ?? "Driver").trim() || "Driver"} · payable, settlement, and performance
+          </Text>
+        </View>
         {/* ── Period picker ─────────────────────────────────────────────── */}
         <View style={rootStyles.periodRow}>
           {PERIOD_OPTIONS.map((opt) => (
@@ -821,10 +803,10 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
           ))}
         </View>
 
-        {/* ── Earnings & Revenue Trends ──────────────────────────────────── */}
-        <SectionHeader title="Earnings Trends" sub={`${period} view`} />
+        {/* ── Payable & settlement trends ───────────────────────────────── */}
+        <SectionHeader title="Payable & settlement" sub={`${period} view`} />
 
-        <ChartCard title="Earnings (Commission Due)">
+        <ChartCard title="Commission payable">
           <TrendLineChart
             data={earningsLinePoints}
             width={chartWidth}
@@ -835,7 +817,7 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
           />
         </ChartCard>
 
-        <ChartCard title="Payments Received">
+        <ChartCard title="Payments made">
           <TrendLineChart
             data={paidLinePoints}
             width={chartWidth}
@@ -843,24 +825,6 @@ export const DriverAnalyticsTab = memo(function DriverAnalyticsTab({
             field="revenue"
             color={Theme.primary}
             gradientId="paidGrad"
-          />
-        </ChartCard>
-
-        <ChartCard
-          title="Revenue vs Earnings"
-          legend={
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <LegendChip color={Theme.primary} label="Revenue" />
-              <LegendChip color={Theme.darkGreen} label="Earnings" />
-            </View>
-          }
-        >
-          <TrendBarChart
-            data={revExpPoints}
-            width={chartWidth}
-            height={isTablet ? 185 : 168}
-            primaryField="revenue"
-            secondaryField="expense"
           />
         </ChartCard>
 
@@ -1057,6 +1021,20 @@ const rootStyles = StyleSheet.create({
   },
   content: { flex: 1 },
   contentDesktop: { maxWidth: 860, alignSelf: "center", width: "100%" },
+  hero: { marginBottom: 12, gap: 2 },
+  heroTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  heroSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 14,
+  },
   periodRow: {
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,

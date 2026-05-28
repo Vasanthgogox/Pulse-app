@@ -48,6 +48,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
+import { injectPulseWatermarkIntoHtml } from '@/lib/reportWatermark.util';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
@@ -570,7 +571,7 @@ export default function DriverWalletScreen() {
       route?: string | null;
     }) => {
       const html = buildCashReceiptHtml(p);
-      const file = await Print.printToFileAsync({ html });
+      const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
       if (Platform.OS === 'web') {
         // Best-effort: open the generated file in a new tab.
         window.open(file.uri, '_blank');
@@ -677,7 +678,7 @@ export default function DriverWalletScreen() {
       paymentRequestId?: string | null;
     }) => {
       const html = buildTripClaimHtml(p);
-      const file = await Print.printToFileAsync({ html });
+      const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
       if (Platform.OS === 'web') {
         window.open(file.uri, '_blank');
         return;
@@ -784,7 +785,7 @@ export default function DriverWalletScreen() {
   const shareBulkClaimPdf = useCallback(
     async (p: Parameters<typeof buildBulkClaimHtml>[0]) => {
       const html = buildBulkClaimHtml(p);
-      const file = await Print.printToFileAsync({ html });
+      const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
       if (Platform.OS === 'web') {
         window.open(file.uri, '_blank');
         return;
@@ -883,7 +884,7 @@ export default function DriverWalletScreen() {
       route: string;
     }) => {
       const html = buildTripSettlementHtml(p);
-      const file = await Print.printToFileAsync({ html });
+      const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
       if (Platform.OS === 'web') {
         window.open(file.uri, '_blank');
         return;

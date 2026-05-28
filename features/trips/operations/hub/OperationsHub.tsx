@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { useMemo, useState } from "react";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,7 +14,6 @@ import {
 } from "@/features/operations/observability";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import {
-  getActorOperationalPermissions,
   getTripOperationalCapabilities,
   selectOperationsHubSections,
 } from "@/features/trips/capabilities";
@@ -33,7 +32,6 @@ import { toOperationsDisplayMetrics } from "../metrics/operationsMetrics";
 import { deriveOperationalHealth } from "../health/operationalHealth";
 import { useVehicleOperationsLedger } from "../vehicle/useVehicleOperationsLedger";
 import {
-  deriveReimbursementChipLabel,
   groupPendingReimbursements,
   toReimbursableEntries,
 } from "../reimbursement";
@@ -61,14 +59,6 @@ function getHealthChipStyle(state: HealthChipState) {
   return styles.chip_unavailable;
 }
 
-function paymentOwnerLabel(owner: string | null | undefined): string {
-  const v = String(owner ?? "").toLowerCase();
-  if (v === "driver") return "Paid by Driver";
-  if (v === "organization") return "Paid by Organization";
-  if (v === "supplier") return "Paid by Supplier";
-  return "Pending Settlement";
-}
-
 function getStatusChipStyle(state: StatusChipState) {
   if (state === "good") return styles.statusChipGood;
   if (state === "pending") return styles.statusChipPending;
@@ -85,38 +75,248 @@ function eventSeverity(eventType: string): TimelineSeverity {
   return "neutral";
 }
 
+export type OperationsHubDriverTheme = {
+  surface: string;
+  surfaceElevated: string;
+  border: string;
+  text: string;
+  textMuted: string;
+  emerald: string;
+  emeraldMuted: string;
+  emeraldDark: string;
+  background: string;
+  isDark: boolean;
+};
+
+type HubVariantStyles = {
+  card: ViewStyle;
+  header: ViewStyle;
+  headerLeft: ViewStyle;
+  title: TextStyle;
+  sub: TextStyle;
+  healthStrip: ViewStyle;
+  execStrip: ViewStyle;
+  execCell: ViewStyle;
+  execLabel: TextStyle;
+  execValue: TextStyle;
+  compactGrid: ViewStyle;
+  compactCell: ViewStyle;
+  compactLabel: TextStyle;
+  compactValue: TextStyle;
+  sectionTitle: TextStyle;
+  expenseControlCard: ViewStyle;
+  expenseControlBtn: ViewStyle;
+  expenseControlBtnText: TextStyle;
+  timelineWrap: ViewStyle;
+  actions: ViewStyle;
+  actionBtn: ViewStyle;
+  actionBtnPrimary: ViewStyle;
+  actionBtnDark: ViewStyle;
+  actionText: TextStyle;
+  actionTextPrimary: TextStyle;
+  actionTextOnDark: TextStyle;
+};
+
+function makeDriverHubStyles(c: OperationsHubDriverTheme): HubVariantStyles {
+  const stripBg = c.isDark ? "rgba(16,185,129,0.06)" : c.emeraldMuted;
+  const cellBg = c.isDark ? c.surfaceElevated : c.surface;
+  return {
+    card: {
+      borderRadius: 14,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      padding: 10,
+      gap: 10,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    headerLeft: { flex: 1, minWidth: 0 },
+    title: {
+      fontSize: 9,
+      fontWeight: "800",
+      color: c.text,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+    },
+    sub: {
+      marginTop: 2,
+      fontSize: 10,
+      fontWeight: "600",
+      color: c.textMuted,
+      lineHeight: 14,
+    },
+    healthStrip: {
+      borderRadius: 12,
+      borderColor: c.border,
+      backgroundColor: stripBg,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+    },
+    execStrip: {
+      borderBottomColor: c.border,
+      gap: 8,
+    },
+    execCell: {
+      width: "48%",
+      borderRadius: 10,
+      borderColor: c.border,
+      backgroundColor: cellBg,
+      paddingHorizontal: 8,
+      paddingVertical: 7,
+    },
+    execLabel: {
+      fontSize: 8,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.7,
+      color: c.textMuted,
+    },
+    execValue: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.text,
+    },
+    compactGrid: {
+      borderRadius: 12,
+      borderColor: c.border,
+      overflow: "hidden",
+    },
+    compactCell: {
+      backgroundColor: cellBg,
+      borderColor: c.border,
+      paddingVertical: 10,
+    },
+    compactLabel: {
+      fontSize: 8,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      color: c.textMuted,
+    },
+    compactValue: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: c.text,
+    },
+    sectionTitle: {
+      fontSize: 9,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+      color: c.textMuted,
+    },
+    expenseControlCard: {
+      borderRadius: 12,
+      borderColor: c.border,
+      backgroundColor: stripBg,
+      flexDirection: "column",
+      alignItems: "stretch",
+      gap: 8,
+    },
+    expenseControlBtn: {
+      borderRadius: 10,
+      backgroundColor: c.emeraldDark,
+      borderColor: c.emeraldDark,
+      width: "100%",
+    },
+    expenseControlBtnText: {
+      fontSize: 10,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+      color: "#fff",
+    },
+    timelineWrap: {
+      borderTopColor: c.border,
+      paddingTop: 8,
+    },
+    actions: { gap: 6 },
+    actionBtn: {
+      borderRadius: 10,
+      borderColor: c.border,
+      backgroundColor: cellBg,
+      minWidth: "30%",
+      flexGrow: 1,
+    },
+    actionBtnPrimary: {
+      backgroundColor: c.emeraldMuted,
+      borderColor: c.emerald,
+    },
+    actionBtnDark: {
+      backgroundColor: c.emeraldDark,
+      borderColor: c.emeraldDark,
+    },
+    actionText: {
+      fontSize: 9,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      color: c.text,
+    },
+    actionTextPrimary: { color: c.emerald },
+    actionTextOnDark: { color: "#fff" },
+  };
+}
+
 export function OperationsHub({
   trip,
+  variant = "default",
+  driverTheme,
+  hideHeader = false,
   onEditStart,
   onEditEnd,
   onAddFuel,
   onAddToll,
+  onOpenExpenses,
 }: {
   trip: TripRow;
+  /** Pulse intelligence layout — always expanded, compact executive styling. */
+  variant?: "default" | "pulse" | "driver";
+  /** Required when variant is driver — theme tokens from driver app. */
+  driverTheme?: OperationsHubDriverTheme;
+  /** Omit top header (e.g. driver tab provides its own hero). */
+  hideHeader?: boolean;
   onEditStart?: () => void;
   onEditEnd?: () => void;
   onAddFuel?: () => void;
   onAddToll?: () => void;
+  onOpenExpenses?: () => void;
 }) {
   const { profile } = useAuth();
-  const [expanded, setExpanded] = useState(false);
+  const isPulse = variant === "pulse";
+  const isDriver = variant === "driver";
+  const isThemed = isPulse || isDriver;
+  const [expanded, setExpanded] = useState(isThemed);
+  const showDetails = isThemed || expanded;
+  const driverHubStyles = useMemo(
+    () => (isDriver && driverTheme ? makeDriverHubStyles(driverTheme) : null),
+    [isDriver, driverTheme],
+  );
+  const hubStyles: HubVariantStyles | null = isDriver
+    ? driverHubStyles
+    : isPulse
+      ? (pulseStyles as HubVariantStyles)
+      : null;
   const reviewFuel = useReviewTripFuelEntry();
   const reviewToll = useReviewTripTollEntry();
   const setFuelReimbursement = useSetTripFuelReimbursementState();
   const setTollReimbursement = useSetTripTollReimbursementState();
   const snapshot = toVerificationSnapshot(trip);
   const capabilities = getTripOperationalCapabilities(trip);
-  const actorPermissions = getActorOperationalPermissions(profile?.role ?? null);
   const enabledSections = selectOperationsHubSections(trip);
-  const summaryQuery = useTripOperationsSummary(trip.id, { enabled: expanded });
-  const timelineQuery = useTripOperationalTimeline(trip.id, { enabled: expanded });
+  const summaryQuery = useTripOperationsSummary(trip.id, { enabled: showDetails });
+  const timelineQuery = useTripOperationalTimeline(trip.id, { enabled: showDetails });
   const postingEnabled =
     String(process.env.EXPO_PUBLIC_ENABLE_VEHICLE_LEDGER_POSTING ?? "false").toLowerCase() ===
     "true";
   const vehicleLedger = useVehicleOperationsLedger({
     organizationId: trip.organization_id,
     vehicleId: trip.vehicle_id ?? null,
-    enabled: expanded && capabilities.canTrackVehicleEconomics && !!trip.vehicle_id,
+    enabled: showDetails && capabilities.canTrackVehicleEconomics && !!trip.vehicle_id,
   });
   const updatedIdentity = useResolvedIdentity({
     userId: snapshot.odometerUpdatedBy,
@@ -125,14 +325,14 @@ export function OperationsHub({
   });
   const health = deriveOperationalHealth(trip);
   const observability = useOperationalObservability({
-    tripId: expanded ? trip.id : null,
-    enabled: expanded,
+    tripId: showDetails ? trip.id : null,
+    enabled: showDetails,
   });
   const operationalHealth = useOperationalHealthSnapshot({
-    organizationId: expanded ? trip.organization_id : null,
-    enabled: expanded,
+    organizationId: showDetails ? trip.organization_id : null,
+    enabled: showDetails,
   });
-  const reconciliation = usePostingReconciliationState(expanded ? trip.id : null, expanded);
+  const reconciliation = usePostingReconciliationState(showDetails ? trip.id : null, showDetails);
   const runReconciliation = useRunPostingReconciliation();
 
   const metrics = useMemo(() => {
@@ -301,66 +501,6 @@ export function OperationsHub({
     return Array.from(byDay.entries()).map(([day, items]) => ({ day, items }));
   }, [timelineRows]);
 
-  const handleApproveFuel = async (fuelEntryId: string) => {
-    await reviewFuel.mutateAsync({
-      tripId: trip.id,
-      fuelEntryId,
-      approvalState: "approved",
-      reviewerUserId: profile?.uid ?? null,
-    });
-  };
-
-  const handleRejectFuel = async (fuelEntryId: string) => {
-    await reviewFuel.mutateAsync({
-      tripId: trip.id,
-      fuelEntryId,
-      approvalState: "rejected",
-      reviewerUserId: profile?.uid ?? null,
-    });
-  };
-
-  const handleApproveToll = async (tollEntryId: string) => {
-    await reviewToll.mutateAsync({
-      tripId: trip.id,
-      tollEntryId,
-      approvalState: "approved",
-      reviewerUserId: profile?.uid ?? null,
-    });
-  };
-
-  const handleRejectToll = async (tollEntryId: string) => {
-    await reviewToll.mutateAsync({
-      tripId: trip.id,
-      tollEntryId,
-      approvalState: "rejected",
-      reviewerUserId: profile?.uid ?? null,
-    });
-  };
-
-  const handleSetFuelReimbursement = async (
-    fuelEntryId: string,
-    nextState: "reimbursement_pending" | "reimbursed" | "rejected",
-  ) => {
-    await setFuelReimbursement.mutateAsync({
-      tripId: trip.id,
-      fuelEntryId,
-      nextState,
-      actorUserId: profile?.uid ?? null,
-    });
-  };
-
-  const handleSetTollReimbursement = async (
-    tollEntryId: string,
-    nextState: "reimbursement_pending" | "reimbursed" | "rejected",
-  ) => {
-    await setTollReimbursement.mutateAsync({
-      tripId: trip.id,
-      tollEntryId,
-      nextState,
-      actorUserId: profile?.uid ?? null,
-    });
-  };
-
   const healthChips = useMemo(() => {
     const summary = summaryQuery.data;
     const hasOps = !!summary && summary.fuelEntries.length + summary.tollEntries.length > 0;
@@ -397,51 +537,71 @@ export function OperationsHub({
   }, [summaryQuery.data, snapshot.state, capabilities, ledgerState]);
 
   return (
-    <View style={styles.card}>
-      <Pressable style={styles.header} onPress={() => setExpanded((v) => !v)}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.title}>Operations Hub</Text>
-          <Text style={styles.sub}>
-            {capabilities.isAssetTrip
-              ? "Asset operations, approval controls and vehicle economics"
-              : "Aggregation operations, verification and coordination controls"}
-          </Text>
-        </View>
-        <View style={styles.headerRight}>
+    <View style={[styles.card, hubStyles?.card]}>
+      {!hideHeader ? (
+        isThemed ? (
+        <View style={hubStyles?.header ?? pulseStyles.header}>
+          <View style={hubStyles?.headerLeft ?? pulseStyles.headerLeft}>
+            <Text style={hubStyles?.title ?? pulseStyles.title}>Operations hub</Text>
+            <Text style={hubStyles?.sub ?? pulseStyles.sub}>
+              {capabilities.isAssetTrip
+                ? "Asset manifest · fuel, toll & vehicle economics"
+                : "Aggregation manifest · coordination & verification"}
+            </Text>
+          </View>
           <VerificationStatusChip state={snapshot.state} />
-          <Text style={styles.toggle}>{expanded ? "Hide" : "View"}</Text>
         </View>
-      </Pressable>
+      ) : (
+        <Pressable style={styles.header} onPress={() => setExpanded((v) => !v)}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.title}>Operations Hub</Text>
+            <Text style={styles.sub}>
+              {capabilities.isAssetTrip
+                ? "Asset operations, approval controls and vehicle economics"
+                : "Aggregation operations, verification and coordination controls"}
+            </Text>
+          </View>
+          <View style={styles.headerRight}>
+            <VerificationStatusChip state={snapshot.state} />
+            <Text style={styles.toggle}>{expanded ? "Hide" : "View"}</Text>
+          </View>
+        </Pressable>
+      )
+      ) : null}
 
-      <View style={styles.healthStrip}>
-        <View style={styles.execStrip}>
-          <View style={styles.execCell}>
-            <Text style={styles.execLabel}>Operational Code</Text>
-            <Text style={styles.execValue}>{operationalCode}</Text>
+      <View style={[styles.healthStrip, hubStyles?.healthStrip]}>
+        <View style={[styles.execStrip, hubStyles?.execStrip]}>
+          <View style={[styles.execCell, hubStyles?.execCell]}>
+            <Text style={[styles.execLabel, hubStyles?.execLabel]}>Operational Code</Text>
+            <Text style={[styles.execValue, hubStyles?.execValue]}>{operationalCode}</Text>
           </View>
-          <View style={styles.execCell}>
-            <Text style={styles.execLabel}>Trip Status</Text>
-            <Text style={styles.execValue}>{String(trip.status ?? "—").replaceAll("_", " ")}</Text>
+          <View style={[styles.execCell, hubStyles?.execCell]}>
+            <Text style={[styles.execLabel, hubStyles?.execLabel]}>Trip Status</Text>
+            <Text style={[styles.execValue, hubStyles?.execValue]}>
+              {String(trip.status ?? "—").replaceAll("_", " ")}
+            </Text>
           </View>
-          <View style={styles.execCell}>
-            <Text style={styles.execLabel}>Posting</Text>
-            <Text style={styles.execValue}>{reconciliationChip.label}</Text>
+          <View style={[styles.execCell, hubStyles?.execCell]}>
+            <Text style={[styles.execLabel, hubStyles?.execLabel]}>Posting</Text>
+            <Text style={[styles.execValue, hubStyles?.execValue]}>
+              {reconciliationChip.label}
+            </Text>
           </View>
-          <View style={styles.execCell}>
-            <Text style={styles.execLabel}>Approval</Text>
-            <Text style={styles.execValue}>
+          <View style={[styles.execCell, hubStyles?.execCell]}>
+            <Text style={[styles.execLabel, hubStyles?.execLabel]}>Approval</Text>
+            <Text style={[styles.execValue, hubStyles?.execValue]}>
               {totalPendingApprovals > 0 ? `${totalPendingApprovals} Pending` : "Cleared"}
             </Text>
           </View>
-          <View style={styles.execCell}>
-            <Text style={styles.execLabel}>Reimbursement</Text>
-            <Text style={styles.execValue}>
+          <View style={[styles.execCell, hubStyles?.execCell]}>
+            <Text style={[styles.execLabel, hubStyles?.execLabel]}>Reimbursement</Text>
+            <Text style={[styles.execValue, hubStyles?.execValue]}>
               {pendingReimbursements.length > 0 ? `${pendingReimbursements.length} Pending` : "Settled"}
             </Text>
           </View>
-          <View style={styles.execCell}>
-            <Text style={styles.execLabel}>Sync</Text>
-            <Text style={styles.execValue}>{syncStateLabel}</Text>
+          <View style={[styles.execCell, hubStyles?.execCell]}>
+            <Text style={[styles.execLabel, hubStyles?.execLabel]}>Sync</Text>
+            <Text style={[styles.execValue, hubStyles?.execValue]}>{syncStateLabel}</Text>
           </View>
         </View>
         <View style={styles.healthTop}>
@@ -517,7 +677,7 @@ export function OperationsHub({
         </View>
       </View>
 
-      {expanded ? (
+      {showDetails ? (
         <>
           <View style={styles.sectionsRow}>
             <Text style={styles.metricMeta}>Sections: {enabledSections.join(" • ")}</Text>
@@ -535,42 +695,44 @@ export function OperationsHub({
           {summaryQuery.isLoading ? (
             <Text style={styles.loading}>Loading operations…</Text>
           ) : summaryQuery.data ? (
-            <View style={styles.compactGrid}>
-              <View style={styles.compactCell}>
-                <Text style={styles.compactLabel}>Distance</Text>
-                <Text style={styles.compactValue}>
+            <View style={[styles.compactGrid, hubStyles?.compactGrid]}>
+              <View style={[styles.compactCell, hubStyles?.compactCell]}>
+                <Text style={[styles.compactLabel, hubStyles?.compactLabel]}>Distance</Text>
+                <Text style={[styles.compactValue, hubStyles?.compactValue]}>
                   {km(summaryQuery.data.mileage.distanceKm ?? snapshot.odometerDistanceKm)}
                 </Text>
               </View>
-              <View style={styles.compactCell}>
-                <Text style={styles.compactLabel}>Fuel</Text>
-                <Text style={styles.compactValue}>
+              <View style={[styles.compactCell, hubStyles?.compactCell]}>
+                <Text style={[styles.compactLabel, hubStyles?.compactLabel]}>Fuel</Text>
+                <Text style={[styles.compactValue, hubStyles?.compactValue]}>
                   {capabilities.canTrackFuel
                     ? inr(summaryQuery.data.mileage.totalFuelSpendInr)
                     : "Notes only"}
                 </Text>
               </View>
-              <View style={styles.compactCell}>
-                <Text style={styles.compactLabel}>Toll</Text>
-                <Text style={styles.compactValue}>{inr(summaryQuery.data.mileage.totalTollSpendInr)}</Text>
+              <View style={[styles.compactCell, hubStyles?.compactCell]}>
+                <Text style={[styles.compactLabel, hubStyles?.compactLabel]}>Toll</Text>
+                <Text style={[styles.compactValue, hubStyles?.compactValue]}>
+                  {inr(summaryQuery.data.mileage.totalTollSpendInr)}
+                </Text>
               </View>
-              <View style={styles.compactCell}>
-                <Text style={styles.compactLabel}>Cost/KM</Text>
-                <Text style={styles.compactValue}>
+              <View style={[styles.compactCell, hubStyles?.compactCell]}>
+                <Text style={[styles.compactLabel, hubStyles?.compactLabel]}>Cost/KM</Text>
+                <Text style={[styles.compactValue, hubStyles?.compactValue]}>
                   {capabilities.canTrackVehicleEconomics
                     ? metrics?.fuelCostPerKmLabel ?? "—"
                     : "N/A"}
                 </Text>
               </View>
-              <View style={styles.compactCell}>
-                <Text style={styles.compactLabel}>KM/L</Text>
-                <Text style={styles.compactValue}>
+              <View style={[styles.compactCell, hubStyles?.compactCell]}>
+                <Text style={[styles.compactLabel, hubStyles?.compactLabel]}>KM/L</Text>
+                <Text style={[styles.compactValue, hubStyles?.compactValue]}>
                   {capabilities.canTrackMileage ? metrics?.efficiencyLabel ?? "—" : "N/A"}
                 </Text>
               </View>
-              <View style={styles.compactCell}>
-                <Text style={styles.compactLabel}>Trust</Text>
-                <Text style={styles.compactValue}>
+              <View style={[styles.compactCell, hubStyles?.compactCell]}>
+                <Text style={[styles.compactLabel, hubStyles?.compactLabel]}>Trust</Text>
+                <Text style={[styles.compactValue, hubStyles?.compactValue]}>
                   {updatedIdentity.data?.trustLevel?.toUpperCase() ?? "LOW"}
                 </Text>
               </View>
@@ -608,93 +770,32 @@ export function OperationsHub({
             )}
           </View>
 
-          {actorPermissions.canApproveOperationalEvents && totalPendingApprovals > 0 ? (
-            <View style={styles.queueWrap}>
-              <Text style={styles.sectionTitle}>Approval Queue ({totalPendingApprovals})</Text>
-              {pendingFuelApprovals.slice(0, 3).map((entry) => (
-                <View key={entry.id} style={styles.queueItemCompact}>
-                  <Text style={styles.timelineMeta} numberOfLines={1}>
-                    Fuel {inr(Number(entry.amount_inr ?? 0))} · {paymentOwnerLabel(entry.payment_owner)}
-                  </Text>
-                  <View style={styles.queueActions}>
-                    <Pressable style={styles.queueBtn} onPress={() => void handleApproveFuel(entry.id)}>
-                      <Text style={styles.queueBtnText}>Approve</Text>
-                    </Pressable>
-                    <Pressable style={styles.queueBtn} onPress={() => void handleRejectFuel(entry.id)}>
-                      <Text style={styles.queueBtnText}>Reject</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-              {pendingTollApprovals.slice(0, 3).map((entry) => (
-                <View key={entry.id} style={styles.queueItemCompact}>
-                  <Text style={styles.timelineMeta} numberOfLines={1}>
-                    Toll {inr(Number(entry.amount_inr ?? 0))} · {paymentOwnerLabel(entry.payment_owner)}
-                  </Text>
-                  <View style={styles.queueActions}>
-                    <Pressable style={styles.queueBtn} onPress={() => void handleApproveToll(entry.id)}>
-                      <Text style={styles.queueBtnText}>Approve</Text>
-                    </Pressable>
-                    <Pressable style={styles.queueBtn} onPress={() => void handleRejectToll(entry.id)}>
-                      <Text style={styles.queueBtnText}>Reject</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {pendingReimbursements.length > 0 ? (
-            <View style={styles.queueWrap}>
-              <Text style={styles.sectionTitle}>
-                Pending Reimbursements ({pendingReimbursements.length})
+          <View style={[styles.expenseControlCard, hubStyles?.expenseControlCard]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, hubStyles?.sectionTitle]}>
+                Expense Control Layer
               </Text>
-              {pendingReimbursements.slice(0, 4).map((entry) => (
-                <View key={`${entry.kind}-${entry.id}`} style={styles.queueItemCompact}>
-                  <Text style={styles.timelineMeta} numberOfLines={1}>
-                    {entry.kind.toUpperCase()} {inr(entry.amount_inr)} ·{" "}
-                    {deriveReimbursementChipLabel(entry.reimbursement_state ?? "reported")}
-                  </Text>
-                  <View style={styles.queueActions}>
-                    {entry.kind === "fuel" ? (
-                      <>
-                        <Pressable
-                          style={styles.queueBtn}
-                          onPress={() => void handleSetFuelReimbursement(entry.id, "reimbursement_pending")}
-                        >
-                          <Text style={styles.queueBtnText}>Queue</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.queueBtn}
-                          onPress={() => void handleSetFuelReimbursement(entry.id, "reimbursed")}
-                        >
-                          <Text style={styles.queueBtnText}>Reimbursed</Text>
-                        </Pressable>
-                      </>
-                    ) : (
-                      <>
-                        <Pressable
-                          style={styles.queueBtn}
-                          onPress={() => void handleSetTollReimbursement(entry.id, "reimbursement_pending")}
-                        >
-                          <Text style={styles.queueBtnText}>Queue</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.queueBtn}
-                          onPress={() => void handleSetTollReimbursement(entry.id, "reimbursed")}
-                        >
-                          <Text style={styles.queueBtnText}>Reimbursed</Text>
-                        </Pressable>
-                      </>
-                    )}
-                  </View>
-                </View>
-              ))}
+              <Text style={styles.metricMeta}>
+                {totalPendingApprovals} approval pending · {pendingReimbursements.length} settlement pending
+              </Text>
+              <Text style={styles.metricMeta}>
+                Approval, posting and settlement actions are centralized in Expense Control.
+              </Text>
             </View>
-          ) : null}
+            <Pressable
+              style={[styles.expenseControlBtn, hubStyles?.expenseControlBtn]}
+              onPress={onOpenExpenses}
+            >
+              <Text style={[styles.expenseControlBtnText, hubStyles?.expenseControlBtnText]}>
+                Open Expenses
+              </Text>
+            </Pressable>
+          </View>
 
-          <View style={styles.timelineWrap}>
-            <Text style={styles.sectionTitle}>Operational Timeline</Text>
+          <View style={[styles.timelineWrap, hubStyles?.timelineWrap]}>
+            <Text style={[styles.sectionTitle, hubStyles?.sectionTitle]}>
+              Operational Timeline
+            </Text>
             {latestTimelineEvent ? (
               <View style={styles.latestEventWrap}>
                 <Text style={styles.latestEventLabel}>Latest Event</Text>
@@ -749,23 +850,41 @@ export function OperationsHub({
           </View>
 
           <OperationalBottomActionBar reserveSafeArea={false} style={styles.actionBar}>
-            <View style={styles.actions}>
+            <View style={[styles.actions, hubStyles?.actions]}>
               {capabilities.canTrackFuel ? (
-                <Pressable style={styles.actionBtn} onPress={onAddFuel}>
-                  <Text style={styles.actionText}>Fuel</Text>
+                <Pressable
+                  style={[styles.actionBtn, hubStyles?.actionBtnPrimary]}
+                  onPress={onAddFuel}
+                >
+                  <Text style={[styles.actionText, hubStyles?.actionTextPrimary]}>Fuel</Text>
                 </Pressable>
               ) : null}
-              <Pressable style={styles.actionBtn} onPress={onAddToll}>
-                <Text style={styles.actionText}>Toll</Text>
-              </Pressable>
-              <Pressable style={styles.actionBtn} onPress={onEditStart}>
-                <Text style={styles.actionText}>Start KM</Text>
-              </Pressable>
-              <Pressable style={styles.actionBtn} onPress={onEditEnd}>
-                <Text style={styles.actionText}>End KM</Text>
+              <Pressable
+                style={[styles.actionBtn, hubStyles?.actionBtn]}
+                onPress={onAddToll}
+              >
+                <Text style={[styles.actionText, hubStyles?.actionText]}>Toll</Text>
               </Pressable>
               <Pressable
-                style={styles.actionBtn}
+                style={[styles.actionBtn, hubStyles?.actionBtn]}
+                onPress={onOpenExpenses}
+              >
+                <Text style={[styles.actionText, hubStyles?.actionText]}>Expenses</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.actionBtn, hubStyles?.actionBtn]}
+                onPress={onEditStart}
+              >
+                <Text style={[styles.actionText, hubStyles?.actionText]}>Start KM</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.actionBtn, hubStyles?.actionBtn]}
+                onPress={onEditEnd}
+              >
+                <Text style={[styles.actionText, hubStyles?.actionText]}>End KM</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.actionBtn, hubStyles?.actionBtnDark]}
                 onPress={() =>
                   void runReconciliation.mutateAsync({
                     tripId: trip.id,
@@ -773,7 +892,9 @@ export function OperationsHub({
                   })
                 }
               >
-                <Text style={styles.actionText}>Reconcile</Text>
+                <Text style={[styles.actionText, hubStyles?.actionTextOnDark]}>
+                  Reconcile
+                </Text>
               </Pressable>
               <View style={styles.actionStatusPill}>
                 <Text style={styles.actionStatusText}>
@@ -905,6 +1026,31 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     gap: 2,
   },
+  expenseControlCard: {
+    marginTop: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    borderRadius: 10,
+    backgroundColor: Theme.whiteMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  expenseControlBtn: {
+    borderWidth: 1,
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  expenseControlBtnText: {
+    color: Theme.surface,
+    fontSize: 11,
+    fontWeight: "700",
+  },
   sectionsRow: { gap: 2 },
   timelineWrap: { gap: 0, borderTopWidth: StyleSheet.hairlineWidth, borderColor: Theme.border },
   latestEventWrap: {
@@ -995,4 +1141,150 @@ const styles = StyleSheet.create({
     minWidth: "100%",
   },
   actionStatusText: { color: Theme.textSecondary, fontSize: 10, fontWeight: "700" },
+});
+
+const pulseStyles = StyleSheet.create({
+  card: {
+    borderRadius: 22,
+    borderColor: "#e8ecf4",
+    backgroundColor: "#fff",
+    padding: 12,
+    gap: 10,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  headerLeft: { flex: 1, minWidth: 0 },
+  title: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0f172a",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  sub: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 14,
+  },
+  healthStrip: {
+    borderRadius: 14,
+    borderColor: "#eef2f7",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  execStrip: {
+    borderBottomColor: "#eef2f7",
+    gap: 8,
+  },
+  execCell: {
+    width: "48%",
+    borderRadius: 10,
+    borderColor: "#eef2f7",
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  execLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    color: "#94a3b8",
+  },
+  execValue: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  compactGrid: {
+    borderRadius: 14,
+    borderColor: "#eef2f7",
+    overflow: "hidden",
+  },
+  compactCell: {
+    backgroundColor: "#fff",
+    borderColor: "#eef2f7",
+    paddingVertical: 10,
+  },
+  compactLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#94a3b8",
+  },
+  compactValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  sectionTitle: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: "#64748b",
+  },
+  expenseControlCard: {
+    borderRadius: 14,
+    borderColor: "#eef2f7",
+    backgroundColor: "#f8fafc",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  expenseControlBtn: {
+    borderRadius: 10,
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+    width: "100%",
+  },
+  expenseControlBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  timelineWrap: {
+    borderTopColor: "#eef2f7",
+    paddingTop: 8,
+  },
+  actions: {
+    gap: 6,
+  },
+  actionBtn: {
+    borderRadius: 10,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    minWidth: "30%",
+    flexGrow: 1,
+  },
+  actionBtnPrimary: {
+    backgroundColor: "#eef2ff",
+    borderColor: "#c7d2fe",
+  },
+  actionBtnDark: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  actionText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    color: "#334155",
+  },
+  actionTextPrimary: {
+    color: "#4338ca",
+  },
+  actionTextOnDark: {
+    color: "#fff",
+  },
 });

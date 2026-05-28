@@ -14,5 +14,10 @@ export {
   type ExpenseLineItem,
   type TripPnLRow,
   type VehiclePnLRow,
+  type VehicleLedgerExpenseRow,
   type TripExpenseGrouped,
 } from './garragePnL';
+export type {
+  VehicleProfitabilityBreakdown,
+  VehicleProfitabilityState,
+} from "./vehicleProfitabilityBreakdown";

@@ -28,32 +28,11 @@ import {
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-
-const FLEX_CARD_BREAKPOINT = 720;
-const FLEX_CARD_RATIO = 0.4;
-/**
- * Side flex card sized to match the canonical workspace reference
- * (`w-[40vw] min-w-[380px] max-w-[480px]`). The previous 420–720 px
- * range felt too wide on standard desktops — content rattled in the
- * column and typography read too sparse. 380–480 keeps the card
- * thumb-graspable on a single-monitor browser, matches the density
- * of the rest of the app (network cards, detail forms), and gives
- * the underlying screen more breathing room behind the backdrop.
- */
-const FLEX_CARD_MIN_WIDTH = 380;
-const FLEX_CARD_MAX_WIDTH = 480;
-const FLEX_CARD_CANVAS = "#f4f6fb";
+import { StyleSheet, View } from "react-native";
 
 export default function WorkspaceScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ panel?: string | string[] }>();
-  const { width } = useWindowDimensions();
 
   const activePanel = useMemo(
     () => parseWorkspacePanelId(params.panel),
@@ -75,14 +54,6 @@ export default function WorkspaceScreen() {
   const closePanel = useCallback(() => {
     router.setParams({ panel: "" });
   }, [router]);
-
-  const isNarrow = width < FLEX_CARD_BREAKPOINT;
-  const cardWidth = isNarrow
-    ? width
-    : Math.min(
-        FLEX_CARD_MAX_WIDTH,
-        Math.max(Math.round(width * FLEX_CARD_RATIO), FLEX_CARD_MIN_WIDTH),
-      );
 
   const panelContent = useMemo(() => {
     if (activePanel === "account") {
@@ -110,15 +81,7 @@ export default function WorkspaceScreen() {
 
   return (
     <View style={styles.root}>
-      {!isNarrow ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close workspace"
-          onPress={closeOverlay}
-          style={styles.backdrop}
-        />
-      ) : null}
-      <View style={[styles.card, { width: cardWidth }]}>
+      <View style={styles.page}>
         <WorkspaceFeedbackProvider>
           {activePanel ? (
             panelContent
@@ -138,21 +101,10 @@ export default function WorkspaceScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    flexDirection: "row",
-    backgroundColor: "transparent",
+    backgroundColor: "#f4f6fb",
   },
-  backdrop: {
+  page: {
     flex: 1,
-    backgroundColor: "rgba(15,23,42,0.32)",
-  },
-  card: {
-    height: "100%",
-    backgroundColor: FLEX_CARD_CANVAS,
-    overflow: "hidden",
-    shadowColor: "#0f172a",
-    shadowOffset: { width: -10, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 32,
-    elevation: 24,
+    backgroundColor: "#f4f6fb",
   },
 });

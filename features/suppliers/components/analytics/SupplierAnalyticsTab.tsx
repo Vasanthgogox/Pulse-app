@@ -25,6 +25,7 @@
 import { useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
+import { partyAnalyticsLayout } from "@/components/analytics/partyAnalyticsLayout";
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
 
@@ -89,17 +90,6 @@ function toPayableLine(months: readonly SupplierMonthlyTrendPoint[]): TrendPoint
   return months.map((m) => ({
     label: m.label,
     revenue: m.payable,
-    expense: 0,
-    profit: 0,
-    margin: 0,
-    tripCount: m.trips,
-  }));
-}
-
-function toMarginLine(months: readonly SupplierMonthlyTrendPoint[]): TrendPoint[] {
-  return months.map((m) => ({
-    label: m.label,
-    revenue: m.margin,
     expense: 0,
     profit: 0,
     margin: 0,
@@ -194,41 +184,46 @@ export default function SupplierAnalyticsTab({
     ? Math.max(...pricing.lanes.map((l) => l.avgRate))
     : 1
 
+  const settlementPct = useMemo(() => {
+    const total = financial.payable;
+    const paid = financial.paid;
+    return total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  }, [financial.paid, financial.payable]);
+
   const headerKpiRows = useMemo(
     (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
       [
+        {
+          id: "payable",
+          label: "Total payable",
+          value: formatINR(financial.payable),
+          subtext: "Contract cost · 12 mo",
+          valueColor: Theme.primary,
+          iconName: "credit-card",
+        },
+        {
+          id: "paid",
+          label: "Paid out",
+          value: formatINR(financial.paid),
+          subtext: `${settlementPct}% settled`,
+          valueColor: Theme.positive,
+          iconName: "money",
+        },
+        {
+          id: "due",
+          label: "Payable due",
+          value: formatINR(financial.outstanding),
+          subtext: `Avg ${financial.avgSettlementDays}d to settle`,
+          valueColor: financial.outstanding > 0 ? Theme.negative : Theme.positive,
+          iconName: "exclamation-circle",
+        },
         {
           id: "trips",
           label: "Trips executed",
           value: `${kpis.tripsExecuted}`,
           subtext: `${operations.completionPct.toFixed(0)}% completion`,
-          valueColor: Theme.primary,
-          iconName: "truck",
-        },
-        {
-          id: "revenue",
-          label: "Revenue handled",
-          value: formatINR(kpis.revenueHandled),
-          subtext: "Last 12 months",
           valueColor: Theme.textBody,
-          iconName: "money",
-        },
-        {
-          id: "margin",
-          label: "Margin contribution",
-          value: formatINR(kpis.marginContribution),
-          subtext: `${kpis.marginContributionPct.toFixed(1)}% margin`,
-          valueColor:
-            kpis.marginContribution >= 0 ? Theme.positive : Theme.negative,
-          iconName: "line-chart",
-        },
-        {
-          id: "outstanding",
-          label: "Payable outstanding",
-          value: formatINR(kpis.outstanding),
-          subtext: `Avg ${financial.avgSettlementDays}d settlement`,
-          valueColor: Theme.negative,
-          iconName: "exclamation-circle",
+          iconName: "truck",
         },
       ],
       [
@@ -282,7 +277,7 @@ export default function SupplierAnalyticsTab({
         },
       ],
     ],
-    [kpis, operations, financial, score],
+    [financial, kpis, operations, score, settlementPct],
   )
 
   const opsKpiRows = useMemo(
@@ -412,14 +407,14 @@ export default function SupplierAnalyticsTab({
           iconName: "clock-o",
         },
         {
-          id: "f-margin",
-          label: "Margin %",
-          value: `${kpis.marginContributionPct.toFixed(1)}%`,
-          subtext: `${formatINRChip(financial.contractProfitability)} contract`,
+          id: "f-settlement-pct",
+          label: "Settlement rate",
+          value: `${settlementPct}%`,
+          subtext: "Paid vs total payable",
           valueColor:
-            kpis.marginContributionPct >= 15
+            settlementPct >= 80
               ? Theme.positive
-              : kpis.marginContributionPct >= 5
+              : settlementPct >= 50
                 ? Theme.warning
                 : Theme.negative,
           iconName: "percent",
@@ -427,7 +422,7 @@ export default function SupplierAnalyticsTab({
         null,
       ],
     ],
-    [financial, kpis],
+    [financial, settlementPct],
   )
 
   const pricingKpiRows = useMemo(
@@ -518,10 +513,15 @@ export default function SupplierAnalyticsTab({
 
   return (
     <PulseAnalyticsShell
-      title="Supplier reliability"
-      subtitle="Composite score across completion, on-time, cancellation, availability, pricing"
+      title="Supplier finance analytics"
+      subtitle={
+        supplier?.name
+          ? `${supplier.name} · payable, settlement, and trip performance`
+          : "Payable, settlement, and trip performance"
+      }
       embedded
     >
+      <View style={partyAnalyticsLayout.inset}>
       <PulseKpiGrid rows={headerKpiRows} />
 
       <PulseSection
@@ -585,8 +585,8 @@ export default function SupplierAnalyticsTab({
       </PulseSection>
 
       <PulseSection
-        title="Financial intelligence"
-        subtitle="Payable trend, settlement velocity, margin contribution"
+        title="Payable & settlement"
+        subtitle="What you owe this supplier and how fast you pay"
       >
         <PulseKpiGrid rows={financialKpiRows} />
         <PulseChartPanel
@@ -604,22 +604,9 @@ export default function SupplierAnalyticsTab({
         </PulseChartPanel>
         <PulseChartPanel
           title="Paid vs outstanding"
-          subtitle="Green = settled, red = still payable per month"
+          subtitle="Settled vs still payable each month"
         >
           <TrendBarChart data={toPaidVsOutstanding(monthly)} width={chartWidth} height={chartH} />
-        </PulseChartPanel>
-        <PulseChartPanel
-          title="Margin contribution"
-          subtitle="Net margin you earn on this supplier per month"
-        >
-          <TrendLineChart
-            data={toMarginLine(monthly)}
-            width={chartWidth}
-            height={chartH}
-            field="revenue"
-            color={Theme.chartSeries2}
-            gradientId="supplierMarginTrend"
-          />
         </PulseChartPanel>
       </PulseSection>
 
@@ -661,6 +648,7 @@ export default function SupplierAnalyticsTab({
           }))}
         />
       ) : null}
+      </View>
     </PulseAnalyticsShell>
   );
 }

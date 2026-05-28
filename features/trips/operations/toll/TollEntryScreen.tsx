@@ -2,38 +2,31 @@ import { SmartInput } from "@/components/mobile-input";
 import {
   OperationalBottomActionBar,
   OperationalButton,
+  OperationalChipSelect,
   OperationalHeader,
   Surface,
 } from "@/components/operational";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
-import { useSaveTripTollEntry } from "../queries/useTripOperations";
-import { useOperationsSyncState } from "../state/useOperationsSyncState";
+import { useMemo, useState } from "react";
+import { Alert, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { OperationalPaymentMode, OperationalPaymentOwner } from "../types";
-
-const PAYMENT_OWNERS: OperationalPaymentOwner[] = [
-  "organization",
-  "driver",
-  "supplier",
-  "unknown",
-];
-const PAYMENT_MODES: OperationalPaymentMode[] = [
-  "cash",
-  "fastag",
-  "card",
-  "credit",
-  "pending",
-  "unknown",
-];
+import { useSaveTripTollEntry } from "../queries/useTripOperations";
+import {
+  PAYMENT_MODE_OPTIONS,
+  TOLL_PAYMENT_OWNER_OPTIONS,
+} from "../shared/operationsEntryOptions";
+import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
+import { useOperationsSyncState } from "../state/useOperationsSyncState";
 
 export function TollEntryScreen({ trip }: { trip: TripRow }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const saveToll = useSaveTripTollEntry();
   const { pendingCount, failedCount, refresh } = useOperationsSyncState();
@@ -46,6 +39,11 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("unknown");
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+
+  const contextLine = useMemo(
+    () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
+    [trip.drop_location, trip.pickup_area],
+  );
 
   const handleCapture = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -75,7 +73,7 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
         paymentMode,
         receiptLocalUri: receiptUri,
       });
-      if (res.queued) setHint("Saved to outbox. Toll entry will sync when online.");
+      if (res.queued) setHint("Saved offline — will sync when connected.");
       await refresh();
       router.back();
     } catch (e) {
@@ -84,87 +82,80 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={s.screen}>
       <OperationalHeader
         title="Toll Entry"
-        subtitle="Manual toll logging. Optional and editable later."
+        subtitle={contextLine}
         onBack={() => router.back()}
+        density="high"
       />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Surface elevation={1}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={[
+          s.content,
+          { paddingBottom: insets.bottom + 88 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Surface elevation={1} density="high">
           <SmartInput
             type="currency"
             value={amountInr}
             onChange={(_, numeric) => setAmountInr(numeric)}
-            label="Toll Amount"
-            context={`${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`}
-            submitLabel="Apply Amount"
+            label="Toll amount"
+            submitLabel="Apply"
             required={false}
             validation={{ min: 0, max: 1000000 }}
           />
         </Surface>
 
-        <Surface elevation={1}>
-          <Text style={styles.label}>Toll Plaza (optional)</Text>
+        <Surface elevation={1} density="high">
+          <OperationalChipSelect
+            label="Entry type"
+            options={[
+              { value: "actual", label: "Actual" },
+              { value: "estimated", label: "Estimated" },
+            ]}
+            value={isEstimated ? "estimated" : "actual"}
+            onChange={(v) => setIsEstimated(v === "estimated")}
+          />
+        </Surface>
+
+        <Surface elevation={1} density="high">
+          <OperationalChipSelect
+            label="Paid by"
+            options={TOLL_PAYMENT_OWNER_OPTIONS}
+            value={paymentOwner}
+            onChange={setPaymentOwner}
+          />
+          <View style={s.divider} />
+          <OperationalChipSelect
+            label="Payment mode"
+            options={PAYMENT_MODE_OPTIONS}
+            value={paymentMode}
+            onChange={setPaymentMode}
+          />
+        </Surface>
+
+        <Surface elevation={1} density="high">
+          <Text style={s.fieldLabel}>Plaza (optional)</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             value={plazaName}
             onChangeText={setPlazaName}
-            placeholder="Enter toll plaza"
+            placeholder="Toll plaza name"
             placeholderTextColor={Theme.textMuted}
           />
-          <Text style={[styles.label, { marginTop: 10 }]}>Notes (optional)</Text>
+          <Text style={[s.fieldLabel, { marginTop: 8 }]}>Notes (optional)</Text>
           <TextInput
-            style={[styles.input, styles.notes]}
+            style={[s.input, s.notes]}
             value={notes}
             onChangeText={setNotes}
             multiline
-            placeholder="Any operational note"
+            placeholder="Short note"
             placeholderTextColor={Theme.textMuted}
           />
-        </Surface>
-
-        <Surface elevation={1}>
-          <Text style={styles.label}>Payment Owner</Text>
-          <View style={styles.entryTypeRow}>
-            {PAYMENT_OWNERS.map((owner) => (
-              <OperationalButton
-                key={owner}
-                intent={paymentOwner === owner ? "primary" : "utility"}
-                label={owner.replaceAll("_", " ").toUpperCase()}
-                onPress={() => setPaymentOwner(owner)}
-              />
-            ))}
-          </View>
-          <Text style={[styles.label, { marginTop: 10 }]}>Payment Mode</Text>
-          <View style={styles.entryTypeRow}>
-            {PAYMENT_MODES.map((mode) => (
-              <OperationalButton
-                key={mode}
-                intent={paymentMode === mode ? "primary" : "utility"}
-                label={mode.replaceAll("_", " ").toUpperCase()}
-                onPress={() => setPaymentMode(mode)}
-              />
-            ))}
-          </View>
-        </Surface>
-
-        <Surface elevation={1}>
-          <Text style={styles.label}>Entry Type</Text>
-          <View style={styles.entryTypeRow}>
-            <OperationalButton
-              intent={!isEstimated ? "primary" : "utility"}
-              label="Actual Toll"
-              onPress={() => setIsEstimated(false)}
-              fullWidth
-            />
-            <OperationalButton
-              intent={isEstimated ? "primary" : "utility"}
-              label="Estimated Toll"
-              onPress={() => setIsEstimated(true)}
-              fullWidth
-            />
-          </View>
         </Surface>
 
         <OdometerPhotoCapture
@@ -172,54 +163,41 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
           busy={saveToll.isPending}
           onCapture={handleCapture}
           onRetake={handleCapture}
+          compact
+          title="Receipt"
+          subtitle="Optional · camera capture"
+          captureLabel="Add receipt"
+          retakeLabel="Retake"
         />
 
-        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        {hint ? <Text style={s.hint}>{hint}</Text> : null}
         {pendingCount > 0 ? (
-          <Text style={styles.hint}>
-            Pending sync items: {pendingCount}
-            {failedCount > 0 ? ` · failed: ${failedCount}` : ""}
+          <Text style={s.hint}>
+            Sync queue: {pendingCount}
+            {failedCount > 0 ? ` · failed ${failedCount}` : ""}
           </Text>
         ) : null}
       </ScrollView>
 
       <OperationalBottomActionBar>
-        <View style={styles.footer}>
+        <View style={s.footer}>
           <OperationalButton
             intent="utility"
-            label="Skip for now"
+            label="Skip"
             onPress={() => router.back()}
-            fullWidth
+            density="high"
+            style={s.footerBtn}
           />
           <OperationalButton
             intent="bottomSticky"
-            label={saveToll.isPending ? "Saving..." : "Save Toll Entry"}
+            label={saveToll.isPending ? "Saving…" : "Save"}
             onPress={handleSave}
             loading={saveToll.isPending}
-            fullWidth
+            density="high"
+            style={s.footerBtn}
           />
         </View>
       </OperationalBottomActionBar>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Theme.screenBackground },
-  content: { padding: 14, gap: 12, paddingBottom: 24 },
-  label: { color: Theme.text, fontSize: 13, fontWeight: "700", marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    color: Theme.text,
-    backgroundColor: Theme.whiteMuted,
-    fontSize: 13,
-  },
-  notes: { minHeight: 90, textAlignVertical: "top" },
-  entryTypeRow: { gap: 8 },
-  footer: { gap: 10 },
-  hint: { color: "#b45309", fontSize: 12 },
-});

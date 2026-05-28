@@ -29,7 +29,7 @@ export function getTripOperationalCapabilities(
     isAssetTrip: assetTrip,
     isAggregationTrip: aggregationTrip,
     canTrackFuel: assetTrip,
-    canTrackToll: true,
+    canTrackToll: assetTrip,
     canTrackMileage: assetTrip,
     canTrackMaintenance: assetTrip,
     canTrackVehicleEconomics: assetTrip,

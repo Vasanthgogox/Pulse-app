@@ -9,6 +9,13 @@ export interface VehicleOperationsLedgerSummary {
   tripCount: number;
   totalDistanceKm: number;
   approvedSpendInr: number;
+  monthlyRevenueInr: number;
+  operationalCostInr: number;
+  ownershipCostInr: number;
+  outstandingPayablesInr: number;
+  unallocatedOverheadInr: number;
+  allocationEfficiencyPct: number;
+  netVehicleProfitabilityInr: number;
   approvedFuelSpendInr: number;
   approvedTollSpendInr: number;
   approvedMaintenanceSpendInr: number;
@@ -167,10 +174,14 @@ export async function getVehicleOperationsLedger(params: {
 }): Promise<{ error: Error | null; summary: VehicleOperationsLedgerSummary | null }> {
   const { organizationId, vehicleId, limit = 30 } = params;
   try {
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthStartIso = monthStart.toISOString();
     const [tripRes, ledgerRes] = await Promise.all([
       supabase()
       .from("trips")
-      .select("id, odometer_distance_km, gps_distance_km, distance_source")
+      .select("id, odometer_distance_km, gps_distance_km, distance_source, client_price, created_at")
       .eq("organization_id", organizationId)
       .eq("vehicle_id", vehicleId)
       .order("created_at", { ascending: false })
@@ -188,6 +199,8 @@ export async function getVehicleOperationsLedger(params: {
       odometer_distance_km?: number | null;
       gps_distance_km?: number | null;
       distance_source?: string | null;
+      client_price?: number | string | null;
+      created_at?: string | null;
     }>;
     const tripIds = trips.map((t) => t.id).filter(Boolean);
     const totalDistanceKm = trips.reduce((sum, t) => {
@@ -198,6 +211,19 @@ export async function getVehicleOperationsLedger(params: {
 
     if (ledgerRes.error) return { error: ledgerRes.error, summary: null };
     const entries = ledgerRes.entries;
+    const tripIdsForPayables = tripIds.length > 0 ? tripIds : ["00000000-0000-0000-0000-000000000000"];
+    const [fuelPayableRes, tollPayableRes] = await Promise.all([
+      supabase()
+        .from("trip_fuel_entries")
+        .select("amount_inr,approval_state,reimbursement_state,payment_owner,status,posting_state")
+        .in("trip_id", tripIdsForPayables),
+      supabase()
+        .from("trip_toll_entries")
+        .select("amount_inr,approval_state,reimbursement_state,payment_owner,status,posting_state")
+        .in("trip_id", tripIdsForPayables),
+    ]);
+    if (fuelPayableRes.error) return { error: new Error(fuelPayableRes.error.message), summary: null };
+    if (tollPayableRes.error) return { error: new Error(tollPayableRes.error.message), summary: null };
     const approvedEntries = entries.filter((e) => e.approval_state === "approved");
     const draftEntries = entries.filter((e) => e.approval_state === "draft").length;
     const verifiedEntries = entries.filter((e) => e.approval_state === "verified").length;
@@ -230,6 +256,51 @@ export async function getVehicleOperationsLedger(params: {
       spendBySource.service +
       spendBySource.insurance +
       spendBySource.permit;
+    const operationalCostInr = spendBySource.fuel + spendBySource.toll;
+    const ownershipCostInr = approvedMaintenanceSpendInr + spendBySource.manual_adjustment;
+    const ownershipApprovedEntries = approvedEntries.filter((entry) =>
+      ["maintenance", "repair", "service", "insurance", "permit", "manual_adjustment"].includes(
+        entry.source_type,
+      ),
+    );
+    const ownershipAllocatedInr = ownershipApprovedEntries
+      .filter((entry) => !!entry.trip_id)
+      .reduce((sum, entry) => sum + safeNumber(entry.amount), 0);
+    const unallocatedOverheadInr = Math.max(0, ownershipCostInr - ownershipAllocatedInr);
+    const allocationEfficiencyPct =
+      ownershipCostInr > 0 ? Number(((ownershipAllocatedInr / ownershipCostInr) * 100).toFixed(2)) : 0;
+
+    const monthlyRevenueInr = trips
+      .filter((trip) => {
+        const createdAt = String(trip.created_at ?? "").trim();
+        return createdAt.length > 0 && createdAt >= monthStartIso;
+      })
+      .reduce((sum, trip) => sum + safeNumber(trip.client_price), 0);
+    const payableRows = [...(fuelPayableRes.data ?? []), ...(tollPayableRes.data ?? [])] as Array<{
+      amount_inr?: number | string | null;
+      approval_state?: string | null;
+      reimbursement_state?: string | null;
+      payment_owner?: string | null;
+      status?: string | null;
+      posting_state?: string | null;
+    }>;
+    const outstandingPayablesInr = payableRows
+      .filter((row) => {
+        const paymentOwner = String(row.payment_owner ?? "").toLowerCase();
+        const approval = String(row.approval_state ?? "").toLowerCase();
+        const reimbursement = String(row.reimbursement_state ?? "").toLowerCase();
+        const status = String(row.status ?? "").toLowerCase();
+        const posting = String(row.posting_state ?? "").toLowerCase();
+        if (status === "void" || status === "voided") return false;
+        if (paymentOwner !== "driver") return false;
+        if (approval !== "approved" && approval !== "settled") return false;
+        if (posting !== "posted") return false;
+        return reimbursement !== "reimbursed";
+      })
+      .reduce((sum, row) => sum + safeNumber(row.amount_inr), 0);
+    const netVehicleProfitabilityInr = Number(
+      (monthlyRevenueInr - operationalCostInr - ownershipCostInr - outstandingPayablesInr).toFixed(2),
+    );
     const approvedCostPerKm =
       totalDistanceKm > 0 ? Number((approvedSpendInr / totalDistanceKm).toFixed(2)) : null;
     return {
@@ -238,6 +309,13 @@ export async function getVehicleOperationsLedger(params: {
         tripCount: tripIds.length,
         totalDistanceKm,
         approvedSpendInr,
+        monthlyRevenueInr,
+        operationalCostInr,
+        ownershipCostInr,
+        outstandingPayablesInr,
+        unallocatedOverheadInr,
+        allocationEfficiencyPct,
+        netVehicleProfitabilityInr,
         approvedFuelSpendInr: spendBySource.fuel,
         approvedTollSpendInr: spendBySource.toll,
         approvedMaintenanceSpendInr,

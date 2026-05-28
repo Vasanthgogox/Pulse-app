@@ -1,5 +1,6 @@
 import type { LedgerRow } from "../services/finance.service";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import { PULSE_WATERMARK_PRINT_CSS, pulseWatermarkHtmlFragment } from "@/lib/reportWatermark.util";
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -264,9 +265,14 @@ export function buildLedgerReportHtml(
       @media print {
         .footer { position: fixed; }
       }
+
+      ${PULSE_WATERMARK_PRINT_CSS}
+      .pulse-report-body { position: relative; z-index: 1; }
     </style>
   </head>
   <body>
+    ${pulseWatermarkHtmlFragment()}
+    <div class="pulse-report-body">
     <div class="page">
       <div class="topHeader">
         ${logoHtml}
@@ -320,6 +326,7 @@ export function buildLedgerReportHtml(
         <div>${safeCompany} · ${safeTitle}</div>
         <div>Page <span class="pageNo"></span></div>
       </div>
+    </div>
     </div>
   </body>
 </html>`;

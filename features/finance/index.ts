@@ -103,3 +103,46 @@ export {
   deriveOperationalPayables,
   syncOperationalFinanceProjection,
 } from "./projections";
+export type {
+  TripCostApprovalState,
+  TripCostActor,
+  TripCostCategory,
+  TripCostEvent,
+  TripCostFinancialSnapshot,
+  TripCostPostingState,
+  TripCostSettlementState,
+  TripCostSource,
+} from "./domain/tripCostEvent";
+export {
+  deriveTripCostFinancialSnapshot,
+  mapFuelEntryToTripCostEvent,
+  mapTollEntryToTripCostEvent,
+  mapTripOperationalRowsToCostEvents,
+} from "./mappers";
+export type {
+  TripCommercialAdjustment,
+  TripCommercialAdjustmentType,
+  TripCommercialDirection,
+  TripCommercialPostingState,
+} from "./domain/tripCommercialAdjustment";
+export {
+  selectFleetProfitabilityHealth,
+  selectAggregateTripBrokerageMargin,
+  selectAggregateTripCommercialAdjustments,
+  selectAggregateTripNetMargin,
+  selectAggregateTripSupplierCost,
+  selectTripAccountingIntegrity,
+  selectTripPostingIntegrity,
+  selectAssetTripActualMargin,
+  selectAssetTripCostPerKm,
+  selectAssetTripFuelCost,
+  selectAssetTripMarginImpact,
+  selectAssetTripMaintenanceCost,
+  selectAssetTripOperationalCost,
+  selectAssetTripOutstandingPayables,
+  selectAssetTripPostedExpenses,
+  selectAssetTripTollCost,
+  selectVehicleAccountingIntegrity,
+  selectVehicleAllocationExposure,
+  selectVehicleSettlementExposure,
+} from "./selectors";

@@ -423,15 +423,16 @@ function RootLayoutNav() {
               <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
               <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+              <Stack.Screen name="business-pulse" options={{ presentation: 'card', animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
               <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />
               <Stack.Screen
                 name="workspace"
                 options={{
-                  presentation: 'transparentModal',
+                  presentation: 'card',
                   animation: 'slide_from_right',
                   headerShown: false,
-                  contentStyle: { flex: 1, backgroundColor: 'transparent' },
+                  contentStyle: { flex: 1, backgroundColor: '#f4f6fb' },
                 }}
               />
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />

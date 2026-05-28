@@ -29,7 +29,6 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
-  ChevronRight,
   ChevronUp,
   Clock,
   FileImage,
@@ -45,7 +44,6 @@ import {
   Image,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -67,7 +65,6 @@ import {
   buildMissionLog,
   formatDistance,
   formatDurationForTrip,
-  formatTripHistoryDate,
   getTripProgressTitle,
   isCompleted,
   isInTransitStatus,
@@ -78,7 +75,8 @@ import {
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
 import { TripDetailSettlementPanel } from "@/features/driver/components/TripDetailSettlementPanel";
 import { useTripVerificationSync } from "@/features/trips/verification";
-import { OperationsHub, useTripOperationsSync } from "@/features/trips/operations";
+import { useTripOperationsSync } from "@/features/trips/operations";
+import { DriverTripOperationsTab } from "@/features/driver/components/DriverTripOperationsTab";
 
 function TimelinePulseIcon({
   expanded,
@@ -131,7 +129,7 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const [routeMetricsByTripId, setRouteMetricsByTripId] = useState<
     Record<string, { distance: number; estimated_duration: string }>
   >({});
-  const [detailTab, setDetailTab] = useState<"journey" | "settlement">("journey");
+  const [detailTab, setDetailTab] = useState<"journey" | "operations" | "settlement">("journey");
   const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
   const [detailPodDocuments, setDetailPodDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
   const [detailPodLoading, setDetailPodLoading] = useState(false);
@@ -632,61 +630,6 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
                 </LinearGradient>
               </View>
 
-              {trip ? (
-                <View style={{ marginBottom: 10 }}>
-                  <View
-                    style={{
-                      borderWidth: StyleSheet.hairlineWidth,
-                      borderColor: colors.border,
-                      borderRadius: 10,
-                      backgroundColor: colors.surface,
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      marginBottom: 8,
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "700" }}>
-                      Sync
-                    </Text>
-                    <Text style={{ color: colors.text, fontSize: 11, fontWeight: "700" }}>
-                      {operationsSync.isSyncing
-                        ? "Replaying"
-                        : operationsSync.lastResult?.failed
-                          ? `Retry Needed (${operationsSync.lastResult.failed})`
-                          : operationsSync.lastResult?.processed
-                            ? `Posted (${operationsSync.lastResult.processed})`
-                            : "Live"}
-                    </Text>
-                  </View>
-                  <OperationsHub
-                    trip={trip}
-                    onEditStart={() =>
-                      router.push(
-                        `/trip/${encodeURIComponent(trip.id)}/verification?side=start` as Href,
-                      )
-                    }
-                    onEditEnd={() =>
-                      router.push(
-                        `/trip/${encodeURIComponent(trip.id)}/verification?side=end` as Href,
-                      )
-                    }
-                    onAddFuel={() =>
-                      router.push(
-                        `/trip/${encodeURIComponent(trip.id)}/operations/fuel` as Href,
-                      )
-                    }
-                    onAddToll={() =>
-                      router.push(
-                        `/trip/${encodeURIComponent(trip.id)}/operations/toll` as Href,
-                      )
-                    }
-                  />
-                </View>
-              ) : null}
-
               <View style={[styles.tdTabBar, { backgroundColor: `${colors.border}99` }]}>
                 <TouchableOpacity
                   style={[
@@ -704,7 +647,26 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
                       },
                     ]}
                   >
-                    Journey Log
+                    Journey
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.tdTabBtn,
+                    detailTab === "operations" && styles.tdTabBtnActive,
+                  ]}
+                  onPress={() => setDetailTab("operations")}
+                  activeOpacity={0.88}
+                >
+                  <Text
+                    style={[
+                      styles.tdTabLabel,
+                      {
+                        color: detailTab === "operations" ? "#ffffff" : colors.textMuted,
+                      },
+                    ]}
+                  >
+                    Operations
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1027,6 +989,12 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
                       </View>
                     </View>
                   )}
+                </View>
+              ) : null}
+
+              {detailTab === "operations" && trip ? (
+                <View style={{ marginBottom: 12 }}>
+                  <DriverTripOperationsTab trip={trip} operationsSync={operationsSync} />
                 </View>
               ) : null}
 

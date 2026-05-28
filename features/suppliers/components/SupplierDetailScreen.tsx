@@ -2,6 +2,8 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { CounterpartyProfileSystemCard } from "@/components/CounterpartyProfileSystemCard";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
+import { EntityIntelWidgetRow } from "@/components/entityIntel/EntityIntelWidgetRow";
+import { pickEntityReport } from "@/components/entityIntel/pickEntityReport";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
@@ -26,6 +28,11 @@ import {
     type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
+import {
+  buildSupplierPayableReport,
+  formatReportInr,
+  formatSettlementPct,
+} from "@/features/finance/lib/entityDetailReports.util";
 import {
   buildFinancialRowDataForLedgerRow,
   resolveLedgerPartyName,
@@ -192,6 +199,9 @@ export default function SupplierDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [supplierReportKind, setSupplierReportKind] = useState<
+    "payable" | "ledger"
+  >("payable");
   const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
     useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -1106,7 +1116,7 @@ export default function SupplierDetailScreen({
     () => (detailSubTab === "trips" ? tripReportTransactions : sortedTx),
     [detailSubTab, sortedTx, tripReportTransactions],
   );
-  const tripTableReport = useMemo(() => {
+  const supplierPayableReport = useMemo(() => {
     if (detailSubTab !== "trips") return undefined;
     const rows = missionRows.map((row) => {
       const key = String(row.trip.id).trim().toLowerCase();
@@ -1114,49 +1124,56 @@ export default function SupplierDetailScreen({
         count: 0,
         lastTxnDate: null,
       };
-      const clientRevenue = getTripSalesForSupplierView(row.trip);
-      const pnl = clientRevenue - row.sales;
-      const margin =
-        clientRevenue > 0
-          ? `${((pnl / clientRevenue) * 100).toFixed(1)}%`
-          : "0.0%";
       return {
         trip: row.missionId,
         route: row.route,
         client: resolveClientDisplayName(row.trip),
-        contract: formatINR(row.sales),
-        clientRevenue: formatINR(clientRevenue),
-        pnl: formatINR(pnl),
-        margin,
-        paid: formatINR(row.paid),
-        due: formatINR(row.due),
+        cost: formatReportInr(row.sales),
+        paid: formatReportInr(row.paid),
+        due: formatReportInr(row.due),
+        settlement: formatSettlementPct(row.paid, row.sales),
         txns: meta.count,
         lastTxn: meta.lastTxnDate ? formatLedgerDate(meta.lastTxnDate) : "—",
       };
     });
-    return {
-      columns: [
-        { key: "trip", label: "Trip" },
-        { key: "route", label: "Route" },
-        { key: "client", label: "Client" },
-        { key: "contract", label: "Cost", align: "right" as const },
-        { key: "clientRevenue", label: "Sales", align: "right" as const },
-        { key: "pnl", label: "P&L", align: "right" as const },
-        { key: "margin", label: "Margin %", align: "right" as const },
-        { key: "paid", label: "Paid", align: "right" as const },
-        { key: "due", label: "Due", align: "right" as const },
-        { key: "txns", label: "Txns", align: "right" as const },
-        { key: "lastTxn", label: "Last Txn", align: "right" as const },
-      ],
-      rows,
-    };
+    return buildSupplierPayableReport(rows);
   }, [
     detailSubTab,
     missionRows,
     tripTransactionMetaById,
     resolveClientDisplayName,
-    getTripSalesForSupplierView,
   ]);
+
+  const openSupplierReport = useCallback((kind: "payable" | "ledger") => {
+    setSupplierReportKind(kind);
+    setShowReportModal(true);
+  }, []);
+
+  const handleSupplierDownloadPress = useCallback(() => {
+    if (detailSubTab === "shared") {
+      setSharedLedgerDownloadSignal((n) => n + 1);
+      return;
+    }
+    if (detailSubTab === "trips") {
+      pickEntityReport(
+        "Supplier report",
+        [
+          { id: "payable", label: "Payable & performance" },
+          { id: "ledger", label: "Ledger transactions" },
+        ],
+        (id) => openSupplierReport(id === "ledger" ? "ledger" : "payable"),
+      );
+      return;
+    }
+    openSupplierReport("ledger");
+  }, [detailSubTab, openSupplierReport]);
+
+  const supplierPaymentHealthPct = useMemo(() => {
+    const paidSum = totalBilledConsolidated - totalPendingConsolidated;
+    return totalBilledConsolidated > 0
+      ? Math.min(100, Math.round((paidSum / totalBilledConsolidated) * 100))
+      : 0;
+  }, [totalBilledConsolidated, totalPendingConsolidated]);
 
   if (loading) {
     return (
@@ -1297,13 +1314,7 @@ export default function SupplierDetailScreen({
           ) : null}
           <TouchableOpacity
             style={styles.downloadBtn}
-            onPress={() => {
-              if (detailSubTab === "shared") {
-                setSharedLedgerDownloadSignal((n) => n + 1);
-              } else {
-                setShowReportModal(true);
-              }
-            }}
+            onPress={handleSupplierDownloadPress}
             activeOpacity={0.8}
             accessibilityLabel={
               detailSubTab === "shared"
@@ -1627,6 +1638,39 @@ export default function SupplierDetailScreen({
           ))}
         </View>
 
+        {detailSubTab === "trips" ? (
+          <EntityIntelWidgetRow
+            widgets={[
+              {
+                id: "payable",
+                label: "Payable due",
+                value: formatINR(due),
+                tone: due > 0 ? "warn" : "good",
+                hint: "Export payable report",
+                onPress: () => openSupplierReport("payable"),
+              },
+              {
+                id: "performance",
+                label: "Trips handled",
+                value: String(tripsHandled),
+                hint: "Supplier performance",
+              },
+              {
+                id: "health",
+                label: "Payment health",
+                value: `${supplierPaymentHealthPct}%`,
+                tone:
+                  supplierPaymentHealthPct >= 80
+                    ? "good"
+                    : supplierPaymentHealthPct >= 50
+                      ? "warn"
+                      : "bad",
+                hint: "Paid vs contract",
+              },
+            ]}
+          />
+        ) : null}
+
         {detailSubTab === "trips" && (
           <View style={styles.tripDatePillWrap}>
             <DatePresetPillBar
@@ -1674,17 +1718,6 @@ export default function SupplierDetailScreen({
                   <Text style={[styles.th, styles.thWebDesktop]}>Client</Text>
                 </View>
               ) : null}
-              {isWebDesktop ? (
-                <View
-                  style={[styles.headerAmountCol, styles.amountColWebDesktop]}
-                >
-                  <Text
-                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
-                  >
-                    Sales
-                  </Text>
-                </View>
-              ) : null}
               <View
                 style={[
                   styles.headerAmountCol,
@@ -1698,7 +1731,7 @@ export default function SupplierDetailScreen({
                     isWebDesktop && styles.thWebDesktop,
                   ]}
                 >
-                  Cost
+                  Payable
                 </Text>
               </View>
               {isWebDesktop ? (
@@ -1706,14 +1739,9 @@ export default function SupplierDetailScreen({
                   style={[styles.headerAmountCol, styles.amountColWebDesktop]}
                 >
                   <Text
-                    style={[
-                      styles.th,
-                      styles.thRight,
-                      styles.thWebDesktop,
-                      { textAlign: "right" as const },
-                    ]}
+                    style={[styles.th, styles.thRight, styles.thWebDesktop]}
                   >
-                    P&L
+                    Settled %
                   </Text>
                 </View>
               ) : null}
@@ -1799,8 +1827,7 @@ export default function SupplierDetailScreen({
                       ? clientById.get(cidKey)
                       : undefined;
                     const clientNameForUi = resolveClientDisplayName(row.trip);
-                    const clientRevenue = getTripSalesForSupplierView(row.trip);
-                    const tripPnl = clientRevenue - row.sales;
+                    const settledPct = formatSettlementPct(row.paid, row.sales);
                     return (
                       <>
                         <View
@@ -1861,25 +1888,6 @@ export default function SupplierDetailScreen({
                             </View>
                           </View>
                         ) : null}
-                        {isWebDesktop ? (
-                          <View
-                            style={[
-                              styles.amountCol,
-                              styles.amountColWebDesktop,
-                            ]}
-                          >
-                            <Text
-                              numberOfLines={1}
-                              style={[
-                                styles.td,
-                                styles.tdRight,
-                                styles.tdAmountWebDesktop,
-                              ]}
-                            >
-                              {formatINR(clientRevenue)}
-                            </Text>
-                          </View>
-                        ) : null}
                         <View
                           style={[
                             styles.amountCol,
@@ -1910,11 +1918,10 @@ export default function SupplierDetailScreen({
                                 styles.td,
                                 styles.tdRight,
                                 styles.tdAmountWebDesktop,
-                                tripPnl >= 0 ? styles.tdGreen : styles.tdRed,
                                 { textAlign: "right" as const },
                               ]}
                             >
-                              {formatINR(tripPnl)}
+                              {settledPct}
                             </Text>
                           </View>
                         ) : null}
@@ -2181,9 +2188,16 @@ export default function SupplierDetailScreen({
         onClose={() => setShowReportModal(false)}
         transactions={reportTransactions}
         title={
-          supplierName ? `${t("ledgerFor")}${supplierName}` : t("ledgerReport")
+          supplierReportKind === "payable"
+            ? `${supplierName || t("supplier")} — Payable & performance`
+            : supplierName
+              ? `${t("ledgerFor")}${supplierName}`
+              : t("ledgerReport")
         }
-        customReport={tripTableReport}
+        customReport={
+          supplierReportKind === "payable" ? supplierPayableReport : undefined
+        }
+        hideCashSummary={supplierReportKind === "payable"}
       />
       <Modal
         visible={showProfileModal}

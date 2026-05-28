@@ -5,11 +5,15 @@
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import Theme from "@/constants/Theme";
+import { useQuery } from "@tanstack/react-query";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { DriverStatusDot } from "@/features/finance/components/FinancialRow";
+import {
+  selectFleetProfitabilitySummary,
+} from "@/features/fleet";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
@@ -33,11 +37,14 @@ import {
     buildTripPnLListForPeriod,
     buildVehiclePnLList,
     resolveVehicleIdForTrip,
+    tripInPeriod,
+    type VehicleLedgerExpenseRow,
     type GarragePeriodValue,
     type VehiclePnLRow,
 } from "../pnl";
 import { FleetAnalyticsTab } from "./analytics/FleetAnalyticsTab";
 import type { VehicleRow } from "../services/vehicles.service";
+import { supabase } from "@/lib/supabase";
 
 export type GarrageViewTab = "vehicle" | "trips" | "revenue" | "profit" | "analytics";
 
@@ -115,6 +122,76 @@ export function GarrageTab({
   const vehicles = vehiclesProp ?? [];
   const drivers = driversProp ?? [];
   const trips = tripsProp ?? [];
+  const vehicleIds = useMemo(() => vehicles.map((vehicle) => vehicle.id), [vehicles]);
+  const vehicleLedgerExpenseQuery = useQuery({
+    queryKey: ["q", "garage", "vehicle-ledger-expenses", organizationId, period, vehicleIds.join("|")],
+    enabled: !!organizationId && vehicleIds.length > 0,
+    queryFn: async () => {
+      const response = await supabase()
+        .from("vehicle_ledger_entries")
+        .select("id,vehicle_id,trip_id,source_type,amount,created_at")
+        .eq("organization_id", organizationId!)
+        .in("vehicle_id", vehicleIds)
+        .order("created_at", { ascending: false })
+        .limit(2500);
+      if (response.error) throw new Error(response.error.message);
+      return (response.data ?? []) as VehicleLedgerExpenseRow[];
+    },
+    staleTime: 45000,
+  });
+  const tripVehicleMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const trip of trips) {
+      if (!tripInPeriod(trip, period)) continue;
+      const vehicleId = resolveVehicleIdForTrip(trip, vehicles);
+      if (vehicleId) map[trip.id] = vehicleId;
+    }
+    return map;
+  }, [period, trips, vehicles]);
+  const periodTripIds = useMemo(() => Object.keys(tripVehicleMap), [tripVehicleMap]);
+  const vehiclePayablesQuery = useQuery({
+    queryKey: ["q", "garage", "vehicle-open-payables", organizationId, period, periodTripIds.join("|")],
+    enabled: !!organizationId && periodTripIds.length > 0,
+    queryFn: async () => {
+      const [fuelRes, tollRes] = await Promise.all([
+        supabase()
+          .from("trip_fuel_entries")
+          .select("trip_id,amount_inr,payment_owner,posting_state,reimbursement_state,status")
+          .in("trip_id", periodTripIds),
+        supabase()
+          .from("trip_toll_entries")
+          .select("trip_id,amount_inr,payment_owner,posting_state,reimbursement_state,status")
+          .in("trip_id", periodTripIds),
+      ]);
+      if (fuelRes.error) throw new Error(fuelRes.error.message);
+      if (tollRes.error) throw new Error(tollRes.error.message);
+      const map: Record<string, number> = {};
+      const rows = [...(fuelRes.data ?? []), ...(tollRes.data ?? [])] as Array<{
+        trip_id?: string | null;
+        amount_inr?: number | null;
+        payment_owner?: string | null;
+        posting_state?: string | null;
+        reimbursement_state?: string | null;
+        status?: string | null;
+      }>;
+      for (const row of rows) {
+        const paymentOwner = String(row.payment_owner ?? "").toLowerCase();
+        const postingState = String(row.posting_state ?? "").toLowerCase();
+        const reimbursementState = String(row.reimbursement_state ?? "").toLowerCase();
+        const status = String(row.status ?? "").toLowerCase();
+        if (status === "void" || status === "voided") continue;
+        if (paymentOwner !== "driver") continue;
+        if (postingState !== "posted") continue;
+        if (reimbursementState === "reimbursed") continue;
+        const tripId = String(row.trip_id ?? "").trim();
+        const vehicleId = tripVehicleMap[tripId];
+        if (!vehicleId) continue;
+        map[vehicleId] = (map[vehicleId] ?? 0) + Math.max(0, Number(row.amount_inr ?? 0) || 0);
+      }
+      return map;
+    },
+    staleTime: 45000,
+  });
 
   /** One driver per vehicle: driver.assigned_vehicle_id === vehicle.id. */
   const driverByVehicleId = useMemo(() => {
@@ -130,11 +207,21 @@ export function GarrageTab({
       vehicles,
       trips,
       transactionsProp ?? null,
+      vehicleLedgerExpenseQuery.data ?? null,
+      vehiclePayablesQuery.data ?? null,
       period,
       getTripDisplayNumber,
       organizationId,
     );
-  }, [vehicles, trips, transactionsProp, period, organizationId]);
+  }, [
+    vehicles,
+    trips,
+    transactionsProp,
+    vehicleLedgerExpenseQuery.data,
+    vehiclePayablesQuery.data,
+    period,
+    organizationId,
+  ]);
 
   const tripsList = useMemo(() => {
     return buildTripPnLListForPeriod(
@@ -171,6 +258,10 @@ export function GarrageTab({
   );
   const totalProfit = useMemo(
     () => assignedOnly.reduce((s, r) => s + r.pnl, 0),
+    [assignedOnly],
+  );
+  const fleetSummary = useMemo(
+    () => selectFleetProfitabilitySummary(assignedOnly),
     [assignedOnly],
   );
 
@@ -308,20 +399,35 @@ export function GarrageTab({
       >
         {topContent}
         {!hideSummaryRow && (
-          <View style={styles.receivablesSummaryRow}>
-            <View style={styles.receivablesSummaryCard}>
-              <Text style={styles.receivablesSummaryLabel}>Vehicle Revenue</Text>
-              <Text style={styles.receivablesSummaryRevenue}>
-                ₹{totalRevenue.toLocaleString("en-IN")}
-              </Text>
+          <View style={styles.summaryWrap}>
+            <View style={styles.receivablesSummaryRow}>
+              <View style={styles.receivablesSummaryCard}>
+                <Text style={styles.receivablesSummaryLabel}>Vehicle Revenue</Text>
+                <Text style={styles.receivablesSummaryRevenue}>
+                  ₹{totalRevenue.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.receivablesSummarySubline}>
+                  Op: ₹{fleetSummary.totalOperationalCost.toLocaleString("en-IN")} · Own: ₹
+                  {fleetSummary.totalOwnershipCost.toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <LiquidFillPill
+                percentage={marginPercent > 0 ? Math.min(100, marginPercent) : 0}
+                label="Margin"
+                valuePrefix={marginPercent > 0 ? "+" : ""}
+                valueSuffix="%"
+                displayValue={marginPercent}
+              />
             </View>
-            <LiquidFillPill
-              percentage={marginPercent > 0 ? Math.min(100, marginPercent) : 0}
-              label="Margin"
-              valuePrefix={marginPercent > 0 ? "+" : ""}
-              valueSuffix="%"
-              displayValue={marginPercent}
-            />
+            <View style={styles.telemetryStrip}>
+              {(fleetSummary.telemetry.length > 0
+                ? fleetSummary.telemetry
+                : ["Healthy Margin"]).map((label) => (
+                <View key={label} style={styles.telemetryChip}>
+                  <Text style={styles.telemetryChipText}>{label}</Text>
+                </View>
+              ))}
+            </View>
           </View>
         )}
         {viewTab === "analytics" && (
@@ -430,7 +536,9 @@ export function GarrageTab({
                     />
                   </View>
                   <Text style={styles.listEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                    Sales: {row.sales > 0 ? formatSubline(row.sales) : "—"}
+                    Sales: {row.sales > 0 ? formatSubline(row.sales) : "—"} · Op:{" "}
+                    {row.operationalExpense > 0 ? formatSubline(row.operationalExpense) : "—"} · Own:{" "}
+                    {row.ownershipExpense > 0 ? formatSubline(row.ownershipExpense) : "—"}
                   </Text>
                 </View>
                 <View style={[styles.listCell, styles.ctTrips]}>
@@ -453,7 +561,8 @@ export function GarrageTab({
                     {formatCurrency(row.pnl)}
                   </Text>
                   <Text style={styles.listRecdLabel} numberOfLines={1}>
-                    Exp: {row.expense > 0 ? formatSubline(row.expense) : "—"}
+                    Exp: {row.expense > 0 ? formatSubline(row.expense) : "—"} · Unalloc:{" "}
+                    {row.unallocatedCost > 0 ? formatSubline(row.unallocatedCost) : "—"}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -468,6 +577,9 @@ export function GarrageTab({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#FBFBFF" },
+  summaryWrap: {
+    gap: 8,
+  },
   /** Summary row — match Customers tab (Total Outstanding + Collection). */
   receivablesSummaryRow: {
     flexDirection: "row",
@@ -496,6 +608,34 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.darkGreen,
+  },
+  receivablesSummarySubline: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    letterSpacing: 0.3,
+  },
+  telemetryStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 16,
+  },
+  telemetryChip: {
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  telemetryChipText: {
+    fontSize: 9,
+    color: Theme.textMuted,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   /** List layout — same as Customers (Client Entity | Trips | Outstanding). */
   listScroll: { flex: 1 },

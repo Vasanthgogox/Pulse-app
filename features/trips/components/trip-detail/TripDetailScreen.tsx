@@ -72,12 +72,12 @@ import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLoc
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
 import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
 import { TripFinanceAdjustmentsPanel } from "@/features/trips/components/trip-detail/adjustment/TripFinanceAdjustmentsPanel";
+import { TripOdometerPreviewCard } from "@/features/trips/components/trip-detail/TripOdometerPreviewCard";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripMap } from "./TripMap";
 import { ManifestDriverPingList } from "./ManifestDriverPingList";
-import { formatLocationUpdatedAt } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { useTrackingState } from "@/features/tracking/hooks/useTrackingState";
 import { LiveTrackingModal } from "./modals/LiveTrackingModal";
@@ -85,7 +85,13 @@ import { isTripTrackingActive, defaultTrackingState } from "@/features/trips/uti
 import { MAP_LOCATION_LABEL_LOADING } from "@/lib/mapLocationLabel.service";
 import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
 import { useTripVerificationSync } from "@/features/trips/verification";
-import { OperationsHub, useTripOperationsSync } from "@/features/trips/operations";
+import { useTripOperationsSummary, useTripOperationsSync } from "@/features/trips/operations";
+import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
+import {
+  getTripExecutionModel,
+  isAssetExecutionTrip,
+} from "@/features/trips/domain/tripExecutionModel";
+import type { TripCommercialAdjustment } from "@/features/finance";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import {
@@ -93,7 +99,7 @@ import {
     type TripStageTimestamp,
 } from "./sections/TripStatusTimeline";
 
-type Tab = "trip" | "finance" | "tracking" | "docs";
+type Tab = "trip" | "finance" | "expenses" | "tracking" | "docs";
 
 type TripWebExtra = {
   pickup_state?: string | null;
@@ -286,9 +292,13 @@ export default function TripDetailScreen({
   const [activeTab, setActiveTab] = useState<Tab>("trip");
   useTripVerificationSync();
   useTripOperationsSync();
+  const tripOperationsSummaryQuery = useTripOperationsSummary(tripId || null, {
+    enabled: !!tripId,
+  });
   const [financeSubTab, setFinanceSubTab] = useState<
     "summary" | "transactions"
   >("summary");
+  const expenseTabAutoSelectedRef = useRef(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
   const [locationLogExpanded, setLocationLogExpanded] = useState(false);
@@ -342,6 +352,23 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const expensePendingCount =
+    (tripOperationsSummaryQuery.data?.financialSnapshot?.approvalPendingCount ?? 0) +
+    (tripOperationsSummaryQuery.data?.financialSnapshot?.settlementPendingCount ?? 0);
+
+  useEffect(() => {
+    if (expenseTabAutoSelectedRef.current) return;
+    if (activeTab !== "trip") return;
+    if (expensePendingCount > 0) {
+      setActiveTab("expenses");
+      expenseTabAutoSelectedRef.current = true;
+      return;
+    }
+    if (tripOperationsSummaryQuery.isFetched) {
+      expenseTabAutoSelectedRef.current = true;
+    }
+  }, [activeTab, expensePendingCount, tripOperationsSummaryQuery.isFetched]);
 
   const trackingState = useTrackingState(
     detail.trip?.id ?? null,
@@ -406,6 +433,15 @@ export default function TripDetailScreen({
   ]);
 
   const { initiateDriverConversationForTrip } = useTripChat();
+
+  const openOdometerVerification = useCallback(
+    (side: "start" | "end") => {
+      const id = detail.trip?.id;
+      if (!id) return;
+      router.push(ROUTES.tripVerification(id, side) as never);
+    },
+    [detail.trip?.id, router],
+  );
 
   const handleOpenTripChat = useCallback(async () => {
     const tr = detail.trip;
@@ -903,14 +939,6 @@ export default function TripDetailScreen({
     },
     [tripForAssignmentFlow?.id, canChangeManifestAssetsForNav, router],
   );
-  const openTripVerification = useCallback(
-    (side: "start" | "end") => {
-      if (!tripForAssignmentFlow?.id) return;
-      router.push(ROUTES.tripVerification(tripForAssignmentFlow.id, side) as never);
-    },
-    [tripForAssignmentFlow?.id, router],
-  );
-
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
   }
@@ -937,6 +965,35 @@ export default function TripDetailScreen({
   }
 
   const { trip } = detail;
+  const tripExecutionModel = getTripExecutionModel(trip);
+  const expenseTabLabel = tripExecutionModel === "asset" ? "Expense" : "Commercial";
+  const expenseHubLabel = tripExecutionModel === "asset" ? "Expense Hub" : "Commercial Hub";
+  const commercialAdjustments: TripCommercialAdjustment[] = (
+    detail.adjustments ?? []
+  )
+    .filter((adjustment) => !isAdjustmentVoided(adjustment))
+    .map((adjustment) => {
+      const direction: TripCommercialAdjustment["direction"] =
+        adjustment.type === "cost"
+          ? adjustment.impact === "plus"
+            ? "increase_cost"
+            : "reduce_cost"
+          : adjustment.impact === "plus"
+            ? "increase_margin"
+            : "reduce_margin";
+      return {
+        id: adjustment.id,
+        tripId: adjustment.trip_id,
+        type:
+          adjustment.type === "cost"
+            ? "supplier_adjustment"
+            : "brokerage_adjustment",
+        amount: Math.max(0, Number(adjustment.amount ?? 0) || 0),
+        direction,
+        postingState: "posted",
+        createdAt: adjustment.created_at ?? trip.created_at,
+      };
+    });
   const isAggregate = isAggregateTrip(trip);
 
   const driverSummaryText = (() => {
@@ -1525,119 +1582,22 @@ export default function TripDetailScreen({
     />
   );
 
-  /** Shared mobile + desktop: net yield, sale/cost columns with adjustment line items, voyage expense row. */
+  /** Shared mobile + desktop: trip margin hero only (detail in adjustments panel below). */
   const financeManifestSummaryBlock = (
     <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
-      <Text style={styles.refSettleLabel}>Net Manifest Yield</Text>
-      <Text style={styles.refManifestNetHuge}>
-        {formatINR(netManifestYield)}
-      </Text>
-      <Text style={styles.refSettleHint}>
-        After adjusted revenue, adjusted supplier cost, and voyage spend
-      </Text>
-
-      <View style={styles.refCollectionsRow}>
-        <View style={styles.refCollectionsCard}>
-          <Text style={styles.refCollectionsLabel}>Collected</Text>
-          <Text
-            style={[styles.refCollectionsValue, styles.refCollectionsValueIn]}
-          >
-            {formatINR(collectedFromClient)}
-          </Text>
-          <Text style={styles.refCollectionsMeta}>
-            From client ledger entries
-          </Text>
-        </View>
-        <View
-          style={[styles.refCollectionsCard, styles.refCollectionsCardRight]}
-        >
-          <Text style={styles.refCollectionsLabel}>Pending</Text>
-          <Text
-            style={[styles.refCollectionsValue, styles.refCollectionsValueOut]}
-          >
-            {formatINR(receivableAfterAdjustments)}
-          </Text>
-          <Text style={styles.refCollectionsMeta}>Against adjusted sales</Text>
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.refManifestHeroSplit,
-          isDesktop && styles.refManifestHeroSplitDesktop,
-        ]}
-      >
-        <Pressable
-          style={styles.refManifestCol}
-          onPress={() => setShowFinanceProvisionPanel("client")}
-          accessibilityRole="button"
-          accessibilityLabel="Open client sale provision adjustments"
-        >
-          <View style={styles.refManifestColHead}>
-            <View style={styles.refManifestColHeadLeft}>
-              <View
-                style={[styles.refManifestDot, styles.refManifestDotSales]}
-              />
-              <Text style={styles.refManifestColTitle}>Adjusted sales</Text>
-            </View>
-          </View>
-          <Text
-            style={[styles.refManifestColAmount, styles.refManifestSalesAmt]}
-          >
-            {formatINR(adjSales)}
-          </Text>
-          <View style={styles.refManifestMicroBox}>
-            <Text style={styles.refManifestMicroLine}>
-              Base · {formatINR(sales)}
-            </Text>
-            <Text style={styles.refManifestMicroAdjSales}>
-              Adj · {revenueSideDelta >= 0 ? "+" : "−"}
-              {formatINR(Math.abs(revenueSideDelta))}
-            </Text>
-          </View>
-        </Pressable>
-
-        <View style={styles.refManifestHeroSep} />
-
-        <Pressable
-          style={styles.refManifestCol}
-          onPress={() => setShowFinanceProvisionPanel("supplier")}
-          accessibilityRole="button"
-          accessibilityLabel="Open supplier cost provision adjustments"
-        >
-          <View style={styles.refManifestColHead}>
-            <View style={styles.refManifestColHeadLeft}>
-              <View
-                style={[styles.refManifestDot, styles.refManifestDotCost]}
-              />
-              <Text style={styles.refManifestColTitle}>Adjusted cost</Text>
-            </View>
-          </View>
-          <Text
-            style={[styles.refManifestColAmount, styles.refManifestCostAmt]}
-          >
-            {formatINR(adjCost)}
-          </Text>
-          <View style={styles.refManifestMicroBox}>
-            <Text style={styles.refManifestMicroLine}>
-              Base · {formatINR(cost)}
-            </Text>
-            <Text style={styles.refManifestMicroAdjCost}>
-              Adj · {costSideDelta >= 0 ? "+" : "−"}
-              {formatINR(Math.abs(costSideDelta))}
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-
-      <View style={styles.refSettleExpenseRow}>
-        <Text style={styles.refSettleExpenseLabel}>Petty / voyage expense</Text>
-        <Text style={styles.refSettleExpenseVal}>
-          {formatINR(totalExpenses)}
-        </Text>
-      </View>
+      <Text style={styles.refSettleLabel}>Margin</Text>
+      <Text style={styles.refSettleValue}>{formatINR(netManifestYield)}</Text>
     </View>
   );
+
+  const showOdometerVerification = isAssetExecutionTrip(trip);
+  const odometerPreviewEl = showOdometerVerification ? (
+    <TripOdometerPreviewCard
+      trip={trip}
+      onRecordStart={() => openOdometerVerification("start")}
+      onRecordEnd={() => openOdometerVerification("end")}
+    />
+  ) : null;
 
   const filteredFinanceRows = financeHistoryRows.filter((row) => {
     const q = searchTerm.trim().toLowerCase();
@@ -2265,6 +2225,28 @@ export default function TripDetailScreen({
               <TouchableOpacity
                 style={[
                   styles.refTabBtn,
+                  activeTab === "expenses" && styles.refTabBtnActive,
+                ]}
+                onPress={() => setActiveTab("expenses")}
+                activeOpacity={0.85}
+              >
+                <Feather
+                  name="dollar-sign"
+                  size={12}
+                  color={activeTab === "expenses" ? "#818cf8" : "#94a3b8"}
+                />
+                <Text
+                  style={[
+                    styles.refTabBtnText,
+                    activeTab === "expenses" && styles.refTabBtnTextActive,
+                  ]}
+                >
+                  {expenseTabLabel}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.refTabBtn,
                   activeTab === "docs" && styles.refTabBtnActive,
                 ]}
                 onPress={() => setActiveTab("docs")}
@@ -2306,13 +2288,6 @@ export default function TripDetailScreen({
                     <Feather name="chevron-right" size={15} color="#94a3b8" />
                   </TouchableOpacity>
                 ) : null}
-                <OperationsHub
-                  trip={trip}
-                  onEditStart={() => openTripVerification("start")}
-                  onEditEnd={() => openTripVerification("end")}
-                  onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
-                  onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
-                />
                 <View style={styles.refTimelineCard}>
                   {journeyLogs.map((log, index) => {
                     const expanded = expandedLog === index;
@@ -2512,6 +2487,18 @@ export default function TripDetailScreen({
                     ))}
                   </>
                 )}
+              </View>
+            ) : activeTab === "expenses" ? (
+              <View style={styles.refFinanceWrap}>
+                {odometerPreviewEl}
+                <TripExpensesScreen
+                  trip={trip}
+                  embedded
+                  onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
+                  onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
+                  onAddOtherExpense={() => setShowFinanceProvisionPanel("supplier")}
+                  commercialAdjustments={commercialAdjustments}
+                />
               </View>
             ) : activeTab === "docs" ? (
               <View style={styles.refVaultWrap}>
@@ -2752,6 +2739,11 @@ export default function TripDetailScreen({
                       id: "finance" as const,
                       label: "Finance Hub",
                       icon: "credit-card" as const,
+                    },
+                    {
+                      id: "expenses" as const,
+                      label: expenseHubLabel,
+                      icon: "dollar-sign" as const,
                     },
                     {
                       id: "docs" as const,
@@ -3524,6 +3516,18 @@ export default function TripDetailScreen({
                         )}
                       </View>
                     )}
+                  </View>
+                ) : activeTab === "expenses" ? (
+                  <View style={neoStyles.financeStack}>
+                    {odometerPreviewEl}
+                    <TripExpensesScreen
+                      trip={trip}
+                      embedded
+                      onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
+                      onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
+                      onAddOtherExpense={() => setShowFinanceProvisionPanel("supplier")}
+                      commercialAdjustments={commercialAdjustments}
+                    />
                   </View>
                 ) : (
                   <View style={neoStyles.vaultGrid}>
@@ -8569,24 +8573,25 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   refTabShell: {
-    marginBottom: 12,
-    padding: 4,
-    borderRadius: 18,
+    marginBottom: 8,
+    padding: 3,
+    borderRadius: 12,
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     flexDirection: "row",
-    gap: 4,
+    gap: 3,
   },
   refTabBtn: {
     flex: 1,
-    borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
+    minHeight: 32,
   },
   refTabBtnActive: {
     backgroundColor: "#0f172a",
@@ -9516,7 +9521,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.25)",
   },
-  refFinanceWrap: { gap: 14 },
+  refFinanceWrap: { gap: 8 },
   refFinanceManifestHero: {
     paddingVertical: 16,
     paddingHorizontal: 16,

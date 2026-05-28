@@ -12,6 +12,8 @@ import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
+import { prependPulseExcelBanner } from '@/lib/reportWatermark.util';
+import { buildPulseIntelligenceReportHtml } from '@/lib/pulseReportPrint.util';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { LedgerRow } from '../services/finance.service';
@@ -93,47 +95,58 @@ function ledgerToPlainText(rows: LedgerRow[], totalIn: number, totalOut: number)
   return lines.join('\n');
 }
 
-function ledgerToHtml(rows: LedgerRow[], totalIn: number, totalOut: number): string {
-  const rowsHtml = rows
-    .map(
-      (r) =>
-        `<tr><td>${escapeHtml(r.party_name ?? '')}</td><td>${escapeHtml(getOperationalRef(r))}</td><td>${(r.transaction_date ?? '').slice(0, 10)}</td><td>${(r.amount_in ?? 0) > 0 ? formatAmount(r.amount_in!) : '—'}</td><td>${(r.amount_out ?? 0) > 0 ? formatAmount(r.amount_out!) : '—'}</td></tr>`
-    )
-    .join('');
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Ledger Report</title>
-<style>body{font-family:system-ui;padding:16px;font-size:12px;} table{width:100%;border-collapse:collapse;} th,td{border:1px solid #ddd;padding:8px;text-align:left;} th{background:#111;color:#fff;}
-.total{font-weight:bold;margin-top:12px;}</style>
-</head>
-<body>
-<h2>Ledger Report</h2>
-<table>
-<thead><tr><th>Party</th><th>Ref</th><th>Date</th><th>In</th><th>Out</th></tr></thead>
-<tbody>${rowsHtml}</tbody>
-</table>
-<p class="total">Total Received: ${formatAmount(totalIn)}</p>
-<p class="total">Total Paid: ${formatAmount(totalOut)}</p>
-</body>
-</html>`;
+function ledgerToHtml(
+  rows: LedgerRow[],
+  totalIn: number,
+  totalOut: number,
+  reportTitle = 'Ledger Report',
+): string {
+  return buildPulseIntelligenceReportHtml({
+    title: reportTitle,
+    summaryCards: [
+      { label: 'Received', value: formatAmount(totalIn), tone: 'in' },
+      { label: 'Paid', value: formatAmount(totalOut), tone: 'out' },
+      {
+        label: 'Net',
+        value: formatAmount(Math.abs(totalIn - totalOut)),
+        tone: totalIn >= totalOut ? 'in' : 'out',
+      },
+    ],
+    columns: [
+      { key: 'party', label: 'Party', width: '26%' },
+      { key: 'ref', label: 'Ref / Trip', width: '30%' },
+      { key: 'date', label: 'Date', width: '14%' },
+      { key: 'in', label: 'In', align: 'right', width: '15%' },
+      { key: 'out', label: 'Out', align: 'right', width: '15%' },
+    ],
+    rows: rows.map((r) => ({
+      party: r.party_name ?? '—',
+      ref: getOperationalRef(r),
+      date: formatDate(r.transaction_date ?? r.created_at ?? ''),
+      in: (r.amount_in ?? 0) > 0 ? formatAmount(r.amount_in!) : '—',
+      out: (r.amount_out ?? 0) > 0 ? formatAmount(r.amount_out!) : '—',
+    })),
+  });
 }
 
 function buildLedgerWorkbook(rows: LedgerRow[], totalIn: number, totalOut: number): XLSX.WorkBook {
-  const sheetRows: (string | number)[][] = [
-    ['Party', 'Description', 'Trip/Ref', 'Date', 'Amount In', 'Amount Out'],
-    ...rows.map((r) => [
-      r.party_name ?? '',
-      r.description ?? '',
-      getOperationalRef(r),
-      (r.transaction_date ?? '').slice(0, 10),
-      r.amount_in ?? 0,
-      r.amount_out ?? 0,
-    ]),
-    [],
-    ['Total Received', '', '', '', totalIn, ''],
-    ['Total Paid', '', '', '', '', totalOut],
-  ];
+  const sheetRows = prependPulseExcelBanner(
+    [
+      ['Party', 'Description', 'Trip/Ref', 'Date', 'Amount In', 'Amount Out'],
+      ...rows.map((r) => [
+        r.party_name ?? '',
+        r.description ?? '',
+        getOperationalRef(r),
+        (r.transaction_date ?? '').slice(0, 10),
+        r.amount_in ?? 0,
+        r.amount_out ?? 0,
+      ]),
+      [],
+      ['Total Received', '', '', '', totalIn, ''],
+      ['Total Paid', '', '', '', '', totalOut],
+    ],
+    'Ledger report',
+  );
   const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Ledger Report');
@@ -199,7 +212,7 @@ export function LedgerReportModal({
   const totalOut = sortedTransactions.reduce((s, r) => s + (r.amount_out ?? 0), 0);
   const plainText = ledgerToPlainText(sortedTransactions, totalIn, totalOut);
   const csv = ledgerToCsv(sortedTransactions);
-  const html = ledgerToHtml(sortedTransactions, totalIn, totalOut);
+  const html = ledgerToHtml(sortedTransactions, totalIn, totalOut, displayTitle);
   const isCustomReport = !!customReport;
   const activePlainText = useMemo(() => {
     if (!customReport) return plainText;
@@ -223,29 +236,25 @@ export function LedgerReportModal({
   }, [customReport, csv]);
   const activeHtml = useMemo(() => {
     if (!customReport) return html;
-    const isWide = customReport.columns.length > 8;
-    const columnClass = (key: string) => `col-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-    const th = customReport.columns
-      .map((col) => `<th class="${columnClass(col.key)}" style="text-align:${col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left'};">${escapeHtml(col.label)}</th>`)
-      .join('');
-    const tr = customReport.rows
-      .map((row) => `<tr>${customReport.columns.map((col) => {
-        const align = col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left';
-        const value = row[col.key] == null ? '—' : String(row[col.key]);
-        return `<td class="${columnClass(col.key)}" style="text-align:${align};">${escapeHtml(value)}</td>`;
-      }).join('')}</tr>`)
-      .join('');
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(displayTitle)}</title><style>
-      @page { size: ${isWide ? 'A4 landscape' : 'A4 portrait'}; margin: 10mm; }
-      body{font-family:system-ui;padding:8px;font-size:10px;color:#0f172a;}
-      h2{margin:0 0 10px 0;font-size:14px;}
-      table{width:100%;border-collapse:collapse;table-layout:fixed;}
-      th,td{border:1px solid #dbe2ea;padding:6px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-      th{background:#0f172a;color:#fff;text-transform:uppercase;font-size:8px;letter-spacing:.4px;}
-      tr:nth-child(even) td{background:#f8fafc;}
-      .col-trip{width:90px}.col-route{width:170px}.col-model{width:90px}.col-supplier{width:150px}.col-client{width:130px}
-      .col-sales,.col-cost,.col-pnl,.col-margin,.col-received,.col-due,.col-txns,.col-lastTxn,.col-contract,.col-clientRevenue,.col-paid{width:80px}
-    </style></head><body><h2>${escapeHtml(displayTitle)}</h2><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></body></html>`;
+    const colWidth = `${Math.max(8, Math.floor(100 / customReport.columns.length))}%`;
+    return buildPulseIntelligenceReportHtml({
+      title: displayTitle,
+      columns: customReport.columns.map((col) => ({
+        key: col.key,
+        label: col.label,
+        align: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left',
+        width: colWidth,
+      })),
+      rows: customReport.rows.map((row) => {
+        const out: Record<string, string> = {};
+        for (const col of customReport.columns) {
+          const value = row[col.key];
+          out[col.key] = value == null || value === '' ? '—' : String(value);
+        }
+        return out;
+      }),
+      landscape: customReport.columns.length > 7,
+    });
   }, [customReport, html, displayTitle]);
 
   const getCustomColumnWidth = (key: string): number => {
@@ -266,6 +275,8 @@ export function LedgerReportModal({
         return 86;
       case 'txns': return 44;
       case 'lastTxn': return 72;
+      case 'settlement': return 64;
+      case 'commissionBasis': return 100;
       case 'sync': return 52;
       case 'you':
       case 'partner':
@@ -281,7 +292,13 @@ export function LedgerReportModal({
     const isDashOrZero = v === '—' || v === '₹0' || v === '0' || v === '0.0%';
     if (key === 'sync') return v === 'Fix' ? Theme.teslaRed : Theme.darkGreen;
     if (key === 'due') return isDashOrZero ? Theme.textPrimary : Theme.teslaRed;
-    if (key === 'pnl' || key === 'margin' || key === 'received' || key === 'paid') {
+    if (
+      key === 'pnl' ||
+      key === 'margin' ||
+      key === 'received' ||
+      key === 'paid' ||
+      key === 'settlement'
+    ) {
       return v.startsWith('-') ? Theme.teslaRed : Theme.darkGreen;
     }
     return undefined;
@@ -363,10 +380,17 @@ export function LedgerReportModal({
       if (Platform.OS === 'web') {
         const workbook = isCustomReport
           ? (() => {
-              const ws = XLSX.utils.aoa_to_sheet([
-                customReport!.columns.map((c) => c.label),
-                ...customReport!.rows.map((row) => customReport!.columns.map((c) => row[c.key] ?? '')),
-              ]);
+              const ws = XLSX.utils.aoa_to_sheet(
+                prependPulseExcelBanner(
+                  [
+                    customReport!.columns.map((c) => c.label),
+                    ...customReport!.rows.map((row) =>
+                      customReport!.columns.map((c) => row[c.key] ?? ''),
+                    ),
+                  ],
+                  displayTitle,
+                ),
+              );
               const wb = XLSX.utils.book_new();
               XLSX.utils.book_append_sheet(wb, ws, 'Report');
               return wb;
@@ -387,10 +411,17 @@ export function LedgerReportModal({
       if (!cacheDirectory) throw new Error('No cache directory available');
       const workbook = isCustomReport
         ? (() => {
-            const ws = XLSX.utils.aoa_to_sheet([
-              customReport!.columns.map((c) => c.label),
-              ...customReport!.rows.map((row) => customReport!.columns.map((c) => row[c.key] ?? '')),
-            ]);
+            const ws = XLSX.utils.aoa_to_sheet(
+              prependPulseExcelBanner(
+                [
+                  customReport!.columns.map((c) => c.label),
+                  ...customReport!.rows.map((row) =>
+                    customReport!.columns.map((c) => row[c.key] ?? ''),
+                  ),
+                ],
+                displayTitle,
+              ),
+            );
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Report');
             return wb;

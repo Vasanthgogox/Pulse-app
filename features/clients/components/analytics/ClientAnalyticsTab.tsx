@@ -8,6 +8,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
 
+import { partyAnalyticsLayout } from "@/components/analytics/partyAnalyticsLayout";
 import {
   Heatmap,
   TrendBarChart,
@@ -208,30 +209,48 @@ export default function ClientAnalyticsTab({
     ? Math.max(...loadTypes.map((l) => l.revenue))
     : 1;
 
+  const collectionPct = useMemo(() => {
+    const billed = kpis.totalRevenue;
+    const received = billed - kpis.outstanding;
+    return billed > 0 ? Math.min(100, Math.round((received / billed) * 100)) : 0;
+  }, [kpis.outstanding, kpis.totalRevenue]);
+
   const headerKpiRows = useMemo(
     (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
       [
         {
-          id: "revenue",
-          label: "Total revenue",
+          id: "billed",
+          label: "Total billed",
           value: formatINRChip(kpis.totalRevenue),
           subtext: `${kpis.tripCount} trips · 12 mo`,
           valueColor: Theme.primary,
           iconName: "money",
         },
         {
-          id: "margin",
-          label: "Net margin",
+          id: "pnl",
+          label: "Trip P&L",
           value: formatINRChip(kpis.netMargin),
-          subtext: `${kpis.marginPct.toFixed(1)}% margin`,
+          subtext: `${kpis.marginPct.toFixed(1)}% on sales`,
           valueColor:
             kpis.netMargin >= 0 ? Theme.positive : Theme.negative,
           iconName: "line-chart",
         },
-        null,
         {
-          id: "outstanding",
-          label: "Outstanding",
+          id: "collection",
+          label: "Collection rate",
+          value: `${collectionPct}%`,
+          subtext: "Received vs billed",
+          valueColor:
+            collectionPct >= 80
+              ? Theme.positive
+              : collectionPct >= 50
+                ? Theme.warning
+                : Theme.negative,
+          iconName: "percent",
+        },
+        {
+          id: "receivable",
+          label: "Receivable due",
           value: formatINRChip(kpis.outstanding),
           subtext: `Avg delay ${kpis.avgPaymentDelayDays}d`,
           valueColor: Theme.negative,
@@ -240,20 +259,6 @@ export default function ClientAnalyticsTab({
       ],
       [
         {
-          id: "growth",
-          label: "Business growth",
-          value: `${kpis.businessGrowthPct >= 0 ? "+" : ""}${kpis.businessGrowthPct.toFixed(0)}%`,
-          subtext: "Last 6 mo vs prior",
-          valueColor:
-            kpis.businessGrowthPct >= 0 ? Theme.positive : Theme.negative,
-          iconName: "arrow-up",
-          trend: kpis.businessGrowthPct,
-          badge:
-            kpis.businessGrowthPct !== 0
-              ? `${Math.abs(kpis.businessGrowthPct).toFixed(0)}% YoY`
-              : undefined,
-        },
-        {
           id: "trips",
           label: "Trips completed",
           value: `${operations.tripsCompleted}`,
@@ -261,32 +266,6 @@ export default function ClientAnalyticsTab({
           valueColor: Theme.textBody,
           iconName: "truck",
         },
-        null,
-        {
-          id: "routes",
-          label: "Active routes",
-          value: `${kpis.activeRoutes}`,
-          subtext: "Unique lanes",
-          valueColor: Theme.textBody,
-          iconName: "map",
-        },
-      ],
-      [
-        {
-          id: "profitability",
-          label: "Profitability",
-          value: `${kpis.profitabilityPct.toFixed(1)}%`,
-          subtext: "Margin contribution",
-          valueColor:
-            kpis.profitabilityPct >= 15
-              ? Theme.positive
-              : kpis.profitabilityPct >= 5
-                ? Theme.warning
-                : Theme.negative,
-          iconName: "percent",
-          trend: kpis.profitabilityPct >= 15 ? 12 : undefined,
-        },
-        null,
         {
           id: "on-time",
           label: "On-time delivery",
@@ -299,11 +278,19 @@ export default function ClientAnalyticsTab({
                 ? Theme.warning
                 : Theme.negative,
           iconName: "clock-o",
-          trend: operations.onTimePct >= 85 ? 5 : -5,
         },
+        {
+          id: "routes",
+          label: "Active lanes",
+          value: `${kpis.activeRoutes}`,
+          subtext: "Unique routes",
+          valueColor: Theme.textBody,
+          iconName: "map",
+        },
+        null,
       ],
     ],
-    [kpis, operations],
+    [collectionPct, kpis, operations],
   );
 
   const profitKpiRows = useMemo(
@@ -513,15 +500,20 @@ export default function ClientAnalyticsTab({
 
   return (
     <PulseAnalyticsShell
-      title="Performance analytics"
-      subtitle="Real-time insights across your logistics network"
+      title="Client finance analytics"
+      subtitle={
+        client?.name
+          ? `${client.name} · billing, P&L, and receivables`
+          : "Billing, P&L, and receivables for this client"
+      }
       embedded
     >
+      <View style={partyAnalyticsLayout.inset}>
       <PulseKpiGrid rows={headerKpiRows} />
 
       <PulseSection
-        title="Customer health"
-        subtitle="Composite 0-100 score across profitability, payments, ops, consistency, growth"
+        title="Receivable health"
+        subtitle="Collection risk and payment behaviour for this client"
       >
         <PulseHealthRow
           score={
@@ -698,6 +690,7 @@ export default function ClientAnalyticsTab({
           }))}
         />
       ) : null}
+      </View>
     </PulseAnalyticsShell>
   );
 }

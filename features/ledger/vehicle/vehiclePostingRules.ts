@@ -18,7 +18,7 @@ export function decideFuelPostingRule(params: {
   if (c.approvalState !== "approved") return "skip";
   if (c.ledgerState === "posted") return "skip";
   if (c.paymentOwner === "organization") return "post_vehicle_expense";
-  if (c.paymentOwner === "driver") return "create_driver_reimbursement";
-  if (c.paymentOwner === "supplier") return "supplier_operational_adjustment";
+  if (c.paymentOwner === "driver") return "post_vehicle_expense";
+  if (c.paymentOwner === "supplier") return "post_vehicle_expense";
   return "skip";
 }

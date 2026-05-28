@@ -3,6 +3,11 @@
  * Import from `@/components/operational` — not generic shadcn-style buttons.
  */
 export { OperationalButton, type OperationalButtonIntent, type OperationalButtonProps } from './OperationalButton';
+export {
+  OperationalChipSelect,
+  type OperationalChipSelectProps,
+  type OperationalChipOption,
+} from './OperationalChipSelect';
 export { Surface, type SurfaceProps, type SurfaceElevation } from './Surface';
 export { OperationalHeader, type OperationalHeaderProps, type OperationalHeaderVariant } from './OperationalHeader';
 export {

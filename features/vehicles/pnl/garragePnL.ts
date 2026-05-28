@@ -7,6 +7,15 @@ import type { TripRow } from "@/features/trips/services/trips.service";
 import { formatIndianVehicleNumber, normalizeVehicleNumberForMatch } from "@/lib/format";
 import type { VehicleRow } from "../services/vehicles.service";
 
+export interface VehicleLedgerExpenseRow {
+  id: string;
+  vehicle_id: string | null;
+  trip_id: string | null;
+  source_type: string | null;
+  amount: number | null;
+  created_at: string | null;
+}
+
 interface VehicleResolutionContext {
   vehicleIds: Set<string>;
   vehicleIdByNormalizedNumber: Map<string, string>;
@@ -85,6 +94,19 @@ export function ledgerTransactionInPeriod(
   period: GarragePeriodValue,
 ): boolean {
   const dateStr = (tx.transaction_date ?? tx.created_at ?? "").slice(0, 10);
+  if (!dateStr) return false;
+  if (period.startsWith("ytd-")) {
+    const year = parseInt(period.slice(4), 10);
+    return parseInt(dateStr.slice(0, 4), 10) === year;
+  }
+  return dateStr.slice(0, 7) === period;
+}
+
+export function vehicleLedgerExpenseInPeriod(
+  row: VehicleLedgerExpenseRow,
+  period: GarragePeriodValue,
+): boolean {
+  const dateStr = (row.created_at ?? "").slice(0, 10);
   if (!dateStr) return false;
   if (period.startsWith("ytd-")) {
     const year = parseInt(period.slice(4), 10);
@@ -274,6 +296,13 @@ export interface VehiclePnLRow {
   trips: number;
   sales: number;
   expense: number;
+  operationalExpense: number;
+  ownershipExpense: number;
+  maintenanceExpense: number;
+  allocatedCost: number;
+  unallocatedCost: number;
+  outstandingPayables: number;
+  allocationEfficiency: number;
   pnl: number;
   margin: number;
 }
@@ -300,10 +329,40 @@ function isDriverPaymentByDescription(tx: LedgerRow): boolean {
   return DRIVER_PAYMENT_DESCRIPTIONS.some((d) => desc === d);
 }
 
+const MAINTENANCE_SOURCES = new Set(["maintenance", "repair", "service"]);
+const OWNERSHIP_SOURCES = new Set([
+  "emi",
+  "insurance",
+  "permit",
+  "fitness",
+  "tax",
+  "depreciation",
+  "manual_adjustment",
+  "gps",
+  "tire",
+  "oil",
+]);
+
+function normalizeSourceType(sourceType: string | null | undefined): string {
+  return String(sourceType ?? "").trim().toLowerCase();
+}
+
+function isOwnershipSource(sourceType: string): boolean {
+  if (!sourceType) return false;
+  return OWNERSHIP_SOURCES.has(sourceType);
+}
+
+function isMaintenanceSource(sourceType: string): boolean {
+  if (!sourceType) return false;
+  return MAINTENANCE_SOURCES.has(sourceType);
+}
+
 export function buildVehiclePnLList(
   vehicles: VehicleRow[],
   trips: TripRow[],
   transactions: LedgerRow[] | null,
+  vehicleLedgerEntries: VehicleLedgerExpenseRow[] | null,
+  vehicleOutstandingPayablesByVehicleId: Record<string, number> | null,
   period: GarragePeriodValue,
   getMissionId: (t: TripRow) => string,
   /** When set, trips where organization_id !== orgId are supplier trips — use supplier_rate for sales (our revenue). */
@@ -321,19 +380,51 @@ export function buildVehiclePnLList(
     filteredTrips.push({ trip, resolvedVehicleId });
   }
   const outByTripId: Record<string, number> = {};
+  const operationalByTripId: Record<string, number> = {};
+  const maintenanceByTripId: Record<string, number> = {};
   filteredTrips.forEach(({ trip: t }) => {
     const isSupplierTrip =
       organizationId != null &&
       String(t.organization_id ?? "").trim() !== String(organizationId).trim();
     // Own trips: supplier_rate is our cost (we pay the carrier). Supplier trips: we ARE the carrier, no supplier cost.
-    outByTripId[t.id] = isSupplierTrip ? 0 : Number(t.supplier_rate ?? 0);
+    const baseCost = isSupplierTrip ? 0 : Number(t.supplier_rate ?? 0);
+    outByTripId[t.id] = baseCost;
+    operationalByTripId[t.id] = baseCost;
+    maintenanceByTripId[t.id] = 0;
   });
   (transactions ?? []).forEach((tx) => {
     if (tx.trip_id && outByTripId[tx.trip_id] != null) {
       // Exclude driver payments (commission, salary, etc.) from vehicle expense.
       if (tx.contact_type === "driver" || isDriverPaymentByDescription(tx))
         return;
-      outByTripId[tx.trip_id] += Number(tx.amount_out ?? 0);
+      const amount = Number(tx.amount_out ?? 0);
+      outByTripId[tx.trip_id] += amount;
+      operationalByTripId[tx.trip_id] += amount;
+    }
+  });
+  const allocatedOwnershipByVehicleId = new Map<string, number>();
+  (vehicleLedgerEntries ?? []).forEach((entry) => {
+    if (!vehicleLedgerExpenseInPeriod(entry, period)) return;
+    const amount = Number(entry.amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const tripId = String(entry.trip_id ?? "").trim();
+    const sourceType = normalizeSourceType(entry.source_type);
+    const isOwnership = isOwnershipSource(sourceType);
+    const isMaintenance = isMaintenanceSource(sourceType);
+    if (tripId && outByTripId[tripId] != null) {
+      if (!isOwnership) {
+        outByTripId[tripId] += amount;
+        operationalByTripId[tripId] += amount;
+        if (isMaintenance) maintenanceByTripId[tripId] += amount;
+      } else {
+        const vehicleId = String(entry.vehicle_id ?? "").trim();
+        if (vehicleId) {
+          allocatedOwnershipByVehicleId.set(
+            vehicleId,
+            (allocatedOwnershipByVehicleId.get(vehicleId) ?? 0) + amount,
+          );
+        }
+      }
     }
   });
 
@@ -347,6 +438,13 @@ export function buildVehiclePnLList(
       trips: 0,
       sales: 0,
       expense: 0,
+      operationalExpense: 0,
+      ownershipExpense: 0,
+      maintenanceExpense: 0,
+      allocatedCost: 0,
+      unallocatedCost: 0,
+      outstandingPayables: 0,
+      allocationEfficiency: 0,
       pnl: 0,
       margin: 0,
     });
@@ -367,6 +465,8 @@ export function buildVehiclePnLList(
     row.trips += 1;
     row.sales += sales;
     row.expense += expense;
+    row.operationalExpense += operationalByTripId[t.id] ?? expense;
+    row.maintenanceExpense += maintenanceByTripId[t.id] ?? 0;
     row.pnl += net;
   });
 
@@ -392,12 +492,63 @@ export function buildVehiclePnLList(
     );
   }
 
+  const ownershipExpenseByVehicleId = new Map<string, number>();
+  const ownershipMaintenanceByVehicleId = new Map<string, number>();
+  for (const entry of vehicleLedgerEntries ?? []) {
+    if (!vehicleLedgerExpenseInPeriod(entry, period)) continue;
+    const amount = Number(entry.amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const vehicleId = String(entry.vehicle_id ?? "").trim();
+    if (!vehicleId || !vMap.has(vehicleId)) continue;
+    const tripId = String(entry.trip_id ?? "").trim();
+    const sourceType = normalizeSourceType(entry.source_type);
+    const isOwnership = isOwnershipSource(sourceType);
+    const isMaintenance = isMaintenanceSource(sourceType);
+    if (tripId && outByTripId[tripId] != null) continue;
+    if (isOwnership || isMaintenance) {
+      ownershipExpenseByVehicleId.set(
+        vehicleId,
+        (ownershipExpenseByVehicleId.get(vehicleId) ?? 0) + amount,
+      );
+      if (isMaintenance) {
+        ownershipMaintenanceByVehicleId.set(
+          vehicleId,
+          (ownershipMaintenanceByVehicleId.get(vehicleId) ?? 0) + amount,
+        );
+      }
+      continue;
+    }
+    ownershipExpenseByVehicleId.set(
+      vehicleId,
+      (ownershipExpenseByVehicleId.get(vehicleId) ?? 0) + amount,
+    );
+  }
+
   const list = Array.from(vMap.values());
   for (const r of list) {
     const extra = standaloneExpenseByVehicleId.get(r.id) ?? 0;
-    if (extra > 0) {
-      r.expense += extra;
+    const ownership = ownershipExpenseByVehicleId.get(r.id) ?? 0;
+    const maintenanceOwnership = ownershipMaintenanceByVehicleId.get(r.id) ?? 0;
+    const allocated = allocatedOwnershipByVehicleId.get(r.id) ?? 0;
+    const outstandingPayables = Math.max(
+      0,
+      Number(vehicleOutstandingPayablesByVehicleId?.[r.id] ?? 0) || 0,
+    );
+    const totalExtra = extra + ownership;
+    if (totalExtra > 0) {
+      r.expense += totalExtra;
       r.pnl -= extra;
+      r.pnl -= ownership;
+    }
+    r.operationalExpense += extra;
+    r.ownershipExpense += ownership;
+    r.maintenanceExpense += maintenanceOwnership;
+    r.allocatedCost = allocated;
+    r.unallocatedCost = Math.max(0, ownership - allocated);
+    r.outstandingPayables = outstandingPayables;
+    r.allocationEfficiency = ownership > 0 ? Math.min(100, (allocated / ownership) * 100) : 0;
+    if (outstandingPayables > 0) {
+      r.pnl -= outstandingPayables;
     }
   }
   list.forEach((r) => {

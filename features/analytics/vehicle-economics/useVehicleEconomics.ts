@@ -61,11 +61,11 @@ export function useVehicleEconomics(input: {
           .in("id", vehicleIds),
         supabase()
           .from("trip_fuel_entries")
-          .select("trip_id,amount_inr,approval_state,status")
+          .select("trip_id,amount_inr,approval_state,posting_state,status")
           .in("trip_id", tripIds),
         supabase()
           .from("trip_toll_entries")
-          .select("trip_id,amount_inr,approval_state,status")
+          .select("trip_id,amount_inr,approval_state,posting_state,status")
           .in("trip_id", tripIds),
         supabase()
           .from("vehicle_maintenance_entries")
@@ -118,7 +118,12 @@ export function useVehicleEconomics(input: {
         const approval = String(
           (fuel as { approval_state?: string | null }).approval_state ?? "",
         ).toLowerCase();
-        if (approval !== "approved" && approval !== "settled") continue;
+        const posting = String(
+          (fuel as { posting_state?: string | null }).posting_state ?? "",
+        ).toLowerCase();
+        if (posting !== "posted" && (posting || (approval !== "approved" && approval !== "settled"))) {
+          continue;
+        }
         const tripId = String((fuel as { trip_id: string }).trip_id);
         const vehicleId = tripToVehicle.get(tripId);
         if (!vehicleId) continue;
@@ -133,7 +138,12 @@ export function useVehicleEconomics(input: {
         const approval = String(
           (toll as { approval_state?: string | null }).approval_state ?? "",
         ).toLowerCase();
-        if (approval !== "approved" && approval !== "settled") continue;
+        const posting = String(
+          (toll as { posting_state?: string | null }).posting_state ?? "",
+        ).toLowerCase();
+        if (posting !== "posted" && (posting || (approval !== "approved" && approval !== "settled"))) {
+          continue;
+        }
         const tripId = String((toll as { trip_id: string }).trip_id);
         const vehicleId = tripToVehicle.get(tripId);
         if (!vehicleId) continue;

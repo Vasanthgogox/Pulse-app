@@ -18,6 +18,7 @@ import * as salaryRequestsService from "@/features/drivers/services/salaryReques
 import type { TripRow } from "@/features/trips/services/trips.service";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { injectPulseWatermarkIntoHtml } from "@/lib/reportWatermark.util";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Platform, Share } from "react-native";
 
@@ -123,7 +124,7 @@ function buildTripSettlementHtml(p: {
 }
 
 async function sharePdf(html: string, dialogTitle: string) {
-  const file = await Print.printToFileAsync({ html });
+  const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
   if (Platform.OS === "web") {
     window.open(file.uri, "_blank");
     return;

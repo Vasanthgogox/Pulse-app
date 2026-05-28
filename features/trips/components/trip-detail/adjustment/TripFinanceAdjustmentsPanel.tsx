@@ -100,11 +100,21 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
 
       <View style={styles.table}>
         <View style={styles.tableHead}>
-          <Text style={[styles.th, styles.thParty]}>Party</Text>
-          <Text style={[styles.th, styles.thLane]}>Lane</Text>
-          <Text style={[styles.th, styles.thNote]}>Note</Text>
-          <Text style={[styles.th, styles.thReason]}>Reason</Text>
-          <Text style={[styles.th, styles.thAmt]}>Amount</Text>
+          <View style={styles.colParty}>
+            <Text style={styles.th}>Party</Text>
+          </View>
+          <View style={styles.colLane}>
+            <Text style={styles.th}>Lane</Text>
+          </View>
+          <View style={styles.colNote}>
+            <Text style={styles.th}>Note</Text>
+          </View>
+          <View style={styles.colReason}>
+            <Text style={styles.th}>Reason</Text>
+          </View>
+          <View style={styles.colAmt}>
+            <Text style={[styles.th, styles.thAmtText]}>Amount</Text>
+          </View>
         </View>
 
         {rows.length === 0 ? (
@@ -120,46 +130,53 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                 style={[styles.tr, voided && styles.trVoided]}
                 onPress={() => props.onOpenProvision(isSale ? "client" : "supplier")}
               >
-                <View style={styles.tdParty}>
+                <View style={styles.colParty}>
                   <EntityAvatar
                     name={partyName}
                     avatarUrl={isSale ? props.clientAvatarUrl : props.supplierAvatarUrl}
                     avatarSeed={isSale ? props.clientAvatarSeed : props.supplierAvatarSeed}
                     entityType={isSale ? "client" : "supplier"}
-                    size={28}
+                    size={24}
                     showIntegrationBadge={false}
                   />
                   <Text style={[styles.partyCell, voided && styles.struck]} numberOfLines={1}>
                     {partyName}
                   </Text>
                 </View>
-                <Text style={[styles.td, styles.tdLane, voided && styles.struck]}>
-                  {laneLabel(adj.type)}
-                </Text>
-                <Text
-                  style={[
-                    styles.td,
-                    styles.tdNote,
-                    adj.impact === "minus" ? styles.noteCn : styles.noteDn,
-                    voided && styles.struck,
-                  ]}
-                >
-                  {cnDnLabel(adj.impact)}
-                </Text>
-                <Text style={[styles.td, styles.tdReason, voided && styles.struck]} numberOfLines={2}>
-                  {(adj.reason ?? "").trim() || "—"}
-                </Text>
-                <Text
-                  style={[
-                    styles.td,
-                    styles.tdAmt,
-                    isSale ? styles.amtSale : styles.amtCost,
-                    voided && styles.struck,
-                  ]}
-                >
-                  {adj.impact === "plus" ? "+" : "−"}
-                  {formatINR(adj.amount)}
-                </Text>
+                <View style={styles.colLane}>
+                  <Text style={[styles.td, voided && styles.struck]}>{laneLabel(adj.type)}</Text>
+                </View>
+                <View style={styles.colNote}>
+                  <Text
+                    style={[
+                      styles.td,
+                      styles.tdNote,
+                      adj.impact === "minus" ? styles.noteCn : styles.noteDn,
+                      voided && styles.struck,
+                    ]}
+                  >
+                    {cnDnLabel(adj.impact)}
+                  </Text>
+                </View>
+                <View style={styles.colReason}>
+                  <Text style={[styles.td, styles.tdReason, voided && styles.struck]} numberOfLines={2}>
+                    {(adj.reason ?? "").trim() || "—"}
+                  </Text>
+                </View>
+                <View style={styles.colAmt}>
+                  <Text
+                    style={[
+                      styles.td,
+                      styles.tdAmt,
+                      isSale ? styles.amtSale : styles.amtCost,
+                      voided && styles.struck,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {adj.impact === "plus" ? "+" : "−"}
+                    {formatINR(adj.amount)}
+                  </Text>
+                </View>
               </Pressable>
             );
           })
@@ -280,16 +297,42 @@ const styles = StyleSheet.create({
   },
   th: {
     fontSize: 8,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
-  thParty: { width: "34%" },
-  thLane: { width: "12%" },
-  thNote: { width: "10%" },
-  thReason: { flex: 1, minWidth: 0 },
-  thAmt: { width: "18%", textAlign: "right" },
+  thAmtText: { textAlign: "right", width: "100%" },
+  colParty: {
+    flex: 34,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingRight: 4,
+  },
+  colLane: {
+    flex: 11,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  colNote: {
+    flex: 9,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  colReason: {
+    flex: 28,
+    minWidth: 0,
+    justifyContent: "center",
+    paddingRight: 4,
+  },
+  colAmt: {
+    flex: 18,
+    minWidth: 56,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   empty: {
     padding: 14,
     fontSize: 11,
@@ -310,38 +353,26 @@ const styles = StyleSheet.create({
   trVoided: { opacity: 0.55 },
   td: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#334155",
-  },
-  tdParty: {
-    width: "34%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minWidth: 0,
   },
   partyCell: {
     flex: 1,
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "600",
     color: "#0f172a",
     minWidth: 0,
   },
-  tdLane: { width: "12%" },
-  tdNote: { width: "10%", fontWeight: "900" },
+  tdNote: { fontWeight: "600" },
   noteCn: { color: "#4f46e5" },
   noteDn: { color: "#e11d48" },
   tdReason: {
-    flex: 1,
-    minWidth: 0,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#64748b",
-    paddingRight: 4,
   },
   tdAmt: {
-    width: "18%",
     textAlign: "right",
-    fontWeight: "900",
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
   },
   amtSale: { color: "#059669" },

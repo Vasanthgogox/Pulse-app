@@ -234,7 +234,9 @@ export async function syncIndentsWithCache(orgId: string, currentRows: IndentRow
     const indents = await syncDomainRows<IndentRow>({
       domain: "indents",
       orgId,
-      schemaVersion: "1",
+      // Bump cache schema so legacy cached rows without operational identity
+      // fields are invalidated and rebuilt with normalized indent refs.
+      schemaVersion: "2",
       policy: { maxDeltaLagMs: 3 * 60_000, fullSyncEveryMs: 4 * 60 * 60_000 },
       currentRows,
       getFull: async () => {

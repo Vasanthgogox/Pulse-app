@@ -28,6 +28,7 @@ import * as salaryRequestsService from '@/features/drivers/services/salaryReques
 import * as tripsService from '@/features/trips/services/trips.service';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as Print from 'expo-print';
+import { injectPulseWatermarkIntoHtml } from '@/lib/reportWatermark.util';
 import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -314,7 +315,7 @@ export default function DriverPassbookDetailScreen() {
 
   const shareCashReceiptPdf = useCallback(async (p: Parameters<typeof buildCashReceiptHtml>[0]) => {
     const html = buildCashReceiptHtml(p);
-    const file = await Print.printToFileAsync({ html });
+    const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
     if (Platform.OS === 'web') {
       window.open(file.uri, '_blank');
       return;
@@ -334,7 +335,7 @@ export default function DriverPassbookDetailScreen() {
   const shareBulkClaimPdf = useCallback(
     async (p: Parameters<typeof buildBulkClaimHtml>[0]) => {
       const html = buildBulkClaimHtml(p);
-      const file = await Print.printToFileAsync({ html });
+      const file = await Print.printToFileAsync({ html: injectPulseWatermarkIntoHtml(html) });
       if (Platform.OS === 'web') {
         window.open(file.uri, '_blank');
         return;

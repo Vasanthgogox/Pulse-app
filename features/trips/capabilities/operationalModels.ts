@@ -1,23 +1,18 @@
 import type { TripRow } from "@/features/trips/services/trips.service";
+import {
+  isAggregateExecutionTrip,
+  isAssetExecutionTrip,
+} from "@/features/trips/domain/tripExecutionModel";
 
 export type OperationalOwner = "organization_vehicle" | "supplier_vehicle";
 export type AccountingMode = "vehicle_economics" | "supplier_operations";
 
-function normalizeMode(mode: TripRow["trip_payout_mode"]): string {
-  return String(mode ?? "")
-    .trim()
-    .toLowerCase();
-}
-
 export function isAssetTrip(trip: TripRow): boolean {
-  const payoutMode = normalizeMode(trip.trip_payout_mode);
-  if (payoutMode === "asset") return true;
-  if (payoutMode === "market") return false;
-  return !trip.supplier_id;
+  return isAssetExecutionTrip(trip);
 }
 
 export function isAggregationTrip(trip: TripRow): boolean {
-  return !isAssetTrip(trip);
+  return isAggregateExecutionTrip(trip);
 }
 
 export function getOperationalOwner(trip: TripRow): OperationalOwner {

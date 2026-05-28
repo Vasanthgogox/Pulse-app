@@ -17,6 +17,7 @@ import { DetailScreenLayout } from '@/components/DetailScreenLayout';
 import { TransactionRow } from '@/components/TransactionRow';
 import { formatINR } from '@/lib/format';
 import Theme from '@/constants/Theme';
+import { wrapPrintableReportHtml } from '@/lib/reportWatermark.util';
 
 // Sample transaction data - replace with actual data from your service
 const sampleTransactions = [
@@ -119,7 +120,10 @@ export default function ReportScreen() {
 
   const handleDownloadPdf = async () => {
     try {
-      const html = `<html><body><h2>Report ${startDate} - ${endDate}</h2><pre>${buildReportMessage().replace(/</g, '&lt;')}</pre></body></html>`;
+      const html = wrapPrintableReportHtml({
+        title: `Report ${startDate} - ${endDate}`,
+        bodyHtml: `<h2>Report ${startDate} - ${endDate}</h2><pre>${buildReportMessage().replace(/</g, "&lt;")}</pre>`,
+      });
       if (Platform.OS === 'web') {
         await Print.printAsync({ html });
         return;

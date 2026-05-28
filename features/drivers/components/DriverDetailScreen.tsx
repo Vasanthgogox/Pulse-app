@@ -1,6 +1,8 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { DatePresetPillBar } from "@/components/DatePresetPillBar";
+import { EntityIntelWidgetRow } from "@/components/entityIntel/EntityIntelWidgetRow";
+import { pickEntityReport } from "@/components/entityIntel/pickEntityReport";
 import { DetailPageLayout, DetailSection } from "@/components/DetailPageLayout";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
@@ -18,6 +20,11 @@ import {
     type FinancePeriodFilter,
     type LedgerRow,
 } from "@/features/finance";
+import {
+    buildDriverPayableReport,
+    formatReportInr,
+    formatSettlementPct,
+} from "@/features/finance/lib/entityDetailReports.util";
 import {
     buildMonthlyDriverStatement,
     type DriverLedgerEntryForStatement,
@@ -344,6 +351,9 @@ export default function DriverDetailScreen({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [driverReportKind, setDriverReportKind] = useState<"payable" | "ledger">(
+    "payable",
+  );
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
@@ -891,6 +901,45 @@ export default function DriverDetailScreen({
     return { contractValue, paidSum, dueSum, health };
   }, [filteredLedgerRows]);
 
+  const driverPayableReport = useMemo(() => {
+    const rows = filteredLedgerRows.map((r) => ({
+      trip: r.missionId ?? "—",
+      route: r.dest?.trim() || "—",
+      client: (r.clientName ?? "—").toUpperCase(),
+      contract: formatReportInr(Number(r.col1 ?? 0)),
+      paid: formatReportInr(Number(r.col2 ?? 0)),
+      due: formatReportInr(Number(r.col3 ?? 0)),
+      settlement: formatSettlementPct(Number(r.col2 ?? 0), Number(r.col1 ?? 0)),
+      commissionBasis: r.commissionBasis ?? "—",
+      txns: r.txnCount ?? 0,
+      lastTxn: r.lastTxnShort ?? "—",
+    }));
+    return buildDriverPayableReport(rows);
+  }, [filteredLedgerRows]);
+
+  const openDriverReport = useCallback(
+    (kind: "payable" | "ledger") => {
+      setDriverReportKind(kind);
+      setShowReportModal(true);
+    },
+    [],
+  );
+
+  const handleDriverDownloadPress = useCallback(() => {
+    if (driverDetailTab === "trips") {
+      pickEntityReport(
+        "Driver report",
+        [
+          { id: "payable", label: "Payable & performance" },
+          { id: "ledger", label: "Ledger transactions" },
+        ],
+        (id) => openDriverReport(id === "ledger" ? "ledger" : "payable"),
+      );
+      return;
+    }
+    openDriverReport("ledger");
+  }, [driverDetailTab, openDriverReport]);
+
   /** Trip details map for Cash Flow list. */
   const driverTripDetailsMap = useMemo(() => {
     const m: Record<
@@ -1305,7 +1354,7 @@ export default function DriverDetailScreen({
         <View style={styles.headerRightActions}>
           <TouchableOpacity
             style={styles.downloadHeaderBtn}
-            onPress={() => setShowReportModal(true)}
+            onPress={handleDriverDownloadPress}
             activeOpacity={0.8}
             accessibilityLabel={t("ledgerReport")}
           >
@@ -1743,6 +1792,39 @@ export default function DriverDetailScreen({
         </TouchableOpacity>
       </View>
 
+      {driverDetailTab === "trips" ? (
+        <EntityIntelWidgetRow
+          widgets={[
+            {
+              id: "payable",
+              label: "Payable due",
+              value: formatINR(tripsScorecard.dueSum),
+              tone: tripsScorecard.dueSum > 0 ? "warn" : "good",
+              hint: "Export payable report",
+              onPress: () => openDriverReport("payable"),
+            },
+            {
+              id: "settlement",
+              label: "Trip settlement",
+              value: `${tripsScorecard.health}%`,
+              tone:
+                tripsScorecard.health >= 80
+                  ? "good"
+                  : tripsScorecard.health >= 50
+                    ? "warn"
+                    : "bad",
+              hint: "Contract vs paid",
+            },
+            {
+              id: "performance",
+              label: "Fleet payments",
+              value: `${settlementHealth}%`,
+              hint: `${tripsHandled} trips in view`,
+            },
+          ]}
+        />
+      ) : null}
+
       <Modal
         visible={showProfileModal}
         animationType="slide"
@@ -1880,7 +1962,7 @@ export default function DriverDetailScreen({
                   </Text>
                   {isWebDesktop ? (
                     <Text style={styles.driverTripsThNum} numberOfLines={1}>
-                      {t("driverTripsColPnL")}
+                      SETTLED %
                     </Text>
                   ) : null}
                   <Text style={styles.driverTripsThNum} numberOfLines={1}>
@@ -1914,13 +1996,18 @@ export default function DriverDetailScreen({
                   </View>
                 ) : (
                   filteredLedgerRows.map((r) => {
-                    const pl = Number(r.margin ?? 0);
-                    const plStyle =
-                      pl > 0
-                        ? styles.tdGreen
-                        : pl < 0
-                          ? styles.tdRed
-                          : styles.tdMuted;
+                    const settledPct = formatSettlementPct(
+                      Number(r.col2 ?? 0),
+                      Number(r.col1 ?? 0),
+                    );
+                    const settledTone =
+                      settledPct === "—"
+                        ? styles.tdMuted
+                        : Number.parseInt(settledPct, 10) >= 100
+                          ? styles.tdGreen
+                          : Number.parseInt(settledPct, 10) > 0
+                            ? styles.tdMuted
+                            : styles.tdRed;
                     return (
                       <Pressable
                         key={r.id}
@@ -1976,10 +2063,10 @@ export default function DriverDetailScreen({
                         </Text>
                           {isWebDesktop ? (
                             <Text
-                              style={[styles.driverTripsAmt, plStyle]}
+                              style={[styles.driverTripsAmt, settledTone]}
                               numberOfLines={1}
                             >
-                              {formatINR(pl)}
+                              {settledPct}
                             </Text>
                           ) : null}
                         <Text
@@ -2390,10 +2477,18 @@ export default function DriverDetailScreen({
         onClose={() => setShowReportModal(false)}
         transactions={sortedDriverLedger}
         title={
-          lockedPartyName
-            ? `${t("ledgerFor")}${lockedPartyName}`
-            : t("ledgerReport")
+          driverReportKind === "payable"
+            ? `${lockedPartyName || t("driver")} — Payable & performance`
+            : lockedPartyName
+              ? `${t("ledgerFor")}${lockedPartyName}`
+              : t("ledgerReport")
         }
+        customReport={
+          driverReportKind === "payable" && driverDetailTab === "trips"
+            ? driverPayableReport
+            : undefined
+        }
+        hideCashSummary={driverReportKind === "payable"}
       />
 
       <DriverFleetInviteSalaryModal

@@ -2,6 +2,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useMemo, useState } from "react";
 import Theme from "@/constants/Theme";
 import { VehicleHealthBadge } from "@/features/ai";
+import { mapVehicleLedgerRowToExpenseEvent } from "@/features/fleet";
+import {
+  selectVehicleAccountingIntegrity,
+  selectVehicleAllocationExposure,
+} from "@/features/finance";
 import {
   useSetVehicleOperationLedgerApproval,
   useVehicleOperationLedgerEntries,
@@ -39,6 +44,12 @@ export function VehicleOperationsHub({
     approvalStates: ["draft", "verified"],
     enabled: !!organizationId && expanded,
   });
+  const approvedLedgerEntriesQuery = useVehicleOperationLedgerEntries({
+    organizationId,
+    vehicleId,
+    approvalStates: ["approved"],
+    enabled: !!organizationId && expanded,
+  });
   const setApproval = useSetVehicleOperationLedgerApproval();
 
   const sections = useMemo(() => {
@@ -64,6 +75,20 @@ export function VehicleOperationsHub({
       },
     };
   }, [ledgerQuery.data, utilizationPct]);
+  const financialHealth = useMemo(() => {
+    const summary = ledgerQuery.data;
+    if (!summary) return null;
+    const events = (approvedLedgerEntriesQuery.data ?? []).map((entry) =>
+      mapVehicleLedgerRowToExpenseEvent(entry),
+    );
+    const accounting = selectVehicleAccountingIntegrity({
+      monthlyRevenueInr: summary.monthlyRevenueInr,
+      operationalCostInr: summary.operationalCostInr,
+      events,
+    });
+    const allocation = selectVehicleAllocationExposure(events);
+    return { accounting, allocation };
+  }, [approvedLedgerEntriesQuery.data, ledgerQuery.data]);
 
   return (
     <View style={styles.card}>
@@ -104,6 +129,28 @@ export function VehicleOperationsHub({
                   <Text style={styles.meta}>Approved maintenance/repair/service/permit/insurance</Text>
                 </View>
               </View>
+
+              {financialHealth ? (
+                <View style={styles.metric}>
+                  <Text style={styles.metricLabel}>Vehicle Financial Health</Text>
+                  <Text style={styles.metricValue}>
+                    {financialHealth.accounting.health.replace(/_/g, " ").toUpperCase()}
+                  </Text>
+                  <Text style={styles.meta}>
+                    Revenue {inr(financialHealth.accounting.monthlyRevenueInr)} · Operational{" "}
+                    {inr(financialHealth.accounting.operationalCostInr)} · Ownership{" "}
+                    {inr(financialHealth.accounting.ownershipCostInr)}
+                  </Text>
+                  <Text style={styles.meta}>
+                    Payables {inr(financialHealth.accounting.outstandingPayablesInr)} · Unallocated{" "}
+                    {inr(financialHealth.accounting.unallocatedOverheadInr)} · Net{" "}
+                    {inr(financialHealth.accounting.netVehicleProfitabilityInr)}
+                  </Text>
+                  <Text style={styles.meta}>
+                    Allocation efficiency {financialHealth.allocation.allocationEfficiencyPct.toFixed(1)}%
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={styles.grid}>
                 <View style={styles.metric}>

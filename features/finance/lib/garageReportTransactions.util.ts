@@ -49,6 +49,8 @@ export function buildGarageReportTransactions({
     vehicleRows,
     tripRows,
     ledgerTransactions,
+    null,
+    null,
     garagePeriod,
     getTripDisplayNumber,
     organizationId,

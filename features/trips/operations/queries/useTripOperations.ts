@@ -19,6 +19,22 @@ import {
 } from "@/lib/queries/operationalInvalidation";
 import { syncOperationalFinanceProjection } from "@/features/finance/projections";
 import {
+  deriveTripCostFinancialSnapshot,
+  mapTripOperationalRowsToCostEvents,
+  selectAggregateTripBrokerageMargin,
+  selectAggregateTripNetMargin,
+  selectAggregateTripSupplierCost,
+  selectAssetTripActualMargin,
+  selectAssetTripCostPerKm,
+  selectAssetTripMarginImpact,
+  selectAssetTripOutstandingPayables,
+  selectAssetTripPostedExpenses,
+  selectTripAccountingIntegrity,
+  selectTripPostingIntegrity,
+  type TripCostEvent,
+  type TripCostFinancialSnapshot,
+} from "@/features/finance";
+import {
   createTripFuelEntry,
   getTripFuelEntries,
   updateTripFuelApprovalState,
@@ -44,6 +60,8 @@ import {
   enqueueTollMetadata,
   enqueueTollPhoto,
 } from "../offline/outbox";
+import { supabase } from "@/lib/supabase";
+import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
 
 const reviewInFlightKeys = new Set<string>();
 
@@ -103,6 +121,24 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
             })
           : { error: null, entries: [] };
       if (maintenanceRes.error) throw maintenanceRes.error;
+      const { data: ledgerRows, error: ledgerError } = await supabase()
+        .from("vehicle_ledger_entries")
+        .select("id,source_type,source_id")
+        .eq("trip_id", tripId!)
+        .in("source_type", ["fuel", "toll"]);
+      if (ledgerError) throw new Error(ledgerError.message);
+      const ledgerBySource: { fuel: Record<string, string>; toll: Record<string, string> } = {
+        fuel: {},
+        toll: {},
+      };
+      for (const row of ledgerRows ?? []) {
+        const sourceType = String((row as { source_type?: string | null }).source_type ?? "").toLowerCase();
+        const sourceId = String((row as { source_id?: string | null }).source_id ?? "").trim();
+        const ledgerId = String((row as { id?: string | null }).id ?? "").trim();
+        if (!sourceId || !ledgerId) continue;
+        if (sourceType === "fuel") ledgerBySource.fuel[sourceId] = ledgerId;
+        if (sourceType === "toll") ledgerBySource.toll[sourceId] = ledgerId;
+      }
       const mileage = computeTripMileageMetrics({
         trip: tripRes.trip,
         fuelEntries: fuelRes.entries,
@@ -111,13 +147,95 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         capabilities: getTripOperationalCapabilities(tripRes.trip),
       });
       const capabilities = getTripOperationalCapabilities(tripRes.trip);
+      const executionModel = getTripExecutionModel(tripRes.trip);
+      const costEvents: TripCostEvent[] = mapTripOperationalRowsToCostEvents({
+        fuelEntries: fuelRes.entries,
+        tollEntries: tollRes.entries,
+        tripDisplay: {
+          trip_operational_code: tripRes.trip.trip_operational_code ?? null,
+          trip_code: tripRes.trip.trip_code ?? null,
+          display_trip_id: tripRes.trip.display_trip_id ?? null,
+          trip_number: tripRes.trip.trip_number ?? null,
+        },
+        ledgerBySource,
+      });
+      const financialSnapshot: TripCostFinancialSnapshot = deriveTripCostFinancialSnapshot({
+        events: costEvents,
+        distanceKm: mileage.distanceKm ?? null,
+      });
+      const assetPnL =
+        executionModel === "asset"
+          ? {
+              actualMarginInr: selectAssetTripActualMargin({
+                trip: tripRes.trip,
+                events: costEvents,
+              }),
+              costPerKm: selectAssetTripCostPerKm({
+                trip: tripRes.trip,
+                events: costEvents,
+              }),
+              marginImpactPercent: selectAssetTripMarginImpact({
+                trip: tripRes.trip,
+                events: costEvents,
+              }),
+            }
+          : null;
+      const integrity =
+        executionModel === "asset"
+          ? {
+              trip: selectTripAccountingIntegrity({
+                trip: tripRes.trip,
+                events: costEvents,
+              }),
+              posting: selectTripPostingIntegrity(costEvents),
+            }
+          : null;
+      const aggregatePnL =
+        executionModel === "aggregate"
+          ? {
+              supplierCostInr: selectAggregateTripSupplierCost({
+                trip: tripRes.trip,
+                adjustments: [],
+              }),
+              brokerageMarginInr: selectAggregateTripBrokerageMargin({
+                trip: tripRes.trip,
+                adjustments: [],
+              }),
+              netMarginInr: selectAggregateTripNetMargin({
+                trip: tripRes.trip,
+                adjustments: [],
+              }),
+            }
+          : null;
       return {
         trip: tripRes.trip,
+        executionModel,
         capabilities,
         fuelEntries: fuelRes.entries,
         tollEntries: tollRes.entries,
         maintenanceEntries: maintenanceRes.entries,
         mileage,
+        costEvents,
+        financialSnapshot,
+        assetPnL,
+        aggregatePnL,
+        integrity,
+        lifecycle:
+          executionModel === "asset"
+            ? {
+                approvedCostsInr: financialSnapshot.approvedOperationalCostInr,
+                postedToLedgerInr: selectAssetTripPostedExpenses(costEvents),
+                pendingPostingInr: Math.max(
+                  0,
+                  financialSnapshot.approvedOperationalCostInr - selectAssetTripPostedExpenses(costEvents),
+                ),
+                outstandingReimbursementInr: selectAssetTripOutstandingPayables(costEvents),
+                marginImpacted: selectAssetTripMarginImpact({
+                  trip: tripRes.trip,
+                  events: costEvents,
+                }) > 0,
+              }
+            : null,
       };
     },
     enabled,

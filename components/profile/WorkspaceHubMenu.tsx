@@ -47,7 +47,6 @@ const NAVY = Theme.primary;
 const NAVY_MID = Theme.primaryLight;
 const NAVY_TINT = "rgba(79,70,229,0.08)";
 const NAVY_BORDER_SOFT = "rgba(79,70,229,0.12)";
-const NAVY_ON_DARK_MUTED = "rgba(255,255,255,0.62)";
 const NAVY_ON_DARK_EYEBROW = "rgba(255,255,255,0.78)";
 
 function orgInitials(name: string): string {
@@ -58,9 +57,11 @@ function orgInitials(name: string): string {
 }
 
 type HubRow = {
-  id: WorkspacePanelId;
+  id: string;
   label: string;
   icon: React.ReactNode;
+  panelId?: WorkspacePanelId;
+  route?: string;
 };
 
 type Props = {
@@ -140,21 +141,30 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
       id: "settings",
       label: "Workspace settings",
       icon: <Building2 size={14} color={NAVY} strokeWidth={2.2} />,
+      panelId: "settings",
     },
     {
       id: "team",
       label: "Team members",
       icon: <Users size={14} color={NAVY} strokeWidth={2.2} />,
+      panelId: "team",
     },
     {
       id: "kyc",
       label: "Org identity & KYC",
       icon: <Settings2 size={14} color={NAVY} strokeWidth={2.2} />,
+      panelId: "kyc",
+    },
+    {
+      id: "business-pulse",
+      label: "Business Pulse intelligence",
+      icon: <Bell size={14} color={NAVY} strokeWidth={2.2} />,
+      route: ROUTES.BUSINESS_PULSE,
     },
   ];
 
   const navigate = (path: string) => {
-    router.push(path as Parameters<typeof router.push>[0]);
+    router.replace(path as Parameters<typeof router.replace>[0]);
   };
 
   return (
@@ -258,12 +268,18 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
               <Text style={styles.sectionTitle}>Workspace Management</Text>
             </View>
             {rows.map((row, idx) => {
-              const selected = activePanel === row.id;
+              const selected = !!row.panelId && activePanel === row.panelId;
               const isFirst = idx === 0;
               return (
                 <Pressable
                   key={row.id}
-                  onPress={() => onSelectPanel(row.id)}
+                  onPress={() => {
+                    if (row.panelId) {
+                      onSelectPanel(row.panelId);
+                      return;
+                    }
+                    if (row.route) navigate(row.route);
+                  }}
                   style={({ pressed }) => [
                     styles.menuRow,
                     isFirst && styles.menuRowFirst,
@@ -450,7 +466,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   navyTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
     color: "#fff",
     letterSpacing: -0.3,
@@ -512,7 +528,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   quickLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.05,
@@ -581,7 +597,7 @@ const styles = StyleSheet.create({
   },
   menuRowLabel: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.05,
@@ -619,7 +635,7 @@ const styles = StyleSheet.create({
   footerAvatarInitials: { fontSize: 12, fontWeight: "800", color: NAVY },
   footerText: { flex: 1, minWidth: 0 },
   footerName: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
-  footerEmail: { fontSize: 10, color: Theme.textMuted, marginTop: 1 },
+  footerEmail: { fontSize: 9, color: Theme.textMuted, marginTop: 1 },
   signOutBtn: {
     width: 32,
     height: 32,

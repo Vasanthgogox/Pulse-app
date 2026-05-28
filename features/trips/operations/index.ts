@@ -2,6 +2,7 @@ export { FuelEntryScreen } from "./fuel/FuelEntryScreen";
 export { TollEntryScreen } from "./toll/TollEntryScreen";
 export { TripOperationsSummary } from "./summary/TripOperationsSummary";
 export { OperationsHub } from "./hub/OperationsHub";
+export { TripExpensesScreen } from "./hub/TripExpensesScreen";
 export { computeTripMileageMetrics } from "./mileage/mileageEngine";
 export { toOperationsDisplayMetrics } from "./metrics/operationsMetrics";
 export {

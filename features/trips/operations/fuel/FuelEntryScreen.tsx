@@ -2,44 +2,32 @@ import { SmartInput } from "@/components/mobile-input";
 import {
   OperationalBottomActionBar,
   OperationalButton,
+  OperationalChipSelect,
   OperationalHeader,
   Surface,
 } from "@/components/operational";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import type {
-  FuelType,
-  OperationalPaymentMode,
-  OperationalPaymentOwner,
-} from "../types";
-import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
+import { Alert, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { FuelType, OperationalPaymentMode, OperationalPaymentOwner } from "../types";
 import { useSaveTripFuelEntry } from "../queries/useTripOperations";
+import {
+  FUEL_TYPE_OPTIONS,
+  PAYMENT_MODE_OPTIONS,
+  PAYMENT_OWNER_OPTIONS,
+} from "../shared/operationsEntryOptions";
+import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
 import { useOperationsSyncState } from "../state/useOperationsSyncState";
-
-const FUEL_TYPES: FuelType[] = ["diesel", "petrol", "cng", "other"];
-const PAYMENT_OWNERS: OperationalPaymentOwner[] = [
-  "organization",
-  "driver",
-  "supplier",
-  "fleet_card",
-  "unknown",
-];
-const PAYMENT_MODES: OperationalPaymentMode[] = [
-  "cash",
-  "fastag",
-  "card",
-  "credit",
-  "pending",
-  "unknown",
-];
 
 export function FuelEntryScreen({ trip }: { trip: TripRow }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const saveFuel = useSaveTripFuelEntry();
   const { pendingCount, failedCount, refresh } = useOperationsSyncState();
@@ -89,7 +77,7 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
         billPhotoLocalUri: photoUri,
       });
       if (res.queued) {
-        setHint("Saved to outbox. Fuel entry will sync when online.");
+        setHint("Saved offline — will sync when connected.");
       }
       await refresh();
       router.back();
@@ -99,97 +87,97 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={s.screen}>
       <OperationalHeader
         title="Fuel Entry"
-        subtitle="Optional operations logging. Add now or later."
+        subtitle={contextLine}
         onBack={() => router.back()}
+        density="high"
       />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Surface elevation={1}>
-          <SmartInput
-            type="currency"
-            value={amountInr}
-            onChange={(_, numeric) => setAmountInr(numeric)}
-            label="Fuel Spend"
-            context={contextLine}
-            submitLabel="Apply Amount"
-            required={false}
-            validation={{ min: 0, max: 1000000 }}
-          />
-        </Surface>
-        <Surface elevation={1}>
-          <SmartInput
-            type="quantity"
-            value={liters ?? ""}
-            onChange={(_, numeric) => setLiters(numeric)}
-            label="Liters (optional)"
-            context={contextLine}
-            submitLabel="Apply Liters"
-            suffix=" L"
-            required={false}
-            validation={{ min: 0, max: 5000 }}
-          />
-        </Surface>
-
-        <Surface elevation={1}>
-          <Text style={styles.label}>Fuel Type</Text>
-          <View style={styles.chips}>
-            {FUEL_TYPES.map((type) => (
-              <OperationalButton
-                key={type}
-                intent={fuelType === type ? "primary" : "utility"}
-                label={type.toUpperCase()}
-                onPress={() => setFuelType(type)}
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={[
+          s.content,
+          { paddingBottom: insets.bottom + 88 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Surface elevation={1} density="high">
+          <Text style={s.routeLine} numberOfLines={1}>
+            {contextLine}
+          </Text>
+          <View style={s.row2}>
+            <View style={s.row2Cell}>
+              <SmartInput
+                type="currency"
+                value={amountInr}
+                onChange={(_, numeric) => setAmountInr(numeric)}
+                label="Spend"
+                submitLabel="Apply"
+                required={false}
+                validation={{ min: 0, max: 1000000 }}
               />
-            ))}
+            </View>
+            <View style={s.row2Cell}>
+              <SmartInput
+                type="quantity"
+                value={liters ?? ""}
+                onChange={(_, numeric) => setLiters(numeric)}
+                label="Liters"
+                submitLabel="Apply"
+                suffix=" L"
+                required={false}
+                validation={{ min: 0, max: 5000 }}
+              />
+            </View>
           </View>
         </Surface>
 
-        <Surface elevation={1}>
-          <Text style={styles.label}>Payment Owner</Text>
-          <View style={styles.chips}>
-            {PAYMENT_OWNERS.map((owner) => (
-              <OperationalButton
-                key={owner}
-                intent={paymentOwner === owner ? "primary" : "utility"}
-                label={owner.replaceAll("_", " ").toUpperCase()}
-                onPress={() => setPaymentOwner(owner)}
-              />
-            ))}
-          </View>
-          <Text style={[styles.label, { marginTop: 10 }]}>Payment Mode</Text>
-          <View style={styles.chips}>
-            {PAYMENT_MODES.map((mode) => (
-              <OperationalButton
-                key={mode}
-                intent={paymentMode === mode ? "primary" : "utility"}
-                label={mode.replaceAll("_", " ").toUpperCase()}
-                onPress={() => setPaymentMode(mode)}
-              />
-            ))}
-          </View>
-          <Text style={styles.metaHint}>
-            Reports are operational only. Business approval is required before posting.
+        <Surface elevation={1} density="high">
+          <OperationalChipSelect
+            label="Fuel type"
+            options={FUEL_TYPE_OPTIONS}
+            value={fuelType}
+            onChange={setFuelType}
+          />
+        </Surface>
+
+        <Surface elevation={1} density="high">
+          <OperationalChipSelect
+            label="Paid by"
+            options={PAYMENT_OWNER_OPTIONS}
+            value={paymentOwner}
+            onChange={setPaymentOwner}
+          />
+          <View style={s.divider} />
+          <OperationalChipSelect
+            label="Payment mode"
+            options={PAYMENT_MODE_OPTIONS}
+            value={paymentMode}
+            onChange={setPaymentMode}
+          />
+          <Text style={s.metaHint}>
+            Operational log only — approval required before posting.
           </Text>
         </Surface>
 
-        <Surface elevation={1}>
-          <Text style={styles.label}>Station Name (optional)</Text>
+        <Surface elevation={1} density="high">
+          <Text style={s.fieldLabel}>Station (optional)</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             value={stationName}
             onChangeText={setStationName}
-            placeholder="Enter station / pump name"
+            placeholder="Pump / station name"
             placeholderTextColor={Theme.textMuted}
           />
-          <Text style={[styles.label, { marginTop: 10 }]}>Notes (optional)</Text>
+          <Text style={[s.fieldLabel, { marginTop: 8 }]}>Notes (optional)</Text>
           <TextInput
-            style={[styles.input, styles.notes]}
+            style={[s.input, s.notes]}
             value={notes}
             onChangeText={setNotes}
             multiline
-            placeholder="Any operational note"
+            placeholder="Short note"
             placeholderTextColor={Theme.textMuted}
           />
         </Surface>
@@ -199,55 +187,41 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
           busy={saveFuel.isPending}
           onCapture={handleCapture}
           onRetake={handleCapture}
+          compact
+          title="Bill photo"
+          subtitle="Optional · camera capture"
+          captureLabel="Add bill photo"
+          retakeLabel="Retake"
         />
 
-        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        {hint ? <Text style={s.hint}>{hint}</Text> : null}
         {pendingCount > 0 ? (
-          <Text style={styles.hint}>
-            Pending sync items: {pendingCount}
-            {failedCount > 0 ? ` · failed: ${failedCount}` : ""}
+          <Text style={s.hint}>
+            Sync queue: {pendingCount}
+            {failedCount > 0 ? ` · failed ${failedCount}` : ""}
           </Text>
         ) : null}
       </ScrollView>
 
       <OperationalBottomActionBar>
-        <View style={styles.footer}>
+        <View style={s.footer}>
           <OperationalButton
             intent="utility"
-            label="Skip for now"
+            label="Skip"
             onPress={() => router.back()}
-            fullWidth
+            density="high"
+            style={s.footerBtn}
           />
           <OperationalButton
             intent="bottomSticky"
-            label={saveFuel.isPending ? "Saving..." : "Save Fuel Entry"}
+            label={saveFuel.isPending ? "Saving…" : "Save"}
             onPress={handleSave}
             loading={saveFuel.isPending}
-            fullWidth
+            density="high"
+            style={s.footerBtn}
           />
         </View>
       </OperationalBottomActionBar>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Theme.screenBackground },
-  content: { padding: 14, gap: 12, paddingBottom: 24 },
-  label: { color: Theme.text, fontSize: 13, fontWeight: "700", marginBottom: 6 },
-  chips: { gap: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    color: Theme.text,
-    backgroundColor: Theme.whiteMuted,
-    fontSize: 13,
-  },
-  notes: { minHeight: 90, textAlignVertical: "top" },
-  footer: { gap: 10 },
-  hint: { color: "#b45309", fontSize: 12 },
-  metaHint: { marginTop: 8, color: Theme.textSecondary, fontSize: 11 },
-});
