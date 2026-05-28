@@ -402,7 +402,9 @@ export function LedgerExpandedCardFromData({
   const showVehicleRow =
     partyType === "vehicle" && (hasPayables || (hasTripSummary && summary));
 
-  const expandedTripNumber = hasTripDetail ? (data.tripDetail!.trip_number ?? data.msn ?? "—") : "—";
+  const expandedTripNumber = hasTripDetail
+    ? (data.tripDetail!["trip_number"] ?? data.msn ?? "—")
+    : "—";
   const expandedRouteStr = typeof routeStr === "string" ? routeStr : "";
   const expandedClientStr = typeof clientStr === "string" ? clientStr : "";
 

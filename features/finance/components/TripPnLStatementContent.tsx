@@ -86,7 +86,7 @@ function useTripPnLData(trip: TripRow | null, transactions: LedgerRow[] | null) 
       net,
       margin,
     };
-  }, [trip, trip?.id, trip?.trip_number, trip?.display_trip_id, transactions]);
+  }, [trip, trip?.id, trip?.["trip_number"], trip?.["display_trip_id"], transactions]);
 }
 
 export function TripPnLStatementContent({

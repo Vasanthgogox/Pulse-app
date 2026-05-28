@@ -492,8 +492,8 @@ export function FinanceKanbanTab({
       desc: row.description,
       tripId: row.trip_id,
       msn:
-        (getTripOperationalDisplay({ trip_number: row.trip_number ?? null }) !== "—"
-          ? getTripOperationalDisplay({ trip_number: row.trip_number ?? null })
+        (getTripOperationalDisplay({ trip_number: row["trip_number"] ?? null }) !== "—"
+          ? getTripOperationalDisplay({ trip_number: row["trip_number"] ?? null })
           : "") || (row.trip_id ? "Trip" : "General"),
       tripDetail: tripDetail ?? undefined,
       vehicleNumber: vehicleNum,
@@ -534,10 +534,10 @@ export function FinanceKanbanTab({
     const rowData = buildFinancialRowData(row);
     const tripIdOnly =
       getTripOperationalDisplay({
-        trip_number: tripDetail?.trip_number ?? row.trip_number ?? null,
+        trip_number: tripDetail?.["trip_number"] ?? row["trip_number"] ?? null,
       }) !== "—"
         ? getTripOperationalDisplay({
-            trip_number: tripDetail?.trip_number ?? row.trip_number ?? null,
+            trip_number: tripDetail?.["trip_number"] ?? row["trip_number"] ?? null,
           })
         : row.trip_id
           ? "TRIP"

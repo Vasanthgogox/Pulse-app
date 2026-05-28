@@ -106,7 +106,7 @@ export function TripPickerModal({
             ) : (
               tripOptions.map((t) => {
                 const tripDisplay = getTripOperationalDisplay({
-                  trip_number: t.trip_number,
+                  trip_number: t["trip_number"],
                 });
                 const routeStr = (t as { route?: string | null; route_label?: string | null }).route ?? (t as { route_label?: string | null }).route_label ?? "";
                 const routeParts = routeStr.split(/\s*→\s*/);
@@ -176,8 +176,8 @@ export function TripPickerModal({
             <View style={styles.confirmBar}>
               <Text style={styles.confirmLabel} numberOfLines={2}>
                 {hasChange
-                  ? `Change to ${getTripOperationalDisplay({ trip_number: pendingTrip.trip_number })}?`
-                  : `Link this entry to ${getTripOperationalDisplay({ trip_number: pendingTrip.trip_number })}?`}
+                  ? `Change to ${getTripOperationalDisplay({ trip_number: pendingTrip["trip_number"] })}?`
+                  : `Link this entry to ${getTripOperationalDisplay({ trip_number: pendingTrip["trip_number"] })}?`}
               </Text>
               <View style={styles.confirmActions}>
                 <Pressable

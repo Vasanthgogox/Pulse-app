@@ -186,7 +186,7 @@ export function useLoadCenterFilters({
         `${(load.pickup_area || "").toLowerCase()} ${(load.drop_location || "").toLowerCase()}`.trim();
       const indentId = (getIndentDisplayNumber(load) || "").toLowerCase();
       const tripId = getTripOperationalDisplay({
-        trip_number: load.trip_number ?? null,
+        trip_number: load["trip_number"] ?? null,
       }).toLowerCase();
       const client = (load.client_name || "").toLowerCase();
       const creator = (

@@ -199,8 +199,8 @@ function partyDetailLine(row: LedgerRow): string {
   const trip = getTripOperationalDisplay({
     trip_operational_code: row.trips?.trip_operational_code ?? null,
     trip_code: row.trips?.trip_code ?? null,
-    display_trip_id: row.trips?.display_trip_id ?? null,
-    trip_number: row.trip_number ?? null,
+    display_trip_id: row.trips?.["display_trip_id"] ?? null,
+    trip_number: row["trip_number"] ?? null,
   });
   const desc = (row.description ?? "").trim();
   const parts: string[] = [];
@@ -231,7 +231,7 @@ function tripDetailLine(
   if (!row.trip_id || !tripDetailsMap?.[row.trip_id]) return null;
   const d = tripDetailsMap[row.trip_id];
   const num = getTripOperationalDisplay({
-    trip_number: d.trip_number ?? row.trip_number ?? null,
+    trip_number: d["trip_number"] ?? row["trip_number"] ?? null,
   });
   const route = [d.pickup_area, d.drop_location].filter(Boolean).join(" → ");
   if ((!num || num === "—") && !route) return null;
@@ -257,7 +257,7 @@ function tripNumberForPill(
   if (!row.trip_id) return null;
   const d = tripDetailsMap?.[row.trip_id];
   const num = getTripOperationalDisplay({
-    trip_number: d?.trip_number ?? row.trip_number ?? null,
+    trip_number: d?.["trip_number"] ?? row["trip_number"] ?? null,
   });
   return num === "—" ? null : num;
 }

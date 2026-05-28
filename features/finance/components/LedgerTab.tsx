@@ -339,7 +339,7 @@ export function LedgerTab({
         // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
         const entityName = getResolvedPartyName(row);
         const tripDisplayResolved = getTripOperationalDisplay({
-          trip_number: row.trip_number ?? null,
+          trip_number: row["trip_number"] ?? null,
         });
         const tripDisplay = tripDisplayResolved !== "—" ? tripDisplayResolved : null;
         const entryDateStr = formatLedgerEntryDate(row.transaction_date);
@@ -393,7 +393,7 @@ export function LedgerTab({
                   const detail = tripDetailsMap[t.id];
                   return {
                     id: t.id,
-                    trip_number: t.trip_number,
+                    trip_number: t["trip_number"],
                     route: formatLedgerRoute(detail),
                     trip_date:
                       (t as { trip_date?: string | null }).trip_date ??

@@ -91,8 +91,8 @@ export function useLedgerReconciliation(input: {
                 tripLabel: getTripOperationalDisplay({
                   trip_operational_code: trip.trip_operational_code,
                   trip_code: trip.trip_code,
-                  display_trip_id: trip.display_trip_id,
-                  trip_number: trip.trip_number,
+                  display_trip_id: trip["display_trip_id"],
+                  trip_number: trip["trip_number"],
                 }),
               });
             } else {
@@ -123,8 +123,8 @@ export function useLedgerReconciliation(input: {
             tripLabel: getTripOperationalDisplay({
               trip_operational_code: trip.trip_operational_code,
               trip_code: trip.trip_code,
-              display_trip_id: trip.display_trip_id,
-              trip_number: trip.trip_number,
+              display_trip_id: trip["display_trip_id"],
+              trip_number: trip["trip_number"],
             }),
           });
         }

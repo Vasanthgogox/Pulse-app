@@ -920,9 +920,9 @@ export function LoadCenterView({
           <Text style={styles.loadCardIdCompact} numberOfLines={1}>
             {getIndentDisplayNumber(load)}
             {getTripOperationalDisplay({
-              trip_number: load.trip_number ?? null,
+              trip_number: load["trip_number"] ?? null,
             }) !== "—"
-              ? ` · ${getTripOperationalDisplay({ trip_number: load.trip_number ?? null })}`
+              ? ` · ${getTripOperationalDisplay({ trip_number: load["trip_number"] ?? null })}`
               : ""}
           </Text>
           <Text style={styles.loadCardDateHero}>

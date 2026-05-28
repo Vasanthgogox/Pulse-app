@@ -100,8 +100,8 @@ function mapOperationalRow(
             tripLabel: getTripOperationalDisplay({
               trip_operational_code: activeTrip.trip_operational_code,
               trip_code: activeTrip.trip_code,
-              display_trip_id: activeTrip.display_trip_id,
-              trip_number: activeTrip.trip_number,
+              display_trip_id: activeTrip["display_trip_id"],
+              trip_number: activeTrip["trip_number"],
             }),
             tripStatus: activeTrip.status,
             tripPayoutMode: activeTrip.trip_payout_mode,

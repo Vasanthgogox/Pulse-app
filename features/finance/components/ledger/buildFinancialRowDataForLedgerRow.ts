@@ -71,7 +71,7 @@ export function resolveLedgerTripDetailForRow(
     if (fromMap) return fromMap;
 
     const tripLabel = getTripOperationalDisplay({
-      trip_number: row.trip_number ?? nested?.trip_number ?? null,
+      trip_number: row["trip_number"] ?? nested?.["trip_number"] ?? null,
     });
     const tripNumber = tripLabel !== "—" ? tripLabel : "Trip";
     const vn =
@@ -90,7 +90,7 @@ export function resolveLedgerTripDetailForRow(
   }
 
   const nestedNum = getTripOperationalDisplay({
-    trip_number: nested?.trip_number ?? null,
+    trip_number: nested?.["trip_number"] ?? null,
   });
   if (nestedNum !== "—") {
     return {
@@ -463,7 +463,7 @@ export function buildFinancialRowDataForLedgerRow(
     ? categoryBase
     : "GENERAL";
   const tripMsnResolved = getTripOperationalDisplay({
-    trip_number: row.trip_number ?? null,
+    trip_number: row["trip_number"] ?? null,
   });
   return {
     id: row.id,

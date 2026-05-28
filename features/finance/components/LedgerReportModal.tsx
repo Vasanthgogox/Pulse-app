@@ -42,8 +42,8 @@ function getOperationalRef(row: LedgerRow): string {
   const tripRef = getTripOperationalDisplay({
     trip_operational_code: row.trips?.trip_operational_code ?? null,
     trip_code: row.trips?.trip_code ?? null,
-    display_trip_id: row.trips?.display_trip_id ?? null,
-    trip_number: row.trip_number ?? null,
+    display_trip_id: row.trips?.["display_trip_id"] ?? null,
+    trip_number: row["trip_number"] ?? null,
   });
   return tripRef !== "—" ? tripRef : row.description || "—";
 }
@@ -125,7 +125,7 @@ function buildLedgerWorkbook(rows: LedgerRow[], totalIn: number, totalOut: numbe
     ...rows.map((r) => [
       r.party_name ?? '',
       r.description ?? '',
-      r.trip_number ?? '',
+      getOperationalRef(r),
       (r.transaction_date ?? '').slice(0, 10),
       r.amount_in ?? 0,
       r.amount_out ?? 0,

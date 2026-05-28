@@ -365,7 +365,7 @@ export function TripExpandableCard({
                     .indent_operational_code ?? null,
                   indent_code: (trip as { indent_code?: string | null }).indent_code ?? null,
                   display_indent_id: (trip as { display_indent_id?: string | null })
-                    .display_indent_id ?? null,
+                    ["display_indent_id"] ?? null,
                   indent_number: trip["indent_number"] ?? null,
                 }) !== "—"
                   ? ` · ${getIndentOperationalDisplay({
@@ -374,7 +374,7 @@ export function TripExpandableCard({
                       }).indent_operational_code ?? null,
                       indent_code: (trip as { indent_code?: string | null }).indent_code ?? null,
                       display_indent_id: (trip as { display_indent_id?: string | null })
-                        .display_indent_id ?? null,
+                        ["display_indent_id"] ?? null,
                       indent_number: trip["indent_number"] ?? null,
                     })}`
                   : ""}

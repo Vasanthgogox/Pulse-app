@@ -1771,8 +1771,8 @@ export function useTripDetail({
       const missionRaw = getTripOperationalDisplay({
         trip_operational_code: trip.trip_operational_code ?? null,
         trip_code: trip.trip_code ?? null,
-        display_trip_id: trip.display_trip_id ?? null,
-        trip_number: trip.trip_number ?? null,
+        display_trip_id: trip["display_trip_id"] ?? null,
+        trip_number: trip["trip_number"] ?? null,
       });
       await addTripAdjustment(
         trip.id,

@@ -396,7 +396,7 @@ export function FinanceAnalyticsView({
                     <View style={styles.corridorCardId}>
                       <Text style={styles.corridorCardIdText} numberOfLines={1}>
                         {getTripOperationalDisplay({
-                          trip_number: tripDetailsMap?.[trip.trip_id]?.trip_number ?? trip.trip_id,
+                          trip_number: tripDetailsMap?.[trip.trip_id]?.["trip_number"] ?? trip.trip_id,
                         })}
                       </Text>
                     </View>
