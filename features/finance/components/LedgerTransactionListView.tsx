@@ -13,6 +13,7 @@ import {
     getLedgerFlowForRow,
     LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatINRChip, formatLedgerAmount } from "@/lib/format";
 import { partyAvatarHasRenderableOutput, partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
@@ -195,11 +196,16 @@ function getAgingLabel(iso: string | null | undefined): string {
 
 function partyDetailLine(row: LedgerRow): string {
   const party = (row.party_name ?? "").trim();
-  const trip = (row.trip_number ?? "").trim();
+  const trip = getTripOperationalDisplay({
+    trip_operational_code: row.trips?.trip_operational_code ?? null,
+    trip_code: row.trips?.trip_code ?? null,
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_number: row.trip_number ?? null,
+  });
   const desc = (row.description ?? "").trim();
   const parts: string[] = [];
   if (party) parts.push(party);
-  if (trip) parts.push(`Trip ${trip}`);
+  if (trip && trip !== "—") parts.push(`Trip ${trip}`);
   if (desc && desc !== "GENERAL" && !parts.includes(desc)) parts.push(desc);
   return parts.join(" · ") || "—";
 }
@@ -224,9 +230,11 @@ function tripDetailLine(
 ): string | null {
   if (!row.trip_id || !tripDetailsMap?.[row.trip_id]) return null;
   const d = tripDetailsMap[row.trip_id];
-  const num = (d.trip_number ?? row.trip_number ?? "").trim();
+  const num = getTripOperationalDisplay({
+    trip_number: d.trip_number ?? row.trip_number ?? null,
+  });
   const route = [d.pickup_area, d.drop_location].filter(Boolean).join(" → ");
-  if (!num && !route) return null;
+  if ((!num || num === "—") && !route) return null;
   return route ? `${num} · ${route}` : num;
 }
 
@@ -248,8 +256,10 @@ function tripNumberForPill(
 ): string | null {
   if (!row.trip_id) return null;
   const d = tripDetailsMap?.[row.trip_id];
-  const num = (d?.trip_number ?? row.trip_number ?? "").trim();
-  return num || null;
+  const num = getTripOperationalDisplay({
+    trip_number: d?.trip_number ?? row.trip_number ?? null,
+  });
+  return num === "—" ? null : num;
 }
 
 /** Compact expandable detail for a single transaction row (Type, Date, Amount, Party, Note). */

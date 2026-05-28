@@ -1610,7 +1610,16 @@ export default function DriverRadarScreen() {
               (i.from_organization_id ?? "").trim() ===
                 (trip.organization_id ?? "").trim() &&
               String(i.status ?? "").toLowerCase() === "accepted",
-          ) ?? null;
+          ) ??
+          (trip.supplier_id
+            ? invites.find(
+                (i) =>
+                  (i.from_organization_id ?? "").trim() ===
+                    (trip.supplier_id ?? "").trim() &&
+                  String(i.status ?? "").toLowerCase() === "accepted",
+              )
+            : undefined) ??
+          null;
         const commissionForTrip = computeDriverCommissionForTrip(trip, {
           commissionPercent: acceptedInviteForTrip?.commission_percent ?? null,
           commissionPerKm: acceptedInviteForTrip?.commission_per_km ?? null,
@@ -1705,7 +1714,6 @@ export default function DriverRadarScreen() {
             (i.from_organization_id ?? "").trim() ===
             (trip.organization_id ?? "").trim(),
         ) ?? null;
-      const tripOrgId = (trip.organization_id ?? "").trim();
       return buildJobCardAssignerPayload(
         trip,
         assignerDisplay,
@@ -1716,7 +1724,11 @@ export default function DriverRadarScreen() {
           isAggregate: isAggregateTrip(trip),
           isRoster: isRosterTrip(trip),
         },
-        organizationLogoById[tripOrgId] ?? null,
+        organizationLogoById[
+          "effectiveAssignerOrgId" in assignerDisplay
+            ? (assignerDisplay.effectiveAssignerOrgId ?? "")
+            : ""
+        ] ?? null,
       );
     },
     [

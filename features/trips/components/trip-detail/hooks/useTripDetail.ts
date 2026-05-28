@@ -88,6 +88,7 @@ import {
     updateTripAdjustment,
     voidTripAdjustment,
 } from "../../../services/tripAdjustments";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { getTripOtpForDisplay } from "../../../services/tripOtp.service";
 import {
     getTripById,
@@ -1767,16 +1768,17 @@ export function useTripDetail({
       // Row must pass trip org check + RLS; prefer trip owner over UI org context.
       const orgId =
         trip.organization_id?.trim() || currentOrganization?.id || null;
-      const missionRaw =
-        trip.display_trip_id != null &&
-        String(trip.display_trip_id).trim() !== ""
-          ? String(trip.display_trip_id).trim()
-          : trip.trip_number ?? null;
+      const missionRaw = getTripOperationalDisplay({
+        trip_operational_code: trip.trip_operational_code ?? null,
+        trip_code: trip.trip_code ?? null,
+        display_trip_id: trip.display_trip_id ?? null,
+        trip_number: trip.trip_number ?? null,
+      });
       await addTripAdjustment(
         trip.id,
         params,
         orgId
-          ? { organizationId: orgId, missionKey: missionRaw }
+          ? { organizationId: orgId, missionKey: missionRaw === "—" ? null : missionRaw }
           : undefined,
       );
       await loadAdjustments();

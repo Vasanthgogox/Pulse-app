@@ -111,15 +111,18 @@ function flattenMapChildren(
   out: { markers: MarkerNode[]; polylines: PolylineNode[]; seq: number },
 ) {
   Children.forEach(children, (child) => {
-    if (!isValidElement(child)) return;
+    if (!isValidElement<Record<string, unknown>>(child)) return;
 
     if (child.type === Fragment) {
-      flattenMapChildren(child.props.children, out);
+      flattenMapChildren(child.props.children as React.ReactNode, out);
       return;
     }
 
-    const typeTag = (child.type as TaggedMapChildType | string)
-      ?.__mapCompatType;
+    const childType = child.type;
+    const typeTag =
+      typeof childType === "string"
+        ? undefined
+        : (childType as TaggedMapChildType).__mapCompatType;
     if (typeTag === MARKER_TAG) {
       out.markers.push({
         ...(child.props as MarkerProps),

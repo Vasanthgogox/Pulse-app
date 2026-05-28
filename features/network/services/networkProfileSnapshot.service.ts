@@ -28,6 +28,17 @@ export type NetworkProfileSnapshot = {
   is_integrated: boolean;
 };
 
+type OrganizationSnapshotRow = {
+  id: string;
+  name: string;
+  avatar_seed: string | null;
+  logo_url: string | null;
+  city: string | null;
+  state: string | null;
+  address_line: string | null;
+  owner_id: string | null;
+};
+
 function formatLocation(
   city: string | null | undefined,
   state: string | null | undefined,
@@ -59,18 +70,7 @@ export async function getOrgProfileSnapshot(
   }
 
   // 1) Organization row — prefer logo_url column when available.
-  let orgRow:
-    | {
-        id: string;
-        name: string;
-        avatar_seed: string | null;
-        logo_url: string | null;
-        city: string | null;
-        state: string | null;
-        address_line: string | null;
-        owner_id: string | null;
-      }
-    | null = null;
+  let orgRow: OrganizationSnapshotRow | null = null;
 
   const orgWithLogo = await supabase()
     .from("organizations")
@@ -104,7 +104,7 @@ export async function getOrgProfileSnapshot(
   } else if (orgWithLogo.error) {
     return { error: new Error(orgWithLogo.error.message), snapshot: null };
   } else if (orgWithLogo.data) {
-    orgRow = orgWithLogo.data as typeof orgRow;
+    orgRow = orgWithLogo.data as OrganizationSnapshotRow;
   }
 
   if (!orgRow) {

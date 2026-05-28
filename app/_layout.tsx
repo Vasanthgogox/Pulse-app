@@ -46,7 +46,6 @@ import {
 } from '@/lib/webDeployRecovery';
 import {
   installWebViewportHeight,
-  WEB_APP_VIEWPORT_STYLE,
 } from '@/lib/webViewportHeight';
 import type { ViewStyle } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -183,7 +182,6 @@ const styles = StyleSheet.create({
     flex: 1,
     ...(Platform.OS === 'web'
       ? ({
-          ...(WEB_APP_VIEWPORT_STYLE as ViewStyle),
           backgroundColor: Theme.screenBackground,
           overflow: 'hidden' as const,
         } satisfies ViewStyle)

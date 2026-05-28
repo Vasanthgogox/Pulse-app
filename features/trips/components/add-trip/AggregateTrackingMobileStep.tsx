@@ -114,11 +114,9 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
     return false;
   })();
 
-  const inputStyle = [
-    wizard.input,
-    inputErr && styles.inputError,
-    step === "vehicle" && styles.inputVehicle,
-  ];
+  const inputStyle: TextStyle[] = [wizard.input];
+  if (inputErr) inputStyle.push(styles.inputError);
+  if (step === "vehicle") inputStyle.push(styles.inputVehicle);
 
   return (
     <View style={styles.root}>

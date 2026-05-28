@@ -70,6 +70,7 @@ import {
   getTripDisplayNumber,
   type TripRow,
 } from "@/features/trips/services/trips.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
@@ -216,10 +217,10 @@ function partyFilterSheetLabel(type: ConversationPartyType): string {
 }
 
 function getConversationTripLabel(conversation: Pick<TripConversation, "trip_number" | "display_trip_id">): string {
-  return getTripDisplayNumber({
+  return getTripOperationalDisplay({
     trip_number: conversation.trip_number,
     display_trip_id: conversation.display_trip_id ?? null,
-  } as TripRow);
+  });
 }
 
 function formatTripStatusLabel(status: string | null | undefined): string {
@@ -874,7 +875,7 @@ export function ChatScreen() {
       .filter((conv) => {
         if (!hasSearch) return true;
         const displayId = getConversationTripLabel(conv);
-        const haystack = `${displayId} ${conv.trip_number}`.toLowerCase();
+        const haystack = `${displayId}`.toLowerCase();
         return haystack.includes(trimmedSearch);
       })
       .sort((a, b) => {
@@ -1430,7 +1431,12 @@ export function ChatScreen() {
     setInitiating(true);
     const convId = await initiateConversation({
       tripId: trip.id,
-      tripNumber: trip.display_trip_id ?? trip.trip_number,
+      tripNumber: getTripOperationalDisplay({
+        trip_operational_code: trip.trip_operational_code ?? null,
+        trip_code: trip.trip_code ?? null,
+        display_trip_id: trip.display_trip_id ?? null,
+        trip_number: trip.trip_number ?? null,
+      }),
       pickupArea: trip.pickup_area,
       dropLocation: trip.drop_location,
       partyType,
@@ -1450,7 +1456,14 @@ export function ChatScreen() {
     if (!q) return composeTrips;
     return composeTrips.filter(
       (t) =>
-        (t.display_trip_id ?? t.trip_number).toLowerCase().includes(q) ||
+        getTripOperationalDisplay({
+          trip_operational_code: t.trip_operational_code ?? null,
+          trip_code: t.trip_code ?? null,
+          display_trip_id: t.display_trip_id ?? null,
+          trip_number: t.trip_number ?? null,
+        })
+          .toLowerCase()
+          .includes(q) ||
         (t.client_name ?? "").toLowerCase().includes(q) ||
         (t.supplier_name ?? "").toLowerCase().includes(q) ||
         (t.pickup_area ?? "").toLowerCase().includes(q) ||
@@ -2528,7 +2541,12 @@ export function ChatScreen() {
           <ScrollView showsVerticalScrollIndicator={false} style={scrollStyle}>
             {composeTripsWithChatParties.map((trip) => {
               const isExpanded = expandedTripId === trip.id;
-              const tripLabel = trip.display_trip_id ?? trip.trip_number;
+              const tripLabel = getTripOperationalDisplay({
+                trip_operational_code: trip.trip_operational_code ?? null,
+                trip_code: trip.trip_code ?? null,
+                display_trip_id: trip.display_trip_id ?? null,
+                trip_number: trip.trip_number ?? null,
+              });
 
               const partyRows = getComposePartyRows(trip);
               const selectablePartyCount = partyRows.filter((row) => row.kind === "selectable").length;
@@ -6218,7 +6236,7 @@ function TripConversationDetailLoaded({
       header={
         <>
           <ChatDetailHeader
-            title={`${liveConv.trip_number} · ${viewerRelativeConvPartyLabel}`}
+            title={`${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`}
             subtitle={chatDetailSubtitle}
             partyType={liveConv.party_type}
             counterpartyType={headerCounterparty}

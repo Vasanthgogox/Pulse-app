@@ -90,8 +90,12 @@ export function resolveJobCardAssignmentSourceKind(
   acceptedInviteForOrg: DriverInviteLite | null,
 ): Pick<JobCardAssignerPayload, "kind" | "kindLabel"> {
   const tripOrgId = (trip.organization_id ?? "").trim();
+  const tripSupplierId = (trip.supplier_id ?? "").trim();
   const driverOrgId = (driverOrganizationId ?? "").trim();
-  const isOwnFleet = Boolean(tripOrgId && driverOrgId && tripOrgId === driverOrgId);
+  const isOwnFleet = Boolean(
+    driverOrgId &&
+    (tripOrgId === driverOrgId || (tripSupplierId && tripSupplierId === driverOrgId)),
+  );
   const hasAcceptedEmployer =
     acceptedInviteForOrg != null &&
     String(acceptedInviteForOrg.status ?? "").toLowerCase() === "accepted";
@@ -131,7 +135,11 @@ export function buildJobCardAssignerPayload(
     flags,
     acceptedInvite,
   );
-  const orgId = (trip.organization_id ?? "").trim();
+  // Use the invite's org when available — it correctly points to the employer org
+  // even on cross-org trips where trip.organization_id is the client, not employer.
+  const orgId =
+    (inviteForOrg?.from_organization_id ?? "").trim() ||
+    (trip.organization_id ?? "").trim();
   return {
     kind,
     kindLabel,
@@ -164,6 +172,13 @@ export type AssignerDisplayResult = {
   /** Muted / trailing segment: dispatcher when fleet leads, else fleet label. */
   assignerLineSecondary: string;
   assignedByName: string;
+  /**
+   * The org that actually assigned this trip from the driver's perspective.
+   * For direct fleet trips: trip.organization_id.
+   * For cross-org trips where employer is supplier: trip.supplier_id.
+   * Callers use this to look up the correct logo/avatar.
+   */
+  effectiveAssignerOrgId: string;
 };
 
 /** Cross-fleet placeholder when the assigning org name cannot be resolved client-side. */
@@ -206,12 +221,35 @@ export function buildAssignerDisplayForTrip(
       (i) =>
         (i.from_organization_id ?? "").trim() ===
         (trip.organization_id ?? "").trim(),
-    ) ?? null;
+    ) ??
+    (trip.supplier_id
+      ? invites.find(
+          (i) =>
+            (i.from_organization_id ?? "").trim() ===
+            (trip.supplier_id ?? "").trim(),
+        )
+      : undefined) ??
+    null;
 
   const assignerUserId = resolveAssignerUserId(
     trip,
     deps.assignmentActorByTripId,
   ).trim();
+
+  // Determine the org that actually assigned this trip from the driver's perspective.
+  // For cross-org trips the invite may come from supplier_id (employer is supplier), or
+  // the driver's own org may be the supplier (admin/owner driving for their fleet).
+  const tripOrgIdRaw = (trip.organization_id ?? "").trim();
+  const tripSupplierIdRaw = (trip.supplier_id ?? "").trim();
+  const driverOrgIdRaw = (driverOrganizationId ?? "").trim();
+  const inviteIsFromSupplier =
+    !!tripSupplierIdRaw &&
+    !!inviteForTrip &&
+    (inviteForTrip.from_organization_id ?? "").trim() === tripSupplierIdRaw;
+  const driverOrgIsSupplier =
+    !!tripSupplierIdRaw && !!driverOrgIdRaw && driverOrgIdRaw === tripSupplierIdRaw;
+  const effectiveAssignerOrgId =
+    inviteIsFromSupplier || driverOrgIsSupplier ? tripSupplierIdRaw : tripOrgIdRaw;
 
   const tripAssignedByUserNameCandidates = [
     tripMeta.assigned_by_name,
@@ -220,15 +258,15 @@ export function buildAssignerDisplayForTrip(
     tripMeta.created_by_name,
     tripMeta.dispatcher_name,
   ];
-  /**
-   * Fleet / assigning org. `inviteForTrip` matches `from_organization_id === trip.organization_id`,
-   * so `from_org_name` is the owning fleet — not the aggregate `supplier_id` party.
-   */
   const tripAssignedByOrgNameCandidates = [
     deps.assignerTripOrgNameByTripId?.[String(trip.id).trim()] ?? null,
     deps.assignerOrgNameByUserId?.[assignerUserId] ?? null,
-    deps.organizationNamesById[(trip.organization_id ?? "").trim()] ?? null,
     inviteForTrip?.from_org_name ?? null,
+    deps.organizationNamesById[effectiveAssignerOrgId] ?? null,
+    // Fall back to trip.organization_id name only when different from effective assigner
+    effectiveAssignerOrgId !== tripOrgIdRaw
+      ? (deps.organizationNamesById[tripOrgIdRaw] ?? null)
+      : null,
     (tripMeta.organization_name as string | null | undefined) ?? null,
     (tripMeta.org_name as string | null | undefined) ?? null,
     (tripMeta.from_org_name as string | null | undefined) ?? null,
@@ -271,5 +309,6 @@ export function buildAssignerDisplayForTrip(
     assignerLinePrimary,
     assignerLineSecondary,
     assignedByName,
+    effectiveAssignerOrgId,
   };
 }

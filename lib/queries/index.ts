@@ -115,3 +115,30 @@ export {
 export { fetchTripLiveTrackingSeed } from './fetchTripLiveTrackingSeed';
 export type { TripLiveTrackingSeed } from './fetchTripLiveTrackingSeed';
 export { useDriverProfileImagesQuery } from './useDriverProfileImagesQuery';
+export {
+  useTripVerification,
+  useSaveTripVerification,
+  useTripVerificationPhotos,
+} from "./useTripVerificationQuery";
+export {
+  useTripFuelEntries,
+  useTripTollEntries,
+  useTripOperationsSummary,
+  useTripOperationalTimeline,
+  useReviewTripFuelEntry,
+  useReviewTripTollEntry,
+  useSetTripFuelReimbursementState,
+  useSetTripTollReimbursementState,
+  useSaveTripFuelEntry,
+  useSaveTripTollEntry,
+} from "./useTripOperationsQuery";
+export { useReimbursementQueue } from "@/features/trips/operations/reimbursement/useReimbursementQueue";
+export { useOperationsControlCenter } from "@/features/operations/control-center/queries/useOperationsControlCenter";
+export { useOperationalHealthSnapshot } from "@/features/operations/observability/useOperationalHealthSnapshot";
+export { useVehicleEconomics } from "@/features/analytics/vehicle-economics/useVehicleEconomics";
+export {
+  invalidateTripOperationalState,
+  invalidateLedgerState,
+  invalidateReconciliationState,
+  invalidateOperationalIdentity,
+} from "./operationalInvalidation";

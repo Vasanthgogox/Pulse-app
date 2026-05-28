@@ -473,7 +473,15 @@ export default function DriverNotificationsScreen() {
             (i) =>
               (i.from_organization_id ?? '').trim() ===
               (trip.organization_id ?? '').trim(),
-          ) ?? null;
+          ) ??
+          (trip.supplier_id
+            ? invites.find(
+                (i) =>
+                  (i.from_organization_id ?? '').trim() ===
+                  (trip.supplier_id ?? '').trim(),
+              )
+            : undefined) ??
+          null;
 
         const assignerPayload = buildJobCardAssignerPayload(
           trip,

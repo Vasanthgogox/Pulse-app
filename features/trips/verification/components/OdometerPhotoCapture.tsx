@@ -1,0 +1,1 @@
+export { OdometerPhotoCapture } from "../OdometerPhotoCapture";

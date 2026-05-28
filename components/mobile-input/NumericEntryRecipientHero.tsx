@@ -54,24 +54,24 @@ const styles = StyleSheet.create({
   },
   caption: {
     marginTop: 10,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "500",
     color: Theme.textSecondary,
     textAlign: "center",
   },
   name: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "700",
     color: Theme.textPrimary,
     textAlign: "center",
     letterSpacing: -0.2,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "400",
     color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 21,
     maxWidth: 320,
   },
 });

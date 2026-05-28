@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import {
   getClientsByOrganization,
   syncClientsWithCache,
+  type ClientRow,
 } from '@/features/clients/services/clients.service';
 import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
@@ -15,19 +16,19 @@ import { STALE } from '@/lib/queryClient';
 /** Full list (no pagination). Use for dropdowns, Finance entities. */
 export function useClientsQuery(orgId: string | null) {
   const qc = useQueryClient();
-  return useQuery({
+  return useQuery<ClientRow[], Error>({
     queryKey: queryKeys.clients.finite(orgId ?? ''),
     queryFn: async () => {
       const existing =
         (qc.getQueryData(queryKeys.clients.finite(orgId ?? '')) as
-          | Array<{ id: string }>
+          | ClientRow[]
           | undefined) ?? [];
-      return fetchEntityListWithFallback({
+      return fetchEntityListWithFallback<ClientRow>({
         orgId: orgId!,
         domain: 'clients',
-        cachedRows: existing as never[],
-        sync: async (id, cached) => {
-          const res = await syncClientsWithCache(id, cached as never[]);
+        cachedRows: existing,
+        sync: async (id, cachedRows) => {
+          const res = await syncClientsWithCache(id, cachedRows);
           return { error: res.error, rows: res.clients };
         },
         fetchDirect: async (id) => {
@@ -38,7 +39,7 @@ export function useClientsQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
-    refetchOnMount: refetchOnMountIfEntityListEmpty,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<ClientRow[]>(),
   });
 }
 

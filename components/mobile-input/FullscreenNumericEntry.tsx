@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   payCloseText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '300',
     color: Theme.textPrimary,
     lineHeight: 24,
@@ -371,17 +371,17 @@ const styles = StyleSheet.create({
   payLabelOnly: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 12,
+    paddingTop: 18,
     gap: 4,
   },
   payLabelOnlyText: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '700',
     color: Theme.textPrimary,
     textAlign: 'center',
   },
   payContextLine: {
-    fontSize: 13,
+    fontSize: 18,
     color: Theme.textSecondary,
     textAlign: 'center',
   },
@@ -399,8 +399,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   payFab: {
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     borderRadius: 16,
     backgroundColor: Theme.primary,
     alignItems: 'center',

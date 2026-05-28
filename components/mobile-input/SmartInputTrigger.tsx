@@ -145,13 +145,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: Theme.screenBackground,
-    minHeight: 52,
+    minHeight: 58,
   },
   rowDisabled: {
     opacity: 0.45,
   },
   rowLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '400',
     color: Theme.textPrimary,
     flex: 1,
@@ -164,12 +164,12 @@ const styles = StyleSheet.create({
     maxWidth: '60%',
   },
   rowPrefix: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '400',
     color: Theme.textBody,
   },
   rowValue: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '600',
     color: Theme.textBody,
     // @ts-ignore
@@ -179,10 +179,10 @@ const styles = StyleSheet.create({
   rowPlaceholder: {
     color: Theme.textMuted,
     fontWeight: '400',
-    fontSize: 15,
+    fontSize: 17,
   },
   rowSuffix: {
-    fontSize: 13,
+    fontSize: 15,
     color: Theme.textSecondary,
     marginLeft: 2,
   },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.negative,
   },
   fieldLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: Theme.textSecondary,
     textTransform: 'uppercase',
@@ -230,12 +230,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   fieldPrefix: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '400',
     color: Theme.textBody,
   },
   fieldValue: {
-    fontSize: 18,
+    fontSize: 21,
     fontWeight: '600',
     color: Theme.textBody,
     // @ts-ignore
@@ -244,10 +244,10 @@ const styles = StyleSheet.create({
   fieldPlaceholder: {
     color: Theme.textMuted,
     fontWeight: '400',
-    fontSize: 16,
+    fontSize: 19,
   },
   fieldSuffix: {
-    fontSize: 13,
+    fontSize: 15,
     color: Theme.textSecondary,
   },
   errorText: {

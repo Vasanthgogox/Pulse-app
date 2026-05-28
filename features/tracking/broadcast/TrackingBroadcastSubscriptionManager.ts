@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { trackingTripChannelName } from '@/features/tracking/broadcast/trackingBroadcastChannels';
 import { TRACKING_BROADCAST_EVENT } from '@/features/tracking/constants';
 import type {
+  TrackingBroadcastPayload,
   TrackingBroadcastEventName,
   TrackingPositionPayload,
 } from '@/features/tracking/types/broadcast.types';
@@ -27,8 +28,13 @@ function dispatch(tripId: string, event: TrackingBroadcastEventName, payload: un
   if (!entry) return;
   for (const h of entry.handlers) {
     try {
-      if (event === TRACKING_BROADCAST_EVENT.POSITION && isTrackingPositionPayload(payload)) {
-        h.onPosition?.(payload);
+      if (
+        event === TRACKING_BROADCAST_EVENT.POSITION &&
+        payload != null &&
+        typeof payload === "object" &&
+        isTrackingPositionPayload(payload as TrackingBroadcastPayload)
+      ) {
+        h.onPosition?.(payload as TrackingPositionPayload);
       } else if (event === TRACKING_BROADCAST_EVENT.RESEED) {
         h.onReseed?.();
       } else if (event === TRACKING_BROADCAST_EVENT.SESSION_ENDED) {

@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getIndentOperationalDisplay } from "@/features/operations/display";
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -359,7 +360,11 @@ export function TripExpandableCard({
             <View style={styles.cardIdPill}>
               <Text style={styles.cardIdPillText}>
                 #{getTripDisplayNumber(trip)}
-                {trip.indent_number ? ` · ${trip.indent_number}` : ""}
+                {trip.indent_number
+                  ? ` · ${getIndentOperationalDisplay({
+                      indent_number: trip.indent_number,
+                    })}`
+                  : ""}
               </Text>
             </View>
             <View

@@ -96,3 +96,10 @@ export {
   openTripLedgerEntryChooser,
   type TripLedgerChooserLabels,
 } from './ledger/tripLedgerEntryChooser';
+export {
+  deriveOperationalCashflow,
+  deriveOperationalLedgerProjection,
+  derivePendingReimbursements,
+  deriveOperationalPayables,
+  syncOperationalFinanceProjection,
+} from "./projections";

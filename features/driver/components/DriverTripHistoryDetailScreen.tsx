@@ -77,6 +77,8 @@ import {
 } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
 import { TripDetailSettlementPanel } from "@/features/driver/components/TripDetailSettlementPanel";
+import { useTripVerificationSync } from "@/features/trips/verification";
+import { OperationsHub, useTripOperationsSync } from "@/features/trips/operations";
 
 function TimelinePulseIcon({
   expanded,
@@ -117,6 +119,8 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const { theme } = useDriverTheme();
   const isDark = theme === "dark";
   const router = useRouter();
+  useTripVerificationSync();
+  useTripOperationsSync();
   const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
@@ -627,6 +631,34 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
                   <View style={[styles.tdHeroAccentBar, { backgroundColor: colors.emerald }]} />
                 </LinearGradient>
               </View>
+
+              {trip ? (
+                <View style={{ marginBottom: 10 }}>
+                  <OperationsHub
+                    trip={trip}
+                    onEditStart={() =>
+                      router.push(
+                        `/trip/${encodeURIComponent(trip.id)}/verification?side=start` as Href,
+                      )
+                    }
+                    onEditEnd={() =>
+                      router.push(
+                        `/trip/${encodeURIComponent(trip.id)}/verification?side=end` as Href,
+                      )
+                    }
+                    onAddFuel={() =>
+                      router.push(
+                        `/trip/${encodeURIComponent(trip.id)}/operations/fuel` as Href,
+                      )
+                    }
+                    onAddToll={() =>
+                      router.push(
+                        `/trip/${encodeURIComponent(trip.id)}/operations/toll` as Href,
+                      )
+                    }
+                  />
+                </View>
+              ) : null}
 
               <View style={[styles.tdTabBar, { backgroundColor: `${colors.border}99` }]}>
                 <TouchableOpacity

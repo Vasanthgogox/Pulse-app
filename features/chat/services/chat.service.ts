@@ -28,11 +28,14 @@ import {
   mergeMessagesByContextIntoLanes,
   normalizeServerLanes,
 } from "../utils/laneMultiplexer.util";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 export interface TripForCompose {
   id: string;
   trip_number: string;
   display_trip_id: string | null;
+  trip_operational_code?: string | null;
+  trip_code?: string | null;
   /** Trip lifecycle status from `trips.status` (for hub scope / unassigned merge). */
   status?: string | null;
   created_at?: string | null;
@@ -67,8 +70,16 @@ export async function getTripsForCompose(
 
   const trips = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
     id: String(row.id ?? ""),
-    trip_number: String(row.trip_number ?? ""),
+    trip_number: getTripOperationalDisplay({
+      trip_operational_code: (row.trip_operational_code as string | null | undefined) ?? null,
+      trip_code: (row.trip_code as string | null | undefined) ?? null,
+      display_trip_id: (row.display_trip_id as string | null | undefined) ?? null,
+      trip_number: (row.trip_number as string | null | undefined) ?? null,
+    }),
     display_trip_id: (row.display_trip_id as string | null | undefined) ?? null,
+    trip_operational_code:
+      (row.trip_operational_code as string | null | undefined) ?? null,
+    trip_code: (row.trip_code as string | null | undefined) ?? null,
     status: (row.status as string | null | undefined) ?? null,
     created_at: (row.created_at as string | null | undefined) ?? null,
     pickup_area: String(row.pickup_area ?? ""),
@@ -276,9 +287,9 @@ async function enrichIndentCreatorOrganizationNamesForViewer(
 }
 
 const TRIP_EMBED_FIELDS_FULL =
-  "organization_id, trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_operational_code, trip_code, trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 const TRIP_EMBED_FIELDS_LEGACY =
-  "organization_id, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_operational_code, trip_code, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
@@ -570,7 +581,6 @@ export async function sendChatMessage(params: {
 }): Promise<TripMessageRow> {
   const {
     conversationId,
-    organizationId,
     content,
     senderRole,
     senderName,
@@ -1089,6 +1099,9 @@ export async function getConversationsByDriverIds(
 
   type DriverChatTripMini = {
     id: string;
+    trip_operational_code: string | null;
+    trip_code: string | null;
+    display_trip_id: string | null;
     trip_number: string | null;
     driver_display_trip_id: string | null;
     pickup_area: string | null;
@@ -1112,9 +1125,15 @@ export async function getConversationsByDriverIds(
         tr?.driver_display_trip_id != null && String(tr.driver_display_trip_id).trim() !== ""
           ? String(tr.driver_display_trip_id).trim()
           : "";
+      const operational = getTripOperationalDisplay({
+        trip_operational_code: tr?.trip_operational_code ?? null,
+        trip_code: tr?.trip_code ?? null,
+        display_trip_id: tr?.display_trip_id ?? null,
+        trip_number: tr?.trip_number ?? null,
+      });
       return {
         ...row,
-        trip_number: perDriver || tr?.trip_number || "",
+        trip_number: operational !== "—" ? operational : perDriver || tr?.trip_number || "",
         pickup_area: tr?.pickup_area ?? "",
         drop_location: tr?.drop_location ?? "",
         messages: (
@@ -1141,7 +1160,9 @@ export async function getConversationsByDriverIds(
   const tripRes = tripIds.length
     ? await supabase()
         .from("trips")
-        .select("id, trip_number, driver_display_trip_id, pickup_area, drop_location")
+        .select(
+          "id, trip_operational_code, trip_code, display_trip_id, trip_number, driver_display_trip_id, pickup_area, drop_location",
+        )
         .in("id", tripIds)
     : emptyTripsRes;
 

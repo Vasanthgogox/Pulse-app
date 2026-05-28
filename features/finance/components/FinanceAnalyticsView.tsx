@@ -3,6 +3,7 @@
  * Uses ledger transactions + trip details; KPIs and filters from available data.
  */
 import Theme from "@/constants/Theme";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { Layout } from "@/constants/Layout";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { formatLedgerAmount } from "@/lib/format";
@@ -394,7 +395,9 @@ export function FinanceAnalyticsView({
                   <View key={trip.trip_id} style={styles.corridorCard}>
                     <View style={styles.corridorCardId}>
                       <Text style={styles.corridorCardIdText} numberOfLines={1}>
-                        {tripDetailsMap?.[trip.trip_id]?.trip_number ?? trip.trip_id}
+                        {getTripOperationalDisplay({
+                          trip_number: tripDetailsMap?.[trip.trip_id]?.trip_number ?? trip.trip_id,
+                        })}
                       </Text>
                     </View>
                     <View style={styles.corridorCardBody}>

@@ -120,7 +120,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                 style={[styles.tr, voided && styles.trVoided]}
                 onPress={() => props.onOpenProvision(isSale ? "client" : "supplier")}
               >
-                <View style={[styles.td, styles.tdParty]}>
+                <View style={styles.tdParty}>
                   <EntityAvatar
                     name={partyName}
                     avatarUrl={isSale ? props.clientAvatarUrl : props.supplierAvatarUrl}

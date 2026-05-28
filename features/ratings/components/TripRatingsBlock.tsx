@@ -24,6 +24,7 @@ import {
     getSupplierDetails,
 } from '@/features/suppliers/services/suppliers.service';
 import type { TripRow } from '@/features/trips/services/trips.service';
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
 import { VALIDATION } from '@/lib/validation';
 import Feather from '@expo/vector-icons/Feather';
@@ -979,12 +980,18 @@ export function TripRatingsBlock({
   const isRegistry = layoutVariant === 'registry';
   const isWidePanel = isWorkspace || isRegistry;
   const isCompactWorkspace = isWidePanel && width < 1100;
+  const operationalTripLabel = getTripOperationalDisplay({
+    trip_operational_code: trip.trip_operational_code ?? null,
+    trip_code: trip.trip_code ?? null,
+    display_trip_id: trip.display_trip_id ?? null,
+    trip_number: trip.trip_number ?? null,
+  });
   const activeSubjectName = flow?.type === 'client_supplier'
     ? resolvedPartnerLabel
     : (driverName || trip.driver_display_name || 'Driver');
   const activeSubjectMeta = flow?.type === 'client_supplier'
-    ? (trip.display_trip_id || trip.trip_number || 'Trip')
-    : (trip.vehicle_display_number || trip.display_trip_id || trip.trip_number || 'Trip');
+    ? (operationalTripLabel !== "—" ? operationalTripLabel : 'Trip')
+    : (trip.vehicle_display_number || (operationalTripLabel !== "—" ? operationalTripLabel : 'Trip'));
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
   const presentationKind = flow ? presentationKindFromFlow(flow) : 'DRIVER';
   const pulseUi = FEEDBACK_PRESENTATION[presentationKind];

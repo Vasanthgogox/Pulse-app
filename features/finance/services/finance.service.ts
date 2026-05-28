@@ -25,10 +25,11 @@ import { LEDGER_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { VALIDATION, dateISO } from "@/lib/validation";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 /** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
 const LEDGER_TX_SELECT_WITH_TRIPS =
-  "*, trips(trip_number, display_trip_id)" as const;
+  "*, trips(trip_number, display_trip_id, trip_code, trip_operational_code)" as const;
 const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY = "*, trips(trip_number)" as const;
 
 function isMissingTripsDisplayTripIdError(
@@ -159,7 +160,12 @@ export interface LedgerRow {
   contact_type?: "client" | "supplier" | "driver" | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
-  trips?: { trip_number: string; display_trip_id?: string | null } | null;
+  trips?: {
+    trip_number: string;
+    display_trip_id?: string | null;
+    trip_code?: string | null;
+    trip_operational_code?: string | null;
+  } | null;
   primary_category?: string | null;
   payment_mode?: string | null;
   payment_reference?: string | null;
@@ -693,7 +699,12 @@ function toLedgerRow(row: {
   contact_type: string | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
-  trips?: { trip_number: string; display_trip_id?: string | null } | null;
+  trips?: {
+    trip_number: string;
+    display_trip_id?: string | null;
+    trip_code?: string | null;
+    trip_operational_code?: string | null;
+  } | null;
   ledger_entity_type?: string | null;
   ledger_flow_type?: string | null;
   ledger_category?: string | null;
@@ -701,12 +712,12 @@ function toLedgerRow(row: {
   const descriptionRaw = row.description ?? "ENTRY";
   const description = stripLedgerMeta(descriptionRaw) || "ENTRY";
   const meta = extractLedgerMeta(descriptionRaw);
-  const tripNumber =
-    row.trips?.display_trip_id ??
-    row.trips?.trip_number ??
-    row.trip_number ??
-    meta.trip_number ??
-    null;
+  const tripNumber = getTripOperationalDisplay({
+    trip_operational_code: row.trips?.trip_operational_code ?? null,
+    trip_code: row.trips?.trip_code ?? null,
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_number: row.trips?.trip_number ?? row.trip_number ?? meta.trip_number ?? null,
+  });
   const interpreted = interpretLedgerRowStructured({
     contact_id: row.contact_id,
     contact_type: row.contact_type,
@@ -720,7 +731,7 @@ function toLedgerRow(row: {
     id: row.id,
     organization_id: row.organization_id,
     trip_id: row.trip_id ?? null,
-    trip_number: tripNumber,
+    trip_number: tripNumber === "—" ? null : tripNumber,
     party_name: row.party_name ?? "—",
     description,
     amount_in: Number(row.amount_in ?? 0),
@@ -733,8 +744,20 @@ function toLedgerRow(row: {
     driver_name: row.driver_name ?? meta.driver_name ?? null,
     trips: row.trips
       ? {
-          trip_number: row.trips.trip_number,
-          display_trip_id: row.trips.display_trip_id ?? row.trips.trip_number,
+          trip_number: getTripOperationalDisplay({
+            trip_operational_code: row.trips.trip_operational_code ?? null,
+            trip_code: row.trips.trip_code ?? null,
+            display_trip_id: row.trips.display_trip_id ?? null,
+            trip_number: row.trips.trip_number,
+          }),
+          display_trip_id: getTripOperationalDisplay({
+            trip_operational_code: row.trips.trip_operational_code ?? null,
+            trip_code: row.trips.trip_code ?? null,
+            display_trip_id: row.trips.display_trip_id ?? null,
+            trip_number: row.trips.trip_number,
+          }),
+          trip_code: row.trips.trip_code ?? null,
+          trip_operational_code: row.trips.trip_operational_code ?? null,
         }
       : null,
     profileImageUrl: null,
@@ -999,7 +1022,12 @@ type InsertedTxnRowForChat = {
   contact_type: string | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
-  trips?: { trip_number: string; display_trip_id?: string | null } | null;
+  trips?: {
+    trip_number: string;
+    display_trip_id?: string | null;
+    trip_code?: string | null;
+    trip_operational_code?: string | null;
+  } | null;
   ledger_entity_type?: string | null;
   ledger_flow_type?: string | null;
   ledger_category?: string | null;
@@ -1446,7 +1474,12 @@ export async function updateLedgerEntry(
     contact_type: string | null;
     vehicle_number?: string | null;
     driver_name?: string | null;
-    trips?: { trip_number: string; display_trip_id?: string | null } | null;
+    trips?: {
+      trip_number: string;
+      display_trip_id?: string | null;
+      trip_code?: string | null;
+      trip_operational_code?: string | null;
+    } | null;
     ledger_entity_type?: string | null;
     ledger_flow_type?: string | null;
     ledger_category?: string | null;

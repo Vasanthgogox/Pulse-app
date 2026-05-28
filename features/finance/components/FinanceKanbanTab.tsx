@@ -8,6 +8,7 @@ import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
@@ -490,7 +491,10 @@ export function FinanceKanbanTab({
       category: ALL_LEDGER_CATEGORY_VALUES.includes(row.description ?? "") ? row.description : "GENERAL",
       desc: row.description,
       tripId: row.trip_id,
-      msn: row.trip_number || (row.trip_id ? "Trip" : "General"),
+      msn:
+        (getTripOperationalDisplay({ trip_number: row.trip_number ?? null }) !== "—"
+          ? getTripOperationalDisplay({ trip_number: row.trip_number ?? null })
+          : "") || (row.trip_id ? "Trip" : "General"),
       tripDetail: tripDetail ?? undefined,
       vehicleNumber: vehicleNum,
       driverName: row.driver_name,
@@ -528,7 +532,16 @@ export function FinanceKanbanTab({
     const routeStr = tripDetail ? [tripDetail.pickup_area, tripDetail.drop_location].filter(Boolean).join(" → ") : null;
     const routeWhyLine = [routeStr, typeLabel].filter(Boolean).join(" • ");
     const rowData = buildFinancialRowData(row);
-    const tripIdOnly = tripDetail?.trip_number || row.trip_number || (row.trip_id ? "TRIP" : null);
+    const tripIdOnly =
+      getTripOperationalDisplay({
+        trip_number: tripDetail?.trip_number ?? row.trip_number ?? null,
+      }) !== "—"
+        ? getTripOperationalDisplay({
+            trip_number: tripDetail?.trip_number ?? row.trip_number ?? null,
+          })
+        : row.trip_id
+          ? "TRIP"
+          : null;
 
     let profileImageUrl: string | null = null;
 

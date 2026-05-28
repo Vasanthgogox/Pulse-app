@@ -15,13 +15,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  type ViewStyle,
+  type TextStyle,
 } from "react-native";
 
-const INPUT_WEB: ViewStyle =
-  Platform.OS === "web"
-    ? ({ outlineStyle: "none" } as unknown as ViewStyle)
-    : {};
+const INPUT_WEB: TextStyle = Platform.OS === "web" ? {} : {};
 
 export type ChatMobileComposerProps = {
   value: string;

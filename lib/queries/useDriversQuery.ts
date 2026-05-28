@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getDriversByOrganization,
   syncDriversWithCache,
+  type DriverRow,
 } from '@/features/drivers/services/drivers.service';
 import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
@@ -13,19 +14,19 @@ import { STALE } from '@/lib/queryClient';
 
 export function useDriversQuery(orgId: string | null) {
   const qc = useQueryClient();
-  return useQuery({
+  return useQuery<DriverRow[], Error>({
     queryKey: queryKeys.drivers.finite(orgId ?? ''),
     queryFn: async () => {
       const existing =
         (qc.getQueryData(queryKeys.drivers.finite(orgId ?? '')) as
-          | Array<{ id: string }>
+          | DriverRow[]
           | undefined) ?? [];
-      return fetchEntityListWithFallback({
+      return fetchEntityListWithFallback<DriverRow>({
         orgId: orgId!,
         domain: 'drivers',
-        cachedRows: existing as never[],
-        sync: async (id, cached) => {
-          const res = await syncDriversWithCache(id, cached as never[]);
+        cachedRows: existing,
+        sync: async (id, cachedRows) => {
+          const res = await syncDriversWithCache(id, cachedRows);
           return { error: res.error, rows: res.drivers };
         },
         fetchDirect: async (id) => {
@@ -36,7 +37,7 @@ export function useDriversQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
-    refetchOnMount: refetchOnMountIfEntityListEmpty,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<DriverRow[]>(),
   });
 }
 

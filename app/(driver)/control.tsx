@@ -24,12 +24,15 @@ import {
 import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import { formatINR } from "@/lib/format";
 import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+import { ROUTES } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
 import { getOptimalRoute } from "@/lib/routingService";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import * as tripsService from "@/features/trips/services/trips.service";
+import { useTripVerificationSync } from "@/features/trips/verification";
+import { useTripOperationsSync } from "@/features/trips/operations";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -100,6 +103,8 @@ export default function DriverControlScreen() {
   const insets = useSafeAreaInsets();
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
+  useTripVerificationSync();
+  useTripOperationsSync();
   const { avatarUri } = useDriverAvatarUri();
   const params = useLocalSearchParams<{ tripId?: string | string[] }>();
   const tripId =
@@ -371,6 +376,21 @@ export default function DriverControlScreen() {
       ? STEPS.findIndex((s) => s.id === "completed")
       : stepIndex;
   const tripIsAggregate = isAggregateTrip(trip);
+  const openVerificationFlow = useCallback(
+    (side: "start" | "end") => {
+      if (!trip?.id) return;
+      router.push(ROUTES.tripVerification(trip.id, side) as Href);
+    },
+    [router, trip?.id],
+  );
+  const openFuelEntry = useCallback(() => {
+    if (!trip?.id) return;
+    router.push(ROUTES.tripFuelEntry(trip.id) as Href);
+  }, [router, trip?.id]);
+  const openTollEntry = useCallback(() => {
+    if (!trip?.id) return;
+    router.push(ROUTES.tripTollEntry(trip.id) as Href);
+  }, [router, trip?.id]);
   const commission = tripIsAggregate
     ? 0
     : computeDriverCommissionForTrip(
@@ -404,14 +424,8 @@ export default function DriverControlScreen() {
   const employerOrgIdSet = useMemo(() => {
     const set = new Set<string>();
     linkedDriversFull.forEach((d) => {
-      if (
-        (d.payable_amount != null && d.payable_amount > 0) ||
-        (d.commission_percent != null && d.commission_percent > 0) ||
-        (d.commission_per_km != null && d.commission_per_km > 0)
-      ) {
-        const orgId = String(d.organization_id ?? '');
-        if (orgId) set.add(orgId);
-      }
+      const orgId = String(d.organization_id ?? '');
+      if (orgId) set.add(orgId);
     });
     return set;
   }, [linkedDriversFull]);
@@ -424,8 +438,10 @@ export default function DriverControlScreen() {
     return { orgId: String(d.organization_id ?? ''), driverRowId: d.id };
   }, [linkedDriversFull, employerOrgIdSet]);
 
+  // Fleet trip: employer dispatched directly OR employer is supplier on a cross-org trip.
   const isControlTripFleet = controlCurrentEmployer
-    ? employerOrgIdSet.has(String(trip.organization_id ?? ''))
+    ? (employerOrgIdSet.has(String(trip.organization_id ?? '')) ||
+        (!!trip.supplier_id && employerOrgIdSet.has(String(trip.supplier_id ?? ''))))
     : false;
 
   const isControlTripAttributed = useMemo(() => {
@@ -1006,29 +1022,74 @@ export default function DriverControlScreen() {
           ) : null}
 
           {step === "accepted" && (
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                { backgroundColor: colors.emerald },
-                stepLoading && styles.primaryBtnDisabled,
-              ]}
-              onPress={confirmArrival}
-              disabled={stepLoading}
-              activeOpacity={0.8}
-            >
-              {stepLoading ? (
-                <Text style={styles.primaryBtnText}>Updating…</Text>
-              ) : (
-                <>
-                  <FontAwesome
-                    name="map-marker"
-                    size={20}
-                    color={colors.textOnPrimary}
-                  />
-                  <Text style={styles.primaryBtnText}>Confirm arrival</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryActionBtn,
+                  { borderColor: colors.border, backgroundColor: colors.whiteMuted },
+                ]}
+                onPress={() => openVerificationFlow("start")}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="dashboard" size={14} color={colors.text} />
+                <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
+                  Add start odometer (optional)
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.secondaryActionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryActionBtn,
+                    styles.secondaryActionHalf,
+                    { borderColor: colors.border, backgroundColor: colors.whiteMuted },
+                  ]}
+                  onPress={openFuelEntry}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="fire" size={14} color={colors.text} />
+                  <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
+                    Add fuel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryActionBtn,
+                    styles.secondaryActionHalf,
+                    { borderColor: colors.border, backgroundColor: colors.whiteMuted },
+                  ]}
+                  onPress={openTollEntry}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="road" size={14} color={colors.text} />
+                  <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
+                    Add toll
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  { backgroundColor: colors.emerald },
+                  stepLoading && styles.primaryBtnDisabled,
+                ]}
+                onPress={confirmArrival}
+                disabled={stepLoading}
+                activeOpacity={0.8}
+              >
+                {stepLoading ? (
+                  <Text style={styles.primaryBtnText}>Updating…</Text>
+                ) : (
+                  <>
+                    <FontAwesome
+                      name="map-marker"
+                      size={20}
+                      color={colors.textOnPrimary}
+                    />
+                    <Text style={styles.primaryBtnText}>Confirm arrival</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
           )}
 
           {step === "pickup" && (
@@ -1107,6 +1168,49 @@ export default function DriverControlScreen() {
 
           {step === "reached" && (
             <View style={styles.reachedBlock}>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryActionBtn,
+                  { borderColor: colors.border, backgroundColor: colors.whiteMuted },
+                ]}
+                onPress={() => openVerificationFlow("end")}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="dashboard" size={14} color={colors.text} />
+                <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
+                  Add closing odometer (optional)
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.secondaryActionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryActionBtn,
+                    styles.secondaryActionHalf,
+                    { borderColor: colors.border, backgroundColor: colors.whiteMuted },
+                  ]}
+                  onPress={openFuelEntry}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="fire" size={14} color={colors.text} />
+                  <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
+                    Log fuel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.secondaryActionBtn,
+                    styles.secondaryActionHalf,
+                    { borderColor: colors.border, backgroundColor: colors.whiteMuted },
+                  ]}
+                  onPress={openTollEntry}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="road" size={14} color={colors.text} />
+                  <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
+                    Log toll
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <View
                 style={[
                   styles.podUploadWrap,
@@ -1878,6 +1982,27 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   primaryBtnDisabled: { opacity: 0.7 },
+  secondaryActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  secondaryActionBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  secondaryActionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  secondaryActionHalf: {
+    flex: 1,
+  },
   stepErrorWrap: {
     flexDirection: "row",
     alignItems: "center",

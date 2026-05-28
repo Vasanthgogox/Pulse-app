@@ -5,8 +5,8 @@
 import type { CacheDomain } from '@/lib/cache/deltaTypes';
 import { clearDomainCacheMeta } from '@/lib/cache/cacheMetadataStore';
 
-type SyncResult<T> = { error: Error | null; rows: T[] };
-type DirectResult<T> = { error: Error | null; rows: T[] };
+export type SyncResult<T> = { error: Error | null; rows: T[] };
+export type DirectResult<T> = { error: Error | null; rows: T[] };
 
 export async function fetchEntityListWithFallback<T>(params: {
   orgId: string;

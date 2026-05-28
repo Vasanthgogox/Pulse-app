@@ -80,18 +80,25 @@ const SORT_OPTIONS: Array<{
 ];
 
 function tripToScoreInput(t: TripRow): VehicleScoreTripInput {
+  const distance =
+    t.distance == null
+      ? null
+      : typeof t.distance === "number"
+        ? t.distance
+        : Number.parseFloat(String(t.distance).replace(/[^0-9.]/g, ""));
   return {
     id: t.id,
     vehicle_id: t.vehicle_id ?? null,
     client_price: t.client_price ?? null,
     status: t.status ?? null,
-    distance: t.distance ?? null,
+    distance: Number.isFinite(distance) ? distance : null,
     pickup_date: t.pickup_date ?? null,
     created_at: t.created_at ?? null,
   };
 }
 
 interface FleetRow extends VehicleLeaderboardRow {
+  id: string;
   /** Full performance breakdown — kept around for tooltips / archetype callouts. */
   performance: VehiclePerformanceScore | null;
 }
@@ -149,6 +156,7 @@ function buildFleetRows(
     const trips_ = performance?.breakdown.tripsTotal ?? 0;
 
     return {
+      id: v.id,
       vehicleId: v.id,
       vehicleNumber: v.vehicle_number || "—",
       vehicleType: v.vehicle_type ?? null,

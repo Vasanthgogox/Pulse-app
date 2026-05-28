@@ -58,6 +58,7 @@ import {
 import { VehicleDocumentsSection } from "./VehicleDocumentsSection";
 import { VehicleAnalyticsTab } from "./analytics/VehicleAnalyticsTab";
 import { VehicleFleetRankingTab } from "./analytics/VehicleFleetRankingTab";
+import { VehicleOperationsHub } from "./VehicleOperationsHub";
 
 export interface VehicleDetailScreenProps {
   vehicleId: string;
@@ -93,8 +94,8 @@ export default function VehicleDetailScreen({
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<
-    "trips" | "cash" | "analytics" | "ranking"
-  >("trips");
+    "operations" | "trips" | "cash" | "analytics" | "ranking"
+  >("operations");
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
@@ -343,6 +344,16 @@ export default function VehicleDetailScreen({
     [missionRows],
   );
   const tripsHandled = missionRows.length;
+  const utilizationPct = useMemo(() => {
+    const now = Date.now();
+    const windowMs = 30 * 24 * 60 * 60 * 1000;
+    const recentTrips = vehicleTrips.filter((trip) => {
+      const d = new Date(trip.created_at ?? trip.pickup_date ?? "");
+      return Number.isFinite(d.getTime()) && now - d.getTime() <= windowMs;
+    }).length;
+    if (recentTrips <= 0) return 0;
+    return Math.min(100, (recentTrips / 30) * 100);
+  }, [vehicleTrips]);
   const performanceScore = Number(
     (
       contractValue > 0
@@ -681,6 +692,23 @@ export default function VehicleDetailScreen({
           <TouchableOpacity
             style={[
               styles.tabItem,
+              detailSubTab === "operations" && styles.tabItemActive,
+            ]}
+            onPress={() => setDetailSubTab("operations")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.tabItemText,
+                detailSubTab === "operations" && styles.tabItemTextActive,
+              ]}
+            >
+              Operations
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tabItem,
               detailSubTab === "trips" && styles.tabItemActive,
             ]}
             onPress={() => setDetailSubTab("trips")}
@@ -747,6 +775,15 @@ export default function VehicleDetailScreen({
             </Text>
           </TouchableOpacity>
         </View>
+
+        {detailSubTab === "operations" && (
+          <VehicleOperationsHub
+            organizationId={currentOrganization?.id ?? null}
+            vehicleId={vehicleId}
+            utilizationPct={utilizationPct}
+            actorUserId={profile?.uid ?? null}
+          />
+        )}
 
         {detailSubTab === "trips" && (
           <View style={styles.tableCard}>

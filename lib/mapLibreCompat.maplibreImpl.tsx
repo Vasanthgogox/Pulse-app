@@ -82,21 +82,7 @@ type CalloutProps = {
 type MarkerNode = MarkerProps & { id: string };
 type PolylineNode = PolylineProps & { id: string };
 type TaggedMapChildType = { __mapCompatType?: string };
-type CameraRefLike = {
-  fitBounds: (
-    ne: [number, number],
-    sw: [number, number],
-    padding?: [number, number, number, number],
-    duration?: number,
-  ) => void;
-  setCamera: (config: {
-    centerCoordinate?: [number, number];
-    heading?: number;
-    pitch?: number;
-    zoomLevel?: number;
-    animationDuration?: number;
-  }) => void;
-};
+type CameraRefLike = React.ElementRef<typeof MapLibreGL.Camera>;
 
 const MARKER_TAG = "map-compat-marker";
 const POLYLINE_TAG = "map-compat-polyline";
@@ -119,15 +105,18 @@ function flattenMapChildren(
   out: { markers: MarkerNode[]; polylines: PolylineNode[]; seq: number },
 ) {
   Children.forEach(children, (child) => {
-    if (!isValidElement(child)) return;
+    if (!isValidElement<Record<string, unknown>>(child)) return;
 
     if (child.type === Fragment) {
-      flattenMapChildren(child.props.children, out);
+      flattenMapChildren(child.props.children as React.ReactNode, out);
       return;
     }
 
-    const typeTag = (child.type as TaggedMapChildType | string)
-      ?.__mapCompatType;
+    const childType = child.type;
+    const typeTag =
+      typeof childType === "string"
+        ? undefined
+        : (childType as TaggedMapChildType).__mapCompatType;
     if (typeTag === MARKER_TAG) {
       out.markers.push({
         ...(child.props as MarkerProps),
@@ -235,11 +224,10 @@ const CompatMapView = forwardRef<CompatMapRef, CompatMapProps>(
       <View style={style}>
         <MapLibreGL.MapView
           style={StyleSheet.absoluteFill}
-          styleURL={MAP_STYLE}
+          mapStyle={MAP_STYLE}
           logoEnabled={false}
           attributionEnabled={false}
           compassEnabled={false}
-          scaleBarEnabled={false}
           scrollEnabled={scrollEnabled}
           zoomEnabled={zoomEnabled}
           rotateEnabled={rotateEnabled}

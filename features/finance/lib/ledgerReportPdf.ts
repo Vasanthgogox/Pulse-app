@@ -1,4 +1,5 @@
 import type { LedgerRow } from "../services/finance.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -86,10 +87,11 @@ export function buildLedgerReportHtml(
 
   const bodyRows = rows
     .map((r) => {
+      const tripDisplay = getTripOperationalDisplay({ trip_number: r.trip_number ?? null });
       const ref =
         refDisplayMode === "tripOnly"
-          ? escapeHtml(r.trip_number || "—")
-          : escapeHtml(r.trip_number || r.description || "—");
+          ? escapeHtml(tripDisplay)
+          : escapeHtml(tripDisplay !== "—" ? tripDisplay : r.description || "—");
       const party = escapeHtml(r.party_name ?? "—");
       const dateIso = pickLedgerDate(r);
       const date = dateIso ? escapeHtml(formatDateLabel(dateIso)) : "—";

@@ -4,6 +4,7 @@
  * Selecting a card shows a confirmation bar; Confirm links the trip and closes.
  */
 import Theme from "@/constants/Theme";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useEffect, useState } from "react";
@@ -104,6 +105,9 @@ export function TripPickerModal({
               <Text style={styles.empty}>No trips to link</Text>
             ) : (
               tripOptions.map((t) => {
+                const tripDisplay = getTripOperationalDisplay({
+                  trip_number: t.trip_number,
+                });
                 const routeStr = (t as { route?: string | null; route_label?: string | null }).route ?? (t as { route_label?: string | null }).route_label ?? "";
                 const routeParts = routeStr.split(/\s*→\s*/);
                 const origin = routeParts[0]?.trim() ?? "—";
@@ -122,7 +126,7 @@ export function TripPickerModal({
                     <View style={styles.itemContent}>
                       <View style={styles.itemRow1}>
                         <Text style={styles.itemTripId} numberOfLines={1}>
-                          {t.trip_number}
+                          {tripDisplay}
                         </Text>
                         <Text style={styles.itemDate} numberOfLines={1}>
                           {t.trip_date ?? "—"}
@@ -172,8 +176,8 @@ export function TripPickerModal({
             <View style={styles.confirmBar}>
               <Text style={styles.confirmLabel} numberOfLines={2}>
                 {hasChange
-                  ? `Change to ${pendingTrip.trip_number}?`
-                  : `Link this entry to ${pendingTrip.trip_number}?`}
+                  ? `Change to ${getTripOperationalDisplay({ trip_number: pendingTrip.trip_number })}?`
+                  : `Link this entry to ${getTripOperationalDisplay({ trip_number: pendingTrip.trip_number })}?`}
               </Text>
               <View style={styles.confirmActions}>
                 <Pressable

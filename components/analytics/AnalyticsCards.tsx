@@ -220,7 +220,10 @@ export const KPIHeader = memo(function KPIHeader({
                 <View key={id} style={headerStyles.gridCell}>
                   <KPICard
                     {...rest}
-                    containerStyle={[headerStyles.cellCard, containerStyle]}
+                    containerStyle={StyleSheet.flatten([
+                      headerStyles.cellCard,
+                      containerStyle,
+                    ])}
                   />
                 </View>
               );

@@ -6,6 +6,7 @@ import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
   type LedgerIdentityContext,
   resolveLedgerRowPartyIdentity,
@@ -337,7 +338,10 @@ export function LedgerTab({
             : null);
         // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
         const entityName = getResolvedPartyName(row);
-        const tripDisplay = (row.trip_number ?? "").trim() || null;
+        const tripDisplayResolved = getTripOperationalDisplay({
+          trip_number: row.trip_number ?? null,
+        });
+        const tripDisplay = tripDisplayResolved !== "—" ? tripDisplayResolved : null;
         const entryDateStr = formatLedgerEntryDate(row.transaction_date);
         const restSublineDriver =
           isDriverPayment && tripDisplay
@@ -486,9 +490,7 @@ export function LedgerTab({
           category: categoryLabel,
           desc: row.description,
           tripId: row.trip_id ?? null,
-          msn:
-            (row.trip_number ?? "").trim() ||
-            (row.trip_id ? "Trip" : "General"),
+          msn: tripDisplay ?? (row.trip_id ? "Trip" : "General"),
           tripDetail: tripDetail ?? undefined,
           vehicleNumber: isDriverPayment ? null : vehicleNum,
           driverName: row.driver_name ?? undefined,

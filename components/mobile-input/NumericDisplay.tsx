@@ -69,8 +69,8 @@ export function NumericDisplay({
             isEmpty && isHero && styles.amountPlaceholderHero,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.4}
+          adjustsFontSizeToFit={!isHero}
+          minimumFontScale={isHero ? 0.72 : 0.4}
           allowFontScaling={false}
         >
           {display}
@@ -108,14 +108,14 @@ const styles = StyleSheet.create({
   rootHero: {
     flex: 0,
     flexGrow: 0,
-    paddingVertical: 16,
-    minHeight: 88,
+    paddingVertical: 20,
+    minHeight: 112,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    maxWidth: '100%',
+    maxWidth: '92%',
   },
   prefix: {
     fontSize: 22,
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   prefixHero: {
-    fontSize: 36,
+    fontSize: 48,
     fontWeight: '400',
     letterSpacing: 0,
   },
@@ -139,10 +139,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   amountHero: {
-    fontSize: 52,
+    fontSize: 72,
     fontWeight: '600',
-    lineHeight: 56,
-    letterSpacing: -1,
+    lineHeight: 76,
+    letterSpacing: -1.2,
   },
   amountPlaceholder: {
     color: Theme.textMuted,
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   suffixHero: {
-    fontSize: 28,
+    fontSize: 38,
   },
   dim: {
     color: Theme.textMuted,
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
   cursorHero: {
-    height: 44,
-    width: 2.5,
+    height: 54,
+    width: 3,
   },
 });

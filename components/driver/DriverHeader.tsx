@@ -185,7 +185,7 @@ export function DriverHeader({
         >
           <FontAwesome
             name={pendingInviteCount > 0 ? 'envelope' : 'user-plus'}
-            size={18}
+            size={Layout.driverHeaderActionIconSize}
             color={pendingInviteCount > 0 ? colors.emerald : colors.text}
           />
           {pendingInviteCount > 0 ? (
@@ -207,7 +207,11 @@ export function DriverHeader({
           accessibilityLabel="Notifications"
           accessibilityHint="View notifications"
         >
-          <FontAwesome name="bell" size={18} color={colors.text} />
+          <FontAwesome
+            name="bell"
+            size={Layout.driverHeaderActionIconSize}
+            color={colors.text}
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -285,9 +289,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   notificationBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: Layout.driverHeaderActionSize,
+    height: Layout.driverHeaderActionSize,
+    borderRadius: Layout.driverHeaderActionSize / 2,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',

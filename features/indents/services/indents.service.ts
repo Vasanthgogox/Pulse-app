@@ -13,6 +13,10 @@ import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import {
+  getIndentOperationalDisplay,
+  getTripOperationalDisplay,
+} from "@/features/operations/display";
+import {
     VALIDATION,
     dateISO,
     maxLength,
@@ -70,6 +74,10 @@ export interface IndentStopInput {
 export interface IndentRow {
   id: string;
   organization_id: string;
+  /** Operational identity code, e.g. GGV234-IND-001 */
+  indent_code?: string | null;
+  /** Enterprise operational identity code, e.g. GGV234ABCIND000001 */
+  indent_operational_code?: string | null;
   /** User-facing ID; DB trigger sets from display_indent_id when null. */
   indent_number: string;
   /** Per-org sequence; set by DB trigger. Used for IND001 display. */
@@ -101,6 +109,37 @@ export interface IndentRow {
   assigned_supplier_id?: string | null;
   assigned_supplier_rate?: number | null;
   [key: string]: unknown;
+}
+
+type IndentTripJoin = {
+  trip_operational_code?: string | null;
+  trip_number: string | null;
+  trip_code?: string | null;
+};
+
+function normalizeIndentRow(
+  row: IndentRow & {
+    active_trip?: IndentTripJoin[] | null;
+    trips?: IndentTripJoin[] | null;
+    trip_code?: string | null;
+  },
+): IndentRow {
+  const tripRef =
+    getTripOperationalDisplay({
+      trip_operational_code:
+        row.active_trip?.[0]?.trip_operational_code ??
+        row.trips?.[0]?.trip_operational_code ??
+        null,
+      trip_code: row.active_trip?.[0]?.trip_code ?? row.trips?.[0]?.trip_code ?? null,
+      trip_number:
+        row.active_trip?.[0]?.trip_number ?? row.trips?.[0]?.trip_number ?? row.trip_number ?? null,
+    }) ?? null;
+  return {
+    ...row,
+    indent_operational_code: row.indent_operational_code ?? null,
+    indent_number: getIndentOperationalDisplay(row),
+    trip_number: tripRef === "—" ? null : tripRef,
+  };
 }
 
 async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
@@ -137,7 +176,9 @@ export async function getIndentsByOrganization(
   const base = () =>
     supabase()
       .from("indents")
-      .select("*, trips(trip_number)")
+      .select(
+        "*, active_trip:trips!trips_indent_id_fkey(trip_operational_code, trip_number, trip_code)",
+      )
       .eq("organization_id", orgId)
       .order("created_at", { ascending: false });
   if (opts != null) {
@@ -145,10 +186,9 @@ export async function getIndentsByOrganization(
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
     if (error) return { error: new Error(error.message), indents: [] };
-    const indents = (data ?? []).map((row: any) => ({
-      ...row,
-      trip_number: row.trips?.[0]?.trip_number ?? null,
-    })) as IndentRow[];
+    const indents = (data ?? []).map((row) =>
+      normalizeIndentRow(row as IndentRow & { trips?: IndentTripJoin[] | null }),
+    ) as IndentRow[];
     const hasMore = indents.length > limit;
     return {
       error: null,
@@ -158,10 +198,9 @@ export async function getIndentsByOrganization(
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), indents: [] };
-  const indents = (data ?? []).map((row: any) => ({
-    ...row,
-    trip_number: row.trips?.[0]?.trip_number ?? null,
-  })) as IndentRow[];
+  const indents = (data ?? []).map((row) =>
+    normalizeIndentRow(row as IndentRow & { trips?: IndentTripJoin[] | null }),
+  ) as IndentRow[];
   return { error: null, indents };
 }
 
@@ -181,7 +220,9 @@ export async function getIndentsDelta(
   return {
     error: null,
     delta: {
-      changed: (row?.changed ?? []) as IndentRow[],
+      changed: ((row?.changed ?? []) as IndentRow[]).map((indent) =>
+        normalizeIndentRow(indent as IndentRow & { trips?: IndentTripJoin[] | null }),
+      ),
       deletedIds: (row?.deleted_ids ?? []) as string[],
       nextCursor: row?.next_cursor ? { updatedAt: row.next_cursor } : since,
     },
@@ -346,11 +387,14 @@ export async function getMarketIndentsForOrganization(
         (organizations as { name?: string | null } | null)?.name ??
         (row.creator_organization_name as string | null) ??
         null;
-      return { ...rest, creator_organization_name: name } as IndentRow;
+      return normalizeIndentRow({
+        ...rest,
+        creator_organization_name: name,
+      } as IndentRow & { trips?: IndentTripJoin[] | null });
     });
     const withActiveLinked = await mergeLinkedShipperActiveIndents(orgId, indents);
     const merged = await mergeQuotedIndentsForSupplier(orgId, withActiveLinked);
-    return { error: null, indents: merged };
+    return { error: null, indents: merged.map((i) => normalizeIndentRow(i)) };
   }
 
   const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
@@ -383,13 +427,13 @@ export async function getMarketIndentsForOrganization(
   })[];
   const indents: IndentRow[] = rows.map((row) => {
     const { organizations, ...rest } = row;
-    return {
+    return normalizeIndentRow({
       ...rest,
       creator_organization_name: organizations?.name ?? null,
-    } as IndentRow;
+    } as IndentRow & { trips?: IndentTripJoin[] | null });
   });
   const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
-  return { error: null, indents: merged };
+  return { error: null, indents: merged.map((i) => normalizeIndentRow(i)) };
 }
 
 /**
@@ -431,10 +475,10 @@ async function mergeQuotedIndentsForSupplier(
     IndentRow & { organizations?: { name: string | null } | null }
   >).map((row) => {
     const { organizations, ...rest } = row;
-    return {
+    return normalizeIndentRow({
       ...rest,
       creator_organization_name: organizations?.name ?? null,
-    } as IndentRow;
+    } as IndentRow & { trips?: IndentTripJoin[] | null });
   });
 
   const merged = [...baseIndents];
@@ -453,17 +497,14 @@ export async function getIndentById(
 ): Promise<{ error: Error | null; indent: IndentRow | null }> {
   const { data, error } = await supabase()
     .from("indents")
-    .select("*, trips(trip_number)")
+    .select(
+      "*, active_trip:trips!trips_indent_id_fkey(trip_operational_code, trip_number, trip_code)",
+    )
     .eq("id", indentId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), indent: null };
-  const raw = data as any;
-  const indent: IndentRow | null = raw
-    ? {
-        ...raw,
-        trip_number: raw.trips?.[0]?.trip_number ?? null,
-      }
-    : null;
+  const raw = data as (IndentRow & { trips?: IndentTripJoin[] | null }) | null;
+  const indent: IndentRow | null = raw ? normalizeIndentRow(raw) : null;
   return { error: null, indent };
 }
 
@@ -518,6 +559,8 @@ export async function getVisibleIndentById(
   const needle = raw.toLowerCase();
   const match =
     indents.find((row) => row.id === raw) ??
+    indents.find((row) => (row.indent_operational_code ?? "").toLowerCase() === needle) ??
+    indents.find((row) => (row.indent_code ?? "").toLowerCase() === needle) ??
     indents.find(
       (row) => (row.display_indent_id ?? "").toLowerCase() === needle,
     ) ??
@@ -529,7 +572,7 @@ export async function getVisibleIndentById(
 
 /** Display label for an indent (IND001-style when present). */
 export function getIndentDisplayNumber(row: IndentRow): string {
-  return row.display_indent_id ?? row.indent_number ?? "—";
+  return getIndentOperationalDisplay(row);
 }
 
 /** Supplier-facing target rate (not load-giver client sales price). */

@@ -1956,7 +1956,7 @@ export function SharedLedgerContent({
           .select("id")
           .eq("organization_id", organizationId)
           .or(
-            `display_trip_id.eq.${missionRaw},trip_number.eq.${missionRaw},id.eq.${missionRaw}`,
+            `trip_operational_code.eq.${missionRaw},trip_code.eq.${missionRaw},display_trip_id.eq.${missionRaw},trip_number.eq.${missionRaw},id.eq.${missionRaw}`,
           )
           .limit(1)
           .maybeSingle();

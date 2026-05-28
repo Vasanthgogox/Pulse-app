@@ -84,6 +84,8 @@ import { LiveTrackingModal } from "./modals/LiveTrackingModal";
 import { isTripTrackingActive, defaultTrackingState } from "@/features/trips/utils/tripTrackingStatus.util";
 import { MAP_LOCATION_LABEL_LOADING } from "@/lib/mapLocationLabel.service";
 import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
+import { useTripVerificationSync } from "@/features/trips/verification";
+import { OperationsHub, useTripOperationsSync } from "@/features/trips/operations";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import {
@@ -282,6 +284,8 @@ export default function TripDetailScreen({
   const { t } = useLanguage();
   const { width: screenWidth } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<Tab>("trip");
+  useTripVerificationSync();
+  useTripOperationsSync();
   const [financeSubTab, setFinanceSubTab] = useState<
     "summary" | "transactions"
   >("summary");
@@ -790,6 +794,25 @@ export default function TripDetailScreen({
           : "—",
         details: inTransitDetails,
       },
+      ...(tr.start_odometer_km != null
+        ? [
+            {
+              status: "Start Odometer Added",
+              location: tr.pickup_area?.trim() || "Pickup point",
+              time: (tr.odometer_updated_at ?? tr.started_at)
+                ? new Date(
+                    (tr.odometer_updated_at ?? tr.started_at) as string,
+                  ).toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—",
+              details: `Starting odometer recorded: ${Number(
+                tr.start_odometer_km,
+              ).toLocaleString("en-IN", { maximumFractionDigits: 1 })} KM`,
+            },
+          ]
+        : []),
       {
         status: "Delivered",
         location: tr.drop_location?.trim() || "Destination",
@@ -801,6 +824,44 @@ export default function TripDetailScreen({
           : "—",
         details: "Delivery completed and settlement flow closed.",
       },
+      ...(tr.end_odometer_km != null
+        ? [
+            {
+              status: "Closing Odometer Added",
+              location: tr.drop_location?.trim() || "Destination",
+              time: tr.odometer_updated_at
+                ? new Date(tr.odometer_updated_at).toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—",
+              details: `Closing odometer recorded: ${Number(
+                tr.end_odometer_km,
+              ).toLocaleString("en-IN", { maximumFractionDigits: 1 })} KM`,
+            },
+          ]
+        : []),
+      ...(tr.gps_distance_km != null && tr.odometer_distance_km != null
+        ? [
+            {
+              status: "GPS Comparison Available",
+              location: "Distance verification",
+              time: tr.odometer_updated_at
+                ? new Date(tr.odometer_updated_at).toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—",
+              details: `Odometer ${Number(
+                tr.odometer_distance_km,
+              ).toLocaleString("en-IN", {
+                maximumFractionDigits: 1,
+              })} KM vs GPS ${Number(tr.gps_distance_km).toLocaleString("en-IN", {
+                maximumFractionDigits: 1,
+              })} KM`,
+            },
+          ]
+        : []),
     ];
   }, [
     detail.trip,
@@ -841,6 +902,13 @@ export default function TripDetailScreen({
       router.push(ROUTES.tripAssignment(tripForAssignmentFlow.id, focus) as never);
     },
     [tripForAssignmentFlow?.id, canChangeManifestAssetsForNav, router],
+  );
+  const openTripVerification = useCallback(
+    (side: "start" | "end") => {
+      if (!tripForAssignmentFlow?.id) return;
+      router.push(ROUTES.tripVerification(tripForAssignmentFlow.id, side) as never);
+    },
+    [tripForAssignmentFlow?.id, router],
   );
 
   if (detail.loading && !detail.trip) {
@@ -2238,6 +2306,13 @@ export default function TripDetailScreen({
                     <Feather name="chevron-right" size={15} color="#94a3b8" />
                   </TouchableOpacity>
                 ) : null}
+                <OperationsHub
+                  trip={trip}
+                  onEditStart={() => openTripVerification("start")}
+                  onEditEnd={() => openTripVerification("end")}
+                  onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
+                  onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
+                />
                 <View style={styles.refTimelineCard}>
                   {journeyLogs.map((log, index) => {
                     const expanded = expandedLog === index;

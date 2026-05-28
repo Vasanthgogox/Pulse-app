@@ -6,6 +6,7 @@ import { ReceiptText } from "lucide-react-native";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { TripRow } from "../../../services/trips.service";
 import { getTripDisplayNumber } from "../../../services/trips.service";
+import { getIndentOperationalLineageCode } from "@/features/operations/display";
 import {
   shouldShowAggregateTripKindPill,
   type AggregateTripKindPillContext,
@@ -27,6 +28,7 @@ export function TripDetailHeader({
 }: TripDetailHeaderProps) {
   const isAggregate = shouldShowAggregateTripKindPill(trip, aggregateTripKindPillContext);
   const tripNumber = getTripDisplayNumber(trip);
+  const sourceIndentLabel = getIndentOperationalLineageCode(trip);
 
   return (
     <View style={styles.root}>
@@ -45,7 +47,8 @@ export function TripDetailHeader({
           {tripNumber}
         </Text>
         <Text style={styles.subtitle}>
-          Trip Details{trip.indent_number ? ` · ${trip.indent_number}` : ""}
+          Trip Details
+          {sourceIndentLabel ? ` · Created from ${sourceIndentLabel}` : ""}
         </Text>
 
         <View

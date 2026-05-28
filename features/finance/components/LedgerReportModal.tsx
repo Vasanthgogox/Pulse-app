@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { LedgerRow } from '../services/finance.service';
 
 function formatAmount(n: number): string {
@@ -37,6 +38,16 @@ function sortLedgerRowsByDate(rows: LedgerRow[]): LedgerRow[] {
   });
 }
 
+function getOperationalRef(row: LedgerRow): string {
+  const tripRef = getTripOperationalDisplay({
+    trip_operational_code: row.trips?.trip_operational_code ?? null,
+    trip_code: row.trips?.trip_code ?? null,
+    display_trip_id: row.trips?.display_trip_id ?? null,
+    trip_number: row.trip_number ?? null,
+  });
+  return tripRef !== "—" ? tripRef : row.description || "—";
+}
+
 function ledgerToCsv(rows: LedgerRow[]): string {
   const header = 'Party,Description,Trip/Ref,Date,Amount In,Amount Out';
   const totalIn = rows.reduce((s, r) => s + (r.amount_in ?? 0), 0);
@@ -48,7 +59,7 @@ function ledgerToCsv(rows: LedgerRow[]): string {
       [
         escape(r.party_name ?? ''),
         escape(r.description ?? ''),
-        escape(r.trip_number ?? ''),
+        escape(getOperationalRef(r)),
         (r.transaction_date ?? '').slice(0, 10),
         r.amount_in ?? 0,
         r.amount_out ?? 0,
@@ -69,7 +80,7 @@ function ledgerToPlainText(rows: LedgerRow[], totalIn: number, totalOut: number)
     ...rows.map((r) =>
       [
         (r.party_name ?? '—').replace(/\|/g, ' '),
-        (r.trip_number || r.description || '—').replace(/\|/g, ' '),
+        getOperationalRef(r).replace(/\|/g, ' '),
         (r.transaction_date ?? '').slice(0, 10),
         (r.amount_in ?? 0) > 0 ? formatAmount(r.amount_in!) : '—',
         (r.amount_out ?? 0) > 0 ? formatAmount(r.amount_out!) : '—',
@@ -86,7 +97,7 @@ function ledgerToHtml(rows: LedgerRow[], totalIn: number, totalOut: number): str
   const rowsHtml = rows
     .map(
       (r) =>
-        `<tr><td>${escapeHtml(r.party_name ?? '')}</td><td>${escapeHtml(r.trip_number || r.description || '—')}</td><td>${(r.transaction_date ?? '').slice(0, 10)}</td><td>${(r.amount_in ?? 0) > 0 ? formatAmount(r.amount_in!) : '—'}</td><td>${(r.amount_out ?? 0) > 0 ? formatAmount(r.amount_out!) : '—'}</td></tr>`
+        `<tr><td>${escapeHtml(r.party_name ?? '')}</td><td>${escapeHtml(getOperationalRef(r))}</td><td>${(r.transaction_date ?? '').slice(0, 10)}</td><td>${(r.amount_in ?? 0) > 0 ? formatAmount(r.amount_in!) : '—'}</td><td>${(r.amount_out ?? 0) > 0 ? formatAmount(r.amount_out!) : '—'}</td></tr>`
     )
     .join('');
   return `
@@ -327,7 +338,7 @@ export function LedgerReportModal({
           message: 'Save or share the ledger report PDF.',
         });
       }
-    } catch (e) {
+    } catch {
       try {
         await Share.share({
           message: activeCsv,
@@ -531,7 +542,7 @@ export function LedgerReportModal({
                   <View style={styles.cellEntity}>
                     <Text style={styles.entityName} numberOfLines={1}>{row.party_name}</Text>
                     <Text style={styles.entityDesc} numberOfLines={1}>
-                      {row.trip_number || row.description || '—'}
+                      {getOperationalRef(row)}
                     </Text>
                   </View>
                   <Text style={styles.cellDate}>{formatDate(row.transaction_date)}</Text>

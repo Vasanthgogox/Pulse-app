@@ -16,6 +16,22 @@ export const queryKeys = {
         ? (["q", "trips", orgId, opts] as const)
         : (["q", "trips", orgId] as const),
     detail: (tripId: string) => ["q", "trips", "detail", tripId] as const,
+    verification: (tripId: string) =>
+      ["q", "trips", "verification", tripId] as const,
+    verificationPhotos: (tripId: string) =>
+      ["q", "trips", "verification", tripId, "photos"] as const,
+    fuelEntries: (tripId: string) =>
+      ["q", "trips", "operations", tripId, "fuel"] as const,
+    tollEntries: (tripId: string) =>
+      ["q", "trips", "operations", tripId, "toll"] as const,
+    operationsSummary: (tripId: string) =>
+      ["q", "trips", "operations", tripId, "summary"] as const,
+    operationsTimeline: (tripId: string) =>
+      ["q", "trips", "operations", tripId, "timeline"] as const,
+    vehicleOperationsLedger: (orgId: string, vehicleId: string) =>
+      ["q", "trips", "operations", "vehicle", orgId, vehicleId, "ledger"] as const,
+    vehicleOperationsLedgerEntries: (orgId: string, vehicleId: string, stateKey: string) =>
+      ["q", "trips", "operations", "vehicle", orgId, vehicleId, "ledger-entries", stateKey] as const,
     workflow: (tripId: string) => ["q", "trips", "workflow", tripId] as const,
     byDriver: (driverId: string, opts?: { limit?: number; offset?: number }) =>
       opts
@@ -219,6 +235,11 @@ export const queryKeys = {
       ["q", "trip-conversations", "driver-messages", conversationId] as const,
   },
 
+  identity: {
+    one: (userId: string) => ["q", "identity", userId] as const,
+    many: (userIdsKey: string) => ["q", "identities", userIdsKey] as const,
+  },
+
   driverChat: {
     conversations: (driverIdsKey: string) =>
       ["q", "driver-chat", "conversations", driverIdsKey] as const,
@@ -347,6 +368,25 @@ export const queryKeys = {
     /** Vehicle Performance Score for a single vehicle. */
     vehiclePerformance: (orgId: string, vehicleId: string) =>
       ["q", "analytics", orgId, "vehicle", vehicleId, "performance"] as const,
+  },
+
+  operations: {
+    controlCenter: (orgId: string) =>
+      ["q", "operations", "control-center", orgId] as const,
+    reimbursementQueue: (orgId: string) =>
+      ["q", "operations", "reimbursement-queue", orgId] as const,
+    vehicleEconomics: (orgId: string) =>
+      ["q", "operations", "vehicle-economics", orgId] as const,
+    healthSnapshot: (orgId: string) =>
+      ["q", "operations", "health", orgId] as const,
+    observabilityByTrip: (tripId: string) =>
+      ["q", "operations", "observability", tripId] as const,
+    postingReconciliationByTrip: (tripId: string) =>
+      ["q", "trips", "operations", "reconciliation", tripId] as const,
+    ledgerReconciliationByOrg: (orgId: string) =>
+      ["q", "operations", "ledger-reconciliation", "org", orgId] as const,
+    ledgerReconciliationByTrip: (tripId: string) =>
+      ["q", "operations", "ledger-reconciliation", "trip", tripId] as const,
   },
 
   /** Linked-org display profiles (avatar URL + seed) fetched via batch RPC. */

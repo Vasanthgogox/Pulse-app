@@ -53,7 +53,17 @@ function randomUUID(): string {
   });
 }
 
-export type TripDocumentType = 'pod' | 'manifest' | 'invoice' | 'eway_bill' | 'loading_slip';
+export type TripDocumentType =
+  | 'pod'
+  | 'manifest'
+  | 'invoice'
+  | 'eway_bill'
+  | 'loading_slip'
+  | 'odometer_start_photo'
+  | 'odometer_end_photo'
+  | 'fuel_bill_photo'
+  | 'toll_receipt_photo'
+  | 'maintenance_invoice_photo';
 
 export interface TripDocumentRow {
   id: string;
@@ -120,10 +130,13 @@ export async function getDocumentsByTripId(
   if (error) {
     tableError = new Error(error.message);
   } else {
-    rows = (data ?? []).map((r: any) => ({
-      ...r,
-      document_type: (r.document_type as TripDocumentType) ?? 'pod',
-    })) as TripDocumentRow[];
+    rows = (data ?? []).map((r) => {
+      const row = r as TripDocumentRow;
+      return {
+        ...row,
+        document_type: row.document_type ?? 'pod',
+      };
+    }) as TripDocumentRow[];
     if (rows.length > 0) return { documents: rows, error: null };
   }
 
@@ -143,7 +156,16 @@ export async function getDocumentsByTripId(
   // from subfolder entries (no dot). Old-style uploads are at tripId/uuid.jpg;
   // new-style uploads are inside tripId/{type}/uuid.jpg and appear as folder entries.
   const KNOWN_SUBFOLDER_TYPES: TripDocumentType[] = [
-    'pod', 'manifest', 'invoice', 'eway_bill', 'loading_slip',
+    'pod',
+    'manifest',
+    'invoice',
+    'eway_bill',
+    'loading_slip',
+    'odometer_start_photo',
+    'odometer_end_photo',
+    'fuel_bill_photo',
+    'toll_receipt_photo',
+    'maintenance_invoice_photo',
   ];
 
   const topLevelFiles = listData.filter((f) => f.name && /\./.test(f.name));
@@ -275,7 +297,10 @@ export async function uploadTripDocument(
   }
 
   return {
-    doc: { ...(row as any), document_type: (row as any).document_type ?? documentType } as TripDocumentRow,
+    doc: {
+      ...(row as TripDocumentRow),
+      document_type: ((row as TripDocumentRow).document_type ?? documentType) as TripDocumentType,
+    } as TripDocumentRow,
     error: null,
   };
 }

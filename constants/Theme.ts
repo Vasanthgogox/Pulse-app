@@ -34,6 +34,8 @@ export const Theme = {
   surface: "#f8fafc",
   /** Card border, tab bar border (slate-100) */
   surfaceBorder: "#f1f5f9",
+  /** Legacy alias used by operational cards. */
+  whiteMuted: "#f8fafc",
   /** Demo: list/card subtle bg */
   surfaceLight: "#F9F9F9",
   /** Tab pills, input areas (slightly darker than surface) */
@@ -142,6 +144,8 @@ export const Theme = {
   /** GPay list timestamp line (light) */
   gpayListSubtitle: "#5F6368",
   positive: "#15803D",
+  /** Legacy alias for semantic success usage. */
+  success: "#15803D",
   positiveMuted: "#d1fae5",
   /** Warning / expiring soon */
   warning: "#B45309",

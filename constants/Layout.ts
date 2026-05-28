@@ -41,6 +41,9 @@ export const Layout = {
   driverHeaderGap: 12,
   /** Driver header compact avatar size */
   driverHeaderAvatarSize: 40,
+  /** Header action chips (invite / bell) — same footprint as avatar on History & Earnings */
+  driverHeaderActionSize: 40,
+  driverHeaderActionIconSize: 20,
   /** Modal / sheet bottom padding above home indicator (add insets.bottom in component) */
   modalBottomPadding: 24,
   /** Ledger-style bottom sheet: ratio of window height (same for Add Transaction, Add Client, Add Vehicle, Add Driver) */

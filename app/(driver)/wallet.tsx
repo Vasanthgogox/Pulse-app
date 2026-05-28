@@ -1158,7 +1158,8 @@ export default function DriverWalletScreen() {
     return salaryRequestOrgOptions.map((fleet) => {
       const fleetTrips = completedTrips.filter(
         (trip) =>
-          String(trip.organization_id ?? '') === String(fleet.orgId) &&
+          (String(trip.organization_id ?? '') === String(fleet.orgId) ||
+            String(trip.supplier_id ?? '') === String(fleet.orgId)) &&
           String(trip.driver_id ?? '') === String(fleet.driverId),
       );
       const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
@@ -1209,13 +1210,14 @@ export default function DriverWalletScreen() {
     linkedDrivers.forEach((d) => {
       const orgId = String(d.organization_id ?? '');
       if (!orgId) return;
+      // A linkedDrivers row IS the fleet membership signal — pay rates are optional.
+      // When the driver has accepted invites, an org with no invite AND no pay arrangement
+      // is treated as a stray record (not an employer) to prevent client-org misclassification.
       const hasPay =
         (d.payable_amount != null && d.payable_amount > 0) ||
         (d.commission_percent != null && d.commission_percent > 0) ||
         (d.commission_per_km != null && d.commission_per_km > 0);
-      if (!hasPay) return;
-      // When formal invites exist, require the org to have sent one.
-      if (hasAnyAcceptedInvite && !acceptedInviteOrgIds.has(orgId)) return;
+      if (hasAnyAcceptedInvite && !hasPay && !acceptedInviteOrgIds.has(orgId)) return;
       set.add(orgId);
     });
     return set;
@@ -1250,29 +1252,37 @@ export default function DriverWalletScreen() {
       );
       const hadAnyInviteAtDate = acceptedInviteOrgIdsAtDate.size > 0;
 
-      const isFleetOwnerTrip =
-        !!tripOrgId &&
+      // Returns true when the given org ID is a fleet employer of this driver at the trip date.
+      // A linkedDrivers row for that org IS the membership signal — pay rates are optional
+      // (owner/admin drivers have no pay fields set but are still fleet members).
+      // The invite guard only applies when the driver has accepted partner invites: in that
+      // case an org without a matching invite is a partner, not an employer.
+      const isEmployerOrgAtDate = (orgId: string) =>
+        !!orgId &&
         linkedDrivers.some((d) => {
-          if (String(d.organization_id ?? '') !== tripOrgId) return false;
-          // Must have a pay arrangement on this driver record.
-          const hasPay =
-            (d.payable_amount != null && d.payable_amount > 0) ||
-            (d.commission_percent != null && d.commission_percent > 0) ||
-            (d.commission_per_km != null && d.commission_per_km > 0);
-          if (!hasPay) return false;
-          // Driver must have joined this org on or before the trip date (±1 day tolerance).
+          if (String(d.organization_id ?? '') !== orgId) return false;
           const joinTs = d.created_at ? new Date(d.created_at).getTime() : 0;
           if (joinTs > tripTs + 24 * 60 * 60 * 1000) return false;
-          // If the driver left this org, they must have left after the trip date (±1 day).
           if (d.left_at) {
             const leftTs = new Date(d.left_at).getTime();
             if (leftTs < tripTs - 24 * 60 * 60 * 1000) return false;
           }
-          // When formal invites existed at trip time, require this org to have sent one —
-          // prevents client orgs with payable_amount from being misclassified as employers.
-          if (hadAnyInviteAtDate && !acceptedInviteOrgIdsAtDate.has(tripOrgId)) return false;
+          // When the driver has accepted invites from other orgs, an org that issued no
+          // invite AND has no pay arrangement is treated as a stray record, not an employer.
+          const hasPay =
+            (d.payable_amount != null && d.payable_amount > 0) ||
+            (d.commission_percent != null && d.commission_percent > 0) ||
+            (d.commission_per_km != null && d.commission_per_km > 0);
+          if (hadAnyInviteAtDate && !hasPay && !acceptedInviteOrgIdsAtDate.has(orgId)) return false;
           return true;
         });
+
+      const tripSupplierId = String(trip.supplier_id ?? '');
+      // Fleet trip: employer dispatched directly (org = employer) OR employer is the supplier
+      // for a client-owned cross-org trip (supplier_id = employer).
+      const isFleetOwnerTrip =
+        isEmployerOrgAtDate(tripOrgId) ||
+        (!!tripSupplierId && isEmployerOrgAtDate(tripSupplierId));
 
       const fleetOrgName =
         salaryRequestOrgOptions.find(

@@ -811,8 +811,15 @@ export default function DriverTripsScreen() {
           (i) =>
             (i.from_organization_id ?? "").trim() ===
             (trip.organization_id ?? "").trim(),
-        ) ?? null;
-      const tripOrgId = (trip.organization_id ?? "").trim();
+        ) ??
+        (trip.supplier_id
+          ? invites.find(
+              (i) =>
+                (i.from_organization_id ?? "").trim() ===
+                (trip.supplier_id ?? "").trim(),
+            )
+          : undefined) ??
+        null;
       byTrip[tid] = buildJobCardAssignerPayload(
         trip,
         assignerDisplay,
@@ -823,7 +830,7 @@ export default function DriverTripsScreen() {
           isAggregate: isAggregateTrip(trip),
           isRoster: isRosterTrip(trip),
         },
-        organizationLogoById[tripOrgId] ?? null,
+        organizationLogoById[assignerDisplay.effectiveAssignerOrgId] ?? null,
       );
     }
     return byTrip;

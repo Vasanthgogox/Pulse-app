@@ -19,7 +19,7 @@ import { isStartupComplete, markStartupPhase } from '@/lib/startupMetrics';
 
 /** Full list (no pagination). Use for Trips tab. Includes trips where org is owner or supplier on a shared load trip. */
 export function useTripsQuery(orgId: string | null) {
-  return useQuery({
+  return useQuery<TripRow[], Error>({
     queryKey: queryKeys.trips.finite(orgId ?? ''),
     queryFn: async () => {
       const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId! });
@@ -29,7 +29,7 @@ export function useTripsQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.realtime,
-    refetchOnMount: refetchOnMountIfEntityListEmpty,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<TripRow[]>(),
   });
 }
 

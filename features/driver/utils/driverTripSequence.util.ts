@@ -1,4 +1,5 @@
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 function toTime(value: string | null | undefined): number {
   if (!value) return 0;
@@ -55,6 +56,13 @@ export function getDriverTripDisplayNumber(
   trip: TripRow,
   byTripId: Record<string, string>,
 ): string {
+  const operational = getTripOperationalDisplay({
+    trip_operational_code: trip.trip_operational_code ?? null,
+    trip_code: trip.trip_code ?? null,
+    display_trip_id: trip.display_trip_id ?? null,
+    trip_number: trip.trip_number ?? null,
+  });
+  if (operational !== "—") return operational;
   const fromDb = trip.driver_display_trip_id?.trim();
   if (fromDb) return fromDb;
   return byTripId[String(trip.id)] ?? "—";

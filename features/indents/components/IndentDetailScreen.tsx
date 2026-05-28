@@ -22,6 +22,7 @@ import {
     updateIndent,
     type IndentRow,
 } from "@/features/indents/services/indents.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { formatINR } from "@/lib/format";
 import {
     useIndentDirectQuotesQuery,
@@ -547,7 +548,9 @@ export function IndentDetailScreen({
             <View style={styles.headerStatusDot} />
             <Text style={styles.headerSubtitle}>
               Review Hub • {status === "OPEN" ? "Active" : status} Indent{" "}
-              {indent.trip_number ? `· ${indent.trip_number}` : ""}
+              {indent.trip_number
+                ? `· ${getTripOperationalDisplay({ trip_number: indent.trip_number })}`
+                : ""}
             </Text>
           </View>
         </View>

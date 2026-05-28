@@ -106,3 +106,16 @@ export type {
   SupplierAnalyticsResult,
   VehicleMonthlyAnalyticsRow,
 } from "./services/analytics.service";
+
+// ── Operational analytics foundation ─────────────────────────────────────────
+export {
+  buildOperationsDerivedMetrics,
+  type OperationsDerivedMetrics,
+} from "./operations";
+export {
+  VehicleEconomicsDashboard,
+  useVehicleEconomics,
+  buildVehicleEconomicsRows,
+  rankVehiclesByEfficiency,
+  buildVehicleProfitabilitySnapshot,
+} from "./vehicle-economics";

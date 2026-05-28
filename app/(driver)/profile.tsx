@@ -532,7 +532,7 @@ export default function DriverProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Invite drivers"
           >
-            <UserPlus size={20} color={muted} />
+            <UserPlus size={Layout.driverHeaderActionIconSize} color={muted} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.topIconBtn}
@@ -541,7 +541,7 @@ export default function DriverProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Share profile"
           >
-            <Share2 size={20} color={muted} />
+            <Share2 size={Layout.driverHeaderActionIconSize} color={muted} />
           </TouchableOpacity>
         </View>
       </View>
@@ -751,7 +751,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  topIconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  topIconBtn: {
+    width: Layout.driverHeaderActionSize,
+    height: Layout.driverHeaderActionSize,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   titleCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   headerName: { fontSize: 14, fontWeight: '700', maxWidth: 200 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Theme.driverEmerald },

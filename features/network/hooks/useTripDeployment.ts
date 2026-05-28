@@ -6,6 +6,8 @@
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
 import { useInvalidateIndents, useInvalidateTrips } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateOperationalIdentity } from "@/lib/queries/operationalInvalidation";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert } from "react-native";
@@ -22,6 +24,7 @@ export function useTripDeployment({
   onSuccess,
 }: UseTripDeploymentParams) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const invalidateTrips = useInvalidateTrips();
   const invalidateIndents = useInvalidateIndents();
   const [assigningTripId, setAssigningTripId] = useState<string | null>(null);
@@ -69,6 +72,11 @@ export function useTripDeployment({
       if (orgId) {
         invalidateTrips(orgId);
         invalidateIndents(orgId);
+        invalidateOperationalIdentity({
+          queryClient,
+          organizationId: orgId,
+          tripId: trip.id,
+        });
       }
       const isShipper = load.organization_id === orgId;
       if (isShipper) router.push("/(tabs)/trips" as import("expo-router").Href);

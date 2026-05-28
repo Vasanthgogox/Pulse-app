@@ -5,6 +5,7 @@
  */
 
 import { getIndentDisplayNumber, type DirectQuoteRow, type IndentRow } from "@/features/indents";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { useCallback, useMemo } from "react";
 import {
   statusMatchesFilter,
@@ -184,7 +185,9 @@ export function useLoadCenterFilters({
       const route =
         `${(load.pickup_area || "").toLowerCase()} ${(load.drop_location || "").toLowerCase()}`.trim();
       const indentId = (getIndentDisplayNumber(load) || "").toLowerCase();
-      const tripId = (load.trip_number || "").toLowerCase();
+      const tripId = getTripOperationalDisplay({
+        trip_number: load.trip_number ?? null,
+      }).toLowerCase();
       const client = (load.client_name || "").toLowerCase();
       const creator = (
         (load as { creator_organization_name?: string })

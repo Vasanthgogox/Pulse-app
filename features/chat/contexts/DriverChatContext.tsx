@@ -5,7 +5,6 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,15 +30,22 @@ import type { InfiniteData } from '@tanstack/react-query';
 import type { DriverChatMessagesPage } from '@/features/chat/utils/driverChatMessageCache.util';
 import { useQueryClient } from '@tanstack/react-query';
 import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 function buildMinimalDriverTripConversation(
   trip: TripRow,
   row: TripConversationRow,
 ): TripConversation {
   const perDriver = trip.driver_display_trip_id?.trim();
+  const operational = getTripOperationalDisplay({
+    trip_operational_code: trip.trip_operational_code ?? null,
+    trip_code: trip.trip_code ?? null,
+    display_trip_id: trip.display_trip_id ?? null,
+    trip_number: trip.trip_number ?? null,
+  });
   return {
     ...row,
-    trip_number: perDriver || trip.trip_number || '',
+    trip_number: operational !== "—" ? operational : perDriver || trip.trip_number || '',
     pickup_area: trip.pickup_area ?? '',
     drop_location: trip.drop_location ?? '',
     messages: [],

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSuppliersByOrganization,
   syncSuppliersWithCache,
+  type SupplierRow,
 } from '@/features/suppliers/services/suppliers.service';
 import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
@@ -13,19 +14,19 @@ import { STALE } from '@/lib/queryClient';
 
 export function useSuppliersQuery(orgId: string | null) {
   const qc = useQueryClient();
-  return useQuery({
+  return useQuery<SupplierRow[], Error>({
     queryKey: queryKeys.suppliers.finite(orgId ?? ''),
     queryFn: async () => {
       const existing =
         (qc.getQueryData(queryKeys.suppliers.finite(orgId ?? '')) as
-          | Array<{ id: string }>
+          | SupplierRow[]
           | undefined) ?? [];
-      return fetchEntityListWithFallback({
+      return fetchEntityListWithFallback<SupplierRow>({
         orgId: orgId!,
         domain: 'suppliers',
-        cachedRows: existing as never[],
-        sync: async (id, cached) => {
-          const res = await syncSuppliersWithCache(id, cached as never[]);
+        cachedRows: existing,
+        sync: async (id, cachedRows) => {
+          const res = await syncSuppliersWithCache(id, cachedRows);
           return { error: res.error, rows: res.suppliers };
         },
         fetchDirect: async (id) => {
@@ -36,7 +37,7 @@ export function useSuppliersQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
-    refetchOnMount: refetchOnMountIfEntityListEmpty,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<SupplierRow[]>(),
   });
 }
 

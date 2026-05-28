@@ -119,6 +119,7 @@ function tripEarning(trip: TripRow, offer: DriverOfferForAggregation | null): nu
 }
 
 interface FleetRow extends DriverLeaderboardRow {
+  id: string;
   /** Margin contributed (client_price - supplier_rate). */
   marginContribution: number;
   /** Computed performance breakdown for tooltips / chart cards. */
@@ -188,6 +189,7 @@ function buildFleetRows(
         onTimeEligible > 0 ? Math.round((onTime / onTimeEligible) * 100) : 0;
 
       return {
+        id: d.id,
         driverId: d.id,
         name: (d.name ?? "").trim() || "Unnamed",
         avatarUrl: d.avatar_url ?? null,

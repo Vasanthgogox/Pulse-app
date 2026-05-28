@@ -10,6 +10,7 @@ import type { SupplierRow } from "@/features/suppliers/services/suppliers.servic
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 export type LedgerTripDetailsMap = Record<
   string,
@@ -69,10 +70,10 @@ export function resolveLedgerTripDetailForRow(
     }
     if (fromMap) return fromMap;
 
-    const tripNumber =
-      (row.trip_number ?? "").trim() ||
-      (nested?.trip_number ?? "").trim() ||
-      "Trip";
+    const tripLabel = getTripOperationalDisplay({
+      trip_number: row.trip_number ?? nested?.trip_number ?? null,
+    });
+    const tripNumber = tripLabel !== "—" ? tripLabel : "Trip";
     const vn =
       row.vehicle_number ??
       getVehicleNumberForTripId?.(rawTid) ??
@@ -88,8 +89,10 @@ export function resolveLedgerTripDetailForRow(
     };
   }
 
-  const nestedNum = (nested?.trip_number ?? "").trim();
-  if (nestedNum) {
+  const nestedNum = getTripOperationalDisplay({
+    trip_number: nested?.trip_number ?? null,
+  });
+  if (nestedNum !== "—") {
     return {
       trip_number: nestedNum,
       pickup_date: null,
@@ -459,6 +462,9 @@ export function buildFinancialRowDataForLedgerRow(
   const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(categoryBase)
     ? categoryBase
     : "GENERAL";
+  const tripMsnResolved = getTripOperationalDisplay({
+    trip_number: row.trip_number ?? null,
+  });
   return {
     id: row.id,
     name: entityName,
@@ -466,7 +472,7 @@ export function buildFinancialRowDataForLedgerRow(
     category: categoryLabel,
     desc: row.description,
     tripId: row.trip_id ?? null,
-    msn: (row.trip_number ?? "").trim() || (row.trip_id ? "Trip" : "General"),
+    msn: (tripMsnResolved !== "—" ? tripMsnResolved : "") || (row.trip_id ? "Trip" : "General"),
     tripDetail: tripDetail ?? undefined,
     vehicleNumber: isDriverPayment ? null : vehicleNum,
     driverName: row.driver_name ?? undefined,

@@ -64,6 +64,7 @@ import {
 } from "@/features/trips/styles/assignmentShellShared";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { formatINR } from "@/lib/format";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
     useIndentOfferCountsQuery,
     useDriversQuery,
@@ -918,7 +919,9 @@ export function LoadCenterView({
           ) : null}
           <Text style={styles.loadCardIdCompact} numberOfLines={1}>
             {getIndentDisplayNumber(load)}
-            {load.trip_number ? ` · ${load.trip_number}` : ""}
+            {load.trip_number
+              ? ` · ${getTripOperationalDisplay({ trip_number: load.trip_number })}`
+              : ""}
           </Text>
           <Text style={styles.loadCardDateHero}>
             {formatIndentCardDate(load.pickup_date)}

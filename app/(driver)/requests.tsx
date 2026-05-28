@@ -496,9 +496,9 @@ export default function DriverRequestsScreen() {
       color: GRAY_700,
     },
     notificationBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: Layout.driverHeaderActionSize,
+      height: Layout.driverHeaderActionSize,
+      borderRadius: Layout.driverHeaderActionSize / 2,
       borderWidth: 1,
       justifyContent: 'center',
       alignItems: 'center',
@@ -867,7 +867,11 @@ export default function DriverRequestsScreen() {
           activeOpacity={0.8}
           accessibilityLabel="Notifications"
         >
-          <FontAwesome name="bell" size={20} color={colors.text} />
+          <FontAwesome
+            name="bell"
+            size={Layout.driverHeaderActionIconSize}
+            color={colors.text}
+          />
         </TouchableOpacity>
       </View>
 

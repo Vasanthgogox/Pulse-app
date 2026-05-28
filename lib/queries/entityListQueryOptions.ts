@@ -1,10 +1,17 @@
 import type { Query } from '@tanstack/react-query';
 
-/** Force network refetch when a persisted/hydrated entity list is empty (not just when stale). */
-export function refetchOnMountIfEntityListEmpty(query: Query): boolean | 'always' {
-  const data = query.state.data;
-  if (!Array.isArray(data) || data.length === 0) return 'always';
-  return true;
+/**
+ * Force network refetch when a persisted/hydrated entity list is empty (not just when stale).
+ * Returns a typed callback so each hook preserves concrete query data generics.
+ */
+export function refetchOnMountIfEntityListEmpty<TData>() {
+  return (
+    query: Query<TData, Error, TData, readonly unknown[]>,
+  ): boolean | 'always' => {
+    const data = query.state.data;
+    if (!Array.isArray(data) || data.length === 0) return 'always';
+    return true;
+  };
 }
 
 const ENTITY_FINITE_PREFIXES = new Set(['clients', 'suppliers', 'drivers', 'vehicles', 'trips', 'transactions']);
