@@ -218,8 +218,8 @@ function partyFilterSheetLabel(type: ConversationPartyType): string {
 
 function getConversationTripLabel(conversation: Pick<TripConversation, "trip_number" | "display_trip_id">): string {
   return getTripOperationalDisplay({
-    trip_number: conversation.trip_number,
-    display_trip_id: conversation.display_trip_id ?? null,
+    trip_number: conversation["trip_number"],
+    display_trip_id: conversation["display_trip_id"] ?? null,
   });
 }
 
@@ -563,8 +563,8 @@ function buildGroupedTripHubRows(args: {
       if (isTerminalTripStatus(t.status)) continue;
       if (byTrip.has(t.id)) continue;
       const tripLabel = getTripDisplayNumber({
-        trip_number: t.trip_number,
-        display_trip_id: t.display_trip_id ?? null,
+        trip_number: t["trip_number"],
+        display_trip_id: t["display_trip_id"] ?? null,
       } as TripRow);
       const createdMs = t.created_at ? new Date(t.created_at).getTime() : 0;
       byTrip.set(t.id, {
@@ -1434,8 +1434,8 @@ export function ChatScreen() {
       tripNumber: getTripOperationalDisplay({
         trip_operational_code: trip.trip_operational_code ?? null,
         trip_code: trip.trip_code ?? null,
-        display_trip_id: trip.display_trip_id ?? null,
-        trip_number: trip.trip_number ?? null,
+          display_trip_id: trip["display_trip_id"] ?? null,
+          trip_number: trip["trip_number"] ?? null,
       }),
       pickupArea: trip.pickup_area,
       dropLocation: trip.drop_location,
@@ -1459,8 +1459,8 @@ export function ChatScreen() {
         getTripOperationalDisplay({
           trip_operational_code: t.trip_operational_code ?? null,
           trip_code: t.trip_code ?? null,
-          display_trip_id: t.display_trip_id ?? null,
-          trip_number: t.trip_number ?? null,
+          display_trip_id: t["display_trip_id"] ?? null,
+          trip_number: t["trip_number"] ?? null,
         })
           .toLowerCase()
           .includes(q) ||
@@ -2145,7 +2145,16 @@ export function ChatScreen() {
                               setInitiating(true);
                               const convId = await initiateConversation({
                                 tripId: hubTripForIcons.id,
-                                tripNumber: hubTripForIcons.display_trip_id ?? hubTripForIcons.trip_number,
+                                tripNumber: getTripOperationalDisplay({
+                                  trip_operational_code:
+                                    (hubTripForIcons as { trip_operational_code?: string | null })
+                                      .trip_operational_code ?? null,
+                                  trip_code:
+                                    (hubTripForIcons as { trip_code?: string | null }).trip_code ??
+                                    null,
+                                  display_trip_id: hubTripForIcons["display_trip_id"] ?? null,
+                                  trip_number: hubTripForIcons["trip_number"] ?? null,
+                                }),
                                 pickupArea: hubTripForIcons.pickup_area,
                                 dropLocation: hubTripForIcons.drop_location,
                                 partyType: tab.rowType,
@@ -2544,8 +2553,8 @@ export function ChatScreen() {
               const tripLabel = getTripOperationalDisplay({
                 trip_operational_code: trip.trip_operational_code ?? null,
                 trip_code: trip.trip_code ?? null,
-                display_trip_id: trip.display_trip_id ?? null,
-                trip_number: trip.trip_number ?? null,
+                display_trip_id: trip["display_trip_id"] ?? null,
+                trip_number: trip["trip_number"] ?? null,
               });
 
               const partyRows = getComposePartyRows(trip);
@@ -5786,8 +5795,8 @@ function TripConversationDetailLoaded({
     const partyRow = getComposePartyRows(
       tripCompose ?? {
         id: liveConv.trip_id,
-        trip_number: liveConv.trip_number,
-        display_trip_id: liveConv.display_trip_id ?? null,
+        trip_number: liveConv["trip_number"],
+        display_trip_id: liveConv["display_trip_id"] ?? null,
         pickup_area: liveConv.pickup_area,
         drop_location: liveConv.drop_location,
         status: liveConv.trip_status ?? "active",
@@ -5807,7 +5816,10 @@ function TripConversationDetailLoaded({
 
     const convId = await initiateConversation({
       tripId: liveConv.trip_id,
-      tripNumber: liveConv.trip_number,
+      tripNumber: getTripOperationalDisplay({
+        display_trip_id: liveConv["display_trip_id"] ?? null,
+        trip_number: liveConv["trip_number"] ?? null,
+      }),
       pickupArea: liveConv.pickup_area,
       dropLocation: liveConv.drop_location,
       partyType,

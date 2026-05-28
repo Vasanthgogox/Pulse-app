@@ -2,6 +2,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useMemo, useState } from "react";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  getDriverOperationalDisplay,
+  getTripOperationalDisplay,
+  getVehicleOperationalDisplay,
+} from "@/features/operations/display";
 import { useResolvedIdentities, useResolvedIdentity } from "@/features/identity";
 import {
   useOperationalHealthSnapshot,
@@ -69,6 +74,15 @@ function getStatusChipStyle(state: StatusChipState) {
   if (state === "pending") return styles.statusChipPending;
   if (state === "warning") return styles.statusChipWarning;
   return styles.statusChipBlocked;
+}
+
+type TimelineSeverity = "neutral" | "warning" | "critical";
+
+function eventSeverity(eventType: string): TimelineSeverity {
+  const normalized = String(eventType).toLowerCase();
+  if (normalized.includes("failed") || normalized.includes("rejected")) return "critical";
+  if (normalized.includes("reconciliation") || normalized.includes("retry")) return "warning";
+  return "neutral";
 }
 
 export function OperationsHub({
@@ -212,6 +226,81 @@ export function OperationsHub({
     return { label: "Blocked", state: "blocked" as const };
   }, [reconciliation.data?.chip]);
 
+  const operationalCode = useMemo(
+    () =>
+      getTripOperationalDisplay({
+        trip_operational_code: trip.trip_operational_code ?? null,
+        trip_code: trip.trip_code ?? null,
+        display_trip_id: trip.display_trip_id ?? null,
+        trip_number: trip.trip_number ?? null,
+      }),
+    [trip],
+  );
+
+  const vehicleRef = useMemo(
+    () =>
+      getVehicleOperationalDisplay({
+        vehicle_display_number: trip.vehicle_display_number ?? null,
+        id: trip.vehicle_id ?? null,
+      }),
+    [trip.vehicle_display_number, trip.vehicle_id],
+  );
+
+  const driverRef = useMemo(
+    () =>
+      getDriverOperationalDisplay({
+        driver_display_name: trip.driver_display_name ?? null,
+        id: trip.driver_id ?? null,
+      }),
+    [trip.driver_display_name, trip.driver_id],
+  );
+
+  const syncStateLabel = useMemo(() => {
+    if (
+      reviewFuel.isPending ||
+      reviewToll.isPending ||
+      setFuelReimbursement.isPending ||
+      setTollReimbursement.isPending ||
+      runReconciliation.isPending
+    ) {
+      return "Syncing";
+    }
+    if (summaryQuery.isFetching || timelineQuery.isFetching) return "Refreshing";
+    if ((operationalHealth.data?.sync.pendingCount ?? 0) > 0) return "Replaying";
+    return "Live";
+  }, [
+    operationalHealth.data?.sync.pendingCount,
+    reviewFuel.isPending,
+    reviewToll.isPending,
+    runReconciliation.isPending,
+    setFuelReimbursement.isPending,
+    setTollReimbursement.isPending,
+    summaryQuery.isFetching,
+    timelineQuery.isFetching,
+  ]);
+
+  const timelineRows = useMemo(() => {
+    const entries = [...(timelineQuery.data ?? [])];
+    entries.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    return entries;
+  }, [timelineQuery.data]);
+
+  const latestTimelineEvent = timelineRows[0] ?? null;
+
+  const timelineClusters = useMemo(() => {
+    const byDay = new Map<string, typeof timelineRows>();
+    for (const item of timelineRows.slice(0, 16)) {
+      const dateKey = new Date(item.created_at).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+      });
+      const list = byDay.get(dateKey) ?? [];
+      list.push(item);
+      byDay.set(dateKey, list);
+    }
+    return Array.from(byDay.entries()).map(([day, items]) => ({ day, items }));
+  }, [timelineRows]);
+
   const handleApproveFuel = async (fuelEntryId: string) => {
     await reviewFuel.mutateAsync({
       tripId: trip.id,
@@ -325,6 +414,36 @@ export function OperationsHub({
       </Pressable>
 
       <View style={styles.healthStrip}>
+        <View style={styles.execStrip}>
+          <View style={styles.execCell}>
+            <Text style={styles.execLabel}>Operational Code</Text>
+            <Text style={styles.execValue}>{operationalCode}</Text>
+          </View>
+          <View style={styles.execCell}>
+            <Text style={styles.execLabel}>Trip Status</Text>
+            <Text style={styles.execValue}>{String(trip.status ?? "—").replaceAll("_", " ")}</Text>
+          </View>
+          <View style={styles.execCell}>
+            <Text style={styles.execLabel}>Posting</Text>
+            <Text style={styles.execValue}>{reconciliationChip.label}</Text>
+          </View>
+          <View style={styles.execCell}>
+            <Text style={styles.execLabel}>Approval</Text>
+            <Text style={styles.execValue}>
+              {totalPendingApprovals > 0 ? `${totalPendingApprovals} Pending` : "Cleared"}
+            </Text>
+          </View>
+          <View style={styles.execCell}>
+            <Text style={styles.execLabel}>Reimbursement</Text>
+            <Text style={styles.execValue}>
+              {pendingReimbursements.length > 0 ? `${pendingReimbursements.length} Pending` : "Settled"}
+            </Text>
+          </View>
+          <View style={styles.execCell}>
+            <Text style={styles.execLabel}>Sync</Text>
+            <Text style={styles.execValue}>{syncStateLabel}</Text>
+          </View>
+        </View>
         <View style={styles.healthTop}>
           <Text style={styles.healthLabel}>Operational Health</Text>
           <Text
@@ -383,6 +502,16 @@ export function OperationsHub({
           {operationalHealth.data?.operatorAttentionRequired ? (
             <View style={[styles.statusChip, getStatusChipStyle("blocked")]}>
               <Text style={styles.statusChipText}>Operator Attention</Text>
+            </View>
+          ) : null}
+          <View style={[styles.statusChip, getStatusChipStyle(syncStateLabel === "Live" ? "good" : "pending")]}>
+            <Text style={styles.statusChipText}>{syncStateLabel}</Text>
+          </View>
+          {operationalHealth.data?.sync.pendingCount ? (
+            <View style={[styles.statusChip, getStatusChipStyle("pending")]}>
+              <Text style={styles.statusChipText}>
+                Replay Queue {operationalHealth.data.sync.pendingCount}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -566,28 +695,54 @@ export function OperationsHub({
 
           <View style={styles.timelineWrap}>
             <Text style={styles.sectionTitle}>Operational Timeline</Text>
-            {(timelineQuery.data?.length ?? 0) === 0 ? (
+            {latestTimelineEvent ? (
+              <View style={styles.latestEventWrap}>
+                <Text style={styles.latestEventLabel}>Latest Event</Text>
+                <Text style={styles.latestEventText} numberOfLines={1}>
+                  {String(latestTimelineEvent.event_type).replaceAll("_", " ")} ·{" "}
+                  {String(
+                    timelineIdentityByUserId[String(latestTimelineEvent.actor_user_id ?? "")] ??
+                      "System",
+                  )}
+                </Text>
+              </View>
+            ) : null}
+            {timelineRows.length === 0 ? (
               <Text style={styles.metricMeta}>No operations events yet.</Text>
             ) : (
-              (timelineQuery.data ?? []).slice(0, 16).map((item) => (
-                <View key={item.id} style={styles.timelineRow}>
-                  <Text style={styles.timelineSummary} numberOfLines={1}>
-                    {String(item.event_type).replaceAll("_", " ")} ·{" "}
-                    {String(
-                      timelineIdentityByUserId[String(item.actor_user_id ?? "")] ?? "System",
-                    )}{" "}
-                    · {String((item.payload as { amountInr?: number | null })?.amountInr ?? "").trim()
-                      ? inr(Number((item.payload as { amountInr?: number }).amountInr ?? 0))
-                      : "Event"}
-                  </Text>
-                  <Text style={styles.timelineTime}>
-                    {new Date(item.created_at).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Text>
+              timelineClusters.map((cluster) => (
+                <View key={cluster.day} style={styles.timelineCluster}>
+                  <Text style={styles.timelineClusterLabel}>{cluster.day}</Text>
+                  {cluster.items.map((item) => (
+                    <View key={item.id} style={styles.timelineRow}>
+                      <View
+                        style={[
+                          styles.timelineSeverityMarker,
+                          eventSeverity(item.event_type) === "critical"
+                            ? styles.timelineSeverityCritical
+                            : eventSeverity(item.event_type) === "warning"
+                              ? styles.timelineSeverityWarning
+                              : styles.timelineSeverityNeutral,
+                        ]}
+                      />
+                      <Text style={styles.timelineSummary} numberOfLines={1}>
+                        {String(item.event_type).replaceAll("_", " ")} ·{" "}
+                        {String(
+                          timelineIdentityByUserId[String(item.actor_user_id ?? "")] ?? "System",
+                        )}{" "}
+                        ·{" "}
+                        {String((item.payload as { amountInr?: number | null })?.amountInr ?? "").trim()
+                          ? inr(Number((item.payload as { amountInr?: number }).amountInr ?? 0))
+                          : "Event"}
+                      </Text>
+                      <Text style={styles.timelineTime}>
+                        {new Date(item.created_at).toLocaleString("en-IN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               ))
             )}
@@ -620,6 +775,11 @@ export function OperationsHub({
               >
                 <Text style={styles.actionText}>Reconcile</Text>
               </Pressable>
+              <View style={styles.actionStatusPill}>
+                <Text style={styles.actionStatusText}>
+                  Driver {driverRef} · Vehicle {vehicleRef}
+                </Text>
+              </View>
             </View>
           </OperationalBottomActionBar>
         </>
@@ -658,6 +818,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   healthLabel: { color: Theme.textSecondary, fontSize: 11, fontWeight: "700" },
+  execStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.border,
+    paddingBottom: 6,
+  },
+  execCell: {
+    width: "31%",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    backgroundColor: Theme.surface,
+  },
+  execLabel: { color: Theme.textSecondary, fontSize: 9, fontWeight: "700" },
+  execValue: { color: Theme.text, fontSize: 11, fontWeight: "700", marginTop: 1 },
   healthValue: { fontSize: 11, fontWeight: "700" },
   healthMessage: { color: Theme.textSecondary, fontSize: 11 },
   healthChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
@@ -669,10 +848,10 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     backgroundColor: Theme.surface,
   },
-  chip_active: { backgroundColor: "#e8f8ef", borderColor: "#a7f3d0" },
-  chip_pending: { backgroundColor: "#fff7ed", borderColor: "#fdba74" },
-  chip_unavailable: { backgroundColor: "#f1f5f9", borderColor: "#cbd5e1" },
-  chip_aggregation_mode: { backgroundColor: "#eef2ff", borderColor: "#c7d2fe" },
+  chip_active: { backgroundColor: Theme.whiteMuted, borderColor: Theme.success },
+  chip_pending: { backgroundColor: Theme.whiteMuted, borderColor: Theme.warning },
+  chip_unavailable: { backgroundColor: Theme.whiteMuted, borderColor: Theme.border },
+  chip_aggregation_mode: { backgroundColor: Theme.whiteMuted, borderColor: Theme.primary },
   healthChipText: { color: Theme.text, fontSize: 10, fontWeight: "700" },
   statusChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   statusChip: {
@@ -728,6 +907,26 @@ const styles = StyleSheet.create({
   },
   sectionsRow: { gap: 2 },
   timelineWrap: { gap: 0, borderTopWidth: StyleSheet.hairlineWidth, borderColor: Theme.border },
+  latestEventWrap: {
+    marginTop: 6,
+    marginBottom: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: Theme.whiteMuted,
+  },
+  latestEventLabel: { color: Theme.textSecondary, fontSize: 10, fontWeight: "700" },
+  latestEventText: { color: Theme.text, fontSize: 11, fontWeight: "700", marginTop: 2 },
+  timelineCluster: { marginTop: 2 },
+  timelineClusterLabel: {
+    color: Theme.textSecondary,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 4,
+    marginBottom: 2,
+  },
   timelineRow: {
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -737,6 +936,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  timelineSeverityMarker: {
+    width: 6,
+    height: 6,
+    borderRadius: 99,
+    marginTop: 2,
+  },
+  timelineSeverityNeutral: { backgroundColor: Theme.textSecondary },
+  timelineSeverityWarning: { backgroundColor: Theme.warning },
+  timelineSeverityCritical: { backgroundColor: Theme.negative },
   timelineSummary: { color: Theme.text, fontSize: 11, fontWeight: "600", flex: 1 },
   timelineTime: { color: Theme.textSecondary, fontSize: 10 },
   timelineMeta: { color: Theme.textSecondary, fontSize: 11 },
@@ -777,4 +985,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.whiteMuted,
   },
   actionText: { color: Theme.text, fontSize: 11, fontWeight: "700" },
+  actionStatusPill: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: Theme.surface,
+    minWidth: "100%",
+  },
+  actionStatusText: { color: Theme.textSecondary, fontSize: 10, fontWeight: "700" },
 });

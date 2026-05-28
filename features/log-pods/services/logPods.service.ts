@@ -8,6 +8,7 @@ import {
     getShipperDisplayNamesForSupplierTrips,
     type TripRow,
 } from "@/features/trips/services/trips.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
@@ -51,12 +52,20 @@ function str(v: unknown): string {
 /** Public trip id for trip_lrs and trip_pods (cashflow uses trips.trip_id). */
 export function getTripStringId(row: TripRecord): string {
   const r = row as {
+    trip_operational_code?: string;
+    trip_code?: string;
     trip_id?: string;
     display_trip_id?: string;
     trip_number?: string;
     id?: string;
   };
-  return str(r.trip_id || r.display_trip_id || r.trip_number || r.id);
+  const operationalRef = getTripOperationalDisplay({
+    trip_operational_code: r.trip_operational_code ?? null,
+    trip_code: r.trip_code ?? null,
+    display_trip_id: r.display_trip_id ?? null,
+    trip_number: r.trip_number ?? null,
+  });
+  return str(operationalRef !== "—" ? operationalRef : r.trip_id || r.id);
 }
 
 function mergeTripsById(lists: TripRecord[][]): TripRecord[] {

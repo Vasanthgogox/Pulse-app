@@ -360,9 +360,22 @@ export function TripExpandableCard({
             <View style={styles.cardIdPill}>
               <Text style={styles.cardIdPillText}>
                 #{getTripDisplayNumber(trip)}
-                {trip.indent_number
+                {getIndentOperationalDisplay({
+                  indent_operational_code: (trip as { indent_operational_code?: string | null })
+                    .indent_operational_code ?? null,
+                  indent_code: (trip as { indent_code?: string | null }).indent_code ?? null,
+                  display_indent_id: (trip as { display_indent_id?: string | null })
+                    .display_indent_id ?? null,
+                  indent_number: trip["indent_number"] ?? null,
+                }) !== "—"
                   ? ` · ${getIndentOperationalDisplay({
-                      indent_number: trip.indent_number,
+                      indent_operational_code: (trip as {
+                        indent_operational_code?: string | null;
+                      }).indent_operational_code ?? null,
+                      indent_code: (trip as { indent_code?: string | null }).indent_code ?? null,
+                      display_indent_id: (trip as { display_indent_id?: string | null })
+                        .display_indent_id ?? null,
+                      indent_number: trip["indent_number"] ?? null,
                     })}`
                   : ""}
               </Text>

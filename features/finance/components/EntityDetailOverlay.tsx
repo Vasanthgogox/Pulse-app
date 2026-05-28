@@ -20,6 +20,7 @@ import {
 } from "@/features/ratings/services/ratings.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
+import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
     adjustedCost,
     adjustedRevenue,
@@ -420,7 +421,7 @@ function TripPnLInlinePanel({
       trip.id,
       getTripDisplayNumber(trip),
     );
-  }, [transactions, trip.id, trip.trip_number, trip.display_trip_id]);
+  }, [transactions, trip.id, trip["trip_number"], trip["display_trip_id"]]);
   const grouped = useMemo(
     () => getExpenseGroupedForTrip(trip, tripLedgerEntries),
     [trip, tripLedgerEntries],
@@ -971,7 +972,7 @@ export function EntityDetailOverlay({
             const txDate = (tx.transaction_date ?? "").slice(0, 10) || null;
             tripRows.push({
               id: `adj-${tx.id}`,
-              missionId: tx.trip_number ?? "ADJ",
+              missionId: tx["trip_number"] ?? "ADJ",
               dest:
                 tx.description && tx.description !== "ENTRY"
                   ? tx.description
@@ -1828,7 +1829,11 @@ export function EntityDetailOverlay({
                       : vehicleNum
                         ? vehicleNum
                         : (tx.party_name ?? "—");
-                  const tripDisplay = (tx.trip_number ?? "").trim() || null;
+                  const tripDisplayResolved = getTripOperationalDisplay({
+                    trip_number: tx["trip_number"] ?? null,
+                  });
+                  const tripDisplay =
+                    tripDisplayResolved !== "—" ? tripDisplayResolved : null;
                   const entryDateStr = formatLedgerDate(
                     tx.transaction_date ?? tx.created_at ?? "",
                   );
@@ -1922,7 +1927,7 @@ export function EntityDetailOverlay({
                     desc: tx.description,
                     tripId: tx.trip_id ?? null,
                     msn:
-                      (tx.trip_number ?? "").trim() ||
+                      (tx["trip_number"] ?? "").trim() ||
                       (tx.trip_id ? "Trip" : "General"),
                     tripDetail: tripDetail ?? undefined,
                     vehicleNumber: isDriverPayment ? null : vehicleNum,
@@ -3942,7 +3947,9 @@ export function EntityDetailOverlay({
                                     style={styles.ledgerExpandedValue}
                                     numberOfLines={1}
                                   >
-                                    {detailForRow?.trip_number ?? r.missionId ?? "—"}
+                                    {getTripOperationalDisplay({
+                                      trip_number: detailForRow?.["trip_number"] ?? r.missionId ?? null,
+                                    })}
                                   </Text>
                                 </View>
                                 <View

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { expandLR } from '@/lib/utils/lr';
 import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
+import { getTripOperationalDisplay } from "@/features/operations/display";
 
 type TripRow = Record<string, unknown>;
 
@@ -149,11 +150,16 @@ export async function fetchReconciliationTrips(
     if (searchTerm) {
       const q = searchTerm.trim().toLowerCase();
       pool = pool.filter((trip) => {
+        const operationalRef = getTripOperationalDisplay({
+          trip_operational_code: (trip as { trip_operational_code?: string | null }).trip_operational_code ?? null,
+          trip_code: (trip as { trip_code?: string | null }).trip_code ?? null,
+          display_trip_id: (trip as { display_trip_id?: string | null }).display_trip_id ?? null,
+          trip_number: (trip as { trip_number?: string | null }).trip_number ?? null,
+        });
         const tid = str(
-          trip.display_trip_id ??
-            trip.trip_number ??
-            trip.trip_id ??
-            trip.id,
+          operationalRef !== "—"
+            ? operationalRef
+            : (trip as { trip_id?: string | null }).trip_id ?? trip.id,
         ).toLowerCase();
         const client = str(trip.client_name).toLowerCase();
         const lr = str(trip.lr_no).toLowerCase();
@@ -238,7 +244,17 @@ export async function fetchReconciliationTrips(
         finalReceivedLRs = allLrNumbers;
       }
 
-      const tripDisplayId = str(trip.display_trip_id || trip.trip_number || trip.trip_id || trip.id);
+      const operationalRef = getTripOperationalDisplay({
+        trip_operational_code: (trip as { trip_operational_code?: string | null }).trip_operational_code ?? null,
+        trip_code: (trip as { trip_code?: string | null }).trip_code ?? null,
+        display_trip_id: (trip as { display_trip_id?: string | null }).display_trip_id ?? null,
+        trip_number: (trip as { trip_number?: string | null }).trip_number ?? null,
+      });
+      const tripDisplayId = str(
+        operationalRef !== "—"
+          ? operationalRef
+          : (trip as { trip_id?: string | null }).trip_id || trip.id,
+      );
       const tripDate = str(trip.pickup_date || trip.trip_date || trip.created_at);
 
       return {

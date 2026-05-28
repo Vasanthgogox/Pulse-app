@@ -548,8 +548,10 @@ export function IndentDetailScreen({
             <View style={styles.headerStatusDot} />
             <Text style={styles.headerSubtitle}>
               Review Hub • {status === "OPEN" ? "Active" : status} Indent{" "}
-              {indent.trip_number
-                ? `· ${getTripOperationalDisplay({ trip_number: indent.trip_number })}`
+              {getTripOperationalDisplay({
+                trip_number: indent.trip_number ?? null,
+              }) !== "—"
+                ? `· ${getTripOperationalDisplay({ trip_number: indent.trip_number ?? null })}`
                 : ""}
             </Text>
           </View>

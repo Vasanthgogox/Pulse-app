@@ -120,7 +120,7 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const isDark = theme === "dark";
   const router = useRouter();
   useTripVerificationSync();
-  useTripOperationsSync();
+  const operationsSync = useTripOperationsSync();
   const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
@@ -634,6 +634,33 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
 
               {trip ? (
                 <View style={{ marginBottom: 10 }}>
+                  <View
+                    style={{
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: colors.border,
+                      borderRadius: 10,
+                      backgroundColor: colors.surface,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      marginBottom: 8,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: "700" }}>
+                      Sync
+                    </Text>
+                    <Text style={{ color: colors.text, fontSize: 11, fontWeight: "700" }}>
+                      {operationsSync.isSyncing
+                        ? "Replaying"
+                        : operationsSync.lastResult?.failed
+                          ? `Retry Needed (${operationsSync.lastResult.failed})`
+                          : operationsSync.lastResult?.processed
+                            ? `Posted (${operationsSync.lastResult.processed})`
+                            : "Live"}
+                    </Text>
+                  </View>
                   <OperationsHub
                     trip={trip}
                     onEditStart={() =>

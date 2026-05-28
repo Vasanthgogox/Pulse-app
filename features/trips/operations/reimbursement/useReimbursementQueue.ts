@@ -40,7 +40,7 @@ export function useReimbursementQueue(input: {
       : ["q", "operations", "reimbursement-queue", "noop"],
     queryFn: async () => {
       const selectFields =
-        "id,trip_id,amount_inr,reimbursement_state,approval_state,payment_owner,reimbursement_notes,entered_at,trips!inner(id,organization_id,trip_operational_code,trip_code,trip_number)";
+        "id,trip_id,amount_inr,reimbursement_state,approval_state,payment_owner,reimbursement_notes,entered_at,trips!inner(id,organization_id,trip_operational_code,trip_code,display_trip_id,trip_number)";
       const [fuelRes, tollRes] = await Promise.all([
         supabase()
           .from("trip_fuel_entries")
@@ -67,6 +67,7 @@ export function useReimbursementQueue(input: {
                   id: string;
                   trip_operational_code?: string | null;
                   trip_code?: string | null;
+                  display_trip_id?: string | null;
                   trip_number?: string | null;
                 }>
               | null;
@@ -86,6 +87,7 @@ export function useReimbursementQueue(input: {
           tripLabel: getTripOperationalDisplay({
             trip_operational_code: trip?.trip_operational_code ?? null,
             trip_code: trip?.trip_code ?? null,
+              display_trip_id: trip?.display_trip_id ?? null,
             trip_number: trip?.trip_number ?? null,
           }),
           amountInr: Number((row as { amount_inr?: number | null }).amount_inr ?? 0),
@@ -102,6 +104,7 @@ export function useReimbursementQueue(input: {
                   id: string;
                   trip_operational_code?: string | null;
                   trip_code?: string | null;
+                  display_trip_id?: string | null;
                   trip_number?: string | null;
                 }>
               | null;
@@ -121,6 +124,7 @@ export function useReimbursementQueue(input: {
           tripLabel: getTripOperationalDisplay({
             trip_operational_code: trip?.trip_operational_code ?? null,
             trip_code: trip?.trip_code ?? null,
+              display_trip_id: trip?.display_trip_id ?? null,
             trip_number: trip?.trip_number ?? null,
           }),
           amountInr: Number((row as { amount_inr?: number | null }).amount_inr ?? 0),

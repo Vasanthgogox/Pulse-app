@@ -24,6 +24,7 @@ interface FuelRow {
     organization_id: string;
     trip_operational_code: string | null;
     trip_code: string | null;
+    display_trip_id: string | null;
     trip_number: string | null;
     status: string | null;
     trip_payout_mode: string | null;
@@ -99,6 +100,7 @@ function mapOperationalRow(
             tripLabel: getTripOperationalDisplay({
               trip_operational_code: activeTrip.trip_operational_code,
               trip_code: activeTrip.trip_code,
+              display_trip_id: activeTrip.display_trip_id,
               trip_number: activeTrip.trip_number,
             }),
             tripStatus: activeTrip.status,
@@ -136,7 +138,7 @@ export async function getOperationsControlCenterPage(input: {
   const limit = Math.min(100, Math.max(20, input.limit ?? 40));
   const to = offset + limit - 1;
   const selectFields =
-    "id,trip_id,amount_inr,approval_state,payment_owner,posting_state,retry_count,reimbursement_state,entered_at,posting_error,trips!inner(id,organization_id,trip_operational_code,trip_code,trip_number,status,trip_payout_mode,supplier_id,vehicle_id)";
+    "id,trip_id,amount_inr,approval_state,payment_owner,posting_state,retry_count,reimbursement_state,entered_at,posting_error,trips!inner(id,organization_id,trip_operational_code,trip_code,display_trip_id,trip_number,status,trip_payout_mode,supplier_id,vehicle_id)";
   const [fuelRes, tollRes, outbox] = await Promise.all([
     supabase()
       .from("trip_fuel_entries")
