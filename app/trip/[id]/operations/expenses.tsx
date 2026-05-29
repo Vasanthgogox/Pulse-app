@@ -50,6 +50,7 @@ export default function TripExpenseControlRoute() {
         onBack={safeBack}
         onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id))}
         onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id))}
+        onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id))}
       />
     );
   }, [error, loading, router, safeBack, trip]);

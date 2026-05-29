@@ -1,12 +1,6 @@
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Theme from "@/constants/Theme";
-import {
-  complianceTabLabel,
-  type ComplianceScope,
-} from "@/features/business-pulse/lib/pulseComplianceScope.util";
 import type { ExecutionScope } from "@/features/business-pulse/lib/pulseExecutionScope.util";
-import type { ContributionSlice } from "@/features/business-pulse/selectors/pulseContributionSelectors";
-import type { PulseComplianceState } from "@/features/business-pulse/types";
 
 type TabChipProps = {
   label: string;
@@ -32,80 +26,33 @@ function TabChip({ label, active, onPress }: TabChipProps) {
 type Props = {
   executionScope: ExecutionScope;
   onExecutionScope: (scope: ExecutionScope) => void;
-  complianceScope: ComplianceScope;
-  onComplianceScope: (scope: ComplianceScope) => void;
-  complianceSlices: ContributionSlice[];
 };
 
-export function PulseScopeTabRow({
-  executionScope,
-  onExecutionScope,
-  complianceScope,
-  onComplianceScope,
-  complianceSlices,
-}: Props) {
+export function PulseScopeTabRow({ executionScope, onExecutionScope }: Props) {
   const executionTabs: Array<{ key: ExecutionScope; label: string }> = [
     { key: "all", label: "All" },
     { key: "asset", label: "Asset" },
     { key: "aggregate", label: "Aggregate" },
   ];
 
-  const complianceTabs: Array<{ key: ComplianceScope; label: string }> = [
-    { key: "all", label: "Compliance all" },
-    ...complianceSlices.map((slice) => ({
-      key: slice.key as PulseComplianceState,
-      label: complianceTabLabel(slice.key as PulseComplianceState, slice.sharePct),
-    })),
-  ];
-
-  const { width } = useWindowDimensions();
-  const stacked = width < 560;
-
-  const renderChipLane = (
-    label: string,
-    tabs: Array<{ key: string; label: string; active: boolean; onPress: () => void }>,
-  ) => (
-    <View style={[styles.lane, stacked && styles.laneStacked]}>
-      <Text style={styles.groupLabel}>{label}</Text>
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.groupLabel}>Execution</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.chipRow}
         keyboardShouldPersistTaps="handled"
       >
-        {tabs.map((tab) => (
+        {executionTabs.map((tab) => (
           <TabChip
             key={tab.key}
             label={tab.label}
-            active={tab.active}
-            onPress={tab.onPress}
+            active={executionScope === tab.key}
+            onPress={() => onExecutionScope(tab.key)}
           />
         ))}
       </ScrollView>
-    </View>
-  );
-
-  return (
-    <View style={[styles.wrap, stacked && styles.wrapStacked]}>
-      {renderChipLane(
-        "Execution",
-        executionTabs.map((tab) => ({
-          key: tab.key,
-          label: tab.label,
-          active: executionScope === tab.key,
-          onPress: () => onExecutionScope(tab.key),
-        })),
-      )}
-      {!stacked ? <View style={styles.divider} /> : null}
-      {renderChipLane(
-        "Compliance",
-        complianceTabs.map((tab) => ({
-          key: String(tab.key),
-          label: tab.key === "all" ? "All" : tab.label,
-          active: complianceScope === tab.key,
-          onPress: () => onComplianceScope(tab.key),
-        })),
-      )}
     </View>
   );
 }
@@ -115,24 +62,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 2,
     flexDirection: "row",
-    alignItems: "stretch",
-    gap: 10,
-  },
-  wrapStacked: {
-    flexDirection: "column",
-    gap: 8,
-  },
-  lane: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  laneStacked: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: 4,
   },
   groupLabel: {
     fontSize: 8,
@@ -149,12 +80,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingRight: 4,
     flexGrow: 1,
-  },
-  divider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: Theme.borderLight,
-    marginVertical: 2,
   },
   tabChip: {
     borderWidth: 1,

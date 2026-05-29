@@ -1265,7 +1265,9 @@ export async function createLedgerEntry(
   if (
     error &&
     isLedgerTripIdRejectedError(error) &&
-    (enriched.contact_type === "supplier" || enriched.contact_type === "client") &&
+    (enriched.contact_type === "supplier" ||
+      enriched.contact_type === "client" ||
+      enriched.ledger_entity_type === "vehicle") &&
     payload.trip_id != null
   ) {
     // Integrated / getLoad: trip_id may be rejected (incl. after passthrough first attempt). Retry unanchored + QMETA trip_number.
@@ -1427,7 +1429,9 @@ export async function updateLedgerEntry(
   if (
     error &&
     isLedgerTripIdRejectedError(error) &&
-    (enriched.contact_type === "supplier" || enriched.contact_type === "client") &&
+    (enriched.contact_type === "supplier" ||
+      enriched.contact_type === "client" ||
+      enriched.ledger_entity_type === "vehicle") &&
     payload.trip_id != null
   ) {
     const unanchoredPayload = {

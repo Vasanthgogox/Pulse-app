@@ -8,6 +8,7 @@ export {
   type DriverOption as VehicleEntryDriverOption,
 } from './components/AddVehicleEntryModal';
 export { default as VehicleDetailScreen } from './components/VehicleDetailScreen';
+export { VehicleAnalyticsFullScreen } from './components/VehicleAnalyticsFullScreen';
 export { GarrageTab, type GarrageTabProps, type GarrageViewTab } from './components/GarrageTab';
 export { getAvailablePeriodOptions, type GarragePeriodValue } from './pnl';
 export {

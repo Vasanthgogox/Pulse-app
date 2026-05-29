@@ -5,11 +5,17 @@ import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
 
+export type ProvisionCostBreakdownLine = {
+  label: string;
+  amount: number;
+  variant?: "default" | "section" | "child" | "emphasis" | "good";
+};
+
 export interface ProvisionPartyLaneProps {
   partyName: string;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
-  entityType: "client" | "supplier";
+  entityType: "client" | "supplier" | "driver";
   laneLabel: string;
   baseAmount: number;
   revisedAmount: number;
@@ -17,6 +23,7 @@ export interface ProvisionPartyLaneProps {
   accentColor: string;
   active?: boolean;
   onPress?: () => void;
+  breakdownLines?: ProvisionCostBreakdownLine[];
 }
 
 function PartyLaneCard({
@@ -31,6 +38,7 @@ function PartyLaneCard({
   accentColor,
   active,
   onPress,
+  breakdownLines,
 }: ProvisionPartyLaneProps) {
   const content = (
     <>
@@ -67,6 +75,41 @@ function PartyLaneCard({
           </Text>
         </View>
       </View>
+      {breakdownLines && breakdownLines.length > 0 ? (
+        <View style={styles.breakdown}>
+          {breakdownLines.map((line) => {
+            const variant = line.variant ?? "default";
+            const isChild = variant === "child";
+            const isSection = variant === "section";
+            const valueColor =
+              variant === "emphasis"
+                ? Theme.warning
+                : variant === "good"
+                  ? Theme.success
+                  : Theme.textPrimaryDark;
+            return (
+              <View
+                key={`${line.label}-${variant}`}
+                style={[styles.breakdownRow, isChild && styles.breakdownRowChild]}
+              >
+                <Text
+                  style={[
+                    styles.breakdownLabel,
+                    isChild && styles.breakdownLabelChild,
+                    isSection && styles.breakdownLabelSection,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {line.label}
+                </Text>
+                <Text style={[styles.breakdownValue, { color: valueColor }]}>
+                  {formatINR(line.amount)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </>
   );
 
@@ -100,6 +143,10 @@ export interface ProvisionRevisedPartiesCardProps {
   cost: number;
   adjCost: number;
   costSideDelta: number;
+  /** Asset trips: driver + posted expenses instead of supplier. */
+  costLaneLabel?: string;
+  costPartyEntityType?: "supplier" | "driver";
+  costBreakdownLines?: ProvisionCostBreakdownLine[];
   activeSide?: "client" | "supplier" | null;
   onSelectSide?: (side: "client" | "supplier") => void;
   compact?: boolean;
@@ -127,14 +174,15 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
         partyName={props.supplierName}
         avatarUrl={props.supplierAvatarUrl}
         avatarSeed={props.supplierAvatarSeed}
-        entityType="supplier"
-        laneLabel="Revised cost"
+        entityType={props.costPartyEntityType ?? "supplier"}
+        laneLabel={props.costLaneLabel ?? "Revised cost"}
         baseAmount={props.cost}
         revisedAmount={props.adjCost}
         delta={props.costSideDelta}
         accentColor="#0f766e"
         active={props.activeSide === "supplier"}
         onPress={props.onSelectSide ? () => props.onSelectSide!("supplier") : undefined}
+        breakdownLines={props.costBreakdownLines}
       />
     </View>
   );
@@ -206,5 +254,42 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontWeight: "800",
+  },
+  breakdown: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    gap: 4,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  breakdownRowChild: {
+    paddingLeft: 10,
+  },
+  breakdownLabel: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  breakdownLabelChild: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  breakdownLabelSection: {
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  breakdownValue: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
   },
 });

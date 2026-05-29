@@ -4,6 +4,7 @@ export {
   type ConnectionInviteeMatch,
 } from './components/AddClientModal';
 export { default as ClientDetailScreen } from './components/ClientDetailScreen';
+export { ClientAnalyticsFullScreen } from './components/ClientAnalyticsFullScreen';
 export { CustomersTab, type CustomersTabProps } from './components/CustomersTab';
 export {
   getClientsByOrganization,

@@ -1,6 +1,7 @@
 export type TripCostCategory =
   | "fuel"
   | "toll"
+  | "parking"
   | "mileage"
   | "loading"
   | "unloading"
@@ -36,6 +37,8 @@ export interface TripCostEvent {
   settlementState: TripCostSettlementState;
   approvedAt?: string;
   approvedBy?: string;
+  /** Set when ops marks driver reimbursement settled (`reimbursement_state = reimbursed`). */
+  reimbursedAt?: string;
   ledgerTransactionId?: string;
   pnlImpact: boolean;
   source: TripCostSource;

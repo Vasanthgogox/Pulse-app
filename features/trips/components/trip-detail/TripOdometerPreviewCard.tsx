@@ -21,6 +21,8 @@ type Props = {
   trip: TripRow;
   onRecordStart: () => void;
   onRecordEnd: () => void;
+  /** Tighter card when nested under trip detail tabs. */
+  compact?: boolean;
 };
 
 function odometerReading(km: number | null): string {
@@ -32,6 +34,7 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
   trip,
   onRecordStart,
   onRecordEnd,
+  compact = false,
 }: Props) {
   const qc = useQueryClient();
   const verificationQuery = useTripVerification(trip.id);
@@ -76,24 +79,22 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
 
   const hasWarn =
     metrics.distanceDiscrepancyKm != null && metrics.distanceDiscrepancyKm >= 10;
-  const hasAnyReading = metrics.startKm != null || metrics.endKm != null;
-  const hasComparison =
-    metrics.odometerDistanceKm != null ||
-    metrics.gpsDistanceKm != null ||
-    hasAnyReading;
   const loading = verificationQuery.isLoading && !verificationQuery.data;
+  const distanceLine =
+    metrics.odometerDistanceKm != null
+      ? `${formatKm(metrics.odometerDistanceKm)} trip`
+      : metrics.gpsDistanceKm != null
+        ? `${formatKm(metrics.gpsDistanceKm)} GPS`
+        : "Record start & end";
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.iconWrap}>
-            <Feather name="navigation" size={14} color="#4f46e5" />
+            <Feather name="navigation" size={12} color={Theme.primary} />
           </View>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>Odometer verification</Text>
-            <Text style={styles.subtitle}>Start / end readings · GPS comparison</Text>
-          </View>
+          <Text style={styles.title}>Odometer</Text>
         </View>
         <VerificationStatusChip state={metrics.state} />
       </View>
@@ -103,78 +104,40 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
           style={styles.readingCell}
           onPress={onRecordStart}
           accessibilityRole="button"
-          accessibilityLabel="Record or edit start odometer"
+          accessibilityLabel="Record start odometer"
         >
           <Text style={styles.readingLabel}>Start</Text>
           <Text style={styles.readingValue}>{odometerReading(metrics.startKm)}</Text>
-          <Text style={styles.readingUnit}>KM</Text>
         </Pressable>
         <View style={styles.readingSep} />
         <Pressable
           style={styles.readingCell}
           onPress={onRecordEnd}
           accessibilityRole="button"
-          accessibilityLabel="Record or edit closing odometer"
+          accessibilityLabel="Record end odometer"
         >
           <Text style={styles.readingLabel}>End</Text>
           <Text style={styles.readingValue}>{odometerReading(metrics.endKm)}</Text>
-          <Text style={styles.readingUnit}>KM</Text>
         </Pressable>
       </View>
 
-      <View style={[styles.compareCard, hasWarn && styles.compareCardWarn]}>
+      <View style={styles.footer}>
         {loading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={Theme.primary} />
-            <Text style={styles.compareHint}>Loading verification…</Text>
-          </View>
+          <ActivityIndicator size="small" color={Theme.primary} />
         ) : (
-          <>
-            <View style={styles.compareRow}>
-              <View style={styles.compareMetric}>
-                <Text style={styles.compareLabel}>Odometer distance</Text>
-                <Text style={styles.compareValue}>{formatKm(metrics.odometerDistanceKm)}</Text>
-              </View>
-              <View style={styles.compareDivider} />
-              <View style={styles.compareMetric}>
-                <Text style={styles.compareLabel}>GPS distance</Text>
-                <Text style={styles.compareValue}>{formatKm(metrics.gpsDistanceKm)}</Text>
-              </View>
-            </View>
-            {hasComparison ? (
-              <View style={styles.discrepancyRow}>
-                <Text style={styles.discrepancyLabel}>Discrepancy</Text>
-                <Text style={[styles.discrepancyValue, hasWarn && styles.discrepancyWarn]}>
-                  {formatKm(metrics.distanceDiscrepancyKm)}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.compareHint}>
-                Record start and end readings to compare with GPS track distance.
-              </Text>
-            )}
-            {metrics.gpsDistanceKm != null &&
-            metrics.odometerDistanceKm == null &&
-            !hasAnyReading ? (
-              <Text style={styles.compareHint}>
-                Route GPS estimate available — add odometer readings to verify actual distance.
-              </Text>
-            ) : null}
-          </>
+          <Feather
+            name={hasWarn ? "alert-circle" : "activity"}
+            size={12}
+            color={hasWarn ? Theme.warning : Theme.textMuted}
+          />
         )}
-      </View>
-
-      <View style={styles.actions}>
-        <Pressable style={styles.actionBtn} onPress={onRecordStart} accessibilityRole="button">
-          <Text style={styles.actionBtnText}>Start</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.actionBtn, styles.actionBtnPrimary]}
-          onPress={onRecordEnd}
-          accessibilityRole="button"
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>End</Text>
-        </Pressable>
+        <Text style={[styles.meta, hasWarn && styles.metaWarn]} numberOfLines={1}>
+          {loading
+            ? "Syncing readings…"
+            : hasWarn
+              ? `${distanceLine} · Δ ${formatKm(metrics.distanceDiscrepancyKm)}`
+              : distanceLine}
+        </Text>
       </View>
     </View>
   );
@@ -182,191 +145,89 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 10,
-    borderRadius: 18,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#eef2f7",
-    backgroundColor: "#fff",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 10,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    padding: 10,
+    gap: 8,
+  },
+  cardCompact: {
+    marginBottom: 0,
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
   headerLeft: {
-    flex: 1,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
-    minWidth: 0,
   },
   iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: "#eef2ff",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef2ff",
-  },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
   },
   title: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#0f172a",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  subtitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
-    color: Theme.textMuted,
+    color: Theme.textPrimaryDark,
   },
   readingsRow: {
     flexDirection: "row",
-    alignItems: "stretch",
     borderWidth: 1,
-    borderColor: "#eef2f7",
-    borderRadius: 12,
+    borderColor: Theme.borderLight,
+    borderRadius: 10,
     overflow: "hidden",
-    backgroundColor: "#f8fafc",
+    backgroundColor: Theme.surface,
   },
   readingCell: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     alignItems: "center",
     gap: 2,
+    minHeight: 40,
+    justifyContent: "center",
   },
   readingSep: {
-    width: 1,
-    backgroundColor: "#e2e8f0",
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderMedium,
   },
   readingLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  readingValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.3,
-    fontVariant: ["tabular-nums"],
-  },
-  readingUnit: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#94a3b8",
-  },
-  compareCard: {
-    borderWidth: 1,
-    borderColor: "#eef2f7",
-    borderRadius: 12,
-    backgroundColor: "#fafbfc",
-    padding: 10,
-    gap: 8,
-  },
-  compareCardWarn: {
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-  },
-  compareRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  compareMetric: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  compareDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: "#e2e8f0",
-    marginHorizontal: 8,
-  },
-  compareLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: "#94a3b8",
+    color: Theme.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  compareValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0f172a",
-    fontVariant: ["tabular-nums"],
-  },
-  discrepancyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#eef2f7",
-  },
-  discrepancyLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textMuted,
-  },
-  discrepancyValue: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#334155",
-    fontVariant: ["tabular-nums"],
-  },
-  discrepancyWarn: {
-    color: "#b45309",
-  },
-  compareHint: {
-    fontSize: 10,
+  readingValue: {
+    fontSize: 15,
     fontWeight: "600",
-    color: Theme.textMuted,
-    lineHeight: 14,
+    color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
   },
-  actions: {
+  footer: {
     flexDirection: "row",
-    gap: 8,
-  },
-  actionBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 10,
-    paddingVertical: 8,
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    gap: 6,
+    paddingTop: 2,
   },
-  actionBtnPrimary: {
-    backgroundColor: "#0f172a",
-    borderColor: "#0f172a",
+  meta: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    lineHeight: 15,
   },
-  actionBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#0f172a",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  actionBtnTextPrimary: {
-    color: "#fff",
+  metaWarn: {
+    color: Theme.warning,
+    fontWeight: "500",
   },
 });

@@ -318,6 +318,26 @@ export function LedgerExpandedCard({
           <Text style={styles.detailValue}>{agingLabel}</Text>
         </View>
       </View>
+      {hasTruckStr ? (
+        <View style={styles.detailGridRow}>
+          <View style={styles.detailGridHalf}>
+            <Text style={styles.detailLabel}>Vehicle</Text>
+            <Text style={styles.detailValue} numberOfLines={2}>
+              {(truckStr ?? "").trim()}
+            </Text>
+          </View>
+          {hasTripDetail && tripNumber !== "—" ? (
+            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+              <Text style={styles.detailLabel}>Trip</Text>
+              <Text style={styles.detailValue} numberOfLines={2}>
+                {tripNumber}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]} />
+          )}
+        </View>
+      ) : null}
       <View style={styles.detailGridRow}>
         <View style={styles.detailGridHalf}>
           <Text style={styles.detailLabel}>Entry Date</Text>

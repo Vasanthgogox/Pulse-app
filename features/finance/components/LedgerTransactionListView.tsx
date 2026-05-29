@@ -15,7 +15,7 @@ import {
 } from "@/features/finance/components/LedgerFlowChip";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
-import { formatINRChip, formatLedgerAmount } from "@/lib/format";
+import { formatIndianVehicleNumber, formatINRChip, formatLedgerAmount } from "@/lib/format";
 import { partyAvatarHasRenderableOutput, partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -563,6 +563,8 @@ export interface LedgerTransactionListViewProps {
   showTitle?: boolean;
   /** Map trip_id -> detail; used to show trip number/route on row and in expand. */
   tripDetailsMap?: TripDetailMap;
+  /** Resolve vehicle registration when row/trip map omit vehicle_number. */
+  getVehicleNumberForTripId?: (tripId: string | null) => string | null;
   /** Trip options for "Link to trip" (when onMissionChange provided). */
   tripOptions?: TripPickerOption[];
   /** Called when user links an entry to a trip. */
@@ -607,6 +609,7 @@ export function LedgerTransactionListView({
   highlightId,
   showTitle = true,
   tripDetailsMap,
+  getVehicleNumberForTripId,
   tripOptions = [],
   onMissionChange,
   showHistoryHeader = false,
@@ -766,10 +769,20 @@ export function LedgerTransactionListView({
     setSectionFlowFilterByKey((prev) => ({ ...prev, [key]: filter }));
   };
 
-  const getVehicleForRow = (row: LedgerRow) =>
-    row.trip_id && tripDetailsMap?.[row.trip_id]
-      ? (tripDetailsMap[row.trip_id].vehicle_number ?? "").trim()
-      : "";
+  const getVehicleForRow = useCallback(
+    (row: LedgerRow): string => {
+      const fromRow = (row.vehicle_number ?? "").trim();
+      if (fromRow) return formatIndianVehicleNumber(fromRow);
+      if (row.trip_id && tripDetailsMap?.[row.trip_id]) {
+        const fromTrip = (tripDetailsMap[row.trip_id].vehicle_number ?? "").trim();
+        if (fromTrip) return formatIndianVehicleNumber(fromTrip);
+      }
+      const fromLookup = getVehicleNumberForTripId?.(row.trip_id ?? null);
+      if (fromLookup) return formatIndianVehicleNumber(fromLookup);
+      return "";
+    },
+    [getVehicleNumberForTripId, tripDetailsMap],
+  );
 
   /** Vehicle type for display (e.g. "40 ft container", from vehicle_body_type or vehicle_type). */
   const getVehicleTypeForRow = (row: LedgerRow): string => {
@@ -2028,63 +2041,83 @@ export function LedgerTransactionListView({
                             null;
                           const hasTrip =
                             tripIdOnly != null && tripIdOnly !== "";
-                          const tripPillContent = hasTrip ? (
-                            onMissionChange ? (
-                              <TouchableOpacity
-                                style={styles.tripPillWithCheck}
-                                onPress={() => setTripPickerRowId(row.id)}
-                                activeOpacity={0.7}
-                                hitSlop={8}
-                              >
-                                <FontAwesome
-                                  name="check-circle"
-                                  size={8}
-                                  color={Theme.darkGreen}
-                                  style={styles.tripPillCheckIcon}
-                                />
-                                <Text
-                                  style={styles.tripPillTextOnlyLabel}
-                                  numberOfLines={1}
+                          const tripPillContent = (
+                            <View style={styles.rightMetaStack}>
+                              {vehicleStr ? (
+                                <View style={styles.vehiclePill}>
+                                  <FontAwesome
+                                    name="truck"
+                                    size={9}
+                                    color={Theme.primary}
+                                    style={styles.vehiclePillIcon}
+                                  />
+                                  <Text
+                                    style={styles.vehiclePillText}
+                                    numberOfLines={1}
+                                  >
+                                    {vehicleStr}
+                                  </Text>
+                                </View>
+                              ) : null}
+                              {hasTrip ? (
+                                onMissionChange ? (
+                                  <TouchableOpacity
+                                    style={styles.tripPillWithCheck}
+                                    onPress={() => setTripPickerRowId(row.id)}
+                                    activeOpacity={0.7}
+                                    hitSlop={8}
+                                  >
+                                    <FontAwesome
+                                      name="check-circle"
+                                      size={8}
+                                      color={Theme.darkGreen}
+                                      style={styles.tripPillCheckIcon}
+                                    />
+                                    <Text
+                                      style={styles.tripPillTextOnlyLabel}
+                                      numberOfLines={1}
+                                    >
+                                      {tripIdOnly}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : (
+                                  <View style={styles.tripPillWithCheck}>
+                                    <FontAwesome
+                                      name="check-circle"
+                                      size={8}
+                                      color={Theme.darkGreen}
+                                      style={styles.tripPillCheckIcon}
+                                    />
+                                    <Text
+                                      style={styles.tripPillTextOnlyLabel}
+                                      numberOfLines={1}
+                                    >
+                                      {tripIdOnly}
+                                    </Text>
+                                  </View>
+                                )
+                              ) : onMissionChange ? (
+                                <TouchableOpacity
+                                  style={styles.tripPillLink}
+                                  onPress={() => setTripPickerRowId(row.id)}
+                                  activeOpacity={0.7}
+                                  hitSlop={8}
                                 >
-                                  {tripIdOnly}
-                                </Text>
-                              </TouchableOpacity>
-                            ) : (
-                              <View style={styles.tripPillWithCheck}>
-                                <FontAwesome
-                                  name="check-circle"
-                                  size={8}
-                                  color={Theme.darkGreen}
-                                  style={styles.tripPillCheckIcon}
-                                />
-                                <Text
-                                  style={styles.tripPillTextOnlyLabel}
-                                  numberOfLines={1}
-                                >
-                                  {tripIdOnly}
-                                </Text>
-                              </View>
-                            )
-                          ) : onMissionChange ? (
-                            <TouchableOpacity
-                              style={styles.tripPillLink}
-                              onPress={() => setTripPickerRowId(row.id)}
-                              activeOpacity={0.7}
-                              hitSlop={8}
-                            >
-                              <FontAwesome
-                                name="link"
-                                size={8}
-                                color={Theme.primary}
-                              />
-                              <Text
-                                style={styles.tripPillLinkText}
-                                numberOfLines={1}
-                              >
-                                Link trip
-                              </Text>
-                            </TouchableOpacity>
-                          ) : null;
+                                  <FontAwesome
+                                    name="link"
+                                    size={8}
+                                    color={Theme.primary}
+                                  />
+                                  <Text
+                                    style={styles.tripPillLinkText}
+                                    numberOfLines={1}
+                                  >
+                                    Link trip
+                                  </Text>
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+                          );
 
                           const amountEl = (
                             <Text
@@ -2150,9 +2183,9 @@ export function LedgerTransactionListView({
                                   style={styles.timelineCardDateVehicle}
                                   numberOfLines={1}
                                 >
-                                  {[dateStr, vehicleStr]
-                                    .filter(Boolean)
-                                    .join(" · ")}
+                                  {vehicleStr
+                                    ? `${dateStr} · ${vehicleStr}`
+                                    : dateStr}
                                 </Text>
                                 {routeWhyLine != null ? (
                                   <Text
@@ -3954,6 +3987,33 @@ const styles = StyleSheet.create({
     marginTop: 2,
     opacity: 0.9,
   },
+  rightMetaStack: {
+    alignItems: "flex-end",
+    gap: 4,
+    maxWidth: 118,
+  },
+  vehiclePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    maxWidth: "100%",
+  },
+  vehiclePillIcon: {
+    opacity: 0.9,
+  },
+  vehiclePillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.primary,
+    letterSpacing: 0.2,
+    flexShrink: 1,
+  },
   tripPillWithCheck: {
     flexDirection: "row",
     alignItems: "center",
@@ -3964,6 +4024,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(248,250,252,0.5)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    maxWidth: "100%",
   },
   tripPillCheckIcon: {
     opacity: 0.8,

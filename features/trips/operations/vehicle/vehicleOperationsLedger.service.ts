@@ -102,6 +102,58 @@ export async function createVehicleOperationLedgerDraftFromSource(input: {
   return { error: null, entry: data as VehicleOperationLedgerEntry };
 }
 
+const OPERATION_LEDGER_SOURCE_TYPES: VehicleLedgerSourceType[] = [
+  "fuel",
+  "toll",
+  "maintenance",
+  "repair",
+  "service",
+  "insurance",
+  "permit",
+  "manual_adjustment",
+];
+
+export function isVehicleOperationLedgerSourceType(
+  value: string,
+): value is VehicleLedgerSourceType {
+  return OPERATION_LEDGER_SOURCE_TYPES.includes(value as VehicleLedgerSourceType);
+}
+
+/** After a row is posted to vehicle_ledger_entries, mirror approval on vehicle_operation_ledger_entries. */
+export async function syncVehicleOperationLedgerFromPostedSource(input: {
+  sourceType: VehicleLedgerSourceType;
+  sourceId: string;
+  tripId: string;
+  amount: number;
+  approvedBy?: string | null;
+}): Promise<void> {
+  if (!isVehicleOperationLedgerSourceType(input.sourceType)) return;
+  await createVehicleOperationLedgerDraftFromSource({
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    tripId: input.tripId,
+    amount: input.amount,
+    entryType: "expense",
+  });
+  const { data } = await supabase()
+    .from("vehicle_operation_ledger_entries")
+    .select("id, approval_state")
+    .eq("source_type", input.sourceType)
+    .eq("source_id", input.sourceId)
+    .maybeSingle();
+  const entryId = String((data as { id?: string | null } | null)?.id ?? "").trim();
+  if (!entryId) return;
+  const currentState = String(
+    (data as { approval_state?: string | null } | null)?.approval_state ?? "",
+  ).toLowerCase();
+  if (currentState === "approved") return;
+  await updateVehicleOperationLedgerApprovalState({
+    entryId,
+    approvalState: "approved",
+    approvedBy: input.approvedBy ?? null,
+  });
+}
+
 export async function updateVehicleOperationLedgerApprovalState(input: {
   entryId: string;
   approvalState: VehicleLedgerApprovalState;

@@ -2,7 +2,10 @@
  * Provision CN/DN hub + in-modal wizard + success (mobile-aligned with ledger flow).
  */
 import Theme from "@/constants/Theme";
-import { ProvisionRevisedPartiesCard } from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
+import {
+  ProvisionRevisedPartiesCard,
+  type ProvisionCostBreakdownLine,
+} from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
 import { TripAdjustmentMobileWizard } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentMobileWizard";
 import { TripAdjustmentSuccessView } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentSuccessView";
 import {
@@ -65,6 +68,9 @@ export interface ProvisionAdjustmentModalProps {
   adjCost: number;
   revenueSideDelta: number;
   costSideDelta: number;
+  isAssetExecution?: boolean;
+  costLaneLabel?: string;
+  costBreakdownLines?: ProvisionCostBreakdownLine[];
   adjustments: TripAdjustment[];
   lineMetaLabel: (adj: TripAdjustment) => string;
 }
@@ -320,6 +326,9 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
               cost={props.cost}
               adjCost={props.adjCost}
               costSideDelta={props.costSideDelta}
+              costLaneLabel={props.costLaneLabel}
+              costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
+              costBreakdownLines={props.costBreakdownLines}
               activeSide={side}
             />
 

@@ -76,12 +76,10 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
 
-const SupplierAnalyticsTab = lazy(() =>
-  import("./analytics/SupplierAnalyticsTab").then((m) => ({ default: m.default })),
-);
 import {
     Alert,
     Animated,
@@ -208,11 +206,7 @@ export default function SupplierDetailScreen({
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<
-    "trips" | "cash" | "shared" | "analytics"
-  >(
-    "trips",
-  );
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
   const [tripDatePeriod, setTripDatePeriod] =
     useState<FinancePeriodFilter>("RANGE");
   const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
@@ -1250,7 +1244,6 @@ export default function SupplierDetailScreen({
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
-    { id: "analytics" as const, label: "Analytics" },
     { id: "shared" as const, label: "Shared" },
   ];
   const heroDecorAnimatedStyle = isWebDesktop
@@ -1297,6 +1290,19 @@ export default function SupplierDetailScreen({
           <Text style={styles.headerSubtitle}>DEEP ENTITY INTEL</Text>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.profileBtn}
+            onPress={() => router.push(ROUTES.supplierAnalytics(supplierId) as never)}
+            activeOpacity={0.8}
+            accessibilityLabel="Open supplier analytics"
+            accessibilityRole="button"
+          >
+            <FontAwesome
+              name="line-chart"
+              size={16}
+              color={Theme.textPrimaryDark}
+            />
+          </TouchableOpacity>
           {!isWebDesktop ? (
             <TouchableOpacity
               style={styles.profileBtn}
@@ -2068,19 +2074,6 @@ export default function SupplierDetailScreen({
                 );
               }}
             />
-          </View>
-        )}
-
-        {detailSubTab === "analytics" && (
-          <View style={styles.analyticsSection}>
-            <Suspense fallback={<LazySuspenseNullFallback />}>
-              <SupplierAnalyticsTab
-                supplier={supplier}
-                trips={trips}
-                transactions={transactions}
-                orgId={currentOrganization?.id ?? null}
-              />
-            </Suspense>
           </View>
         )}
 

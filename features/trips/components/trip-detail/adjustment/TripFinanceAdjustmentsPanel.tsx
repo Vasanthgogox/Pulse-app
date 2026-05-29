@@ -3,7 +3,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { EntityAvatar } from "@/components/EntityAvatar";
-import { ProvisionRevisedPartiesCard } from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
+import {
+  ProvisionRevisedPartiesCard,
+  type ProvisionCostBreakdownLine,
+} from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
@@ -23,6 +26,10 @@ export interface TripFinanceAdjustmentsPanelProps {
   supplierName: string;
   supplierAvatarUrl?: string | null;
   supplierAvatarSeed?: string | null;
+  /** Asset execution: cost lane is driver labor + posted trip expenses. */
+  isAssetExecution?: boolean;
+  costLaneLabel?: string;
+  costBreakdownLines?: ProvisionCostBreakdownLine[];
   lineMetaLabel: (adj: TripAdjustment) => string;
   onOpenProvision: (side: "client" | "supplier") => void;
   capturePaymentSlot?: ReactNode;
@@ -55,7 +62,11 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Provision adjustments</Text>
-          <Text style={styles.hint}>Revised sale & cost after CN/DN lines</Text>
+          <Text style={styles.hint}>
+            {props.isAssetExecution
+              ? "Customer sale vs driver cost & posted expenses"
+              : "Revised sale & cost after CN/DN lines"}
+          </Text>
         </View>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{activeCount}</Text>
@@ -75,6 +86,9 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         cost={props.cost}
         adjCost={props.adjCost}
         costSideDelta={props.costSideDelta}
+        costLaneLabel={props.costLaneLabel}
+        costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
+        costBreakdownLines={props.costBreakdownLines}
         onSelectSide={props.onOpenProvision}
       />
 
@@ -93,7 +107,9 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             onPress={() => props.onOpenProvision("supplier")}
           >
             <Feather name="plus" size={12} color="#0f766e" />
-            <Text style={styles.addBtnCostText}>Cost</Text>
+            <Text style={styles.addBtnCostText}>
+              {props.isAssetExecution ? "Driver" : "Cost"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -124,6 +140,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             const voided = isAdjustmentVoided(adj);
             const isSale = adj.type === "revenue";
             const partyName = isSale ? props.clientName : props.supplierName;
+            const costEntityType = props.isAssetExecution ? "driver" : "supplier";
             return (
               <Pressable
                 key={adj.id}
@@ -135,7 +152,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                     name={partyName}
                     avatarUrl={isSale ? props.clientAvatarUrl : props.supplierAvatarUrl}
                     avatarSeed={isSale ? props.clientAvatarSeed : props.supplierAvatarSeed}
-                    entityType={isSale ? "client" : "supplier"}
+                    entityType={isSale ? "client" : costEntityType}
                     size={24}
                     showIntegrationBadge={false}
                   />

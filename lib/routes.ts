@@ -64,6 +64,15 @@ export const ROUTES = {
   /** Compliance & Document Intelligence hub — opened from header icons. */
   DOCUMENTS_CENTER: '/documents-center' as const,
 
+  vehicleAnalytics: (vehicleId: string) =>
+    `/vehicle/${encodeURIComponent(vehicleId)}/analytics` as const,
+  clientAnalytics: (clientId: string) =>
+    `/client/${encodeURIComponent(clientId)}/analytics` as const,
+  supplierAnalytics: (supplierId: string) =>
+    `/supplier/${encodeURIComponent(supplierId)}/analytics` as const,
+  driverAnalytics: (driverId: string) =>
+    `/driver/${encodeURIComponent(driverId)}/analytics` as const,
+
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
   /** Full-screen driver & vehicle assignment from trip detail (Change). */
@@ -80,6 +89,8 @@ export const ROUTES = {
     `/trip/${encodeURIComponent(tripId)}/operations/fuel` as const,
   tripTollEntry: (tripId: string) =>
     `/trip/${encodeURIComponent(tripId)}/operations/toll` as const,
+  tripOtherExpenseEntry: (tripId: string) =>
+    `/trip/${encodeURIComponent(tripId)}/operations/other` as const,
   tripExpenses: (tripId: string) =>
     `/trip/${encodeURIComponent(tripId)}/operations/expenses` as const,
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */

@@ -153,7 +153,7 @@ export function GarrageTab({
     queryKey: ["q", "garage", "vehicle-open-payables", organizationId, period, periodTripIds.join("|")],
     enabled: !!organizationId && periodTripIds.length > 0,
     queryFn: async () => {
-      const [fuelRes, tollRes] = await Promise.all([
+      const [fuelRes, tollRes, otherRes] = await Promise.all([
         supabase()
           .from("trip_fuel_entries")
           .select("trip_id,amount_inr,payment_owner,posting_state,reimbursement_state,status")
@@ -162,11 +162,20 @@ export function GarrageTab({
           .from("trip_toll_entries")
           .select("trip_id,amount_inr,payment_owner,posting_state,reimbursement_state,status")
           .in("trip_id", periodTripIds),
+        supabase()
+          .from("trip_other_expenses")
+          .select("trip_id,amount_inr,payment_owner,posting_state,reimbursement_state,status")
+          .in("trip_id", periodTripIds),
       ]);
       if (fuelRes.error) throw new Error(fuelRes.error.message);
       if (tollRes.error) throw new Error(tollRes.error.message);
+      if (otherRes.error) throw new Error(otherRes.error.message);
       const map: Record<string, number> = {};
-      const rows = [...(fuelRes.data ?? []), ...(tollRes.data ?? [])] as Array<{
+      const rows = [
+        ...(fuelRes.data ?? []),
+        ...(tollRes.data ?? []),
+        ...(otherRes.data ?? []),
+      ] as Array<{
         trip_id?: string | null;
         amount_inr?: number | null;
         payment_owner?: string | null;

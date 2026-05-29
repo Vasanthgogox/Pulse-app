@@ -347,8 +347,11 @@ function normalizeSourceType(sourceType: string | null | undefined): string {
   return String(sourceType ?? "").trim().toLowerCase();
 }
 
-function isOwnershipSource(sourceType: string): boolean {
+function isOwnershipSource(sourceType: string, tripId?: string | null): boolean {
   if (!sourceType) return false;
+  if (sourceType === "manual_adjustment" && String(tripId ?? "").trim()) {
+    return false;
+  }
   return OWNERSHIP_SOURCES.has(sourceType);
 }
 
@@ -409,7 +412,7 @@ export function buildVehiclePnLList(
     if (!Number.isFinite(amount) || amount <= 0) return;
     const tripId = String(entry.trip_id ?? "").trim();
     const sourceType = normalizeSourceType(entry.source_type);
-    const isOwnership = isOwnershipSource(sourceType);
+    const isOwnership = isOwnershipSource(sourceType, tripId);
     const isMaintenance = isMaintenanceSource(sourceType);
     if (tripId && outByTripId[tripId] != null) {
       if (!isOwnership) {
@@ -502,7 +505,7 @@ export function buildVehiclePnLList(
     if (!vehicleId || !vMap.has(vehicleId)) continue;
     const tripId = String(entry.trip_id ?? "").trim();
     const sourceType = normalizeSourceType(entry.source_type);
-    const isOwnership = isOwnershipSource(sourceType);
+    const isOwnership = isOwnershipSource(sourceType, tripId);
     const isMaintenance = isMaintenanceSource(sourceType);
     if (tripId && outByTripId[tripId] != null) continue;
     if (isOwnership || isMaintenance) {

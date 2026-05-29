@@ -24,6 +24,8 @@ export const queryKeys = {
       ["q", "trips", "operations", tripId, "fuel"] as const,
     tollEntries: (tripId: string) =>
       ["q", "trips", "operations", tripId, "toll"] as const,
+    otherEntries: (tripId: string) =>
+      ["q", "trips", "operations", tripId, "other"] as const,
     operationsSummary: (tripId: string) =>
       ["q", "trips", "operations", tripId, "summary"] as const,
     operationsTimeline: (tripId: string) =>

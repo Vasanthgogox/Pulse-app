@@ -29,6 +29,7 @@ import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -91,7 +92,13 @@ import {
   getTripExecutionModel,
   isAssetExecutionTrip,
 } from "@/features/trips/domain/tripExecutionModel";
-import type { TripCommercialAdjustment } from "@/features/finance";
+import {
+  buildAssetProvisionCostBreakdownLines,
+  driverOfferFromDriverRow,
+  selectAssetTripProvisionCostBreakdown,
+  type TripCommercialAdjustment,
+} from "@/features/finance";
+import { getDriverById } from "@/features/drivers/services/drivers.service";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import {
@@ -356,6 +363,46 @@ export default function TripDetailScreen({
   const expensePendingCount =
     (tripOperationsSummaryQuery.data?.financialSnapshot?.approvalPendingCount ?? 0) +
     (tripOperationsSummaryQuery.data?.financialSnapshot?.settlementPendingCount ?? 0);
+
+  const tripForAssetFinance = detail.trip;
+  const assignedDriverCompQuery = useQuery({
+    queryKey: [
+      "q",
+      "trip",
+      tripId,
+      "driver-comp",
+      tripForAssetFinance?.driver_id ?? "",
+    ],
+    enabled:
+      !!tripForAssetFinance?.driver_id &&
+      !!tripForAssetFinance.organization_id &&
+      !!tripForAssetFinance &&
+      isAssetExecutionTrip(tripForAssetFinance),
+    queryFn: async () => {
+      const res = await getDriverById(
+        tripForAssetFinance!.organization_id,
+        tripForAssetFinance!.driver_id!,
+      );
+      if (res.error) throw res.error;
+      return res.driver;
+    },
+    staleTime: 60_000,
+  });
+
+  const assetProvisionCostPreview = useMemo(() => {
+    if (!tripForAssetFinance || !isAssetExecutionTrip(tripForAssetFinance)) {
+      return null;
+    }
+    return selectAssetTripProvisionCostBreakdown({
+      trip: tripForAssetFinance,
+      events: tripOperationsSummaryQuery.data?.costEvents ?? [],
+      driverOffer: driverOfferFromDriverRow(assignedDriverCompQuery.data ?? null),
+    });
+  }, [
+    tripForAssetFinance,
+    tripOperationsSummaryQuery.data?.costEvents,
+    assignedDriverCompQuery.data,
+  ]);
 
   useEffect(() => {
     if (expenseTabAutoSelectedRef.current) return;
@@ -1182,11 +1229,16 @@ export default function TripDetailScreen({
   const customerSales = Number(trip.client_price ?? 0);
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
+  const isAssetTripFinance = isAssetExecutionTrip(trip);
   const cost = isPartnerSettlementView
     ? computePartnerIndentFreightCost(detail.subcontractRate)
-    : supplierCost;
+    : isAssetTripFinance && assetProvisionCostPreview
+      ? assetProvisionCostPreview.totalBaseCostInr
+      : supplierCost;
   const baseFreight = sales;
-  const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
+  const totalExpenses = isAssetTripFinance
+    ? 0
+    : expenseRows.reduce((s, r) => s + r.amount, 0);
   const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
   const deductionAdjustmentRows = adjustmentsCountingAsDeductions(
     detail.adjustments,
@@ -1241,6 +1293,25 @@ export default function TripDetailScreen({
     });
     return rows;
   })();
+  const driverCashPayoutsForExpenses = detail.tripLedgerEntries
+    .filter(
+      (tx) =>
+        tx.contact_type === "driver" && Number(tx.amount_out ?? 0) > 0,
+    )
+    .map((tx) => ({
+      id: tx.id,
+      dateLabel: new Date(
+        tx.transaction_date ?? tx.created_at ?? "",
+      ).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      amount: Number(tx.amount_out ?? 0),
+      description: tx.description,
+    }));
+  const driverReimbursementDueInr =
+    tripOperationsSummaryQuery.data?.financialSnapshot?.payableOutstandingInr ?? 0;
   const paymentCaptured = detail.tripLedgerEntries.some(
     (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
   );
@@ -1489,7 +1560,9 @@ export default function TripDetailScreen({
     "—";
   const adjSales = adjustedRevenue(sales, detail.adjustments);
   const adjCost = adjustedCost(cost, detail.adjustments);
-  const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
+  const netManifestYield = isAssetTripFinance
+    ? Math.max(0, adjSales - adjCost)
+    : Math.max(0, adjSales - adjCost - totalExpenses);
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
   const receivableAfterAdjustments = Math.max(
@@ -1563,6 +1636,16 @@ export default function TripDetailScreen({
     </View>
   );
 
+  const provisionCostPartyName = isAssetTripFinance
+    ? allocatedDriverName !== "Unassigned"
+      ? allocatedDriverName
+      : detail.driverName?.trim() || "Driver"
+    : supplierNameForParty;
+  const assetCostBreakdownLines =
+    isAssetTripFinance && assetProvisionCostPreview
+      ? buildAssetProvisionCostBreakdownLines(assetProvisionCostPreview)
+      : undefined;
+
   const financeAdjustmentSummaryWrappedEl = (
     <TripFinanceAdjustmentsPanel
       adjustments={detail.adjustments}
@@ -1574,8 +1657,14 @@ export default function TripDetailScreen({
       costSideDelta={costSideDelta}
       clientName={clientNameForParty}
       clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
-      supplierName={supplierNameForParty}
-      supplierAvatarSeed={trip.supplier_id ?? null}
+      supplierName={provisionCostPartyName}
+      supplierAvatarUrl={isAssetTripFinance ? detail.driverAvatarUri : undefined}
+      supplierAvatarSeed={
+        isAssetTripFinance ? (trip.driver_id ?? null) : (trip.supplier_id ?? null)
+      }
+      isAssetExecution={isAssetTripFinance}
+      costLaneLabel={isAssetTripFinance ? "Revised trip cost" : undefined}
+      costBreakdownLines={assetCostBreakdownLines}
       lineMetaLabel={provisionLineMetaLabel}
       onOpenProvision={setShowFinanceProvisionPanel}
       capturePaymentSlot={financeCapturePaymentSlot}
@@ -1594,6 +1683,7 @@ export default function TripDetailScreen({
   const odometerPreviewEl = showOdometerVerification ? (
     <TripOdometerPreviewCard
       trip={trip}
+      compact
       onRecordStart={() => openOdometerVerification("start")}
       onRecordEnd={() => openOdometerVerification("end")}
     />
@@ -2496,8 +2586,34 @@ export default function TripDetailScreen({
                   embedded
                   onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                   onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
-                  onAddOtherExpense={() => setShowFinanceProvisionPanel("supplier")}
+                  onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
                   commercialAdjustments={commercialAdjustments}
+                  driverCashPayouts={driverCashPayoutsForExpenses}
+                  onRecordDriverPayment={
+                    trip.driver_id
+                      ? () =>
+                          pushTripLedgerQuickEntry(
+                            {
+                              trip,
+                              router,
+                              displayClientName: detail.displayClientName ?? null,
+                              clientIdFromContext: clientIdFromContext ?? null,
+                              clientNameFromContext: clientNameFromContext ?? null,
+                              partnerName: detail.partnerName ?? null,
+                              driverDisplayName: detail.driverName ?? null,
+                              ledgerSyncExtraParams: {
+                                dueAmountOut:
+                                  driverReimbursementDueInr > 0
+                                    ? String(
+                                        Math.round(driverReimbursementDueInr),
+                                      )
+                                    : undefined,
+                              },
+                            },
+                            "driver",
+                          )
+                      : undefined
+                  }
                 />
               </View>
             ) : activeTab === "docs" ? (
@@ -3525,8 +3641,34 @@ export default function TripDetailScreen({
                       embedded
                       onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                       onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
-                      onAddOtherExpense={() => setShowFinanceProvisionPanel("supplier")}
+                      onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
                       commercialAdjustments={commercialAdjustments}
+                      driverCashPayouts={driverCashPayoutsForExpenses}
+                      onRecordDriverPayment={
+                        trip.driver_id
+                          ? () =>
+                              pushTripLedgerQuickEntry(
+                                {
+                                  trip,
+                                  router,
+                                  displayClientName: detail.displayClientName ?? null,
+                                  clientIdFromContext: clientIdFromContext ?? null,
+                                  clientNameFromContext: clientNameFromContext ?? null,
+                                  partnerName: detail.partnerName ?? null,
+                                  driverDisplayName: detail.driverName ?? null,
+                                  ledgerSyncExtraParams: {
+                                    dueAmountOut:
+                                      driverReimbursementDueInr > 0
+                                        ? String(
+                                            Math.round(driverReimbursementDueInr),
+                                          )
+                                        : undefined,
+                                  },
+                                },
+                                "driver",
+                              )
+                          : undefined
+                      }
                     />
                   </View>
                 ) : (
@@ -4557,18 +4699,25 @@ export default function TripDetailScreen({
         partyLabel={
           showFinanceProvisionPanel === "client"
             ? (detail.displayClientName ?? trip.client_name ?? "Client")
-            : (detail.partnerName ?? trip.supplier_name ?? "Supplier")
+            : isAssetTripFinance
+              ? provisionCostPartyName
+              : (detail.partnerName ?? trip.supplier_name ?? "Supplier")
         }
         clientName={clientNameForParty}
         clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
-        supplierName={supplierNameForParty}
-        supplierAvatarSeed={trip.supplier_id ?? null}
+        supplierName={provisionCostPartyName}
+        supplierAvatarSeed={
+          isAssetTripFinance ? (trip.driver_id ?? null) : (trip.supplier_id ?? null)
+        }
         sales={sales}
         adjSales={adjSales}
         cost={cost}
         adjCost={adjCost}
         revenueSideDelta={revenueSideDelta}
         costSideDelta={costSideDelta}
+        isAssetExecution={isAssetTripFinance}
+        costLaneLabel={isAssetTripFinance ? "Revised trip cost" : undefined}
+        costBreakdownLines={assetCostBreakdownLines}
         adjustments={detail.adjustments}
         lineMetaLabel={provisionLineMetaLabel}
       />
@@ -9521,7 +9670,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.25)",
   },
-  refFinanceWrap: { gap: 8 },
+  refFinanceWrap: { gap: 10 },
   refFinanceManifestHero: {
     paddingVertical: 16,
     paddingHorizontal: 16,

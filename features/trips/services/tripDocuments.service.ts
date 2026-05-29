@@ -63,6 +63,7 @@ export type TripDocumentType =
   | 'odometer_end_photo'
   | 'fuel_bill_photo'
   | 'toll_receipt_photo'
+  | 'trip_expense_receipt_photo'
   | 'maintenance_invoice_photo';
 
 export interface TripDocumentRow {
@@ -165,6 +166,7 @@ export async function getDocumentsByTripId(
     'odometer_end_photo',
     'fuel_bill_photo',
     'toll_receipt_photo',
+    'trip_expense_receipt_photo',
     'maintenance_invoice_photo',
   ];
 

@@ -209,7 +209,7 @@ function KanbanCard({
             {partyName}
           </Text>
           <Text style={styles.timelineCardDateVehicle} numberOfLines={1}>
-            {[dateStr, cat !== 'garage' ? vehicleStr : null].filter(Boolean).join(" · ")}
+            {[dateStr, vehicleStr].filter(Boolean).join(" · ")}
           </Text>
           {routeWhyLine ? (
             <Text style={styles.timelineCardRouteWhy} numberOfLines={1}>
