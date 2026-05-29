@@ -224,16 +224,16 @@ export const Theme = {
   pulseTabClusterTrackBorder: "rgba(199, 210, 254, 0.28)",
   pulseTabClusterTrackInnerGlow: "rgba(255, 255, 255, 0.14)",
   pulseTabClusterTrackRim: "rgba(165, 180, 252, 0.35)",
-  pulseTabClusterThumbTop: "rgba(255, 255, 255, 0.52)",
-  pulseTabClusterThumbMid: "rgba(224, 231, 255, 0.38)",
-  pulseTabClusterThumbBottom: "rgba(99, 102, 241, 0.32)",
-  pulseTabClusterThumbAccent: "rgba(255, 255, 255, 0.42)",
-  pulseTabClusterThumbBorder: "rgba(224, 231, 255, 0.65)",
-  pulseTabClusterThumbSpecular: "rgba(255, 255, 255, 0.55)",
-  pulseTabClusterIconActive: "#FFFFFF",
-  pulseTabClusterIconInactive: "rgba(224, 231, 255, 0.62)",
-  pulseTabClusterLabelActive: "#FFFFFF",
-  pulseTabClusterLabelInactive: "rgba(224, 231, 255, 0.58)",
+  /** Solid sliding thumb (Slack-style) — opaque white for contrast on purple track. */
+  pulseTabClusterThumbSolid: "#FFFFFF",
+  pulseTabClusterThumbBorder: "rgba(255, 255, 255, 0.92)",
+  pulseTabClusterThumbShadow: "rgba(30, 27, 75, 0.45)",
+  /** Icon + label on the white thumb (high contrast). */
+  pulseTabClusterIconOnThumb: "#1E1B4B",
+  pulseTabClusterLabelOnThumb: "#312E81",
+  /** Icon + label on the purple track (inactive). */
+  pulseTabClusterIconInactive: "rgba(255, 255, 255, 0.52)",
+  pulseTabClusterLabelInactive: "rgba(255, 255, 255, 0.48)",
 
   /** Demo tab bar: bar background, top border, pill and FAB (use Layout for radii/shadows) */
   tabBarBg: "#FAFAFF",
