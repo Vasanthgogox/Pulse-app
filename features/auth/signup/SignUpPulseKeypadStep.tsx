@@ -1,15 +1,19 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
   Animated,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
+import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
@@ -67,6 +71,8 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   theme = PULSE_SIGNUP,
 }: SignUpPulseKeypadStepProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const useKeypad = useSignupKeypadInput();
+  const inputRef = useRef<TextInput>(null);
   const blink = useRef(new Animated.Value(1)).current;
   const digits = value.replace(/\D/g, '').slice(0, maxDigits);
   const display = digits.length > 0 ? formatDisplay(digits) : emptyPlaceholder;
@@ -74,6 +80,15 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   const ready = digits.length >= maxDigits && !primaryDisabled && !primaryLoading;
 
   useEffect(() => {
+    if (!useKeypad) {
+      const id = requestAnimationFrame(() => inputRef.current?.focus());
+      return () => cancelAnimationFrame(id);
+    }
+    return undefined;
+  }, [useKeypad]);
+
+  useEffect(() => {
+    if (!useKeypad) return undefined;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(blink, { toValue: 0, duration: 520, useNativeDriver: true }),
@@ -82,7 +97,18 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     );
     loop.start();
     return () => loop.stop();
-  }, [blink]);
+  }, [blink, useKeypad]);
+
+  const handleDigitsChange = useCallback(
+    (text: string) => {
+      onChange(text.replace(/\D/g, '').slice(0, maxDigits));
+    },
+    [maxDigits, onChange],
+  );
+
+  const handleSubmitEditing = useCallback(() => {
+    if (ready) onPrimary();
+  }, [onPrimary, ready]);
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
@@ -95,30 +121,74 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     [digits, maxDigits, onChange],
   );
 
-  return (
-    <View style={styles.root}>
-      <View style={styles.main}>
-        <View style={styles.content}>
-          <SignUpPulseTitle title={title} subtitle={subtitle} />
+  const content = (
+    <>
+      <SignUpPulseTitle title={title} subtitle={subtitle} />
 
           <Text style={styles.fieldLabel}>{fieldLabel}</Text>
-          {customDisplay ? (
-            <View style={styles.customDisplay}>{customDisplay}</View>
+          {useKeypad ? (
+            customDisplay ? (
+              <View style={styles.customDisplay}>{customDisplay}</View>
+            ) : (
+              <View style={[styles.displayRow, errorMessage ? styles.displayError : null]}>
+                {displayFlag ? <Text style={styles.flag}>{displayFlag}</Text> : null}
+                {displayPrefix ? <Text style={styles.prefix}>{displayPrefix}</Text> : null}
+                <Text
+                  style={[styles.displayValue, isEmpty && styles.placeholder]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.65}
+                >
+                  {display}
+                </Text>
+                {digits.length < maxDigits ? (
+                  <Animated.View style={[styles.cursor, { opacity: blink }]} />
+                ) : null}
+              </View>
+            )
+          ) : customDisplay ? (
+            <View
+              style={[styles.customDisplay, errorMessage ? styles.displayError : null]}
+            >
+              <View style={styles.otpWebWrap}>
+                {customDisplay}
+                <TextInput
+                  ref={inputRef}
+                  value={digits}
+                  onChangeText={handleDigitsChange}
+                  onSubmitEditing={handleSubmitEditing}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  maxLength={maxDigits}
+                  autoComplete="one-time-code"
+                  textContentType="oneTimeCode"
+                  caretHidden
+                  style={styles.otpWebOverlay}
+                  accessibilityLabel={fieldLabel}
+                />
+              </View>
+            </View>
           ) : (
             <View style={[styles.displayRow, errorMessage ? styles.displayError : null]}>
-              {displayFlag ? <Text style={styles.flag}>{displayFlag}</Text> : null}
-              {displayPrefix ? <Text style={styles.prefix}>{displayPrefix}</Text> : null}
-              <Text
-                style={[styles.displayValue, isEmpty && styles.placeholder]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.65}
-              >
-                {display}
-              </Text>
-              {digits.length < maxDigits ? (
-                <Animated.View style={[styles.cursor, { opacity: blink }]} />
-              ) : null}
+              <View style={styles.webInputRow}>
+                {displayFlag ? <Text style={styles.flag}>{displayFlag}</Text> : null}
+                {displayPrefix ? <Text style={styles.prefix}>{displayPrefix}</Text> : null}
+                <TextInput
+                  ref={inputRef}
+                  value={digits}
+                  onChangeText={handleDigitsChange}
+                  onSubmitEditing={handleSubmitEditing}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  maxLength={maxDigits}
+                  placeholder={emptyPlaceholder}
+                  placeholderTextColor={theme.placeholder}
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
+                  style={styles.webInput}
+                  accessibilityLabel={fieldLabel}
+                />
+              </View>
             </View>
           )}
 
@@ -162,13 +232,32 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
             </>
           ) : null}
 
-          {footerAccessory}
-        </View>
+      {footerAccessory}
+    </>
+  );
+
+  return (
+    <View style={[styles.root, !useKeypad && styles.rootWeb]}>
+      <View style={[styles.main, !useKeypad && styles.mainWeb]}>
+        {useKeypad ? (
+          <View style={styles.content}>{content}</View>
+        ) : (
+          <ScrollView
+            style={styles.contentScroll}
+            contentContainerStyle={styles.contentScrollInner}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {content}
+          </ScrollView>
+        )}
       </View>
 
-      <View style={styles.keypadDock}>
-        <DecimalKeypad onKey={handleKey} showDecimal={false} variant="pay" size="compact" />
-      </View>
+      {useKeypad ? (
+        <View style={styles.keypadDock}>
+          <DecimalKeypad onKey={handleKey} showDecimal={false} variant="pay" size="compact" />
+        </View>
+      ) : null}
     </View>
   );
 });
@@ -183,10 +272,27 @@ function createStyles(theme: SignUpTheme) {
       flex: 1,
       minHeight: 0,
     },
+    rootWeb: {
+      flex: 1,
+      minHeight: 0,
+    },
+    mainWeb: {
+      flex: 1,
+      minHeight: 0,
+    },
     content: {
       flex: 1,
       paddingHorizontal: 24,
       paddingTop: 8,
+    },
+    contentScroll: {
+      flex: 1,
+    },
+    contentScrollInner: {
+      flexGrow: 1,
+      paddingHorizontal: 24,
+      paddingTop: 8,
+      paddingBottom: 24,
     },
     fieldLabel: {
       fontSize: 10,
@@ -246,6 +352,34 @@ function createStyles(theme: SignUpTheme) {
       borderRadius: 1,
       backgroundColor: theme.primary,
       marginLeft: 4,
+    },
+    webInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      minWidth: 0,
+    },
+    webInput: {
+      flex: 1,
+      fontSize: 18,
+      fontWeight: '700',
+      letterSpacing: 2.4,
+      color: theme.text,
+      minWidth: 0,
+      paddingVertical: 0,
+      ...Platform.select({
+        web: { outlineStyle: 'none' } as object,
+      }),
+    },
+    otpWebWrap: {
+      position: 'relative',
+      width: '100%',
+    },
+    otpWebOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 0.02,
+      fontSize: 1,
+      color: 'transparent',
     },
     error: {
       fontSize: 12,

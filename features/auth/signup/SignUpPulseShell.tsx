@@ -3,6 +3,8 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 
+import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
+
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 
@@ -93,13 +95,23 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
 
   if (isDesktop) {
     return (
-      <View style={[styles.outer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.outer,
+          Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as object) : null,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
         {device}
       </View>
     );
   }
 
-  return device;
+  return (
+    <View style={Platform.OS === 'web' ? [styles.webFill, WEB_APP_VIEWPORT_STYLE as object] : undefined}>
+      {device}
+    </View>
+  );
 });
 
 function createStyles(theme: SignUpShellTheme) {
@@ -117,12 +129,19 @@ function createStyles(theme: SignUpShellTheme) {
       backgroundColor: theme.bg,
       overflow: 'hidden',
     },
+    webFill: {
+      flex: 1,
+      width: '100%',
+    },
     deviceFramed: {
       flex: 0,
+      flexDirection: 'column',
       width: DEVICE_WIDTH,
       maxWidth: '100%',
       height: DEVICE_HEIGHT,
-      maxHeight: '100%',
+      ...(Platform.OS === 'web'
+        ? { minHeight: DEVICE_HEIGHT }
+        : { maxHeight: '100%' }),
       borderRadius: PULSE_SIGNUP_RADIUS.device,
       borderWidth: DEVICE_BORDER,
       borderColor: theme.deviceBorder,
