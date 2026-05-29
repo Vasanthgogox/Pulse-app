@@ -173,24 +173,16 @@ function MobileFooterTab({
       : Theme.pulseIndigo
     : Theme.textMutedDemo;
   const isProfile = avatarInitials != null;
-  return (
-    <TouchableOpacity
-      style={[styles.mobileFooterTab, edge && styles.mobileFooterTabEdge]}
-      onPress={onPress}
-      activeOpacity={0.72}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={label}
-    >
-      <View
-        style={[
-          styles.mobileFooterIconSlot,
-          edge && styles.mobileFooterIconSlotEdge,
-          active && (edge ? styles.mobileFooterIconSlotEdgeActive : styles.mobileFooterIconSlotActive),
-        ]}
-      >
-        {active && !edge ? <View style={styles.mobileFooterActiveBar} /> : null}
-        {isProfile ? (
+  const iconSlotBase = [
+    styles.mobileFooterIconSlot,
+    edge && styles.mobileFooterIconSlotEdge,
+    edge && !active && styles.mobileFooterIconSlotEdgeIdle,
+    active && !edge && styles.mobileFooterIconSlotActive,
+  ];
+  const iconSlotInner = (
+    <>
+      {active && !edge ? <View style={styles.mobileFooterActiveBar} /> : null}
+      {isProfile ? (
           avatarUri ? (
             <Image
               source={{ uri: avatarUri }}
@@ -231,13 +223,37 @@ function MobileFooterTab({
             </Text>
           </View>
         ) : null}
-      </View>
+    </>
+  );
+
+  return (
+    <TouchableOpacity
+      style={[styles.mobileFooterTab, edge && styles.mobileFooterTabEdge]}
+      onPress={onPress}
+      activeOpacity={0.72}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={label}
+    >
+      {active && edge ? (
+        <LinearGradient
+          colors={[Theme.actionAccent, Theme.actionAccentBorder]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[iconSlotBase, styles.mobileFooterIconSlotEdgeActive]}
+        >
+          {iconSlotInner}
+        </LinearGradient>
+      ) : (
+        <View style={iconSlotBase}>{iconSlotInner}</View>
+      )}
       <Text
         style={[
           styles.mobileFooterLabel,
           compact && styles.mobileFooterLabelCompact,
           active && styles.mobileFooterLabelActive,
           active && edge && styles.mobileFooterEdgeLabelActive,
+          edge && !active && styles.mobileFooterEdgeLabelIdle,
         ]}
         numberOfLines={1}
       >
@@ -357,6 +373,7 @@ function MobileFooterSlackCluster({
         style={styles.mobileFooterSlackTrackSheen}
         pointerEvents="none"
       />
+      <View style={styles.mobileFooterSlackTrackRim} pointerEvents="none" />
       {thumbWidth > 0 ? (
         <Animated.View
           pointerEvents="none"
@@ -373,15 +390,15 @@ function MobileFooterSlackCluster({
               Theme.pulseTabClusterThumbMid,
               Theme.pulseTabClusterThumbBottom,
             ]}
-            locations={[0, 0.45, 1]}
+            locations={[0, 0.4, 1]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
           <LinearGradient
-            colors={[Theme.pulseTabClusterThumbAccent, "rgba(99,102,241,0)"]}
-            start={{ x: 0.5, y: 1 }}
-            end={{ x: 0.5, y: 0.35 }}
+            colors={[Theme.pulseTabClusterThumbAccent, "rgba(79,70,229,0)"]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
@@ -1210,9 +1227,10 @@ export function DemoTabBar({
                     ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
                     : MOBILE_EDGE_ICON_SIZE + 1
                 }
-                color={isNetwork ? Theme.textOnPrimary : Theme.textMutedDemo}
+                color={isNetwork ? Theme.textOnPrimary : Theme.actionAccent}
                 fill={isNetwork ? Theme.textOnPrimary : "transparent"}
-                strokeWidth={CLUSTER_STROKE}
+                strokeWidth={isNetwork ? CLUSTER_STROKE + 0.1 : CLUSTER_STROKE}
+                opacity={isNetwork ? 1 : 0.55}
               />
             }
               onPress={() => {
@@ -1234,14 +1252,16 @@ export function DemoTabBar({
             active={isChatRoute}
             badgeCount={messageUnreadCount}
             customIcon={
-              <AnimatedChatTabIcon
-                active={isChatRoute}
-                size={
-                  isCompactMobile
-                    ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
-                    : MOBILE_EDGE_ICON_SIZE + 1
-                }
-              />
+              <View style={!isChatRoute ? styles.mobileFooterEdgeIconMuted : undefined}>
+                <AnimatedChatTabIcon
+                  active={isChatRoute}
+                  size={
+                    isCompactMobile
+                      ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
+                      : MOBILE_EDGE_ICON_SIZE + 1
+                  }
+                />
+              </View>
             }
             onPress={() => {
               collapseNetworkDock();
@@ -1269,16 +1289,16 @@ const styles = StyleSheet.create({
   },
   mmtFooterShell: {
     backgroundColor: Theme.tabBarBg,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
     borderTopColor: Theme.tabBarBorderTop,
     paddingTop: 10,
     paddingHorizontal: 4,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowColor: Theme.actionAccent,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
     elevation: 12,
   },
   mmtFooterBar: {
@@ -1318,11 +1338,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.pulseTabClusterTrackBorder,
     position: "relative",
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowColor: Theme.actionAccent,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 10,
   },
   mobileFooterSlackPillCompact: {
     maxWidth: 280,
@@ -1333,6 +1353,14 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     opacity: 0.85,
   },
+  mobileFooterSlackTrackRim: {
+    position: "absolute",
+    top: 0,
+    left: 12,
+    right: 12,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.pulseTabClusterTrackRim,
+  },
   mobileFooterSlackThumb: {
     position: "absolute",
     top: CLUSTER_PILL_INSET,
@@ -1342,11 +1370,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Theme.pulseTabClusterThumbBorder,
-    shadowColor: "#000000",
+    shadowColor: "#312E81",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.4,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 6,
   },
   mobileFooterSlackThumbCompact: {
     borderRadius: 18,
@@ -1436,21 +1464,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "transparent",
   },
-  /* Edge tabs (Home / Chat): active = solid indigo chip with a soft
-   *  purple glow underneath. Pairs the home/chat pill with the matte
-   *  black cluster in the centre so the bottom bar reads as "purple ↔
-   *  black ↔ purple" instead of a washed-out tint floating beside a
-   *  dark slab. */
+  mobileFooterIconSlotEdgeIdle: {
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseTabActiveBorder,
+  },
   mobileFooterIconSlotEdgeActive: {
-    backgroundColor: Theme.primary,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.actionAccentBorder,
-    shadowColor: Theme.primary,
+    borderColor: "rgba(255,255,255,0.35)",
+    shadowColor: Theme.actionAccent,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.32,
+    shadowOpacity: 0.4,
     shadowRadius: 14,
-    elevation: 6,
+    elevation: 8,
   },
   mobileFooterIconSlotActive: {
     backgroundColor: Theme.pulseTabActiveBg,
@@ -1461,7 +1488,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 2.5,
     borderRadius: 2,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.actionAccent,
   },
   mobileFooterAvatar: {
     width: 24,
@@ -1514,7 +1541,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     backgroundColor: Theme.teslaRed,
     borderWidth: 1.5,
-    borderColor: Theme.pulseTabClusterTrackBg,
+    borderColor: Theme.pulseTabClusterTrackTop,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1539,9 +1566,16 @@ const styles = StyleSheet.create({
     color: Theme.iconPrimary,
   },
   mobileFooterEdgeLabelActive: {
-    color: Theme.primary,
+    color: Theme.actionAccent,
     fontWeight: "700",
     letterSpacing: -0.05,
+  },
+  mobileFooterEdgeLabelIdle: {
+    color: Theme.textSecondary,
+    fontWeight: "600",
+  },
+  mobileFooterEdgeIconMuted: {
+    opacity: 0.55,
   },
   mobileFooterRow: {
     width: "100%",

@@ -217,30 +217,27 @@ export const Theme = {
   /** Mobile footer active pill + icon ring */
   pulseTabActiveBg: "rgba(79, 70, 229, 0.10)",
   pulseTabActiveBorder: "rgba(79, 70, 229, 0.28)",
-  /** Slack-style dark cluster track + glass sliding thumb (Finance / Trips / Loads). */
-  pulseTabClusterTrackTop: "#232633",
-  pulseTabClusterTrackBottom: "#12141C",
-  pulseTabClusterTrackBg: "#181A24",
-  pulseTabClusterTrackBorder: "rgba(255,255,255,0.09)",
-  pulseTabClusterTrackInnerGlow: "rgba(255,255,255,0.05)",
-  pulseTabClusterThumbTop: "rgba(255,255,255,0.34)",
-  pulseTabClusterThumbMid: "rgba(255,255,255,0.16)",
-  pulseTabClusterThumbBottom: "rgba(255,255,255,0.07)",
-  /* Subtle indigo bleed beneath the cluster glass thumb. Pulled up from
-   *  the previous 14% to 26% so the active Cash/Trips/Loads tab carries
-   *  a visible Pulse-purple wash — ties the matte-black cluster to the
-   *  solid indigo Home/Chat edge chips for a unified purple/black bar. */
-  pulseTabClusterThumbAccent: "rgba(99,102,241,0.26)",
-  pulseTabClusterThumbBorder: "rgba(255,255,255,0.32)",
-  pulseTabClusterThumbSpecular: "rgba(255,255,255,0.45)",
+  /** Ops cluster (Cash / Trips / Loads) — deep Pulse indigo track + glass thumb. */
+  pulseTabClusterTrackTop: "#6366F1",
+  pulseTabClusterTrackBottom: "#3730A3",
+  pulseTabClusterTrackBg: "#4F46E5",
+  pulseTabClusterTrackBorder: "rgba(199, 210, 254, 0.28)",
+  pulseTabClusterTrackInnerGlow: "rgba(255, 255, 255, 0.14)",
+  pulseTabClusterTrackRim: "rgba(165, 180, 252, 0.35)",
+  pulseTabClusterThumbTop: "rgba(255, 255, 255, 0.52)",
+  pulseTabClusterThumbMid: "rgba(224, 231, 255, 0.38)",
+  pulseTabClusterThumbBottom: "rgba(99, 102, 241, 0.32)",
+  pulseTabClusterThumbAccent: "rgba(255, 255, 255, 0.42)",
+  pulseTabClusterThumbBorder: "rgba(224, 231, 255, 0.65)",
+  pulseTabClusterThumbSpecular: "rgba(255, 255, 255, 0.55)",
   pulseTabClusterIconActive: "#FFFFFF",
-  pulseTabClusterIconInactive: "rgba(255,255,255,0.38)",
+  pulseTabClusterIconInactive: "rgba(224, 231, 255, 0.62)",
   pulseTabClusterLabelActive: "#FFFFFF",
-  pulseTabClusterLabelInactive: "rgba(255,255,255,0.40)",
+  pulseTabClusterLabelInactive: "rgba(224, 231, 255, 0.58)",
 
   /** Demo tab bar: bar background, top border, pill and FAB (use Layout for radii/shadows) */
-  tabBarBg: "#ffffff",
-  tabBarBorderTop: "#f1f5f9",
+  tabBarBg: "#FAFAFF",
+  tabBarBorderTop: "rgba(99, 102, 241, 0.14)",
   tabBarPillActiveBg: "#F4F4F4",
   tabBarActiveIconBorder: "#E82127",
 
