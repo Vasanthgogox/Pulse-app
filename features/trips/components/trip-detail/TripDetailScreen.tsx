@@ -72,7 +72,14 @@ import { ReassignSheet } from "../reassign/ReassignSheet";
 import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
 import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
+import { ProvisionDeductionConfirmModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionDeductionConfirmModal";
+import { ProvisionNotePdfModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionNotePdfModal";
 import { TripFinanceAdjustmentsPanel } from "@/features/trips/components/trip-detail/adjustment/TripFinanceAdjustmentsPanel";
+import type { ProvisionNotePdfContext } from "@/features/trips/components/trip-detail/adjustment/tripProvisionNotePdf.util";
+import {
+  buildCostDeductionSaveParams,
+  type ClientPassThroughRecommendation,
+} from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 import { TripOdometerPreviewCard } from "@/features/trips/components/trip-detail/TripOdometerPreviewCard";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
@@ -88,15 +95,11 @@ import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constant
 import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSummary, useTripOperationsSync } from "@/features/trips/operations";
 import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
-import {
-  getTripExecutionModel,
-  isAssetExecutionTrip,
-} from "@/features/trips/domain/tripExecutionModel";
+import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import {
   buildAssetProvisionCostBreakdownLines,
   driverOfferFromDriverRow,
   selectAssetTripProvisionCostBreakdown,
-  type TripCommercialAdjustment,
 } from "@/features/finance";
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import { type ExpenseRow } from "./sections/ExpensesTable";
@@ -312,6 +315,11 @@ export default function TripDetailScreen({
   const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
     "client" | "supplier" | null
   >(null);
+  const [pendingCostDeduction, setPendingCostDeduction] =
+    useState<ClientPassThroughRecommendation | null>(null);
+  const [costDeductionSubmitting, setCostDeductionSubmitting] = useState(false);
+  const [provisionNotePdfContext, setProvisionNotePdfContext] =
+    useState<ProvisionNotePdfContext | null>(null);
   const [provisionConfirm, setProvisionConfirm] = useState<{
     mode: "delete" | "edit";
     adjustment: TripAdjustment;
@@ -343,6 +351,14 @@ export default function TripDetailScreen({
     setEditingProvisionAdjustmentId(null);
   };
 
+  const handleRequestCostDeduction = useCallback(
+    (rec: ClientPassThroughRecommendation) => {
+      setPendingCostDeduction(rec);
+      setShowFinanceProvisionPanel(null);
+    },
+    [],
+  );
+
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
   const isDesktop = screenWidth >= 1024;
@@ -359,6 +375,17 @@ export default function TripDetailScreen({
     clientNameFromContext,
     onBack,
   });
+
+  const handleConfirmCostDeduction = useCallback(async () => {
+    if (!pendingCostDeduction || costDeductionSubmitting) return;
+    setCostDeductionSubmitting(true);
+    try {
+      await detail.handleSaveAdjustment(buildCostDeductionSaveParams(pendingCostDeduction));
+      setPendingCostDeduction(null);
+    } finally {
+      setCostDeductionSubmitting(false);
+    }
+  }, [pendingCostDeduction, costDeductionSubmitting, detail.handleSaveAdjustment]);
 
   const expensePendingCount =
     (tripOperationsSummaryQuery.data?.financialSnapshot?.approvalPendingCount ?? 0) +
@@ -1012,35 +1039,8 @@ export default function TripDetailScreen({
   }
 
   const { trip } = detail;
-  const tripExecutionModel = getTripExecutionModel(trip);
-  const expenseTabLabel = tripExecutionModel === "asset" ? "Expense" : "Commercial";
-  const expenseHubLabel = tripExecutionModel === "asset" ? "Expense Hub" : "Commercial Hub";
-  const commercialAdjustments: TripCommercialAdjustment[] = (
-    detail.adjustments ?? []
-  )
-    .filter((adjustment) => !isAdjustmentVoided(adjustment))
-    .map((adjustment) => {
-      const direction: TripCommercialAdjustment["direction"] =
-        adjustment.type === "cost"
-          ? adjustment.impact === "plus"
-            ? "increase_cost"
-            : "reduce_cost"
-          : adjustment.impact === "plus"
-            ? "increase_margin"
-            : "reduce_margin";
-      return {
-        id: adjustment.id,
-        tripId: adjustment.trip_id,
-        type:
-          adjustment.type === "cost"
-            ? "supplier_adjustment"
-            : "brokerage_adjustment",
-        amount: Math.max(0, Number(adjustment.amount ?? 0) || 0),
-        direction,
-        postingState: "posted",
-        createdAt: adjustment.created_at ?? trip.created_at,
-      };
-    });
+  const expenseTabLabel = "Expense";
+  const expenseHubLabel = "Expense Hub";
   const isAggregate = isAggregateTrip(trip);
 
   const driverSummaryText = (() => {
@@ -1549,15 +1549,20 @@ export default function TripDetailScreen({
     detail.driverRatingAvg != null &&
     Number.isFinite(Number(detail.driverRatingAvg))
       ? Number(detail.driverRatingAvg).toFixed(1)
-      : "—";
+      : null;
+  const driverAssetMeta =
+    driverRatingLabel != null ? `★ ${driverRatingLabel} rating` : "No rating yet";
   const vehicleTypeLabel =
     String(tripExtra.vehicle_type ?? "").trim() ||
     String(tripExtra.truck_type ?? "").trim() ||
-    "MXL";
+    "";
   const vehicleCapacityLabel =
     String(tripExtra.capacity ?? "").trim() ||
     String(tripExtra.vehicle_capacity ?? "").trim() ||
-    "—";
+    "";
+  const vehicleAssetMeta = [vehicleTypeLabel, vehicleCapacityLabel]
+    .filter(Boolean)
+    .join(" · ") || "Specs pending";
   const adjSales = adjustedRevenue(sales, detail.adjustments);
   const adjCost = adjustedCost(cost, detail.adjustments);
   const netManifestYield = isAssetTripFinance
@@ -1667,6 +1672,20 @@ export default function TripDetailScreen({
       costBreakdownLines={assetCostBreakdownLines}
       lineMetaLabel={provisionLineMetaLabel}
       onOpenProvision={setShowFinanceProvisionPanel}
+      onRequestDeduction={handleRequestCostDeduction}
+      onViewNotePdf={(adj) => {
+        const isSale = adj.type === "revenue";
+        setProvisionNotePdfContext({
+          adjustment: adj,
+          tripCode: getTripDisplayNumber(trip, currentOrganization?.id),
+          companyName: currentOrganization?.name?.trim() || "Q",
+          partyName: isSale ? clientNameForParty : provisionCostPartyName,
+          laneLabel: isSale ? "Sale" : "Cost",
+          partyRole: isSale ? "Client" : isAssetTripFinance ? "Driver" : "Supplier",
+          baseLaneAmount: isSale ? sales : cost,
+          revisedLaneAmount: isSale ? adjSales : adjCost,
+        });
+      }}
       capturePaymentSlot={financeCapturePaymentSlot}
     />
   );
@@ -2216,24 +2235,27 @@ export default function TripDetailScreen({
                   <View style={styles.refAssetIconWrap}>
                     <Feather name="user" size={14} color="#4f46e5" />
                   </View>
-                  <TouchableOpacity
-                    onPress={() => openAssignmentFlow("driver")}
-                    style={styles.refAssetChangeBtn}
-                    activeOpacity={0.85}
-                    disabled={!canChangeManifestAssets}
-                  >
-                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
-                  </TouchableOpacity>
+                  {canChangeManifestAssets ? (
+                    <TouchableOpacity
+                      onPress={() => openAssignmentFlow("driver")}
+                      style={styles.refAssetChangeBtn}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.refAssetChangeBtnText}>Change</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.refAssetChangeSpacer} />
+                  )}
                 </View>
-                <View style={styles.refAssetBody}>
-                  <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
-                  <Text style={styles.refAssetValue} numberOfLines={1}>
-                    {allocatedDriverName}
-                  </Text>
-                  <Text style={styles.refAssetSubtle}>
-                    {driverRatingLabel} rank
-                  </Text>
-                </View>
+                <Text style={styles.refAssetLabel} numberOfLines={1}>
+                  Driver
+                </Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>
+                  {allocatedDriverName}
+                </Text>
+                <Text style={styles.refAssetSubtle} numberOfLines={1}>
+                  {driverAssetMeta}
+                </Text>
               </View>
 
               <View style={styles.refAssetCard}>
@@ -2246,24 +2268,27 @@ export default function TripDetailScreen({
                   >
                     <Feather name="truck" size={14} color="#fff" />
                   </View>
-                  <TouchableOpacity
-                    onPress={() => openAssignmentFlow("vehicle")}
-                    style={styles.refAssetChangeBtn}
-                    activeOpacity={0.85}
-                    disabled={!canChangeManifestAssets}
-                  >
-                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
-                  </TouchableOpacity>
+                  {canChangeManifestAssets ? (
+                    <TouchableOpacity
+                      onPress={() => openAssignmentFlow("vehicle")}
+                      style={styles.refAssetChangeBtn}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.refAssetChangeBtnText}>Change</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.refAssetChangeSpacer} />
+                  )}
                 </View>
-                <View style={styles.refAssetBody}>
-                  <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
-                  <Text style={styles.refAssetValue} numberOfLines={1}>
-                    {allocatedVehicleLabel}
-                  </Text>
-                  <Text style={styles.refAssetSubtle}>
-                    {vehicleTypeLabel} · {vehicleCapacityLabel}
-                  </Text>
-                </View>
+                <Text style={styles.refAssetLabel} numberOfLines={1}>
+                  Vehicle
+                </Text>
+                <Text style={styles.refAssetValue} numberOfLines={1}>
+                  {allocatedVehicleLabel}
+                </Text>
+                <Text style={styles.refAssetSubtle} numberOfLines={1}>
+                  {vehicleAssetMeta}
+                </Text>
               </View>
             </View>
 
@@ -2587,7 +2612,6 @@ export default function TripDetailScreen({
                   onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                   onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
                   onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
-                  commercialAdjustments={commercialAdjustments}
                   driverCashPayouts={driverCashPayoutsForExpenses}
                   onRecordDriverPayment={
                     trip.driver_id
@@ -3642,7 +3666,6 @@ export default function TripDetailScreen({
                       onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                       onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
                       onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
-                      commercialAdjustments={commercialAdjustments}
                       driverCashPayouts={driverCashPayoutsForExpenses}
                       onRecordDriverPayment={
                         trip.driver_id
@@ -3749,10 +3772,13 @@ export default function TripDetailScreen({
                         <View style={neoStyles.assetIcon}>
                           <Feather name="user" size={18} color="#4f46e5" />
                         </View>
-                        <View>
-                          <Text style={neoStyles.assetLabel}>Pilot Node</Text>
+                        <View style={neoStyles.assetTextCol}>
+                          <Text style={neoStyles.assetLabel}>Driver</Text>
                           <Text style={neoStyles.assetValue} numberOfLines={1}>
                             {allocatedDriverName}
+                          </Text>
+                          <Text style={neoStyles.assetSubtle} numberOfLines={1}>
+                            {driverAssetMeta}
                           </Text>
                         </View>
                       </View>
@@ -3773,12 +3799,13 @@ export default function TripDetailScreen({
                         >
                           <Feather name="truck" size={18} color="#fff" />
                         </View>
-                        <View>
-                          <Text style={neoStyles.assetLabel}>
-                            Vehicle Asset
-                          </Text>
+                        <View style={neoStyles.assetTextCol}>
+                          <Text style={neoStyles.assetLabel}>Vehicle</Text>
                           <Text style={neoStyles.assetValue} numberOfLines={1}>
                             {allocatedVehicleLabel}
+                          </Text>
+                          <Text style={neoStyles.assetSubtle} numberOfLines={1}>
+                            {vehicleAssetMeta}
                           </Text>
                         </View>
                       </View>
@@ -4720,7 +4747,28 @@ export default function TripDetailScreen({
         costBreakdownLines={assetCostBreakdownLines}
         adjustments={detail.adjustments}
         lineMetaLabel={provisionLineMetaLabel}
+        onRequestDeduction={handleRequestCostDeduction}
       />
+
+      <ProvisionDeductionConfirmModal
+        visible={pendingCostDeduction !== null}
+        recommendation={pendingCostDeduction}
+        isAssetExecution={isAssetTripFinance}
+        costPartyName={provisionCostPartyName}
+        adjCost={adjCost}
+        submitting={costDeductionSubmitting}
+        onCancel={() => {
+          if (!costDeductionSubmitting) setPendingCostDeduction(null);
+        }}
+        onConfirm={() => void handleConfirmCostDeduction()}
+      />
+
+      <ProvisionNotePdfModal
+        visible={provisionNotePdfContext !== null}
+        context={provisionNotePdfContext}
+        onClose={() => setProvisionNotePdfContext(null)}
+      />
+
       {!useCompactAdjustmentWizard ? (
         <TripAdjustmentModal
           visible={detail.showAdjustmentModal}
@@ -8418,6 +8466,11 @@ const neoStyles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  assetTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
   assetIcon: {
     width: 42,
     height: 42,
@@ -8445,7 +8498,12 @@ const neoStyles = StyleSheet.create({
     color: "#0f172a",
     fontSize: 13,
     fontWeight: "900",
-    maxWidth: 145,
+  },
+  assetSubtle: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "600",
   },
   assetChangeBtn: {
     borderRadius: 13,
@@ -8651,75 +8709,83 @@ const styles = StyleSheet.create({
   },
   refAssetRow: {
     flexDirection: "row",
+    alignItems: "stretch",
     gap: 8,
     marginTop: 0,
     marginBottom: 10,
   },
   refAssetCard: {
     flex: 1,
-    borderRadius: 18,
+    minWidth: 0,
+    minHeight: 96,
+    borderRadius: 16,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#eef2f7",
-    paddingVertical: 11,
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 10,
+    gap: 3,
   },
   refAssetHead: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-    minHeight: 0,
-    gap: 4,
-  },
-  refAssetBody: {
-    alignSelf: "stretch",
-    width: "100%",
+    marginBottom: 6,
+    minHeight: 30,
   },
   refAssetIconWrap: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#eef2ff",
+    flexShrink: 0,
   },
   refAssetIconWrapDark: {
     backgroundColor: "#0f172a",
   },
   refAssetChangeBtn: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     backgroundColor: "#f8fafc",
+    flexShrink: 0,
+  },
+  refAssetChangeSpacer: {
+    width: 52,
+    height: 26,
+    flexShrink: 0,
   },
   refAssetChangeBtnText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
-    color: "#0f172a",
+    color: Theme.primary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   refAssetLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 0.6,
   },
   refAssetValue: {
-    marginTop: 2,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: "#0f172a",
-    lineHeight: 16,
+    lineHeight: 17,
   },
   refAssetSubtle: {
-    marginTop: 4,
+    marginTop: 1,
     fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
-    textTransform: "uppercase",
+    fontWeight: "600",
+    color: "#64748b",
+    lineHeight: 14,
   },
   refTabShell: {
     marginBottom: 8,

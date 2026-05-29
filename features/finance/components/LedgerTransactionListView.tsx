@@ -1721,7 +1721,7 @@ export function LedgerTransactionListView({
                                             >
                                               <FontAwesome
                                                 name="check-circle"
-                                                size={8}
+                                                size={7}
                                                 color={Theme.darkGreen}
                                                 style={
                                                   styles.fiscalCardPillIcon
@@ -1740,7 +1740,7 @@ export function LedgerTransactionListView({
                                             <View style={styles.fiscalCardPill}>
                                               <FontAwesome
                                                 name="check-circle"
-                                                size={8}
+                                                size={7}
                                                 color={Theme.darkGreen}
                                                 style={
                                                   styles.fiscalCardPillIcon
@@ -3100,27 +3100,27 @@ const styles = StyleSheet.create({
   fiscalCardInner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 7,
     paddingHorizontal: 0,
-    gap: 12,
+    gap: 10,
   },
   fiscalCardAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   fiscalCardAvatarImageWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 16,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
   fiscalCardAvatarText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
   },
   fiscalCardBody: {
@@ -3128,27 +3128,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   fiscalCardParty: {
-    fontSize: 12,
-    fontWeight: "300",
+    fontSize: 11,
+    fontWeight: "500",
     fontStyle: "italic",
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
     textTransform: "uppercase",
     color: Theme.textPrimaryDark,
   },
   fiscalCardDate: {
-    fontSize: 8,
-    fontWeight: "500",
+    fontSize: 7,
+    fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 4,
+    letterSpacing: 0.4,
+    marginTop: 3,
   },
   fiscalCardRouteWhy: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "400",
     color: Theme.textSecondary,
     fontStyle: "italic",
-    marginTop: 2,
+    marginTop: 1,
+    lineHeight: 11,
   },
   fiscalCardRight: {
     alignItems: "flex-end",
@@ -3157,27 +3158,30 @@ const styles = StyleSheet.create({
   fiscalCardPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 20,
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 16,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    maxWidth: 148,
   },
   fiscalCardPillIcon: { marginRight: 0 },
   fiscalCardPillText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "600",
     color: Theme.primary,
     fontStyle: "italic",
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
     textTransform: "uppercase",
+    flexShrink: 1,
   },
   fiscalCardAmount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     fontStyle: "italic",
+    letterSpacing: -0.3,
   },
   fiscalCardAmountIn: { color: Theme.darkGreen },
   fiscalCardAmountOut: { color: Theme.teslaRed },

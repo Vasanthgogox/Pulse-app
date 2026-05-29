@@ -1,12 +1,17 @@
-import React from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
-import Pdf from 'react-native-pdf';
-import Theme from '@/constants/Theme';
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { WebView } from "react-native-webview";
+
+import Theme from "@/constants/Theme";
 
 interface PdfViewerProps {
   pdfUri: string | null;
 }
 
+/**
+ * Native PDF preview via WebView (Expo Go–compatible; no react-native-pdf).
+ * Supports file:// URIs from expo-print and https:// URLs.
+ */
 export function PdfViewer({ pdfUri }: PdfViewerProps) {
   if (!pdfUri) {
     return (
@@ -16,21 +21,20 @@ export function PdfViewer({ pdfUri }: PdfViewerProps) {
     );
   }
 
+  const source =
+    pdfUri.trim().startsWith("<") || pdfUri.includes("<!DOCTYPE")
+      ? { html: pdfUri }
+      : { uri: pdfUri };
+
   return (
     <View style={styles.container}>
-      <Pdf
-        source={{ uri: pdfUri, cache: true }}
-        onLoadComplete={(numberOfPages, filePath) => {
-          console.log(`Number of pages: ${numberOfPages}`);
-        }}
-        onPageChanged={(page, numberOfPages) => {
-          console.log(`Current page: ${page}`);
-        }}
-        onError={(error) => {
-          console.error("PDF Viewer Error", error);
-          Alert.alert('Error', 'Could not load PDF document.');
-        }}
+      <WebView
+        originWhitelist={["*"]}
+        source={source}
         style={styles.pdf}
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
+        startInLoadingState
       />
     </View>
   );
@@ -39,20 +43,21 @@ export function PdfViewer({ pdfUri }: PdfViewerProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Theme.surface,
   },
   message: {
     color: Theme.textSecondary,
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   pdf: {
     flex: 1,
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
+    backgroundColor: Theme.surface,
   },
 });

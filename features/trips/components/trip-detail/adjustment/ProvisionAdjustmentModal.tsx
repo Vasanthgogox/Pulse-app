@@ -9,13 +9,22 @@ import {
 import { TripAdjustmentMobileWizard } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentMobileWizard";
 import { TripAdjustmentSuccessView } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentSuccessView";
 import {
+  ASSET_DRIVER_DEDUCTION_PROTOCOL_CHIPS,
+  ASSET_DRIVER_PAYMENT_PROTOCOL_CHIPS,
   FINANCE_PROTOCOL_CHIPS,
+  protocolAssetDriverDeductionAdjustment,
+  protocolAssetDriverPaymentAdjustment,
   protocolClientChipAdjustment,
   protocolSupplierChipAdjustment,
 } from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentFlow.util";
+import {
+  passThroughRecommendationAfterClientSave,
+  type ClientPassThroughRecommendation,
+} from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import {
   COST_REASON_OPTIONS,
+  getAdjustmentReasonOptions,
   REVENUE_REASON_OPTIONS,
   isAdjustmentVoided,
   type TripAdjustmentImpact,
@@ -42,6 +51,9 @@ export type ProvisionAdjustmentPreset = {
   type?: TripAdjustmentType;
   impact?: TripAdjustmentImpact;
   reasonSeed?: string | null;
+  amountSeed?: number | null;
+  /** Client sale line this cost deduction mirrors (audit). */
+  passThroughFromId?: string | null;
 };
 
 export interface ProvisionAdjustmentModalProps {
@@ -73,6 +85,11 @@ export interface ProvisionAdjustmentModalProps {
   costBreakdownLines?: ProvisionCostBreakdownLine[];
   adjustments: TripAdjustment[];
   lineMetaLabel: (adj: TripAdjustment) => string;
+  /** Opens wizard when modal becomes visible (e.g. pass-through from client CN). */
+  launchPreset?: ProvisionAdjustmentPreset | null;
+  onLaunchPresetConsumed?: () => void;
+  /** Open deduction confirmation (panel banner or after client CN save). */
+  onRequestDeduction?: (rec: ClientPassThroughRecommendation) => void;
 }
 
 function applyPreset(
@@ -125,6 +142,8 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
   const laneLocked = wizardPreset?.type != null;
   const impactLocked = wizardPreset?.impact != null;
   const reasonLocked = Boolean(wizardPreset?.reasonSeed?.trim());
+  const reasonBeforeAmount =
+    !reasonLocked && wizardPreset?.type != null && wizardPreset?.impact != null;
 
   const entryContextLabel = useMemo(() => {
     if (!props.tripCode) return props.partyLabel ?? null;
@@ -160,21 +179,53 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
     (preset: ProvisionAdjustmentPreset) => {
       setWizardPreset(preset);
       applyPreset(preset, setType, setImpact, setReason, setOtherReason);
-      setAmountStr("");
+      const seededAmount = Math.max(0, Number(preset.amountSeed ?? 0) || 0);
+      setAmountStr(seededAmount > 0 ? String(seededAmount) : "");
       setPhase("wizard");
     },
     [],
   );
+
+  useEffect(() => {
+    if (!props.visible) return;
+    if (props.launchPreset) return;
+    setPhase("hub");
+    setWizardPreset(null);
+    setSuccessPayload(null);
+    setAmountStr("");
+  }, [props.side, props.visible, props.launchPreset]);
+
+  useEffect(() => {
+    if (!props.visible || !props.launchPreset) return;
+    setSuccessPayload(null);
+    beginWizard(props.launchPreset);
+    props.onLaunchPresetConsumed?.();
+  }, [
+    props.visible,
+    props.launchPreset,
+    props.side,
+    beginWizard,
+    props.onLaunchPresetConsumed,
+  ]);
 
   const handleWizardBack = useCallback(() => {
     setPhase("hub");
     setWizardPreset(null);
   }, []);
 
+  const isClient = side === "client";
+  const isAssetDriverCost = Boolean(props.isAssetExecution && side && !isClient);
+
   const selectedReason = reason === "Other" ? otherReason.trim() || "Other" : reason;
   const amountNum = Math.round(parseFloat(amountStr.replace(/,/g, "")) || 0);
   const canSubmit =
-    amountNum > 0 && (selectedReason.length > 0 || REVENUE_REASON_OPTIONS.length > 0);
+    amountNum > 0 &&
+    (selectedReason.length > 0 ||
+      getAdjustmentReasonOptions({
+        type,
+        isAssetDriverCost,
+        impact,
+      }).length > 0);
 
   const reviewRevisedAmount = useMemo(() => {
     const signed = impact === "plus" ? amountNum : -amountNum;
@@ -204,9 +255,28 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
     props.onClose();
   }, [props]);
 
+  const successPassThrough = useMemo(() => {
+    if (!successPayload || side !== "client") return null;
+    if (successPayload.type !== "revenue" || successPayload.impact !== "minus") return null;
+    return passThroughRecommendationAfterClientSave({
+      amount: successPayload.amount,
+      reason: successPayload.reason,
+      adjustments: props.adjustments,
+      isAssetExecution: Boolean(props.isAssetExecution),
+      driverOrSupplierName: props.supplierName,
+    });
+  }, [successPayload, side, props.adjustments, props.isAssetExecution, props.supplierName]);
+
+  const handleSuccessDeduction = useCallback(() => {
+    if (!successPassThrough || !props.onRequestDeduction) return;
+    props.onRequestDeduction(successPassThrough);
+    setSuccessPayload(null);
+    setPhase("hub");
+    props.onClose();
+  }, [successPassThrough, props]);
+
   if (!props.visible || !side) return null;
 
-  const isClient = side === "client";
   const focusAccent = isClient ? Theme.primary : "#0f766e";
 
   if (phase === "success" && successPayload) {
@@ -223,6 +293,17 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
           amount={successPayload.amount}
           reason={successPayload.reason}
           tripCode={props.tripCode}
+          isAssetDriverCost={isAssetDriverCost}
+          deductionActionLabel={
+            successPassThrough
+              ? `Deduct ₹${successPassThrough.amount.toLocaleString("en-IN")} from ${successPassThrough.targetLabel}`
+              : null
+          }
+          onApplyDeduction={
+            successPassThrough && props.onRequestDeduction
+              ? handleSuccessDeduction
+              : undefined
+          }
           onDone={handleSuccessDone}
         />
       </Modal>
@@ -253,7 +334,9 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
           otherReason={otherReason}
           onOtherReasonChange={setOtherReason}
           reasonLocked={reasonLocked}
-          showProtocolShortcuts={!reasonLocked}
+          reasonBeforeAmount={reasonBeforeAmount}
+          isAssetDriverCost={isAssetDriverCost}
+          showProtocolShortcuts={!reasonLocked && !reasonBeforeAmount}
           canSubmit={canSubmit}
           submitting={submitting}
           onSubmit={() => void handleSubmit()}
@@ -295,7 +378,11 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                   </Text>
                 </View>
                 <Text style={[styles.hubTitle, compact && styles.hubTitleCompact]}>
-                  {isClient ? "Client sale" : "Supplier cost"}
+                  {isClient
+                    ? "Client sale"
+                    : props.isAssetExecution
+                      ? "Driver cost"
+                      : "Supplier cost"}
                 </Text>
                 {entryContextLabel ? (
                   <Text style={[styles.hubSub, compact && styles.hubSubLight]} numberOfLines={2}>
@@ -333,7 +420,9 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
             />
 
             <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
-              New {isClient ? "sale" : "cost"} provision
+              {isAssetDriverCost
+                ? "Driver adjustment"
+                : `New ${isClient ? "sale" : "cost"} provision`}
             </Text>
             <View style={styles.cnDnRow}>
               <Pressable
@@ -342,14 +431,22 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                   beginWizard({
                     type: isClient ? "revenue" : "cost",
                     impact: "minus",
-                    reasonSeed: "Other",
                   })
                 }
               >
-                <Feather name="plus" size={18} color="#4f46e5" />
+                <Feather
+                  name={isAssetDriverCost ? "minus-circle" : "plus"}
+                  size={18}
+                  color="#4f46e5"
+                />
                 <Text style={[styles.cnDnLabel, compact && styles.cnDnLabelLight]}>
-                  Credit (CN)
+                  {isAssetDriverCost ? "Deduct (CN)" : "Credit (CN)"}
                 </Text>
+                {isAssetDriverCost ? (
+                  <Text style={[styles.cnDnHint, compact && styles.cnDnHintLight]}>
+                    Damage · missing · late
+                  </Text>
+                ) : null}
               </Pressable>
               <Pressable
                 style={[styles.cnBtn, compact ? styles.cnBtnDebitLight : styles.cnBtnDebit]}
@@ -357,40 +454,94 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                   beginWizard({
                     type: isClient ? "revenue" : "cost",
                     impact: "plus",
-                    reasonSeed: "Other",
                   })
                 }
               >
-                <Feather name="minus" size={18} color="#e11d48" />
+                <Feather
+                  name={isAssetDriverCost ? "plus-circle" : "minus"}
+                  size={18}
+                  color="#e11d48"
+                />
                 <Text style={[styles.cnDnLabel, compact && styles.cnDnLabelLight]}>
-                  Debit (DN)
+                  {isAssetDriverCost ? "Pay driver (DN)" : "Debit (DN)"}
                 </Text>
+                {isAssetDriverCost ? (
+                  <Text style={[styles.cnDnHint, compact && styles.cnDnHintLight]}>
+                    Tip · bonus · allowance
+                  </Text>
+                ) : null}
               </Pressable>
             </View>
 
-            <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
-              Quick protocol
-            </Text>
-            <View style={styles.chipWrap}>
-              {FINANCE_PROTOCOL_CHIPS.map((chip) => {
-                const preset = isClient
-                  ? protocolClientChipAdjustment(chip)
-                  : protocolSupplierChipAdjustment(chip);
-                return (
-                  <Pressable
-                    key={chip}
-                    style={[styles.chip, compact && styles.chipLight]}
-                    onPress={() => beginWizard(preset)}
-                  >
-                    <Text style={[styles.chipText, compact && styles.chipTextLight]}>
-                      {chip}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {isAssetDriverCost ? (
+              <>
+                <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
+                  Deduct from driver
+                </Text>
+                <View style={styles.chipWrap}>
+                  {ASSET_DRIVER_DEDUCTION_PROTOCOL_CHIPS.map((chip) => (
+                    <Pressable
+                      key={chip.label}
+                      style={[styles.chip, compact && styles.chipLight]}
+                      onPress={() => beginWizard(protocolAssetDriverDeductionAdjustment(chip))}
+                    >
+                      <Text style={[styles.chipText, compact && styles.chipTextLight]}>
+                        {chip.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
+                  Pay driver
+                </Text>
+                <View style={styles.chipWrap}>
+                  {ASSET_DRIVER_PAYMENT_PROTOCOL_CHIPS.map((chip) => (
+                    <Pressable
+                      key={chip.label}
+                      style={[styles.chip, compact && styles.chipLight]}
+                      onPress={() => beginWizard(protocolAssetDriverPaymentAdjustment(chip))}
+                    >
+                      <Text style={[styles.chipText, compact && styles.chipTextLight]}>
+                        {chip.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={[styles.hubFootnote, compact && styles.hubFootnoteLight]}>
+                  CN lowers revised trip cost (deduction from driver). DN adds tip or allowance on
+                  this trip.
+                  {sideAdjustments.length > 0
+                    ? ` ${sideAdjustments.length} line${sideAdjustments.length === 1 ? "" : "s"} already on this trip.`
+                    : ""}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
+                  Quick protocol
+                </Text>
+                <View style={styles.chipWrap}>
+                  {FINANCE_PROTOCOL_CHIPS.map((chip) => {
+                    const preset = isClient
+                      ? protocolClientChipAdjustment(chip)
+                      : protocolSupplierChipAdjustment(chip);
+                    return (
+                      <Pressable
+                        key={chip}
+                        style={[styles.chip, compact && styles.chipLight]}
+                        onPress={() => beginWizard(preset)}
+                      >
+                        <Text style={[styles.chipText, compact && styles.chipTextLight]}>
+                          {chip}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            )}
 
-            {sideAdjustments.length > 0 ? (
+            {!isAssetDriverCost && sideAdjustments.length > 0 ? (
               <Text style={[styles.hubFootnote, compact && styles.hubFootnoteLight]}>
                 {sideAdjustments.length} existing line
                 {sideAdjustments.length === 1 ? "" : "s"} on summary — new lines appear in the
@@ -593,6 +744,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
     color: "#e2e8f0",
+  },
+  cnDnHint: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: "#94a3b8",
+    textAlign: "center",
+    lineHeight: 11,
+    marginTop: 2,
+  },
+  cnDnHintLight: {
+    color: Theme.textMuted,
   },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   chip: {

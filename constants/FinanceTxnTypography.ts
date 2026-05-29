@@ -16,7 +16,7 @@ export const FinanceTxnTypography = {
   },
   /** Party / org name on transaction card. */
   partyTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500" as const,
     fontStyle: "italic" as const,
     color: Theme.textPrimaryDark,
@@ -49,7 +49,7 @@ export const FinanceTxnTypography = {
   },
   /** Cash in / out amount on card. */
   amount: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "400" as const,
     fontStyle: "normal" as const,
   },

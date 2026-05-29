@@ -11,6 +11,11 @@ import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { isAdjustmentVoided } from "@/features/trips/services/tripAdjustments";
+import { ProvisionPassThroughCard } from "@/features/trips/components/trip-detail/adjustment/ProvisionPassThroughCard";
+import {
+  selectClientPassThroughRecommendations,
+  type ClientPassThroughRecommendation,
+} from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 
 export interface TripFinanceAdjustmentsPanelProps {
   adjustments: TripAdjustment[];
@@ -32,6 +37,8 @@ export interface TripFinanceAdjustmentsPanelProps {
   costBreakdownLines?: ProvisionCostBreakdownLine[];
   lineMetaLabel: (adj: TripAdjustment) => string;
   onOpenProvision: (side: "client" | "supplier") => void;
+  onRequestDeduction?: (rec: ClientPassThroughRecommendation) => void;
+  onViewNotePdf?: (adj: TripAdjustment) => void;
   capturePaymentSlot?: ReactNode;
 }
 
@@ -42,6 +49,11 @@ function cnDnLabel(impact: TripAdjustment["impact"]): string {
 function laneLabel(type: TripAdjustment["type"]): string {
   return type === "revenue" ? "Sale" : "Cost";
 }
+
+/** Fixed widths for compact columns; party + reason share remaining space. */
+const COL_LANE = 38;
+const COL_NOTE = 34;
+const COL_AMT = 72;
 
 export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsPanel(
   props: TripFinanceAdjustmentsPanelProps,
@@ -56,6 +68,16 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
   );
 
   const activeCount = rows.filter((a) => !isAdjustmentVoided(a)).length;
+
+  const passThroughRecommendations = useMemo(
+    () =>
+      selectClientPassThroughRecommendations({
+        adjustments: props.adjustments,
+        isAssetExecution: Boolean(props.isAssetExecution),
+        driverOrSupplierName: props.supplierName,
+      }),
+    [props.adjustments, props.isAssetExecution, props.supplierName],
+  );
 
   return (
     <View style={styles.card}>
@@ -92,6 +114,14 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         onSelectSide={props.onOpenProvision}
       />
 
+      {props.onRequestDeduction && passThroughRecommendations.length > 0 ? (
+        <ProvisionPassThroughCard
+          recommendations={passThroughRecommendations}
+          isAssetExecution={Boolean(props.isAssetExecution)}
+          onRequestDeduction={props.onRequestDeduction}
+        />
+      ) : null}
+
       <View style={styles.tableToolbar}>
         <Text style={styles.tableTitle}>Adjustment lines</Text>
         <View style={styles.toolbarActions}>
@@ -117,19 +147,29 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
       <View style={styles.table}>
         <View style={styles.tableHead}>
           <View style={styles.colParty}>
-            <Text style={styles.th}>Party</Text>
+            <Text style={styles.th} numberOfLines={1}>
+              Party
+            </Text>
           </View>
           <View style={styles.colLane}>
-            <Text style={styles.th}>Lane</Text>
+            <Text style={styles.th} numberOfLines={1}>
+              Lane
+            </Text>
           </View>
           <View style={styles.colNote}>
-            <Text style={styles.th}>Note</Text>
+            <Text style={styles.th} numberOfLines={1}>
+              Note
+            </Text>
           </View>
           <View style={styles.colReason}>
-            <Text style={styles.th}>Reason</Text>
+            <Text style={styles.th} numberOfLines={1}>
+              Reason
+            </Text>
           </View>
           <View style={styles.colAmt}>
-            <Text style={[styles.th, styles.thAmtText]}>Amount</Text>
+            <Text style={[styles.th, styles.thAmt]} numberOfLines={1}>
+              Amount
+            </Text>
           </View>
         </View>
 
@@ -161,19 +201,41 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                   </Text>
                 </View>
                 <View style={styles.colLane}>
-                  <Text style={[styles.td, voided && styles.struck]}>{laneLabel(adj.type)}</Text>
+                  <Text style={[styles.td, styles.tdLane, voided && styles.struck]} numberOfLines={1}>
+                    {laneLabel(adj.type)}
+                  </Text>
                 </View>
                 <View style={styles.colNote}>
-                  <Text
+                  <Pressable
                     style={[
-                      styles.td,
-                      styles.tdNote,
-                      adj.impact === "minus" ? styles.noteCn : styles.noteDn,
-                      voided && styles.struck,
+                      styles.notePill,
+                      adj.impact === "minus" ? styles.notePillCn : styles.notePillDn,
+                      voided && styles.notePillVoided,
                     ]}
+                    onPress={() => props.onViewNotePdf?.(adj)}
+                    disabled={!props.onViewNotePdf}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${cnDnLabel(adj.impact)} PDF`}
                   >
-                    {cnDnLabel(adj.impact)}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.notePillText,
+                        adj.impact === "minus" ? styles.noteCn : styles.noteDn,
+                        voided && styles.struck,
+                      ]}
+                    >
+                      {cnDnLabel(adj.impact)}
+                    </Text>
+                    {props.onViewNotePdf ? (
+                      <Feather
+                        name="file-text"
+                        size={9}
+                        color={adj.impact === "minus" ? Theme.primary : "#0f766e"}
+                        style={styles.notePillIcon}
+                      />
+                    ) : null}
+                  </Pressable>
                 </View>
                 <View style={styles.colReason}>
                   <Text style={[styles.td, styles.tdReason, voided && styles.struck]} numberOfLines={2}>
@@ -313,40 +375,44 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
   },
   th: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 0.6,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.4,
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
-  thAmtText: { textAlign: "right", width: "100%" },
+  thAmt: {
+    textAlign: "right",
+    width: "100%",
+  },
   colParty: {
-    flex: 34,
+    flex: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingRight: 4,
+    paddingRight: 6,
   },
   colLane: {
-    flex: 11,
-    minWidth: 0,
+    width: COL_LANE,
+    flexShrink: 0,
     justifyContent: "center",
   },
   colNote: {
-    flex: 9,
-    minWidth: 0,
+    width: COL_NOTE,
+    flexShrink: 0,
+    alignItems: "center",
     justifyContent: "center",
   },
   colReason: {
-    flex: 28,
-    minWidth: 0,
+    flex: 1,
+    minWidth: 48,
     justifyContent: "center",
-    paddingRight: 4,
+    paddingHorizontal: 4,
   },
   colAmt: {
-    flex: 18,
-    minWidth: 56,
+    width: COL_AMT,
+    flexShrink: 0,
     alignItems: "flex-end",
     justifyContent: "center",
   },
@@ -361,7 +427,8 @@ const styles = StyleSheet.create({
   tr: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 9,
+    minHeight: 40,
+    paddingVertical: 8,
     paddingHorizontal: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#e2e8f0",
@@ -369,18 +436,49 @@ const styles = StyleSheet.create({
   },
   trVoided: { opacity: 0.55 },
   td: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     color: "#334155",
   },
+  tdLane: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748b",
+  },
   partyCell: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
     color: "#0f172a",
     minWidth: 0,
   },
-  tdNote: { fontWeight: "600" },
+  notePill: {
+    minWidth: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  notePillIcon: {
+    marginTop: 1,
+  },
+  notePillCn: {
+    backgroundColor: "rgba(79,70,229,0.1)",
+  },
+  notePillDn: {
+    backgroundColor: "rgba(225,29,72,0.08)",
+  },
+  notePillVoided: {
+    opacity: 0.7,
+  },
+  notePillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
   noteCn: { color: "#4f46e5" },
   noteDn: { color: "#e11d48" },
   tdReason: {
@@ -388,12 +486,13 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   tdAmt: {
+    fontSize: 11,
     textAlign: "right",
-    fontWeight: "600",
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
   amtSale: { color: "#059669" },
-  amtCost: { color: "#e11d48" },
+  amtCost: { color: "#dc2626" },
   struck: {
     textDecorationLine: "line-through",
     opacity: 0.75,

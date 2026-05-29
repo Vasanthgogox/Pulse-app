@@ -51,7 +51,6 @@ import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useDriverProfileImagesQuery } from "@/lib/queries";
-import { useOperationalHealthSnapshot } from "@/features/operations/observability";
 import { queryKeys } from "@/lib/queryKeys";
 import { clearAllDomainCacheMetaForOrg } from "@/lib/cache/cacheMetadataStore";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
@@ -127,10 +126,6 @@ export function FinanceScreen() {
   const queryClient = useQueryClient();
   const [entitiesRefreshKey, setEntitiesRefreshKey] = useState(0);
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubTab>("cash");
-  const operationsHealth = useOperationalHealthSnapshot({
-    organizationId: currentOrganization?.id ?? null,
-    enabled: !!currentOrganization?.id,
-  });
   const entities = useFinanceEntities({
     organizationId: currentOrganization?.id ?? null,
     canAccess,
@@ -1387,34 +1382,6 @@ export function FinanceScreen() {
       style={[styles.container, { paddingTop: screenTopPad }]}
       testID="finance-tab-screen"
     >
-      <View
-        style={{
-          marginHorizontal: 12,
-          marginBottom: 8,
-          borderWidth: 1,
-          borderColor: Theme.border,
-          borderRadius: 10,
-          paddingHorizontal: 10,
-          paddingVertical: 7,
-          backgroundColor: Theme.whiteMuted,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: Theme.textSecondary, fontSize: 11, fontWeight: "700" }}>
-          Projection Freshness
-        </Text>
-        <Text style={{ color: Theme.text, fontSize: 11, fontWeight: "700" }}>
-          {operationsHealth.isFetching
-            ? "Syncing"
-            : (operationsHealth.data?.sync.pendingCount ?? 0) > 0
-              ? `Replaying (${operationsHealth.data?.sync.pendingCount ?? 0})`
-              : operationsHealth.data?.operatorAttentionRequired
-                ? "Reconciliation Required"
-                : "Live"}
-        </Text>
-      </View>
       <FinanceSummarySection
         activeTab={financeSubTab}
         onTabPress={handleTabPress}

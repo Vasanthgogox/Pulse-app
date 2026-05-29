@@ -8,13 +8,6 @@ import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
-import {
-  selectAggregateTripBrokerageMargin,
-  selectAggregateTripNetMargin,
-  selectAggregateTripSupplierCost,
-  type TripCommercialAdjustment,
-} from "@/features/finance";
 import {
   useReviewTripFuelEntry,
   useReviewTripOtherExpenseEntry,
@@ -183,7 +176,6 @@ export function TripExpensesScreen({
   onAddFuel,
   onAddToll,
   onAddOtherExpense,
-  commercialAdjustments = [],
   driverCashPayouts = [],
   onRecordDriverPayment,
 }: {
@@ -193,7 +185,6 @@ export function TripExpensesScreen({
   onAddFuel?: () => void;
   onAddToll?: () => void;
   onAddOtherExpense?: () => void;
-  commercialAdjustments?: TripCommercialAdjustment[];
   /** Cash-out rows to driver from Finance ledger (`transactions` on this trip). */
   driverCashPayouts?: TripDriverCashPayoutRow[];
   onRecordDriverPayment?: () => void;
@@ -239,25 +230,6 @@ export function TripExpensesScreen({
 
   const events = summaryQuery.data?.costEvents ?? [];
   const snapshot = summaryQuery.data?.financialSnapshot ?? null;
-  const executionModel = useMemo(() => getTripExecutionModel(trip), [trip]);
-  const isAssetTrip = executionModel === "asset";
-  const commercialSnapshot = useMemo(
-    () => ({
-      supplierCostInr: selectAggregateTripSupplierCost({
-        trip,
-        adjustments: commercialAdjustments,
-      }),
-      brokerageMarginInr: selectAggregateTripBrokerageMargin({
-        trip,
-        adjustments: commercialAdjustments,
-      }),
-      netMarginInr: selectAggregateTripNetMargin({
-        trip,
-        adjustments: commercialAdjustments,
-      }),
-    }),
-    [commercialAdjustments, trip],
-  );
   const actionNeededEvents = useMemo(
     () => events.filter(needsUserAction),
     [events],
@@ -396,27 +368,16 @@ export function TripExpensesScreen({
     return events;
   }, [actionNeededEvents, events, listFilter]);
 
-  const quickActions = (
-    isAssetTrip
-      ? [
-          { key: "fuel", label: "Fuel", icon: "droplet" as const, onPress: onAddFuel },
-          { key: "toll", label: "Toll", icon: "map-pin" as const, onPress: onAddToll },
-          {
-            key: "other",
-            label: "Other",
-            icon: "plus-circle" as const,
-            onPress: onAddOtherExpense,
-          },
-        ]
-      : [
-          {
-            key: "commercial",
-            label: "Adjustment",
-            icon: "sliders" as const,
-            onPress: onAddOtherExpense,
-          },
-        ]
-  ).filter((action) => typeof action.onPress === "function");
+  const quickActions = [
+    { key: "fuel", label: "Fuel", icon: "droplet" as const, onPress: onAddFuel },
+    { key: "toll", label: "Toll", icon: "map-pin" as const, onPress: onAddToll },
+    {
+      key: "other",
+      label: "Other",
+      icon: "plus-circle" as const,
+      onPress: onAddOtherExpense,
+    },
+  ].filter((action) => typeof action.onPress === "function");
 
   const renderExpenseRow = (event: TripCostEvent) => {
     const visual = categoryVisual(event.category);
@@ -498,8 +459,7 @@ export function TripExpensesScreen({
         </Pressable>
       ) : null}
 
-      {isAssetTrip ? (
-        <View style={styles.toolbar}>
+      <View style={styles.toolbar}>
           <View style={styles.summaryCard}>
             <View style={styles.summaryTop}>
               <View style={styles.summaryLeft}>
@@ -641,38 +601,7 @@ export function TripExpensesScreen({
               <Feather name="chevron-right" size={16} color={Theme.textMuted} />
             </Pressable>
           ) : null}
-        </View>
-      ) : (
-        <View style={styles.commercialCard}>
-          <Text style={styles.commercialTitle}>Commercial trip</Text>
-          <View style={styles.commercialMetrics}>
-            <View style={styles.commercialMetric}>
-              <Text style={styles.commercialMetricLabel}>Supplier cost</Text>
-              <Text style={styles.commercialMetricValue}>
-                {inr(commercialSnapshot.supplierCostInr)}
-              </Text>
-            </View>
-            <View style={styles.commercialMetric}>
-              <Text style={styles.commercialMetricLabel}>Brokerage</Text>
-              <Text style={styles.commercialMetricValue}>
-                {inr(commercialSnapshot.brokerageMarginInr)}
-              </Text>
-            </View>
-            <View style={styles.commercialMetric}>
-              <Text style={styles.commercialMetricLabel}>Net margin</Text>
-              <Text style={styles.commercialMetricValue}>
-                {inr(commercialSnapshot.netMarginInr)}
-              </Text>
-            </View>
-          </View>
-          {typeof onAddOtherExpense === "function" ? (
-            <Pressable style={styles.quickActionBtn} onPress={onAddOtherExpense}>
-              <Feather name="sliders" size={15} color={Theme.primary} />
-              <Text style={styles.quickActionBtnText}>Add adjustment</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      )}
+      </View>
 
       <ScrollView
         style={styles.list}
@@ -683,11 +612,11 @@ export function TripExpensesScreen({
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
       >
-        {isAssetTrip && summaryQuery.isLoading ? (
+        {summaryQuery.isLoading ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Loading expenses…</Text>
           </View>
-        ) : isAssetTrip && displayedEvents.length === 0 ? (
+        ) : displayedEvents.length === 0 ? (
           <View style={styles.emptyCard}>
             <Feather
               name={listFilter === "action" ? "check-circle" : "inbox"}
@@ -1015,39 +944,6 @@ const styles = StyleSheet.create({
   },
   segmentCountTextHighlight: {
     color: "#b45309",
-  },
-  commercialCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    padding: 14,
-    gap: 12,
-    marginBottom: 10,
-  },
-  commercialTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-  },
-  commercialMetrics: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  commercialMetric: {
-    flex: 1,
-    gap: 4,
-  },
-  commercialMetricLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  commercialMetricValue: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
   },
   list: { flex: 1 },
   listContent: {

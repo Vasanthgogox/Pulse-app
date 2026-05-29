@@ -155,35 +155,42 @@ export interface ProvisionRevisedPartiesCardProps {
 export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedPartiesCard(
   props: ProvisionRevisedPartiesCardProps,
 ) {
+  const showClient = props.activeSide !== "supplier";
+  const showSupplier = props.activeSide !== "client";
+
   return (
     <View style={[styles.wrap, props.compact && styles.wrapCompact]}>
-      <PartyLaneCard
-        partyName={props.clientName}
-        avatarUrl={props.clientAvatarUrl}
-        avatarSeed={props.clientAvatarSeed}
-        entityType="client"
-        laneLabel="Revised sale"
-        baseAmount={props.sales}
-        revisedAmount={props.adjSales}
-        delta={props.revenueSideDelta}
-        accentColor={Theme.primary}
-        active={props.activeSide === "client"}
-        onPress={props.onSelectSide ? () => props.onSelectSide!("client") : undefined}
-      />
-      <PartyLaneCard
-        partyName={props.supplierName}
-        avatarUrl={props.supplierAvatarUrl}
-        avatarSeed={props.supplierAvatarSeed}
-        entityType={props.costPartyEntityType ?? "supplier"}
-        laneLabel={props.costLaneLabel ?? "Revised cost"}
-        baseAmount={props.cost}
-        revisedAmount={props.adjCost}
-        delta={props.costSideDelta}
-        accentColor="#0f766e"
-        active={props.activeSide === "supplier"}
-        onPress={props.onSelectSide ? () => props.onSelectSide!("supplier") : undefined}
-        breakdownLines={props.costBreakdownLines}
-      />
+      {showClient ? (
+        <PartyLaneCard
+          partyName={props.clientName}
+          avatarUrl={props.clientAvatarUrl}
+          avatarSeed={props.clientAvatarSeed}
+          entityType="client"
+          laneLabel="Revised sale"
+          baseAmount={props.sales}
+          revisedAmount={props.adjSales}
+          delta={props.revenueSideDelta}
+          accentColor={Theme.primary}
+          active={props.activeSide === "client"}
+          onPress={props.onSelectSide ? () => props.onSelectSide!("client") : undefined}
+        />
+      ) : null}
+      {showSupplier ? (
+        <PartyLaneCard
+          partyName={props.supplierName}
+          avatarUrl={props.supplierAvatarUrl}
+          avatarSeed={props.supplierAvatarSeed}
+          entityType={props.costPartyEntityType ?? "supplier"}
+          laneLabel={props.costLaneLabel ?? "Revised cost"}
+          baseAmount={props.cost}
+          revisedAmount={props.adjCost}
+          delta={props.costSideDelta}
+          accentColor="#0f766e"
+          active={props.activeSide === "supplier"}
+          onPress={props.onSelectSide ? () => props.onSelectSide!("supplier") : undefined}
+          breakdownLines={props.costBreakdownLines}
+        />
+      ) : null}
     </View>
   );
 });

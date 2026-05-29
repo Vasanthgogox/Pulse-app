@@ -40,6 +40,24 @@ function isNegativeMoney(row: DrilldownDataRow, column: DrilldownColumnDef): boo
   return typeof raw === "number" && raw < 0;
 }
 
+function isEmptyMetaValue(raw: unknown): boolean {
+  const v = String(raw ?? "").trim();
+  return v === "" || v === "—" || v === "-";
+}
+
+function visibleMetaColumnsForRow(
+  row: DrilldownDataRow,
+  metaColumns: DrilldownColumnDef[],
+  options: { routeInHeader: boolean },
+): DrilldownColumnDef[] {
+  return metaColumns.filter((col) => {
+    if (options.routeInHeader && col.key === "branch") return false;
+    const value = formatCell(row, col);
+    if (col.key === "supplier" && isEmptyMetaValue(value)) return false;
+    return !isEmptyMetaValue(value);
+  });
+}
+
 type Props = {
   view: PulseDrilldownView;
   /** Full filtered set for PDF/Excel export */
@@ -141,42 +159,74 @@ export function PulseDrilldownTable({ view, exportView, reportTitle, companyName
         <Text style={styles.empty}>No rows match current filter context.</Text>
       ) : compact ? (
         <View style={styles.cardList}>
-          {view.rows.map((row, index) => (
-            <View key={`${row.trip}-${index}`} style={styles.mobileCard}>
-              <Text style={styles.mobileTrip} numberOfLines={1}>
-                {String(row.trip)}
-              </Text>
-              <Text style={styles.mobileSubline} numberOfLines={2}>
-                {String(row.date)}
-                {row.route ? ` · ${String(row.route)}` : row.branch ? ` · ${String(row.branch)}` : ""}
-              </Text>
-              {metaColumns.map((col) => (
-                <View key={col.key} style={styles.mobileMetaRow}>
-                  <Text style={styles.mobileMetaLabel}>{col.label}</Text>
-                  <Text style={styles.mobileMetaValue} numberOfLines={2}>
-                    {formatCell(row, col)}
+          {view.rows.map((row, index) => {
+            const routeText =
+              row.route && !isEmptyMetaValue(row.route) ? String(row.route) : null;
+            const rowMeta = visibleMetaColumnsForRow(row, metaColumns, {
+              routeInHeader: Boolean(routeText),
+            });
+            return (
+              <View key={`${row.trip}-${index}`} style={styles.mobileCard}>
+                <View style={styles.mobileCardHeader}>
+                  <Text style={styles.mobileTrip} numberOfLines={1}>
+                    {String(row.trip)}
                   </Text>
+                  <Text style={styles.mobileDate} numberOfLines={1}>
+                    {String(row.date)}
+                  </Text>
+                  {routeText ? (
+                    <Text style={styles.mobileRoute} numberOfLines={2}>
+                      {routeText}
+                    </Text>
+                  ) : null}
                 </View>
-              ))}
-              {moneyColumns.length > 0 ? (
-                <View style={styles.mobileMoneyRow}>
-                  {moneyColumns.map((col) => (
-                    <View key={col.key} style={styles.mobileMoneyCell}>
-                      <Text style={styles.mobileMoneyLabel}>{col.label}</Text>
-                      <Text
+
+                {rowMeta.length > 0 ? (
+                  <View style={styles.mobileMetaGrid}>
+                    {rowMeta.map((col) => (
+                      <View
+                        key={col.key}
                         style={[
-                          styles.mobileMoneyValue,
-                          isNegativeMoney(row, col) ? styles.negative : styles.positive,
+                          styles.mobileMetaCell,
+                          rowMeta.length === 1 && styles.mobileMetaCellFull,
                         ]}
                       >
-                        {formatCell(row, col)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ))}
+                        <Text style={styles.mobileMetaLabel}>{col.label}</Text>
+                        <Text style={styles.mobileMetaValue} numberOfLines={2}>
+                          {formatCell(row, col)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {moneyColumns.length > 0 ? (
+                  <View style={styles.mobileMoneyRow}>
+                    {moneyColumns.map((col, moneyIndex) => (
+                      <View
+                        key={col.key}
+                        style={[
+                          styles.mobileMoneyCell,
+                          moneyIndex > 0 && styles.mobileMoneyCellDivider,
+                        ]}
+                      >
+                        <Text style={styles.mobileMoneyLabel}>{col.label}</Text>
+                        <Text
+                          style={[
+                            styles.mobileMoneyValue,
+                            isNegativeMoney(row, col) ? styles.negative : styles.positive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {formatCell(row, col)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -288,66 +338,97 @@ const styles = StyleSheet.create({
   mobileCard: {
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 10,
-    backgroundColor: Theme.whiteMuted,
-    padding: 10,
-    gap: 5,
+    borderRadius: 14,
+    backgroundColor: "#fff",
+    padding: 12,
+    gap: 10,
+  },
+  mobileCardHeader: {
+    gap: 3,
   },
   mobileTrip: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
-    marginBottom: 2,
+    letterSpacing: -0.2,
   },
-  mobileMetaRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  mobileMetaLabel: {
-    width: 72,
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  mobileMetaValue: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 10,
+  mobileDate: {
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.text,
+    color: Theme.textSecondary,
   },
-  mobileMoneyRow: {
+  mobileRoute: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 14,
+  },
+  mobileMetaGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 4,
-    paddingTop: 8,
+    paddingTop: 2,
+  },
+  mobileMetaCell: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    minWidth: 120,
+    gap: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: Theme.whiteMuted,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  mobileMetaCellFull: {
+    flexBasis: "100%",
+  },
+  mobileMetaLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  mobileMetaValue: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    lineHeight: 15,
+  },
+  mobileMoneyRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    marginTop: 2,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
   mobileMoneyCell: {
-    flexGrow: 1,
-    flexBasis: "30%",
-    minWidth: 72,
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+    paddingHorizontal: 4,
+  },
+  mobileMoneyCellDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: Theme.borderLight,
+    paddingLeft: 10,
+    marginLeft: 6,
   },
   mobileMoneyLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textMuted,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   mobileMoneyValue: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
-    marginTop: 2,
-  },
-  mobileSubline: {
-    fontSize: 9,
-    color: Theme.textMuted,
-    marginBottom: 4,
+    fontVariant: ["tabular-nums"],
   },
   table: {
     gap: 0,
