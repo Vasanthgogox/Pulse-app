@@ -13,6 +13,7 @@ import Typography from "@/constants/Typography";
 
 /** Network growth card — darker indigo than `Theme.primary` for kicker + trend pill. */
 const NETWORK_GROWTH_PURPLE = "#3730A3";
+import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
   ConnectionsView,
@@ -272,6 +273,7 @@ function NetworkScreenInner() {
   } = useProtocolInvitesWithDriverSent(orgId);
   const { inviteActionId, handleInviteAction } =
     useInboundProtocolInviteActions(orgId);
+  const businessConnectionModal = useOptionalBusinessConnectionRequestModal();
 
   const filterTabs = useMemo(
     () => ["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as ConnectionFilterTab[],
@@ -581,6 +583,9 @@ function NetworkScreenInner() {
           onApprove={(item) => void handleInviteAction(item, "approve")}
           onReject={(item) => void handleInviteAction(item, "reject")}
           onCancel={(item) => void handleInviteAction(item, "cancel")}
+          onOpenInviteDetail={(item) =>
+            businessConnectionModal?.presentConnectionInvite(item)
+          }
           onManageAll={() => setViewMode("dashboard")}
           showFooter={false}
         />

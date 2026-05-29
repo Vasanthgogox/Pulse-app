@@ -57,8 +57,6 @@ export function subtitleForRequest(
   const profile = partnerDisplay[partnerId];
   const phone = (profile?.phone ?? '').trim();
   if (phone.length > 0) return phone;
-  const contact = (profile?.contactPerson ?? '').trim();
-  if (contact.length > 0 && contact !== displayName) return contact;
   return undefined;
 }
 
@@ -248,6 +246,8 @@ export function mapPendingInviteItems(
         avatarUri: partnerAvatarUri[partnerOrgId] ?? null,
         logoUrl: partnerProfile?.logoUrl ?? null,
         ownerAvatarUrl: partnerProfile?.ownerAvatarUrl ?? null,
+        contactPerson: partnerProfile?.contactPerson?.trim() || null,
+        senderAvatarSeed: partnerProfile?.avatarSeed?.trim() || null,
         orgAvatarSeed: partnerProfile?.orgAvatarSeed ?? partnerProfile?.avatarSeed ?? null,
         orgCreatedAt: partnerProfile?.orgCreatedAt ?? null,
         tripCount: partnerProfile?.tripCount ?? null,

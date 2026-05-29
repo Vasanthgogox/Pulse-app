@@ -36,6 +36,9 @@ export type InboundProtocolInviteItem = {
   /** organizations.logo_url when available (hero uses logo before owner photo). */
   logoUrl?: string | null;
   ownerAvatarUrl?: string | null;
+  /** Partner org owner display name (who sent the invite). */
+  contactPerson?: string | null;
+  senderAvatarSeed?: string | null;
   orgAvatarSeed?: string | null;
   orgCreatedAt?: string | null;
   tripCount?: number | null;

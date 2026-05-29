@@ -10,9 +10,16 @@ import {
   formatConnectionTripsValue,
   type ConnectionOfferTile,
 } from '@/features/network/utils/businessConnectionOffer.util';
-import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
+import {
+  getFleetAvatarUriForOrg,
+  resolveOrgAvatarUri,
+} from '@/features/vehicles/utils/fleetAvatar.util';
 import type { InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
-import { partyInitialsFromName, partyAvatarBackgroundColor } from '@/lib/partyAvatarDisplay';
+import {
+  partyInitialsFromName,
+  partyAvatarBackgroundColor,
+  resolvePartyDisplayUri,
+} from '@/lib/partyAvatarDisplay';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowRight,
@@ -78,9 +85,11 @@ export function BusinessConnectionRequestModal({
   const insets = useSafeAreaInsets();
 
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
+  const [senderAvatarLoadFailed, setSenderAvatarLoadFailed] = useState(false);
 
   useEffect(() => {
     setLogoLoadFailed(false);
+    setSenderAvatarLoadFailed(false);
   }, [invite.id]);
 
   const orgLogoUri = useMemo(
@@ -98,6 +107,32 @@ export function BusinessConnectionRequestModal({
   const orgName = invite.name?.trim() || 'Organization';
   const orgInitials = partyInitialsFromName(orgName);
   const orgInitialsBg = partyAvatarBackgroundColor(invite.partnerOrgId);
+  const senderName = invite.contactPerson?.trim() || '';
+  const senderPhone = invite.subtitle?.trim() || '';
+  const senderLabel = senderName || 'Team member';
+  const senderInitials = partyInitialsFromName(senderLabel);
+  const senderInitialsBg = partyAvatarBackgroundColor(
+    invite.partnerOwnerId ?? invite.partnerOrgId,
+  );
+  const senderAvatarUri = useMemo(
+    () =>
+      resolvePartyDisplayUri({
+        avatarUrl: invite.ownerAvatarUrl ?? null,
+        avatarSeed: invite.senderAvatarSeed ?? null,
+      }) ??
+      getFleetAvatarUriForOrg(
+        invite.partnerOwnerId ?? invite.partnerOrgId,
+        senderLabel,
+      ),
+    [
+      invite.ownerAvatarUrl,
+      invite.partnerOrgId,
+      invite.partnerOwnerId,
+      invite.senderAvatarSeed,
+      senderLabel,
+    ],
+  );
+  const showSenderRow = senderName.length > 0 || senderPhone.length > 0;
   const yourRoleTiles = useMemo(() => buildYourRoleTiles(invite.type), [invite.type]);
   const inviteDateLabel = useMemo(
     () => formatConnectionInviteDate(invite.createdAt),
@@ -162,38 +197,75 @@ export function BusinessConnectionRequestModal({
             </View>
 
             <View style={styles.heroBody}>
-              <View style={styles.heroLogoWrap}>
-                {!logoLoadFailed ? (
-                  <Image
-                    source={{ uri: orgLogoUri }}
-                    style={styles.heroLogo}
-                    resizeMode="cover"
-                    onError={() => setLogoLoadFailed(true)}
-                  />
-                ) : (
-                  <View style={[styles.heroLogoFallback, { backgroundColor: orgInitialsBg }]}>
-                    <Text style={styles.heroLogoInitials}>{orgInitials}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.heroTextBlock}>
-                <Text style={styles.heroTitle} numberOfLines={2}>
-                  Connect with {orgName}
-                </Text>
-                <View style={styles.heroPillRow}>
-                  <View style={styles.heroPill}>
-                    <Text style={styles.heroPillText}>{yourRolePill}</Text>
-                  </View>
-                  {inviteDateLabel ? (
-                    <Text style={styles.heroDate}>Sent {inviteDateLabel}</Text>
-                  ) : null}
+              <View style={styles.heroOrgRow}>
+                <View style={styles.heroLogoWrap}>
+                  {!logoLoadFailed ? (
+                    <Image
+                      source={{ uri: orgLogoUri }}
+                      style={styles.heroLogo}
+                      resizeMode="cover"
+                      onError={() => setLogoLoadFailed(true)}
+                    />
+                  ) : (
+                    <View style={[styles.heroLogoFallback, { backgroundColor: orgInitialsBg }]}>
+                      <Text style={styles.heroLogoInitials}>{orgInitials}</Text>
+                    </View>
+                  )}
                 </View>
-                {invite.subtitle ? (
-                  <Text style={styles.heroSubtitle} numberOfLines={1}>
-                    {invite.subtitle}
+                <View style={styles.heroTextBlock}>
+                  <Text style={styles.heroTitle} numberOfLines={1}>
+                    {orgName}
                   </Text>
-                ) : null}
+                  <Text style={styles.heroOrgKicker} numberOfLines={1}>
+                    Business connection invite
+                  </Text>
+                  <View style={styles.heroPillRow}>
+                    <View style={styles.heroPill}>
+                      <Text style={styles.heroPillText}>{yourRolePill}</Text>
+                    </View>
+                    {inviteDateLabel ? (
+                      <Text style={styles.heroDate}>Sent {inviteDateLabel}</Text>
+                    ) : null}
+                  </View>
+                </View>
               </View>
+
+              {showSenderRow ? (
+                <View style={styles.heroSenderRow}>
+                  <View style={styles.heroSenderAvatarWrap}>
+                    {!senderAvatarLoadFailed ? (
+                      <Image
+                        source={{ uri: senderAvatarUri }}
+                        style={styles.heroSenderAvatar}
+                        resizeMode="cover"
+                        onError={() => setSenderAvatarLoadFailed(true)}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.heroSenderAvatarFallback,
+                          { backgroundColor: senderInitialsBg },
+                        ]}
+                      >
+                        <Text style={styles.heroSenderInitials}>{senderInitials}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.heroSenderText}>
+                    <View style={styles.heroSenderHeadRow}>
+                      <Text style={styles.heroSenderName} numberOfLines={1}>
+                        {senderLabel}
+                      </Text>
+                      <Text style={styles.heroSenderKicker}>Invited by</Text>
+                    </View>
+                    {senderPhone ? (
+                      <Text style={styles.heroSenderMeta} numberOfLines={1}>
+                        {senderPhone}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
             </View>
           </LinearGradient>
 
@@ -244,14 +316,22 @@ export function BusinessConnectionRequestModal({
                     yourRoleTiles.length === 1 ? styles.payTileFull : undefined,
                   ]}
                 >
-                  <View style={[styles.payTileIconWrap, i === 0 && styles.payTileIconPrimary]}>
-                    {offerIcon(tile.icon, 16)}
+                  <View style={styles.payTileRow}>
+                    <View style={[styles.payTileIconWrap, i === 0 && styles.payTileIconPrimary]}>
+                      {offerIcon(tile.icon, 14)}
+                    </View>
+                    <View style={styles.payTileCopy}>
+                      <Text style={styles.payTileAmount} numberOfLines={1}>
+                        {tile.value}
+                      </Text>
+                      <Text style={styles.payTileSep} accessibilityElementsHidden>
+                        ·
+                      </Text>
+                      <Text style={styles.payTileLabel} numberOfLines={1}>
+                        {tile.label}
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.payTileAmount}>{tile.value}</Text>
-                  <Text style={styles.payTileLabel}>{tile.label}</Text>
-                  <Text style={styles.payTileHint} numberOfLines={2}>
-                    {tile.hint}
-                  </Text>
                 </View>
               ))}
             </View>
@@ -412,9 +492,83 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.14)',
   },
   heroBody: {
+    gap: 8,
+  },
+  heroOrgRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    minWidth: 0,
+  },
+  heroSenderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'stretch',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  heroSenderAvatarWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.85)',
+    flexShrink: 0,
+  },
+  heroSenderAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  heroSenderAvatarFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroSenderInitials: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  heroSenderText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  heroSenderHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    width: '100%',
+  },
+  heroSenderKicker: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: 'rgba(237, 242, 255, 0.95)',
+    flexShrink: 0,
+  },
+  heroSenderName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: 17,
+  },
+  heroSenderMeta: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'rgba(237, 242, 255, 0.92)',
+    lineHeight: 14,
   },
   heroLogoWrap: {
     width: 68,
@@ -446,15 +600,21 @@ const styles = StyleSheet.create({
   },
   heroTextBlock: {
     flex: 1,
-    gap: 6,
+    gap: 4,
     minWidth: 0,
   },
   heroTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -0.5,
-    lineHeight: 26,
+    lineHeight: 24,
+  },
+  heroOrgKicker: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: LAVENDER,
+    lineHeight: 14,
   },
   heroPillRow: {
     flexDirection: 'row',
@@ -474,11 +634,6 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   heroDate: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: LAVENDER,
-  },
-  heroSubtitle: {
     fontSize: 11,
     fontWeight: '500',
     color: LAVENDER,
@@ -566,13 +721,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   payTile: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 10,
-    gap: 3,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     minWidth: 130,
     width: '48%',
     flexGrow: 1,
+    justifyContent: 'center',
+  },
+  payTileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  payTileCopy: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minWidth: 0,
   },
   payTileFull: {
     width: '100%',
@@ -586,36 +754,39 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   payTileIconWrap: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
     backgroundColor: Theme.surface,
+    flexShrink: 0,
   },
   payTileIconPrimary: {
     backgroundColor: '#fff',
   },
   payTileAmount: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: -0.4,
-    lineHeight: 24,
+    letterSpacing: -0.3,
+    lineHeight: 18,
     color: Theme.textPrimaryDark,
+    flexShrink: 0,
+  },
+  payTileSep: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    lineHeight: 18,
   },
   payTileLabel: {
-    fontSize: 10,
+    flex: 1,
+    fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: PURPLE,
-  },
-  payTileHint: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '400',
-    color: Theme.textSecondary,
+    lineHeight: 12,
   },
   nextCard: {
     borderRadius: 12,

@@ -21,6 +21,8 @@ type BusinessConnectionRequestModalContextValue = {
   pendingConnectionCount: number;
   pendingConnectionInvites: InboundProtocolInviteItem[];
   presentPendingConnectionRequest: () => void;
+  /** Opens the full invite sheet for a specific connection request (e.g. list avatar tap). */
+  presentConnectionInvite: (item: InboundProtocolInviteItem) => void;
   refreshConnectionRequests: () => Promise<void>;
 };
 
@@ -55,12 +57,14 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
   const [queueViewIndex, setQueueViewIndex] = useState(0);
+  const [focusedInviteId, setFocusedInviteId] = useState<string | null>(null);
   const [declineTarget, setDeclineTarget] = useState<InboundProtocolInviteItem | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const clearSessionSnooze = useCallback(() => {
     setSessionSnoozedIds(new Set());
     setQueueViewIndex(0);
+    setFocusedInviteId(null);
   }, []);
 
   const refreshConnectionRequests = useCallback(async () => {
@@ -96,12 +100,37 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     }
   }, [queueViewIndex, visiblePendingInvites.length]);
 
-  const activeInvite =
-    visiblePendingInvites.length > 0
-      ? visiblePendingInvites[queueViewIndex % visiblePendingInvites.length]
-      : null;
+  const activeInvite = useMemo(() => {
+    if (focusedInviteId) {
+      return (
+        pendingConnectionInvites.find((invite) => invite.id === focusedInviteId) ?? null
+      );
+    }
+    if (visiblePendingInvites.length === 0) return null;
+    return visiblePendingInvites[queueViewIndex % visiblePendingInvites.length];
+  }, [
+    focusedInviteId,
+    pendingConnectionInvites,
+    visiblePendingInvites,
+    queueViewIndex,
+  ]);
 
   const showModal = !!activeInvite && !declineTarget;
+
+  const presentConnectionInvite = useCallback(
+    (item: InboundProtocolInviteItem) => {
+      if (!isConnectionProtocolInvite(item)) return;
+      setSessionSnoozedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+      setFocusedInviteId(item.id);
+      const idx = pendingConnectionInvites.findIndex((invite) => invite.id === item.id);
+      if (idx >= 0) setQueueViewIndex(idx);
+    },
+    [pendingConnectionInvites],
+  );
 
   const presentPendingConnectionRequest = useCallback(() => {
     clearSessionSnooze();
@@ -110,6 +139,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
   const handleLater = useCallback(() => {
     if (!activeInvite) return;
+    setFocusedInviteId(null);
     setSessionSnoozedIds((prev) => new Set(prev).add(activeInvite.id));
   }, [activeInvite]);
 
@@ -126,6 +156,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
       next.delete(activeInvite.id);
       return next;
     });
+    setFocusedInviteId(null);
     setQueueViewIndex(0);
   }, [activeInvite, handleInviteAction]);
 
@@ -133,6 +164,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     async (item: InboundProtocolInviteItem) => {
       await handleInviteAction(item, 'reject');
       setDeclineTarget(null);
+      setFocusedInviteId(null);
       setSessionSnoozedIds((prev) => {
         const next = new Set(prev);
         next.delete(item.id);
@@ -160,19 +192,22 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
       pendingConnectionCount: pendingConnectionInvites.length,
       pendingConnectionInvites,
       presentPendingConnectionRequest,
+      presentConnectionInvite,
       refreshConnectionRequests,
     }),
     [
       pendingConnectionInvites,
       presentPendingConnectionRequest,
+      presentConnectionInvite,
       refreshConnectionRequests,
     ],
   );
 
   const queueIndex =
     activeInvite != null
-      ? visiblePendingInvites.findIndex((i) => i.id === activeInvite.id) + 1 || 1
+      ? pendingConnectionInvites.findIndex((i) => i.id === activeInvite.id) + 1 || 1
       : 1;
+  const queueTotal = pendingConnectionInvites.length;
 
   return (
     <BusinessConnectionRequestModalContext.Provider value={value}>
@@ -184,12 +219,14 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
           visible={showModal}
           invite={activeInvite}
           queueIndex={queueIndex}
-          queueTotal={visiblePendingInvites.length}
+          queueTotal={queueTotal}
           busy={inviteActionId === activeInvite.id}
           onAccept={() => void handleAccept()}
           onDecline={handleDeclinePress}
           onLater={handleLater}
-          onNext={visiblePendingInvites.length > 1 ? handleNext : undefined}
+          onNext={
+            !focusedInviteId && visiblePendingInvites.length > 1 ? handleNext : undefined
+          }
         />
       ) : null}
 

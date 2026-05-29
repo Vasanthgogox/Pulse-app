@@ -43,6 +43,8 @@ export type InboundProtocolPanelProps = {
   onApprove: (item: InboundProtocolInviteItem) => void;
   onReject: (item: InboundProtocolInviteItem) => void;
   onCancel: (item: InboundProtocolInviteItem) => void;
+  /** Opens the full business-connection invite sheet (received connection rows). */
+  onOpenInviteDetail?: (item: InboundProtocolInviteItem) => void;
   onManageAll: () => void;
   layout?: InboundProtocolPanelLayout;
   topInset?: number;
@@ -85,8 +87,14 @@ function EmptyProtocolState() {
   );
 }
 
-function InviteAvatar({ item }: { item: InboundProtocolInviteItem }) {
-  return (
+function InviteAvatar({
+  item,
+  onPress,
+}: {
+  item: InboundProtocolInviteItem;
+  onPress?: () => void;
+}) {
+  const avatar = (
     <PartyAvatar
       name={item.name}
       initialsColorSeed={item.partnerOrgId}
@@ -95,6 +103,20 @@ function InviteAvatar({ item }: { item: InboundProtocolInviteItem }) {
       size={44}
       style={styles.inviteAvatarOnly}
     />
+  );
+
+  if (!onPress) return avatar;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={styles.inviteAvatarPressable}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={`View invitation from ${item.name}`}
+    >
+      {avatar}
+    </Pressable>
   );
 }
 
@@ -105,6 +127,7 @@ function InviteCard({
   onApprove,
   onReject,
   onCancel,
+  onOpenInviteDetail,
 }: {
   item: InboundProtocolInviteItem;
   tab: "received" | "sent";
@@ -112,15 +135,23 @@ function InviteCard({
   onApprove: (item: InboundProtocolInviteItem) => void;
   onReject: (item: InboundProtocolInviteItem) => void;
   onCancel: (item: InboundProtocolInviteItem) => void;
+  onOpenInviteDetail?: (item: InboundProtocolInviteItem) => void;
 }) {
   const busy =
     busyId === item.id ||
     (item.linkedRequestIds?.includes(busyId ?? "") ?? false);
+  const canOpenDetail =
+    tab === "received" &&
+    item.kind !== "driver" &&
+    Boolean(onOpenInviteDetail);
 
   return (
     <View style={[styles.inviteCard, tab === "sent" && styles.inviteCardSent]}>
       <View style={styles.inviteCardTop}>
-        <InviteAvatar item={item} />
+        <InviteAvatar
+          item={item}
+          onPress={canOpenDetail ? () => onOpenInviteDetail?.(item) : undefined}
+        />
         <View style={styles.inviteTextCol}>
           <Text style={styles.inviteName} numberOfLines={1}>
             {item.name}
@@ -189,6 +220,7 @@ export function InboundProtocolPanel({
   onApprove,
   onReject,
   onCancel,
+  onOpenInviteDetail,
   onManageAll,
   layout = "popover",
   topInset = 0,
@@ -281,6 +313,7 @@ export function InboundProtocolPanel({
                 onApprove={onApprove}
                 onReject={onReject}
                 onCancel={onCancel}
+                onOpenInviteDetail={onOpenInviteDetail}
               />
             ))
           )}
@@ -523,6 +556,10 @@ const styles = StyleSheet.create({
   },
   inviteAvatarOnly: {
     flexShrink: 0,
+  },
+  inviteAvatarPressable: {
+    flexShrink: 0,
+    borderRadius: 22,
   },
   inviteTextCol: {
     flex: 1,

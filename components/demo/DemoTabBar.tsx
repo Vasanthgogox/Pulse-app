@@ -11,6 +11,7 @@ import {
     getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext";
 import {
     useDemoTabBarScrollHideVersion,
     useDemoTabBarVisibilityProgressOptional,
@@ -263,6 +264,7 @@ export function DemoTabBar({
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [notifActionId, setNotifActionId] = useState<string | null>(null);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
+  const businessConnectionModal = useOptionalBusinessConnectionRequestModal();
   const notificationsPopoverRootRef = useRef<View | null>(null);
   const invitationsPopoverRootRef = useRef<View | null>(null);
   const mobileNetworkAnchorRef = useRef<View | null>(null);
@@ -771,6 +773,10 @@ export function DemoTabBar({
                     onApprove={(item) => void handleInviteAction(item, "approve")}
                     onReject={(item) => void handleInviteAction(item, "reject")}
                     onCancel={(item) => void handleInviteAction(item, "cancel")}
+                    onOpenInviteDetail={(item) => {
+                      setShowInvitations(false);
+                      businessConnectionModal?.presentConnectionInvite(item);
+                    }}
                     onManageAll={() => {
                       setShowInvitations(false);
                       router.push({
