@@ -21,7 +21,7 @@ import { SmartInputTrigger } from './SmartInputTrigger';
 import { formatDisplayValue, toRawString, parseRawToNumber } from './keypad';
 import { validateEntry, resolveValidationRule } from './validation';
 import { triggerFeedback } from './feedback';
-import type { TriggerVariant, TriggerValueColor } from './SmartInputTrigger';
+import type { TriggerDensity, TriggerVariant, TriggerValueColor } from './SmartInputTrigger';
 import type { ValidationRule, SmartInputType } from './types';
 
 export type { SmartInputType };
@@ -51,6 +51,12 @@ export interface SmartInputProps {
 
   /** Trigger layout variant */
   variant?: TriggerVariant;
+
+  /** Compact trigger typography for dense operational forms */
+  density?: TriggerDensity;
+
+  /** Hero trigger accent (currency prefix colour). */
+  heroAccentColor?: string;
 
   /** Placeholder shown when value is empty */
   placeholder?: string;
@@ -93,6 +99,7 @@ export function SmartInput({
   context,
   partyPreview,
   variant = 'row',
+  density = 'default',
   placeholder,
   prefix,
   suffix,
@@ -101,6 +108,7 @@ export function SmartInput({
   maxDecimalPlaces,
   validation,
   valueColor = 'default',
+  heroAccentColor,
   disabled = false,
   required = false,
   errorMessage,
@@ -169,6 +177,8 @@ export function SmartInput({
         suffix={triggerSuffix}
         valueColor={resolvedColor}
         variant={variant}
+        density={density}
+        heroAccentColor={heroAccentColor}
         required={required}
         errorMessage={errorMessage}
       />

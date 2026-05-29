@@ -68,10 +68,15 @@ export const SignUpPhotoPickerStep = memo(function SignUpPhotoPickerStep({
       theme={theme}
     >
       <View style={styles.previewWrap}>
-        {previewImage ? (
+        {previewUri ? (
+          <Image
+            key={previewUri}
+            source={{ uri: previewUri }}
+            style={styles.previewImage}
+            resizeMode="cover"
+          />
+        ) : previewImage ? (
           <Image source={previewImage} style={styles.previewImage} resizeMode="cover" />
-        ) : previewUri ? (
-          <Image source={{ uri: previewUri }} style={styles.previewImage} resizeMode="cover" />
         ) : (
           previewFallback ?? <View style={styles.previewPlaceholder} />
         )}
@@ -146,10 +151,15 @@ export const SignUpPhotoPickerBody = memo(function SignUpPhotoPickerBody({
   return (
     <View style={styles.body}>
       <View style={styles.previewWrap}>
-        {previewImage ? (
+        {previewUri ? (
+          <Image
+            key={previewUri}
+            source={{ uri: previewUri }}
+            style={styles.previewImage}
+            resizeMode="cover"
+          />
+        ) : previewImage ? (
           <Image source={previewImage} style={styles.previewImage} resizeMode="cover" />
-        ) : previewUri ? (
-          <Image source={{ uri: previewUri }} style={styles.previewImage} resizeMode="cover" />
         ) : (
           previewFallback ?? <View style={styles.previewPlaceholder} />
         )}

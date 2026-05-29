@@ -39,7 +39,7 @@ function ChatBubbleSvg({
    *  so the SVG bubble flips to a white / pale-indigo palette to read
    *  on the deep purple background. Inactive keeps the muted slate
    *  tones used by the rest of the bar. */
-  const accent = active ? "#FFFFFF" : Theme.actionAccent;
+  const accent = active ? "#FFFFFF" : Theme.pulseIndigo;
   const accentDeep = active ? "#C7D2FE" : Theme.actionAccentBorder;
   const highlight = active ? "#FFFFFF" : "#A5B4FC";
   const face = active ? "#FFFFFF" : "#EEF2FF";

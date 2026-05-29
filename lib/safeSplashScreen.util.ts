@@ -6,6 +6,9 @@ type SplashScreenModule = typeof import('expo-splash-screen');
 /** null = not yet checked; false = skip native splash for this session. */
 let nativeSplashEnabled: boolean | null = null;
 
+/** Resolves true only when preventAutoHideAsync succeeded for this session. */
+let preventAutoHidePromise: Promise<boolean> | null = null;
+
 const SPLASH_UNAVAILABLE_RE = /No native splash screen registered/i;
 
 function shouldUseNativeSplash(): boolean {
@@ -43,29 +46,55 @@ function loadSplashScreenModule(): SplashScreenModule | null {
   }
 }
 
-async function runSplashCall(
-  method: 'preventAutoHideAsync' | 'hideAsync',
-): Promise<void> {
-  if (!shouldUseNativeSplash()) return;
+/**
+ * Keeps the native splash visible until hide succeeds.
+ * Must complete before hideAsync — iOS rejects hide when no splash is registered.
+ */
+async function ensurePreventAutoHideAsync(): Promise<boolean> {
+  if (!shouldUseNativeSplash()) return false;
+  if (preventAutoHidePromise) return preventAutoHidePromise;
 
-  const SplashScreen = loadSplashScreenModule();
-  if (!SplashScreen) return;
+  preventAutoHidePromise = (async () => {
+    const SplashScreen = loadSplashScreenModule();
+    if (!SplashScreen) return false;
 
-  try {
-    await SplashScreen[method]();
-  } catch (error) {
-    if (isSplashUnavailableError(error)) {
-      markNativeSplashUnavailable();
+    try {
+      await SplashScreen.preventAutoHideAsync();
+      return true;
+    } catch (error) {
+      if (isSplashUnavailableError(error)) {
+        markNativeSplashUnavailable();
+      }
+      return false;
     }
-  }
+  })();
+
+  return preventAutoHidePromise;
 }
 
 /** Keeps the native splash visible until {@link safeHideSplashAsync}. No-op in Expo Go / web. */
 export function safePreventAutoHideAsync(): Promise<void> {
-  return runSplashCall('preventAutoHideAsync');
+  return ensurePreventAutoHideAsync()
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
-/** Hides the native splash once boot UI is ready. No-op in Expo Go / web. */
+/** Hides the native splash once boot UI is ready. No-op when prevent failed or in Expo Go / web. */
 export function safeHideSplashAsync(): Promise<void> {
-  return runSplashCall('hideAsync');
+  return ensurePreventAutoHideAsync()
+    .then(async (preventOk) => {
+      if (!preventOk || !shouldUseNativeSplash()) return;
+
+      const SplashScreen = loadSplashScreenModule();
+      if (!SplashScreen) return;
+
+      try {
+        await SplashScreen.hideAsync();
+      } catch (error) {
+        if (isSplashUnavailableError(error)) {
+          markNativeSplashUnavailable();
+        }
+      }
+    })
+    .catch(() => undefined);
 }

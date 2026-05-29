@@ -9,8 +9,13 @@ import type {
   SaveTollEntryInput,
   TripTollEntry,
 } from "../types";
-import { createVehicleOperationLedgerDraftFromSource } from "../vehicle/vehicleOperationsLedger.service";
+import {
+  createVehicleOperationLedgerDraftFromSource,
+  syncVehicleOperationLedgerDraftAmountFromSource,
+} from "../vehicle/vehicleOperationsLedger.service";
 import { appendTripOperationalTimelineEventSafe } from "../timeline/timelineEvents.service";
+import { buildExpenseEditApprovalReset } from "../shared/expenseEntryEdit.util";
+import type { UpdateTollEntryInput } from "../types";
 
 function toNullableText(value: string | null | undefined): string | null {
   const v = (value ?? "").trim();
@@ -28,6 +33,63 @@ export async function getTripTollEntries(
     .order("entered_at", { ascending: false });
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as TripTollEntry[] };
+}
+
+export async function getTripTollEntryById(
+  entryId: string,
+): Promise<{ error: Error | null; entry: TripTollEntry | null }> {
+  const { data, error } = await supabase()
+    .from("trip_toll_entries")
+    .select("*")
+    .eq("id", entryId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), entry: null };
+  if (!data) return { error: new Error("Toll entry not found"), entry: null };
+  return { error: null, entry: data as TripTollEntry };
+}
+
+export async function updateTripTollEntry(
+  input: UpdateTollEntryInput & { receiptStoragePath?: string | null },
+): Promise<{ error: Error | null; entry: TripTollEntry | null }> {
+  const existing = await getTripTollEntryById(input.entryId);
+  if (existing.error || !existing.entry) {
+    return { error: existing.error ?? new Error("Toll entry not found"), entry: null };
+  }
+  if (String(existing.entry.posting_state ?? "") === "posted") {
+    return { error: new Error("Posted toll entries cannot be edited"), entry: null };
+  }
+  const paymentOwner: OperationalPaymentOwner =
+    input.paymentOwner ?? existing.entry.payment_owner ?? "unknown";
+  const paymentMode: OperationalPaymentMode =
+    input.paymentMode ?? existing.entry.payment_mode ?? "unknown";
+  const payload: Record<string, unknown> = {
+    amount_inr: Math.max(0, Number(input.amountInr) || 0),
+    plaza_name: toNullableText(input.plazaName),
+    notes: toNullableText(input.notes),
+    is_estimated: input.isEstimated === true,
+    payment_owner: paymentOwner,
+    payment_mode: paymentMode,
+    ...buildExpenseEditApprovalReset(paymentOwner),
+  };
+  if (input.receiptStoragePath !== undefined) {
+    payload.receipt_storage_path = toNullableText(input.receiptStoragePath);
+  }
+  const { data, error } = await supabase()
+    .from("trip_toll_entries")
+    .update(payload)
+    .eq("id", input.entryId)
+    .select("*")
+    .single();
+  if (error) return { error: new Error(error.message), entry: null };
+  const sync = await syncVehicleOperationLedgerDraftAmountFromSource({
+    sourceType: "toll",
+    sourceId: input.entryId,
+    tripId: String(data.trip_id),
+    amount: Number(data.amount_inr ?? 0),
+  });
+  if (sync.error) return { error: sync.error, entry: null };
+  return { error: null, entry: data as TripTollEntry };
 }
 
 export async function createTripTollEntry(

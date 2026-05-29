@@ -106,6 +106,17 @@ config.resolver = {
         type: 'sourceFile',
       };
     }
+    // react-native-webview ships both `src/` (package "react-native" field) and
+    // compiled `lib/` — resolving both registers RNCWebView twice on native.
+    if (platform !== 'web' && moduleName === 'react-native-webview') {
+      return {
+        filePath: path.resolve(
+          projectRoot,
+          'node_modules/react-native-webview/index.js',
+        ),
+        type: 'sourceFile',
+      };
+    }
     // Native-only `framer-motion` stub — keeps moti from dragging the DOM-only
     // framer-motion bundle into iOS/Android builds. Web falls through.
     // `platform` is occasionally undefined during Metro graph walks — treat as native.

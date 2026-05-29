@@ -15,14 +15,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import Feather from "@expo/vector-icons/Feather";
-import { WebView } from "react-native-webview";
+
+import { NativeHtmlWebView } from "@/components/NativeHtmlWebView";
 
 import Theme from "@/constants/Theme";
 import {
   generateProvisionNotePdfUri,
   type ProvisionNotePdfContext,
 } from "@/features/trips/components/trip-detail/adjustment/tripProvisionNotePdf.util";
-import type { TripAdjustmentImpact } from "@/features/trips/services/tripAdjustments";
+import type { TripAdjustment, TripAdjustmentImpact } from "@/features/trips/services/tripAdjustments";
+import { isAdjustmentVoided } from "@/features/trips/services/tripAdjustments";
 
 function noteTitle(impact: TripAdjustmentImpact): string {
   return impact === "minus" ? "Credit Note" : "Debit Note";
@@ -45,21 +47,14 @@ function ProvisionNoteHtmlPreview({
     );
   }
 
-  return (
-    <WebView
-      originWhitelist={["*"]}
-      source={{ html }}
-      style={styles.webView}
-      showsVerticalScrollIndicator
-      nestedScrollEnabled
-    />
-  );
+  return <NativeHtmlWebView html={html} style={styles.webView} />;
 }
 
 export type ProvisionNotePdfModalProps = {
   visible: boolean;
   context: ProvisionNotePdfContext | null;
   onClose: () => void;
+  onEdit?: (adjustment: TripAdjustment) => void;
 };
 
 export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
@@ -148,6 +143,9 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
 
   const title = noteTitle(props.context.adjustment.impact);
   const kind = props.context.adjustment.impact === "minus" ? "CN" : "DN";
+  const canEdit =
+    typeof props.onEdit === "function" &&
+    !isAdjustmentVoided(props.context.adjustment);
 
   return (
     <Modal
@@ -195,12 +193,22 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
         </View>
 
         <View style={styles.toolbar}>
+          {canEdit ? (
+            <TouchableOpacity
+              style={styles.toolBtn}
+              onPress={() => props.onEdit?.(props.context!.adjustment)}
+              activeOpacity={0.88}
+            >
+              <Feather name="edit-2" size={16} color={Theme.primary} />
+              <Text style={styles.toolBtnText}>Edit {kind}</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.toolBtn} onPress={() => void handlePrint()} activeOpacity={0.88}>
             <Feather name="printer" size={16} color={Theme.primary} />
             <Text style={styles.toolBtnText}>Print</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.toolBtn, styles.toolBtnPrimary]}
+            style={[styles.toolBtn, styles.toolBtnPrimary, !canEdit && styles.toolBtnPrimaryWide]}
             onPress={() => void handleShare()}
             activeOpacity={0.88}
           >
@@ -304,6 +312,9 @@ const styles = StyleSheet.create({
   toolBtnPrimary: {
     backgroundColor: Theme.primary,
     borderColor: Theme.primary,
+  },
+  toolBtnPrimaryWide: {
+    flex: 2,
   },
   toolBtnText: {
     fontSize: 14,

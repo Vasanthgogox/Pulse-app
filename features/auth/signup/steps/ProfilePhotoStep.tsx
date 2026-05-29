@@ -5,7 +5,7 @@ import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function ProfilePhotoStep({ flow }: { flow: SignUpFlow }) {
   const preset =
-    !flow.profilePreviewUri && flow.profileAvatarSeed
+    !flow.profilePreviewUri && flow.profileAvatarSeed?.trim()
       ? USER_2D_AVATARS.find((a) => a.seed === flow.profileAvatarSeed)
       : undefined;
 

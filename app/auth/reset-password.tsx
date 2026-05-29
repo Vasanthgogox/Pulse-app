@@ -2,6 +2,7 @@ import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import { signUpPasswordInputProps } from '@/lib/signupPasswordInput.util';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { updatePasswordWithCurrentSession } from '@/features/auth/services/auth.service';
 import { ROUTES } from '@/lib/routes';
@@ -221,6 +222,7 @@ export default function AuthResetPassword() {
 
       <View style={styles.passwordWrap}>
         <TextInput
+          {...signUpPasswordInputProps('new')}
           value={password}
           onChangeText={(v) => {
             setFormError(null);
@@ -230,10 +232,6 @@ export default function AuthResetPassword() {
           placeholderTextColor={Theme.textMuted}
           style={styles.input}
           secureTextEntry={!showPass}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textContentType="newPassword"
-          autoComplete="password-new"
           maxLength={128}
         />
         <Pressable onPress={() => setShowPass((v) => !v)} style={styles.eyeBtn}>
@@ -242,6 +240,7 @@ export default function AuthResetPassword() {
       </View>
 
       <TextInput
+        {...signUpPasswordInputProps('confirm')}
         value={confirm}
         onChangeText={(v) => {
           setFormError(null);
@@ -251,10 +250,6 @@ export default function AuthResetPassword() {
         placeholderTextColor={Theme.textMuted}
         style={[styles.input, styles.inputConfirm]}
         secureTextEntry={!showPass}
-        autoCapitalize="none"
-        autoCorrect={false}
-        textContentType="newPassword"
-        autoComplete="password-new"
         maxLength={128}
       />
 

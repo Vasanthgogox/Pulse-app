@@ -514,10 +514,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15,23,42,0.06)',
   },
   eyeBtn: {
-    position: 'absolute',
-    right: 14,
-    top: 14,
-    padding: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   errorText: {
     color: Theme.negative,

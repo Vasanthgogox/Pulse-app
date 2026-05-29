@@ -244,9 +244,16 @@ type OrgDisplayProfile = {
   organizationName: string;
   contactPerson: string;
   phone: string;
+  logoUrl?: string;
+  ownerAvatarUrl?: string;
+  orgAvatarSeed?: string;
   avatarUrl?: string;
   avatarSeed?: string;
   ownerId?: string;
+  orgCreatedAt?: string;
+  tripCount?: number;
+  averageRating?: number | null;
+  ratingCount?: number;
 };
 
 /** Batch-fetch display profiles for multiple linked orgs in one RPC call. */
@@ -262,21 +269,55 @@ export async function getLinkedOrgProfilesBatch(
     organizationName?: string;
     contactPerson?: string;
     phone?: string;
+    logoUrl?: string;
+    ownerAvatarUrl?: string;
+    orgAvatarSeed?: string;
     avatarUrl?: string;
     avatarSeed?: string;
     ownerId?: string;
+    orgCreatedAt?: string;
+    tripCount?: number;
+    averageRating?: number | null;
+    ratingCount?: number;
   }>;
   const result: Record<string, OrgDisplayProfile> = {};
   for (const [oid, entry] of Object.entries(raw)) {
     if (!entry) continue;
     const ownerId = (entry.ownerId ?? '').trim();
+    const logoUrl = (entry.logoUrl ?? '').trim();
+    const ownerAvatarUrl = (entry.ownerAvatarUrl ?? '').trim();
+    const orgAvatarSeed = (entry.orgAvatarSeed ?? '').trim();
+    const avatarUrl = (entry.avatarUrl ?? '').trim();
+    const avatarSeed = (entry.avatarSeed ?? '').trim();
+    const orgCreatedAt = (entry.orgCreatedAt ?? '').trim();
+    const tripCount =
+      typeof entry.tripCount === 'number' && Number.isFinite(entry.tripCount)
+        ? entry.tripCount
+        : undefined;
+    const averageRating =
+      typeof entry.averageRating === 'number' && Number.isFinite(entry.averageRating)
+        ? entry.averageRating
+        : entry.averageRating === null
+          ? null
+          : undefined;
+    const ratingCount =
+      typeof entry.ratingCount === 'number' && Number.isFinite(entry.ratingCount)
+        ? entry.ratingCount
+        : undefined;
     result[oid] = {
       organizationName: (entry.organizationName ?? '').trim() || 'Connected',
       contactPerson: (entry.contactPerson ?? '').trim(),
       phone: (entry.phone ?? '').trim(),
-      avatarUrl: (entry.avatarUrl ?? '').trim(),
-      avatarSeed: (entry.avatarSeed ?? '').trim(),
+      ...(logoUrl ? { logoUrl } : {}),
+      ...(ownerAvatarUrl ? { ownerAvatarUrl } : {}),
+      ...(orgAvatarSeed ? { orgAvatarSeed } : {}),
+      ...(avatarUrl ? { avatarUrl } : {}),
+      ...(avatarSeed ? { avatarSeed } : {}),
       ...(ownerId ? { ownerId } : {}),
+      ...(orgCreatedAt ? { orgCreatedAt } : {}),
+      ...(tripCount !== undefined ? { tripCount } : {}),
+      ...(averageRating !== undefined ? { averageRating } : {}),
+      ...(ratingCount !== undefined ? { ratingCount } : {}),
     };
   }
   return result;

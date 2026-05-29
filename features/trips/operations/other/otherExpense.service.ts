@@ -11,9 +11,12 @@ import type {
 } from "../types";
 import {
   createVehicleOperationLedgerDraftFromSource,
+  syncVehicleOperationLedgerDraftAmountFromSource,
   updateVehicleOperationLedgerApprovalState,
 } from "../vehicle/vehicleOperationsLedger.service";
 import { appendTripOperationalTimelineEventSafe } from "../timeline/timelineEvents.service";
+import { buildExpenseEditApprovalReset } from "../shared/expenseEntryEdit.util";
+import type { UpdateOtherExpenseInput } from "../types";
 
 async function syncOtherExpenseLedgerDraft(input: {
   entryId: string;
@@ -57,6 +60,64 @@ export async function getTripOtherExpenses(
     .order("entered_at", { ascending: false });
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as TripOtherExpenseEntry[] };
+}
+
+export async function getTripOtherExpenseById(
+  entryId: string,
+): Promise<{ error: Error | null; entry: TripOtherExpenseEntry | null }> {
+  const { data, error } = await supabase()
+    .from("trip_other_expenses")
+    .select("*")
+    .eq("id", entryId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), entry: null };
+  if (!data) return { error: new Error("Expense not found"), entry: null };
+  return { error: null, entry: data as TripOtherExpenseEntry };
+}
+
+export async function updateTripOtherExpense(
+  input: UpdateOtherExpenseInput & { receiptStoragePath?: string | null },
+): Promise<{ error: Error | null; entry: TripOtherExpenseEntry | null }> {
+  const existing = await getTripOtherExpenseById(input.entryId);
+  if (existing.error || !existing.entry) {
+    return { error: existing.error ?? new Error("Expense not found"), entry: null };
+  }
+  if (String(existing.entry.posting_state ?? "") === "posted") {
+    return { error: new Error("Posted expenses cannot be edited"), entry: null };
+  }
+  const paymentOwner: OperationalPaymentOwner =
+    input.paymentOwner ?? existing.entry.payment_owner ?? "unknown";
+  const paymentMode: OperationalPaymentMode =
+    input.paymentMode ?? existing.entry.payment_mode ?? "unknown";
+  const payload: Record<string, unknown> = {
+    expense_category: input.expenseCategory,
+    amount_inr: Math.max(0, Number(input.amountInr) || 0),
+    description: toNullableText(input.description),
+    location_name: toNullableText(input.locationName),
+    notes: toNullableText(input.notes),
+    payment_owner: paymentOwner,
+    payment_mode: paymentMode,
+    ...buildExpenseEditApprovalReset(paymentOwner),
+  };
+  if (input.receiptStoragePath !== undefined) {
+    payload.receipt_storage_path = toNullableText(input.receiptStoragePath);
+  }
+  const { data, error } = await supabase()
+    .from("trip_other_expenses")
+    .update(payload)
+    .eq("id", input.entryId)
+    .select("*")
+    .single();
+  if (error) return { error: new Error(error.message), entry: null };
+  const sync = await syncVehicleOperationLedgerDraftAmountFromSource({
+    sourceType: "manual_adjustment",
+    sourceId: input.entryId,
+    tripId: String(data.trip_id),
+    amount: Number(data.amount_inr ?? 0),
+  });
+  if (sync.error) return { error: sync.error, entry: null };
+  return { error: null, entry: data as TripOtherExpenseEntry };
 }
 
 export async function createTripOtherExpense(

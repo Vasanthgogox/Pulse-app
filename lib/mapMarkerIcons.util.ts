@@ -1,7 +1,70 @@
+import {
+  DEFAULT_USER_2D_AVATAR_SEED,
+  getUser2DAvatarUriForSeed,
+} from '@/constants/UserAvatars';
+import Theme from '@/constants/Theme';
+
 /**
  * Shared map marker HTML (TripMap Leaflet + MapLibre LeafletMap.web).
  * Live marker: isometric driver-in-cab + loaded cargo (Theme indigo / emerald / gold).
  */
+
+export function resolveDriverMapAvatarSrc(
+  avatarUri?: string | null,
+  avatarSeed?: string | null,
+): string {
+  const trimmed = avatarUri?.trim();
+  if (trimmed && (trimmed.startsWith('http') || trimmed.startsWith('data:'))) {
+    return trimmed;
+  }
+  return getUser2DAvatarUriForSeed(avatarSeed?.trim() || DEFAULT_USER_2D_AVATAR_SEED);
+}
+
+let driverMapMarkerStylesInjected = false;
+
+function ensureDriverMapMarkerStyles(): void {
+  if (typeof document === 'undefined' || driverMapMarkerStylesInjected) return;
+  const id = 'q-driver-map-marker-styles';
+  if (document.getElementById(id)) {
+    driverMapMarkerStylesInjected = true;
+    return;
+  }
+  const el = document.createElement('style');
+  el.id = id;
+  el.textContent = `
+@keyframes qDriverMapPulse{0%,100%{transform:scale(1);opacity:0.55;}50%{transform:scale(1.22);opacity:0.18;}}
+.q-driver-map-marker{position:relative;display:flex;flex-direction:column;align-items:center;width:52px;filter:drop-shadow(0 4px 10px rgba(15,23,42,0.35));pointer-events:none;}
+.q-driver-map-pulse{position:absolute;top:2px;left:50%;width:48px;height:48px;margin-left:-24px;border-radius:50%;border:2px solid var(--ring);box-sizing:border-box;}
+.q-driver-map-pulse.on{animation:qDriverMapPulse 1.8s ease-in-out infinite;}
+.q-driver-map-pulse.off{opacity:0.32;}
+.q-driver-map-avatar{position:relative;width:44px;height:44px;border-radius:50%;border:3px solid var(--ring);background:#fff;overflow:hidden;z-index:1;}
+.q-driver-map-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.q-driver-map-dot{position:absolute;right:2px;bottom:2px;width:10px;height:10px;border-radius:50%;background:var(--ring);border:2px solid #fff;}
+.q-driver-map-pointer{width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:10px solid var(--ring);margin-top:-1px;}
+`;
+  document.head.appendChild(el);
+  driverMapMarkerStylesInjected = true;
+}
+
+export function buildDriverAvatarMarkerHtml(
+  avatarUri?: string | null,
+  avatarSeed?: string | null,
+  isOnline = false,
+): string {
+  ensureDriverMapMarkerStyles();
+  const src = resolveDriverMapAvatarSrc(avatarUri, avatarSeed);
+  const ring = isOnline ? Theme.darkGreen : Theme.teslaRed;
+  const pulseClass = isOnline ? 'on' : 'off';
+  const safeSrc = src.replace(/"/g, '&quot;');
+  return `<div class="q-driver-map-marker" style="--ring:${ring};">
+  <div class="q-driver-map-pulse ${pulseClass}"></div>
+  <div class="q-driver-map-avatar">
+    <img src="${safeSrc}" alt="" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <span class="q-driver-map-dot"></span>
+  </div>
+  <div class="q-driver-map-pointer"></div>
+</div>`;
+}
 
 export const MAP_SOURCE_PIN_HTML = `<svg width="28" height="40" viewBox="0 0 28 40" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.16));">
   <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26c0-7.73-6.27-14-14-14z" fill="#059669"/>
@@ -31,10 +94,10 @@ export const MAP_TRUCK_MARKER_HTML = `<div style="width:72px;height:72px;display
       <feDropShadow dx="0" dy="0" stdDeviation="1.2" flood-color="#059669" flood-opacity="0.18"/>
     </filter>
     <linearGradient id="qmCabPri" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#4F46E5"/>
+      <stop offset="0%" stop-color="#4F46E5"/><stop offset="100%" stop-color="#4F46E5"/>
     </linearGradient>
     <linearGradient id="qmCabFace" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#4F46E5"/>
+      <stop offset="0%" stop-color="#4F46E5"/><stop offset="100%" stop-color="#4F46E5"/>
     </linearGradient>
     <linearGradient id="qmBoxSide" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#f1f5f9"/><stop offset="100%" stop-color="#94a3b8"/>
@@ -118,6 +181,7 @@ export type TripMapMarkerRole =
   | 'destination'
   | 'live'
   | 'truck'
+  | 'driver'
   | 'ping'
   | 'past'
   | 'default';
@@ -125,16 +189,24 @@ export type TripMapMarkerRole =
 export function tripMapMarkerRoleFromId(id: string): TripMapMarkerRole {
   if (id === 'origin') return 'origin';
   if (id === 'destination') return 'destination';
+  if (id === 'you') return 'driver';
   if (id === 'live' || id === 'truck') return 'truck';
   if (id.startsWith('ping-') || id.startsWith('past-')) return id.startsWith('ping-') ? 'ping' : 'past';
   return 'default';
 }
+
+export type DriverMapMarkerOptions = {
+  avatarUri?: string | null;
+  avatarSeed?: string | null;
+  isOnline?: boolean;
+};
 
 /** Build a DOM element for MapLibre markers (web). */
 export function createTripMapMarkerElement(
   role: TripMapMarkerRole,
   label?: string,
   fallbackColor?: string,
+  driverOptions?: DriverMapMarkerOptions,
 ): HTMLDivElement {
   const wrap = document.createElement('div');
   wrap.style.display = 'flex';
@@ -151,6 +223,12 @@ export function createTripMapMarkerElement(
     iconHost.innerHTML = MAP_DESTINATION_PIN_HTML;
   } else if (role === 'truck' || role === 'live') {
     iconHost.innerHTML = MAP_TRUCK_MARKER_HTML;
+  } else if (role === 'driver') {
+    iconHost.innerHTML = buildDriverAvatarMarkerHtml(
+      driverOptions?.avatarUri,
+      driverOptions?.avatarSeed,
+      driverOptions?.isOnline ?? false,
+    );
   } else if (role === 'ping') {
     iconHost.innerHTML = MAP_PING_DOT_HTML;
   } else {

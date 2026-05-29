@@ -7,6 +7,10 @@ export type LeafletMarker = {
   coordinate: LeafletLatLng;
   label?: string;
   color?: string;
+  /** Driver self-marker (`id: "you"`): profile image + online ring. */
+  avatarUri?: string | null;
+  avatarSeed?: string | null;
+  isOnline?: boolean;
 };
 
 export type LeafletMapProps = {
@@ -25,9 +29,13 @@ export type LeafletMapProps = {
   lowPower?: boolean;
   /** When true, disable drag/zoom so the viewport stays locked while driver-tracking. */
   interactionLocked?: boolean;
+  /** Show +/- zoom buttons (default true). */
+  showZoomControls?: boolean;
 };
 
 export type LeafletMapRef = {
   focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
   fitBounds: (ne: LeafletLatLng, sw: LeafletLatLng, paddingPx?: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
 };

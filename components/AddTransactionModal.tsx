@@ -6,6 +6,7 @@ import { LedgerFlowGuardAlert } from "@/components/LedgerFlowGuardAlert";
 import type { TripLedgerSmartTag } from "@/components/TripLedgerFinancialSummary";
 import { LedgerEntrySuccessView } from "@/components/ledger/LedgerEntrySuccessView";
 import { LedgerMobileWizard, type LedgerPaymentTypeItem } from "@/components/ledger/LedgerMobileWizard";
+import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -157,27 +158,9 @@ function useLedgerViewportWidth(): number {
   return winW;
 }
 
-/** Colour Lucide icons for ledger payment mode tiles (full-page grid). */
-function ledgerPaymentModeLucide(modeId: string, size = 20) {
-  const p = { size, strokeWidth: LEDGER_LUCIDE_STROKE };
-  switch (modeId) {
-    case "CASH":
-      return <Banknote {...p} color="#16a34a" />;
-    case "UPI":
-      return <Smartphone {...p} color="#7c3aed" />;
-    case "BANK":
-      return <Building2 {...p} color="#2563eb" />;
-    case "CHEQUE":
-      return <FileText {...p} color="#db2777" />;
-    case "FUEL_CARD":
-      return <CreditCard {...p} color="#ea580c" />;
-    case "FASTAG":
-      return <Ticket {...p} color="#0891b2" />;
-    case "CREDIT":
-      return <Clock {...p} color="#64748b" />;
-    default:
-      return <Wallet {...p} color="#94a3b8" />;
-  }
+/** Brand logos for ledger payment mode tiles. */
+function ledgerPaymentModeLogo(modeId: string, size = 20) {
+  return <PaymentModeLogo modeId={modeId} size={size} />;
 }
 
 /** Colour Lucide icons for payment type / category / driver-type keys. */
@@ -1492,6 +1475,30 @@ export function AddTransactionModal({
     return base;
   }, [
     amountPlaceholder,
+    selectedTripIds,
+    resolveTripOptionById,
+    getLedgerTripDueWeight,
+  ]);
+
+  const ledgerDueAmountInr = useMemo(() => {
+    const parsed = parseFloat(String(ledgerAmountPlaceholder).replace(/,/g, "").trim());
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    const direct = type === "in" ? dueAmountIn : dueAmountOut;
+    if (direct != null && direct > 0) return direct;
+    const tid = selectedTripIds[0];
+    if (tid) {
+      const trip = resolveTripOptionById(tid);
+      if (trip) {
+        const due = getLedgerTripDueWeight(trip);
+        if (due > 0) return due;
+      }
+    }
+    return null;
+  }, [
+    ledgerAmountPlaceholder,
+    type,
+    dueAmountIn,
+    dueAmountOut,
     selectedTripIds,
     resolveTripOptionById,
     getLedgerTripDueWeight,
@@ -3565,7 +3572,7 @@ export function AddTransactionModal({
             >
               <View style={styles.selectorSummaryMain}>
                 <View style={[styles.selectorSummaryIconSm, mob && styles.ledgerMobSelectorIcon]}>
-                  {ledgerPaymentModeLucide(paymentModeId, LEDGER_PROTOCOL_ICON_SM)}
+                  {ledgerPaymentModeLogo(paymentModeId, LEDGER_PROTOCOL_ICON_SM)}
                 </View>
                 <Text
                   style={[styles.selectorSummaryText, mob && styles.ledgerMobSelectorText]}
@@ -3606,7 +3613,7 @@ export function AddTransactionModal({
                     }}
                     activeOpacity={0.85}
                   >
-                    {ledgerPaymentModeLucide(opt.id, LEDGER_PROTOCOL_ICON_SM)}
+                    {ledgerPaymentModeLogo(opt.id, LEDGER_PROTOCOL_ICON_SM)}
                     <Text
                       style={[
                         styles.protocolTileText,
@@ -3648,7 +3655,7 @@ export function AddTransactionModal({
                       }}
                       activeOpacity={0.85}
                     >
-                      {ledgerPaymentModeLucide(opt.id, LEDGER_PROTOCOL_ICON_SM)}
+                      {ledgerPaymentModeLogo(opt.id, LEDGER_PROTOCOL_ICON_SM)}
                       <Text
                         style={[
                           styles.protocolTileText,
@@ -5131,6 +5138,7 @@ export function AddTransactionModal({
                 amountStr={amountStr}
                 onAmountChange={setAmountStr}
                 amountPlaceholder={ledgerAmountPlaceholder}
+                dueAmountInr={ledgerDueAmountInr}
                 partyId={partyId}
                 onPartySelect={setPartyId}
                 partyOptions={ledgerWizardPartyOptions}

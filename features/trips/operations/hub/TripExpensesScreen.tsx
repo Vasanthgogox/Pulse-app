@@ -1,7 +1,7 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { ComponentProps } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Theme from "@/constants/Theme";
@@ -18,6 +18,7 @@ import {
   useTripOperationsSummary,
 } from "../queries/useTripOperations";
 import { formatOtherExpenseCategoryLabel } from "../shared/tripOtherExpenseCategories";
+import { canEditTripCostEvent } from "../shared/expenseEntryEdit.util";
 import { syncOperationalFinanceProjection } from "@/features/finance/projections";
 import { syncPostedTripExpensesToOperationLedger } from "../vehicle/syncPostedExpensesToOperationLedger.service";
 import type { TripCostEvent, TripCostCategory } from "@/features/finance";
@@ -30,6 +31,7 @@ type CategoryVisual = {
   bg: string;
   fg: string;
   icon: ComponentProps<typeof Feather>["name"];
+  rail: string;
 };
 
 function inr(value: number): string {
@@ -47,19 +49,28 @@ function toCategoryLabel(event: TripCostEvent): string {
 function categoryVisual(category: TripCostCategory): CategoryVisual {
   switch (category) {
     case "fuel":
-      return { initials: "FU", bg: "#dcfce7", fg: "#15803d", icon: "droplet" };
+      return { initials: "FU", bg: "#dcfce7", fg: "#15803d", icon: "droplet", rail: "#22c55e" };
     case "toll":
     case "fastag":
-      return { initials: "TL", bg: "#ede9fe", fg: "#6d28d9", icon: "map-pin" };
+      return { initials: "TL", bg: "#ede9fe", fg: "#6d28d9", icon: "map-pin", rail: "#8b5cf6" };
     case "loading":
     case "unloading":
-      return { initials: "LD", bg: "#ffedd5", fg: "#c2410c", icon: "package" };
+      return { initials: "LD", bg: "#ffedd5", fg: "#c2410c", icon: "package", rail: "#f97316" };
     case "parking":
-      return { initials: "PK", bg: "#e0f2fe", fg: "#0369a1", icon: "square" };
+      return { initials: "PK", bg: "#e0f2fe", fg: "#0369a1", icon: "square", rail: "#0ea5e9" };
     default:
-      return { initials: "EX", bg: "#f1f5f9", fg: "#475569", icon: "file-text" };
+      return { initials: "EX", bg: "#f1f5f9", fg: "#475569", icon: "file-text", rail: "#94a3b8" };
   }
 }
+
+const QUICK_ACTION_STYLE: Record<
+  string,
+  { bg: string; fg: string; ring: string }
+> = {
+  fuel: { bg: "#ecfdf5", fg: "#15803d", ring: "#bbf7d0" },
+  toll: { bg: "#f5f3ff", fg: "#6d28d9", ring: "#ddd6fe" },
+  other: { bg: "#eef2ff", fg: Theme.primary, ring: "#c7d2fe" },
+};
 
 function canApproveAndPostToLedger(event: TripCostEvent): boolean {
   if (event.approvalState === "pending") return true;
@@ -169,6 +180,133 @@ function StatusChip({ event }: { event: TripCostEvent }) {
   );
 }
 
+type ExpenseRowProps = {
+  event: TripCostEvent;
+  embedded: boolean;
+  iconMd: number;
+  loadingAction: boolean;
+  onApprove: (event: TripCostEvent) => void;
+  onReject: (event: TripCostEvent) => void;
+  onMarkSettled: (event: TripCostEvent) => void;
+  onEdit?: (event: TripCostEvent) => void;
+};
+
+const ExpenseRow = memo(function ExpenseRow({
+  event,
+  embedded,
+  iconMd,
+  loadingAction,
+  onApprove,
+  onReject,
+  onMarkSettled,
+  onEdit,
+}: ExpenseRowProps) {
+  const visual = categoryVisual(event.category);
+  const showActions = needsUserAction(event);
+  const tone = statusTone(event);
+  const hint = formatReimbursedHint(event);
+  const editable = canEditTripCostEvent(event) && typeof onEdit === "function";
+
+  return (
+    <View
+      style={[
+        styles.row,
+        embedded && styles.rowEmbedded,
+        showActions && styles.rowNeedsAction,
+        { borderLeftColor: visual.rail, borderLeftWidth: 3 },
+      ]}
+    >
+      <View style={styles.rowMain}>
+        <View style={[styles.rowAvatar, { backgroundColor: visual.bg }]}>
+          <Feather name={visual.icon} size={iconMd} color={visual.fg} />
+        </View>
+        <View style={styles.rowBody}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {toCategoryLabel(event)}
+          </Text>
+          {hint ? (
+            <Text style={styles.rowHint} numberOfLines={2}>
+              {hint}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.rowRight}>
+          {editable ? (
+            <Pressable
+              style={({ pressed }) => [styles.editBtn, pressed && styles.editBtnPressed]}
+              onPress={() => onEdit?.(event)}
+              disabled={loadingAction}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${toCategoryLabel(event)}`}
+              hitSlop={8}
+            >
+              <Feather name="edit-2" size={iconMd} color={Theme.primary} />
+            </Pressable>
+          ) : null}
+          <Text
+            style={[
+              styles.rowAmount,
+              tone === "settled" && styles.rowAmountSettled,
+            ]}
+          >
+            {inr(event.amount)}
+          </Text>
+          <StatusChip event={event} />
+        </View>
+      </View>
+
+      {showActions ? (
+        <View style={styles.actions}>
+          {canApproveAndPostToLedger(event) ? (
+            <>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.actionBtnPrimary,
+                  pressed && styles.actionBtnPressed,
+                ]}
+                onPress={() => void onApprove(event)}
+                disabled={loadingAction}
+              >
+                <Text style={styles.actionBtnTextPrimary}>
+                  {approveAndPostButtonLabel(event)}
+                </Text>
+              </Pressable>
+              {event.approvalState === "pending" || event.approvalState === "rejected" ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    pressed && styles.actionBtnSecondaryPressed,
+                  ]}
+                  onPress={() => void onReject(event)}
+                  disabled={loadingAction}
+                >
+                  <Text style={styles.actionBtnText}>Reject</Text>
+                </Pressable>
+              ) : null}
+            </>
+          ) : event.reimbursable &&
+            event.approvalState === "approved" &&
+            event.settlementState !== "settled" ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionBtnPrimary,
+                styles.actionBtnFull,
+                pressed && styles.actionBtnPressed,
+              ]}
+              onPress={() => void onMarkSettled(event)}
+              disabled={loadingAction}
+            >
+              <Text style={styles.actionBtnTextPrimary}>Mark reimbursed</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+});
+
 export function TripExpensesScreen({
   trip,
   onBack,
@@ -176,6 +314,7 @@ export function TripExpensesScreen({
   onAddFuel,
   onAddToll,
   onAddOtherExpense,
+  onEditExpense,
   driverCashPayouts = [],
   onRecordDriverPayment,
 }: {
@@ -185,6 +324,7 @@ export function TripExpensesScreen({
   onAddFuel?: () => void;
   onAddToll?: () => void;
   onAddOtherExpense?: () => void;
+  onEditExpense?: (event: TripCostEvent) => void;
   /** Cash-out rows to driver from Finance ledger (`transactions` on this trip). */
   driverCashPayouts?: TripDriverCashPayoutRow[];
   onRecordDriverPayment?: () => void;
@@ -244,7 +384,7 @@ export function TripExpensesScreen({
     !!trip.driver_id &&
     (reimbursementDueInr > 0 || hasReimbursableExpenses);
 
-  const handleApprove = async (event: TripCostEvent) => {
+  const handleApprove = useCallback(async (event: TripCostEvent) => {
     const [kind, sourceId] = event.id.split(":");
     if (!sourceId) return;
     try {
@@ -286,9 +426,18 @@ export function TripExpensesScreen({
         e instanceof Error ? e.message : "Unknown error",
       );
     }
-  };
+  }, [
+    profile?.uid,
+    queryClient,
+    reviewFuel,
+    reviewOther,
+    reviewToll,
+    trip.id,
+    trip.organization_id,
+    trip.vehicle_id,
+  ]);
 
-  const handleReject = async (event: TripCostEvent) => {
+  const handleReject = useCallback(async (event: TripCostEvent) => {
     const [kind, sourceId] = event.id.split(":");
     if (!sourceId) return;
     if (kind === "fuel") {
@@ -317,9 +466,9 @@ export function TripExpensesScreen({
         reviewerUserId: profile?.uid ?? null,
       });
     }
-  };
+  }, [profile?.uid, reviewFuel, reviewOther, reviewToll, trip.id]);
 
-  const handleMarkSettled = async (event: TripCostEvent) => {
+  const handleMarkSettled = useCallback(async (event: TripCostEvent) => {
     const [kind, sourceId] = event.id.split(":");
     if (!sourceId) return;
     try {
@@ -361,12 +510,24 @@ export function TripExpensesScreen({
         e instanceof Error ? e.message : "Unknown error",
       );
     }
-  };
+  }, [
+    onRecordDriverPayment,
+    profile?.uid,
+    setFuelReimbursement,
+    setOtherReimbursement,
+    setTollReimbursement,
+    trip.id,
+  ]);
 
   const displayedEvents = useMemo(() => {
     if (listFilter === "action") return actionNeededEvents;
     return events;
   }, [actionNeededEvents, events, listFilter]);
+
+  const iconSm = embedded ? 10 : 12;
+  const iconMd = embedded ? 11 : 14;
+  const iconLg = embedded ? 14 : 16;
+  const iconEmpty = embedded ? 18 : 22;
 
   const quickActions = [
     { key: "fuel", label: "Fuel", icon: "droplet" as const, onPress: onAddFuel },
@@ -378,72 +539,6 @@ export function TripExpensesScreen({
       onPress: onAddOtherExpense,
     },
   ].filter((action) => typeof action.onPress === "function");
-
-  const renderExpenseRow = (event: TripCostEvent) => {
-    const visual = categoryVisual(event.category);
-    const showActions = needsUserAction(event);
-
-    return (
-      <View key={event.id} style={styles.row}>
-        <View style={styles.rowMain}>
-          <View style={[styles.rowAvatar, { backgroundColor: visual.bg }]}>
-            <Feather name={visual.icon} size={14} color={visual.fg} />
-          </View>
-          <View style={styles.rowBody}>
-            <Text style={styles.rowTitle} numberOfLines={1}>
-              {toCategoryLabel(event)}
-            </Text>
-            {formatReimbursedHint(event) ? (
-              <Text style={styles.rowHint} numberOfLines={2}>
-                {formatReimbursedHint(event)}
-              </Text>
-            ) : null}
-          </View>
-          <View style={styles.rowRight}>
-            <Text style={styles.rowAmount}>{inr(event.amount)}</Text>
-            <StatusChip event={event} />
-          </View>
-        </View>
-
-        {showActions ? (
-          <View style={styles.actions}>
-            {canApproveAndPostToLedger(event) ? (
-              <>
-                <Pressable
-                  style={[styles.actionBtn, styles.actionBtnPrimary]}
-                  onPress={() => void handleApprove(event)}
-                  disabled={loadingAction}
-                >
-                  <Text style={styles.actionBtnTextPrimary}>
-                    {approveAndPostButtonLabel(event)}
-                  </Text>
-                </Pressable>
-                {event.approvalState === "pending" || event.approvalState === "rejected" ? (
-                  <Pressable
-                    style={styles.actionBtn}
-                    onPress={() => void handleReject(event)}
-                    disabled={loadingAction}
-                  >
-                    <Text style={styles.actionBtnText}>Reject</Text>
-                  </Pressable>
-                ) : null}
-              </>
-            ) : event.reimbursable &&
-              event.approvalState === "approved" &&
-              event.settlementState !== "settled" ? (
-              <Pressable
-                style={[styles.actionBtn, styles.actionBtnPrimary, styles.actionBtnFull]}
-                onPress={() => void handleMarkSettled(event)}
-                disabled={loadingAction}
-              >
-                <Text style={styles.actionBtnTextPrimary}>Mark reimbursed</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-    );
-  };
 
   return (
     <View
@@ -459,64 +554,94 @@ export function TripExpensesScreen({
         </Pressable>
       ) : null}
 
-      <View style={styles.toolbar}>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryTop}>
-              <View style={styles.summaryLeft}>
-                <Text style={styles.summaryLabel}>Posted to ledger</Text>
-                <Text style={styles.summaryValue}>{inr(postedCostInr)}</Text>
-              </View>
-              {vehicleLabel ? (
-                <View style={styles.vehiclePill}>
-                  <Feather name="truck" size={10} color={Theme.primary} />
-                  <Text style={styles.vehiclePillText} numberOfLines={1}>
-                    {vehicleLabel}
-                  </Text>
+      <View style={[styles.toolbar, embedded && styles.toolbarEmbedded]}>
+          <View style={[styles.hubShell, embedded && styles.hubShellEmbedded]}>
+            <View style={styles.ledgerHero}>
+              <View style={styles.ledgerAccent} />
+              <View style={styles.ledgerHeroBody}>
+                <View style={styles.ledgerHeroTop}>
+                  <View style={styles.ledgerHeroIcon}>
+                    <Feather name="book-open" size={11} color={Theme.primary} />
+                  </View>
+                  <View style={styles.summaryLeft}>
+                    <Text style={styles.summaryLabel}>Posted to ledger</Text>
+                    <Text style={styles.summaryValue}>{inr(postedCostInr)}</Text>
+                  </View>
                 </View>
-              ) : null}
+                {vehicleLabel ? (
+                  <View style={styles.vehicleRow}>
+                    <Feather name="truck" size={iconSm} color={Theme.textMuted} />
+                    <Text style={styles.vehicleRowText} numberOfLines={1}>
+                      {vehicleLabel}
+                    </Text>
+                  </View>
+                ) : null}
+                {hasSummaryAlerts ? (
+                  <View style={styles.summaryAlerts}>
+                    {pendingPostCount > 0 ? (
+                      <View style={styles.alertPill}>
+                        <Feather name="clock" size={iconSm} color={Theme.warning} />
+                        <Text style={styles.alertPillText}>
+                          {pendingPostCount} awaiting post
+                        </Text>
+                      </View>
+                    ) : null}
+                    {reimbursementDueInr > 0 ? (
+                      <View style={[styles.alertPill, styles.alertPillDue]}>
+                        <Feather name="credit-card" size={iconSm} color="#7c3aed" />
+                        <Text style={[styles.alertPillText, styles.alertPillDueText]}>
+                          {inr(reimbursementDueInr)} to reimburse
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
             </View>
-            {hasSummaryAlerts ? (
-              <View style={styles.summaryAlerts}>
-                {pendingPostCount > 0 ? (
-                  <View style={styles.alertPill}>
-                    <Feather name="clock" size={10} color={Theme.warning} />
-                    <Text style={styles.alertPillText}>
-                      {pendingPostCount} awaiting post
-                    </Text>
-                  </View>
-                ) : null}
-                {reimbursementDueInr > 0 ? (
-                  <View style={styles.alertPill}>
-                    <Feather name="credit-card" size={10} color={Theme.warning} />
-                    <Text style={styles.alertPillText}>
-                      {inr(reimbursementDueInr)} to reimburse
-                    </Text>
-                  </View>
-                ) : null}
+
+            {quickActions.length > 0 ? (
+              <View style={styles.quickActionsRow}>
+                {quickActions.map((action) => {
+                  const accent =
+                    QUICK_ACTION_STYLE[action.key] ?? QUICK_ACTION_STYLE.other;
+                  return (
+                    <Pressable
+                      key={action.key}
+                      style={({ pressed }) => [
+                        styles.quickTile,
+                        pressed && styles.quickTilePressed,
+                      ]}
+                      onPress={() => action.onPress?.()}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${action.label}`}
+                    >
+                      <View
+                        style={[
+                          styles.quickTileIcon,
+                          {
+                            backgroundColor: accent.bg,
+                            borderColor: accent.ring,
+                          },
+                        ]}
+                      >
+                        <Feather name={action.icon} size={14} color={accent.fg} />
+                      </View>
+                      <Text style={styles.quickTileLabel}>{action.label}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
           </View>
 
-          {quickActions.length > 0 ? (
-            <View style={styles.quickActionsRow}>
-              {quickActions.map((action) => (
-                <Pressable
-                  key={action.key}
-                  style={styles.quickActionBtn}
-                  onPress={() => action.onPress?.()}
-                  accessibilityRole="button"
-                  accessibilityLabel={action.label}
-                >
-                  <Feather name={action.icon} size={14} color={Theme.primary} />
-                  <Text style={styles.quickActionBtnText}>{action.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          <View style={styles.segmentTrack}>
+          <View style={[styles.controlDeck, embedded && styles.controlDeckEmbedded]}>
+            <View style={[styles.segmentTrack, embedded && styles.segmentTrackEmbedded]}>
             <Pressable
-              style={[styles.segmentBtn, listFilter === "all" ? styles.segmentBtnActive : null]}
+              style={({ pressed }) => [
+                styles.segmentBtn,
+                listFilter === "all" ? styles.segmentBtnActive : null,
+                pressed && styles.segmentBtnPressed,
+              ]}
               onPress={() => setListFilter("all")}
             >
               <Text
@@ -544,9 +669,10 @@ export function TripExpensesScreen({
               </View>
             </Pressable>
             <Pressable
-              style={[
+              style={({ pressed }) => [
                 styles.segmentBtn,
                 listFilter === "action" ? styles.segmentBtnActive : null,
+                pressed && styles.segmentBtnPressed,
               ]}
               onPress={() => setListFilter("action")}
             >
@@ -584,10 +710,17 @@ export function TripExpensesScreen({
 
           {showDriverPaymentCta ? (
             <Pressable
-              style={styles.driverPayBanner}
+              style={({ pressed }) => [
+                styles.driverPayBanner,
+                embedded && styles.driverPayBannerEmbedded,
+                pressed && styles.driverPayBannerPressed,
+              ]}
               onPress={() => onRecordDriverPayment?.()}
             >
-              <Feather name="credit-card" size={14} color={Theme.primary} />
+              <View style={styles.driverPayAccent} />
+              <View style={styles.driverPayIconWrap}>
+                <Feather name="credit-card" size={iconMd} color={Theme.primary} />
+              </View>
               <View style={styles.driverPayBannerText}>
                 <Text style={styles.driverPayBannerTitle}>
                   {reimbursementDueInr > 0
@@ -598,9 +731,10 @@ export function TripExpensesScreen({
                   Mark reimbursed on each expense is not cash. Post payout in Finance.
                 </Text>
               </View>
-              <Feather name="chevron-right" size={16} color={Theme.textMuted} />
+              <Feather name="chevron-right" size={iconLg} color={Theme.textMuted} />
             </Pressable>
           ) : null}
+          </View>
       </View>
 
       <ScrollView
@@ -620,7 +754,7 @@ export function TripExpensesScreen({
           <View style={styles.emptyCard}>
             <Feather
               name={listFilter === "action" ? "check-circle" : "inbox"}
-              size={22}
+              size={iconEmpty}
               color={Theme.textMuted}
             />
             <Text style={styles.emptyTitle}>
@@ -634,7 +768,29 @@ export function TripExpensesScreen({
           </View>
         ) : (
           <>
-            {displayedEvents.map(renderExpenseRow)}
+            {!summaryQuery.isLoading && displayedEvents.length > 0 ? (
+              <View style={styles.listSectionHead}>
+                <Text style={styles.listSectionTitle}>Line items</Text>
+                <View style={styles.listSectionBadge}>
+                  <Text style={styles.listSectionBadgeText}>
+                    {displayedEvents.length}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            {displayedEvents.map((event) => (
+              <ExpenseRow
+                key={event.id}
+                event={event}
+                embedded={embedded}
+                iconMd={iconMd}
+                loadingAction={loadingAction}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onMarkSettled={handleMarkSettled}
+                onEdit={onEditExpense}
+              />
+            ))}
             {hasReimbursableExpenses ? (
               <View style={styles.payoutSection}>
                 <Text style={styles.payoutSectionTitle}>Driver cash payouts</Text>
@@ -651,7 +807,7 @@ export function TripExpensesScreen({
                   driverCashPayouts.map((payout) => (
                     <View key={payout.id} style={styles.payoutRow}>
                       <View style={styles.payoutRowLeft}>
-                        <Feather name="user" size={14} color="#0f766e" />
+                        <Feather name="user" size={iconMd} color="#0f766e" />
                         <View style={styles.payoutRowText}>
                           <Text style={styles.payoutRowTitle} numberOfLines={1}>
                             {payout.description?.trim() || "Driver payment"}
@@ -699,13 +855,86 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  summaryCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    padding: 12,
+  toolbarEmbedded: {
     gap: 8,
+    marginBottom: 6,
+  },
+  hubShell: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+      default: { boxShadow: "0 2px 10px rgba(15,23,42,0.06)" } as object,
+    }),
+  },
+  hubShellEmbedded: {
+    borderRadius: 14,
+  },
+  ledgerHero: {
+    position: "relative",
+    backgroundColor: Theme.pulseIndigoWash,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e6edf5",
+  },
+  ledgerAccent: {
+    position: "absolute",
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: Theme.pulseIndigo,
+  },
+  ledgerHeroBody: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingLeft: 12,
+    gap: 6,
+  },
+  ledgerHeroTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  ledgerHeroIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  controlDeck: {
+    gap: 8,
+  },
+  controlDeckEmbedded: {
+    gap: 6,
+  },
+  summaryCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    backgroundColor: Theme.cardWhite,
+    padding: 10,
+    gap: 8,
+  },
+  summaryCardEmbedded: {
+    borderRadius: 14,
+    padding: 8,
+    gap: 6,
   },
   summaryTop: {
     flexDirection: "row",
@@ -719,33 +948,47 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   summaryLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   summaryValue: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
     letterSpacing: -0.3,
+    lineHeight: 22,
+  },
+  vehicleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingTop: 2,
+  },
+  vehicleRowText: {
+    flex: 1,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.2,
   },
   vehiclePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    maxWidth: 130,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 3,
+    maxWidth: 118,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: "#eef2ff",
     borderWidth: 1,
     borderColor: "#c7d2fe",
   },
   vehiclePillText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "700",
     color: Theme.primary,
     flexShrink: 1,
@@ -758,28 +1001,68 @@ const styles = StyleSheet.create({
   alertPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: 999,
     backgroundColor: "#fffbeb",
     borderWidth: 1,
     borderColor: "#fde68a",
   },
   alertPillText: {
-    fontSize: 11,
+    fontSize: 8,
     fontWeight: "600",
     color: "#b45309",
   },
+  alertPillDue: {
+    backgroundColor: "#f5f3ff",
+    borderColor: "#ddd6fe",
+  },
+  alertPillDueText: {
+    color: "#6d28d9",
+  },
   driverPayBanner: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     padding: 10,
-    borderRadius: 10,
+    paddingLeft: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#c7d2fe",
-    backgroundColor: "#f5f3ff",
+    borderColor: Theme.pulseIndigoRing,
+    backgroundColor: "#faf5ff",
+    overflow: "hidden",
+  },
+  driverPayBannerEmbedded: {
+    gap: 8,
+    paddingVertical: 9,
+    borderColor: "#e6edf5",
+    backgroundColor: Theme.cardWhite,
+  },
+  driverPayBannerPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.995 }],
+  },
+  driverPayAccent: {
+    position: "absolute",
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: Theme.pulseIndigo,
+  },
+  driverPayIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+    alignItems: "center",
+    justifyContent: "center",
   },
   driverPayBannerText: {
     flex: 1,
@@ -787,45 +1070,46 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   driverPayBannerTitle: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.primary,
+    lineHeight: 13,
   },
   driverPayBannerSub: {
-    fontSize: 11,
-    fontWeight: "400",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 15,
+    lineHeight: 11,
   },
   payoutSection: {
     marginTop: 4,
     padding: 10,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e6edf5",
     backgroundColor: Theme.surface,
     gap: 6,
   },
   payoutSectionTitle: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   payoutSectionHint: {
-    fontSize: 11,
-    fontWeight: "400",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 15,
+    lineHeight: 13,
     marginBottom: 4,
   },
   payoutEmpty: {
-    fontSize: 12,
-    fontWeight: "400",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
     fontStyle: "italic",
-    lineHeight: 16,
+    lineHeight: 14,
   },
   payoutRow: {
     flexDirection: "row",
@@ -849,43 +1133,78 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   payoutRowTitle: {
-    fontSize: 13,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   payoutRowDate: {
-    fontSize: 11,
-    fontWeight: "400",
+    fontSize: 9,
+    fontWeight: "500",
     color: Theme.textMuted,
   },
   payoutRowAmount: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     color: "#0f766e",
     fontVariant: ["tabular-nums"],
   },
   quickActionsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: Theme.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e6edf5",
+  },
+  quickTile: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+    minHeight: 58,
+  },
+  quickTilePressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.97 }],
+  },
+  quickTileIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickTileLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   quickActionBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 4,
     borderWidth: 1,
-    borderColor: Theme.borderMedium,
+    borderColor: "#e6edf5",
     borderRadius: 10,
     backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 8,
-    paddingVertical: 9,
-    minHeight: 40,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    minHeight: 32,
   },
   quickActionBtnText: {
     color: Theme.textPrimaryDark,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
   segmentTrack: {
     flexDirection: "row",
@@ -896,34 +1215,53 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     gap: 3,
   },
+  segmentTrackEmbedded: {
+    borderColor: "#e6edf5",
+    borderRadius: 10,
+    padding: 2,
+  },
   segmentBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 8,
+    gap: 4,
+    paddingVertical: 6,
     borderRadius: 8,
-    minHeight: 36,
+    minHeight: 28,
   },
   segmentBtnActive: {
     backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
+    borderColor: Theme.pulseIndigoRing,
+    ...Platform.select({
+      ios: {
+        shadowColor: Theme.pulseIndigo,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.12,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+      default: { boxShadow: "0 1px 4px rgba(79,70,229,0.12)" } as object,
+    }),
+  },
+  segmentBtnPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   segmentBtnText: {
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 8,
+    fontWeight: "600",
     color: Theme.textSecondary,
   },
   segmentBtnTextActive: {
     color: Theme.primary,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   segmentCount: {
-    minWidth: 22,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    minWidth: 18,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     borderRadius: 999,
     backgroundColor: Theme.borderLight,
     alignItems: "center",
@@ -935,7 +1273,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fef3c7",
   },
   segmentCountText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "700",
     color: Theme.textSecondary,
   },
@@ -948,14 +1286,54 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: {
     gap: 6,
+    paddingTop: 2,
+  },
+  listSectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  listSectionTitle: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  listSectionBadge: {
+    minWidth: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+  },
+  listSectionBadgeText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: Theme.primary,
   },
   row: {
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e6edf5",
     borderRadius: 12,
     backgroundColor: Theme.cardWhite,
     padding: 10,
+    paddingLeft: 8,
     gap: 8,
+    overflow: "hidden",
+  },
+  rowEmbedded: {
+    padding: 8,
+    gap: 6,
+    borderRadius: 14,
+  },
+  rowNeedsAction: {
+    borderColor: Theme.pulseIndigoRing,
+    backgroundColor: "#fafbff",
   },
   rowMain: {
     flexDirection: "row",
@@ -963,9 +1341,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rowAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -975,50 +1353,69 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   rowTitle: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "800",
     color: Theme.textPrimaryDark,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    lineHeight: 13,
   },
   rowHint: {
-    fontSize: 12,
-    fontWeight: "400",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textSecondary,
+    lineHeight: 11,
   },
   rowRight: {
     alignItems: "flex-end",
-    gap: 4,
-    maxWidth: 110,
+    gap: 3,
+    maxWidth: 100,
+  },
+  editBtn: {
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  editBtnPressed: {
+    opacity: 0.65,
   },
   rowAmount: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
+    lineHeight: 13,
+  },
+  rowAmountSettled: {
+    color: "#15803d",
   },
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    maxWidth: 110,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    maxWidth: 100,
   },
   chipDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
   chipDotGood: { backgroundColor: "#16a34a" },
   chipDotPending: { backgroundColor: "#d97706" },
   chipDotBad: { backgroundColor: "#dc2626" },
   chipDotSettled: { backgroundColor: "#ffffff" },
   chipText: {
-    fontSize: 9,
-    fontWeight: "600",
+    fontSize: 7,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     flexShrink: 1,
+    letterSpacing: 0.1,
   },
   chipTextOnSolid: {
     color: Theme.textOnPrimary,
@@ -1033,8 +1430,8 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    paddingTop: 10,
+    gap: 6,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
@@ -1044,9 +1441,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderMedium,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minHeight: 30,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Theme.surface,
@@ -1058,36 +1455,53 @@ const styles = StyleSheet.create({
   actionBtnPrimary: {
     borderColor: Theme.primary,
     backgroundColor: Theme.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: Theme.pulseIndigo,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  actionBtnPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  actionBtnSecondaryPressed: {
+    backgroundColor: Theme.borderLight,
   },
   actionBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   actionBtnTextPrimary: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textOnPrimary,
   },
   emptyCard: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: "#e6edf5",
     backgroundColor: Theme.surface,
-    padding: 20,
+    padding: 14,
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   emptyTitle: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   empty: {
-    fontSize: 12,
-    fontWeight: "400",
+    fontSize: 8,
+    fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 17,
+    lineHeight: 12,
   },
 });

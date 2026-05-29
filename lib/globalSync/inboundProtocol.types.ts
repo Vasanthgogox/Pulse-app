@@ -4,10 +4,21 @@ export type InboundPartnerDisplay = {
   organizationName: string;
   contactPerson: string;
   phone: string;
+  /** organizations.logo_url — preferred for connection invite hero. */
+  logoUrl?: string;
+  /** Owner profile photo (not used in invite hero). */
+  ownerAvatarUrl?: string;
+  /** organizations.avatar_seed — org branding preset fallback. */
+  orgAvatarSeed?: string;
+  /** Resolved display URI (logo → owner photo → seed preset). */
   avatarUrl?: string;
   avatarSeed?: string;
   /** Partner org owner (from SECURITY DEFINER batch RPC; not readable via RLS SELECT). */
   ownerId?: string;
+  orgCreatedAt?: string;
+  tripCount?: number;
+  averageRating?: number | null;
+  ratingCount?: number;
 };
 
 export type InboundProtocolInviteItem = {
@@ -22,6 +33,14 @@ export type InboundProtocolInviteItem = {
   /** All pending request ids for this contact (recall withdraws every row). */
   linkedRequestIds?: string[];
   avatarUri: string | null;
+  /** organizations.logo_url when available (hero uses logo before owner photo). */
+  logoUrl?: string | null;
+  ownerAvatarUrl?: string | null;
+  orgAvatarSeed?: string | null;
+  orgCreatedAt?: string | null;
+  tripCount?: number | null;
+  averageRating?: number | null;
+  ratingCount?: number | null;
   createdAt: string;
   /** Distinguishes org connection requests from fleet driver invitations. */
   kind?: 'connection' | 'driver';

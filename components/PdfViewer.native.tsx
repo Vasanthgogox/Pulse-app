@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { WebView } from "react-native-webview";
 
+import { NativeHtmlWebView } from "@/components/NativeHtmlWebView";
 import Theme from "@/constants/Theme";
 
 interface PdfViewerProps {
@@ -21,19 +21,15 @@ export function PdfViewer({ pdfUri }: PdfViewerProps) {
     );
   }
 
-  const source =
-    pdfUri.trim().startsWith("<") || pdfUri.includes("<!DOCTYPE")
-      ? { html: pdfUri }
-      : { uri: pdfUri };
+  const isHtml =
+    pdfUri.trim().startsWith("<") || pdfUri.includes("<!DOCTYPE");
 
   return (
     <View style={styles.container}>
-      <WebView
-        originWhitelist={["*"]}
-        source={source}
+      <NativeHtmlWebView
+        html={isHtml ? pdfUri : undefined}
+        uri={isHtml ? undefined : pdfUri}
         style={styles.pdf}
-        showsVerticalScrollIndicator
-        nestedScrollEnabled
         startInLoadingState
       />
     </View>

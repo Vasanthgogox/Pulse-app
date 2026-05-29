@@ -1,39 +1,19 @@
 import Theme from "@/constants/Theme";
+import { LeafletMapZoomControls } from "@/components/driver/LeafletMapZoomControls";
 import {
   createTripMapMarkerElement,
   tripMapMarkerRoleFromId,
 } from "@/lib/mapMarkerIcons.util";
-import React, { useEffect, useRef } from "react";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import React, { useCallback, useEffect, useRef } from "react";
+import { StyleSheet, View } from "react-native";
 
-export type LeafletLatLng = { latitude: number; longitude: number };
+import type {
+  LeafletLatLng,
+  LeafletMapProps,
+  LeafletMapRef,
+} from "./LeafletMap.types";
 
-export type LeafletMarker = {
-  id: string;
-  coordinate: LeafletLatLng;
-  label?: string;
-  color?: string;
-};
-
-type LeafletMapProps = {
-  style?: StyleProp<ViewStyle>;
-  center: LeafletLatLng;
-  zoom?: number;
-  markers?: LeafletMarker[];
-  polyline?: LeafletLatLng[];
-  polylineColor?: string;
-  maxBounds?: {
-    southWest: LeafletLatLng;
-    northEast: LeafletLatLng;
-  };
-  lowPower?: boolean;
-  interactionLocked?: boolean;
-};
-
-export type LeafletMapRef = {
-  focusCurrentLocation: (center: LeafletLatLng, zoom?: number) => void;
-  fitBounds: (ne: LeafletLatLng, sw: LeafletLatLng, paddingPx?: number) => void;
-};
+export type { LeafletLatLng, LeafletMapRef, LeafletMarker } from "./LeafletMap.types";
 
 // Inline OSM raster style avoids external style/sprite/glyph failures on web.
 const MAP_STYLE = {
@@ -91,6 +71,8 @@ type MapLibreMapLike = {
     zoom: number;
     duration?: number;
   }) => void;
+  getZoom?: () => number;
+  getCenter?: () => { lng: number; lat: number };
   resize: () => void;
   remove?: () => void;
 };
@@ -171,10 +153,13 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       maxBounds,
       lowPower = false,
       interactionLocked = false,
+      showZoomControls = true,
     },
     ref,
   ) => {
     const mapRef = useRef<MapLibreMapLike | null>(null);
+    const zoomLevelRef = useRef(zoom);
+    zoomLevelRef.current = zoom;
     const interactionLockedRef = useRef(interactionLocked);
     interactionLockedRef.current = interactionLocked;
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -446,9 +431,15 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           const lng = m.coordinate.longitude;
           const color = m.color || Theme.driverEmerald;
           const role = tripMapMarkerRoleFromId(m.id);
-          const el = createTripMapMarkerElement(role, m.label, color);
+          const el = createTripMapMarkerElement(role, m.label, color, {
+            avatarUri: m.avatarUri,
+            avatarSeed: m.avatarSeed,
+            isOnline: m.isOnline,
+          });
           const anchor =
-            role === "origin" || role === "destination" ? "bottom" : "center";
+            role === "origin" || role === "destination" || role === "driver"
+              ? "bottom"
+              : "center";
 
           const marker = new maplibregl.Marker({
             element: el,
@@ -466,9 +457,34 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
       };
     }, [center, zoom, markers, polyline, polylineColor, maxBounds, lowPower]);
 
+    const adjustZoom = useCallback(
+      (delta: number) => {
+        const map = mapRef.current;
+        if (!map || interactionLockedRef.current) return;
+        const current =
+          typeof map.getZoom === "function" ? map.getZoom() : zoomLevelRef.current;
+        const next = Math.max(3, Math.min(19, current + delta));
+        zoomLevelRef.current = next;
+        const mapCenter = map.getCenter?.();
+        const lng = mapCenter?.lng ?? center.longitude;
+        const lat = mapCenter?.lat ?? center.latitude;
+        try {
+          map.easeTo({
+            center: [lng, lat],
+            zoom: next,
+            duration: lowPower ? 0 : 280,
+          });
+        } catch {
+          // Map may not be ready
+        }
+      },
+      [center.latitude, center.longitude, lowPower],
+    );
+
     React.useImperativeHandle(ref, () => ({
       focusCurrentLocation: (currentCenter, currentZoom = 15) => {
         const boundedCenter = clampToBounds(currentCenter, maxBounds);
+        zoomLevelRef.current = currentZoom;
         mapRef.current?.easeTo({
           center: [boundedCenter.longitude, boundedCenter.latitude],
           zoom: currentZoom,
@@ -489,15 +505,32 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           // Map may not be ready
         }
       },
+      zoomIn: () => adjustZoom(1),
+      zoomOut: () => adjustZoom(-1),
     }));
 
+    const showZoom = showZoomControls && !interactionLocked;
+
     return (
-      <View style={style}>
+      <View style={[style, styles.mapHost]}>
         <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+        {showZoom ? (
+          <LeafletMapZoomControls
+            onZoomIn={() => adjustZoom(1)}
+            onZoomOut={() => adjustZoom(-1)}
+          />
+        ) : null}
       </View>
     );
   },
 );
+
+const styles = StyleSheet.create({
+  mapHost: {
+    position: "relative",
+    overflow: "hidden",
+  },
+});
 
 export function leafletPolylineFromLatLng(
   points: LeafletLatLng[],

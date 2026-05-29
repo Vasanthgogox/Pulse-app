@@ -1,3 +1,4 @@
+import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { DriverHeader } from '@/components/driver/DriverHeader';
 import { DriverTripFlowCard } from '@/features/driver/components/DriverTripFlowCard';
 import { JobRequestCard } from '@/components/JobRequestCard';
@@ -422,6 +423,7 @@ export default function DriverDashboard() {
   const lastAnimatedStepKeyRef = useRef<string | null>(null);
   const lastAnimatedTripIdRef = useRef<string | null>(null);
   const mapRef = useRef<MapView | null>(null);
+  const nativeMapZoomRef = useRef(16);
   const fullMapRef = useRef<MapView | null>(null);
   const inlineMapViewportHeightRef = useRef(0);
   const inlineMapLastFitKeyRef = useRef<string | null>(null);
@@ -1692,14 +1694,13 @@ export default function DriverDashboard() {
             coordinate={driverMapPosition ?? DEFAULT_MAP_REGION}
             anchor={{ x: 0.5, y: 1 }}
           >
-              <Reanimated.View
-                style={[
-                  styles.olaYouMarker,
-                  youIconAnimatedStyle,
-                  { backgroundColor: Theme.primary, borderColor: colors.border },
-                ]}
-              >
-                <FontAwesome name="location-arrow" size={16} color={Theme.textOnPrimary} />
+              <Reanimated.View style={youIconAnimatedStyle}>
+                <DriverMapAvatarMarker
+                  avatarUri={avatarUri}
+                  avatarSeed={avatarSeed}
+                  isOnline={isOnline}
+                  size={48}
+                />
               </Reanimated.View>
               <Callout>
                 <View
@@ -1932,6 +1933,56 @@ export default function DriverDashboard() {
               size={16}
               color={colors.text}
             />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!driverMapPosition) return;
+              nativeMapZoomRef.current = Math.max(3, Math.min(20, nativeMapZoomRef.current + 1));
+              try {
+                targetRef.current?.animateCamera?.(
+                  { center: driverMapPosition, zoom: nativeMapZoomRef.current, pitch: 0 },
+                  { duration: 280 },
+                );
+              } catch {
+                // ignore
+              }
+            }}
+            style={[
+              styles.mapControlBtn,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              mapInteractionsLocked && styles.mapControlBtnDisabled,
+            ]}
+            activeOpacity={0.9}
+            disabled={mapInteractionsLocked}
+            accessibilityRole="button"
+            accessibilityLabel="Zoom in"
+          >
+            <FontAwesome name="plus" size={16} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              if (!driverMapPosition) return;
+              nativeMapZoomRef.current = Math.max(3, Math.min(20, nativeMapZoomRef.current - 1));
+              try {
+                targetRef.current?.animateCamera?.(
+                  { center: driverMapPosition, zoom: nativeMapZoomRef.current, pitch: 0 },
+                  { duration: 280 },
+                );
+              } catch {
+                // ignore
+              }
+            }}
+            style={[
+              styles.mapControlBtn,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              mapInteractionsLocked && styles.mapControlBtnDisabled,
+            ]}
+            activeOpacity={0.9}
+            disabled={mapInteractionsLocked}
+            accessibilityRole="button"
+            accessibilityLabel="Zoom out"
+          >
+            <FontAwesome name="minus" size={16} color={colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleFocusCurrentLocation}

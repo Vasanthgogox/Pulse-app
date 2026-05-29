@@ -59,3 +59,12 @@ export function preloadDispatcherStackRoutes(): void {
 export function preloadDispatcherNavigationGraph(): void {
   // Intentionally empty.
 }
+
+/**
+ * Reserved for future route warm-up. Intentionally a no-op: a direct
+ * `import(TripDetailScreen)` duplicates the lazy route in `app/trip/[id]/index.tsx`
+ * and breaks Metro HMR ("unknown module" / importedAll errors in dev).
+ */
+export function preloadTripDetailScreen(_tripId?: string): void {
+  // Navigation loads the screen via expo-router + React.lazy on the route module.
+}

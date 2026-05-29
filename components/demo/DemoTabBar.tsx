@@ -1,7 +1,7 @@
 /**
  * Unified shell footer + bottom nav (Q-unified-base aligned).
  */
-import { AnimatedChatTabIcon } from "@/components/AnimatedChatTabIcon";
+import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
 import { AlertRegistryPanel } from "@/components/AlertRegistryPanel";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import Layout from "@/constants/Layout";
@@ -18,7 +18,7 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
-import { preloadTabScreen } from "@/lib/preloadRoutes";
+import { preloadPulseLoadsRoute, preloadTabScreen } from "@/lib/preloadRoutes";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 // Chat unread badges read from a tiny external signal — importing
@@ -35,13 +35,9 @@ import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistry
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
+import { useTabBarActiveLoadCount } from "@/lib/hooks/useTabBarActiveLoadCount";
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
-import {
-    useIndentsQuery,
-    useMarketIndentsQuery,
-    useMyDirectQuotesQuery,
-} from "@/lib/queries/useIndentsQuery";
 import {
     useConnectionRequestsReceivedQuery,
     useConnectionRequestsSentQuery,
@@ -57,7 +53,6 @@ import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/sal
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
-import { Home, Package, Route, Wallet } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -75,7 +70,6 @@ import {
 import Animated, {
     Easing,
     interpolate,
-    interpolateColor,
     useAnimatedStyle,
     useDerivedValue,
     useSharedValue,
@@ -126,377 +120,6 @@ function AnimatedPress({
         {children}
       </TouchableOpacity>
     </Animated.View>
-  );
-}
-
-/** Edge tabs (home / chat). */
-const MOBILE_EDGE_ICON_SIZE = 22;
-const MOBILE_EDGE_ICON_SIZE_COMPACT = 19;
-/** Clustered ops tabs — light stroke, Slack thumb. */
-const MOBILE_CLUSTER_ICON_SIZE = 19;
-const MOBILE_CLUSTER_ICON_SIZE_COMPACT = 17;
-const CLUSTER_STROKE = 1.75;
-
-type LucideClusterIcon = typeof Wallet;
-
-function MobileFooterTab({
-  label,
-  active,
-  onPress,
-  badgeCount,
-  compact,
-  icon,
-  customIcon,
-  avatarUri,
-  avatarInitials,
-  edge,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  badgeCount?: number;
-  compact?: boolean;
-  icon?: React.ComponentProps<typeof FontAwesome5>["name"];
-  customIcon?: React.ReactNode;
-  avatarUri?: string | null;
-  avatarInitials?: string;
-  /** Home / chat wings — fixed width, no stretch. */
-  edge?: boolean;
-}) {
-  const showBadge = (badgeCount ?? 0) > 0;
-  const iconSize = compact ? MOBILE_EDGE_ICON_SIZE_COMPACT : MOBILE_EDGE_ICON_SIZE;
-  /* Active edge tabs (Home / Chat) render a solid indigo chip, so the
-   *  glyph inside must flip to white to read on the deep purple fill.
-   *  Inactive uses the muted demo grey. */
-  const iconColor = active
-    ? edge
-      ? Theme.textOnPrimary
-      : Theme.pulseIndigo
-    : Theme.textMutedDemo;
-  const isProfile = avatarInitials != null;
-  const iconSlotBase = [
-    styles.mobileFooterIconSlot,
-    edge && styles.mobileFooterIconSlotEdge,
-    edge && !active && styles.mobileFooterIconSlotEdgeIdle,
-    active && !edge && styles.mobileFooterIconSlotActive,
-  ];
-  const iconSlotInner = (
-    <>
-      {active && !edge ? <View style={styles.mobileFooterActiveBar} /> : null}
-      {isProfile ? (
-          avatarUri ? (
-            <Image
-              source={{ uri: avatarUri }}
-              style={[
-                styles.mobileFooterAvatar,
-                edge && styles.mobileFooterAvatarEdge,
-                active && styles.mobileFooterAvatarActive,
-              ]}
-            />
-          ) : (
-            <View
-              style={[
-                styles.mobileFooterAvatar,
-                styles.mobileFooterAvatarFallback,
-                edge && styles.mobileFooterAvatarEdge,
-                active && styles.mobileFooterAvatarActive,
-              ]}
-            >
-              <Text style={styles.mobileFooterAvatarInitials}>
-                {avatarInitials}
-              </Text>
-            </View>
-          )
-        ) : customIcon ? (
-          customIcon
-        ) : icon ? (
-          <FontAwesome5
-            name={icon}
-            size={iconSize}
-            color={iconColor}
-            solid={false}
-          />
-        ) : null}
-        {showBadge ? (
-          <View style={styles.mobileFooterBadge}>
-            <Text style={styles.mobileFooterBadgeText}>
-              {(badgeCount ?? 0) > 9 ? "9+" : badgeCount}
-            </Text>
-          </View>
-        ) : null}
-    </>
-  );
-
-  return (
-    <TouchableOpacity
-      style={[styles.mobileFooterTab, edge && styles.mobileFooterTabEdge]}
-      onPress={onPress}
-      activeOpacity={0.72}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      accessibilityLabel={label}
-    >
-      {active && edge ? (
-        <LinearGradient
-          colors={[Theme.actionAccent, Theme.actionAccentBorder]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[iconSlotBase, styles.mobileFooterIconSlotEdgeActive]}
-        >
-          {iconSlotInner}
-        </LinearGradient>
-      ) : (
-        <View style={iconSlotBase}>{iconSlotInner}</View>
-      )}
-      <Text
-        style={[
-          styles.mobileFooterLabel,
-          compact && styles.mobileFooterLabelCompact,
-          active && styles.mobileFooterLabelActive,
-          active && edge && styles.mobileFooterEdgeLabelActive,
-          edge && !active && styles.mobileFooterEdgeLabelIdle,
-        ]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-const CLUSTER_PILL_INSET = 5;
-/** Inset so the white thumb floats inside each segment (Slack bubble). */
-const CLUSTER_THUMB_FLOAT = 5;
-const CLUSTER_SPRING = { damping: 24, stiffness: 420, mass: 0.65 };
-
-const CLUSTER_ON_THUMB = Theme.pulseTabClusterIconOnThumb;
-const CLUSTER_ON_TRACK = Theme.pulseTabClusterIconInactive;
-const CLUSTER_LABEL_ON_THUMB = Theme.pulseTabClusterLabelOnThumb;
-const CLUSTER_LABEL_ON_TRACK = Theme.pulseTabClusterLabelInactive;
-
-const AnimatedText = Animated.createAnimatedComponent(Text);
-
-const CLUSTER_TRACK_GLASS_WEB: ViewStyle =
-  Platform.OS === "web"
-    ? ({
-        backdropFilter: "blur(8px) saturate(120%)",
-        WebkitBackdropFilter: "blur(8px) saturate(120%)",
-      } as ViewStyle)
-    : {};
-
-type SlackClusterTab = {
-  id: string;
-  label: string;
-  LucideIcon: LucideClusterIcon;
-  active: boolean;
-  onPress: () => void;
-  badgeCount?: number;
-};
-
-/** Per-tab icon + label crossfade (dark on white thumb ↔ light on purple track). */
-function SlackClusterSegment({
-  tab,
-  index,
-  slideIndex,
-  segmentWidth,
-  compact,
-  iconSize,
-}: {
-  tab: SlackClusterTab;
-  index: number;
-  slideIndex: { value: number };
-  segmentWidth: number;
-  compact?: boolean;
-  iconSize: number;
-}) {
-  const showBadge = (tab.badgeCount ?? 0) > 0;
-  const Icon = tab.LucideIcon;
-
-  const selectionMix = useDerivedValue(() => {
-    if (slideIndex.value < 0) return 0;
-    const dist = Math.abs(slideIndex.value - index);
-    return Math.max(0, 1 - Math.min(dist, 1));
-  });
-
-  const onThumbIconStyle = useAnimatedStyle(() => ({
-    opacity: selectionMix.value,
-    transform: [{ scale: interpolate(selectionMix.value, [0, 1], [0.88, 1]) }],
-  }));
-
-  const onTrackIconStyle = useAnimatedStyle(() => ({
-    opacity: 1 - selectionMix.value,
-    transform: [{ scale: interpolate(selectionMix.value, [0, 1], [1, 0.92]) }],
-  }));
-
-  const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      selectionMix.value,
-      [0, 1],
-      [CLUSTER_LABEL_ON_TRACK, CLUSTER_LABEL_ON_THUMB],
-    ),
-    fontWeight: selectionMix.value > 0.55 ? "800" : "500",
-    letterSpacing: interpolate(selectionMix.value, [0, 1], [0.35, 0.55]),
-    opacity: interpolate(selectionMix.value, [0, 1], [0.72, 1]),
-  }));
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.mobileFooterSlackSegment,
-        segmentWidth > 0 ? { width: segmentWidth } : styles.mobileFooterSlackSegmentFlex,
-        pressed && styles.mobileFooterSlackSegmentPressed,
-      ]}
-      onPress={tab.onPress}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: tab.active }}
-      accessibilityLabel={tab.label}
-    >
-      <View style={styles.mobileFooterSlackIconStack}>
-        <Animated.View style={[styles.mobileFooterSlackIconLayer, onTrackIconStyle]}>
-          <Icon size={iconSize} color={CLUSTER_ON_TRACK} strokeWidth={1.6} />
-        </Animated.View>
-        <Animated.View style={[styles.mobileFooterSlackIconLayer, onThumbIconStyle]}>
-          <Icon size={iconSize} color={CLUSTER_ON_THUMB} strokeWidth={2.25} />
-        </Animated.View>
-        {showBadge ? (
-          <View style={styles.mobileFooterBadgeClustered}>
-            <Text style={styles.mobileFooterBadgeText}>
-              {(tab.badgeCount ?? 0) > 9 ? "9+" : tab.badgeCount}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <AnimatedText
-        style={[
-          styles.mobileFooterSlackLabel,
-          compact && styles.mobileFooterSlackLabelCompact,
-          labelStyle,
-        ]}
-        numberOfLines={1}
-      >
-        {tab.label}
-      </AnimatedText>
-    </Pressable>
-  );
-}
-
-/** Slack-style sliding thumb across ops tabs (cash / trips / loads). */
-function MobileFooterSlackCluster({
-  tabs,
-  activeIndex,
-  compact,
-}: {
-  tabs: SlackClusterTab[];
-  activeIndex: number;
-  compact?: boolean;
-}) {
-  const [pillWidth, setPillWidth] = useState(0);
-  const pillMountedRef = useRef(false);
-  const slideIndex = useSharedValue(activeIndex >= 0 ? activeIndex : -1);
-  const iconSize = compact
-    ? MOBILE_CLUSTER_ICON_SIZE_COMPACT
-    : MOBILE_CLUSTER_ICON_SIZE;
-
-  useEffect(() => {
-    pillMountedRef.current = true;
-    return () => {
-      pillMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (activeIndex < 0) {
-      slideIndex.value = withTiming(-1, { duration: 160, easing: Easing.out(Easing.cubic) });
-      return;
-    }
-    slideIndex.value = withSpring(activeIndex, CLUSTER_SPRING);
-  }, [activeIndex, slideIndex]);
-
-  const handlePillLayout = useCallback((width: number) => {
-    if (!pillMountedRef.current || width <= 0) return;
-    setPillWidth((prev) => (prev === width ? prev : width));
-  }, []);
-
-  const segmentWidth =
-    pillWidth > 0
-      ? (pillWidth - CLUSTER_PILL_INSET * 2) / tabs.length
-      : 0;
-
-  const thumbWidth =
-    segmentWidth > 0 ? Math.max(0, segmentWidth - CLUSTER_THUMB_FLOAT * 2) : 0;
-
-  const thumbStyle = useAnimatedStyle(() => {
-    if (thumbWidth <= 0 || activeIndex < 0) return { opacity: 0 };
-    const frac = slideIndex.value - Math.floor(slideIndex.value);
-    const midBlend = 1 - Math.abs(frac - 0.5) * 2;
-    const travelContract = Math.min(
-      Math.abs(slideIndex.value - Math.round(slideIndex.value)),
-      1,
-    );
-    const scale = interpolate(travelContract, [0, 0.5, 1], [1, 0.94, 0.9]);
-    const scaleY = interpolate(midBlend, [0, 1], [scale, scale * 0.96]);
-    return {
-      width: thumbWidth,
-      opacity: interpolate(travelContract, [0, 1], [1, 0.92]),
-      transform: [
-        {
-          translateX:
-            CLUSTER_PILL_INSET +
-            CLUSTER_THUMB_FLOAT +
-            slideIndex.value * segmentWidth,
-        },
-        { scaleX: scale },
-        { scaleY: scaleY },
-      ],
-    };
-  }, [thumbWidth, segmentWidth, activeIndex]);
-
-  return (
-    <View
-      style={[
-        styles.mobileFooterSlackPill,
-        compact && styles.mobileFooterSlackPillCompact,
-        CLUSTER_TRACK_GLASS_WEB,
-      ]}
-      onLayout={(e) => handlePillLayout(e.nativeEvent.layout.width)}
-    >
-      <LinearGradient
-        colors={[Theme.pulseTabClusterTrackTop, Theme.pulseTabClusterTrackBottom]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      <LinearGradient
-        colors={[Theme.pulseTabClusterTrackInnerGlow, "rgba(255,255,255,0)"]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 0.35 }}
-        style={styles.mobileFooterSlackTrackSheen}
-        pointerEvents="none"
-      />
-      <View style={styles.mobileFooterSlackTrackRim} pointerEvents="none" />
-      {thumbWidth > 0 && activeIndex >= 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.mobileFooterSlackThumb,
-            compact && styles.mobileFooterSlackThumbCompact,
-            thumbStyle,
-          ]}
-        />
-      ) : null}
-      {tabs.map((tab, index) => (
-        <SlackClusterSegment
-          key={tab.id}
-          tab={tab}
-          index={index}
-          slideIndex={slideIndex}
-          segmentWidth={segmentWidth}
-          compact={compact}
-          iconSize={iconSize}
-        />
-      ))}
-    </View>
   );
 }
 
@@ -613,14 +236,21 @@ export function DemoTabBar({
   const { currentOrganization } = useOrganization();
   const queryClient = useQueryClient();
   const orgId = currentOrganization?.id ?? null;
-  const warmTabOnHover = (tab: DemoTabId) => {
-    if (tab === "finance" || tab === "trips" || tab === "network") {
-      preloadTabScreen(tab);
-      if (tab === "finance" && orgId) {
-        preloadFinanceWarmup(queryClient, orgId);
+  const onWarmTab = useCallback(
+    (tab: DemoTabId) => {
+      if (tab === "loadCenter") {
+        preloadPulseLoadsRoute();
+        return;
       }
-    }
-  };
+      if (tab === "finance" || tab === "trips" || tab === "network") {
+        preloadTabScreen(tab);
+        if (tab === "finance" && orgId) {
+          preloadFinanceWarmup(queryClient, orgId);
+        }
+      }
+    },
+    [orgId, queryClient],
+  );
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   /** Operation shelf row ids the user has opened in the Alert Registry (session-only; badge excludes them). */
   const [seenRegistryOperationIds, setSeenRegistryOperationIds] = useState<
@@ -647,9 +277,19 @@ export function DemoTabBar({
   const opsShelf = useOperationsShelfItems();
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
-  const dockIndentsQ = useIndentsQuery(orgId);
-  const dockMarketIndentsQ = useMarketIndentsQuery(orgId);
-  const dockMyQuotesQ = useMyDirectQuotesQuery(orgId);
+  const { width: windowWidth } = useWindowDimensions();
+  const isWebEarly = Platform.OS === "web";
+  const isDesktopWebEarly = isWebEarly && windowWidth >= 1024;
+  const [loadsBadgeReady, setLoadsBadgeReady] = useState(false);
+  useEffect(() => {
+    if (isDesktopWebEarly) return;
+    const t = setTimeout(() => setLoadsBadgeReady(true), 2800);
+    return () => clearTimeout(t);
+  }, [isDesktopWebEarly]);
+  const activeLoadCount = useTabBarActiveLoadCount(
+    orgId,
+    !isDesktopWebEarly && loadsBadgeReady,
+  );
   // External-store-driven counts; chat providers publish into the signal.
   const messageUnreadCount = useSyncExternalStore(
     subscribeChatUnreadSignal,
@@ -663,36 +303,6 @@ export function DemoTabBar({
     refreshInboundProtocol,
     patchAfterAction: patchInviteAfterAction,
   } = useProtocolInvitesWithDriverSent(orgId);
-  const activeLoadCount = useMemo(() => {
-    const terminalStatuses = new Set(["completed", "cancelled"]);
-    const awardedToMeIds = new Set(
-      (dockMyQuotesQ.data ?? [])
-        .filter((q) => String(q.status ?? "").toLowerCase() === "accepted")
-        .map((q) => q.indent_id),
-    );
-    const activeIds = new Set<string>();
-
-    for (const indent of dockIndentsQ.data ?? []) {
-      const status = String(indent.status ?? "").toLowerCase();
-      if (terminalStatuses.has(status)) continue;
-      if (indent.organization_id === orgId) activeIds.add(indent.id);
-    }
-
-    for (const indent of dockMarketIndentsQ.data ?? []) {
-      const status = String(indent.status ?? "").toLowerCase();
-      if (terminalStatuses.has(status)) continue;
-      const target = String(indent.circulation_target ?? "").toLowerCase();
-      const isMarketVisible = target === "integrated_supplier" || target === "both";
-      if (!isMarketVisible) continue;
-      if (status === "awarded") {
-        if (awardedToMeIds.has(indent.id)) activeIds.add(indent.id);
-        continue;
-      }
-      activeIds.add(indent.id);
-    }
-
-    return activeIds.size;
-  }, [dockIndentsQ.data, dockMarketIndentsQ.data, dockMyQuotesQ.data, orgId]);
   useEffect(() => {
     let mounted = true;
     const resolveAvatar = async () => {
@@ -850,7 +460,6 @@ export function DemoTabBar({
   };
 
   const bottomInset = useEffectiveBottomInset();
-  const { width: windowWidth } = useWindowDimensions();
   const { t } = useLanguage();
   const fallbackDockVisibilityProgress = useSharedValue(1);
   const dockVisibilityProgress =
@@ -884,8 +493,8 @@ export function DemoTabBar({
     [router, t],
   );
 
-  const isWeb = Platform.OS === "web";
-  const isDesktopWeb = isWeb && windowWidth >= 1024;
+  const isWeb = isWebEarly;
+  const isDesktopWeb = isDesktopWebEarly;
   const isCompactMobile = !isDesktopWeb && windowWidth < 390;
   const isFiscal = activeTab === "finance";
   const isTrips = activeTab === "trips";
@@ -913,8 +522,11 @@ export function DemoTabBar({
   const footerPadTop = 4;
   const footerPadBottom = tabBarFooterPadding(bottomInset, tabBarPlatform);
   const collapseNetworkDock = useCallback(() => {
-    setIsNetworkExpanded(false);
-    setMobileNetworkDockExpanded(false);
+    setIsNetworkExpanded((open) => {
+      if (!open) return open;
+      setMobileNetworkDockExpanded(false);
+      return false;
+    });
   }, []);
 
   const runNetworkDockAction = useCallback((action: () => void) => {
@@ -1064,7 +676,7 @@ export function DemoTabBar({
                 key={`${item.id}-${item.title}`}
                 active={item.active}
                 onPress={() => onTabChange(item.id)}
-                onHoverInExtra={() => warmTabOnHover(item.id)}
+                onHoverInExtra={() => onWarmTab(item.id)}
                 icon={item.icon}
                 title={item.title}
                 subtitle={item.subtitle}
@@ -1191,120 +803,20 @@ export function DemoTabBar({
     );
   }
 
-  /** No cluster tab selected on Home (network) or Chat — avoid defaulting thumb to Cash. */
-  const clusterActiveIndex = isFiscal ? 0 : isTrips ? 1 : isLoadCenter ? 2 : -1;
-
-  const slackClusterTabs: SlackClusterTab[] = [
-    {
-      id: "finance",
-      label: "Cash",
-      LucideIcon: Wallet,
-      active: isFiscal,
-      onPress: () => {
-        collapseNetworkDock();
-        onTabChange("finance");
-      },
-    },
-    {
-      id: "trips",
-      label: "Trips",
-      LucideIcon: Route,
-      active: isTrips,
-      onPress: () => {
-        collapseNetworkDock();
-        onTabChange("trips");
-      },
-    },
-    {
-      id: "loads",
-      label: "Loads",
-      LucideIcon: Package,
-      active: isLoadCenter,
-      badgeCount: activeLoadCount,
-      onPress: () => {
-        collapseNetworkDock();
-        onTabChange("loadCenter");
-      },
-    },
-  ];
-
   return (
-    <View
-      style={[
-        styles.footerWrap,
-        styles.mmtFooterShell,
-        { paddingBottom: footerPadBottom },
-      ]}
-      pointerEvents="box-none"
-    >
-      <View
-              style={[
-          styles.mmtFooterBar,
-          isCompactMobile && styles.mmtFooterBarCompact,
-        ]}
-      >
-        <View style={styles.mobileFooterEdgeStart}>
-          <MobileFooterTab
-            label="Home"
-            edge
-            active={isNetwork}
-            badgeCount={pendingInvites}
-            customIcon={
-              /* Active = solid indigo edge chip → glyph must flip to
-               *  white so the filled house stays readable on the deep
-               *  purple background. Inactive keeps the muted demo grey
-               *  outline. */
-              <Home
-                size={
-                  isCompactMobile
-                    ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
-                    : MOBILE_EDGE_ICON_SIZE + 1
-                }
-                color={isNetwork ? Theme.textOnPrimary : Theme.actionAccent}
-                fill={isNetwork ? Theme.textOnPrimary : "transparent"}
-                strokeWidth={isNetwork ? CLUSTER_STROKE + 0.1 : CLUSTER_STROKE}
-                opacity={isNetwork ? 1 : 0.55}
-              />
-            }
-              onPress={() => {
-                collapseNetworkDock();
-              onTabChange("network");
-            }}
-            compact={isCompactMobile}
-          />
-                </View>
-        <MobileFooterSlackCluster
-          tabs={slackClusterTabs}
-          activeIndex={clusterActiveIndex}
-          compact={isCompactMobile}
-        />
-        <View style={styles.mobileFooterEdgeEnd}>
-          <MobileFooterTab
-            label="Chat"
-            edge
-            active={isChatRoute}
-            badgeCount={messageUnreadCount}
-            customIcon={
-              <View style={!isChatRoute ? styles.mobileFooterEdgeIconMuted : undefined}>
-                <AnimatedChatTabIcon
-                  active={isChatRoute}
-                  size={
-                    isCompactMobile
-                      ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
-                      : MOBILE_EDGE_ICON_SIZE + 1
-                  }
-                />
-              </View>
-            }
-            onPress={() => {
-              collapseNetworkDock();
-              openMessages();
-            }}
-            compact={isCompactMobile}
-          />
-        </View>
-      </View>
-    </View>
+    <DemoTabBarMobileFooter
+      activeTab={activeTab}
+      isChatRoute={isChatRoute}
+      isCompactMobile={isCompactMobile}
+      footerPadBottom={footerPadBottom}
+      messageUnreadCount={messageUnreadCount}
+      pendingInvites={pendingInvites}
+      activeLoadCount={activeLoadCount}
+      onTabChange={onTabChange}
+      onOpenChat={openMessages}
+      onCollapseNetworkDock={collapseNetworkDock}
+      onWarmTab={onWarmTab}
+    />
   );
 }
 
@@ -1313,295 +825,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
-  },
-  footerWrap: {
-    width: "100%",
-    alignSelf: "stretch",
-    backgroundColor: "transparent",
-    paddingHorizontal: 0,
-  },
-  mmtFooterShell: {
-    backgroundColor: Theme.tabBarBg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderTopWidth: 1,
-    borderTopColor: Theme.tabBarBorderTop,
-    paddingTop: 10,
-    paddingHorizontal: 4,
-    shadowColor: Theme.actionAccent,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 12,
-  },
-  mmtFooterBar: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    minHeight: 58,
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    gap: 10,
-  },
-  mmtFooterBarCompact: {
-    minHeight: 52,
-    paddingHorizontal: 10,
-    gap: 8,
-  },
-  mobileFooterEdgeStart: {
-    width: 58,
-    alignItems: "center",
-    marginLeft: 4,
-  },
-  mobileFooterEdgeEnd: {
-    width: 58,
-    alignItems: "center",
-    marginRight: 4,
-  },
-  mobileFooterSlackPill: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "stretch",
-    maxWidth: 300,
-    minWidth: 228,
-    padding: CLUSTER_PILL_INSET,
-    borderRadius: 28,
-    backgroundColor: Theme.pulseTabClusterTrackBg,
-    borderWidth: 1,
-    borderColor: Theme.pulseTabClusterTrackBorder,
-    position: "relative",
-    overflow: "hidden",
-    shadowColor: Theme.actionAccent,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 10,
-  },
-  mobileFooterSlackPillCompact: {
-    maxWidth: 280,
-    minWidth: 212,
-    borderRadius: 26,
-  },
-  mobileFooterSlackTrackSheen: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.85,
-  },
-  mobileFooterSlackTrackRim: {
-    position: "absolute",
-    top: 0,
-    left: 12,
-    right: 12,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.pulseTabClusterTrackRim,
-  },
-  mobileFooterSlackThumb: {
-    position: "absolute",
-    top: CLUSTER_PILL_INSET,
-    bottom: CLUSTER_PILL_INSET,
-    left: 0,
-    borderRadius: 22,
-    backgroundColor: Theme.pulseTabClusterThumbSolid,
-    borderWidth: 1,
-    borderColor: Theme.pulseTabClusterThumbBorder,
-    shadowColor: Theme.pulseTabClusterThumbShadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.55,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  mobileFooterSlackThumbCompact: {
-    borderRadius: 20,
-  },
-  mobileFooterSlackIconStack: {
-    position: "relative",
-    width: 36,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mobileFooterSlackIconLayer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mobileFooterSlackSegment: {
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingTop: 4,
-    paddingBottom: 4,
-    zIndex: 1,
-  },
-  mobileFooterSlackSegmentPressed: {
-    opacity: 0.82,
-  },
-  mobileFooterSlackSegmentFlex: {
-    flex: 1,
-    minWidth: 0,
-  },
-  mobileFooterSlackLabel: {
-    marginTop: 4,
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.pulseTabClusterLabelInactive,
-    letterSpacing: 0.35,
-    textAlign: "center",
-    textTransform: "uppercase",
-  },
-  mobileFooterSlackLabelCompact: {
-    fontSize: 8,
-    letterSpacing: 0.3,
-    marginTop: 3,
-  },
-  mobileFooterTab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    minWidth: 0,
-    maxWidth: "16.666%",
-    paddingHorizontal: 2,
-    gap: 4,
-  },
-  mobileFooterTabEdge: {
-    flex: 0,
-    width: 56,
-    maxWidth: 56,
-    minWidth: 56,
-  },
-  mobileFooterIconSlot: {
-    position: "relative",
-    width: 38,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 11,
-  },
-  mobileFooterIconSlotEdge: {
-    width: 40,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "transparent",
-  },
-  mobileFooterIconSlotEdgeIdle: {
-    backgroundColor: Theme.pulseIndigoWash,
-    borderWidth: 1,
-    borderColor: Theme.pulseTabActiveBorder,
-  },
-  mobileFooterIconSlotEdgeActive: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    shadowColor: Theme.actionAccent,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  mobileFooterIconSlotActive: {
-    backgroundColor: Theme.pulseTabActiveBg,
-  },
-  mobileFooterActiveBar: {
-    position: "absolute",
-    top: -5,
-    width: 18,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: Theme.actionAccent,
-  },
-  mobileFooterAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-  },
-  mobileFooterAvatarEdge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-  },
-  mobileFooterAvatarActive: {
-    borderWidth: 2,
-    borderColor: Theme.pulseIndigo,
-  },
-  mobileFooterAvatarFallback: {
-    backgroundColor: Theme.surfaceGray,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mobileFooterAvatarInitials: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-  },
-  mobileFooterBadge: {
-    position: "absolute",
-    top: -2,
-    right: -4,
-    minWidth: 15,
-    height: 15,
-    borderRadius: 8,
-    paddingHorizontal: 3,
-    backgroundColor: Theme.teslaRed,
-    borderWidth: 1.5,
-    borderColor: Theme.tabBarBg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mobileFooterBadgeClustered: {
-    position: "absolute",
-    top: -4,
-    right: -6,
-    minWidth: 13,
-    height: 13,
-    borderRadius: 7,
-    paddingHorizontal: 2,
-    backgroundColor: Theme.teslaRed,
-    borderWidth: 1.5,
-    borderColor: Theme.pulseTabClusterTrackTop,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mobileFooterBadgeText: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textOnPrimary,
-    lineHeight: 10,
-  },
-  mobileFooterLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textMutedDemo,
-    letterSpacing: -0.15,
-    textAlign: "center",
-  },
-  mobileFooterLabelCompact: {
-    fontSize: 10,
-  },
-  mobileFooterLabelActive: {
-    fontWeight: "600",
-    color: Theme.iconPrimary,
-  },
-  mobileFooterEdgeLabelActive: {
-    color: Theme.actionAccent,
-    fontWeight: "700",
-    letterSpacing: -0.05,
-  },
-  mobileFooterEdgeLabelIdle: {
-    color: Theme.textSecondary,
-    fontWeight: "600",
-  },
-  mobileFooterEdgeIconMuted: {
-    opacity: 0.55,
-  },
-  mobileFooterRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  mobileFooterRowCompact: {
-    gap: 4,
   },
   commandFooterWrap: {
     paddingHorizontal: 10,

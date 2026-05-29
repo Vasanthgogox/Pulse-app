@@ -5,6 +5,7 @@ import {
     type LeafletMarker,
 } from "@/components/driver/LeafletMap.web";
 import Theme from "@/constants/Theme";
+import { boundsFromCoordinates } from "@/features/trips/utils/mapRouteViewport.util";
 import { getOptimalRoute, type RouteResult } from "@/lib/routingService";
 import FontAwesomeIcon from "@expo/vector-icons/FontAwesome";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -267,12 +268,6 @@ export function TrackingMapBlock({
     };
   }, [latestCoordinate, normalizedDestination, normalizedOrigin, routeFetchKey]);
 
-  // Keep camera tracking smooth to follow real-time movement without jumps.
-  useEffect(() => {
-    if (!latestCoordinate) return;
-    mapRef.current?.focusCurrentLocation(latestCoordinate, 13);
-  }, [latestCoordinate?.latitude, latestCoordinate?.longitude]);
-
   const markers = useMemo<LeafletMarker[]>(() => {
     const next: LeafletMarker[] = [];
     if (normalizedOrigin) {
@@ -346,6 +341,33 @@ export function TrackingMapBlock({
     optimalRoute?.coordinates,
     normalizedOrigin,
     normalizedDestination,
+  ]);
+
+  useEffect(() => {
+    const viewportPoints = [
+      ...polyline,
+      normalizedOrigin,
+      normalizedDestination,
+      latestCoordinate,
+    ];
+    const bounds = boundsFromCoordinates(viewportPoints);
+    if (!bounds) return;
+
+    const frame = requestAnimationFrame(() => {
+      if (polyline.length >= 2) {
+        mapRef.current?.fitBounds(bounds.ne, bounds.sw, 72);
+        return;
+      }
+      if (latestCoordinate) {
+        mapRef.current?.focusCurrentLocation(latestCoordinate, 11);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    latestCoordinate,
+    normalizedDestination,
+    normalizedOrigin,
+    polyline,
   ]);
 
   return (

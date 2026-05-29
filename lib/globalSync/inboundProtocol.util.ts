@@ -1,13 +1,10 @@
-import {
-  DEFAULT_USER_2D_AVATAR_SEED,
-  getUser2DAvatarUriForSeed,
-} from '@/constants/UserAvatars';
 // Lazy import: `clients.service` carries the trips/links subgraph; loading it
 // at startup contaminates the dispatcher dock chunk. The only call site is
 // inside `fetchInboundProtocolSnapshot`, which runs post-bootstrap.
 const loadClientsService = () => import('@/features/clients/services/clients.service');
 import type { InboundPartnerDisplay, InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
 import { getSignedAvatarUrl } from '@/lib/avatarUpload';
+import { resolveOrgAvatarUri } from '@/features/vehicles/utils/fleetAvatar.util';
 import { normalizePhoneForInviteeLookup } from '@/lib/phoneLookup';
 import type { ConnectionRequestRow } from '@/features/connections/services/connectionRequests.service';
 import { REGISTRY_PAGE_SIZE } from '@/lib/globalSync/registryFeed.constants';
@@ -121,24 +118,37 @@ export function partnerOwnerIdByOrgFromDisplay(
   return out;
 }
 
+async function resolvePartnerPhotoUri(raw: string): Promise<string | null> {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http')) return trimmed;
+  return (await getSignedAvatarUrl(trimmed)) ?? null;
+}
+
 export async function resolvePartnerAvatarUris(
   profiles: Record<string, InboundPartnerDisplay>,
 ): Promise<Record<string, string | null>> {
   const entries = await Promise.all(
     Object.entries(profiles).map(async ([orgId, profile]) => {
-      const raw = (profile.avatarUrl ?? '').trim();
-      if (raw.startsWith('http')) {
-        return [orgId, raw] as const;
-      }
-      if (raw.length > 0) {
-        const signed = await getSignedAvatarUrl(raw);
-        if (signed) return [orgId, signed] as const;
-      }
-      const seed = (profile.avatarSeed ?? '').trim();
-      if (seed.length > 0) {
-        return [orgId, getUser2DAvatarUriForSeed(seed)] as const;
-      }
-      return [orgId, getUser2DAvatarUriForSeed(DEFAULT_USER_2D_AVATAR_SEED)] as const;
+      const orgName = profile.organizationName?.trim() || 'Organization';
+      const logoSigned = profile.logoUrl
+        ? await resolvePartnerPhotoUri(profile.logoUrl)
+        : null;
+      const ownerSigned = profile.ownerAvatarUrl
+        ? await resolvePartnerPhotoUri(profile.ownerAvatarUrl)
+        : null;
+      const legacySigned = !logoSigned && !ownerSigned && profile.avatarUrl
+        ? await resolvePartnerPhotoUri(profile.avatarUrl)
+        : null;
+
+      const uri = resolveOrgAvatarUri(
+        orgId,
+        orgName,
+        logoSigned ?? legacySigned,
+        profile.orgAvatarSeed ?? profile.avatarSeed ?? null,
+        ownerSigned,
+      );
+      return [orgId, uri] as const;
     }),
   );
   return Object.fromEntries(entries);
@@ -226,6 +236,7 @@ export function mapPendingInviteItems(
       const partnerOrgId = partnerOrgIdForRequest(row, direction);
       const name = displayNameForRequest(row, direction, partnerDisplay);
       const ownerFromProfile = partnerDisplay[partnerOrgId]?.ownerId;
+      const partnerProfile = partnerDisplay[partnerOrgId];
       return {
         id: row.id,
         name,
@@ -235,6 +246,13 @@ export function mapPendingInviteItems(
         partnerOwnerId:
           partnerOwnerIdByOrgId[partnerOrgId] ?? ownerFromProfile,
         avatarUri: partnerAvatarUri[partnerOrgId] ?? null,
+        logoUrl: partnerProfile?.logoUrl ?? null,
+        ownerAvatarUrl: partnerProfile?.ownerAvatarUrl ?? null,
+        orgAvatarSeed: partnerProfile?.orgAvatarSeed ?? partnerProfile?.avatarSeed ?? null,
+        orgCreatedAt: partnerProfile?.orgCreatedAt ?? null,
+        tripCount: partnerProfile?.tripCount ?? null,
+        averageRating: partnerProfile?.averageRating ?? null,
+        ratingCount: partnerProfile?.ratingCount ?? null,
         createdAt: row.created_at,
       };
     });

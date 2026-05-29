@@ -12,13 +12,23 @@ const LABELS: Record<OdometerVerificationState, string> = {
 
 export function VerificationStatusChip({
   state,
+  compact = false,
 }: {
   state: OdometerVerificationState;
+  compact?: boolean;
 }) {
   const tone = resolveChipTone(state);
   return (
-    <View style={[styles.chip, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-      <Text style={[styles.text, { color: tone.text }]}>{LABELS[state]}</Text>
+    <View
+      style={[
+        styles.chip,
+        compact && styles.chipCompact,
+        { backgroundColor: tone.bg, borderColor: tone.border },
+      ]}
+    >
+      <Text style={[styles.text, compact && styles.textCompact, { color: tone.text }]}>
+        {LABELS[state]}
+      </Text>
     </View>
   );
 }
@@ -55,8 +65,17 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     alignSelf: "flex-start",
   },
+  chipCompact: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   text: {
     fontSize: 11,
     fontWeight: "700",
+  },
+  textCompact: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
 });

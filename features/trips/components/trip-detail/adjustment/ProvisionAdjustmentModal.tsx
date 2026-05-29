@@ -90,6 +90,17 @@ export interface ProvisionAdjustmentModalProps {
   onLaunchPresetConsumed?: () => void;
   /** Open deduction confirmation (panel banner or after client CN save). */
   onRequestDeduction?: (rec: ClientPassThroughRecommendation) => void;
+  /** When set, opens the wizard in edit mode for an existing CN/DN line. */
+  editTarget?: TripAdjustment | null;
+  onUpdate?: (
+    adjustmentId: string,
+    params: {
+      type: TripAdjustmentType;
+      impact: TripAdjustmentImpact;
+      amount: number;
+      reason: string;
+    },
+  ) => void | Promise<void>;
 }
 
 function applyPreset(
@@ -189,11 +200,23 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
   useEffect(() => {
     if (!props.visible) return;
     if (props.launchPreset) return;
+    if (props.editTarget) return;
     setPhase("hub");
     setWizardPreset(null);
     setSuccessPayload(null);
     setAmountStr("");
-  }, [props.side, props.visible, props.launchPreset]);
+  }, [props.side, props.visible, props.launchPreset, props.editTarget]);
+
+  useEffect(() => {
+    if (!props.visible || !props.editTarget || props.launchPreset) return;
+    setSuccessPayload(null);
+    beginWizard({
+      type: props.editTarget.type,
+      impact: props.editTarget.impact,
+      amountSeed: props.editTarget.amount,
+      reasonSeed: props.editTarget.reason,
+    });
+  }, [props.visible, props.editTarget, props.launchPreset, beginWizard]);
 
   useEffect(() => {
     if (!props.visible || !props.launchPreset) return;
@@ -209,9 +232,13 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
   ]);
 
   const handleWizardBack = useCallback(() => {
+    if (props.editTarget) {
+      props.onClose();
+      return;
+    }
     setPhase("hub");
     setWizardPreset(null);
-  }, []);
+  }, [props.editTarget, props.onClose]);
 
   const isClient = side === "client";
   const isAssetDriverCost = Boolean(props.isAssetExecution && side && !isClient);
@@ -241,8 +268,13 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
       selectedReason || (type === "revenue" ? "Revenue adjustment" : "Cost adjustment");
     setSubmitting(true);
     try {
-      await props.onSave({ type, impact, amount: amountNum, reason: finalReason });
-      setSuccessPayload({ type, impact, amount: amountNum, reason: finalReason });
+      const payload = { type, impact, amount: amountNum, reason: finalReason };
+      if (props.editTarget?.id && props.onUpdate) {
+        await props.onUpdate(props.editTarget.id, payload);
+      } else {
+        await props.onSave(payload);
+      }
+      setSuccessPayload(payload);
       setPhase("success");
     } finally {
       setSubmitting(false);
@@ -323,10 +355,10 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
           tripCode={props.tripCode}
           type={type}
           onTypeChange={setType}
-          laneLocked={laneLocked}
+          laneLocked={laneLocked || Boolean(props.editTarget)}
           impact={impact}
           onImpactChange={setImpact}
-          impactLocked={impactLocked}
+          impactLocked={impactLocked || Boolean(props.editTarget)}
           amountStr={amountStr}
           onAmountChange={setAmountStr}
           reason={reason}
@@ -336,7 +368,7 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
           reasonLocked={reasonLocked}
           reasonBeforeAmount={reasonBeforeAmount}
           isAssetDriverCost={isAssetDriverCost}
-          showProtocolShortcuts={!reasonLocked && !reasonBeforeAmount}
+          showProtocolShortcuts={!reasonLocked && !reasonBeforeAmount && !props.editTarget}
           canSubmit={canSubmit}
           submitting={submitting}
           onSubmit={() => void handleSubmit()}
@@ -344,6 +376,7 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
           flowSessionKey={flowSessionKey}
           reviewBaseAmount={reviewBaseAmount}
           reviewRevisedAmount={reviewRevisedAmount}
+          isEditing={Boolean(props.editTarget)}
         />
       </Modal>
     );

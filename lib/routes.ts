@@ -85,12 +85,18 @@ export const ROUTES = {
   tripVerification: (tripId: string, side: "start" | "end" = "start") =>
     `/trip/${encodeURIComponent(tripId)}/verification?side=${side}` as const,
   /** Optional operations entries (fuel/toll). */
-  tripFuelEntry: (tripId: string) =>
-    `/trip/${encodeURIComponent(tripId)}/operations/fuel` as const,
-  tripTollEntry: (tripId: string) =>
-    `/trip/${encodeURIComponent(tripId)}/operations/toll` as const,
-  tripOtherExpenseEntry: (tripId: string) =>
-    `/trip/${encodeURIComponent(tripId)}/operations/other` as const,
+  tripFuelEntry: (tripId: string, entryId?: string) => {
+    const base = `/trip/${encodeURIComponent(tripId)}/operations/fuel`;
+    return entryId ? `${base}?entryId=${encodeURIComponent(entryId)}` : base;
+  },
+  tripTollEntry: (tripId: string, entryId?: string) => {
+    const base = `/trip/${encodeURIComponent(tripId)}/operations/toll`;
+    return entryId ? `${base}?entryId=${encodeURIComponent(entryId)}` : base;
+  },
+  tripOtherExpenseEntry: (tripId: string, entryId?: string) => {
+    const base = `/trip/${encodeURIComponent(tripId)}/operations/other`;
+    return entryId ? `${base}?entryId=${encodeURIComponent(entryId)}` : base;
+  },
   tripExpenses: (tripId: string) =>
     `/trip/${encodeURIComponent(tripId)}/operations/expenses` as const,
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */
@@ -100,6 +106,16 @@ export const ROUTES = {
   /** Load Center + share indent to Pulse (story); use when Network is story-only. */
   PULSE_LOADS:   '/pulse-loads'   as const,
 } as const;
+
+/** Navigate to fuel/toll/other entry screen for editing an existing line item (`fuel:uuid`, etc.). */
+export function tripExpenseEntryEditRoute(tripId: string, costEventId: string): string | null {
+  const [kind, sourceId] = costEventId.split(":");
+  if (!sourceId) return null;
+  if (kind === "fuel") return ROUTES.tripFuelEntry(tripId, sourceId);
+  if (kind === "toll") return ROUTES.tripTollEntry(tripId, sourceId);
+  if (kind === "other") return ROUTES.tripOtherExpenseEntry(tripId, sourceId);
+  return null;
+}
 
 /** The three tabs that live in the bottom dock and are valid startup landing pages. */
 export const BOOKMARKABLE_TABS = [

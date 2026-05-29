@@ -183,6 +183,35 @@ export async function updateVehicleOperationLedgerApprovalState(input: {
   return { error: null, entry: data as VehicleOperationLedgerEntry };
 }
 
+export async function syncVehicleOperationLedgerDraftAmountFromSource(input: {
+  sourceType: VehicleLedgerSourceType;
+  sourceId: string;
+  tripId: string;
+  amount: number;
+}): Promise<{ error: Error | null }> {
+  const draft = await createVehicleOperationLedgerDraftFromSource({
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    tripId: input.tripId,
+    amount: input.amount,
+    entryType: "expense",
+  });
+  if (draft.error) return { error: draft.error };
+  const entryId = String(draft.entry?.id ?? "").trim();
+  if (!entryId) return { error: null };
+  const amountRes = await updateVehicleOperationLedgerAmount({
+    entryId,
+    amount: input.amount,
+  });
+  if (amountRes.error) return { error: amountRes.error };
+  await updateVehicleOperationLedgerApprovalState({
+    entryId,
+    approvalState: "draft",
+    approvedBy: null,
+  });
+  return { error: null };
+}
+
 export async function updateVehicleOperationLedgerAmount(input: {
   entryId: string;
   amount: number;

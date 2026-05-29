@@ -253,7 +253,18 @@ export function selectAssetTripAdjustedNetMargin(input: {
   adjustedSaleInr: number;
   adjustedCostInr: number;
 }): number {
-  return roundCurrency(
-    Math.max(0, input.adjustedSaleInr - input.adjustedCostInr),
-  );
+  return roundCurrency(input.adjustedSaleInr - input.adjustedCostInr);
+}
+
+/**
+ * Trip detail finance hero margin.
+ * - Asset execution: adjusted client sale − adjusted trip execution cost (labor + posted expenses).
+ * - Aggregate / market: adjusted client sale − adjusted supplier cost.
+ * Losses are negative (never clamped to zero).
+ */
+export function selectTripManifestMargin(input: {
+  adjustedSaleInr: number;
+  adjustedCostInr: number;
+}): number {
+  return selectAssetTripAdjustedNetMargin(input);
 }

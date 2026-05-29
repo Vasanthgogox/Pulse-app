@@ -18,6 +18,7 @@ import { formatMobileNumber } from '@/lib/format';
 import { showAppAlert } from '@/lib/appAlert';
 import { supabase } from '@/lib/supabase';
 import { useSafeBack } from '@/lib/useSafeBack';
+import { signUpPasswordInputProps } from '@/lib/signupPasswordInput.util';
 import { VALIDATION, validatePassword } from '@/lib/validation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1048,6 +1049,7 @@ export default function DriverSignUpScreen() {
               <Text style={styles.fieldLabel}>Password</Text>
               <View style={[styles.inputWrap, styles.passwordRow]}>
                 <TextInput
+                  {...signUpPasswordInputProps('new')}
                   style={styles.inputPassword}
                   placeholder="At least 6 characters"
                   placeholderTextColor={LIGHT.placeholder}
@@ -1056,9 +1058,6 @@ export default function DriverSignUpScreen() {
                   onFocus={() => scrollToField('password')}
                   maxLength={VALIDATION.PASSWORD_MAX_LENGTH}
                   secureTextEntry={!showPassword}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
                   editable={!loading}
                   cursorColor={LIGHT.text}
                   selectionColor="rgba(15,23,42,0.2)"
@@ -1082,6 +1081,7 @@ export default function DriverSignUpScreen() {
               <Text style={styles.fieldLabel}>Confirm password</Text>
               <View style={[styles.inputWrap, styles.passwordRow]}>
                 <TextInput
+                  {...signUpPasswordInputProps('confirm')}
                   style={styles.inputPassword}
                   placeholder="Re-enter your password"
                   placeholderTextColor={LIGHT.placeholder}
@@ -1090,9 +1090,6 @@ export default function DriverSignUpScreen() {
                   onFocus={() => scrollToField('confirmPassword')}
                   maxLength={VALIDATION.PASSWORD_MAX_LENGTH}
                   secureTextEntry={!showConfirmPassword}
-                  autoCorrect={false}
-                  spellCheck={false}
-                  autoComplete="off"
                   editable={!loading}
                   cursorColor={LIGHT.text}
                   selectionColor="rgba(15,23,42,0.2)"

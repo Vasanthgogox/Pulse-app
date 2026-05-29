@@ -89,35 +89,70 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
 
   return (
     <View style={[styles.card, compact && styles.cardCompact]}>
-      <View style={styles.header}>
+      <View style={[styles.header, compact && styles.headerCompact]}>
         <View style={styles.headerLeft}>
-          <View style={styles.iconWrap}>
-            <Feather name="navigation" size={12} color={Theme.primary} />
+          <View style={[styles.iconWrap, compact && styles.iconWrapCompact]}>
+            <Feather
+              name="navigation"
+              size={compact ? 10 : 12}
+              color={Theme.primary}
+            />
           </View>
-          <Text style={styles.title}>Odometer</Text>
+          <Text style={[styles.title, compact && styles.titleCompact]}>
+            Odometer
+          </Text>
         </View>
-        <VerificationStatusChip state={metrics.state} />
+        <VerificationStatusChip state={metrics.state} compact={compact} />
       </View>
 
-      <View style={styles.readingsRow}>
+      <View style={compact ? styles.compactBody : undefined}>
+      <View style={[styles.readingsRow, compact && styles.readingsRowCompact]}>
         <Pressable
-          style={styles.readingCell}
+          style={({ pressed }) => [
+            styles.readingCell,
+            compact && styles.readingCellCompact,
+            pressed && styles.readingCellPressed,
+          ]}
           onPress={onRecordStart}
           accessibilityRole="button"
           accessibilityLabel="Record start odometer"
         >
-          <Text style={styles.readingLabel}>Start</Text>
-          <Text style={styles.readingValue}>{odometerReading(metrics.startKm)}</Text>
+          <Text style={[styles.readingLabel, compact && styles.readingLabelCompact]}>
+            Start
+          </Text>
+          <Text style={[styles.readingValue, compact && styles.readingValueCompact]}>
+            {odometerReading(metrics.startKm)}
+          </Text>
+          {compact && metrics.startKm == null ? (
+            <Text style={styles.tapHint}>Tap to set</Text>
+          ) : null}
         </Pressable>
         <View style={styles.readingSep} />
+        {compact ? (
+          <View style={styles.readingMid}>
+            <Feather name="chevrons-right" size={10} color={Theme.textMuted} />
+          </View>
+        ) : null}
+        {compact ? <View style={styles.readingSep} /> : null}
         <Pressable
-          style={styles.readingCell}
+          style={({ pressed }) => [
+            styles.readingCell,
+            compact && styles.readingCellCompact,
+            pressed && styles.readingCellPressed,
+          ]}
           onPress={onRecordEnd}
           accessibilityRole="button"
           accessibilityLabel="Record end odometer"
         >
-          <Text style={styles.readingLabel}>End</Text>
-          <Text style={styles.readingValue}>{odometerReading(metrics.endKm)}</Text>
+          <Text style={[styles.readingLabel, compact && styles.readingLabelCompact]}>
+            End
+          </Text>
+          <Text style={[styles.readingValue, compact && styles.readingValueCompact]}>
+            {odometerReading(metrics.endKm)}
+          </Text>
+          {compact && metrics.endKm == null ? (
+            <Text style={styles.tapHint}>Tap to set</Text>
+          ) : null}
         </Pressable>
       </View>
 
@@ -125,19 +160,25 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
         {loading ? (
           <ActivityIndicator size="small" color={Theme.primary} />
         ) : (
-          <Feather
-            name={hasWarn ? "alert-circle" : "activity"}
-            size={12}
-            color={hasWarn ? Theme.warning : Theme.textMuted}
-          />
+          <View style={[styles.footerIcon, hasWarn && styles.footerIconWarn]}>
+            <Feather
+              name={hasWarn ? "alert-circle" : "activity"}
+              size={10}
+              color={hasWarn ? Theme.warning : Theme.primary}
+            />
+          </View>
         )}
-        <Text style={[styles.meta, hasWarn && styles.metaWarn]} numberOfLines={1}>
+        <Text
+          style={[styles.meta, compact && styles.metaCompact, hasWarn && styles.metaWarn]}
+          numberOfLines={1}
+        >
           {loading
             ? "Syncing readings…"
             : hasWarn
               ? `${distanceLine} · Δ ${formatKm(metrics.distanceDiscrepancyKm)}`
               : distanceLine}
         </Text>
+      </View>
       </View>
     </View>
   );
@@ -153,7 +194,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardCompact: {
-    marginBottom: 0,
+    marginBottom: 8,
+    borderColor: "#e6edf5",
+    borderRadius: 14,
+    padding: 0,
+    gap: 0,
+    overflow: "hidden",
+  },
+  headerCompact: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: Theme.pulseIndigoWash,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e6edf5",
   },
   header: {
     flexDirection: "row",
@@ -179,6 +233,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
+  titleCompact: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: "#64748b",
+  },
+  iconWrapCompact: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+  },
   readingsRow: {
     flexDirection: "row",
     borderWidth: 1,
@@ -186,6 +252,34 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     backgroundColor: Theme.surface,
+  },
+  readingsRowCompact: {
+    marginHorizontal: 8,
+    marginTop: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    borderRadius: 10,
+  },
+  compactBody: {
+    paddingHorizontal: 0,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  readingMid: {
+    width: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surface,
+  },
+  readingCellPressed: {
+    backgroundColor: Theme.pulseIndigoWash,
+  },
+  tapHint: {
+    fontSize: 7,
+    fontWeight: "600",
+    color: Theme.primary,
+    marginTop: 1,
   },
   readingCell: {
     flex: 1,
@@ -195,6 +289,10 @@ const styles = StyleSheet.create({
     gap: 2,
     minHeight: 40,
     justifyContent: "center",
+  },
+  readingCellCompact: {
+    minHeight: 32,
+    paddingVertical: 5,
   },
   readingSep: {
     width: StyleSheet.hairlineWidth,
@@ -207,17 +305,42 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
+  readingLabelCompact: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    lineHeight: 9,
+  },
   readingValue: {
     fontSize: 15,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
   },
+  readingValueCompact: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: -0.15,
+    lineHeight: 13,
+  },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingTop: 2,
+    paddingHorizontal: 10,
+    paddingBottom: 2,
+  },
+  footerIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  footerIconWarn: {
+    backgroundColor: "#fffbeb",
   },
   meta: {
     flex: 1,
@@ -225,6 +348,11 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: Theme.textSecondary,
     lineHeight: 15,
+  },
+  metaCompact: {
+    fontSize: 8,
+    fontWeight: "500",
+    lineHeight: 11,
   },
   metaWarn: {
     color: Theme.warning,

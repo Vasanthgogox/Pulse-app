@@ -1,4 +1,5 @@
 import { SmartInput } from "@/components/mobile-input";
+import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
@@ -12,7 +13,7 @@ import type { TripRow } from "@/features/trips/services/trips.service";
 import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -20,7 +21,11 @@ import type {
   OperationalPaymentOwner,
   TripOtherExpenseCategory,
 } from "../types";
-import { useSaveTripOtherExpense } from "../queries/useTripOperations";
+import {
+  useSaveTripOtherExpense,
+  useUpdateTripOtherExpense,
+} from "../queries/useTripOperations";
+import { getTripOtherExpenseById } from "./otherExpense.service";
 import {
   PAYMENT_MODE_OPTIONS,
   PAYMENT_OWNER_OPTIONS,
@@ -28,12 +33,21 @@ import {
 import { TRIP_OTHER_EXPENSE_OPTIONS } from "../shared/tripOtherExpenseCategories";
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
 
-export function OtherExpenseEntryScreen({ trip }: { trip: TripRow }) {
+export function OtherExpenseEntryScreen({
+  trip,
+  entryId,
+}: {
+  trip: TripRow;
+  entryId?: string | null;
+}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const saveExpense = useSaveTripOtherExpense();
+  const updateExpense = useUpdateTripOtherExpense();
+  const isEditing = !!entryId?.trim();
 
+  const [loadingEntry, setLoadingEntry] = useState(isEditing);
   const [amountInr, setAmountInr] = useState<number>(0);
   const [expenseCategory, setExpenseCategory] = useState<TripOtherExpenseCategory>("parking");
   const [description, setDescription] = useState("");
@@ -53,6 +67,40 @@ export function OtherExpenseEntryScreen({ trip }: { trip: TripRow }) {
     [],
   );
 
+  useEffect(() => {
+    const id = entryId?.trim();
+    if (!id) {
+      setLoadingEntry(false);
+      return;
+    }
+    let mounted = true;
+    void getTripOtherExpenseById(id).then((res) => {
+      if (!mounted) return;
+      if (res.error || !res.entry) {
+        Alert.alert("Could not load expense", res.error?.message ?? "Not found");
+        router.back();
+        return;
+      }
+      if (res.entry.trip_id !== trip.id) {
+        Alert.alert("Wrong trip", "This expense belongs to a different trip.");
+        router.back();
+        return;
+      }
+      const entry = res.entry;
+      setAmountInr(Number(entry.amount_inr ?? 0));
+      setExpenseCategory(entry.expense_category);
+      setDescription(entry.description ?? "");
+      setLocationName(entry.location_name ?? "");
+      setNotes(entry.notes ?? "");
+      setPaymentOwner(entry.payment_owner ?? "organization");
+      setPaymentMode(entry.payment_mode ?? "cash");
+      setLoadingEntry(false);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [entryId, router, trip.id]);
+
   const handleCapture = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (permission.status !== "granted") {
@@ -67,78 +115,91 @@ export function OtherExpenseEntryScreen({ trip }: { trip: TripRow }) {
     setPhotoUri(result.assets[0].uri);
   };
 
+  const saving = saveExpense.isPending || updateExpense.isPending;
+
   const handleSave = async () => {
     if (amountInr <= 0) {
       Alert.alert("Amount required", "Enter the expense amount before saving.");
       return;
     }
+    const payload = {
+      tripId: trip.id,
+      expenseCategory,
+      amountInr,
+      description,
+      locationName,
+      notes,
+      enteredBy: profile?.uid ?? null,
+      paymentOwner,
+      paymentMode,
+      receiptLocalUri: photoUri,
+    };
     try {
-      await saveExpense.mutateAsync({
-        tripId: trip.id,
-        expenseCategory,
-        amountInr,
-        description,
-        locationName,
-        notes,
-        enteredBy: profile?.uid ?? null,
-        actorRole: profile?.role ?? null,
-        paymentOwner,
-        paymentMode,
-        receiptLocalUri: photoUri,
-      });
+      if (isEditing && entryId?.trim()) {
+        await updateExpense.mutateAsync({ ...payload, entryId: entryId.trim() });
+      } else {
+        await saveExpense.mutateAsync({
+          ...payload,
+          actorRole: profile?.role ?? null,
+        });
+      }
       router.back();
     } catch (e) {
       Alert.alert(
-        "Could not save expense",
+        isEditing ? "Could not update expense" : "Could not save expense",
         e instanceof Error ? e.message : "Unknown error",
       );
     }
   };
 
+  if (loadingEntry) {
+    return <CenteredLoadingView message="Loading expense…" />;
+  }
+
   return (
     <View style={s.screen}>
       <OperationalHeader
-        title="Other Expense"
+        title={isEditing ? "Edit expense" : "Other Expense"}
         subtitle={contextLine}
         onBack={() => router.back()}
         density="high"
       />
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 88 }]}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 76 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Surface elevation={1} density="high">
-          <Text style={s.routeLine} numberOfLines={1}>
-            {contextLine}
-          </Text>
+        <Surface elevation={1} density="high" style={s.card}>
           <SmartInput
             type="currency"
             value={amountInr}
             onChange={(_, numeric) => setAmountInr(numeric)}
             label="Amount"
             submitLabel="Apply"
+            variant="field"
+            density="compact"
+            placeholder="Tap to enter"
             required={false}
             validation={{ min: 0, max: 1000000 }}
           />
         </Surface>
 
-        <Surface elevation={1} density="high">
+        <Surface elevation={1} density="high" style={s.card}>
           <OperationalChipSelect
             label="Category"
             options={categoryOptions}
             value={expenseCategory}
             onChange={setExpenseCategory}
+            density="compact"
           />
-        </Surface>
-
-        <Surface elevation={1} density="high">
+          <View style={s.divider} />
           <OperationalChipSelect
             label="Paid by"
             options={PAYMENT_OWNER_OPTIONS}
             value={paymentOwner}
             onChange={setPaymentOwner}
+            density="compact"
           />
           <View style={s.divider} />
           <OperationalChipSelect
@@ -146,51 +207,62 @@ export function OtherExpenseEntryScreen({ trip }: { trip: TripRow }) {
             options={PAYMENT_MODE_OPTIONS}
             value={paymentMode}
             onChange={setPaymentMode}
+            density="compact"
           />
           <Text style={s.metaHint}>
             Parking, challan, loading, detention, and other trip costs — not commercial adjustments.
           </Text>
         </Surface>
 
-        <Surface elevation={1} density="high">
-          <Text style={s.fieldLabel}>Description (optional)</Text>
-          <TextInput
-            style={s.input}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="What was this for?"
-            placeholderTextColor={Theme.textMuted}
-          />
-          <Text style={[s.fieldLabel, { marginTop: 8 }]}>Location (optional)</Text>
-          <TextInput
-            style={s.input}
-            value={locationName}
-            onChangeText={setLocationName}
-            placeholder="Plaza, yard, city"
-            placeholderTextColor={Theme.textMuted}
-          />
-          <Text style={[s.fieldLabel, { marginTop: 8 }]}>Notes (optional)</Text>
-          <TextInput
-            style={[s.input, s.notes]}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            placeholder="Short note"
-            placeholderTextColor={Theme.textMuted}
-          />
+        <Surface elevation={1} density="high" style={s.card}>
+          <View style={s.fieldStack}>
+            <View>
+              <Text style={s.fieldLabel}>Description (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="What was this for?"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+            <View>
+              <Text style={s.fieldLabel}>Location (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={locationName}
+                onChangeText={setLocationName}
+                placeholder="Plaza, yard, city"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+            <View>
+              <Text style={s.fieldLabel}>Notes (optional)</Text>
+              <TextInput
+                style={[s.input, s.notes]}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                placeholder="Short note"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+          </View>
         </Surface>
 
-        <OdometerPhotoCapture
-          photoUri={photoUri}
-          busy={saveExpense.isPending}
-          onCapture={handleCapture}
-          onRetake={handleCapture}
-          compact
-          title="Receipt photo"
-          subtitle="Optional · camera capture"
-          captureLabel="Add receipt"
-          retakeLabel="Retake"
-        />
+        <View style={s.photoWrap}>
+          <OdometerPhotoCapture
+            photoUri={photoUri}
+            busy={saving}
+            onCapture={handleCapture}
+            onRetake={handleCapture}
+            compact
+            title="Receipt photo"
+            subtitle="Optional · camera capture"
+            captureLabel="Add receipt"
+            retakeLabel="Retake"
+          />
+        </View>
       </ScrollView>
 
       <OperationalBottomActionBar>
@@ -204,9 +276,9 @@ export function OtherExpenseEntryScreen({ trip }: { trip: TripRow }) {
           />
           <OperationalButton
             intent="bottomSticky"
-            label={saveExpense.isPending ? "Saving…" : "Save"}
+            label={saving ? "Saving…" : isEditing ? "Update" : "Save"}
             onPress={handleSave}
-            loading={saveExpense.isPending}
+            loading={saving}
             density="high"
             style={s.footerBtn}
           />

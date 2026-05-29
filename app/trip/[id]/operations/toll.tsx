@@ -5,10 +5,16 @@ import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
+function readParam(value: string | string[] | undefined): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value[0] ?? "";
+  return "";
+}
+
 export default function TripTollEntryRoute() {
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
-  const tripId =
-    typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
+  const params = useLocalSearchParams<{ id?: string | string[]; entryId?: string | string[] }>();
+  const tripId = readParam(params.id);
+  const entryId = readParam(params.entryId);
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +46,6 @@ export default function TripTollEntryRoute() {
         </View>
       );
     }
-    return <TollEntryScreen trip={trip} />;
-  }, [error, loading, trip]);
+    return <TollEntryScreen trip={trip} entryId={entryId || null} />;
+  }, [entryId, error, loading, trip]);
 }

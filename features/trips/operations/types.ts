@@ -110,6 +110,10 @@ export interface SaveFuelEntryInput {
   billPhotoLocalUri?: string | null;
 }
 
+export type UpdateFuelEntryInput = Omit<SaveFuelEntryInput, "actorRole"> & {
+  entryId: string;
+};
+
 export interface SaveTollEntryInput {
   tripId: string;
   amountInr: number;
@@ -122,6 +126,10 @@ export interface SaveTollEntryInput {
   paymentMode?: OperationalPaymentMode | null;
   receiptLocalUri?: string | null;
 }
+
+export type UpdateTollEntryInput = Omit<SaveTollEntryInput, "actorRole"> & {
+  entryId: string;
+};
 
 export type TripOtherExpenseCategory =
   | "parking"
@@ -180,6 +188,10 @@ export interface SaveOtherExpenseInput {
   paymentMode?: OperationalPaymentMode | null;
   receiptLocalUri?: string | null;
 }
+
+export type UpdateOtherExpenseInput = Omit<SaveOtherExpenseInput, "actorRole"> & {
+  entryId: string;
+};
 
 export type MaintenanceType =
   | "service"

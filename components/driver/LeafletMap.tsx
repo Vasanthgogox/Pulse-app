@@ -31,6 +31,20 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
           nativeRef.current?.fitBounds(ne, sw, paddingPx);
         }
       },
+      zoomIn: () => {
+        if (Platform.OS === "web") {
+          webRef.current?.zoomIn();
+        } else {
+          nativeRef.current?.zoomIn();
+        }
+      },
+      zoomOut: () => {
+        if (Platform.OS === "web") {
+          webRef.current?.zoomOut();
+        } else {
+          nativeRef.current?.zoomOut();
+        }
+      },
     }));
 
     if (Platform.OS === "web") {

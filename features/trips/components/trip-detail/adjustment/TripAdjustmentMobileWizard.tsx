@@ -63,6 +63,7 @@ export interface TripAdjustmentMobileWizardProps {
   flowSessionKey?: string;
   reviewBaseAmount?: number;
   reviewRevisedAmount?: number;
+  isEditing?: boolean;
 }
 
 function parseAmount(raw: string): number {
@@ -73,6 +74,7 @@ function parseAmount(raw: string): number {
 function stepMeta(
   step: TripAdjustmentWizardStep,
   isAssetDriverCost?: boolean,
+  isEditing?: boolean,
 ): { title: string; hint?: string } {
   switch (step) {
     case "lane":
@@ -115,7 +117,9 @@ function stepMeta(
         hint: "Describe the charge or credit in your own words.",
       };
     case "review":
-      return { title: "Review & save", hint: "Confirm details on your ticket before saving." };
+      return isEditing
+        ? { title: "Review & update", hint: "Confirm changes before updating this note." }
+        : { title: "Review & save", hint: "Confirm details on your ticket before saving." };
     default:
       return { title: "Provision" };
   }
@@ -195,7 +199,7 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   const effectiveStep =
     currentStep === "reason" && otherReasonMode ? ("otherReason" as const) : currentStep;
   const isAssetDriverCost = props.isAssetDriverCost === true;
-  const { title, hint } = stepMeta(effectiveStep, isAssetDriverCost);
+  const { title, hint } = stepMeta(effectiveStep, isAssetDriverCost, props.isEditing);
   const canAdvance = canAdvanceStep(effectiveStep, props);
   const reasonOptions = getAdjustmentReasonOptions({
     type: props.type,
@@ -470,9 +474,17 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
     }
   })();
 
-  const entityTitle = "PROVISION ADJUST";
+  const entityTitle = props.isEditing ? "EDIT PROVISION" : "PROVISION ADJUST";
   const advanceLabel =
-    currentStep === "review" ? (props.submitting ? "Saving…" : "Save") : "Continue";
+    currentStep === "review"
+      ? props.submitting
+        ? props.isEditing
+          ? "Updating…"
+          : "Saving…"
+        : props.isEditing
+          ? "Update"
+          : "Save"
+      : "Continue";
 
   return (
     <KeyboardAvoidingView

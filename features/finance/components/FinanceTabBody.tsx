@@ -1,9 +1,14 @@
 /**
  * Finance sub-tab bodies — eager imports so party lists bundle with FinanceScreen.
+ * Panels stay mounted after first visit to preserve scroll position and local UI state.
  */
 import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
+import { PersistentTabPanel } from '@/components/PersistentTabPanel';
 import type { ComponentType } from 'react';
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import type { FinanceSubTab } from '../types';
+import { TABS } from '../types';
 import { FinanceCashTab } from './finance-tabs/FinanceCashTab';
 import { FinanceCustomersTab } from './finance-tabs/FinanceCustomersTab';
 import { FinanceDriversTab } from './finance-tabs/FinanceDriversTab';
@@ -24,12 +29,39 @@ const TAB_COMPONENTS: Partial<
 };
 
 export function FinanceTabBody(props: FinanceTabBodyProps) {
-  const TabPanel = TAB_COMPONENTS[props.financeSubTab];
-  if (!TabPanel) return null;
+  const activeTab = props.financeSubTab;
+  const [mountedTabs, setMountedTabs] = useState<Set<FinanceSubTab>>(
+    () => new Set([activeTab]),
+  );
 
-  if (props.entitiesLoading && props.financeSubTab !== 'cash') {
+  useEffect(() => {
+    setMountedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
+
+  if (props.entitiesLoading && activeTab !== 'cash') {
     return <LazySuspenseInlineFallback message="Loading parties…" />;
   }
 
-  return <TabPanel {...props} />;
+  return (
+    <View style={{ flex: 1, minHeight: 0 }}>
+      {TABS.map((tab) => {
+        const TabPanel = TAB_COMPONENTS[tab.id];
+        if (!TabPanel || !mountedTabs.has(tab.id)) return null;
+        return (
+          <PersistentTabPanel
+            key={tab.id}
+            active={activeTab === tab.id}
+            style={{ flex: 1, minHeight: 0 }}
+          >
+            <TabPanel {...props} financeSubTab={tab.id} />
+          </PersistentTabPanel>
+        );
+      })}
+    </View>
+  );
 }

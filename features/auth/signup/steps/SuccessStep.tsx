@@ -10,8 +10,10 @@ import { SignUpWorkspaceReadyCard } from '../components/SignUpWorkspaceReadyCard
 export function SuccessStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
   const verifying = flow.emailVerificationRequired;
+  const hasChosenProfilePhoto =
+    !!flow.profilePreviewUri || !!flow.profileAvatarSeed?.trim();
   const profilePreset =
-    !flow.profilePreviewUri && flow.profileAvatarSeed
+    !flow.profilePreviewUri && flow.profileAvatarSeed?.trim()
       ? USER_2D_AVATARS.find((a) => a.seed === flow.profileAvatarSeed)
       : undefined;
 
@@ -52,8 +54,8 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
         <SignUpWorkspaceReadyCard
           entityName={flow.orgName}
           verifying={verifying}
-          profilePreviewUri={flow.profilePreviewUri}
-          profileImage={profilePreset?.image}
+          profilePreviewUri={hasChosenProfilePhoto ? flow.profilePreviewUri : null}
+          profileImage={hasChosenProfilePhoto ? profilePreset?.image : undefined}
           profilePhotoLabel="Profile photo selected"
           checkpoints={[
             { id: 'org', label: 'Organization created', status: 'complete' },

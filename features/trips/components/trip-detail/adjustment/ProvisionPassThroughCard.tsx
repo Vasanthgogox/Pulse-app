@@ -59,12 +59,12 @@ export const ProvisionPassThroughCard = memo(function ProvisionPassThroughCard({
 
 const styles = StyleSheet.create({
   wrap: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(15,118,110,0.28)",
-    backgroundColor: "rgba(15,118,110,0.06)",
-    padding: 12,
-    gap: 10,
+    borderColor: "rgba(15,118,110,0.24)",
+    backgroundColor: "rgba(15,118,110,0.05)",
+    padding: 10,
+    gap: 8,
   },
   header: {
     flexDirection: "row",
@@ -73,8 +73,8 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1, minWidth: 0, gap: 3 },
   title: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   hint: {
@@ -100,9 +100,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   rowAmount: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
+    fontVariant: ["tabular-nums"],
   },
   rowMeta: {
     fontSize: 10,

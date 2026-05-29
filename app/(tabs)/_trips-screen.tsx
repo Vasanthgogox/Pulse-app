@@ -11,6 +11,7 @@ import {
   CHAT_FILTER_MUTED,
   chatFilterChromeStyles as chatChrome,
 } from "@/constants/ChatFilterChrome";
+import { useOpenTripDetail } from "@/lib/navigation/useOpenTripDetail";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +47,10 @@ import {
   type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
 import type { TripHubPartyMeta } from "@/features/trips/utils/tripHubPartyMeta";
+import {
+  getTripHubInTransitPing,
+  useTripHubInTransitPings,
+} from "@/features/trips/hooks/useTripHubInTransitPings";
 import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { canAccessTrips, getCapabilitiesFromProfile } from "@/lib/capabilities";
@@ -73,6 +78,7 @@ import {
   useTripsQuery,
 } from "@/lib/queries/useTripsQuery";
 import { queryKeys } from "@/lib/queryKeys";
+import { scheduleIdleWork } from "@/lib/scheduleIdleWork";
 import { supabase } from "@/lib/supabase";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -117,6 +123,9 @@ const TRIPS_PAGE_BG = "#eef2f6";
 const TRIPS_LIST_LAYOUT_KEY = "@q-mobile/trips-list-layout";
 /** Mobile hub accent — matches filter sheet / Pulse indigo. */
 const TRIPS_HUB_ACCENT = Theme.pulseIndigo;
+/** Native mobile: render trips in batches so the hub stays responsive at scale. */
+const MOBILE_HUB_INITIAL_BATCH = 20;
+const MOBILE_HUB_BATCH_STEP = 20;
 
 function TripsMmtUnderlineTab({
   label,
@@ -235,6 +244,14 @@ export default function TripsScreen() {
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const tripsScrollBottomPad = layout.scrollBottomPadding(40);
   const router = useRouter();
+  const { openTripDetail } = useOpenTripDetail();
+  const tripsHubLayoutCompact = width > 0 && width < 640;
+  const handleOpenTripDetails = useCallback(
+    (trip: TripRow) => {
+      openTripDetail(trip.id);
+    },
+    [openTripDetail],
+  );
   const { t: tr } = useLanguage();
   const orgCtx = useOptionalOrganization();
   const { profile } = useAuth();
@@ -305,6 +322,9 @@ export default function TripsScreen() {
   const currentOrganization = orgCtx?.currentOrganization ?? null;
   const orgBootPending = !orgCtx || orgCtx.isLoading;
   const orgId = canAccess ? (currentOrganization?.id ?? null) : null;
+  const cachedTripsForOrg = orgId
+    ? (queryClient.getQueryData(queryKeys.trips.finite(orgId)) as TripRow[] | undefined)
+    : undefined;
 
   const {
     data: tripsData = [],
@@ -339,7 +359,9 @@ export default function TripsScreen() {
   const tripFinanceAdjForHub = tripFinanceAdjLoading
     ? undefined
     : tripFinanceAdjRecord;
-  const { refetch: refetchAssignment } = useAssignmentAuditQuery(tripIds);
+  const { refetch: refetchAssignment } = useAssignmentAuditQuery(
+    tripsLoading ? [] : tripIds,
+  );
 
   useRealtimeTripsInvalidation(orgId);
   useRealtimeTransactionsInvalidation(orgId);
@@ -384,19 +406,17 @@ export default function TripsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setTripFilter("Active");
-      setActiveMetricTab("assigned");
-      setActiveHistoryMetricTab(null);
-      // Only force-refetch if stale (>5 min). Realtime subscriptions handle live updates;
-      // pull-to-refresh handles explicit reloads.
+      // Light stale refresh on focus — trips only; full ledger refresh stays on pull-to-refresh.
       if (Date.now() - lastFocusRefreshRef.current > 5 * 60_000) {
         lastFocusRefreshRef.current = Date.now();
-        onRefresh();
+        scheduleIdleWork(() => {
+          void refetchTrips();
+        });
       }
-    }, [onRefresh]),
+    }, [refetchTrips]),
   );
 
-  const loading = tripsLoading;
+  const loading = tripsLoading && trips.length === 0 && !(cachedTripsForOrg?.length);
 
   const isCompletedStatus = (s: string) => {
     const v = (s || "").toLowerCase();
@@ -759,6 +779,7 @@ export default function TripsScreen() {
     ],
   );
 
+  const [mobileVisibleCount, setMobileVisibleCount] = useState(MOBILE_HUB_INITIAL_BATCH);
   const [tripsTablePageSize, setTripsTablePageSize] =
     useState<HubGridPageSize>(HUB_GRID_DEFAULT_PAGE_SIZE);
   const [tripsTablePage, setTripsTablePage] = useState(0);
@@ -783,6 +804,10 @@ export default function TripsScreen() {
   }, [tripsTableResetKey]);
 
   useEffect(() => {
+    setMobileVisibleCount(MOBILE_HUB_INITIAL_BATCH);
+  }, [tripsTableResetKey]);
+
+  useEffect(() => {
     const total = hubToolbarMatchCount ?? filtered.length;
     const maxPage = Math.max(0, Math.ceil(total / tripsTablePageSize) - 1);
     setTripsTablePage((p) => Math.min(p, maxPage));
@@ -798,8 +823,18 @@ export default function TripsScreen() {
         onScroll?: (ev?: NativeSyntheticEvent<NativeScrollEvent>) => void;
       };
       p.onScroll?.(e);
+      if (!isMobileViewport || Platform.OS === "web") return;
+      const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+      const nearBottom =
+        contentOffset.y + layoutMeasurement.height >= contentSize.height - 360;
+      if (!nearBottom) return;
+      setMobileVisibleCount((prev) => {
+        const total = hubToolbarMatchCount ?? filtered.length;
+        if (prev >= total) return prev;
+        return Math.min(total, prev + MOBILE_HUB_BATCH_STEP);
+      });
     },
-    [tabBarScrollProps],
+    [tabBarScrollProps, isMobileViewport, hubToolbarMatchCount, filtered.length],
   );
 
   const loadTypeOptions = useMemo(() => {
@@ -888,6 +923,11 @@ export default function TripsScreen() {
         supplierNameFallbackById,
       ),
     [trips, clients, suppliers, drivers, transactions, supplierNameFallbackById],
+  );
+
+  const { data: inTransitPingByTripId = {} } = useTripHubInTransitPings(
+    orgId,
+    showCompletedList ? [] : tripsByStatus,
   );
 
   const tripLedgerExportReport = useMemo(() => {
@@ -1392,6 +1432,13 @@ export default function TripsScreen() {
       ? { page: tripsTablePageSafe, pageSize: tripsTablePageSize }
       : undefined;
 
+  const mobileTripsPagination =
+    isMobileViewport && Platform.OS !== "web"
+      ? { page: 0, pageSize: mobileVisibleCount }
+      : undefined;
+
+  const tripsListPagination = webTripsPagination ?? mobileTripsPagination;
+
   const showTripsPaginationFooter =
     Platform.OS === "web" && (hubToolbarMatchCount ?? filtered.length) > 0;
 
@@ -1403,7 +1450,11 @@ export default function TripsScreen() {
     );
   }
 
-  if (orgBootPending || (loading && trips.length === 0)) {
+  if (orgBootPending && !orgId && !(cachedTripsForOrg?.length)) {
+    return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
+  }
+
+  if (loading) {
     return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
   }
 
@@ -1798,16 +1849,14 @@ export default function TripsScreen() {
               >
                 <TripsHubTableView
                   trips={filtered}
-                  pagination={webTripsPagination}
+                  pagination={tripsListPagination}
                   onDisplayedTripsLengthChange={setHubToolbarMatchCount}
                   currentOrganizationId={currentOrganization?.id ?? null}
                   getStageLabel={getStageLabelForTrip}
                   transactionsByTripId={transactionsByTripId}
                     financeAdjustmentsByTripId={tripFinanceAdjForHub}
                   subcontractRateByTripId={hubSubcontractRateByTripId}
-                  onOpenTripDetails={(trip) =>
-                    router.push(`/trip/${trip.id}` as const)
-                  }
+                  onOpenTripDetails={handleOpenTripDetails}
                   tr={tr}
                   dateRangeFilter={toolbarDateRangeFilter}
                   onDateRangeFilterChange={(next: DateFilter) => {
@@ -1837,16 +1886,14 @@ export default function TripsScreen() {
             <View>
               <TripsHubTableView
                 trips={filtered}
-                pagination={webTripsPagination}
+                pagination={tripsListPagination}
                 onDisplayedTripsLengthChange={setHubToolbarMatchCount}
                 currentOrganizationId={currentOrganization?.id ?? null}
                 getStageLabel={getStageLabelForTrip}
                 transactionsByTripId={transactionsByTripId}
                 financeAdjustmentsByTripId={tripFinanceAdjForHub}
                 subcontractRateByTripId={hubSubcontractRateByTripId}
-                onOpenTripDetails={(trip) =>
-                  router.push(`/trip/${trip.id}` as const)
-                }
+                onOpenTripDetails={handleOpenTripDetails}
                 tr={tr}
                 dateRangeFilter={toolbarDateRangeFilter}
                 onDateRangeFilterChange={(next: DateFilter) => {
@@ -1940,9 +1987,9 @@ export default function TripsScreen() {
                             driverAvatarSeed={party?.driverAvatarSeed ?? null}
                             cardDate={getTripCardDate(t)}
                             stageLabel={stage}
-                            onPress={() =>
-                              router.push(`/trip/${t.id}` as const)
-                            }
+                            onOpenTrip={openTripDetail}
+                            layoutCompact={tripsHubLayoutCompact}
+                            viewportWidth={width}
                             tr={tr}
                             ledgerReceivedTotal={hubLedger.receivedTotal}
                             ledgerPaidTotal={hubLedger.paidTotal}
@@ -1957,6 +2004,10 @@ export default function TripsScreen() {
                                 ? ({ cursor: "pointer" } as ViewStyle)
                                 : undefined
                             }
+                            inTransitPing={getTripHubInTransitPing(
+                              inTransitPingByTripId,
+                              t.id,
+                            )}
                           />
                         </View>
                       );
@@ -2029,9 +2080,9 @@ export default function TripsScreen() {
                           driverAvatarSeed={party?.driverAvatarSeed ?? null}
                           cardDate={getTripCardDate(t)}
                           stageLabel={stage}
-                          onPress={() =>
-                            router.push(`/trip/${t.id}` as const)
-                          }
+                          onOpenTrip={openTripDetail}
+                          layoutCompact={tripsHubLayoutCompact}
+                          viewportWidth={width}
                           tr={tr}
                           ledgerReceivedTotal={hubLedger.receivedTotal}
                           ledgerPaidTotal={hubLedger.paidTotal}
@@ -2041,6 +2092,10 @@ export default function TripsScreen() {
                               ? formatLedgerDate(hubLedger.lastAtIso)
                               : undefined
                           }
+                          inTransitPing={getTripHubInTransitPing(
+                            inTransitPingByTripId,
+                            t.id,
+                          )}
                         />
                       );
                     })}

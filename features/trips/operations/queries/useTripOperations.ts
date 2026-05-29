@@ -10,6 +10,9 @@ import type {
   SaveFuelEntryInput,
   SaveOtherExpenseInput,
   SaveTollEntryInput,
+  UpdateFuelEntryInput,
+  UpdateOtherExpenseInput,
+  UpdateTollEntryInput,
 } from "../types";
 import { getTripOperationalCapabilities } from "@/features/trips/capabilities";
 import {
@@ -39,17 +42,20 @@ import {
   createTripFuelEntry,
   getTripFuelEntries,
   updateTripFuelApprovalState,
+  updateTripFuelEntry,
   uploadFuelBillPhoto,
 } from "../fuel/fuel.service";
 import {
   createTripTollEntry,
   getTripTollEntries,
   updateTripTollApprovalState,
+  updateTripTollEntry,
   uploadTollReceiptPhoto,
 } from "../toll/toll.service";
 import {
   createTripOtherExpense,
   getTripOtherExpenses,
+  updateTripOtherExpense,
   updateTripOtherExpenseApprovalState,
   uploadOtherExpenseReceiptPhoto,
 } from "../other/otherExpense.service";
@@ -371,6 +377,38 @@ export function useSaveTripFuelEntry() {
   });
 }
 
+export function useUpdateTripFuelEntry() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateFuelEntryInput) => {
+      if (!isOnline) {
+        throw new Error("Editing fuel entries requires an internet connection.");
+      }
+      let billStoragePath: string | undefined;
+      if (input.billPhotoLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.billPhotoLocalUri);
+        const upload = await uploadFuelBillPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `fuel-bill-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        billStoragePath = upload.storagePath ?? undefined;
+      }
+      const save = await updateTripFuelEntry({ ...input, billStoragePath });
+      if (save.error) throw save.error;
+      return save.entry;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
 export function useSaveTripTollEntry() {
   const isOnline = useIsOnline();
   const qc = useQueryClient();
@@ -434,6 +472,38 @@ export function useSaveTripTollEntry() {
         return { queued: true };
       }
       return { queued: false };
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
+export function useUpdateTripTollEntry() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateTollEntryInput) => {
+      if (!isOnline) {
+        throw new Error("Editing toll entries requires an internet connection.");
+      }
+      let receiptStoragePath: string | undefined;
+      if (input.receiptLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.receiptLocalUri);
+        const upload = await uploadTollReceiptPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `toll-receipt-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        receiptStoragePath = upload.storagePath ?? undefined;
+      }
+      const save = await updateTripTollEntry({ ...input, receiptStoragePath });
+      if (save.error) throw save.error;
+      return save.entry;
     },
     onSuccess: (_result, vars) => {
       invalidateTripOperationsQueries(qc, vars.tripId);
@@ -695,6 +765,38 @@ export function useSaveTripOtherExpense() {
       });
       if (save.error) throw save.error;
       return { queued: false };
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
+export function useUpdateTripOtherExpense() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateOtherExpenseInput) => {
+      if (!isOnline) {
+        throw new Error("Editing trip expenses requires an internet connection.");
+      }
+      let receiptStoragePath: string | undefined;
+      if (input.receiptLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.receiptLocalUri);
+        const upload = await uploadOtherExpenseReceiptPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `trip-expense-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        receiptStoragePath = upload.storagePath ?? undefined;
+      }
+      const save = await updateTripOtherExpense({ ...input, receiptStoragePath });
+      if (save.error) throw save.error;
+      return save.entry;
     },
     onSuccess: (_result, vars) => {
       invalidateTripOperationsQueries(qc, vars.tripId);

@@ -155,6 +155,7 @@ export {
   selectAssetTripProvisionCostBreakdown,
   selectAssetTripReimbursablePostedCost,
   selectAssetTripReimbursementSplit,
+  selectTripManifestMargin,
   type AssetProvisionCostBreakdownLine,
   type AssetTripPostedExpenseSplit,
   type AssetTripProvisionCostBreakdown,

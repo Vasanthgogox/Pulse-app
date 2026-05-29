@@ -1,12 +1,7 @@
-import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
-import { lazy, Suspense } from "react";
+import { createPreloadedTabRoute } from '@/lib/createPreloadedTabRoute';
 
-const NetworkScreen = lazy(() => import("./_network-screen"));
+const { TabRoute: NetworkTab, preload: preloadNetworkTabRoute } =
+  createPreloadedTabRoute(() => import('./_network-screen'), 'network');
 
-export default function NetworkTab() {
-  return (
-    <Suspense fallback={<LazySuspenseNullFallback />}>
-      <NetworkScreen />
-    </Suspense>
-  );
-}
+export { preloadNetworkTabRoute };
+export default NetworkTab;

@@ -35,7 +35,7 @@ import { TripsHubTripCardToolbar } from "./TripsHubTripCardToolbar";
 
 export { MOBILE_TRIP_CANVAS_BG, TripsHubMobileTripListCanvas };
 import { Plus, Search, X } from "lucide-react-native";
-import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, memo, useState, type ReactNode } from "react";
 import {
     LayoutAnimation,
     Modal,
@@ -63,6 +63,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getTripDisplayNumber, type TripRow } from "../services/trips.service";
+import { TripHubDriverPresenceBadge } from "./TripHubDriverPresenceBadge";
+import { TripHubInTransitPingLines } from "./TripHubInTransitPingLines";
+import type { TripHubInTransitPingMeta } from "../hooks/useTripHubInTransitPings";
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 
 if (
@@ -447,7 +450,14 @@ export type TripsHubTripCardProps = {
   driverAvatarFallbackSeed?: string;
   cardDate: string;
   stageLabel: string;
-  onPress: () => void;
+  /** Legacy press handler — prefer {@link onOpenTrip} for stable list perf. */
+  onPress?: () => void;
+  /** Stable `(tripId) => void` from {@link useOpenTripDetail}. */
+  onOpenTrip?: (tripId: string) => void;
+  /** Precomputed from screen width — avoids per-card `useWindowDimensions`. */
+  layoutCompact?: boolean;
+  /** Screen/window width from parent for mobile-plan card breakpoint. */
+  viewportWidth?: number;
   tr: (key: string) => string;
   rowWebStyle?: ViewStyle;
   /** Optional: same ledger rows as hub table for cash-in / cash-out totals. */
@@ -472,9 +482,33 @@ export type TripsHubTripCardProps = {
   hubCostContext?: TripHubCostOptions | null;
   /** Desktop 4-column grid — hub ticket card + toolbar (not legacy fleet card). */
   hubGrid?: boolean;
+  /** Last ping time / offline for in-transit hub cards. */
+  inTransitPing?: TripHubInTransitPingMeta | null;
 };
 
-export function TripsHubTripCard({
+function tripsHubTripCardAreEqual(
+  prev: TripsHubTripCardProps,
+  next: TripsHubTripCardProps,
+): boolean {
+  if (prev.trip.id !== next.trip.id) return false;
+  if (prev.trip.status !== next.trip.status) return false;
+  if (prev.trip.updated_at !== next.trip.updated_at) return false;
+  if (prev.stageLabel !== next.stageLabel) return false;
+  if (prev.displayClientName !== next.displayClientName) return false;
+  if (prev.displaySupplierName !== next.displaySupplierName) return false;
+  if (prev.displayDriverName !== next.displayDriverName) return false;
+  if (prev.inTransitPing !== next.inTransitPing) return false;
+  if (prev.financeAdjustments !== next.financeAdjustments) return false;
+  if (prev.ledgerReceivedTotal !== next.ledgerReceivedTotal) return false;
+  if (prev.ledgerPaidTotal !== next.ledgerPaidTotal) return false;
+  if (prev.ledgerTxnCount !== next.ledgerTxnCount) return false;
+  if (prev.hubGrid !== next.hubGrid) return false;
+  if (prev.layoutCompact !== next.layoutCompact) return false;
+  if (prev.currentOrganizationId !== next.currentOrganizationId) return false;
+  return true;
+}
+
+function TripsHubTripCardInner({
   trip,
   currentOrganizationId,
   displayClientName,
@@ -496,6 +530,9 @@ export function TripsHubTripCard({
   cardDate: _cardDate,
   stageLabel,
   onPress,
+  onOpenTrip,
+  layoutCompact = false,
+  viewportWidth = 0,
   tr,
   rowWebStyle,
   ledgerReceivedTotal,
@@ -507,9 +544,14 @@ export function TripsHubTripCard({
   hubCostContext,
   /** Desktop 4-column grid — hub ticket card + finance toolbar (matches Load Center indents). */
   hubGrid = false,
+  inTransitPing = null,
 }: TripsHubTripCardProps) {
-  const { width: cardViewportWidth } = useWindowDimensions();
-  const compactMetricGrid = cardViewportWidth > 0 && cardViewportWidth < 640;
+  const handlePress = useCallback(() => {
+    if (onPress) onPress();
+    else onOpenTrip?.(trip.id);
+  }, [onPress, onOpenTrip, trip.id]);
+
+  const compactMetricGrid = layoutCompact;
   const hasSupplierLink = isAggregateTrip(trip);
   const showAggregateKindPill = shouldShowAggregateTripKindPill(trip, {
     viewerOrganizationId: currentOrganizationId,
@@ -582,7 +624,7 @@ export function TripsHubTripCard({
         ? styles.fleetMissionPillTextRose
         : styles.fleetMissionPillTextEmerald;
 
-  const mobilePlanLayout = useMobilePlanCardLayout(cardViewportWidth);
+  const mobilePlanLayout = useMobilePlanCardLayout(viewportWidth);
 
   const hubMobileCardProps = {
     trip,
@@ -609,10 +651,11 @@ export function TripsHubTripCard({
     pickupIso: trip.pickup_date ?? trip.created_at,
     origin,
     dest,
-    onPress,
+    onPress: handlePress,
     tr,
     style: rowWebStyle,
     viewerOrgId: currentOrganizationId,
+    inTransitPing,
   };
 
   const receivedForReceivable =
@@ -652,7 +695,7 @@ export function TripsHubTripCard({
   return (
     <Pressable
       style={[styles.fleetCardOuter, rowWebStyle]}
-      onPress={onPress}
+      onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={`${tripNo} ${displayClientName}${
         showSupplierParty
@@ -687,10 +730,13 @@ export function TripsHubTripCard({
             </View>
           </View>
           <View style={styles.fleetHeadRight}>
-            <View style={[styles.fleetMissionPill, missionPillStyle]}>
-              <Text style={[styles.fleetMissionPillText, missionPillTextStyle]}>
-                {stageUpper}
-              </Text>
+            <View style={styles.fleetHeadStatusCol}>
+              <View style={[styles.fleetMissionPill, missionPillStyle]}>
+                <Text style={[styles.fleetMissionPillText, missionPillTextStyle]}>
+                  {stageUpper}
+                </Text>
+              </View>
+              <TripHubInTransitPingLines ping={inTransitPing} />
             </View>
             {aging ? <Text style={styles.fleetAging}>{aging}</Text> : null}
           </View>
@@ -942,6 +988,11 @@ export function TripsHubTripCard({
     </Pressable>
   );
 }
+
+export const TripsHubTripCard = memo(
+  TripsHubTripCardInner,
+  tripsHubTripCardAreEqual,
+);
 
 export type TripsHubTableViewProps = {
   trips: TripRow[];
@@ -2892,6 +2943,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   fleetHeadRight: { alignItems: "flex-end", gap: 4 },
+  fleetHeadStatusCol: { alignItems: "flex-end", gap: 2 },
   fleetMissionPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,

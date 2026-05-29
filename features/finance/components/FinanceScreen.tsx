@@ -442,23 +442,7 @@ export function FinanceScreen() {
     }
   }, [canAccess, currentOrganization?.id, financeSubTab]);
 
-  const isFirstFinanceFocus = useRef(true);
-  useFocusEffect(
-    useCallback(() => {
-      if (!canAccess || !currentOrganization?.id) return;
-      const orgId = currentOrganization.id;
-      if (isFirstFinanceFocus.current) {
-        isFirstFinanceFocus.current = false;
-        return;
-      }
-      setEntitiesRefreshKey((k) => k + 1);
-      setLedgerRefreshKey((k) => k + 1);
-      queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.vehicles.all(orgId),
-      });
-    }, [canAccess, currentOrganization?.id, queryClient]),
-  );
+  /** Tab refocus must not remount entities/ledger — realtime + pull-to-refresh handle freshness. */
 
   useEffect(() => {
     if (selectedEntity?.entityType !== "DRIVER" || !selectedEntity.data.id) {
@@ -1294,7 +1278,8 @@ export function FinanceScreen() {
     }
   }, [currentOrganization?.id, queryClient, refetchLedger]);
 
-  /** Recover from persisted empty party caches when opening Finance party tabs. */
+  /** Recover from persisted empty party caches — once per org + sub-tab per session. */
+  const partyRecoveryAttempted = useRef(new Set<string>());
   useFocusEffect(
     useCallback(() => {
       const org = currentOrganization?.id;
@@ -1313,6 +1298,10 @@ export function FinanceScreen() {
         (financeSubTab === "drivers" && driverRows.length === 0) ||
         (financeSubTab === "garage" && vehicleRows.length === 0);
       if (!partyListEmpty) return;
+
+      const recoveryKey = `${org}:${financeSubTab}`;
+      if (partyRecoveryAttempted.current.has(recoveryKey)) return;
+      partyRecoveryAttempted.current.add(recoveryKey);
 
       void (async () => {
         await clearAllDomainCacheMetaForOrg(org);
