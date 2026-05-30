@@ -1,6 +1,7 @@
 // Driver UI
 export { AddDriverModal, type DriverFormData, type DriverSource } from './components/AddDriverModal';
 export { default as DriverDetailScreen } from './components/DriverDetailScreen';
+export { DriverAnalyticsFullScreen } from './components/DriverAnalyticsFullScreen';
 
 // Driver services
 export {

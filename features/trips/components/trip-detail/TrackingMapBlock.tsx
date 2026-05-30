@@ -18,6 +18,7 @@ import {
   MAP_LOCATION_LABEL_UNKNOWN,
 } from "@/lib/mapLocationLabel.service";
 import { LeafletMap, type LeafletMapRef } from "@/components/driver/LeafletMap";
+import { boundsFromCoordinates } from "@/features/trips/utils/mapRouteViewport.util";
 
 type MapCoordinate = {
   latitude: number;
@@ -195,6 +196,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
     paddingRight: 10,
+    alignSelf: "stretch",
   },
   trackingMapNodeTitle: {
     fontSize: 13,
@@ -279,6 +281,8 @@ export interface TrackingMapBlockProps {
   tripLocationPoints?: { latitude: number; longitude: number; recorded_at: string }[];
   /** Reverse-geocoded address for latest location. */
   locationAddress?: string | null;
+  /** Extra bottom padding when fitting the full route (e.g. overlapping sheet). */
+  fitPaddingBottom?: number;
 }
 
 const DEFAULT_LOCATION_LABELS: TrackingMapLocationLabels = [
@@ -299,6 +303,7 @@ export function TrackingMapBlock({
   isLocating = false,
   tripLocationPoints = [],
   locationAddress,
+  fitPaddingBottom = 56,
 }: TrackingMapBlockProps) {
   const [origin, past1, past2, currentLabel, destination] = locationLabels;
   const mapRef = useRef<LeafletMapRef | null>(null);
@@ -499,15 +504,37 @@ export function TrackingMapBlock({
   ]);
 
   useEffect(() => {
-    const focusPoint =
-      displayedRouteCoordinates[0] ??
-      latestCoordinate ??
-      normalizedOriginCoordinate ??
-      normalizedDestinationCoordinate;
-    if (!focusPoint) return;
-    mapRef.current?.focusCurrentLocation(focusPoint, displayedRouteCoordinates.length > 1 ? 10 : 13);
+    const viewportPoints = [
+      ...displayedRouteCoordinates,
+      normalizedOriginCoordinate,
+      normalizedDestinationCoordinate,
+      latestCoordinate,
+    ];
+    const bounds = boundsFromCoordinates(viewportPoints);
+    if (!bounds) return;
+
+    const hasRoutableSpan =
+      displayedRouteCoordinates.length >= 2 ||
+      (!!normalizedOriginCoordinate && !!normalizedDestinationCoordinate);
+
+    const frame = requestAnimationFrame(() => {
+      if (hasRoutableSpan) {
+        mapRef.current?.fitBounds(bounds.ne, bounds.sw, fitPaddingBottom);
+        return;
+      }
+      const focus =
+        latestCoordinate ??
+        normalizedOriginCoordinate ??
+        normalizedDestinationCoordinate ??
+        displayedRouteCoordinates[0];
+      if (focus) {
+        mapRef.current?.focusCurrentLocation(focus, 11);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, [
     displayedRouteCoordinates,
+    fitPaddingBottom,
     latestCoordinate,
     normalizedDestinationCoordinate,
     normalizedOriginCoordinate,

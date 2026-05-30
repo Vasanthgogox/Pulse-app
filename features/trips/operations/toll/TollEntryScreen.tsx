@@ -1,4 +1,5 @@
 import { SmartInput } from "@/components/mobile-input";
+import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
@@ -12,11 +13,12 @@ import type { TripRow } from "@/features/trips/services/trips.service";
 import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { OperationalPaymentMode, OperationalPaymentOwner } from "../types";
-import { useSaveTripTollEntry } from "../queries/useTripOperations";
+import { useSaveTripTollEntry, useUpdateTripTollEntry } from "../queries/useTripOperations";
+import { getTripTollEntryById } from "./toll.service";
 import {
   PAYMENT_MODE_OPTIONS,
   TOLL_PAYMENT_OWNER_OPTIONS,
@@ -24,13 +26,22 @@ import {
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
 import { useOperationsSyncState } from "../state/useOperationsSyncState";
 
-export function TollEntryScreen({ trip }: { trip: TripRow }) {
+export function TollEntryScreen({
+  trip,
+  entryId,
+}: {
+  trip: TripRow;
+  entryId?: string | null;
+}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const saveToll = useSaveTripTollEntry();
+  const updateToll = useUpdateTripTollEntry();
   const { pendingCount, failedCount, refresh } = useOperationsSyncState();
+  const isEditing = !!entryId?.trim();
 
+  const [loadingEntry, setLoadingEntry] = useState(isEditing);
   const [amountInr, setAmountInr] = useState<number>(0);
   const [plazaName, setPlazaName] = useState("");
   const [notes, setNotes] = useState("");
@@ -44,6 +55,41 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
   );
+
+  useEffect(() => {
+    const id = entryId?.trim();
+    if (!id) {
+      setLoadingEntry(false);
+      return;
+    }
+    let mounted = true;
+    void getTripTollEntryById(id).then((res) => {
+      if (!mounted) return;
+      if (res.error || !res.entry) {
+        Alert.alert("Could not load toll entry", res.error?.message ?? "Not found");
+        router.back();
+        return;
+      }
+      if (res.entry.trip_id !== trip.id) {
+        Alert.alert("Wrong trip", "This entry belongs to a different trip.");
+        router.back();
+        return;
+      }
+      const entry = res.entry;
+      setAmountInr(Number(entry.amount_inr ?? 0));
+      setPlazaName(entry.plaza_name ?? "");
+      setNotes(entry.notes ?? "");
+      setIsEstimated(entry.is_estimated === true);
+      setPaymentOwner(entry.payment_owner ?? "organization");
+      setPaymentMode(entry.payment_mode ?? "unknown");
+      setLoadingEntry(false);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [entryId, router, trip.id]);
+
+  const saving = saveToll.isPending || updateToll.isPending;
 
   const handleCapture = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -60,31 +106,45 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
   };
 
   const handleSave = async () => {
+    const payload = {
+      tripId: trip.id,
+      amountInr,
+      plazaName,
+      notes,
+      isEstimated,
+      enteredBy: profile?.uid ?? null,
+      paymentOwner,
+      paymentMode,
+      receiptLocalUri: receiptUri,
+    };
     try {
-      const res = await saveToll.mutateAsync({
-        tripId: trip.id,
-        amountInr,
-        plazaName,
-        notes,
-        isEstimated,
-        enteredBy: profile?.uid ?? null,
-        actorRole: profile?.role === "driver" ? "driver" : "user",
-        paymentOwner,
-        paymentMode,
-        receiptLocalUri: receiptUri,
-      });
-      if (res.queued) setHint("Saved offline — will sync when connected.");
+      if (isEditing && entryId?.trim()) {
+        await updateToll.mutateAsync({ ...payload, entryId: entryId.trim() });
+      } else {
+        const res = await saveToll.mutateAsync({
+          ...payload,
+          actorRole: profile?.role === "driver" ? "driver" : "user",
+        });
+        if (res.queued) setHint("Saved offline — will sync when connected.");
+      }
       await refresh();
       router.back();
     } catch (e) {
-      Alert.alert("Could not save toll entry", e instanceof Error ? e.message : "Unknown error");
+      Alert.alert(
+        isEditing ? "Could not update toll entry" : "Could not save toll entry",
+        e instanceof Error ? e.message : "Unknown error",
+      );
     }
   };
+
+  if (loadingEntry) {
+    return <CenteredLoadingView message="Loading toll entry…" />;
+  }
 
   return (
     <View style={s.screen}>
       <OperationalHeader
-        title="Toll Entry"
+        title={isEditing ? "Edit toll" : "Toll Entry"}
         subtitle={contextLine}
         onBack={() => router.back()}
         density="high"
@@ -93,24 +153,27 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
         style={s.scroll}
         contentContainerStyle={[
           s.content,
-          { paddingBottom: insets.bottom + 88 },
+          { paddingBottom: insets.bottom + 76 },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Surface elevation={1} density="high">
+        <Surface elevation={1} density="high" style={s.card}>
           <SmartInput
             type="currency"
             value={amountInr}
             onChange={(_, numeric) => setAmountInr(numeric)}
             label="Toll amount"
             submitLabel="Apply"
+            variant="field"
+            density="compact"
+            placeholder="Tap to enter"
             required={false}
             validation={{ min: 0, max: 1000000 }}
           />
         </Surface>
 
-        <Surface elevation={1} density="high">
+        <Surface elevation={1} density="high" style={s.card}>
           <OperationalChipSelect
             label="Entry type"
             options={[
@@ -119,15 +182,15 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
             ]}
             value={isEstimated ? "estimated" : "actual"}
             onChange={(v) => setIsEstimated(v === "estimated")}
+            density="compact"
           />
-        </Surface>
-
-        <Surface elevation={1} density="high">
+          <View style={s.divider} />
           <OperationalChipSelect
             label="Paid by"
             options={TOLL_PAYMENT_OWNER_OPTIONS}
             value={paymentOwner}
             onChange={setPaymentOwner}
+            density="compact"
           />
           <View style={s.divider} />
           <OperationalChipSelect
@@ -135,40 +198,49 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
             options={PAYMENT_MODE_OPTIONS}
             value={paymentMode}
             onChange={setPaymentMode}
+            density="compact"
           />
         </Surface>
 
-        <Surface elevation={1} density="high">
-          <Text style={s.fieldLabel}>Plaza (optional)</Text>
-          <TextInput
-            style={s.input}
-            value={plazaName}
-            onChangeText={setPlazaName}
-            placeholder="Toll plaza name"
-            placeholderTextColor={Theme.textMuted}
-          />
-          <Text style={[s.fieldLabel, { marginTop: 8 }]}>Notes (optional)</Text>
-          <TextInput
-            style={[s.input, s.notes]}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            placeholder="Short note"
-            placeholderTextColor={Theme.textMuted}
-          />
+        <Surface elevation={1} density="high" style={s.card}>
+          <View style={s.fieldStack}>
+            <View>
+              <Text style={s.fieldLabel}>Plaza (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={plazaName}
+                onChangeText={setPlazaName}
+                placeholder="Toll plaza name"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+            <View>
+              <Text style={s.fieldLabel}>Notes (optional)</Text>
+              <TextInput
+                style={[s.input, s.notes]}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                placeholder="Short note"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+          </View>
         </Surface>
 
-        <OdometerPhotoCapture
-          photoUri={receiptUri}
-          busy={saveToll.isPending}
-          onCapture={handleCapture}
-          onRetake={handleCapture}
-          compact
-          title="Receipt"
-          subtitle="Optional · camera capture"
-          captureLabel="Add receipt"
-          retakeLabel="Retake"
-        />
+        <View style={s.photoWrap}>
+          <OdometerPhotoCapture
+            photoUri={receiptUri}
+            busy={saving}
+            onCapture={handleCapture}
+            onRetake={handleCapture}
+            compact
+            title="Receipt"
+            subtitle="Optional · camera capture"
+            captureLabel="Add receipt"
+            retakeLabel="Retake"
+          />
+        </View>
 
         {hint ? <Text style={s.hint}>{hint}</Text> : null}
         {pendingCount > 0 ? (
@@ -190,9 +262,9 @@ export function TollEntryScreen({ trip }: { trip: TripRow }) {
           />
           <OperationalButton
             intent="bottomSticky"
-            label={saveToll.isPending ? "Saving…" : "Save"}
+            label={saving ? "Saving…" : isEditing ? "Update" : "Save"}
             onPress={handleSave}
-            loading={saveToll.isPending}
+            loading={saving}
             density="high"
             style={s.footerBtn}
           />

@@ -26,6 +26,76 @@ export function isTripTrackingActive(
   return ACTIVE_TRACKING_STATUSES.has(status.toLowerCase());
 }
 
+/** Trip has a driver and may emit GPS — show map, trail, and last-known pin. */
+const DRIVER_MAP_ELIGIBLE_STATUSES = new Set([
+  ...ACTIVE_TRACKING_STATUSES,
+  "assigned",
+  "pending_acceptance",
+]);
+
+/** No GPS ping within this window → driver treated as offline in hub + detail UI. */
+export const DRIVER_LOCATION_STALE_MS = 15 * 60 * 1000;
+
+export function isTripDriverMapEligible(
+  status: string | null | undefined,
+  completedAt: string | null | undefined,
+  driverId?: string | null,
+): boolean {
+  if (completedAt) return false;
+  if (!(driverId ?? "").trim()) return false;
+  if (!status) return false;
+  return DRIVER_MAP_ELIGIBLE_STATUSES.has(status.toLowerCase());
+}
+
+function latestIsoTimestamp(candidates: Array<string | null | undefined>): string | null {
+  let best: string | null = null;
+  let bestMs = -Infinity;
+  for (const raw of candidates) {
+    const t = (raw ?? "").trim();
+    if (!t) continue;
+    const ms = new Date(t).getTime();
+    if (!Number.isFinite(ms)) continue;
+    if (ms > bestMs) {
+      bestMs = ms;
+      best = t;
+    }
+  }
+  return best;
+}
+
+/**
+ * Full offline overlay only when the driver is in an active leg, has no live broadcast,
+ * and no GPS ping in the last {@link DRIVER_LOCATION_STALE_MS}.
+ */
+export function shouldShowDriverTrackingOfflineOverlay(params: {
+  tripStatus: string | null | undefined;
+  completedAt?: string | null;
+  driverId?: string | null;
+  driverOnline: boolean;
+  lastLocationAt?: string | null;
+}): boolean {
+  if (!isTripTrackingActive(params.tripStatus, params.completedAt)) return false;
+  if (!(params.driverId ?? "").trim()) return false;
+  if (params.driverOnline) return false;
+  const lastAt = (params.lastLocationAt ?? "").trim();
+  if (!lastAt) return true;
+  const ageMs = Date.now() - new Date(lastAt).getTime();
+  if (!Number.isFinite(ageMs)) return true;
+  return ageMs > DRIVER_LOCATION_STALE_MS;
+}
+
+export function isDriverLocationRecentlySeen(
+  lastLocationAt: string | null | undefined,
+  maxAgeMs: number = DRIVER_LOCATION_STALE_MS,
+): boolean {
+  const lastAt = (lastLocationAt ?? "").trim();
+  if (!lastAt) return false;
+  const ageMs = Date.now() - new Date(lastAt).getTime();
+  return Number.isFinite(ageMs) && ageMs <= maxAgeMs;
+}
+
+export { latestIsoTimestamp };
+
 // ── Adaptive ping interval (12-ping TAT rule) ─────────────────────────────────
 
 const BASELINE_SPEED_KM_PER_DAY = 350;

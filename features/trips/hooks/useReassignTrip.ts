@@ -1,3 +1,4 @@
+import { updateDriver } from '@/features/drivers/services/drivers.service';
 import { useCallback, useState } from 'react';
 import {
   assignAggregateTripDriverByPhone,
@@ -26,6 +27,8 @@ export type ReassignPayload = {
 
 export type ReassignByPhonePayload = {
   phone: string;
+  /** Required display name (min 2 chars) for assign-by-phone / aggregate. */
+  driverName: string;
   vehicleId?: string | null;
   vehicleDisplayNumber?: string | null;
 };
@@ -215,11 +218,27 @@ export function useReassignTrip({
     [assertTripNotStale, auditOptions, trip.id, validateConflicts],
   );
 
+  const applyPhoneDriverDisplayName = useCallback(
+    async (driverId: string | null | undefined, displayName: string) => {
+      const customName = displayName.trim();
+      if (!driverId || customName.length < 2) return;
+      const orgForDriver = (driverAssignOrgId ?? organizationId).trim() || organizationId;
+      await updateDriver(orgForDriver, driverId, { name: customName });
+    },
+    [driverAssignOrgId, organizationId],
+  );
+
   const reassignByPhone = useCallback(
     async (payload: ReassignByPhonePayload): Promise<ReassignByPhoneResult> => {
       setSaving(true);
       setError(null);
       try {
+        const nameTrimmed = payload.driverName.trim();
+        if (!nameTrimmed || nameTrimmed.length < 2) {
+          setError('Enter driver name (at least 2 characters).');
+          return { ok: false, trip: null };
+        }
+
         const stale = await assertTripNotStale();
         if (stale) {
           setError(stale);
@@ -269,6 +288,7 @@ export function useReassignTrip({
             finalTrip = vehicleStep.trip ?? updated;
           }
 
+          await applyPhoneDriverDisplayName(finalTrip.driver_id, nameTrimmed);
           invalidateDrivers(organizationId);
           invalidateVehicles(organizationId);
           return { ok: true, trip: finalTrip };
@@ -308,6 +328,7 @@ export function useReassignTrip({
           }
           finalTrip = vehicleStep.trip ?? updated;
         }
+        await applyPhoneDriverDisplayName(finalTrip.driver_id, nameTrimmed);
         invalidateDrivers(organizationId);
         invalidateVehicles(organizationId);
         return { ok: true, trip: finalTrip, otpCode: otp?.code ?? null };
@@ -316,6 +337,7 @@ export function useReassignTrip({
       }
     },
     [
+      applyPhoneDriverDisplayName,
       applyFleetVehicleAfterPhone,
       assertTripNotStale,
       auditOptions,

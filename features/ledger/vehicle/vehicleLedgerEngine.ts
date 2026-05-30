@@ -1,6 +1,10 @@
 import { getTripById } from "@/features/trips/services/trips.service";
 import { getTripFuelEntries, updateTripFuelApprovalState } from "@/features/trips/operations/fuel/fuel.service";
 import { getTripTollEntries, updateTripTollApprovalState } from "@/features/trips/operations/toll/toll.service";
+import {
+  getTripOtherExpenses,
+  updateTripOtherExpenseApprovalState,
+} from "@/features/trips/operations/other/otherExpense.service";
 import { appendTripOperationalTimelineEventSafe } from "@/features/trips/operations/timeline/timelineEvents.service";
 import { toFuelPostingCandidate } from "./postingSelectors";
 import { decideFuelPostingRule } from "./vehiclePostingRules";
@@ -36,12 +40,13 @@ export async function evaluateAndPostFuelEntry(params: {
       sourceId: fuelEntry.id,
       amount: Math.max(0, Number(fuelEntry.amount_inr) || 0),
       approvedBy: params.approvedBy ?? null,
-      approvalState: fuelEntry.approval_state,
+      approvalState: "approved",
       metadata: {
         payment_owner: fuelEntry.payment_owner,
         payment_mode: fuelEntry.payment_mode,
       },
       paymentOwner: fuelEntry.payment_owner,
+      forcePost: true,
     });
     if (post.error) return { error: post.error, posted: false, reason: "post_failed" as const };
     const nextLedgerState =
@@ -134,13 +139,14 @@ export async function evaluateAndPostTollEntry(params: {
     sourceId: tollEntry.id,
     amount: Math.max(0, Number(tollEntry.amount_inr) || 0),
     approvedBy: params.approvedBy ?? null,
-    approvalState: tollEntry.approval_state,
+    approvalState: "approved",
     metadata: {
       payment_owner: tollEntry.payment_owner,
       payment_mode: tollEntry.payment_mode,
       is_estimated: tollEntry.is_estimated,
     },
     paymentOwner: tollEntry.payment_owner,
+    forcePost: true,
   });
   if (post.error) return { error: post.error, posted: false, reason: "post_failed" as const };
   const nextLedgerState =
@@ -164,6 +170,67 @@ export async function evaluateAndPostTollEntry(params: {
     payload: {
       reason: post.reason,
     },
+  });
+  return { error: null, posted: post.reason === "posted", reason: post.reason };
+}
+
+export async function evaluateAndPostOtherExpenseEntry(params: {
+  tripId: string;
+  otherEntryId: string;
+  approvedBy: string | null;
+}) {
+  const [tripRes, otherRes] = await Promise.all([
+    getTripById(params.tripId),
+    getTripOtherExpenses(params.tripId),
+  ]);
+  if (tripRes.error || !tripRes.trip) {
+    return { error: tripRes.error ?? new Error("Trip not found"), posted: false, reason: "trip_missing" as const };
+  }
+  if (otherRes.error) {
+    return { error: otherRes.error, posted: false, reason: "other_missing" as const };
+  }
+  const otherEntry = otherRes.entries.find((e) => e.id === params.otherEntryId);
+  if (!otherEntry) {
+    return { error: new Error("Expense entry not found"), posted: false, reason: "other_missing" as const };
+  }
+  const post = await executeVehiclePostingRuntime({
+    orgId: tripRes.trip.organization_id,
+    tripId: tripRes.trip.id,
+    vehicleId: tripRes.trip.vehicle_id ?? "",
+    sourceType: "manual_adjustment",
+    sourceId: otherEntry.id,
+    amount: Math.max(0, Number(otherEntry.amount_inr) || 0),
+    approvedBy: params.approvedBy ?? null,
+    approvalState: "approved",
+    metadata: {
+      payment_owner: otherEntry.payment_owner,
+      payment_mode: otherEntry.payment_mode,
+      expense_category: otherEntry.expense_category,
+      description: otherEntry.description,
+    },
+    paymentOwner: otherEntry.payment_owner,
+    forcePost: true,
+  });
+  if (post.error) return { error: post.error, posted: false, reason: "post_failed" as const };
+  const nextLedgerState =
+    post.reason === "posted" || post.reason === "already_posted" ? "posted" : "not_posted";
+  await updateTripOtherExpenseApprovalState({
+    entryId: otherEntry.id,
+    approvalState: "approved",
+    approvedBy: params.approvedBy,
+    ledgerState: nextLedgerState,
+  });
+  await appendTripOperationalTimelineEventSafe({
+    organizationId: tripRes.trip.organization_id,
+    tripId: tripRes.trip.id,
+    eventType:
+      post.reason === "posted" || post.reason === "already_posted"
+        ? "posting_completed"
+        : "posting_failed",
+    sourceType: "trip_expense",
+    sourceId: otherEntry.id,
+    actorUserId: params.approvedBy,
+    payload: { reason: post.reason, category: otherEntry.expense_category },
   });
   return { error: null, posted: post.reason === "posted", reason: post.reason };
 }

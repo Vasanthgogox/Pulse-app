@@ -370,14 +370,15 @@ function SignUpWorkspaceReadyCardInner({
               ]}
             >
               <View style={[cardStyles.profileAvatarWrap, { borderColor: theme.primary }]}>
-                {profileImage ? (
-                  <Image source={profileImage} style={cardStyles.profileAvatar} resizeMode="cover" />
-                ) : profilePreviewUri ? (
+                {profilePreviewUri ? (
                   <Image
+                    key={profilePreviewUri}
                     source={{ uri: profilePreviewUri }}
                     style={cardStyles.profileAvatar}
                     resizeMode="cover"
                   />
+                ) : profileImage ? (
+                  <Image source={profileImage} style={cardStyles.profileAvatar} resizeMode="cover" />
                 ) : null}
               </View>
               <Text style={[cardStyles.profileLabel, { color: theme.muted }]}>{profilePhotoLabel}</Text>

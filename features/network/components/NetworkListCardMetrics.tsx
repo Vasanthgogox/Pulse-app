@@ -23,7 +23,7 @@ export function NetworkHubMetricsInlineRow({
     <View style={styles.inlineRow} accessibilityLabel={`${trips} trips, ${rating} rating`}>
       <View style={styles.inlineItem}>
         <View style={[styles.inlineIconWrap, styles.inlineIconWrapTrips]}>
-          <Route size={12} color="#6366F1" strokeWidth={2} />
+          <Route size={12} color={Theme.pulseIndigo} strokeWidth={2} />
         </View>
         <Text style={styles.inlineValue} numberOfLines={1}>
           {trips}
@@ -63,7 +63,7 @@ export function TransitNodeMetric({
   return (
     <View style={styles.metricCol} accessibilityLabel={`${count} trips`}>
       <View style={[styles.metricTile, { width: box, height: box }]}>
-        <Route size={icon} color="#6366F1" strokeWidth={2.2} />
+        <Route size={icon} color={Theme.pulseIndigo} strokeWidth={2.2} />
         <View style={[styles.metricBadgeDark, mobile && styles.metricBadgeMobile]}>
           <Text style={[styles.metricBadgeDarkText, mobile && styles.metricBadgeTextMobile]}>
             {count}

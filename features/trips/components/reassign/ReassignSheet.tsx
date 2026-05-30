@@ -108,6 +108,7 @@ export function ReassignSheet({
     trip.vehicle_id ?? null,
   );
   const [phone, setPhone] = useState('');
+  const [driverNameInput, setDriverNameInput] = useState('');
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [adHocPlate, setAdHocPlate] = useState(
     formatIndianVehicleNumber(trip.vehicle_display_number ?? '').trim(),
@@ -158,6 +159,7 @@ export function ReassignSheet({
     setSelectedDriverId(trip.driver_id ?? null);
     setSelectedVehicleId(trip.vehicle_id ?? null);
     setPhone('');
+    setDriverNameInput('');
     setPhoneBusy(false);
     setAdHocPlate(formatIndianVehicleNumber(trip.vehicle_display_number ?? '').trim());
     setError(null);
@@ -229,6 +231,8 @@ export function ReassignSheet({
   const meetsValidation = useMemo(() => {
     if (driverModeIsPhone) {
       const trimmed = phone.trim();
+      const nameTrimmed = driverNameInput.trim();
+      if (!nameTrimmed || nameTrimmed.length < 2) return false;
       if (!trimmed || validatePhone(trimmed)) return false;
       if (isAggregate) {
         return !!(selectedVehicleId || adHocPlate.trim());
@@ -242,6 +246,7 @@ export function ReassignSheet({
     return !!selectedVehicleId;
   }, [
     driverModeIsPhone,
+    driverNameInput,
     phone,
     isAggregate,
     selectedVehicleId,
@@ -334,6 +339,7 @@ export function ReassignSheet({
       const plate = formatIndianVehicleNumber(adHocPlate).trim();
       const result = await reassignByPhone({
         phone: trimmedPhone,
+        driverName: driverNameInput.trim(),
         vehicleId: selectedVehicleId,
         vehicleDisplayNumber: plate || null,
       });
@@ -379,6 +385,7 @@ export function ReassignSheet({
   }, [
     canConfirm,
     driverModeIsPhone,
+    driverNameInput,
     phone,
     adHocPlate,
     selectedVehicleId,
@@ -422,11 +429,17 @@ export function ReassignSheet({
   ]);
 
   const summaryDriver = useMemo(() => {
-    if (driverModeIsPhone) return phone.trim() || '—';
+    if (driverModeIsPhone) {
+      const name = driverNameInput.trim();
+      const ph = phone.trim();
+      if (name && ph) return `${name} · ${ph}`;
+      return name || ph || '—';
+    }
     const d = drivers.find((x) => x.id === selectedDriverId);
     return d?.name ?? currentDriverName ?? '—';
   }, [
     driverModeIsPhone,
+    driverNameInput,
     phone,
     drivers,
     selectedDriverId,
@@ -444,10 +457,16 @@ export function ReassignSheet({
   const canContinueDriver = useMemo(() => {
     if (driverModeIsPhone) {
       const trimmed = phone.trim();
-      return trimmed.length > 0 && !validatePhone(trimmed);
+      const nameTrimmed = driverNameInput.trim();
+      return (
+        nameTrimmed.length >= 2 &&
+        trimmed.length > 0 &&
+        !validatePhone(trimmed) &&
+        !phoneBusy
+      );
     }
     return !!selectedDriverId;
-  }, [driverModeIsPhone, phone, selectedDriverId]);
+  }, [driverModeIsPhone, driverNameInput, phone, phoneBusy, selectedDriverId]);
 
   const canContinueVehicle = useMemo(() => {
     if (isAggregate) return !!(selectedVehicleId || adHocPlate.trim());
@@ -568,6 +587,8 @@ export function ReassignSheet({
         onSelectDriverId={setSelectedDriverId}
         phone={phone}
         onPhoneChange={setPhone}
+        driverName={driverNameInput}
+        onDriverNameChange={setDriverNameInput}
         phoneBusy={phoneBusy}
         onPhoneBusyChange={setPhoneBusy}
       />

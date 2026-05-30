@@ -1,13 +1,22 @@
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { EntityAvatar } from "@/components/EntityAvatar";
-import { ProvisionRevisedPartiesCard } from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
+import {
+  ProvisionRevisedPartiesCard,
+  type ProvisionCostBreakdownLine,
+} from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { isAdjustmentVoided } from "@/features/trips/services/tripAdjustments";
+import { ProvisionPassThroughCard } from "@/features/trips/components/trip-detail/adjustment/ProvisionPassThroughCard";
+import {
+  selectClientPassThroughRecommendations,
+  type ClientPassThroughRecommendation,
+} from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 
 export interface TripFinanceAdjustmentsPanelProps {
   adjustments: TripAdjustment[];
@@ -23,8 +32,15 @@ export interface TripFinanceAdjustmentsPanelProps {
   supplierName: string;
   supplierAvatarUrl?: string | null;
   supplierAvatarSeed?: string | null;
+  /** Asset execution: cost lane is driver labor + posted trip expenses. */
+  isAssetExecution?: boolean;
+  costLaneLabel?: string;
+  costBreakdownLines?: ProvisionCostBreakdownLine[];
   lineMetaLabel: (adj: TripAdjustment) => string;
   onOpenProvision: (side: "client" | "supplier") => void;
+  onRequestDeduction?: (rec: ClientPassThroughRecommendation) => void;
+  onViewNotePdf?: (adj: TripAdjustment) => void;
+  onEditAdjustment?: (adj: TripAdjustment) => void;
   capturePaymentSlot?: ReactNode;
 }
 
@@ -35,6 +51,10 @@ function cnDnLabel(impact: TripAdjustment["impact"]): string {
 function laneLabel(type: TripAdjustment["type"]): string {
   return type === "revenue" ? "Sale" : "Cost";
 }
+
+/** Fixed widths for compact columns; party+lane and reason share flexible space. */
+const COL_NOTE = 40;
+const COL_AMT = 78;
 
 export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsPanel(
   props: TripFinanceAdjustmentsPanelProps,
@@ -49,13 +69,28 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
   );
 
   const activeCount = rows.filter((a) => !isAdjustmentVoided(a)).length;
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+
+  const passThroughRecommendations = useMemo(
+    () =>
+      selectClientPassThroughRecommendations({
+        adjustments: props.adjustments,
+        isAssetExecution: Boolean(props.isAssetExecution),
+        driverOrSupplierName: props.supplierName,
+      }),
+    [props.adjustments, props.isAssetExecution, props.supplierName],
+  );
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Provision adjustments</Text>
-          <Text style={styles.hint}>Revised sale & cost after CN/DN lines</Text>
+          <Text style={styles.hint}>
+            {props.isAssetExecution
+              ? "Customer sale vs driver cost & posted expenses"
+              : "Revised sale & cost after CN/DN lines"}
+          </Text>
         </View>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{activeCount}</Text>
@@ -75,8 +110,19 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         cost={props.cost}
         adjCost={props.adjCost}
         costSideDelta={props.costSideDelta}
+        costLaneLabel={props.costLaneLabel}
+        costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
+        costBreakdownLines={props.costBreakdownLines}
         onSelectSide={props.onOpenProvision}
       />
+
+      {props.onRequestDeduction && passThroughRecommendations.length > 0 ? (
+        <ProvisionPassThroughCard
+          recommendations={passThroughRecommendations}
+          isAssetExecution={Boolean(props.isAssetExecution)}
+          onRequestDeduction={props.onRequestDeduction}
+        />
+      ) : null}
 
       <View style={styles.tableToolbar}>
         <Text style={styles.tableTitle}>Adjustment lines</Text>
@@ -93,27 +139,34 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             onPress={() => props.onOpenProvision("supplier")}
           >
             <Feather name="plus" size={12} color="#0f766e" />
-            <Text style={styles.addBtnCostText}>Cost</Text>
+            <Text style={styles.addBtnCostText}>
+              {props.isAssetExecution ? "Driver" : "Cost"}
+            </Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.table}>
         <View style={styles.tableHead}>
-          <View style={styles.colParty}>
-            <Text style={styles.th}>Party</Text>
-          </View>
-          <View style={styles.colLane}>
-            <Text style={styles.th}>Lane</Text>
+          <View style={styles.colPartyLane}>
+            <Text style={styles.th} numberOfLines={1}>
+              Party
+            </Text>
           </View>
           <View style={styles.colNote}>
-            <Text style={styles.th}>Note</Text>
+            <Text style={styles.th} numberOfLines={1}>
+              Note
+            </Text>
           </View>
           <View style={styles.colReason}>
-            <Text style={styles.th}>Reason</Text>
+            <Text style={styles.th} numberOfLines={1}>
+              Reason
+            </Text>
           </View>
           <View style={styles.colAmt}>
-            <Text style={[styles.th, styles.thAmtText]}>Amount</Text>
+            <Text style={[styles.th, styles.thAmt]} numberOfLines={1}>
+              Amount
+            </Text>
           </View>
         </View>
 
@@ -124,42 +177,93 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             const voided = isAdjustmentVoided(adj);
             const isSale = adj.type === "revenue";
             const partyName = isSale ? props.clientName : props.supplierName;
+            const costEntityType = props.isAssetExecution ? "driver" : "supplier";
+            const isSelected = selectedRowId === adj.id;
+            const canEdit = !voided && typeof props.onEditAdjustment === "function";
             return (
+              <View key={adj.id} style={styles.trWrap}>
               <Pressable
-                key={adj.id}
-                style={[styles.tr, voided && styles.trVoided]}
-                onPress={() => props.onOpenProvision(isSale ? "client" : "supplier")}
+                style={[styles.tr, voided && styles.trVoided, isSelected && styles.trSelected]}
+                onPress={() =>
+                  setSelectedRowId((prev) => (prev === adj.id ? null : adj.id))
+                }
               >
-                <View style={styles.colParty}>
+                <View style={styles.colPartyLane}>
                   <EntityAvatar
                     name={partyName}
                     avatarUrl={isSale ? props.clientAvatarUrl : props.supplierAvatarUrl}
                     avatarSeed={isSale ? props.clientAvatarSeed : props.supplierAvatarSeed}
-                    entityType={isSale ? "client" : "supplier"}
-                    size={24}
+                    entityType={isSale ? "client" : costEntityType}
+                    size={20}
                     showIntegrationBadge={false}
                   />
-                  <Text style={[styles.partyCell, voided && styles.struck]} numberOfLines={1}>
-                    {partyName}
-                  </Text>
-                </View>
-                <View style={styles.colLane}>
-                  <Text style={[styles.td, voided && styles.struck]}>{laneLabel(adj.type)}</Text>
+                  <View style={styles.partyLaneBody}>
+                    <Text
+                      style={[styles.partyCell, voided && styles.struck]}
+                      numberOfLines={2}
+                    >
+                      {partyName}
+                    </Text>
+                    <View
+                      style={[
+                        styles.laneChip,
+                        isSale ? styles.laneChipSale : styles.laneChipCost,
+                        voided && styles.laneChipVoided,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.laneChipText,
+                          isSale ? styles.laneChipTextSale : styles.laneChipTextCost,
+                          voided && styles.struck,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {laneLabel(adj.type)}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
                 <View style={styles.colNote}>
-                  <Text
+                  <Pressable
                     style={[
-                      styles.td,
-                      styles.tdNote,
-                      adj.impact === "minus" ? styles.noteCn : styles.noteDn,
-                      voided && styles.struck,
+                      styles.notePill,
+                      adj.impact === "minus" ? styles.notePillCn : styles.notePillDn,
+                      voided && styles.notePillVoided,
                     ]}
+                    onPress={(e) => {
+                      e?.stopPropagation?.();
+                      props.onViewNotePdf?.(adj);
+                    }}
+                    disabled={!props.onViewNotePdf}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${cnDnLabel(adj.impact)} PDF`}
                   >
-                    {cnDnLabel(adj.impact)}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.notePillText,
+                        adj.impact === "minus" ? styles.noteCn : styles.noteDn,
+                        voided && styles.struck,
+                      ]}
+                    >
+                      {cnDnLabel(adj.impact)}
+                    </Text>
+                    {props.onViewNotePdf ? (
+                      <Feather
+                        name="file-text"
+                        size={9}
+                        color={adj.impact === "minus" ? Theme.primary : "#0f766e"}
+                        style={styles.notePillIcon}
+                      />
+                    ) : null}
+                  </Pressable>
                 </View>
                 <View style={styles.colReason}>
-                  <Text style={[styles.td, styles.tdReason, voided && styles.struck]} numberOfLines={2}>
+                  <Text
+                    style={[styles.td, styles.tdReason, voided && styles.struck]}
+                    numberOfLines={3}
+                  >
                     {(adj.reason ?? "").trim() || "—"}
                   </Text>
                 </View>
@@ -178,6 +282,47 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                   </Text>
                 </View>
               </Pressable>
+
+              {isSelected ? (
+                <View style={styles.rowActions}>
+                  {props.onViewNotePdf ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.rowActionBtn,
+                        pressed && styles.rowActionBtnPressed,
+                      ]}
+                      onPress={() => props.onViewNotePdf?.(adj)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${cnDnLabel(adj.impact)} PDF`}
+                    >
+                      <Feather
+                        name="file-text"
+                        size={11}
+                        color={adj.impact === "minus" ? Theme.primary : "#0f766e"}
+                      />
+                      <Text style={styles.rowActionBtnText}>View PDF</Text>
+                    </Pressable>
+                  ) : null}
+                  {canEdit ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.rowActionBtn,
+                        styles.rowActionBtnPrimary,
+                        pressed && styles.rowActionBtnPressed,
+                      ]}
+                      onPress={() => props.onEditAdjustment?.(adj)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${cnDnLabel(adj.impact)}`}
+                    >
+                      <Feather name="edit-2" size={11} color={Theme.textOnPrimary} />
+                      <Text style={styles.rowActionBtnTextPrimary}>
+                        Edit {cnDnLabel(adj.impact)}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+              </View>
             );
           })
         )}
@@ -190,193 +335,324 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 12,
-    borderRadius: 22,
+    marginTop: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e8ecf4",
+    borderColor: "#e6edf5",
     backgroundColor: "#fff",
-    padding: 14,
-    gap: 12,
+    padding: 10,
+    gap: 8,
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 8,
   },
   title: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
     textTransform: "uppercase",
-    color: "#0f172a",
+    color: Theme.textPrimaryDark,
+    lineHeight: 12,
   },
   hint: {
-    marginTop: 3,
-    fontSize: 11,
-    fontWeight: "600",
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "500",
+    lineHeight: 12,
     color: Theme.textMuted,
   },
   badge: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 13,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
+    flexShrink: 0,
   },
   badgeText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#334155",
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#64748b",
+    fontVariant: ["tabular-nums"],
   },
   tableToolbar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    paddingTop: 2,
   },
   tableTitle: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: Theme.textMuted,
+    lineHeight: 10,
   },
   toolbarActions: { flexDirection: "row", gap: 6 },
   addBtnSale: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.35)",
-    backgroundColor: "rgba(99,102,241,0.08)",
+    borderColor: "rgba(99,102,241,0.28)",
+    backgroundColor: "rgba(99,102,241,0.06)",
   },
   addBtnSaleText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "600",
     color: Theme.primary,
     textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   addBtnCost: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(15,118,110,0.35)",
-    backgroundColor: "rgba(15,118,110,0.08)",
+    borderColor: "rgba(15,118,110,0.28)",
+    backgroundColor: "rgba(15,118,110,0.06)",
   },
   addBtnCostText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "600",
     color: "#0f766e",
     textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   table: {
     borderWidth: 1,
     borderColor: "#eef2f7",
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#fafbfc",
   },
   tableHead: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
+    alignItems: "flex-start",
+    paddingVertical: 6,
     paddingHorizontal: 8,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#f8fafc",
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: "#e8ecf4",
   },
   th: {
+    ...FinanceTxnTypography.fieldLabel,
     fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: Theme.textMuted,
+    lineHeight: 11,
   },
-  thAmtText: { textAlign: "right", width: "100%" },
-  colParty: {
-    flex: 34,
-    minWidth: 0,
+  thAmt: {
+    textAlign: "right",
+    width: "100%",
+  },
+  colPartyLane: {
+    flex: 1,
+    minWidth: 96,
+    maxWidth: 128,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 5,
     paddingRight: 4,
   },
-  colLane: {
-    flex: 11,
+  partyLaneBody: {
+    flex: 1,
     minWidth: 0,
-    justifyContent: "center",
+    gap: 3,
+    paddingTop: 1,
   },
   colNote: {
-    flex: 9,
-    minWidth: 0,
+    width: COL_NOTE,
+    flexShrink: 0,
+    alignItems: "center",
     justifyContent: "center",
+    paddingTop: 2,
   },
   colReason: {
-    flex: 28,
-    minWidth: 0,
+    flex: 1.35,
+    minWidth: 72,
     justifyContent: "center",
-    paddingRight: 4,
+    paddingHorizontal: 2,
+    paddingTop: 2,
   },
   colAmt: {
-    flex: 18,
-    minWidth: 56,
+    width: COL_AMT,
+    flexShrink: 0,
     alignItems: "flex-end",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    paddingTop: 2,
   },
   empty: {
-    padding: 14,
-    fontSize: 11,
-    fontWeight: "600",
+    padding: 12,
+    fontSize: 10,
+    fontWeight: "400",
     color: Theme.textMuted,
-    fontStyle: "italic",
     textAlign: "center",
+    lineHeight: 14,
   },
   tr: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 9,
+    alignItems: "flex-start",
+    minHeight: 38,
+    paddingVertical: 7,
     paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f0",
     backgroundColor: "#fff",
+  },
+  trWrap: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e8ecf4",
+    backgroundColor: "#fff",
+  },
+  trSelected: {
+    backgroundColor: "#fafbff",
+    borderBottomColor: Theme.pulseIndigoRing,
+  },
+  rowActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    paddingTop: 2,
+    backgroundColor: "#fafbff",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.pulseIndigoRing,
+  },
+  rowActionBtn: {
+    flex: 1,
+    minWidth: 96,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
+    minHeight: 32,
+  },
+  rowActionBtnPrimary: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary,
+  },
+  rowActionBtnPressed: {
+    opacity: 0.88,
+  },
+  rowActionBtnText: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  rowActionBtnTextPrimary: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.2,
   },
   trVoided: { opacity: 0.55 },
   td: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: "#334155",
+    fontSize: 9,
+    fontWeight: "400",
+    color: "#475569",
+    lineHeight: 13,
   },
   partyCell: {
-    flex: 1,
-    fontSize: 10,
+    ...FinanceTxnTypography.partyTitle,
+    fontStyle: "normal",
+    fontSize: 9,
     fontWeight: "600",
-    color: "#0f172a",
+    lineHeight: 12,
+    color: Theme.textPrimaryDark,
     minWidth: 0,
   },
-  tdNote: { fontWeight: "600" },
+  laneChip: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  laneChipSale: {
+    backgroundColor: "rgba(99,102,241,0.08)",
+    borderColor: "rgba(99,102,241,0.22)",
+  },
+  laneChipCost: {
+    backgroundColor: "rgba(15,118,110,0.08)",
+    borderColor: "rgba(15,118,110,0.22)",
+  },
+  laneChipVoided: {
+    opacity: 0.75,
+  },
+  laneChipText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  laneChipTextSale: {
+    color: Theme.primary,
+  },
+  laneChipTextCost: {
+    color: "#0f766e",
+  },
+  notePill: {
+    minWidth: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  notePillIcon: {
+    marginTop: 1,
+  },
+  notePillCn: {
+    backgroundColor: "rgba(79,70,229,0.1)",
+  },
+  notePillDn: {
+    backgroundColor: "rgba(225,29,72,0.08)",
+  },
+  notePillVoided: {
+    opacity: 0.7,
+  },
+  notePillText: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
   noteCn: { color: "#4f46e5" },
   noteDn: { color: "#e11d48" },
   tdReason: {
     fontWeight: "500",
     color: "#64748b",
+    fontSize: 9,
+    lineHeight: 13,
   },
   tdAmt: {
+    fontSize: 9,
     textAlign: "right",
-    fontWeight: "600",
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
+    lineHeight: 13,
   },
   amtSale: { color: "#059669" },
-  amtCost: { color: "#e11d48" },
+  amtCost: { color: "#dc2626" },
   struck: {
     textDecorationLine: "line-through",
     opacity: 0.75,

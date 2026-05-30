@@ -110,6 +110,10 @@ export interface SaveFuelEntryInput {
   billPhotoLocalUri?: string | null;
 }
 
+export type UpdateFuelEntryInput = Omit<SaveFuelEntryInput, "actorRole"> & {
+  entryId: string;
+};
+
 export interface SaveTollEntryInput {
   tripId: string;
   amountInr: number;
@@ -122,6 +126,72 @@ export interface SaveTollEntryInput {
   paymentMode?: OperationalPaymentMode | null;
   receiptLocalUri?: string | null;
 }
+
+export type UpdateTollEntryInput = Omit<SaveTollEntryInput, "actorRole"> & {
+  entryId: string;
+};
+
+export type TripOtherExpenseCategory =
+  | "parking"
+  | "challan"
+  | "loading"
+  | "unloading"
+  | "detention"
+  | "maintenance"
+  | "fastag"
+  | "advance"
+  | "food"
+  | "weighbridge"
+  | "misc";
+
+export interface TripOtherExpenseEntry {
+  id: string;
+  trip_id: string;
+  expense_category: TripOtherExpenseCategory;
+  amount_inr: number;
+  description: string | null;
+  location_name: string | null;
+  notes: string | null;
+  receipt_storage_path: string | null;
+  entered_by: string | null;
+  entered_at: string;
+  updated_at: string;
+  source: string;
+  status: "active" | "voided";
+  payment_owner: OperationalPaymentOwner;
+  payment_mode: OperationalPaymentMode | null;
+  approval_state: OperationalApprovalState;
+  ledger_state: OperationalLedgerState;
+  posting_state?: OperationalPostingState;
+  posting_error?: string | null;
+  last_retry_at?: string | null;
+  retry_count?: number;
+  reimbursement_state?: ReimbursementState;
+  reimbursement_updated_at?: string | null;
+  reimbursed_at?: string | null;
+  reimbursed_by?: string | null;
+  reimbursement_notes?: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+}
+
+export interface SaveOtherExpenseInput {
+  tripId: string;
+  expenseCategory: TripOtherExpenseCategory;
+  amountInr: number;
+  description?: string | null;
+  locationName?: string | null;
+  notes?: string | null;
+  enteredBy: string | null;
+  actorRole?: "driver" | "user" | null;
+  paymentOwner?: OperationalPaymentOwner | null;
+  paymentMode?: OperationalPaymentMode | null;
+  receiptLocalUri?: string | null;
+}
+
+export type UpdateOtherExpenseInput = Omit<SaveOtherExpenseInput, "actorRole"> & {
+  entryId: string;
+};
 
 export type MaintenanceType =
   | "service"

@@ -3,7 +3,8 @@ export type { AddTripFormData, AddTripModalProps } from "./components/add-trip";
 export {
     AggregateTripOtpPanel, type AggregateOtpUiState, type AggregateTripOtpPanelProps
 } from "./components/AggregateTripOtpPanel";
-export { default as TripDetailScreen } from "./components/trip-detail/TripDetailScreen";
+// TripDetailScreen is lazy-loaded from app/trip/[id] — do not re-export here
+// (barrel pull-in duplicates react-native-webview across async route chunks).
 export {
     TripAssignmentBlock, type AssignmentSource, type TripAssignmentBlockProps
 } from "./components/TripAssignmentBlock";

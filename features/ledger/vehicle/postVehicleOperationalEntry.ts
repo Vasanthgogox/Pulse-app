@@ -11,7 +11,8 @@ export type VehiclePostingSourceType =
   | "battery"
   | "permit"
   | "insurance"
-  | "repair";
+  | "repair"
+  | "manual_adjustment";
 
 function isVehiclePostingEnabled(): boolean {
   return String(process.env.EXPO_PUBLIC_ENABLE_VEHICLE_LEDGER_POSTING ?? "false").toLowerCase() === "true";

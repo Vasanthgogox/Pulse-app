@@ -51,10 +51,14 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPulseField
         label="Password"
         required
+        passwordField="new"
         value={flow.password}
         onChangeText={flow.setPassword}
         placeholder="At least 6 characters"
         secureTextEntry={!flow.showPassword}
+        autoCorrect={false}
+        spellCheck={false}
+        maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.step5Attempted ? flow.step5Errors.password : null}
         trailing={
@@ -71,10 +75,14 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPulseField
         label="Confirm Password"
         required
+        passwordField="confirm"
         value={flow.confirmPassword}
         onChangeText={flow.setConfirmPassword}
         placeholder="Re-enter password"
         secureTextEntry={!flow.showConfirmPassword}
+        autoCorrect={false}
+        spellCheck={false}
+        maxLength={128}
         editable={!flow.loading}
         onFocus={flow.scrollConfirmPasswordIntoView}
         errorMessage={
@@ -117,10 +125,8 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
 
 const styles = StyleSheet.create({
   eyeBtn: {
-    position: 'absolute',
-    right: 14,
-    top: 16,
-    padding: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   createBtn: {
     marginTop: 8,

@@ -87,6 +87,29 @@ export function shouldShowAggregateTripKindPill(
   return true;
 }
 
+type TripPayoutShape = TripWithSupplier & {
+  trip_payout_mode?: string | null;
+};
+
+/**
+ * Manifest hero right column: **driver** on asset trips; **supplier** on aggregate/market.
+ * Uses explicit payout mode first, then the same Asset vs Aggregate pill rules as Trips hub.
+ */
+export function shouldShowManifestHeroDriverParty(
+  trip: TripWithSupplier &
+    TripRosterShape & { organization_id?: string | null },
+  ctx?: AggregateTripKindPillContext | null,
+): boolean {
+  const payoutMode = String((trip as TripPayoutShape).trip_payout_mode ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (payoutMode === "market") return false;
+  if (payoutMode === "asset") return true;
+  if (!isAggregateTrip(trip)) return true;
+  return !shouldShowAggregateTripKindPill(trip, ctx);
+}
+
 /**
  * Trips hub violet pill (Integrated vs Manual): **Integrated** only when the trip is aggregate and was
  * created via Load Hub (`source === direct_quote`). Aggregate trips with `manual` (or any other) source

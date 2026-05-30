@@ -10,6 +10,10 @@ import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
+
+/** Network growth card — darker indigo than `Theme.primary` for kicker + trend pill. */
+const NETWORK_GROWTH_PURPLE = "#3730A3";
+import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
   ConnectionsView,
@@ -269,6 +273,7 @@ function NetworkScreenInner() {
   } = useProtocolInvitesWithDriverSent(orgId);
   const { inviteActionId, handleInviteAction } =
     useInboundProtocolInviteActions(orgId);
+  const businessConnectionModal = useOptionalBusinessConnectionRequestModal();
 
   const filterTabs = useMemo(
     () => ["ALL", "CLIENT", "SUPPLIER", "DRIVER"] as ConnectionFilterTab[],
@@ -578,6 +583,9 @@ function NetworkScreenInner() {
           onApprove={(item) => void handleInviteAction(item, "approve")}
           onReject={(item) => void handleInviteAction(item, "reject")}
           onCancel={(item) => void handleInviteAction(item, "cancel")}
+          onOpenInviteDetail={(item) =>
+            businessConnectionModal?.presentConnectionInvite(item)
+          }
           onManageAll={() => setViewMode("dashboard")}
           showFooter={false}
         />
@@ -809,13 +817,13 @@ function NetworkScreenInner() {
                 <View style={[styles.commandMainContent, isMobileLayout && styles.commandMainContentCompact]}>
                   <View style={[styles.commandMainHead, isMobileLayout && styles.commandMainHeadMobile]}>
                     <View style={[styles.commandMainKickerRow, isMobileLayout && styles.commandMainKickerRowMobile]}>
-                  <Activity size={isMobileLayout ? 12 : 14} color={Theme.primary} />
+                  <Activity size={isMobileLayout ? 12 : 14} color={NETWORK_GROWTH_PURPLE} />
                       <Text style={styles.commandMainKicker} numberOfLines={1}>
                         NETWORK GROWTH
                       </Text>
                 </View>
                 <View style={styles.commandGrowthPill}>
-                  <ArrowUpRight size={isMobileLayout ? 11 : 13} color={Theme.primary} />
+                  <ArrowUpRight size={isMobileLayout ? 11 : 13} color={NETWORK_GROWTH_PURPLE} />
                   <Text style={styles.commandGrowthText}>+{trendPct || 12}%</Text>
                 </View>
               </View>
@@ -1552,7 +1560,7 @@ const styles = StyleSheet.create({
     width: 288,
     height: 288,
     borderRadius: 144,
-    backgroundColor: "rgba(79,70,229,0.05)",
+    backgroundColor: "rgba(55, 48, 163, 0.07)",
     right: -96,
     top: -96,
   },
@@ -1588,7 +1596,7 @@ const styles = StyleSheet.create({
   commandMainKicker: {
     fontSize: 11,
     fontWeight: "900",
-    color: Theme.primary,
+    color: NETWORK_GROWTH_PURPLE,
     letterSpacing: 1.6,
     textTransform: "uppercase",
   },
@@ -1596,8 +1604,8 @@ const styles = StyleSheet.create({
     minHeight: 26,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    borderColor: "rgba(55, 48, 163, 0.28)",
+    backgroundColor: "rgba(55, 48, 163, 0.08)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1607,7 +1615,7 @@ const styles = StyleSheet.create({
   commandGrowthText: {
     fontSize: 12,
     fontWeight: "900",
-    color: Theme.primary,
+    color: NETWORK_GROWTH_PURPLE,
   },
   commandMainStatsRow: {
     flexDirection: "row",

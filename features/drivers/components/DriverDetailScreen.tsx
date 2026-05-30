@@ -63,6 +63,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
@@ -100,7 +101,6 @@ import {
   DriverFleetInviteSalaryModal,
   type DriverFleetInviteSalaryModalMode,
 } from "./DriverFleetInviteSalaryModal";
-import { DriverAnalyticsTab } from "./analytics/DriverAnalyticsTab";
 import { DriverEarningsAnalyticsTab } from "./analytics/DriverEarningsAnalyticsTab";
 import { DriverFleetRankingTab } from "./analytics/DriverFleetRankingTab";
 import {
@@ -340,7 +340,7 @@ export default function DriverDetailScreen({
   >([]);
   const [driverTransactions, setDriverTransactions] = useState<LedgerRow[]>([]);
   const [driverDetailTab, setDriverDetailTab] = useState<
-    "trips" | "ledger" | "statement" | "analytics" | "ranking" | "earnings"
+    "trips" | "ledger" | "statement" | "ranking" | "earnings"
   >("trips");
   const [tripsDatePreset, setTripsDatePreset] =
     useState<FinancePeriodFilter>("RANGE");
@@ -1353,6 +1353,19 @@ export default function DriverDetailScreen({
       rightAction={
         <View style={styles.headerRightActions}>
           <TouchableOpacity
+            style={styles.profileBtnHeader}
+            onPress={() => router.push(ROUTES.driverAnalytics(driverId) as never)}
+            activeOpacity={0.8}
+            accessibilityLabel="Open driver analytics"
+            accessibilityRole="button"
+          >
+            <FontAwesome
+              name="line-chart"
+              size={17}
+              color={Theme.textPrimaryDark}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
             style={styles.downloadHeaderBtn}
             onPress={handleDriverDownloadPress}
             activeOpacity={0.8}
@@ -1737,23 +1750,6 @@ export default function DriverDetailScreen({
             ]}
           >
             {t("statement")}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            driverDetailTab === "analytics" && styles.tabItemActive,
-          ]}
-          onPress={() => setDriverDetailTab("analytics")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabItemText,
-              driverDetailTab === "analytics" && styles.tabItemTextActive,
-            ]}
-          >
-            Analytics
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -2422,19 +2418,6 @@ export default function DriverDetailScreen({
         </View>
       )}
 
-      {driverDetailTab === "analytics" && (
-        <View style={styles.tabScroll}>
-          <DriverAnalyticsTab
-            trips={trips}
-            driverTransactions={driverTransactions}
-            driverRequests={driverRequests}
-            driver={driver}
-            driverOffer={driverOffer}
-            driverRatings={driverRatings}
-          />
-        </View>
-      )}
-
       {driverDetailTab === "ranking" && (
         <View style={styles.tabScroll}>
           <DriverFleetRankingTab currentDriverId={driverId} />
@@ -2530,6 +2513,14 @@ const styles = StyleSheet.create({
     right: Layout.fabRightOffset,
     zIndex: 100,
     elevation: 10,
+  },
+  profileBtnHeader: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.surfaceGray,
+    alignItems: "center",
+    justifyContent: "center",
   },
   downloadHeaderBtn: {
     width: 40,

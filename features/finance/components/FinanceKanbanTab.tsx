@@ -209,7 +209,7 @@ function KanbanCard({
             {partyName}
           </Text>
           <Text style={styles.timelineCardDateVehicle} numberOfLines={1}>
-            {[dateStr, cat !== 'garage' ? vehicleStr : null].filter(Boolean).join(" · ")}
+            {[dateStr, vehicleStr].filter(Boolean).join(" · ")}
           </Text>
           {routeWhyLine ? (
             <Text style={styles.timelineCardRouteWhy} numberOfLines={1}>
@@ -776,7 +776,7 @@ const styles = StyleSheet.create({
   },
   /** Org / party — italic, uppercase, medium weight, dark (mobile cash list). */
   timelineCardParty: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     fontStyle: "italic",
     color: Theme.textPrimaryDark,
@@ -784,22 +784,23 @@ const styles = StyleSheet.create({
   },
   /** Date line — not italic; slate; smaller than title. */
   timelineCardDateVehicle: {
-    fontSize: 8,
-    fontWeight: "400",
+    fontSize: 7,
+    fontWeight: "500",
     fontStyle: "normal",
     color: Theme.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     marginTop: 2,
   },
   /** Route + type — smallest, italic, muted (sentence case from data). */
   timelineCardRouteWhy: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "400",
     fontStyle: "italic",
     color: Theme.textMuted,
-    marginTop: 2,
+    marginTop: 1,
     opacity: 0.95,
+    lineHeight: 10,
   },
   rightCol: {
     alignItems: "flex-end",
@@ -809,8 +810,8 @@ const styles = StyleSheet.create({
   },
   /** Amount — compact, regular weight; green / red from amountIn / amountOut. */
   amount: {
-    fontSize: 12,
-    fontWeight: "400",
+    fontSize: 11,
+    fontWeight: "500",
     fontStyle: "normal",
   },
   amountIn: {
@@ -832,11 +833,11 @@ const styles = StyleSheet.create({
   },
   /** Trip id pill — italic uppercase, primary (dark blue on light). */
   tripPillText: {
-    fontSize: 8,
-    fontWeight: "500",
+    fontSize: 7,
+    fontWeight: "600",
     color: Theme.primary,
     fontStyle: "italic",
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
     textTransform: "uppercase",
   },
   expandHint: {

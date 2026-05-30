@@ -32,8 +32,7 @@ import {
 import { partyMobileWizardStyles as shell } from "@/components/party/partyMobileWizardStyles";
 import Theme from "@/constants/Theme";
 import {
-  COST_REASON_OPTIONS,
-  REVENUE_REASON_OPTIONS,
+  getAdjustmentReasonOptions,
   type TripAdjustmentImpact,
   type TripAdjustmentType,
 } from "@/features/trips/services/tripAdjustments";
@@ -54,6 +53,8 @@ export interface TripAdjustmentMobileWizardProps {
   otherReason: string;
   onOtherReasonChange: (value: string) => void;
   reasonLocked?: boolean;
+  reasonBeforeAmount?: boolean;
+  isAssetDriverCost?: boolean;
   showProtocolShortcuts?: boolean;
   canSubmit: boolean;
   submitting?: boolean;
@@ -62,6 +63,7 @@ export interface TripAdjustmentMobileWizardProps {
   flowSessionKey?: string;
   reviewBaseAmount?: number;
   reviewRevisedAmount?: number;
+  isEditing?: boolean;
 }
 
 function parseAmount(raw: string): number {
@@ -71,18 +73,30 @@ function parseAmount(raw: string): number {
 
 function stepMeta(
   step: TripAdjustmentWizardStep,
+  isAssetDriverCost?: boolean,
+  isEditing?: boolean,
 ): { title: string; hint?: string } {
   switch (step) {
     case "lane":
-      return {
-        title: "Which lane?",
-        hint: "Revenue changes the sale; cost changes supplier settlement.",
-      };
+      return isAssetDriverCost
+        ? {
+            title: "Driver trip cost",
+            hint: "Adjust what this trip costs for the assigned driver.",
+          }
+        : {
+            title: "Which lane?",
+            hint: "Revenue changes the sale; cost changes supplier settlement.",
+          };
     case "impact":
-      return {
-        title: "Credit or debit?",
-        hint: "Credit note (CN) reduces the amount; debit note (DN) increases it.",
-      };
+      return isAssetDriverCost
+        ? {
+            title: "Deduct or pay driver?",
+            hint: "Deduct (CN) for damage, missing, or late delivery. Pay (DN) for tips or allowances.",
+          }
+        : {
+            title: "Credit or debit?",
+            hint: "Credit note (CN) reduces the amount; debit note (DN) increases it.",
+          };
     case "protocol":
       return {
         title: "Quick protocol",
@@ -91,9 +105,21 @@ function stepMeta(
     case "amount":
       return { title: "Adjustment amount", hint: "Enter the provision amount in rupees." };
     case "reason":
-      return { title: "Why this adjustment?", hint: "Select the closest reason for audit." };
+      return isAssetDriverCost
+        ? {
+            title: "Reason for driver adjustment",
+            hint: "Pick the deduction or payment type for payroll and audit.",
+          }
+        : { title: "Why this adjustment?", hint: "Select the closest reason for audit." };
+    case "otherReason":
+      return {
+        title: "Other reason",
+        hint: "Describe the charge or credit in your own words.",
+      };
     case "review":
-      return { title: "Review & save", hint: "Confirm details on your ticket before saving." };
+      return isEditing
+        ? { title: "Review & update", hint: "Confirm changes before updating this note." }
+        : { title: "Review & save", hint: "Confirm details on your ticket before saving." };
     default:
       return { title: "Provision" };
   }
@@ -110,13 +136,10 @@ function canAdvanceStep(
       return true;
     case "amount":
       return parseAmount(props.amountStr) > 0;
-    case "reason": {
-      const selected =
-        props.reason === "Other"
-          ? props.otherReason.trim().length > 0
-          : props.reason.trim().length > 0;
-      return selected;
-    }
+    case "reason":
+      return props.reason.trim().length > 0 && props.reason !== "Other";
+    case "otherReason":
+      return props.otherReason.trim().length > 0;
     case "review":
       return props.canSubmit;
     default:
@@ -131,6 +154,7 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   const laneLocked = props.laneLocked === true;
   const impactLocked = props.impactLocked === true;
   const reasonLocked = props.reasonLocked === true;
+  const reasonBeforeAmount = props.reasonBeforeAmount === true;
   const showProtocolShortcuts = props.showProtocolShortcuts !== false;
 
   const steps = useMemo(
@@ -140,8 +164,9 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
         impactLocked,
         reasonLocked,
         showProtocolShortcuts,
+        reasonBeforeAmount,
       }),
-    [laneLocked, impactLocked, reasonLocked, showProtocolShortcuts],
+    [laneLocked, impactLocked, reasonLocked, showProtocolShortcuts, reasonBeforeAmount],
   );
 
   const [stepIndex, setStepIndex] = useState(() =>
@@ -149,28 +174,38 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
       laneLocked,
       impactLocked,
       reasonLocked,
+      reasonBeforeAmount,
     }),
   );
+  const [otherReasonMode, setOtherReasonMode] = useState(false);
 
   const lastSessionKeyRef = useRef(props.flowSessionKey ?? "");
   useEffect(() => {
     const key = props.flowSessionKey ?? "";
     if (key === lastSessionKeyRef.current) return;
     lastSessionKeyRef.current = key;
+    setOtherReasonMode(false);
     setStepIndex(
       resolveAdjustmentInitialStepIndex(steps, {
         laneLocked,
         impactLocked,
         reasonLocked,
+        reasonBeforeAmount,
       }),
     );
-  }, [props.flowSessionKey, steps, laneLocked, impactLocked, reasonLocked]);
+  }, [props.flowSessionKey, steps, laneLocked, impactLocked, reasonLocked, reasonBeforeAmount]);
 
   const currentStep = steps[stepIndex] ?? "review";
-  const { title, hint } = stepMeta(currentStep);
-  const canAdvance = canAdvanceStep(currentStep, props);
-  const reasonOptions =
-    props.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+  const effectiveStep =
+    currentStep === "reason" && otherReasonMode ? ("otherReason" as const) : currentStep;
+  const isAssetDriverCost = props.isAssetDriverCost === true;
+  const { title, hint } = stepMeta(effectiveStep, isAssetDriverCost, props.isEditing);
+  const canAdvance = canAdvanceStep(effectiveStep, props);
+  const reasonOptions = getAdjustmentReasonOptions({
+    type: props.type,
+    isAssetDriverCost,
+    impact: props.impact,
+  });
   const selectedReason =
     props.reason === "Other"
       ? props.otherReason.trim() || "Other"
@@ -178,21 +213,37 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   const amountNum = parseAmount(props.amountStr);
 
   const handleBack = useCallback(() => {
+    if (otherReasonMode) {
+      setOtherReasonMode(false);
+      return;
+    }
     if (stepIndex <= 0) {
       props.onClose();
       return;
     }
     setStepIndex((i) => Math.max(0, i - 1));
-  }, [stepIndex, props]);
+  }, [stepIndex, props, otherReasonMode]);
 
   const handleAdvance = useCallback(() => {
-    if (currentStep === "review") {
+    if (effectiveStep === "review") {
       if (props.canSubmit && !props.submitting) props.onSubmit();
       return;
     }
+    if (currentStep === "reason" && props.reason === "Other" && !otherReasonMode) {
+      setOtherReasonMode(true);
+      return;
+    }
     if (!canAdvance) return;
+    if (otherReasonMode) setOtherReasonMode(false);
     setStepIndex((i) => Math.min(steps.length - 1, i + 1));
-  }, [canAdvance, currentStep, props, steps.length]);
+  }, [
+    canAdvance,
+    currentStep,
+    effectiveStep,
+    otherReasonMode,
+    props,
+    steps.length,
+  ]);
 
   const applyProtocolChip = useCallback(
     (chip: (typeof FINANCE_PROTOCOL_CHIPS)[number]) => {
@@ -255,8 +306,12 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           <Minus size={22} color={Theme.darkGreen} strokeWidth={2.6} />
         </View>
         <View style={styles.laneTextCol}>
-          <Text style={styles.laneTitle}>Credit (CN)</Text>
-          <Text style={styles.laneSub}>Reduces amount</Text>
+          <Text style={styles.laneTitle}>
+            {isAssetDriverCost ? "Deduct from driver (CN)" : "Credit (CN)"}
+          </Text>
+          <Text style={styles.laneSub}>
+            {isAssetDriverCost ? "Damage · missing · late delivery" : "Reduces amount"}
+          </Text>
         </View>
       </Pressable>
       <Pressable
@@ -267,8 +322,12 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           <Plus size={22} color={Theme.teslaRed} strokeWidth={2.6} />
         </View>
         <View style={styles.laneTextCol}>
-          <Text style={styles.laneTitle}>Debit (DN)</Text>
-          <Text style={styles.laneSub}>Increases amount</Text>
+          <Text style={styles.laneTitle}>
+            {isAssetDriverCost ? "Pay driver (DN)" : "Debit (DN)"}
+          </Text>
+          <Text style={styles.laneSub}>
+            {isAssetDriverCost ? "Tip · bonus · allowance" : "Increases amount"}
+          </Text>
         </View>
       </Pressable>
     </View>
@@ -307,8 +366,13 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
         />
       </View>
       <Text style={styles.amountHint}>
-        {props.impact === "plus" ? "Debit note increases" : "Credit note reduces"}{" "}
-        {props.type === "revenue" ? "sale" : "supplier cost"}.
+        {isAssetDriverCost
+          ? props.impact === "plus"
+            ? "Adds to revised driver trip cost (tip or allowance)."
+            : "Reduces revised driver trip cost (deduction from salary)."
+          : `${props.impact === "plus" ? "Debit note increases" : "Credit note reduces"} ${
+              props.type === "revenue" ? "sale" : "supplier cost"
+            }.`}
       </Text>
     </View>
   );
@@ -320,7 +384,16 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           <Pressable
             key={r}
             style={[styles.reasonChip, props.reason === r && styles.reasonChipActive]}
-            onPress={() => props.onReasonChange(r)}
+            onPress={() => {
+              props.onReasonChange(r);
+              if (r === "Other") {
+                props.onOtherReasonChange("");
+                setOtherReasonMode(true);
+              } else {
+                props.onOtherReasonChange("");
+                setOtherReasonMode(false);
+              }
+            }}
           >
             <Text
               style={[
@@ -334,16 +407,34 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
         ))}
       </View>
       {props.reason === "Other" ? (
-        <TextInput
-          style={styles.otherInput}
-          value={props.otherReason}
-          onChangeText={props.onOtherReasonChange}
-          placeholder="Describe reason..."
-          placeholderTextColor={Theme.textMuted}
-          maxLength={80}
-        />
+        <Pressable style={styles.otherReasonLink} onPress={() => setOtherReasonMode(true)}>
+          <Text style={styles.otherReasonLinkText}>
+            {props.otherReason.trim()
+              ? `Edit: ${props.otherReason.trim()}`
+              : "Describe other reason →"}
+          </Text>
+        </Pressable>
       ) : null}
     </ScrollView>
+  );
+
+  const renderOtherReason = () => (
+    <View style={styles.otherReasonPage}>
+      <TextInput
+        style={styles.otherReasonInput}
+        value={props.otherReason}
+        onChangeText={props.onOtherReasonChange}
+        placeholder="e.g. Shortage at unloading, rate mismatch…"
+        placeholderTextColor={Theme.textMuted}
+        maxLength={120}
+        multiline
+        autoFocus
+        textAlignVertical="top"
+      />
+      <Text style={styles.otherReasonHint}>
+        This appears on the provision line and audit trail.
+      </Text>
+    </View>
   );
 
   const renderReview = () => (
@@ -364,6 +455,7 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   );
 
   const body = (() => {
+    if (effectiveStep === "otherReason") return renderOtherReason();
     switch (currentStep) {
       case "lane":
         return renderLane();
@@ -382,9 +474,17 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
     }
   })();
 
-  const entityTitle = "PROVISION ADJUST";
+  const entityTitle = props.isEditing ? "EDIT PROVISION" : "PROVISION ADJUST";
   const advanceLabel =
-    currentStep === "review" ? (props.submitting ? "Saving…" : "Save") : "Continue";
+    currentStep === "review"
+      ? props.submitting
+        ? props.isEditing
+          ? "Updating…"
+          : "Saving…"
+        : props.isEditing
+          ? "Update"
+          : "Save"
+      : "Continue";
 
   return (
     <KeyboardAvoidingView
@@ -433,7 +533,7 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
         </View>
 
         <View style={[shell.footer, styles.footerCompact, { paddingBottom: insets.bottom + 12 }]}>
-          {currentStep === "review" ? (
+          {effectiveStep === "review" ? (
             <Pressable
               style={[
                 styles.saveBtn,
@@ -614,16 +714,36 @@ const styles = StyleSheet.create({
     color: Theme.primary,
     fontWeight: "800",
   },
-  otherInput: {
-    marginTop: 10,
+  otherReasonLink: {
+    marginTop: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  otherReasonLinkText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.primary,
+  },
+  otherReasonPage: {
+    flex: 1,
+    gap: 10,
+  },
+  otherReasonInput: {
+    minHeight: 120,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 14,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 15,
+    lineHeight: 22,
     color: "#0f172a",
     backgroundColor: "#fff",
+  },
+  otherReasonHint: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    lineHeight: 17,
   },
   reviewScroll: { paddingBottom: 8 },
   saveBtn: {

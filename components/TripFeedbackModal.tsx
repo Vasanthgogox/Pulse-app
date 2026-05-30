@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Shared max width for trip rating / settlement modals (web + native). */
-export const TRIP_FEEDBACK_MODAL_MAX_WIDTH = 400;
+export const TRIP_FEEDBACK_MODAL_MAX_WIDTH = 340;
 
 type TripFeedbackModalProps = {
   visible: boolean;

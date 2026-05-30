@@ -1,6 +1,6 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
-import { ROUTES } from "@/lib/routes";
+import { ROUTES, tripExpenseEntryEditRoute } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -48,8 +48,13 @@ export default function TripExpenseControlRoute() {
       <TripExpensesScreen
         trip={trip}
         onBack={safeBack}
-        onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id))}
-        onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id))}
+        onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
+        onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
+        onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
+        onEditExpense={(event) => {
+          const href = tripExpenseEntryEditRoute(trip.id, event.id);
+          if (href) router.push(href as never);
+        }}
       />
     );
   }, [error, loading, router, safeBack, trip]);

@@ -51,7 +51,6 @@ import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useDriverProfileImagesQuery } from "@/lib/queries";
-import { useOperationalHealthSnapshot } from "@/features/operations/observability";
 import { queryKeys } from "@/lib/queryKeys";
 import { clearAllDomainCacheMetaForOrg } from "@/lib/cache/cacheMetadataStore";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
@@ -127,10 +126,6 @@ export function FinanceScreen() {
   const queryClient = useQueryClient();
   const [entitiesRefreshKey, setEntitiesRefreshKey] = useState(0);
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubTab>("cash");
-  const operationsHealth = useOperationalHealthSnapshot({
-    organizationId: currentOrganization?.id ?? null,
-    enabled: !!currentOrganization?.id,
-  });
   const entities = useFinanceEntities({
     organizationId: currentOrganization?.id ?? null,
     canAccess,
@@ -447,23 +442,7 @@ export function FinanceScreen() {
     }
   }, [canAccess, currentOrganization?.id, financeSubTab]);
 
-  const isFirstFinanceFocus = useRef(true);
-  useFocusEffect(
-    useCallback(() => {
-      if (!canAccess || !currentOrganization?.id) return;
-      const orgId = currentOrganization.id;
-      if (isFirstFinanceFocus.current) {
-        isFirstFinanceFocus.current = false;
-        return;
-      }
-      setEntitiesRefreshKey((k) => k + 1);
-      setLedgerRefreshKey((k) => k + 1);
-      queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.vehicles.all(orgId),
-      });
-    }, [canAccess, currentOrganization?.id, queryClient]),
-  );
+  /** Tab refocus must not remount entities/ledger — realtime + pull-to-refresh handle freshness. */
 
   useEffect(() => {
     if (selectedEntity?.entityType !== "DRIVER" || !selectedEntity.data.id) {
@@ -1299,7 +1278,8 @@ export function FinanceScreen() {
     }
   }, [currentOrganization?.id, queryClient, refetchLedger]);
 
-  /** Recover from persisted empty party caches when opening Finance party tabs. */
+  /** Recover from persisted empty party caches — once per org + sub-tab per session. */
+  const partyRecoveryAttempted = useRef(new Set<string>());
   useFocusEffect(
     useCallback(() => {
       const org = currentOrganization?.id;
@@ -1318,6 +1298,10 @@ export function FinanceScreen() {
         (financeSubTab === "drivers" && driverRows.length === 0) ||
         (financeSubTab === "garage" && vehicleRows.length === 0);
       if (!partyListEmpty) return;
+
+      const recoveryKey = `${org}:${financeSubTab}`;
+      if (partyRecoveryAttempted.current.has(recoveryKey)) return;
+      partyRecoveryAttempted.current.add(recoveryKey);
 
       void (async () => {
         await clearAllDomainCacheMetaForOrg(org);
@@ -1387,34 +1371,6 @@ export function FinanceScreen() {
       style={[styles.container, { paddingTop: screenTopPad }]}
       testID="finance-tab-screen"
     >
-      <View
-        style={{
-          marginHorizontal: 12,
-          marginBottom: 8,
-          borderWidth: 1,
-          borderColor: Theme.border,
-          borderRadius: 10,
-          paddingHorizontal: 10,
-          paddingVertical: 7,
-          backgroundColor: Theme.whiteMuted,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: Theme.textSecondary, fontSize: 11, fontWeight: "700" }}>
-          Projection Freshness
-        </Text>
-        <Text style={{ color: Theme.text, fontSize: 11, fontWeight: "700" }}>
-          {operationsHealth.isFetching
-            ? "Syncing"
-            : (operationsHealth.data?.sync.pendingCount ?? 0) > 0
-              ? `Replaying (${operationsHealth.data?.sync.pendingCount ?? 0})`
-              : operationsHealth.data?.operatorAttentionRequired
-                ? "Reconciliation Required"
-                : "Live"}
-        </Text>
-      </View>
       <FinanceSummarySection
         activeTab={financeSubTab}
         onTabPress={handleTabPress}

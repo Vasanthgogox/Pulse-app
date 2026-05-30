@@ -9,6 +9,6 @@ export const LedgerSyncPalette = {
   emerald: "#10B981",
   emeraldSoft: "#ECFDF5",
   rose: "#F43F5E",
-  indigo: "#6366F1",
+  indigo: "#4F46E5",
   indigoSoft: "#EEF2FF",
 } as const;

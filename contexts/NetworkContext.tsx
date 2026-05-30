@@ -2,7 +2,7 @@
  * Network context — uses @react-native-community/netinfo.
  * Exposes isConnected so the app can require internet before auth/API calls.
  */
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 
 interface NetworkContextType {
@@ -37,10 +37,13 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const value: NetworkContextType = {
-    isConnected: state?.isConnected ?? null,
-    isInternetReachable: state?.isInternetReachable ?? null,
-  };
+  const value = useMemo<NetworkContextType>(
+    () => ({
+      isConnected: state?.isConnected ?? null,
+      isInternetReachable: state?.isInternetReachable ?? null,
+    }),
+    [state?.isConnected, state?.isInternetReachable],
+  );
 
   return (
     <NetworkContext.Provider value={value}>

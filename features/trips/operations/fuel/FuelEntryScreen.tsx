@@ -1,4 +1,5 @@
 import { SmartInput } from "@/components/mobile-input";
+import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
   OperationalButton,
@@ -12,11 +13,12 @@ import type { TripRow } from "@/features/trips/services/trips.service";
 import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FuelType, OperationalPaymentMode, OperationalPaymentOwner } from "../types";
-import { useSaveTripFuelEntry } from "../queries/useTripOperations";
+import { useSaveTripFuelEntry, useUpdateTripFuelEntry } from "../queries/useTripOperations";
+import { getTripFuelEntryById } from "./fuel.service";
 import {
   FUEL_TYPE_OPTIONS,
   PAYMENT_MODE_OPTIONS,
@@ -25,13 +27,22 @@ import {
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
 import { useOperationsSyncState } from "../state/useOperationsSyncState";
 
-export function FuelEntryScreen({ trip }: { trip: TripRow }) {
+export function FuelEntryScreen({
+  trip,
+  entryId,
+}: {
+  trip: TripRow;
+  entryId?: string | null;
+}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const saveFuel = useSaveTripFuelEntry();
+  const updateFuel = useUpdateTripFuelEntry();
   const { pendingCount, failedCount, refresh } = useOperationsSyncState();
+  const isEditing = !!entryId?.trim();
 
+  const [loadingEntry, setLoadingEntry] = useState(isEditing);
   const [amountInr, setAmountInr] = useState<number>(0);
   const [liters, setLiters] = useState<number | null>(null);
   const [fuelType, setFuelType] = useState<FuelType>("diesel");
@@ -46,6 +57,42 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
   );
+
+  useEffect(() => {
+    const id = entryId?.trim();
+    if (!id) {
+      setLoadingEntry(false);
+      return;
+    }
+    let mounted = true;
+    void getTripFuelEntryById(id).then((res) => {
+      if (!mounted) return;
+      if (res.error || !res.entry) {
+        Alert.alert("Could not load fuel entry", res.error?.message ?? "Not found");
+        router.back();
+        return;
+      }
+      if (res.entry.trip_id !== trip.id) {
+        Alert.alert("Wrong trip", "This entry belongs to a different trip.");
+        router.back();
+        return;
+      }
+      const entry = res.entry;
+      setAmountInr(Number(entry.amount_inr ?? 0));
+      setLiters(entry.liters ?? null);
+      setFuelType((entry.fuel_type as FuelType | null) ?? "diesel");
+      setStationName(entry.station_name ?? "");
+      setNotes(entry.notes ?? "");
+      setPaymentOwner(entry.payment_owner ?? "organization");
+      setPaymentMode(entry.payment_mode ?? "unknown");
+      setLoadingEntry(false);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [entryId, router, trip.id]);
+
+  const saving = saveFuel.isPending || updateFuel.isPending;
 
   const handleCapture = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -62,34 +109,48 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
   };
 
   const handleSave = async () => {
+    const payload = {
+      tripId: trip.id,
+      amountInr,
+      liters,
+      fuelType,
+      stationName,
+      notes,
+      enteredBy: profile?.uid ?? null,
+      paymentOwner,
+      paymentMode,
+      billPhotoLocalUri: photoUri,
+    };
     try {
-      const res = await saveFuel.mutateAsync({
-        tripId: trip.id,
-        amountInr,
-        liters,
-        fuelType,
-        stationName,
-        notes,
-        enteredBy: profile?.uid ?? null,
-        actorRole: profile?.role ?? null,
-        paymentOwner,
-        paymentMode,
-        billPhotoLocalUri: photoUri,
-      });
-      if (res.queued) {
-        setHint("Saved offline — will sync when connected.");
+      if (isEditing && entryId?.trim()) {
+        await updateFuel.mutateAsync({ ...payload, entryId: entryId.trim() });
+      } else {
+        const res = await saveFuel.mutateAsync({
+          ...payload,
+          actorRole: profile?.role ?? null,
+        });
+        if (res.queued) {
+          setHint("Saved offline — will sync when connected.");
+        }
       }
       await refresh();
       router.back();
     } catch (e) {
-      Alert.alert("Could not save fuel entry", e instanceof Error ? e.message : "Unknown error");
+      Alert.alert(
+        isEditing ? "Could not update fuel entry" : "Could not save fuel entry",
+        e instanceof Error ? e.message : "Unknown error",
+      );
     }
   };
+
+  if (loadingEntry) {
+    return <CenteredLoadingView message="Loading fuel entry…" />;
+  }
 
   return (
     <View style={s.screen}>
       <OperationalHeader
-        title="Fuel Entry"
+        title={isEditing ? "Edit fuel" : "Fuel Entry"}
         subtitle={contextLine}
         onBack={() => router.back()}
         density="high"
@@ -98,15 +159,12 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
         style={s.scroll}
         contentContainerStyle={[
           s.content,
-          { paddingBottom: insets.bottom + 88 },
+          { paddingBottom: insets.bottom + 76 },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Surface elevation={1} density="high">
-          <Text style={s.routeLine} numberOfLines={1}>
-            {contextLine}
-          </Text>
+        <Surface elevation={1} density="high" style={s.card}>
           <View style={s.row2}>
             <View style={s.row2Cell}>
               <SmartInput
@@ -115,6 +173,9 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
                 onChange={(_, numeric) => setAmountInr(numeric)}
                 label="Spend"
                 submitLabel="Apply"
+                variant="field"
+                density="compact"
+                placeholder="Tap to enter"
                 required={false}
                 validation={{ min: 0, max: 1000000 }}
               />
@@ -126,6 +187,9 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
                 onChange={(_, numeric) => setLiters(numeric)}
                 label="Liters"
                 submitLabel="Apply"
+                variant="field"
+                density="compact"
+                placeholder="Tap to enter"
                 suffix=" L"
                 required={false}
                 validation={{ min: 0, max: 5000 }}
@@ -134,21 +198,21 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
           </View>
         </Surface>
 
-        <Surface elevation={1} density="high">
+        <Surface elevation={1} density="high" style={s.card}>
           <OperationalChipSelect
             label="Fuel type"
             options={FUEL_TYPE_OPTIONS}
             value={fuelType}
             onChange={setFuelType}
+            density="compact"
           />
-        </Surface>
-
-        <Surface elevation={1} density="high">
+          <View style={s.divider} />
           <OperationalChipSelect
             label="Paid by"
             options={PAYMENT_OWNER_OPTIONS}
             value={paymentOwner}
             onChange={setPaymentOwner}
+            density="compact"
           />
           <View style={s.divider} />
           <OperationalChipSelect
@@ -156,43 +220,52 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
             options={PAYMENT_MODE_OPTIONS}
             value={paymentMode}
             onChange={setPaymentMode}
+            density="compact"
           />
           <Text style={s.metaHint}>
             Operational log only — approval required before posting.
           </Text>
         </Surface>
 
-        <Surface elevation={1} density="high">
-          <Text style={s.fieldLabel}>Station (optional)</Text>
-          <TextInput
-            style={s.input}
-            value={stationName}
-            onChangeText={setStationName}
-            placeholder="Pump / station name"
-            placeholderTextColor={Theme.textMuted}
-          />
-          <Text style={[s.fieldLabel, { marginTop: 8 }]}>Notes (optional)</Text>
-          <TextInput
-            style={[s.input, s.notes]}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            placeholder="Short note"
-            placeholderTextColor={Theme.textMuted}
-          />
+        <Surface elevation={1} density="high" style={s.card}>
+          <View style={s.fieldStack}>
+            <View>
+              <Text style={s.fieldLabel}>Station (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={stationName}
+                onChangeText={setStationName}
+                placeholder="Pump / station name"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+            <View>
+              <Text style={s.fieldLabel}>Notes (optional)</Text>
+              <TextInput
+                style={[s.input, s.notes]}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                placeholder="Short note"
+                placeholderTextColor={Theme.textMuted}
+              />
+            </View>
+          </View>
         </Surface>
 
-        <OdometerPhotoCapture
-          photoUri={photoUri}
-          busy={saveFuel.isPending}
-          onCapture={handleCapture}
-          onRetake={handleCapture}
-          compact
-          title="Bill photo"
-          subtitle="Optional · camera capture"
-          captureLabel="Add bill photo"
-          retakeLabel="Retake"
-        />
+        <View style={s.photoWrap}>
+          <OdometerPhotoCapture
+            photoUri={photoUri}
+            busy={saving}
+            onCapture={handleCapture}
+            onRetake={handleCapture}
+            compact
+            title="Bill photo"
+            subtitle="Optional · camera capture"
+            captureLabel="Add bill photo"
+            retakeLabel="Retake"
+          />
+        </View>
 
         {hint ? <Text style={s.hint}>{hint}</Text> : null}
         {pendingCount > 0 ? (
@@ -214,9 +287,9 @@ export function FuelEntryScreen({ trip }: { trip: TripRow }) {
           />
           <OperationalButton
             intent="bottomSticky"
-            label={saveFuel.isPending ? "Saving…" : "Save"}
+            label={saving ? "Saving…" : isEditing ? "Update" : "Save"}
             onPress={handleSave}
-            loading={saveFuel.isPending}
+            loading={saving}
             density="high"
             style={s.footerBtn}
           />

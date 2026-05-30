@@ -27,6 +27,8 @@ export interface TripMapProps {
   onDistanceCalculated?: (distanceKm: string) => void;
   tripId?: string | null;
   trackingEnabled?: boolean;
+  /** Bottom inset when auto-fitting the full route in compact previews. */
+  fitPaddingBottom?: number;
 }
 
 export function TripMap({ height }: TripMapProps) {

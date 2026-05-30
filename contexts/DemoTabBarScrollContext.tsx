@@ -24,7 +24,6 @@ import Animated, {
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
@@ -33,11 +32,10 @@ const HIDE_TIMING = {
   duration: 360,
   easing: Easing.inOut(Easing.cubic),
 } as const;
-/** Glide back — light spring for a premium settle (not bouncy). */
-const SHOW_SPRING = {
-  damping: 26,
-  stiffness: 300,
-  mass: 0.72,
+/** Glide back — timing only (no spring bounce on dock return). */
+const SHOW_TIMING = {
+  duration: 280,
+  easing: Easing.out(Easing.cubic),
 } as const;
 const SHOW_DELAY_MS = 0;
 const WEB_IDLE_MS = 380;
@@ -114,7 +112,7 @@ export function DemoTabBarScrollProvider({
     clearSchedule();
     scrollEndTimeoutRef.current = setTimeout(() => {
       setScrollInProgress(false);
-      progress.value = withSpring(1, SHOW_SPRING);
+      progress.value = withTiming(1, SHOW_TIMING);
       scrollEndTimeoutRef.current = null;
     }, SHOW_DELAY_MS);
   }, [clearSchedule, progress]);
@@ -131,7 +129,7 @@ export function DemoTabBarScrollProvider({
     if (!autoHideEnabledRef.current) return;
     clearSchedule();
     setScrollInProgress(false);
-    progress.value = withSpring(1, SHOW_SPRING);
+    progress.value = withTiming(1, SHOW_TIMING);
   }, [clearSchedule, progress]);
 
   useEffect(() => () => clearSchedule(), [clearSchedule]);

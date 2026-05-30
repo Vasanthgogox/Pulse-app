@@ -56,8 +56,9 @@ import {
   type DriverOption,
 } from "./AddVehicleEntryModal";
 import { VehicleDocumentsSection } from "./VehicleDocumentsSection";
-import { VehicleAnalyticsTab } from "./analytics/VehicleAnalyticsTab";
 import { VehicleFleetRankingTab } from "./analytics/VehicleFleetRankingTab";
+import { backfillVehicleOperationalCashLedger } from "@/features/ledger/vehicle";
+import { ROUTES } from "@/lib/routes";
 import { VehicleOperationsHub } from "./VehicleOperationsHub";
 
 export interface VehicleDetailScreenProps {
@@ -94,7 +95,7 @@ export default function VehicleDetailScreen({
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<
-    "operations" | "trips" | "cash" | "analytics" | "ranking"
+    "operations" | "trips" | "cash" | "ranking"
   >("operations");
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -102,6 +103,7 @@ export default function VehicleDetailScreen({
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   const openAddEntryHandledRef = useRef(false);
+  const cashLedgerBackfillAttemptRef = useRef(0);
 
   useEffect(() => {
     if (!openAddEntryOnLoad || openAddEntryHandledRef.current) return;
@@ -226,6 +228,29 @@ export default function VehicleDetailScreen({
     );
   }, [vehicleTrips, transactions, vehicle]);
 
+  const runOperationalCashLedgerBackfill = useCallback(() => {
+    const orgId = currentOrganization?.id;
+    if (!orgId || !vehicleId || vehicleTrips.length === 0) return;
+    void backfillVehicleOperationalCashLedger({
+      organizationId: orgId,
+      vehicleId,
+      tripIds: vehicleTrips.map((trip) => trip.id),
+    }).then((result) => {
+      if (result.created > 0 || result.failed > 0) {
+        load();
+      }
+    });
+  }, [currentOrganization?.id, load, vehicleId, vehicleTrips]);
+
+  useEffect(() => {
+    if (!initialLoadDoneRef.current || vehicleTrips.length === 0) return;
+    const hasCashOut = vehicleTransactions.some((tx) => Number(tx.amount_out ?? 0) > 0);
+    if (hasCashOut) return;
+    if (cashLedgerBackfillAttemptRef.current >= 3) return;
+    cashLedgerBackfillAttemptRef.current += 1;
+    runOperationalCashLedgerBackfill();
+  }, [runOperationalCashLedgerBackfill, vehicleTransactions, vehicleTrips.length]);
+
   const vehicleTransactionsByTripId = useMemo(() => {
     const map = new Map<string, LedgerRow[]>();
     for (const trip of vehicleTrips) {
@@ -344,6 +369,18 @@ export default function VehicleDetailScreen({
     [missionRows],
   );
   const tripsHandled = missionRows.length;
+  const tripOperationalSpend = useMemo(() => {
+    let fuelInr = 0;
+    let tollInr = 0;
+    for (const row of missionRows) {
+      for (const line of row.expenseLines) {
+        const label = line.label.toLowerCase();
+        if (label.includes("fuel")) fuelInr += line.amount;
+        else if (label.includes("toll")) tollInr += line.amount;
+      }
+    }
+    return { fuelInr, tollInr };
+  }, [missionRows]);
   const utilizationPct = useMemo(() => {
     const now = Date.now();
     const windowMs = 30 * 24 * 60 * 60 * 1000;
@@ -469,19 +506,26 @@ export default function VehicleDetailScreen({
           </Text>
           <Text style={styles.headerSubtitle}>VEHICLE FINANCIAL VIEW</Text>
         </View>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => setShowProfileModal(true)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Open vehicle profile"
-        >
-          <FontAwesome
-            name="truck"
-            size={18}
-            color={Theme.textPrimaryDark}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.push(ROUTES.vehicleAnalytics(vehicleId) as never)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open vehicle analytics"
+          >
+            <FontAwesome name="line-chart" size={17} color={Theme.textPrimaryDark} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => setShowProfileModal(true)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open vehicle profile"
+          >
+            <FontAwesome name="truck" size={18} color={Theme.textPrimaryDark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -501,6 +545,8 @@ export default function VehicleDetailScreen({
             onRefresh={() => {
               isRefreshingRef.current = true;
               setRefreshing(true);
+              cashLedgerBackfillAttemptRef.current = 0;
+              runOperationalCashLedgerBackfill();
               load();
             }}
             tintColor={Theme.teslaRed}
@@ -743,23 +789,6 @@ export default function VehicleDetailScreen({
           <TouchableOpacity
             style={[
               styles.tabItem,
-              detailSubTab === "analytics" && styles.tabItemActive,
-            ]}
-            onPress={() => setDetailSubTab("analytics")}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                detailSubTab === "analytics" && styles.tabItemTextActive,
-              ]}
-            >
-              Analytics
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.tabItem,
               detailSubTab === "ranking" && styles.tabItemActive,
             ]}
             onPress={() => setDetailSubTab("ranking")}
@@ -782,6 +811,17 @@ export default function VehicleDetailScreen({
             vehicleId={vehicleId}
             utilizationPct={utilizationPct}
             actorUserId={profile?.uid ?? null}
+            tripOperationalSpend={tripOperationalSpend}
+            fleetTotals={{
+              revenueInr: contractValue,
+              expenseInr: totalExpense,
+              netInr: profit,
+              tripCount: tripsHandled,
+            }}
+            onOpenAnalytics={() =>
+              router.push(ROUTES.vehicleAnalytics(vehicleId) as never)
+            }
+            onSwitchToCashFlow={() => setDetailSubTab("cash")}
           />
         )}
 
@@ -840,16 +880,6 @@ export default function VehicleDetailScreen({
               </View>
             )}
           </View>
-        )}
-
-        {detailSubTab === "analytics" && (
-          <VehicleAnalyticsTab
-            missionRows={missionRows}
-            vehicleTrips={vehicleTrips}
-            vehicleTransactions={vehicleTransactions}
-            vehicle={vehicle}
-            orgId={currentOrganization?.id ?? null}
-          />
         )}
 
         {detailSubTab === "ranking" && vehicleId && (

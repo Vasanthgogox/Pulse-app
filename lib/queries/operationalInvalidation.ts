@@ -39,6 +39,7 @@ export function invalidateTripOperationalState(input: {
     qc.invalidateQueries({ queryKey: queryKeys.trips.operationsTimeline(input.tripId) });
     qc.invalidateQueries({ queryKey: queryKeys.trips.fuelEntries(input.tripId) });
     qc.invalidateQueries({ queryKey: queryKeys.trips.tollEntries(input.tripId) });
+    qc.invalidateQueries({ queryKey: queryKeys.trips.otherEntries(input.tripId) });
     qc.invalidateQueries({ queryKey: queryKeys.trips.verification(input.tripId) });
     qc.invalidateQueries({ queryKey: queryKeys.trips.verificationPhotos(input.tripId) });
     qc.invalidateQueries({
@@ -71,6 +72,8 @@ export function invalidateLedgerState(input: {
   scheduleBatchedInvalidation(scope, () => {
     const qc = input.queryClient;
     qc.invalidateQueries({ queryKey: ["q", "vehicle-ledger"] });
+    qc.invalidateQueries({ queryKey: ["q", "garage"] });
+    qc.invalidateQueries({ queryKey: ["q", "business-pulse"] });
     qc.invalidateQueries({ queryKey: queryKeys.transactions.all(input.organizationId) });
     qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(input.organizationId) });
     qc.invalidateQueries({ queryKey: queryKeys.invoicing.trips(input.organizationId) });
@@ -82,6 +85,19 @@ export function invalidateLedgerState(input: {
           input.organizationId,
           input.vehicleId,
         ),
+      });
+      qc.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            key[0] === "q" &&
+            key[1] === "trips" &&
+            key[2] === "operations" &&
+            key[3] === "vehicle" &&
+            key[4] === input.organizationId &&
+            key[5] === input.vehicleId
+          );
+        },
       });
     }
     if (input.tripId) {

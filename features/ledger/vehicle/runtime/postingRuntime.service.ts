@@ -1,7 +1,12 @@
 import { getTripOperationalCapabilities } from "@/features/trips/capabilities";
 import { getTripById } from "@/features/trips/services/trips.service";
+import {
+  isVehicleOperationLedgerSourceType,
+  syncVehicleOperationLedgerFromPostedSource,
+} from "@/features/trips/operations/vehicle/vehicleOperationsLedger.service";
 import { supabase } from "@/lib/supabase";
 import type { VehiclePostingSourceType } from "../postVehicleOperationalEntry";
+import { syncOperationalExpenseToCashLedger } from "../syncOperationalExpenseToCashLedger.service";
 
 type PostingState = "pending" | "approved" | "posted" | "rejected" | "failed";
 
@@ -9,14 +14,21 @@ function isVehiclePostingEnabled(): boolean {
   return String(process.env.EXPO_PUBLIC_ENABLE_VEHICLE_LEDGER_POSTING ?? "false").toLowerCase() === "true";
 }
 
+type OperationalSourceTable = "fuel" | "toll" | "other";
+
 async function updateSourcePostingState(input: {
-  sourceType: "fuel" | "toll";
+  sourceType: OperationalSourceTable;
   sourceId: string;
   state: PostingState;
   errorMessage?: string | null;
   incrementRetry?: boolean;
 }) {
-  const table = input.sourceType === "fuel" ? "trip_fuel_entries" : "trip_toll_entries";
+  const table =
+    input.sourceType === "fuel"
+      ? "trip_fuel_entries"
+      : input.sourceType === "toll"
+        ? "trip_toll_entries"
+        : "trip_other_expenses";
   const patch: Record<string, unknown> = {
     posting_state: input.state,
     posting_error: input.errorMessage ?? null,
@@ -45,9 +57,16 @@ export async function executeVehiclePostingRuntime(input: {
   approvalState: "approved" | "rejected" | "reported" | "review_pending" | "settled";
   paymentOwner?: string | null;
   metadata?: Record<string, unknown>;
+  /** When true, post on explicit approve even if EXPO_PUBLIC_ENABLE_VEHICLE_LEDGER_POSTING is off. */
+  forcePost?: boolean;
 }) {
-  const sourceTableType = input.sourceType === "fuel" || input.sourceType === "toll" ? input.sourceType : null;
-  if (!isVehiclePostingEnabled()) {
+  const sourceTableType: OperationalSourceTable | null =
+    input.sourceType === "fuel" || input.sourceType === "toll"
+      ? input.sourceType
+      : input.sourceType === "manual_adjustment"
+        ? "other"
+        : null;
+  if (!isVehiclePostingEnabled() && !input.forcePost) {
     if (sourceTableType) {
       await updateSourcePostingState({
         sourceType: sourceTableType,
@@ -91,6 +110,18 @@ export async function executeVehiclePostingRuntime(input: {
     }
     return { error: tripRes.error ?? new Error("Trip missing for posting"), posted: false, reason: "trip_missing" as const };
   }
+  if (!String(input.vehicleId ?? "").trim()) {
+    if (sourceTableType) {
+      await updateSourcePostingState({
+        sourceType: sourceTableType,
+        sourceId: input.sourceId,
+        state: "failed",
+        errorMessage: "Trip has no vehicle assigned",
+        incrementRetry: true,
+      });
+    }
+    return { error: null, posted: false, reason: "vehicle_missing" as const };
+  }
   const capabilities = getTripOperationalCapabilities(tripRes.trip);
   if (!capabilities.isAssetTrip || capabilities.accountingMode !== "vehicle_economics") {
     if (sourceTableType) {
@@ -129,6 +160,27 @@ export async function executeVehiclePostingRuntime(input: {
         state: "posted",
       });
     }
+    if (isVehicleOperationLedgerSourceType(input.sourceType)) {
+      await syncVehicleOperationLedgerFromPostedSource({
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        tripId: input.tripId,
+        amount: input.amount,
+        approvedBy: input.approvedBy,
+      });
+    }
+    await syncOperationalExpenseToCashLedger({
+      orgId: input.orgId,
+      tripId: input.tripId,
+      vehicleId: input.vehicleId,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      amount: input.amount,
+      paymentOwner: input.paymentOwner,
+      paymentMode: (input.metadata?.payment_mode as string | undefined) ?? null,
+      metadata: input.metadata,
+      approvedBy: input.approvedBy,
+    });
     return { error: null, posted: false, reason: "already_posted" as const };
   }
 
@@ -173,6 +225,31 @@ export async function executeVehiclePostingRuntime(input: {
       sourceId: input.sourceId,
       state: "posted",
     });
+  }
+  if (isVehicleOperationLedgerSourceType(input.sourceType)) {
+    await syncVehicleOperationLedgerFromPostedSource({
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      tripId: input.tripId,
+      amount: input.amount,
+      approvedBy: input.approvedBy,
+    });
+  }
+  const cashSync = await syncOperationalExpenseToCashLedger({
+    orgId: input.orgId,
+    tripId: input.tripId,
+    vehicleId: input.vehicleId,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    amount: input.amount,
+    paymentOwner: input.paymentOwner,
+    paymentMode: (input.metadata?.payment_mode as string | undefined) ?? null,
+    metadata: input.metadata,
+    transactionDate: new Date().toISOString().slice(0, 10),
+    approvedBy: input.approvedBy,
+  });
+  if (cashSync.error) {
+    return { error: cashSync.error, posted: true, reason: "posted" as const, postingId: inserted.data.id as string };
   }
   return { error: null, posted: true, reason: "posted" as const, postingId: inserted.data.id as string };
 }

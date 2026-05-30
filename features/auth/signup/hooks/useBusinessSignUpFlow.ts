@@ -27,11 +27,11 @@ import {
 } from '@/lib/phoneValidation';
 import { validateFullName, validatePassword } from '@/lib/validation';
 import {
-  pickAndUploadAvatar,
   pickAndUploadOrgLogo,
+  pickLocalAvatar,
+  uploadAvatarFromLocal,
   updateOrganizationLogo,
 } from '@/lib/avatarUpload';
-import { DEFAULT_USER_2D_AVATAR_SEED } from '@/constants/UserAvatars';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -119,8 +119,9 @@ export function useBusinessSignUpFlow() {
   const [pendingLogoPath, setPendingLogoPath] = useState<string | null>(null);
 
   // Step 7 — profile photo (post-auth)
-  const [profileAvatarSeed, setProfileAvatarSeed] = useState<string>(DEFAULT_USER_2D_AVATAR_SEED);
+  const [profileAvatarSeed, setProfileAvatarSeed] = useState<string | null>(null);
   const [profilePreviewUri, setProfilePreviewUri] = useState<string | null>(null);
+  const [profileLocalBase64, setProfileLocalBase64] = useState<string | null>(null);
   const [profileAvatarPath, setProfileAvatarPath] = useState<string | null>(null);
   const [profileUploading, setProfileUploading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -640,14 +641,29 @@ export function useBusinessSignUpFlow() {
         return true;
       }
 
-      if (profileAvatarPath) {
-        const { error } = await updateProfile({
-          avatar_url: profileAvatarPath,
-          avatar_seed: null,
-        });
-        if (error) {
-          Alert.alert('Save failed', error.message);
+      const userId = session.user.id;
+
+      if (profilePreviewUri) {
+        const uploaded = await uploadAvatarFromLocal(
+          userId,
+          profilePreviewUri,
+          profileLocalBase64,
+        );
+        if (uploaded.error) {
+          Alert.alert('Photo upload failed', uploaded.error.message);
           return false;
+        }
+        if (uploaded.path) {
+          const { error } = await updateProfile({
+            avatar_url: uploaded.path,
+            avatar_seed: null,
+          });
+          if (error) {
+            Alert.alert('Save failed', error.message);
+            return false;
+          }
+          if (uploaded.previewUri) setProfilePreviewUri(uploaded.previewUri);
+          setProfileAvatarPath(uploaded.path);
         }
       } else if (profileAvatarSeed) {
         const { error } = await updateProfile({

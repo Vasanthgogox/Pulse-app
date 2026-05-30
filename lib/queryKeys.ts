@@ -24,6 +24,8 @@ export const queryKeys = {
       ["q", "trips", "operations", tripId, "fuel"] as const,
     tollEntries: (tripId: string) =>
       ["q", "trips", "operations", tripId, "toll"] as const,
+    otherEntries: (tripId: string) =>
+      ["q", "trips", "operations", tripId, "other"] as const,
     operationsSummary: (tripId: string) =>
       ["q", "trips", "operations", tripId, "summary"] as const,
     operationsTimeline: (tripId: string) =>
@@ -53,6 +55,9 @@ export const queryKeys = {
       ["q", "trips", "assignment-audit", tripIdsKey] as const,
     /** Phase 3a: single-RPC bundle for trip detail hydration. */
     bundle: (tripId: string) => ["q", "trips", "bundle", tripId] as const,
+    /** Hub list: last ping time / offline for in-transit trips. */
+    hubInTransitPings: (orgId: string, tripIdsKey: string) =>
+      ["q", "trips", "hub", orgId, "in-transit-pings", tripIdsKey] as const,
   },
 
   transactions: {

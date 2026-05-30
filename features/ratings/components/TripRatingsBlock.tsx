@@ -5,7 +5,10 @@
  * - Indent-based: Client→Supplier, Client→Driver, Supplier→Driver
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { PartyAvatar as SharedPartyAvatar } from "@/components/PartyAvatar";
 import { TripFeedbackModal } from '@/components/TripFeedbackModal';
+import type { TripPartyAvatarFields } from "@/features/trips/components/trip-detail/hooks/useTripDetail";
+import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { FinanceTxnTypography } from '@/constants/FinanceTxnTypography';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -71,6 +74,9 @@ export interface TripRatingsBlockProps {
   onRatingsLoaded?: (ratings: RatingRow[]) => void;
   /** Resolved client display name for settlement feedback prompt. */
   clientName?: string | null;
+  /** Linked-org + contact avatar fields from trip detail (preferred for registry layout). */
+  clientPartyAvatarFields?: TripPartyAvatarFields | null;
+  supplierPartyAvatarFields?: TripPartyAvatarFields | null;
   /** True when customer payment has been captured on this trip. */
   paymentCaptured?: boolean;
   /**
@@ -331,6 +337,8 @@ export function TripRatingsBlock({
   driverAvatarUri,
   onRatingsLoaded,
   clientName,
+  clientPartyAvatarFields: clientPartyAvatarFieldsProp,
+  supplierPartyAvatarFields: supplierPartyAvatarFieldsProp,
   paymentCaptured = false,
   layoutVariant = 'default',
 }: TripRatingsBlockProps) {
@@ -966,6 +974,25 @@ export function TripRatingsBlock({
     'Supplier';
   const hasSupplierParty = !!trip.supplier_id?.trim();
   const supplierDisplayName = hasSupplierParty ? resolvedPartnerLabel : 'No supplier';
+  const hasDriverParty = !!trip.driver_id?.trim();
+  const hasClientParty = !!(
+    trip.client_id?.trim() ||
+    trip.client_name?.trim() ||
+    (clientName ?? '').trim()
+  );
+  const showRegistryDriverParty = hasDriverParty;
+  const showRegistryClientParty = hasClientParty;
+  const showRegistrySupplierParty = hasSupplierParty;
+  const registryDriverAvatarFields: TripPartyAvatarFields | null =
+    showRegistryDriverParty
+      ? {
+          organizationImageUrl: null,
+          organizationAvatarSeed: null,
+          avatarUrl:
+            (driverAvatarUri ?? resolvedDriverAvatarUri ?? "").trim() || null,
+          avatarSeed: trip.driver_id?.trim() ?? null,
+        }
+      : null;
   const driverDisplayName = (
     driverName ||
     trip.driver_display_name ||
@@ -995,6 +1022,26 @@ export function TripRatingsBlock({
   const activeQuickTags = flow?.type === 'client_supplier' ? SUPPLIER_RATING_TAGS : DRIVER_RATING_TAGS;
   const presentationKind = flow ? presentationKindFromFlow(flow) : 'DRIVER';
   const pulseUi = FEEDBACK_PRESENTATION[presentationKind];
+  const pulseModalEntityType: PartyEntityType =
+    flow?.type === 'client_supplier' ? 'supplier' : 'driver';
+  const pulseModalPartyFields =
+    flow?.type === 'client_supplier'
+      ? supplierPartyAvatarFieldsProp
+      : registryDriverAvatarFields;
+  const pulseModalAvatarUrl =
+    (pulseModalPartyFields?.avatarUrl ?? '').trim() ||
+    (flow?.type === 'client_supplier'
+      ? (supplierAvatarUri ?? '').trim()
+      : (resolvedDriverAvatarUri ?? '').trim()) ||
+    undefined;
+  const pulseModalEntitySeed =
+    flow?.type === 'client_supplier'
+      ? trip.supplier_id?.trim()
+      : trip.driver_id?.trim();
+  const clientModalAvatarUrl =
+    (clientPartyAvatarFieldsProp?.avatarUrl ?? '').trim() ||
+    (clientAvatarUri ?? '').trim() ||
+    undefined;
   const renderPartyScores = (
     tripScore: number | null,
     globalScore: number | null,
@@ -1198,9 +1245,11 @@ export function TripRatingsBlock({
 
   const renderRegistryCard = (
     roleKicker: string,
-    tag: string,
     partyName: string,
-    avatarUri: string | null | undefined,
+    entityType: PartyEntityType,
+    partyAvatar: TripPartyAvatarFields | null | undefined,
+    entitySeed: string | null | undefined,
+    resolvedAvatarUri: string | null | undefined,
     tripScore: number | null,
     globalScore: number | null,
     onAudit: () => void,
@@ -1217,10 +1266,10 @@ export function TripRatingsBlock({
       Number(tripScore) >= Number(globalScore);
     const perfLabel =
       tripScore == null || globalScore == null
-        ? 'Baseline pending'
+        ? 'Pending'
         : perfUp
-          ? 'Above global avg'
-          : 'Below global avg';
+          ? 'Above avg'
+          : 'Below avg';
     const perfColor =
       tripScore == null || globalScore == null
         ? Theme.textMuted
@@ -1230,51 +1279,73 @@ export function TripRatingsBlock({
     const noteTrimmed = (feedback.note ?? '').trim();
     const hasFeedbackBody = feedback.tags.length > 0 || !!noteTrimmed;
 
+    const avatarUrl =
+      (partyAvatar?.avatarUrl ?? "").trim() ||
+      (resolvedAvatarUri ?? "").trim() ||
+      undefined;
+
     return (
       <View style={styles.regCard}>
-        <View style={styles.regCardDecor} />
         <View style={styles.regCardTop}>
-          <View style={styles.regCardLeft}>
-            <PartyAvatar uri={avatarUri} name={partyName} size={36} />
-            <View style={styles.regCardLeftText}>
-              <Text style={styles.regKicker} numberOfLines={1}>
-                {roleKicker.toUpperCase()} NODE
-              </Text>
-              <Text style={styles.regPartyName} numberOfLines={1}>
-                {partyName}
-              </Text>
-              <View style={styles.regTagRow}>
-                <View style={styles.regTagPill}>
-                  <Text style={styles.regTagPillText}>{tag}</Text>
-                </View>
-                <View style={styles.regGlobalAvgCluster}>
-                  <Text style={styles.regMetricEyebrowMuted}>Global avg</Text>
-                  <View style={styles.regGlobalPill}>
-                    <FontAwesome name="star" size={8} color={Theme.feedbackModalStarActive} />
-                    <Text style={styles.regGlobalPillText}>
-                      {globalScore != null ? globalScore.toFixed(1) : '—'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-          </View>
-          <View style={styles.regCardRight}>
-            <Text style={styles.regMetricEyebrowMuted}>This trip</Text>
-            <View style={styles.regScoreRow}>
-              <Text style={styles.regTripBig}>
-                {tripScore != null ? tripScore.toFixed(1) : '—'}
-              </Text>
-              <FontAwesome
-                name="star"
-                size={11}
-                color={Theme.feedbackModalStarActive}
-                style={styles.regTripStarIcon}
-              />
-            </View>
+          <SharedPartyAvatar
+            name={partyName}
+            entityType={entityType}
+            size={28}
+            avatarUrl={avatarUrl}
+            avatarSeed={partyAvatar?.avatarSeed ?? entitySeed ?? undefined}
+            initialsColorSeed={entitySeed ?? partyAvatar?.avatarSeed ?? undefined}
+            organizationImageUrl={partyAvatar?.organizationImageUrl ?? undefined}
+            organizationAvatarSeed={partyAvatar?.organizationAvatarSeed ?? undefined}
+          />
+          <View style={styles.regCardBody}>
+            <Text style={styles.regKicker} numberOfLines={1}>
+              {roleKicker.toUpperCase()}
+            </Text>
+            <Text style={styles.regPartyName} numberOfLines={2}>
+              {partyName}
+            </Text>
             <Text style={[styles.regPerfLbl, { color: perfColor }]} numberOfLines={1}>
               {perfLabel}
             </Text>
+          </View>
+          <View style={styles.regScoresCol}>
+            <View
+              style={[
+                styles.regTripScoreBlock,
+                tripScore == null && styles.regTripScoreBlockEmpty,
+              ]}
+            >
+              <Text style={styles.regTripEyebrow}>Trip</Text>
+              <View style={styles.regTripScoreRow}>
+                <Text
+                  style={[
+                    styles.regTripHeroScore,
+                    tripScore == null && styles.regTripHeroScoreEmpty,
+                  ]}
+                >
+                  {tripScore != null ? tripScore.toFixed(1) : '—'}
+                </Text>
+                <FontAwesome
+                  name="star"
+                  size={10}
+                  color={
+                    tripScore != null
+                      ? Theme.feedbackModalStarActive
+                      : Theme.textMuted
+                  }
+                  style={styles.regTripHeroStar}
+                />
+              </View>
+            </View>
+            <View style={styles.regAvgScoreBlock}>
+              <Text style={styles.regMetricEyebrowMuted}>Avg</Text>
+              <View style={styles.regGlobalPill}>
+                <FontAwesome name="star" size={7} color={Theme.feedbackModalStarActive} />
+                <Text style={styles.regGlobalPillText}>
+                  {globalScore != null ? globalScore.toFixed(1) : '—'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
         {hasFeedbackBody ? (
@@ -1313,7 +1384,7 @@ export function TripRatingsBlock({
                 >
                   <FontAwesome
                     name={filled ? 'star' : 'star-o'}
-                    size={13}
+                    size={12}
                     color={filled ? Theme.feedbackModalStarActive : Theme.borderMedium}
                   />
                 </TouchableOpacity>
@@ -1349,7 +1420,13 @@ export function TripRatingsBlock({
           </View>
         </View>
       ) : null}
-      <View style={[styles.card, isWidePanel && styles.wsCard]}>
+      <View
+        style={[
+          styles.card,
+          isWidePanel && styles.wsCard,
+          isRegistry && styles.wsCardRegistry,
+        ]}
+      >
         {loading ? (
           <View style={styles.loading}>
             <LoadingIndicator size="small" color={Theme.textMuted} />
@@ -1361,59 +1438,70 @@ export function TripRatingsBlock({
               <View style={styles.regWrap}>
                 <View style={styles.regSectionHead}>
                   <View>
-                    <Text style={styles.regSectionTitle}>Feedback Registry</Text>
-                    <Text style={styles.regSectionSub}>Bilateral Quality Audit</Text>
+                    <Text style={styles.regSectionTitle}>Feedback</Text>
                   </View>
                   <View style={styles.regMsgIconWrap}>
-                    <Feather name="message-square" size={20} color={Theme.primary} />
+                    <Feather name="message-square" size={16} color={Theme.primary} />
                   </View>
                 </View>
                 <View style={styles.regStack}>
-                  {renderRegistryCard(
-                    'Authorized Pilot',
-                    'Precision pilot',
-                    driverDisplayName,
-                    resolvedDriverAvatarUri,
-                    driverTripAvg,
-                    displayDriverAvg,
-                    () => {
-                      if (canOpenDriverRate) openRateDriver();
-                    },
-                    !canOpenDriverRate,
-                    canOpenDriverRate ? openRateDriverAtScore : undefined,
-                    driverRegistryFeedback,
-                    'driver',
-                  )}
-                  {renderRegistryCard(
-                    'Client Hub',
-                    'Billing party',
-                    clientDisplayName,
-                    clientAvatarUri,
-                    clientTripAvg,
-                    displayClientAvg,
-                    () => {
-                      if (canOpenClientRate) setShowClientFeedbackModal(true);
-                    },
-                    !canOpenClientRate,
-                    canOpenClientRate ? openRateClientAtScore : undefined,
-                    clientRegistryFeedback,
-                    'client',
-                  )}
-                  {renderRegistryCard(
-                    'Supplier Node',
-                    'Fleet partner',
-                    supplierDisplayName,
-                    supplierAvatarUri,
-                    supplierTripAvg,
-                    displaySupplierAvg,
-                    () => {
-                      if (canOpenSupplierRate) openRateSupplier();
-                    },
-                    !canOpenSupplierRate || !hasSupplierParty,
-                    canOpenSupplierRate ? openRateSupplierAtScore : undefined,
-                    supplierRegistryFeedback,
-                    'supplier',
-                  )}
+                  {showRegistryDriverParty
+                    ? renderRegistryCard(
+                        'Driver',
+                        driverDisplayName,
+                        'driver',
+                        registryDriverAvatarFields,
+                        trip.driver_id,
+                        resolvedDriverAvatarUri,
+                        driverTripAvg,
+                        displayDriverAvg,
+                        () => {
+                          if (canOpenDriverRate) openRateDriver();
+                        },
+                        !canOpenDriverRate,
+                        canOpenDriverRate ? openRateDriverAtScore : undefined,
+                        driverRegistryFeedback,
+                        'driver',
+                      )
+                    : null}
+                  {showRegistryClientParty
+                    ? renderRegistryCard(
+                        'Client',
+                        clientDisplayName,
+                        'client',
+                        clientPartyAvatarFieldsProp,
+                        trip.client_id,
+                        clientAvatarUri,
+                        clientTripAvg,
+                        displayClientAvg,
+                        () => {
+                          if (canOpenClientRate) setShowClientFeedbackModal(true);
+                        },
+                        !canOpenClientRate,
+                        canOpenClientRate ? openRateClientAtScore : undefined,
+                        clientRegistryFeedback,
+                        'client',
+                      )
+                    : null}
+                  {showRegistrySupplierParty
+                    ? renderRegistryCard(
+                        'Supplier',
+                        supplierDisplayName,
+                        'supplier',
+                        supplierPartyAvatarFieldsProp,
+                        trip.supplier_id,
+                        supplierAvatarUri,
+                        supplierTripAvg,
+                        displaySupplierAvg,
+                        () => {
+                          if (canOpenSupplierRate) openRateSupplier();
+                        },
+                        !canOpenSupplierRate,
+                        canOpenSupplierRate ? openRateSupplierAtScore : undefined,
+                        supplierRegistryFeedback,
+                        'supplier',
+                      )
+                    : null}
                 </View>
               </View>
             ) : null}
@@ -1614,23 +1702,28 @@ export function TripRatingsBlock({
                   <View style={[styles.heroGlowTwoPulse, { backgroundColor: pulseUi.glowSoft }]} />
                   <View style={styles.heroTopRowPulse}>
                     <View style={styles.avatarWrapPulse}>
-                      {flow?.type === 'supplier_driver' && resolvedDriverAvatarUri ? (
-                        <Image
-                          source={{ uri: resolvedDriverAvatarUri }}
-                          style={styles.avatarImagePulse}
-                          resizeMode="cover"
-                        />
-                      ) : flow?.type === 'client_supplier' && supplierAvatarUri ? (
-                        <Image
-                          source={{ uri: supplierAvatarUri }}
-                          style={styles.avatarImagePulse}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <Text style={styles.avatarTextPulse}>
-                          {(activeSubjectName || '—').slice(0, 1).toUpperCase()}
-                        </Text>
-                      )}
+                      <SharedPartyAvatar
+                        name={activeSubjectName}
+                        entityType={pulseModalEntityType}
+                        size={44}
+                        avatarUrl={pulseModalAvatarUrl}
+                        avatarSeed={
+                          pulseModalPartyFields?.avatarSeed ??
+                          pulseModalEntitySeed ??
+                          undefined
+                        }
+                        initialsColorSeed={
+                          pulseModalEntitySeed ??
+                          pulseModalPartyFields?.avatarSeed ??
+                          undefined
+                        }
+                        organizationImageUrl={
+                          pulseModalPartyFields?.organizationImageUrl ?? undefined
+                        }
+                        organizationAvatarSeed={
+                          pulseModalPartyFields?.organizationAvatarSeed ?? undefined
+                        }
+                      />
                       <View
                         style={[
                           styles.avatarBadgePulse,
@@ -1639,7 +1732,7 @@ export function TripRatingsBlock({
                       >
                         <Feather
                           name={pulseUi.badgeIcon}
-                          size={12}
+                          size={10}
                           color={Theme.textOnPrimary}
                         />
                       </View>
@@ -1661,7 +1754,7 @@ export function TripRatingsBlock({
                     activeOpacity={0.8}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   >
-                    <Feather name="x" size={20} color={Theme.textOnPrimary} />
+                    <Feather name="x" size={18} color={Theme.textOnPrimary} />
                   </TouchableOpacity>
                 </View>
 
@@ -1679,14 +1772,14 @@ export function TripRatingsBlock({
                         onPress={() => setScore(n)}
                         style={[
                           styles.starBtnPulse,
-                          { transform: [{ scale: n <= score ? 1.18 : 1 }] },
+                          { transform: [{ scale: n <= score ? 1.1 : 1 }] },
                         ]}
                         hitSlop={8}
                         activeOpacity={0.85}
                       >
                         <FontAwesome
                           name={n <= score ? 'star' : 'star-o'}
-                          size={32}
+                          size={24}
                           color={
                             n <= score
                               ? Theme.feedbackModalStarActive
@@ -1799,16 +1892,55 @@ export function TripRatingsBlock({
         onRequestClose={() => setShowClientFeedbackModal(false)}
       >
             <View style={[styles.heroHeaderPulse, { backgroundColor: Theme.primary }]}>
+              <View style={styles.heroTopRowPulse}>
+                <View style={styles.avatarWrapPulse}>
+                  <SharedPartyAvatar
+                    name={clientDisplayName}
+                    entityType="client"
+                    size={44}
+                    avatarUrl={clientModalAvatarUrl}
+                    avatarSeed={
+                      clientPartyAvatarFieldsProp?.avatarSeed ??
+                      trip.client_id?.trim() ??
+                      undefined
+                    }
+                    initialsColorSeed={
+                      trip.client_id?.trim() ??
+                      clientPartyAvatarFieldsProp?.avatarSeed ??
+                      undefined
+                    }
+                    organizationImageUrl={
+                      clientPartyAvatarFieldsProp?.organizationImageUrl ?? undefined
+                    }
+                    organizationAvatarSeed={
+                      clientPartyAvatarFieldsProp?.organizationAvatarSeed ?? undefined
+                    }
+                  />
+                  <View
+                    style={[
+                      styles.avatarBadgePulse,
+                      { borderColor: Theme.primary },
+                    ]}
+                  >
+                    <Feather name="user" size={10} color={Theme.textOnPrimary} />
+                  </View>
+                </View>
+                <View style={styles.heroTextWrapPulse}>
+                  <Text style={styles.heroEyebrowPulse}>Settlement feedback</Text>
+                  <Text style={styles.heroNamePulse} numberOfLines={2}>
+                    {clientDisplayName}
+                  </Text>
+                  <Text style={styles.heroMetaPulse}>Payment captured</Text>
+                </View>
+              </View>
               <TouchableOpacity
                 style={styles.closeButtonPulse}
                 onPress={() => setShowClientFeedbackModal(false)}
                 activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Feather name="x" size={20} color={Theme.textOnPrimary} />
+                <Feather name="x" size={18} color={Theme.textOnPrimary} />
               </TouchableOpacity>
-              <Text style={styles.heroEyebrowPulse}>Settlement feedback</Text>
-              <Text style={styles.heroNamePulse}>{clientName || 'Client'}</Text>
-              <Text style={styles.heroMetaPulse}>Payment captured</Text>
             </View>
             <View style={styles.modalBodyPulse}>
               <Text style={styles.ratingHeadlinePulse}>How was this client?</Text>
@@ -1822,7 +1954,7 @@ export function TripRatingsBlock({
                   >
                     <FontAwesome
                       name={n <= clientScore ? 'star' : 'star-o'}
-                      size={32}
+                      size={24}
                       color={n <= clientScore ? Theme.feedbackModalStarActive : Theme.borderMedium}
                     />
                   </TouchableOpacity>
@@ -2487,177 +2619,165 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
   },
-  regWrap: { gap: 16 },
+  wsCardRegistry: {
+    padding: 8,
+    borderRadius: 12,
+  },
+  regWrap: { gap: 6 },
   regSectionHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-    paddingHorizontal: 2,
+    marginBottom: 0,
+    paddingBottom: 2,
   },
   regSectionTitle: {
     ...FinanceTxnTypography.partyTitle,
-    fontSize: 14,
+    fontSize: 11,
     fontStyle: 'normal',
     fontWeight: '600',
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
     textTransform: 'uppercase',
   },
-  regSectionSub: {
-    marginTop: 3,
-    ...FinanceTxnTypography.columnTitle,
-  },
   regMsgIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  regStack: { gap: 10 },
+  regStack: { gap: 5 },
   regCard: {
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
-    padding: 12,
-    overflow: 'hidden',
-  },
-  regCardDecor: {
-    position: 'absolute',
-    right: -28,
-    top: -28,
-    width: 88,
-    height: 88,
-    borderBottomLeftRadius: 999,
-    backgroundColor: Theme.surfaceGray,
-    opacity: 0.35,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    gap: 0,
   },
   regCardTop: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-    zIndex: 1,
+    alignItems: 'flex-end',
+    gap: 7,
   },
-  regCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+  regCardBody: {
     flex: 1,
     minWidth: 0,
+    gap: 0,
   },
-  regCardLeftText: { flex: 1, minWidth: 0, gap: 3, paddingTop: 1 },
+  regScoresCol: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+    paddingLeft: 4,
+  },
+  regTripScoreBlock: {
+    alignItems: 'flex-end',
+    gap: 1,
+    minWidth: 44,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  regTripScoreBlockEmpty: {
+    backgroundColor: 'transparent',
+  },
+  regTripEyebrow: {
+    ...FinanceTxnTypography.fieldLabel,
+    fontSize: 7,
+    fontWeight: '700',
+    lineHeight: 9,
+  },
+  regTripScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'flex-end',
+    gap: 2,
+  },
+  regTripHeroScore: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.5,
+    lineHeight: 18,
+    fontVariant: ['tabular-nums'],
+  },
+  regTripHeroScoreEmpty: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Theme.textMuted,
+  },
+  regTripHeroStar: {
+    marginBottom: 2,
+  },
+  regAvgScoreBlock: {
+    alignItems: 'flex-end',
+    gap: 0,
+    paddingBottom: 2,
+  },
   regKicker: {
     ...FinanceTxnTypography.chipLabel,
-    lineHeight: 11,
+    fontSize: 8,
+    lineHeight: 10,
   },
   regPartyName: {
     ...FinanceTxnTypography.partyTitle,
     fontStyle: 'normal',
     fontWeight: '600',
-    lineHeight: 15,
-  },
-  regTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
-  },
-  regTagPill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: Theme.surface,
-  },
-  regTagPillText: {
-    ...FinanceTxnTypography.chipLabel,
-    color: Theme.primary,
-    fontWeight: '600',
+    fontSize: 11,
+    lineHeight: 13,
   },
   regGlobalPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: Theme.surfaceGray,
-  },
-  regGlobalAvgCluster: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
   regMetricEyebrowMuted: {
     ...FinanceTxnTypography.fieldLabel,
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: 7,
+    lineHeight: 9,
   },
   regGlobalPillText: {
     ...FinanceTxnTypography.fieldValue,
     fontStyle: 'normal',
-    fontWeight: '500',
-    fontSize: 9,
-    lineHeight: 12,
-  },
-  regCardRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    flexShrink: 0,
-    minWidth: 64,
-    gap: 2,
-    paddingTop: 1,
-  },
-  regScoreRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  regTripBig: {
-    ...FinanceTxnTypography.amount,
-    fontSize: 14,
     fontWeight: '600',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-    lineHeight: 16,
-  },
-  regTripStarIcon: {
-    marginBottom: 1,
+    fontSize: 11,
+    lineHeight: 13,
+    fontVariant: ['tabular-nums'],
   },
   regPerfLbl: {
     ...FinanceTxnTypography.chipLabel,
     fontWeight: '500',
-    marginTop: 2,
-    textAlign: 'right',
+    fontSize: 7,
+    lineHeight: 9,
+    marginTop: 1,
   },
   regCardFoot: {
-    marginTop: 10,
-    paddingTop: 8,
+    marginTop: 5,
+    paddingTop: 5,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    zIndex: 1,
+    gap: 4,
   },
   regStarsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
     flex: 1,
     minWidth: 0,
   },
   regStarHit: {
-    paddingVertical: 4,
-    paddingHorizontal: 2,
+    paddingVertical: 2,
+    paddingHorizontal: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2665,12 +2785,11 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   regFeedbackSection: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 3,
+    paddingTop: 5,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    gap: 5,
-    zIndex: 1,
+    gap: 3,
   },
   regFeedbackHeading: {
     ...FinanceTxnTypography.fieldLabel,
@@ -2742,35 +2861,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   heroHeaderPulse: {
-    paddingHorizontal: 24,
-    paddingTop: 26,
-    paddingBottom: 20,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
     position: 'relative',
     overflow: 'hidden',
   },
   heroGlowOnePulse: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    right: -56,
-    top: -48,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    right: -44,
+    top: -40,
   },
   heroGlowTwoPulse: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    left: -40,
-    top: 40,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    left: -32,
+    top: 32,
   },
   closeButtonPulse: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: Theme.driverWhiteMutedStrong,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2779,40 +2898,31 @@ const styles = StyleSheet.create({
   heroTopRowPulse: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 16,
-    paddingRight: 52,
+    gap: 12,
+    paddingRight: 44,
   },
   avatarWrapPulse: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: Theme.onPrimaryMuted,
-  },
-  avatarTextPulse: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: Theme.textPrimaryDark,
-  },
-  avatarImagePulse: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 32,
+    overflow: 'visible',
   },
   avatarBadgePulse: {
     position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    right: -3,
+    bottom: -3,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: Theme.feedbackModalBadgeRing,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
+    borderWidth: 2,
   },
   heroTextWrapPulse: {
     flex: 1,
@@ -2828,11 +2938,11 @@ const styles = StyleSheet.create({
     color: Theme.textOnDarkMuted,
   },
   heroNamePulse: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '900',
     fontStyle: 'italic',
     color: Theme.textOnPrimary,
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
     textTransform: 'uppercase',
   },
   heroMetaPulse: {
@@ -2844,22 +2954,22 @@ const styles = StyleSheet.create({
     color: 'rgba(248, 250, 252, 0.45)',
   },
   modalBodyPulse: {
-    paddingHorizontal: 28,
-    paddingTop: 18,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 16,
     backgroundColor: Theme.screenBackground,
     alignItems: 'center',
   },
   ratingHeadlinePulse: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '900',
     fontStyle: 'italic',
     color: Theme.textPrimaryDark,
     textAlign: 'center',
     textTransform: 'uppercase',
-    letterSpacing: -0.5,
-    marginBottom: 14,
-    lineHeight: 26,
+    letterSpacing: -0.4,
+    marginBottom: 10,
+    lineHeight: 21,
   },
   ratingHeadlineAccent: {
     color: Theme.primary,
@@ -2870,12 +2980,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 4,
+    marginBottom: 2,
   },
   starBtnPulse: {
-    paddingVertical: 4,
-    paddingHorizontal: 2,
+    paddingVertical: 2,
+    paddingHorizontal: 1,
   },
   composerSectionPulse: {
     width: '100%',
@@ -2896,14 +3006,14 @@ const styles = StyleSheet.create({
     columnGap: 0,
   },
   tagChipPulse: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderWidth: 1,
   },
   clientTagChipPulse: {
     width: '48%',
-    minHeight: 40,
+    minHeight: 34,
     paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2917,9 +3027,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.primary,
   },
   tagChipTextPulse: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.6,
+    fontSize: 9,
+    fontWeight: '500',
+    letterSpacing: 0.35,
     textTransform: 'uppercase',
   },
   tagChipTextPulseIdle: {
@@ -2936,8 +3046,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   noteToggleTextPulse: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
     color: Theme.textMuted,
   },
   commentBoxWrapPulse: {

@@ -8,6 +8,8 @@ import {
   type TextInputProps,
 } from 'react-native';
 
+import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/signupPasswordInput.util';
+
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 
 export interface SignUpPulseFieldProps extends TextInputProps {
@@ -17,6 +19,8 @@ export interface SignUpPulseFieldProps extends TextInputProps {
   hintMessage?: string | null;
   trailing?: ReactNode;
   theme?: SignUpTheme;
+  /** Applies iOS-safe autofill props so Strong Password UI does not block typing. */
+  passwordField?: SignUpPasswordFieldRole;
 }
 
 export const SignUpPulseField = memo(function SignUpPulseField({
@@ -26,11 +30,15 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   hintMessage,
   trailing,
   theme = PULSE_SIGNUP,
+  passwordField,
   style,
   ...inputProps
 }: SignUpPulseFieldProps) {
   const hasError = !!errorMessage;
   const fieldStyles = useMemo(() => createFieldStyles(theme), [theme]);
+  const passwordAutofillProps = passwordField
+    ? signUpPasswordInputProps(passwordField)
+    : {};
 
   return (
     <View style={fieldStyles.wrap}>
@@ -46,6 +54,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
         ]}
       >
         <TextInput
+          {...passwordAutofillProps}
           {...inputProps}
           style={[
             fieldStyles.input,
@@ -90,6 +99,8 @@ function createFieldStyles(theme: SignUpTheme) {
       backgroundColor: theme.bg,
       flexDirection: 'row',
       alignItems: 'center',
+      position: 'relative',
+      overflow: 'hidden',
     },
     inputShellMultiline: {
       alignItems: 'flex-start',

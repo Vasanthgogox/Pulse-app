@@ -17,6 +17,9 @@ export interface TripAdjustmentSuccessViewProps {
   amount: number;
   reason: string;
   tripCode?: string | null;
+  isAssetDriverCost?: boolean;
+  deductionActionLabel?: string | null;
+  onApplyDeduction?: () => void;
   onDone: () => void;
 }
 
@@ -51,8 +54,13 @@ export const TripAdjustmentSuccessView = memo(function TripAdjustmentSuccessView
               })}
             </Text>
             <Text style={styles.meta}>
-              {props.type === "revenue" ? "Revenue" : "Supplier cost"} ·{" "}
-              {props.impact === "plus" ? "Debit (DN)" : "Credit (CN)"}
+              {props.isAssetDriverCost
+                ? props.impact === "plus"
+                  ? "Pay driver (DN)"
+                  : "Deduct from driver (CN)"
+                : `${props.type === "revenue" ? "Revenue" : "Supplier cost"} · ${
+                    props.impact === "plus" ? "Debit (DN)" : "Credit (CN)"
+                  }`}
             </Text>
           </View>
 
@@ -68,6 +76,19 @@ export const TripAdjustmentSuccessView = memo(function TripAdjustmentSuccessView
           ) : null}
         </LedgerTicketChrome>
       </View>
+
+      {props.deductionActionLabel && props.onApplyDeduction ? (
+        <Pressable
+          style={[styles.deductionBtn, { borderColor: "#0f766e" }]}
+          onPress={props.onApplyDeduction}
+          accessibilityRole="button"
+          accessibilityLabel={props.deductionActionLabel}
+        >
+          <Text style={[styles.deductionBtnText, { color: "#0f766e" }]}>
+            {props.deductionActionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
 
       <Pressable style={[styles.doneBtn, { backgroundColor: accent }]} onPress={props.onDone}>
         <Text style={styles.doneBtnText}>Done</Text>
@@ -139,8 +160,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
-  doneBtn: {
+  deductionBtn: {
     marginTop: 10,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    borderWidth: 2,
+    backgroundColor: "#fff",
+  },
+  deductionBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    textAlign: "center",
+    paddingHorizontal: 8,
+  },
+  doneBtn: {
+    marginTop: 8,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: "center",

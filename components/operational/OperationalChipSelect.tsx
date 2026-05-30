@@ -18,6 +18,8 @@ export interface OperationalChipSelectProps<T extends string> {
   onChange: (value: T) => void;
   /** When true, chips use a denser 3-column wrap grid (default on mobile-friendly forms). */
   compact?: boolean;
+  /** Tighter label + chip typography for operational entry forms. */
+  density?: "default" | "compact";
 }
 
 function OperationalChipSelectInner<T extends string>({
@@ -27,12 +29,14 @@ function OperationalChipSelectInner<T extends string>({
   value,
   onChange,
   compact = true,
+  density = "default",
 }: OperationalChipSelectProps<T>) {
+  const dense = density === "compact";
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-      <View style={[styles.grid, compact && styles.gridCompact]}>
+      <Text style={[styles.label, dense && styles.labelCompact]}>{label}</Text>
+      {hint ? <Text style={[styles.hint, dense && styles.hintCompact]}>{hint}</Text> : null}
+      <View style={[styles.grid, compact && styles.gridCompact, dense && styles.gridDense]}>
         {options.map((option) => {
           const active = option.value === value;
           return (
@@ -42,6 +46,7 @@ function OperationalChipSelectInner<T extends string>({
               style={({ pressed }) => [
                 styles.chip,
                 compact && styles.chipCompact,
+                dense && styles.chipDense,
                 active && styles.chipActive,
                 pressed && !active && styles.chipPressed,
               ]}
@@ -50,7 +55,11 @@ function OperationalChipSelectInner<T extends string>({
               accessibilityLabel={option.label}
             >
               <Text
-                style={[styles.chipText, active && styles.chipTextActive]}
+                style={[
+                  styles.chipText,
+                  dense && styles.chipTextDense,
+                  active && styles.chipTextActive,
+                ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.85}
@@ -80,12 +89,22 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  labelCompact: {
+    fontSize: 8,
+    letterSpacing: 0.6,
+    lineHeight: 10,
+  },
   hint: {
     fontSize: 9,
     fontWeight: "500",
     color: colors.textMuted,
     lineHeight: 12,
     marginBottom: 2,
+  },
+  hintCompact: {
+    fontSize: 8,
+    lineHeight: 11,
+    marginBottom: 0,
   },
   grid: {
     flexDirection: "row",
@@ -94,6 +113,9 @@ const styles = StyleSheet.create({
   },
   gridCompact: {
     gap: 6,
+  },
+  gridDense: {
+    gap: 4,
   },
   chip: {
     flexGrow: 1,
@@ -117,6 +139,14 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 6,
   },
+  chipDense: {
+    flexBasis: "31%",
+    minWidth: 68,
+    minHeight: 26,
+    paddingVertical: 4,
+    paddingHorizontal: 5,
+    borderRadius: 7,
+  },
   chipActive: {
     backgroundColor: "#eef2ff",
     borderColor: colors.brand,
@@ -129,6 +159,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
     textAlign: "center",
+  },
+  chipTextDense: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.1,
   },
   chipTextActive: {
     color: colors.brand,

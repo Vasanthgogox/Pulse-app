@@ -22,7 +22,13 @@ import {
 } from "lucide-react-native";
 
 import { EntityAvatar } from "@/components/EntityAvatar";
+import { SmartInput } from "@/components/mobile-input";
+import {
+  OperationalBottomActionBar,
+  OperationalButton,
+} from "@/components/operational";
 import Theme from "@/constants/Theme";
+import { formatINR } from "@/lib/format";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { partyMobileWizardStyles as shell } from "@/components/party/partyMobileWizardStyles";
 import { LedgerReviewTicket } from "@/components/ledger/LedgerReviewTicket";
@@ -80,6 +86,8 @@ export interface LedgerMobileWizardProps {
   amountStr: string;
   onAmountChange: (value: string) => void;
   amountPlaceholder: string;
+  /** Numeric due for % quick-set when placeholder string is unavailable. */
+  dueAmountInr?: number | null;
   partyId: string | null;
   onPartySelect: (id: string | null) => void;
   partyOptions: LedgerWizardPartyOption[];
@@ -122,6 +130,32 @@ function parseAmount(raw: string): number {
   const n = parseFloat(raw.replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
 }
+
+function parseDueAmount(placeholder: string): number {
+  return parseAmount(placeholder || "0");
+}
+
+function resolveDueTotalInr(props: LedgerMobileWizardProps): number {
+  const fromPlaceholder = parseDueAmount(props.amountPlaceholder);
+  if (fromPlaceholder > 0) return fromPlaceholder;
+  if (props.dueAmountInr != null && props.dueAmountInr > 0) return props.dueAmountInr;
+  if (props.selectedTripId) {
+    const trip = props.trips.find((t) => t.id === props.selectedTripId);
+    if (trip?.dueAmount != null && trip.dueAmount > 0) return trip.dueAmount;
+  }
+  return 0;
+}
+
+function formatLedgerAmountValue(amount: number): string {
+  if (!Number.isFinite(amount) || amount <= 0) return "";
+  return amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+const SETTLEMENT_PCTS = [40, 50, 60, 70, 80, 90] as const;
+const FULL_SETTLEMENT_PCT = 100;
 
 function buildSteps(props: LedgerMobileWizardProps): LedgerWizardStep[] {
   const steps: LedgerWizardStep[] = [];
@@ -169,13 +203,20 @@ function stepMeta(step: LedgerWizardStep, props: LedgerMobileWizardProps) {
         title: "Money in or out?",
         hint: "Choose whether you received cash or paid someone.",
       };
-    case "amount":
+    case "amount": {
+      const dueInr = resolveDueTotalInr(props);
+      const settledOnTrip = props.tripLocked && dueInr <= 0;
       return {
         title: props.type === "in" ? "Amount received" : "Amount paid",
-        hint: props.amountPlaceholder
-          ? `Due: ₹${props.amountPlaceholder} — edit if needed`
-          : "Enter the settlement amount.",
+        hint: settledOnTrip
+          ? props.type === "in"
+            ? "Nothing due from the client on this trip."
+            : "Nothing due to this party on this trip."
+          : props.amountPlaceholder
+            ? `Due: ₹${props.amountPlaceholder} — edit if needed`
+            : "Enter the settlement amount.",
       };
+    }
     case "party":
       return {
         title: "Who is this with?",
@@ -256,6 +297,77 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
   const [tripDueFilter, setTripDueFilter] = useState<"all" | "has_due">(
     props.defaultTripDueFilter ?? "all",
   );
+  const [selectedSettlementPct, setSelectedSettlementPct] = useState<number | null>(null);
+
+  const dueTotalInr = useMemo(() => resolveDueTotalInr(props), [
+    props.amountPlaceholder,
+    props.dueAmountInr,
+    props.selectedTripId,
+    props.trips,
+  ]);
+
+  const amountPartyVisual = useMemo(() => {
+    const fromOptions = props.partyId
+      ? props.partyOptions.find((p) => p.id === props.partyId)
+      : null;
+    const name =
+      props.partyDisplayName?.trim() ||
+      fromOptions?.name?.trim() ||
+      props.entryContextLabel?.trim() ||
+      "Party";
+    const entityType =
+      props.partyEntityType ??
+      fromOptions?.entityType ??
+      (props.type === "in" ? "client" : "supplier");
+    return {
+      name,
+      avatarUrl: props.partyAvatarUrl ?? fromOptions?.avatar_url ?? null,
+      avatarSeed: props.partyAvatarSeed ?? fromOptions?.avatar_seed ?? null,
+      entityType,
+      isIntegrated: props.partyIsIntegrated ?? fromOptions?.is_integrated ?? false,
+      contextLine:
+        props.entryContextLabel?.trim() &&
+        props.entryContextLabel.trim() !== name
+          ? props.entryContextLabel.trim()
+          : props.tripDisplay?.trim() || null,
+    };
+  }, [
+    props.partyId,
+    props.partyOptions,
+    props.partyDisplayName,
+    props.partyAvatarUrl,
+    props.partyAvatarSeed,
+    props.partyEntityType,
+    props.partyIsIntegrated,
+    props.entryContextLabel,
+    props.tripDisplay,
+    props.type,
+  ]);
+
+  const handleAmountChange = useCallback(
+    (value: string) => {
+      setSelectedSettlementPct(null);
+      props.onAmountChange(value);
+    },
+    [props],
+  );
+
+  const applySettlementPct = useCallback(
+    (pct: number) => {
+      if (dueTotalInr <= 0) return;
+      const value =
+        pct >= FULL_SETTLEMENT_PCT
+          ? dueTotalInr
+          : Math.round((dueTotalInr * pct) / 100);
+      setSelectedSettlementPct(pct >= FULL_SETTLEMENT_PCT ? FULL_SETTLEMENT_PCT : pct);
+      props.onAmountChange(formatLedgerAmountValue(value));
+    },
+    [dueTotalInr, props],
+  );
+
+  const applyFullPayment = useCallback(() => {
+    applySettlementPct(FULL_SETTLEMENT_PCT);
+  }, [applySettlementPct]);
 
   const lastSessionKeyRef = useRef(props.flowSessionKey ?? "");
   useEffect(() => {
@@ -266,6 +378,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
     setTripDueFilter(props.defaultTripDueFilter ?? "all");
     setPartySearch("");
     setTripSearch("");
+    setSelectedSettlementPct(null);
   }, [props.flowSessionKey, props.defaultTripDueFilter, steps, props]);
 
   const currentStep = steps[stepIndex] ?? "review";
@@ -371,20 +484,172 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
     </View>
   );
 
-  const renderAmount = () => (
-    <View style={styles.amountBlock}>
-      <Text style={[styles.amountPrefix, { color: accent }]}>₹</Text>
-      <TextInput
-        style={styles.amountInput}
-        value={props.amountStr}
-        onChangeText={props.onAmountChange}
-        placeholder={props.amountPlaceholder || "0"}
-        placeholderTextColor={Theme.textMuted}
-        keyboardType="decimal-pad"
-        autoFocus
-      />
-    </View>
-  );
+  const renderSettlementPctDock = () => {
+    if (dueTotalInr <= 0) return null;
+    const fullActive = selectedSettlementPct === FULL_SETTLEMENT_PCT;
+    return (
+      <View style={styles.amountPctDock}>
+        <Text style={styles.pctSectionLabelCentered}>Quick settlement</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.fullPayTile,
+            fullActive && styles.fullPayTileActive,
+            fullActive && { borderColor: accent },
+            pressed && styles.pctTilePressed,
+          ]}
+          onPress={applyFullPayment}
+          accessibilityRole="button"
+          accessibilityLabel={`Full payment, ${formatINR(dueTotalInr)}`}
+        >
+          <Text style={[styles.fullPayLabel, fullActive && { color: accent }]}>
+            Full payment
+          </Text>
+          <Text style={[styles.fullPayAmount, { color: accent }]}>
+            {formatINR(dueTotalInr)}
+          </Text>
+        </Pressable>
+        <Text style={styles.pctSubsectionLabel}>Or choose % of due</Text>
+        <View style={styles.pctGrid}>
+          {SETTLEMENT_PCTS.map((pct) => {
+            const preview = Math.round((dueTotalInr * pct) / 100);
+            const active = selectedSettlementPct === pct;
+            return (
+              <Pressable
+                key={pct}
+                style={({ pressed }) => [
+                  styles.pctTile,
+                  active && styles.pctTileActive,
+                  pressed && styles.pctTilePressed,
+                ]}
+                onPress={() => applySettlementPct(pct)}
+                accessibilityRole="button"
+                accessibilityLabel={`${pct} percent, ${formatINR(preview)}`}
+              >
+                <Text style={[styles.pctTilePct, active && styles.pctTilePctActive]}>
+                  {pct}%
+                </Text>
+                <Text
+                  style={[styles.pctTileAmt, active && styles.pctTileAmtActive]}
+                  numberOfLines={1}
+                >
+                  {formatINR(preview)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderAmount = () => {
+    const isIn = props.type === "in";
+    const dueLabel = isIn ? "Total receivable" : "Total payable";
+    const payLinePrefix = isIn ? "Receiving from" : "Paying";
+
+    return (
+      <ScrollView
+        style={styles.amountScroll}
+        contentContainerStyle={styles.amountScrollContentCentered}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.amountHeroStack}>
+          <View style={styles.amountAvatarRing}>
+            <EntityAvatar
+              name={amountPartyVisual.name}
+              avatarUrl={amountPartyVisual.avatarUrl}
+              avatarSeed={amountPartyVisual.avatarSeed}
+              entityType={amountPartyVisual.entityType}
+              isIntegrated={amountPartyVisual.isIntegrated}
+              size={56}
+              showIntegrationBadge={false}
+            />
+          </View>
+
+          <Text style={styles.amountPayLine} numberOfLines={2}>
+            {payLinePrefix}{" "}
+            <Text style={styles.amountPayLineName}>{amountPartyVisual.name}</Text>
+          </Text>
+
+          {amountPartyVisual.contextLine ? (
+            <Text style={styles.amountContextLineCentered} numberOfLines={2}>
+              {amountPartyVisual.contextLine}
+            </Text>
+          ) : null}
+
+          <View style={styles.amountHeroInputWrap}>
+            <SmartInput
+              type="currency"
+              value={parseAmount(props.amountStr)}
+              onChange={(_, numeric) => {
+                handleAmountChange(formatLedgerAmountValue(numeric));
+              }}
+              label={isIn ? "Amount received" : "Amount paid"}
+              submitLabel="Apply"
+              variant="hero"
+              heroAccentColor={accent}
+              placeholder="0"
+              required={false}
+              validation={{ min: 0, max: 100000000 }}
+            />
+          </View>
+
+          {dueTotalInr > 0 ? (
+            <View style={styles.amountDueChip}>
+              <Text style={styles.amountDueChipLabel}>{dueLabel}</Text>
+              <Text style={[styles.amountDueChipValue, { color: accent }]}>
+                {formatINR(dueTotalInr)}
+              </Text>
+            </View>
+          ) : props.tripLocked ? (
+            <View style={styles.amountSettledChip}>
+              <Text style={styles.amountSettledChipTitle}>Nothing due</Text>
+              <Text style={styles.amountSettledChipSub}>
+                {isIn
+                  ? "This trip has no outstanding client balance. You can still record a payment or correction."
+                  : "This trip has no outstanding balance for this party. You can still record a payout or correction."}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.amountMetaHintCentered}>
+              Enter the settlement amount for this entry.
+            </Text>
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  const renderAmountFullPage = () => {
+    return (
+      <View style={styles.amountFullPage}>
+        <View style={[styles.amountMinimalTop, { paddingTop: insets.top + 6 }]}>
+          <Pressable
+            style={styles.amountBackBtn}
+            onPress={handleBack}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
+          </Pressable>
+        </View>
+        <View style={styles.amountFullPageBody}>{renderAmount()}</View>
+        {renderSettlementPctDock()}
+        <OperationalBottomActionBar>
+          <OperationalButton
+            intent="bottomSticky"
+            label="Continue"
+            onPress={handleAdvance}
+            disabled={!canAdvance}
+            density="high"
+            fullWidth
+          />
+        </OperationalBottomActionBar>
+      </View>
+    );
+  };
 
   const renderPartyAvatar = (
     item: LedgerWizardPartyOption,
@@ -703,6 +968,14 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
 
   const c = compact ? compactShell : shell;
 
+  if (currentStep === "amount") {
+    return (
+      <View style={styles.amountFullPageShell}>
+        {renderAmountFullPage()}
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={c.root}
@@ -914,6 +1187,251 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     backgroundColor: "#f8fafc",
     minHeight: 52,
+  },
+  amountFullPageShell: {
+    flex: 1,
+    backgroundColor: Theme.screenBackground,
+  },
+  amountFullPage: {
+    flex: 1,
+    backgroundColor: Theme.screenBackground,
+  },
+  amountFullPageBody: {
+    flex: 1,
+    minHeight: 0,
+  },
+  amountScroll: {
+    flex: 1,
+  },
+  amountScrollContentCentered: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    alignItems: "center",
+  },
+  amountPctDock: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    backgroundColor: Theme.screenBackground,
+  },
+  amountHeroStack: {
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    gap: 10,
+  },
+  amountMinimalTop: {
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
+  amountBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f1f5f9",
+  },
+  amountAvatarRing: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "#eef2f7",
+    marginBottom: 4,
+  },
+  amountPayLine: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  amountPayLineName: {
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  amountContextLineCentered: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 15,
+    paddingHorizontal: 12,
+    marginTop: -4,
+  },
+  amountHeroInputWrap: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  amountDueChip: {
+    marginTop: 4,
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 12,
+  },
+  amountDueChipLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+    lineHeight: 10,
+  },
+  amountDueChipValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -0.2,
+    lineHeight: 18,
+  },
+  amountSettledChip: {
+    marginTop: 8,
+    maxWidth: 320,
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+  },
+  amountSettledChipTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 0.2,
+  },
+  amountSettledChipSub: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 16,
+  },
+  pctSectionLabelCentered: {
+    marginBottom: 6,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+    lineHeight: 10,
+    textAlign: "center",
+    width: "100%",
+  },
+  pctSubsectionLabel: {
+    marginTop: 8,
+    marginBottom: 6,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+    lineHeight: 10,
+    textAlign: "center",
+    width: "100%",
+  },
+  fullPayTile: {
+    width: "100%",
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    gap: 2,
+    minHeight: 52,
+  },
+  fullPayTileActive: {
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 2,
+  },
+  fullPayLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+  },
+  fullPayAmount: {
+    fontSize: 15,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -0.3,
+    lineHeight: 18,
+  },
+  amountMetaHintCentered: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 13,
+    textAlign: "center",
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  pctGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    width: "100%",
+    justifyContent: "center",
+  },
+  pctTile: {
+    width: "31%",
+    minWidth: 96,
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    borderRadius: 10,
+    backgroundColor: Theme.cardWhite,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    gap: 3,
+    minHeight: 48,
+  },
+  pctTileActive: {
+    borderColor: Theme.pulseIndigoRing,
+    backgroundColor: Theme.pulseIndigoWash,
+  },
+  pctTilePressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
+  },
+  pctTilePct: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  pctTilePctActive: {
+    color: Theme.primary,
+  },
+  pctTileAmt: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    fontVariant: ["tabular-nums"],
+    lineHeight: 11,
+  },
+  pctTileAmtActive: {
+    color: Theme.primary,
+    fontWeight: "700",
+  },
+  amountMetaHint: {
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 11,
+    marginTop: 2,
   },
   amountPrefix: {
     fontSize: 22,

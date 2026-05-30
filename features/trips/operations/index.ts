@@ -1,5 +1,6 @@
 export { FuelEntryScreen } from "./fuel/FuelEntryScreen";
 export { TollEntryScreen } from "./toll/TollEntryScreen";
+export { OtherExpenseEntryScreen } from "./other/OtherExpenseEntryScreen";
 export { TripOperationsSummary } from "./summary/TripOperationsSummary";
 export { OperationsHub } from "./hub/OperationsHub";
 export { TripExpensesScreen } from "./hub/TripExpensesScreen";
@@ -8,14 +9,18 @@ export { toOperationsDisplayMetrics } from "./metrics/operationsMetrics";
 export {
   useTripFuelEntries,
   useTripTollEntries,
+  useTripOtherExpenses,
   useTripOperationsSummary,
   useTripOperationalTimeline,
   useSaveTripFuelEntry,
   useSaveTripTollEntry,
+  useSaveTripOtherExpense,
   useReviewTripFuelEntry,
   useReviewTripTollEntry,
+  useReviewTripOtherExpenseEntry,
   useSetTripFuelReimbursementState,
   useSetTripTollReimbursementState,
+  useSetTripOtherReimbursementState,
 } from "./queries/useTripOperations";
 export { useTripOperationsSync } from "./hooks/useTripOperationsSync";
 export { useVehicleOperationsLedger } from "./vehicle/useVehicleOperationsLedger";
@@ -36,8 +41,11 @@ export * from "./maintenance";
 export * from "./reimbursement";
 export type {
   SaveFuelEntryInput,
+  SaveOtherExpenseInput,
   SaveTollEntryInput,
   TripFuelEntry,
+  TripOtherExpenseEntry,
+  TripOtherExpenseCategory,
   TripTollEntry,
   VehicleOperationLedgerEntry,
   VehicleLedgerApprovalState,

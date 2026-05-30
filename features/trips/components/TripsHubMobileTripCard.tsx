@@ -4,6 +4,8 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
+import { TripHubInTransitPingLines } from "@/features/trips/components/TripHubInTransitPingLines";
+import type { TripHubInTransitPingMeta } from "@/features/trips/hooks/useTripHubInTransitPings";
 import {
   getTripDisplayNumber,
   type TripRow,
@@ -13,13 +15,16 @@ import {
   HUB_GRID_DIVIDER_MARGIN_BOTTOM,
   HUB_GRID_DIVIDER_MARGIN_TOP,
   HUB_CARD_HEAD_AVATAR,
+  HUB_CARD_PARTY_CHIP_AVATAR,
   HUB_CARD_HEAD_LEFT_GAP,
   HUB_GRID_HEAD_MARGIN_BOTTOM,
   HUB_GRID_PARTY_MIN_HEIGHT,
   HUB_GRID_ROUTE_MIN_HEIGHT,
 } from "@/components/hub/hubGridCardLayout";
 import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
+import { formatIndianVehicleNumber } from "@/lib/format";
 import type { ReactNode } from "react";
+import { memo } from "react";
 import {
   Platform,
   Pressable,
@@ -45,7 +50,7 @@ const REF = {
 
 const ROUTE_ARROW_TOP = 2;
 const ROUTE_PIN_SIZE = 8;
-const CHIP_AVATAR = 18;
+const CHIP_AVATAR = HUB_CARD_PARTY_CHIP_AVATAR;
 
 function asLabel(value: unknown): string {
   if (value == null) return "—";
@@ -60,6 +65,20 @@ export function mobileTripClientSubline(isAssetTrip: boolean, typeLabel: string)
   return type === "—" ? null : type;
 }
 
+/** Left party chip on asset trips — assigned vehicle plate, not the ASSET type label. */
+export function mobileTripAssetVehicleChipLabel(
+  trip: Pick<TripRow, "vehicle_display_number">,
+  unassignedLabel: string,
+): string {
+  const formatted = formatIndianVehicleNumber(
+    trip.vehicle_display_number ?? "",
+  ).trim();
+  if (formatted) return formatted;
+  const raw = String(trip.vehicle_display_number ?? "").trim();
+  if (raw) return raw;
+  return unassignedLabel;
+}
+
 export function mobileTripSupplierChipLabel(
   options: {
     isAssetTrip: boolean;
@@ -67,8 +86,16 @@ export function mobileTripSupplierChipLabel(
     supplierName?: string;
     showSupplierParty?: boolean;
     awaitingLabel: string;
+    trip?: Pick<TripRow, "vehicle_display_number">;
+    vehicleUnassignedLabel?: string;
   },
 ): string {
+  if (options.isAssetTrip && options.trip) {
+    return mobileTripAssetVehicleChipLabel(
+      options.trip,
+      options.vehicleUnassignedLabel ?? options.awaitingLabel,
+    );
+  }
   if (options.isAssetTrip) return asLabel(options.typeLabel);
   if (options.showSupplierParty) {
     const supplier = asLabel(options.supplierName);
@@ -114,6 +141,7 @@ function PartyChip({
   alignEnd?: boolean;
 }) {
   const label = formatPartyName(name);
+
   return (
     <View style={[styles.chip, alignEnd && styles.chipEnd]}>
       <PartyAvatar
@@ -271,9 +299,11 @@ export type TripsHubMobileTripCardProps = {
   style?: StyleProp<ViewStyle>;
   /** Viewer org id — used to show BKG ref instead of TRP001 for cross-org supplier trips. */
   viewerOrgId?: string | null;
+  /** Last ping time / offline for in-transit trips (no location line). */
+  inTransitPing?: TripHubInTransitPingMeta | null;
 };
 
-export function TripsHubMobileTripCard({
+export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
   trip,
   displayClientName,
   displaySupplierName = "",
@@ -305,6 +335,7 @@ export function TripsHubMobileTripCard({
   fillGrid = false,
   style,
   viewerOrgId,
+  inTransitPing,
 }: TripsHubMobileTripCardProps) {
   const tripNo = asLabel(getTripDisplayNumber(trip, viewerOrgId));
   const schedule = formatMobileTripSchedule(
@@ -319,6 +350,8 @@ export function TripsHubMobileTripCard({
     supplierName: displaySupplierName,
     showSupplierParty,
     awaitingLabel: tr("tripsHubAwaitingData"),
+    trip,
+    vehicleUnassignedLabel: tr("unassigned"),
   });
   const driverChipName = mobileTripDriverChipLabel(
     trip,
@@ -335,6 +368,19 @@ export function TripsHubMobileTripCard({
     (trip.supplier_id
       ? `supplier-entity:${String(trip.supplier_id).trim()}`
       : `supplier-trip:${trip.id}`);
+  const vehicleFb = trip.vehicle_id
+    ? `vehicle-entity:${String(trip.vehicle_id).trim()}`
+    : `vehicle-trip:${trip.id}`;
+  const leftChipEntityType = isAssetTrip ? "driver" : "supplier";
+  const leftChipAvatarUrl = isAssetTrip ? undefined : supplierAvatarUrl;
+  const leftChipAvatarSeed = isAssetTrip ? undefined : supplierAvatarSeed;
+  const leftChipInitialsSeed = isAssetTrip ? vehicleFb : supplierFb;
+  const leftChipOrgImageUrl = isAssetTrip
+    ? undefined
+    : supplierOrganizationImageUrl;
+  const leftChipOrgAvatarSeed = isAssetTrip
+    ? undefined
+    : supplierOrganizationAvatarSeed;
   const driverFb =
     (driverAvatarFallbackSeed ?? "").trim() ||
     (trip.driver_id
@@ -379,9 +425,12 @@ export function TripsHubMobileTripCard({
                 ) : null}
               </View>
             </View>
-            <Text style={styles.headMeta} numberOfLines={1}>
-              {stageUpper}
-            </Text>
+            <View style={styles.headMetaCol}>
+              <Text style={styles.headMeta} numberOfLines={1}>
+                {stageUpper}
+              </Text>
+              <TripHubInTransitPingLines ping={inTransitPing} />
+            </View>
           </View>
 
           <View
@@ -422,12 +471,12 @@ export function TripsHubMobileTripCard({
               <View style={[styles.partyRow, styles.partyRowGrid]}>
                 <PartyChip
                   name={supplierChipName}
-                  entityType="supplier"
-                  avatarUrl={supplierAvatarUrl}
-                  avatarSeed={supplierAvatarSeed}
-                  initialsColorSeed={supplierFb}
-                  organizationImageUrl={supplierOrganizationImageUrl}
-                  organizationAvatarSeed={supplierOrganizationAvatarSeed}
+                  entityType={leftChipEntityType}
+                  avatarUrl={leftChipAvatarUrl}
+                  avatarSeed={leftChipAvatarSeed}
+                  initialsColorSeed={leftChipInitialsSeed}
+                  organizationImageUrl={leftChipOrgImageUrl}
+                  organizationAvatarSeed={leftChipOrgAvatarSeed}
                 />
                 <PartyChip
                   name={driverChipName}
@@ -450,12 +499,12 @@ export function TripsHubMobileTripCard({
               <View style={styles.partyRow}>
                 <PartyChip
                   name={supplierChipName}
-                  entityType="supplier"
-                  avatarUrl={supplierAvatarUrl}
-                  avatarSeed={supplierAvatarSeed}
-                  initialsColorSeed={supplierFb}
-                  organizationImageUrl={supplierOrganizationImageUrl}
-                  organizationAvatarSeed={supplierOrganizationAvatarSeed}
+                  entityType={leftChipEntityType}
+                  avatarUrl={leftChipAvatarUrl}
+                  avatarSeed={leftChipAvatarSeed}
+                  initialsColorSeed={leftChipInitialsSeed}
+                  organizationImageUrl={leftChipOrgImageUrl}
+                  organizationAvatarSeed={leftChipOrgAvatarSeed}
                 />
                 <PartyChip
                   name={driverChipName}
@@ -477,7 +526,7 @@ export function TripsHubMobileTripCard({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   list: {
@@ -591,9 +640,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
     fontWeight: "400",
   },
-  headMeta: {
+  headMetaCol: {
     flexShrink: 0,
-    maxWidth: "40%",
+    maxWidth: "42%",
+    alignItems: "flex-end",
+  },
+  headMeta: {
     fontSize: 9,
     lineHeight: 12,
     fontWeight: "400",

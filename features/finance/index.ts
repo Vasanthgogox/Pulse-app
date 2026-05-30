@@ -146,3 +146,18 @@ export {
   selectVehicleAllocationExposure,
   selectVehicleSettlementExposure,
 } from "./selectors";
+export {
+  buildAssetProvisionCostBreakdownLines,
+  computeTripOperatedDays,
+  driverOfferFromDriverRow,
+  selectAssetTripAdjustedNetMargin,
+  selectAssetTripPostedExpenseSplit,
+  selectAssetTripProvisionCostBreakdown,
+  selectAssetTripReimbursablePostedCost,
+  selectAssetTripReimbursementSplit,
+  selectTripManifestMargin,
+  type AssetProvisionCostBreakdownLine,
+  type AssetTripPostedExpenseSplit,
+  type AssetTripProvisionCostBreakdown,
+  type AssetTripReimbursementSplit,
+} from "./selectors/assetTripProvisionSelectors";

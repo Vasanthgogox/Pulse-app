@@ -4,13 +4,15 @@
  * Two variants:
  *   'row'   — label left, value right with chevron (for form rows / list sections)
  *   'field' — stacked label above value (for boxed form fields)
+ *   'hero'  — centered large amount (payment / settlement screens)
  */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Theme from '@/constants/Theme';
 
-export type TriggerVariant = 'row' | 'field';
+export type TriggerVariant = 'row' | 'field' | 'hero';
 export type TriggerValueColor = 'default' | 'positive' | 'negative';
+export type TriggerDensity = 'default' | 'compact';
 
 export interface SmartInputTriggerProps {
   label: string;
@@ -22,8 +24,11 @@ export interface SmartInputTriggerProps {
   suffix?: string;
   valueColor?: TriggerValueColor;
   variant?: TriggerVariant;
+  density?: TriggerDensity;
   required?: boolean;
   errorMessage?: string;
+  /** Tint for hero variant currency prefix (defaults to Theme.primary). */
+  heroAccentColor?: string;
 }
 
 export function SmartInputTrigger({
@@ -36,9 +41,12 @@ export function SmartInputTrigger({
   suffix,
   valueColor = 'default',
   variant = 'row',
+  density = 'default',
   required = false,
   errorMessage,
+  heroAccentColor = Theme.primary,
 }: SmartInputTriggerProps) {
+  const compact = density === 'compact';
   const hasValue = !!displayValue;
 
   const valueStyle =
@@ -48,11 +56,49 @@ export function SmartInputTrigger({
       ? styles.valueNegative
       : undefined;
 
+  if (variant === 'hero') {
+    const heroPrefix = prefix !== undefined ? prefix : '₹';
+    return (
+      <View style={styles.heroWrapper}>
+        <TouchableOpacity
+          style={[styles.heroPressable, disabled && styles.rowDisabled]}
+          onPress={onPress}
+          disabled={disabled}
+          activeOpacity={0.72}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${displayValue || placeholder}`}
+          accessibilityState={{ disabled }}
+        >
+          <View style={styles.heroAmountRow}>
+            <Text style={[styles.heroPrefix, { color: heroAccentColor }]}>{heroPrefix}</Text>
+            <Text
+              style={[
+                styles.heroValue,
+                !hasValue && styles.heroPlaceholder,
+                valueStyle,
+              ]}
+            >
+              {hasValue ? displayValue : placeholder || '0'}
+            </Text>
+            {suffix && hasValue ? (
+              <Text style={[styles.heroSuffix, valueStyle]}>{suffix}</Text>
+            ) : null}
+          </View>
+          <Text style={styles.heroTapHint}>Tap to edit amount</Text>
+        </TouchableOpacity>
+        {errorMessage ? (
+          <Text style={styles.heroErrorText}>{errorMessage}</Text>
+        ) : null}
+      </View>
+    );
+  }
+
   if (variant === 'field') {
     return (
       <TouchableOpacity
         style={[
           styles.field,
+          compact && styles.fieldCompact,
           disabled && styles.fieldDisabled,
           !!errorMessage && styles.fieldHasError,
         ]}
@@ -63,25 +109,31 @@ export function SmartInputTrigger({
         accessibilityLabel={`${label}: ${displayValue || placeholder}`}
         accessibilityState={{ disabled }}
       >
-        <Text style={styles.fieldLabel}>
+        <Text style={[styles.fieldLabel, compact && styles.fieldLabelCompact]}>
           {label}
           {required ? <Text style={styles.required}> *</Text> : null}
         </Text>
         <View style={styles.fieldValueRow}>
           {prefix && hasValue ? (
-            <Text style={[styles.fieldPrefix, valueStyle]}>{prefix}</Text>
+            <Text style={[styles.fieldPrefix, compact && styles.fieldPrefixCompact, valueStyle]}>
+              {prefix}
+            </Text>
           ) : null}
           <Text
             style={[
               styles.fieldValue,
+              compact && styles.fieldValueCompact,
               !hasValue && styles.fieldPlaceholder,
+              !hasValue && compact && styles.fieldPlaceholderCompact,
               valueStyle,
             ]}
           >
             {hasValue ? displayValue : placeholder}
           </Text>
           {suffix && hasValue ? (
-            <Text style={[styles.fieldSuffix, valueStyle]}>{suffix}</Text>
+            <Text style={[styles.fieldSuffix, compact && styles.fieldSuffixCompact, valueStyle]}>
+              {suffix}
+            </Text>
           ) : null}
         </View>
         {errorMessage ? (
@@ -95,7 +147,11 @@ export function SmartInputTrigger({
   return (
     <View style={styles.rowWrapper}>
       <TouchableOpacity
-        style={[styles.row, disabled && styles.rowDisabled]}
+        style={[
+          styles.row,
+          compact && styles.rowCompact,
+          disabled && styles.rowDisabled,
+        ]}
         onPress={onPress}
         disabled={disabled}
         activeOpacity={0.65}
@@ -103,27 +159,33 @@ export function SmartInputTrigger({
         accessibilityLabel={`${label}: ${displayValue || placeholder}`}
         accessibilityState={{ disabled }}
       >
-        <Text style={styles.rowLabel}>
+        <Text style={[styles.rowLabel, compact && styles.rowLabelCompact]}>
           {label}
           {required ? <Text style={styles.required}> *</Text> : null}
         </Text>
         <View style={styles.rowRight}>
           {prefix && hasValue ? (
-            <Text style={[styles.rowPrefix, valueStyle]}>{prefix}</Text>
+            <Text style={[styles.rowPrefix, compact && styles.rowPrefixCompact, valueStyle]}>
+              {prefix}
+            </Text>
           ) : null}
           <Text
             style={[
               styles.rowValue,
+              compact && styles.rowValueCompact,
               !hasValue && styles.rowPlaceholder,
+              !hasValue && compact && styles.rowPlaceholderCompact,
               valueStyle,
             ]}
           >
             {hasValue ? displayValue : placeholder}
           </Text>
           {suffix && hasValue ? (
-            <Text style={[styles.rowSuffix, valueStyle]}>{suffix}</Text>
+            <Text style={[styles.rowSuffix, compact && styles.rowSuffixCompact, valueStyle]}>
+              {suffix}
+            </Text>
           ) : null}
-          <Text style={styles.chevron}>›</Text>
+          <Text style={[styles.chevron, compact && styles.chevronCompact]}>›</Text>
         </View>
       </TouchableOpacity>
       {errorMessage ? (
@@ -266,5 +328,121 @@ const styles = StyleSheet.create({
   },
   valueNegative: {
     color: Theme.negative,
+  },
+
+  rowCompact: {
+    paddingHorizontal: 0,
+    paddingVertical: 6,
+    minHeight: 34,
+    backgroundColor: 'transparent',
+  },
+  rowLabelCompact: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  rowPrefixCompact: {
+    fontSize: 11,
+  },
+  rowValueCompact: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rowPlaceholderCompact: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  rowSuffixCompact: {
+    fontSize: 10,
+  },
+  chevronCompact: {
+    fontSize: 14,
+    lineHeight: 16,
+    marginLeft: 2,
+  },
+
+  fieldCompact: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minHeight: 40,
+    backgroundColor: Theme.whiteMuted,
+  },
+  fieldLabelCompact: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  fieldPrefixCompact: {
+    fontSize: 11,
+  },
+  fieldValueCompact: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  fieldPlaceholderCompact: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  fieldSuffixCompact: {
+    fontSize: 10,
+  },
+
+  heroWrapper: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  heroPressable: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 200,
+  },
+  heroAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 2,
+  },
+  heroPrefix: {
+    fontSize: 34,
+    fontWeight: '400',
+    lineHeight: 40,
+    marginRight: 2,
+  },
+  heroValue: {
+    fontSize: 44,
+    fontWeight: '300',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+    lineHeight: 48,
+  },
+  heroPlaceholder: {
+    color: Theme.textMuted,
+    fontWeight: '300',
+  },
+  heroSuffix: {
+    fontSize: 22,
+    fontWeight: '400',
+    color: Theme.textSecondary,
+    marginLeft: 2,
+  },
+  heroTapHint: {
+    marginTop: 6,
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
+  heroErrorText: {
+    marginTop: 6,
+    fontSize: 11,
+    color: Theme.negative,
+    textAlign: 'center',
   },
 });

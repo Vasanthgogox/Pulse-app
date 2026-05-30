@@ -81,6 +81,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
 
@@ -103,9 +104,6 @@ const CounterpartyProfileSystemCard = lazy(() =>
   import("@/components/CounterpartyProfileSystemCard").then((m) => ({
     default: m.CounterpartyProfileSystemCard,
   })),
-);
-const ClientAnalyticsTab = lazy(() =>
-  import("./analytics/ClientAnalyticsTab").then((m) => ({ default: m.default })),
 );
 import {
     Alert,
@@ -320,11 +318,7 @@ export default function ClientDetailScreen({
   const lastFocusRefreshRef = useRef<number>(0);
   const queryClient = useQueryClient();
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<
-    "trips" | "cash" | "shared" | "analytics"
-  >(
-    "trips",
-  );
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
   const [tripDatePeriod, setTripDatePeriod] =
     useState<FinancePeriodFilter>("RANGE");
   const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
@@ -1665,7 +1659,6 @@ export default function ClientDetailScreen({
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
-    { id: "analytics" as const, label: "Analytics" },
     { id: "shared" as const, label: "Shared" },
   ];
   const heroDecorAnimatedStyle = isWebDesktop
@@ -1718,6 +1711,19 @@ export default function ClientDetailScreen({
           <Text style={styles.headerSubtitle}>DEEP ENTITY INTEL</Text>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.profileBtn}
+            onPress={() => router.push(ROUTES.clientAnalytics(clientId) as never)}
+            activeOpacity={0.8}
+            accessibilityLabel="Open client analytics"
+            accessibilityRole="button"
+          >
+            <FontAwesome
+              name="line-chart"
+              size={16}
+              color={Theme.textPrimaryDark}
+            />
+          </TouchableOpacity>
           {!isWebDesktop ? (
             <TouchableOpacity
               style={styles.profileBtn}
@@ -2641,20 +2647,6 @@ export default function ClientDetailScreen({
                 );
               }}
             />
-            </Suspense>
-          </View>
-        )}
-
-        {/* Tab: Performance Analytics */}
-        {detailSubTab === "analytics" && (
-          <View style={styles.analyticsSection}>
-            <Suspense fallback={<LazySuspenseNullFallback />}>
-              <ClientAnalyticsTab
-                client={client}
-                trips={trips}
-                transactions={transactions}
-                orgId={currentOrganization?.id ?? null}
-              />
             </Suspense>
           </View>
         )}

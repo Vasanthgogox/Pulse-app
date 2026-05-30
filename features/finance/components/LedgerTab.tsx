@@ -275,6 +275,7 @@ export function LedgerTab({
       useTimelineLayout={true}
       onAddTransactionPress={onAddTransactionPress}
       tripDetailsMap={tripDetailsMap}
+      getVehicleNumberForTripId={getVehicleNumberForTripId}
       tripOptions={tripOptions}
       onMissionChange={onMissionChange}
       fullWidth

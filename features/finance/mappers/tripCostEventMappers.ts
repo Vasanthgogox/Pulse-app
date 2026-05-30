@@ -1,7 +1,12 @@
 import {
   getTripOperationalDisplay,
 } from "@/features/operations/display";
-import type { TripFuelEntry, TripTollEntry } from "@/features/trips/operations/types";
+import type {
+  TripFuelEntry,
+  TripOtherExpenseEntry,
+  TripTollEntry,
+} from "@/features/trips/operations/types";
+import { otherExpenseCategoryToCostCategory } from "@/features/trips/operations/shared/tripOtherExpenseCategories";
 import type {
   TripCostActor,
   TripCostApprovalState,
@@ -15,6 +20,7 @@ import type {
 type LedgerLookup = {
   fuel: Record<string, string>;
   toll: Record<string, string>;
+  other: Record<string, string>;
 };
 
 function normalizeActor(owner: string | null | undefined): TripCostActor {
@@ -102,6 +108,7 @@ export function mapFuelEntryToTripCostEvent(input: {
     settlementState,
     approvedAt: input.row.approved_at ?? undefined,
     approvedBy: input.row.approved_by ?? undefined,
+    reimbursedAt: input.row.reimbursed_at ?? undefined,
     ledgerTransactionId: input.ledgerTransactionId ?? undefined,
     pnlImpact: approvalState === "approved",
     source: toSource(input.row.source),
@@ -142,6 +149,48 @@ export function mapTollEntryToTripCostEvent(input: {
     settlementState,
     approvedAt: input.row.approved_at ?? undefined,
     approvedBy: input.row.approved_by ?? undefined,
+    reimbursedAt: input.row.reimbursed_at ?? undefined,
+    ledgerTransactionId: input.ledgerTransactionId ?? undefined,
+    pnlImpact: approvalState === "approved",
+    source: toSource(input.row.source),
+    createdAt: input.row.entered_at,
+    updatedAt: input.row.updated_at,
+  };
+}
+
+export function mapOtherEntryToTripCostEvent(input: {
+  row: TripOtherExpenseEntry;
+  tripOperationalCode: string;
+  ledgerTransactionId?: string | null;
+}): TripCostEvent {
+  const approvalState = toApprovalState(input.row.approval_state);
+  const payer = normalizeActor(input.row.payment_owner);
+  const postingState = toPostingState({
+    approvalState,
+    ledgerState: input.row.ledger_state,
+    postingState: input.row.posting_state ?? null,
+    hasLedger: !!input.ledgerTransactionId,
+  });
+  const settlementState = toSettlementState({
+    reimbursementState: input.row.reimbursement_state ?? null,
+    approvalState,
+  });
+  return {
+    id: `other:${input.row.id}`,
+    tripId: input.row.trip_id,
+    operationalCode: input.tripOperationalCode,
+    category: otherExpenseCategoryToCostCategory(input.row.expense_category),
+    amount: normalizeAmount(input.row.amount_inr),
+    currency: "INR",
+    incurredBy: payer,
+    payer,
+    reimbursable: payer === "driver",
+    approvalState,
+    postingState,
+    settlementState,
+    approvedAt: input.row.approved_at ?? undefined,
+    approvedBy: input.row.approved_by ?? undefined,
+    reimbursedAt: input.row.reimbursed_at ?? undefined,
     ledgerTransactionId: input.ledgerTransactionId ?? undefined,
     pnlImpact: approvalState === "approved",
     source: toSource(input.row.source),
@@ -153,6 +202,7 @@ export function mapTollEntryToTripCostEvent(input: {
 export function mapTripOperationalRowsToCostEvents(input: {
   fuelEntries: TripFuelEntry[];
   tollEntries: TripTollEntry[];
+  otherEntries?: TripOtherExpenseEntry[];
   tripDisplay: {
     trip_operational_code?: string | null;
     trip_code?: string | null;
@@ -164,6 +214,7 @@ export function mapTripOperationalRowsToCostEvents(input: {
   const tripOperationalCode = getTripOperationalDisplay(input.tripDisplay);
   const fuelLedger = input.ledgerBySource?.fuel ?? {};
   const tollLedger = input.ledgerBySource?.toll ?? {};
+  const otherLedger = input.ledgerBySource?.other ?? {};
   const fuel = input.fuelEntries.map((row) =>
     mapFuelEntryToTripCostEvent({
       row,
@@ -178,7 +229,16 @@ export function mapTripOperationalRowsToCostEvents(input: {
       ledgerTransactionId: tollLedger[row.id] ?? null,
     }),
   );
-  return [...fuel, ...toll].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+  const other = (input.otherEntries ?? []).map((row) =>
+    mapOtherEntryToTripCostEvent({
+      row,
+      tripOperationalCode,
+      ledgerTransactionId: otherLedger[row.id] ?? null,
+    }),
+  );
+  return [...fuel, ...toll, ...other].sort(
+    (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+  );
 }
 
 export function deriveTripCostFinancialSnapshot(input: {

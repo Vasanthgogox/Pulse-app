@@ -18,11 +18,9 @@ import { getLastTabRoute, saveLastTabRoute } from '@/lib/lastRoute';
 import { useLayoutInsets } from '@/lib/layoutInsets';
 import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
-  preloadPulseLoadsRoute,
   preloadTabScreen,
   scheduleDispatcherTabPreloads,
 } from '@/lib/preloadRoutes';
-import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { ROUTES } from '@/lib/routes';
 import {
   hydrateSignupFlowFlags,
@@ -32,6 +30,7 @@ import {
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -42,7 +41,7 @@ function DemoCustomTabBar(
   const queryClient = useQueryClient();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
-  const { resetBarVisible } = useDemoTabBarScroll();
+  useDemoTabBarScroll();
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
   const layout = useLayoutInsets();
@@ -57,20 +56,16 @@ function DemoCustomTabBar(
     : routeName === 'resources' ? 'resources'
     : 'trips';
 
-  const onTabChange = (tab: DemoTabId) => {
-    if (tab === 'loadCenter') {
-      preloadPulseLoadsRoute();
-      router.push(ROUTES.PULSE_LOADS);
-      return;
-    }
-    if (tab === 'trips' || tab === 'network' || tab === 'finance') {
-      preloadTabScreen(tab as PreloadableTab);
-      if (tab === 'finance' && orgId) {
-        preloadFinanceWarmup(queryClient, orgId);
+  const onTabChange = useCallback(
+    (tab: DemoTabId) => {
+      if (tab === 'loadCenter') {
+        router.push(ROUTES.PULSE_LOADS);
+        return;
       }
-    }
-    navigation.navigate(tab);
-  };
+      navigation.navigate(tab);
+    },
+    [navigation, router],
+  );
 
   const onProfilePress = () => {
     onOpenProfileDrawer();
@@ -85,8 +80,8 @@ function DemoCustomTabBar(
       : routeName === 'resources' ? ROUTES.TABS.RESOURCES
       : null;
     if (tabRoute) saveLastTabRoute(tabRoute);
-    resetBarVisible();
-  }, [routeName, resetBarVisible]);
+    // Do not resetBarVisible() here — it runs a spring on every tab swap and feels laggy.
+  }, [routeName]);
 
   const shellStyle = [
     styles.tabBarWrap,
@@ -173,6 +168,18 @@ export default function TabLayout() {
     });
   }, [loading, orgId, queryClient]);
 
+  /** Warm trips first (default tab), then fiscal + network — staggered to avoid Metro OOM. */
+  useEffect(() => {
+    if (isDesktopWeb) return;
+    preloadTabScreen('trips');
+    const t0 = setTimeout(() => preloadTabScreen('finance'), 700);
+    const t1 = setTimeout(() => preloadTabScreen('network'), 1400);
+    return () => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+    };
+  }, [isDesktopWeb]);
+
   useEffect(() => {
     if (loading) return;
     if (isDriverSignupSuccessActiveSync()) {
@@ -206,9 +213,11 @@ export default function TabLayout() {
   }
 
   return (
-    <DemoTabBarScrollProvider>
-      <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
-    </DemoTabBarScrollProvider>
+    <BusinessConnectionRequestModalProvider>
+      <DemoTabBarScrollProvider>
+        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+      </DemoTabBarScrollProvider>
+    </BusinessConnectionRequestModalProvider>
   );
 }
 
@@ -228,6 +237,14 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: { display: 'none' },
+        /**
+         * Native: keep all primary tabs mounted (Slack-like persistence).
+         * Mobile web: lazy first paint to protect Metro; chunks still preloaded.
+         */
+        lazy: isDesktopWeb ? false : Platform.OS === 'web',
+        freezeOnBlur: !isDesktopWeb,
+        detachInactiveScreens: Platform.OS === 'web',
+        animation: 'none',
         sceneStyle: {
           flex: 1,
           backgroundColor: Theme.screenBackground,
@@ -237,10 +254,22 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home' }} />
-      <Tabs.Screen name="finance" options={{ title: 'Fiscal' }} />
-      <Tabs.Screen name="trips" options={{ title: 'Trips' }} />
-      <Tabs.Screen name="network" options={{ title: 'Home' }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'Home', lazy: Platform.OS === 'web' && !isDesktopWeb }}
+      />
+      <Tabs.Screen
+        name="finance"
+        options={{ title: 'Fiscal', lazy: Platform.OS === 'web' && !isDesktopWeb }}
+      />
+      <Tabs.Screen
+        name="trips"
+        options={{ title: 'Trips', lazy: Platform.OS === 'web' && !isDesktopWeb }}
+      />
+      <Tabs.Screen
+        name="network"
+        options={{ title: 'Home', lazy: Platform.OS === 'web' && !isDesktopWeb }}
+      />
       <Tabs.Screen name="indents" options={{ href: null }} />
       <Tabs.Screen name="resources" options={{ href: null }} />
     </Tabs>

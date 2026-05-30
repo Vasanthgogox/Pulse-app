@@ -374,7 +374,20 @@ export function DiscoverView({
     }),
     [scoredOrgs],
   );
-  const recommended = connectableOrgs.filter((o) => o.score > 0);
+  /** Mutual / lane / city signals (RPC recommendation_score > 0). */
+  const signalRecommended = useMemo(
+    () => connectableOrgs.filter((o) => o.score > 0),
+    [connectableOrgs],
+  );
+  /**
+   * Hub slots (Grow / People you may know). Cold-start workspaces get score -1 from
+   * discover_organizations — fall back to the RPC-ordered connectable list so new users
+   * still see cards instead of the compass empty state.
+   */
+  const recommendationPool = useMemo(
+    () => (signalRecommended.length > 0 ? signalRecommended : connectableOrgs),
+    [signalRecommended, connectableOrgs],
+  );
   const rest = connectableOrgs.filter((o) => o.score <= 0);
 
   const isNativeApp = Platform.OS !== "web";
@@ -385,18 +398,18 @@ export function DiscoverView({
 
   const growNetworkRecommendations = useMemo(() => {
     const slots: ScoredOrg[] = [];
-    for (const org of recommended) {
+    for (const org of recommendationPool) {
       if (dismissedRecommendationIds.has(org.id)) continue;
       slots.push(org);
       if (slots.length >= splitPaneLayout.slotLimit) break;
     }
     return slots;
-  }, [recommended, dismissedRecommendationIds, splitPaneLayout.slotLimit]);
+  }, [recommendationPool, dismissedRecommendationIds, splitPaneLayout.slotLimit]);
 
   const peopleYouMayKnow = useMemo(() => {
     const growIds = new Set(growNetworkRecommendations.map((o) => o.id));
     const slots: ScoredOrg[] = [];
-    for (const org of recommended) {
+    for (const org of recommendationPool) {
       if (dismissedRecommendationIds.has(org.id)) continue;
       if (growIds.has(org.id)) continue;
       slots.push(org);
@@ -404,7 +417,7 @@ export function DiscoverView({
     }
     return slots;
   }, [
-    recommended,
+    recommendationPool,
     dismissedRecommendationIds,
     growNetworkRecommendations,
     splitPaneLayout.slotLimit,
@@ -565,13 +578,13 @@ export function DiscoverView({
 
   const discoverListOrgs = useMemo(() => {
     if (embedded && !search) return embeddedHubRecommendations;
-    return search ? connectableOrgs : [...recommended, ...rest];
+    return search ? connectableOrgs : [...signalRecommended, ...rest];
   }, [
     embedded,
     search,
     connectableOrgs,
     embeddedHubRecommendations,
-    recommended,
+    signalRecommended,
     rest,
   ]);
 

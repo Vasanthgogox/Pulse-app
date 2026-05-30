@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 export type OperationalTimelineEventType =
   | "fuel_logged"
   | "toll_logged"
+  | "other_expense_logged"
   | "odometer_added"
   | "discrepancy_detected"
   | "approval_changed"

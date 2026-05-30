@@ -9,8 +9,6 @@ import {
   BarChart2,
   Building2,
   CheckCircle2,
-  Eye,
-  EyeOff,
   IndianRupee,
   ListChecks,
   Route,
@@ -33,7 +31,6 @@ import { supabase } from "@/lib/supabase";
 import {
   applyPulseFilters,
   selectBusinessPulseOverview,
-  selectBusinessTelemetry,
   selectCashExposure,
   selectClientProfitability,
   selectComplianceExpiryRisk,
@@ -45,7 +42,6 @@ import {
   selectSupplierProfitability,
   selectSupplierReliability,
   selectSupplierSettlementExposure,
-  selectPulseFilterContributions,
   selectPayableAging,
   selectReceivableAging,
   selectBranchCitySlices,
@@ -56,14 +52,8 @@ import {
 } from "@/features/business-pulse/selectors";
 import { restrictToAssetExecution } from "@/features/business-pulse/lib/pulseDomainScope.util";
 import {
-  complianceStatesForScope,
-  complianceScopeFromFilters,
-  type ComplianceScope,
-} from "@/features/business-pulse/lib/pulseComplianceScope.util";
-import {
   executionModelsForScope,
   executionScopeFromFilters,
-  executionScopeLabel,
   type ExecutionScope,
 } from "@/features/business-pulse/lib/pulseExecutionScope.util";
 import { PulseScopeTabRow } from "@/features/business-pulse/components/PulseScopeTabRow";
@@ -284,14 +274,13 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const halfCardStyle = wide ? styles.halfCardWide : styles.halfCardNarrow;
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
-  const { filters, resetFilters, toggleFilterValue, setDateRange, setFilters } = usePulseFilters();
+  const { filters, toggleFilterValue, setDateRange, setFilters } = usePulseFilters();
 
   const [activeDomain, setActiveDomain] = useState<DomainTab>("overview");
-  const [density, setDensity] = useState<WidgetDensity>("compact");
+  const density: WidgetDensity = "compact";
   const [timePreset, setTimePreset] = useState<TimePreset>("all");
   const [comparePreset, setComparePreset] = useState<ComparePreset>("none");
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const [widgetsVisible, setWidgetsVisible] = useState(true);
   const [financeLedger, setFinanceLedger] = useState<FinanceAgingKind>("receivable");
 
   const clientsQuery = useClientsQuery(orgId);
@@ -399,18 +388,6 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     [setFilters],
   );
 
-  const complianceScope = useMemo(
-    () => complianceScopeFromFilters(activeFilters),
-    [activeFilters],
-  );
-
-  const setComplianceScope = useCallback(
-    (scope: ComplianceScope) => {
-      setFilters({ complianceStates: complianceStatesForScope(scope) });
-    },
-    [setFilters],
-  );
-
   const compareRange = useMemo(
     () => getCompareDateRange(effectiveRange, comparePreset),
     [comparePreset, effectiveRange],
@@ -463,7 +440,6 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     () => selectBusinessPulseOverview(dataset, activeFilters),
     [activeFilters, dataset],
   );
-  const telemetry = useMemo(() => selectBusinessTelemetry(dataset, activeFilters), [activeFilters, dataset]);
   const revenueTrend = useMemo(() => selectRevenueTrend(dataset, activeFilters), [activeFilters, dataset]);
   const clientProfitability = useMemo(
     () => selectClientProfitability(dataset, activeFilters),
@@ -680,11 +656,6 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
       rows: drilldownView.rows.slice(0, wide ? 80 : 40),
     }),
     [drilldownView, wide],
-  );
-
-  const filterContributions = useMemo(
-    () => selectPulseFilterContributions(dataset, activeFilters),
-    [activeFilters, dataset],
   );
 
   useEffect(() => {
@@ -1224,8 +1195,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const activeFilterCount =
     filters.routes.length +
     (timePreset !== "all" ? 1 : 0) +
-    (executionScope !== "all" ? 1 : 0) +
-    (complianceScope !== "all" ? 1 : 0);
+    (executionScope !== "all" ? 1 : 0);
 
   const heroStripLayout = wide
     ? { flexDirection: "row" as const, alignItems: "center" as const }
@@ -1283,45 +1253,6 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
             embedded && styles.headerEmbedded,
           ]}
         >
-          <View style={styles.headerTop}>
-            <View style={styles.headerTitleBlock}>
-              <Text style={styles.headerTitle}>Domains & filters</Text>
-              <Text style={styles.headerSubtitle}>
-                {activeDomain.charAt(0).toUpperCase() + activeDomain.slice(1)} ·{" "}
-                {executionScopeLabel(executionScope)}
-                {complianceScope !== "all" ? ` · ${complianceScope}` : ""}
-              </Text>
-            </View>
-            <View style={styles.headerModeRow}>
-              <Pressable
-                onPress={() => setWidgetsVisible((visible) => !visible)}
-                style={[styles.miniChip, !widgetsVisible && styles.miniChipActive]}
-                accessibilityRole="button"
-                accessibilityLabel={widgetsVisible ? "Hide widgets" : "Show widgets"}
-              >
-                {widgetsVisible ? (
-                  <EyeOff size={10} color={Theme.textMuted} />
-                ) : (
-                  <Eye size={10} color="#fff" />
-                )}
-                <Text style={[styles.miniChipText, !widgetsVisible && styles.miniChipTextActive]}>
-                  {widgetsVisible ? "Hide" : "Show"}
-                </Text>
-              </Pressable>
-              {(["tiny", "compact", "standard"] as const).map((mode) => (
-                <Pressable
-                  key={mode}
-                  onPress={() => setDensity(mode)}
-                  style={[styles.miniChip, density === mode && styles.miniChipActive]}
-                >
-                  <Text style={[styles.miniChipText, density === mode && styles.miniChipTextActive]}>
-                    {mode}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
           <DomainTabBar active={activeDomain} onChange={setActiveDomain} />
 
           <PulseDateRangeTabBar active={timePreset} onChange={handleTimePresetChange} />
@@ -1329,65 +1260,25 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           <PulseScopeTabRow
             executionScope={executionScope}
             onExecutionScope={setExecutionScope}
-            complianceScope={complianceScope}
-            onComplianceScope={setComplianceScope}
-            complianceSlices={filterContributions.complianceStates}
           />
 
-          <View style={styles.globalFilterStrip}>
-            <PulseContributionFilters
-              activeDomain={activeDomain}
-              financeLedger={financeLedger}
-              onFinanceLedger={setFinanceLedger}
-              onReset={() => {
-                resetFilters();
-                setTimePreset("all");
-                setComparePreset("none");
-                setSelectedMonth(null);
-                setDateRange(null, null);
-              }}
-            />
-          </View>
-
-          <View style={styles.telemetryRow}>
-            {telemetry.slice(0, 8).map((chip) => (
-              <View
-                key={chip}
-                style={[
-                  styles.telemetryChip,
-                  chip.toLowerCase().includes("critical")
-                    ? styles.telemetryCritical
-                    : chip.toLowerCase().includes("risk") || chip.toLowerCase().includes("watch")
-                      ? styles.telemetryWarning
-                      : styles.telemetryHealthy,
-                ]}
-              >
-                <Text style={styles.telemetryText}>{chip}</Text>
-              </View>
-            ))}
-          </View>
+          {activeDomain === "finance" ? (
+            <View style={styles.globalFilterStrip}>
+              <PulseContributionFilters
+                financeLedger={financeLedger}
+                onFinanceLedger={setFinanceLedger}
+              />
+            </View>
+          ) : null}
         </View>
 
         {loading ? <Text style={styles.mutedText}>Loading intelligence workspace...</Text> : null}
 
         <View style={styles.widgetZone}>
-          <View style={styles.widgetZoneHeader}>
-            <Text style={styles.widgetZoneTitle}>
-              {activeDomain.charAt(0).toUpperCase() + activeDomain.slice(1)} widgets
-            </Text>
-            <Text style={styles.widgetZoneHint}>
-              {widgetsVisible ? "Tap Hide to collapse analytics" : "Widgets hidden"}
-            </Text>
-          </View>
-          {widgetsVisible ? (
-            renderActiveDomain()
-          ) : (
-            <View style={styles.widgetsHiddenBox}>
-              <Text style={styles.widgetsHiddenText}>
-                Domain widgets are hidden. Use Show to bring back charts and KPI cards.
-              </Text>
-            </View>
-          )}
+          <Text style={styles.widgetZoneTitle}>
+            {activeDomain.charAt(0).toUpperCase() + activeDomain.slice(1)}
+          </Text>
+          {renderActiveDomain()}
         </View>
 
         <View style={[styles.card, styles.widgetCard, styles.drilldownCard]}>
@@ -1467,54 +1358,6 @@ const styles = StyleSheet.create({
     zIndex: 20,
     backgroundColor: Theme.screenBackground,
     marginBottom: 12,
-  },
-  headerTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  headerTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  headerTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  headerSubtitle: {
-    fontSize: 10,
-    color: Theme.textMuted,
-    marginTop: 2,
-  },
-  headerModeRow: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  miniChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.whiteMuted,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  miniChipActive: {
-    backgroundColor: Theme.primary,
-    borderColor: Theme.primary,
-  },
-  miniChipText: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.text,
-    textTransform: "uppercase",
-  },
-  miniChipTextActive: {
-    color: "#fff",
   },
   executionScopeWrap: {
     gap: 4,
@@ -1620,38 +1463,14 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.border,
     gap: 12,
   },
-  widgetZoneHeader: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
   widgetZoneTitle: {
     fontSize: 11,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-  },
-  widgetZoneHint: {
-    fontSize: 9,
-    color: Theme.textMuted,
-    fontWeight: "600",
-  },
-  widgetsHiddenBox: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
-    backgroundColor: Theme.whiteMuted,
-    padding: 16,
-    marginHorizontal: 2,
-  },
-  widgetsHiddenText: {
-    fontSize: 10,
-    color: Theme.textSecondary,
-    textAlign: "center",
-    lineHeight: 15,
+    paddingHorizontal: 4,
+    marginBottom: 4,
   },
   stripTitle: {
     fontSize: 9,
@@ -1688,34 +1507,6 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: "#fff",
-  },
-  telemetryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 5,
-  },
-  telemetryChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  telemetryHealthy: {
-    backgroundColor: "#ecfdf5",
-    borderColor: "#a7f3d0",
-  },
-  telemetryWarning: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#fcd34d",
-  },
-  telemetryCritical: {
-    backgroundColor: "#fff1f2",
-    borderColor: "#fecdd3",
-  },
-  telemetryText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.text,
   },
   sectionBlock: {
     gap: 12,

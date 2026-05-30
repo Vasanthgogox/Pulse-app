@@ -7,7 +7,7 @@
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
-import { setInitialTripForDetail } from "@/features/trips";
+import { setInitialTripForDetail } from "@/features/trips/initialTripForDetail";
 import {
   assignAggregateTripDriverByPhone,
   getDriverAvailabilityByPhoneGlobal,

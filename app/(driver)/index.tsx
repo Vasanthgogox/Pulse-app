@@ -6,11 +6,13 @@ import {
   TripDetailsStrip,
 } from "@/components/driver/DriverTripSheetLayout";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
+import { DriverMapAvatarMarker } from "@/components/driver/DriverMapAvatarMarker";
 import {
     LeafletMap,
     type LeafletMapRef,
     type LeafletMarker,
 } from "@/components/driver/LeafletMap";
+import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
 import Layout from "@/constants/Layout";
@@ -464,6 +466,7 @@ export default function DriverRadarScreen() {
     pendingCount: pendingInviteModalCount,
   } = useDriverHomeInvites();
   const { avatarUri } = useDriverAvatarUri();
+  const optionalDriverAvatar = useOptionalDriverAvatar();
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
   const [allTrips, setAllTrips] = useState<tripsService.TripRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -638,6 +641,7 @@ export default function DriverRadarScreen() {
   const fullMapRef = useRef<MapViewRef | null>(null);
   const leafletRef = useRef<LeafletMapRef | null>(null);
   const fullLeafletRef = useRef<LeafletMapRef | null>(null);
+  const nativeMapZoomRef = useRef(16);
   const bottomSheetRef = useRef<BottomSheet | null>(null);
   const sheetOperationActiveRef = useRef(false);
   const sheetSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3462,7 +3466,9 @@ export default function DriverRadarScreen() {
         id: "you",
         coordinate: driverMapPosition,
         label: "You",
-        color: Theme.primary,
+        avatarUri,
+        avatarSeed: optionalDriverAvatar?.avatarSeed,
+        isOnline,
       });
     }
     if (pickup) {
@@ -3536,6 +3542,7 @@ export default function DriverRadarScreen() {
         const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
         leafRef.current?.focusCurrentLocation(pinnedPosition, 16);
       } else {
+        nativeMapZoomRef.current = 16;
         const map = targetRef.current;
         try {
           if (map?.animateCamera) {
@@ -3551,6 +3558,41 @@ export default function DriverRadarScreen() {
           }
         } catch {}
       }
+    };
+
+    const handleMapZoomDelta = (delta: number) => {
+      if (showLeaflet) {
+        const leafRef = isFullScreen ? fullLeafletRef : leafletRef;
+        if (delta > 0) leafRef.current?.zoomIn();
+        else leafRef.current?.zoomOut();
+        return;
+      }
+      if (!driverMapPosition) return;
+      nativeMapZoomRef.current = Math.max(3, Math.min(20, nativeMapZoomRef.current + delta));
+      const map = isFullScreen ? fullMapRef.current : targetRef.current;
+      try {
+        if (map?.animateCamera) {
+          map.animateCamera(
+            {
+              center: driverMapPosition,
+              zoom: nativeMapZoomRef.current,
+              pitch: 0,
+            },
+            { duration: 280 },
+          );
+        } else if (map?.animateToRegion) {
+          const d = 360 / Math.pow(2, nativeMapZoomRef.current);
+          const deltaDeg = Number.isFinite(d) ? Math.min(180, Math.max(0.0005, d)) : 0.005;
+          map.animateToRegion(
+            {
+              ...driverMapPosition,
+              latitudeDelta: deltaDeg,
+              longitudeDelta: deltaDeg,
+            },
+            280,
+          );
+        }
+      } catch {}
     };
 
     return (
@@ -3576,6 +3618,7 @@ export default function DriverRadarScreen() {
             polylineColor={Theme.primary}
             lowPower={false}
             interactionLocked={mapViewportLocked}
+            showZoomControls={false}
           />
         ) : (
           <MapView
@@ -3633,20 +3676,12 @@ export default function DriverRadarScreen() {
                 coordinate={driverMapPosition}
                 anchor={{ x: 0.5, y: 1 }}
               >
-                <Reanimated.View
-                  style={[
-                    styles.olaYouMarker,
-                    youIconAnimatedStyle,
-                    {
-                      backgroundColor: Theme.primary,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <FontAwesome
-                    name="location-arrow"
-                    size={16}
-                    color={Theme.textOnPrimary}
+                <Reanimated.View style={youIconAnimatedStyle}>
+                  <DriverMapAvatarMarker
+                    avatarUri={avatarUri}
+                    avatarSeed={optionalDriverAvatar?.avatarSeed}
+                    isOnline={isOnline}
+                    size={48}
                   />
                 </Reanimated.View>
                 <MapCallout>
@@ -3922,6 +3957,32 @@ export default function DriverRadarScreen() {
                     />
                   </TouchableOpacity>
                 ) : null}
+
+                <TouchableOpacity
+                  style={[
+                    styles.mapTopIconBtn,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                  onPress={() => handleMapZoomDelta(1)}
+                  disabled={mapViewportLocked}
+                  accessibilityLabel="Zoom in"
+                  accessibilityRole="button"
+                >
+                  <FontAwesome name="plus" size={12} color={colors.text} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.mapTopIconBtn,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                  onPress={() => handleMapZoomDelta(-1)}
+                  disabled={mapViewportLocked}
+                  accessibilityLabel="Zoom out"
+                  accessibilityRole="button"
+                >
+                  <FontAwesome name="minus" size={12} color={colors.text} />
+                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[

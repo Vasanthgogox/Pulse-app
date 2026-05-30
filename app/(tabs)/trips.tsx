@@ -1,12 +1,7 @@
-import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
-import { lazy, Suspense } from "react";
+import { createPreloadedTabRoute } from '@/lib/createPreloadedTabRoute';
 
-const TripsScreen = lazy(() => import("./_trips-screen"));
+const { TabRoute: TripsTab, preload: preloadTripsTabRoute } =
+  createPreloadedTabRoute(() => import('./_trips-screen'), 'trips');
 
-export default function TripsTab() {
-  return (
-    <Suspense fallback={<LazySuspenseNullFallback />}>
-      <TripsScreen />
-    </Suspense>
-  );
-}
+export { preloadTripsTabRoute };
+export default TripsTab;

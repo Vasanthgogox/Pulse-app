@@ -7,18 +7,10 @@
 
 export const Theme = {
   // ---- Primary (Pulse indigo for headers and primary actions) ----
-  /** Active tab, FAB, primary actions, headers.
-   *
-   *  Indigo-600 (`#4F46E5`) — one shade darker than the lighter Pulse
-   *  purple `actionAccent` (`#6366F1`). Picked so headers / "Send
-   *  protocol" buttons read as the same brand purple family as the Add
-   *  pills, with enough contrast on white surfaces and the navy hue of
-   *  the legacy palette retired in favour of indigo. */
+  /** Active tab, FAB, primary actions, headers — same as Add Trip / bottom nav. */
   primary: "#4F46E5",
-  /** Slightly lighter primary — used for the date selection section
-   *  and any "primary-light" gradient stop. Stays warmer than `primary`
-   *  but still in the indigo family (matches `actionAccent`). */
-  primaryLight: "#6366F1",
+  /** Lighter gradient stop; kept in the same indigo-600 family as `primary`. */
+  primaryLight: "#4F46E5",
   /** Dark gray for strong text */
   primaryText: "#1a1a1a",
 
@@ -57,19 +49,13 @@ export const Theme = {
   darkSurface: "#1a1a1a",
   darkInputBg: "#333333",
 
-  // ---- Action accent (Pulse purple) ----
-  /** Canonical "Pulse purple" used by the Pulse broadcast button and all
-   *  primary call-to-action pills (Add Trip / Add Indent / Add Load). This
-   *  is the single source of truth for the app's purple — match Pulse,
-   *  never pick a new violet. */
-  actionAccent: "#6366F1",
-  /** Slightly deeper Indigo-600 — used as a 1px inner border to give the
-   *  Pulse-purple pill subtle depth without changing its perceived hue. */
-  actionAccentBorder: "#4F46E5",
-  /** Pulse-tinted shadow for the soft "glow" elevation under action pills.
-   *  Same hue as the Pulse button shadow, with a modest alpha so it reads
-   *  as elevation rather than neon. */
-  actionAccentShadow: "rgba(99,102,241,0.32)",
+  // ---- Action accent (Pulse purple — matches Add Trip `pulseIndigo`) ----
+  /** Canonical Pulse purple: Add Trip, bottom nav cluster, CTA pills. */
+  actionAccent: "#4F46E5",
+  /** Indigo-700 rim for 1px borders on pills (subtle depth, same hue family). */
+  actionAccentBorder: "#4338CA",
+  /** Indigo-600 shadow tint under action pills and tab bar. */
+  actionAccentShadow: "rgba(79, 70, 229, 0.32)",
 
   /** White card background (legacy alias; prefer surface for new code) */
   cardWhite: "#ffffff",
@@ -213,34 +199,35 @@ export const Theme = {
   /** Pulse loader + mobile tab bar accent (indigo) */
   pulseIndigo: "#4F46E5",
   pulseIndigoRing: "rgba(79, 70, 229, 0.22)",
-  pulseIndigoWash: "rgba(99, 102, 241, 0.12)",
+  pulseIndigoWash: "rgba(79, 70, 229, 0.12)",
   /** Mobile footer active pill + icon ring */
   pulseTabActiveBg: "rgba(79, 70, 229, 0.10)",
   pulseTabActiveBorder: "rgba(79, 70, 229, 0.28)",
-  /** Slack-style dark cluster track + glass sliding thumb (Finance / Trips / Loads). */
-  pulseTabClusterTrackTop: "#232633",
-  pulseTabClusterTrackBottom: "#12141C",
-  pulseTabClusterTrackBg: "#181A24",
-  pulseTabClusterTrackBorder: "rgba(255,255,255,0.09)",
-  pulseTabClusterTrackInnerGlow: "rgba(255,255,255,0.05)",
-  pulseTabClusterThumbTop: "rgba(255,255,255,0.34)",
-  pulseTabClusterThumbMid: "rgba(255,255,255,0.16)",
-  pulseTabClusterThumbBottom: "rgba(255,255,255,0.07)",
-  /* Subtle indigo bleed beneath the cluster glass thumb. Pulled up from
-   *  the previous 14% to 26% so the active Cash/Trips/Loads tab carries
-   *  a visible Pulse-purple wash — ties the matte-black cluster to the
-   *  solid indigo Home/Chat edge chips for a unified purple/black bar. */
-  pulseTabClusterThumbAccent: "rgba(99,102,241,0.26)",
-  pulseTabClusterThumbBorder: "rgba(255,255,255,0.32)",
-  pulseTabClusterThumbSpecular: "rgba(255,255,255,0.45)",
-  pulseTabClusterIconActive: "#FFFFFF",
-  pulseTabClusterIconInactive: "rgba(255,255,255,0.38)",
-  pulseTabClusterLabelActive: "#FFFFFF",
-  pulseTabClusterLabelInactive: "rgba(255,255,255,0.40)",
+  /** Ops cluster (Cash / Trips / Loads) — deep Pulse indigo track + glass thumb. */
+  pulseTabClusterTrackTop: "#4F46E5",
+  pulseTabClusterTrackBottom: "#4F46E5",
+  pulseTabClusterTrackBg: "#4F46E5",
+  pulseTabClusterTrackBorder: "rgba(199, 210, 254, 0.28)",
+  pulseTabClusterTrackInnerGlow: "rgba(255, 255, 255, 0.14)",
+  pulseTabClusterTrackRim: "rgba(165, 180, 252, 0.35)",
+  /** Sliding thumb — Apple-style frosted white on purple track. */
+  pulseTabClusterThumbSolid: "rgba(255, 255, 255, 0.94)",
+  pulseTabClusterThumbGlassTop: "rgba(255, 255, 255, 0.98)",
+  pulseTabClusterThumbGlassBottom: "rgba(255, 255, 255, 0.78)",
+  pulseTabClusterThumbSpecular: "rgba(255, 255, 255, 0.72)",
+  pulseTabClusterThumbBorder: "rgba(255, 255, 255, 0.95)",
+  pulseTabClusterThumbInnerBorder: "rgba(255, 255, 255, 0.35)",
+  pulseTabClusterThumbShadow: "rgba(15, 23, 42, 0.28)",
+  /** Icon + label on the white thumb (high contrast). */
+  pulseTabClusterIconOnThumb: "#1E1B4B",
+  pulseTabClusterLabelOnThumb: "#312E81",
+  /** Icon + label on the purple track (inactive). */
+  pulseTabClusterIconInactive: "rgba(255, 255, 255, 0.52)",
+  pulseTabClusterLabelInactive: "rgba(255, 255, 255, 0.48)",
 
   /** Demo tab bar: bar background, top border, pill and FAB (use Layout for radii/shadows) */
-  tabBarBg: "#ffffff",
-  tabBarBorderTop: "#f1f5f9",
+  tabBarBg: "#FAFAFF",
+  tabBarBorderTop: "rgba(79, 70, 229, 0.14)",
   tabBarPillActiveBg: "#F4F4F4",
   tabBarActiveIconBorder: "#E82127",
 

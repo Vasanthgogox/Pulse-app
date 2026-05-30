@@ -46,6 +46,8 @@ type Props = {
   onSelectDriverId: (id: string | null) => void;
   phone: string;
   onPhoneChange: (value: string) => void;
+  driverName: string;
+  onDriverNameChange: (value: string) => void;
   phoneBusy: boolean;
   onPhoneBusyChange: (busy: boolean) => void;
 };
@@ -67,6 +69,8 @@ export function DriverReassignSection({
   onSelectDriverId,
   phone,
   onPhoneChange,
+  driverName,
+  onDriverNameChange,
   phoneBusy,
   onPhoneBusyChange,
 }: Props) {
@@ -155,6 +159,17 @@ export function DriverReassignSection({
     tripId,
     onPhoneBusyChange,
   ]);
+
+  useEffect(() => {
+    if (mode !== 'phone' || !phoneName) return;
+    if (!driverName.trim()) onDriverNameChange(phoneName);
+  }, [mode, phoneName, driverName, onDriverNameChange]);
+
+  const driverNameTrimmed = driverName.trim();
+  const driverNameError =
+    mode === 'phone' && driverNameTrimmed.length > 0 && driverNameTrimmed.length < 2
+      ? 'Enter at least 2 characters.'
+      : null;
 
   return (
     <View style={s.section}>
@@ -252,7 +267,20 @@ export function DriverReassignSection({
 
       {mode === 'phone' || isAggregate ? (
         <View style={s.form}>
-          <Text style={s.label}>Driver phone</Text>
+          <Text style={s.label}>Driver name *</Text>
+          <TextInput
+            style={s.input}
+            value={driverName}
+            onChangeText={onDriverNameChange}
+            placeholder="e.g. Suresh Kumar"
+            placeholderTextColor={Theme.textMuted}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
+          {driverNameError ? (
+            <Text style={s.inlineError}>{driverNameError}</Text>
+          ) : null}
+          <Text style={[s.label, { marginTop: 12 }]}>Driver phone *</Text>
           <TextInput
             style={s.input}
             value={phone}

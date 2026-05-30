@@ -46,6 +46,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -721,24 +722,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ---- render ----
 
+  const loading = status === "restoring";
+  const sessionExpired = status === "expired";
+
+  const authContextValue = useMemo(
+    () => ({
+      user,
+      profile,
+      roleVerified,
+      status,
+      loading,
+      sessionExpired,
+      restoreError,
+      clearRestoreError,
+      refreshSession,
+      signIn,
+      signInWithGoogle,
+      signUp,
+      signOut,
+    }),
+    [
+      user,
+      profile,
+      roleVerified,
+      status,
+      loading,
+      sessionExpired,
+      restoreError,
+      clearRestoreError,
+      refreshSession,
+      signIn,
+      signInWithGoogle,
+      signUp,
+      signOut,
+    ],
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        roleVerified,
-        status,
-        loading: status === "restoring",
-        sessionExpired: status === "expired",
-        restoreError,
-        clearRestoreError,
-        refreshSession,
-        signIn,
-        signInWithGoogle,
-        signUp,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={authContextValue}>
       {children}
     </AuthContext.Provider>
 

@@ -178,6 +178,8 @@ export interface TripMapProps {
   tripId?: string | null;
   /** Must be true for live layer to attach; false = static pin fallback. */
   trackingEnabled?: boolean;
+  /** Bottom inset when auto-fitting the full route in compact previews. */
+  fitPaddingBottom?: number;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -190,8 +192,11 @@ export function TripMap({
   onDistanceCalculated,
   tripId,
   trackingEnabled,
+  fitPaddingBottom = 48,
 }: TripMapProps) {
   const resolvedHeight = height ?? 520;
+  const compactMapPreview =
+    typeof resolvedHeight === "number" && resolvedHeight <= 460;
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const unmountedRef = useRef(false);
@@ -496,6 +501,52 @@ export function TripMap({
         }
       };
 
+      let routedPolylineCoords: [number, number][] = [];
+
+      const collectViewportCoords = (): [number, number][] => {
+        const coords: [number, number][] = [
+          srcCoords,
+          dstCoords,
+          ...stopCoords.map((s) => s.coords),
+          ...routedPolylineCoords,
+        ];
+        if (isLatLngObject(truckLocation)) {
+          coords.push(toLatLngTuple(truckLocation));
+        }
+        for (const p of validTrailPoints) {
+          coords.push([p.latitude, p.longitude]);
+        }
+        return coords;
+      };
+
+      const fitMapToFullRoute = () => {
+        if (!isMapReadyForDrawing()) return;
+        const coords = collectViewportCoords();
+        if (coords.length === 0) return;
+        try {
+          if (coords.length === 1) {
+            map.setView(coords[0], 11, { animate: false });
+            return;
+          }
+          if (compactMapPreview) {
+            map.fitBounds(coords as LatLngTuple[], {
+              paddingTopLeft: [40, 40],
+              paddingBottomRight: [fitPaddingBottom, 40],
+              maxZoom: 13,
+              animate: false,
+            });
+            return;
+          }
+          map.fitBounds(coords as LatLngTuple[], {
+            padding: fitPaddingBottom,
+            maxZoom: 14,
+            animate: false,
+          });
+        } catch {
+          // Map torn down while fitting
+        }
+      };
+
       const createFallbackRoute = () => {
         if (!isMapReadyForDrawing()) return;
         const allPoints = [srcCoords, ...stopCoords.map((s) => s.coords), dstCoords];
@@ -521,6 +572,8 @@ export function TripMap({
             dashArray: '10, 10',
           }).addTo(map);
           bringDbTrailToFront();
+          routedPolylineCoords = allPoints;
+          fitMapToFullRoute();
         } catch {
           // Map can be torn down while async routing callbacks are still in flight.
         }
@@ -561,6 +614,8 @@ export function TripMap({
                 }).addTo(map);
                 bringDbTrailToFront();
                 onDistanceCalculated?.((totalDistM / 1000).toFixed(1));
+                routedPolylineCoords = allLatLngs;
+                fitMapToFullRoute();
               } catch {
                 // Map torn down
               }
@@ -573,15 +628,8 @@ export function TripMap({
         }
       })();
 
-      // ── Fit bounds ───────────────────────────────────────────────────────
-      const boundsCoords: [number, number][] = [srcCoords, dstCoords, ...stopCoords.map((s) => s.coords)];
-      if (isLatLngObject(truckLocation)) {
-        boundsCoords.push(toLatLngTuple(truckLocation));
-      }
-      for (const p of validTrailPoints) {
-        boundsCoords.push([p.latitude, p.longitude]);
-      }
-      map.fitBounds(boundsCoords as LatLngTuple[], { padding: [50, 50], maxZoom: 15, animate: false });
+      // ── Fit bounds (endpoints until routed polyline loads) ───────────────
+      fitMapToFullRoute();
 
       map.whenReady(() => {
         if (!isRunActive()) return;
@@ -591,6 +639,7 @@ export function TripMap({
           if (mapInstanceRef.current !== map) return;
           try {
             map.invalidateSize(true);
+            fitMapToFullRoute();
           } catch {
             /* ignore */
           }
@@ -667,6 +716,8 @@ export function TripMap({
     destCoords?.latitude, destCoords?.longitude,
     source, destination,
     tripId, trackingEnabled,
+    truckLocation?.latitude,
+    truckLocation?.longitude,
     dbLocationTrail.map((p) => p.recorded_at ?? '').join(','),
   ]);
 

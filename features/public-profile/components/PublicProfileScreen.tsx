@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: Theme.primaryLight ?? "#6366F1",
+    backgroundColor: Theme.primaryLight ?? Theme.pulseIndigo,
     opacity: 0.35,
   },
   heroTopBar: {
@@ -793,7 +793,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: Theme.primaryLight ?? "#6366F1",
+    backgroundColor: Theme.primaryLight ?? Theme.pulseIndigo,
     opacity: 0.28,
   },
   synergyAccentBar: {
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     width: 3,
-    backgroundColor: Theme.primaryLight ?? "#6366F1",
+    backgroundColor: Theme.primaryLight ?? Theme.pulseIndigo,
   },
   synergyHeaderRow: {
     flexDirection: "row",

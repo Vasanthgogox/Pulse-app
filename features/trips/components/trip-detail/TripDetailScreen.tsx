@@ -4,6 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { PersistentTabPanel } from "@/components/PersistentTabPanel";
 import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
@@ -16,7 +17,7 @@ import { computePartnerIndentFreightCost } from "@/features/finance/utils/partne
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
-import { ROUTES } from "@/lib/routes";
+import { ROUTES, tripExpenseEntryEditRoute } from "@/lib/routes";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
@@ -29,6 +30,7 @@ import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -46,6 +48,7 @@ import {
     TouchableOpacity,
     View,
     useWindowDimensions,
+    type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -71,7 +74,14 @@ import { ReassignSheet } from "../reassign/ReassignSheet";
 import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
 import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
+import { ProvisionDeductionConfirmModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionDeductionConfirmModal";
+import { ProvisionNotePdfModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionNotePdfModal";
 import { TripFinanceAdjustmentsPanel } from "@/features/trips/components/trip-detail/adjustment/TripFinanceAdjustmentsPanel";
+import type { ProvisionNotePdfContext } from "@/features/trips/components/trip-detail/adjustment/tripProvisionNotePdf.util";
+import {
+  buildCostDeductionSaveParams,
+  type ClientPassThroughRecommendation,
+} from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 import { TripOdometerPreviewCard } from "@/features/trips/components/trip-detail/TripOdometerPreviewCard";
 import { TripAdjustmentModal } from "./TripAdjustmentModal";
 import { TripDetailFinanceView } from "./TripDetailFinanceView";
@@ -81,17 +91,53 @@ import { ManifestDriverPingList } from "./ManifestDriverPingList";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { useTrackingState } from "@/features/tracking/hooks/useTrackingState";
 import { LiveTrackingModal } from "./modals/LiveTrackingModal";
-import { isTripTrackingActive, defaultTrackingState } from "@/features/trips/utils/tripTrackingStatus.util";
-import { MAP_LOCATION_LABEL_LOADING } from "@/lib/mapLocationLabel.service";
+import {
+  defaultTrackingState,
+  isTripTrackingActive,
+} from "@/features/trips/utils/tripTrackingStatus.util";
+import {
+  mergeMapLocationTrail,
+  resolveMapTruckLocation,
+} from "@/features/trips/utils/mapDriverTracking.util";
+import {
+  formatManifestEteFromEstimatedDuration,
+  formatManifestEteFromRouteSeconds,
+} from "@/features/trips/utils/manifestEta.util";
+import { buildManifestDeliveryPlan } from "@/features/trips/utils/manifestDeliveryPlan.util";
+import { buildDriverLastPingDisplay } from "@/features/trips/utils/driverLastPingDisplay.util";
+import { TripDetailTrackingHub } from "./TripDetailTrackingHub";
+import { ManifestRefAssetCard } from "./ManifestRefAssetCard";
+import { useManifestRefAssetInsights } from "./hooks/useManifestRefAssetInsights";
+import { parseTripCoordinate } from "@/features/driver/tripHistory/tripHistoryDetail.util";
+import { DriverTrackingOfflineOverlay } from "./DriverTrackingOfflineOverlay";
+import {
+  MAP_LOCATION_LABEL_LOADING,
+  resolveMapLocationLabel,
+} from "@/lib/mapLocationLabel.service";
+import {
+  buildManifestJourneyLogs,
+  getManifestCurrentStepIndex,
+  getVisibleManifestJourneyLogs,
+  manifestSimLogsForStepIndex,
+  manifestStepIndexForLog,
+  type ManifestJourneyLogEntry,
+} from "@/features/trips/utils/manifestJourneyLog.util";
 import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
 import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSummary, useTripOperationsSync } from "@/features/trips/operations";
 import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
+import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import {
-  getTripExecutionModel,
-  isAssetExecutionTrip,
-} from "@/features/trips/domain/tripExecutionModel";
-import type { TripCommercialAdjustment } from "@/features/finance";
+  shouldShowManifestHeroDriverParty,
+  type AggregateTripKindPillContext,
+} from "@/features/drivers/utils/driverUtils.util";
+import {
+  buildAssetProvisionCostBreakdownLines,
+  driverOfferFromDriverRow,
+  selectAssetTripProvisionCostBreakdown,
+  selectTripManifestMargin,
+} from "@/features/finance";
+import { getDriverById } from "@/features/drivers/services/drivers.service";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 import { LRDocumentsSection } from "./sections/LRDocumentsSection";
 import {
@@ -277,6 +323,208 @@ function inferCoordsFromLocationName(
   return null;
 }
 
+/** Manifest hero bridge — party avatars (client / driver / supplier). */
+const MANIFEST_HERO_AVATAR_MOBILE = 34;
+const MANIFEST_HERO_AVATAR_DESKTOP = 36;
+
+const manifestHeroBridgePartyStyles = StyleSheet.create({
+  avatarStack: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vehicleBadge: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    borderWidth: 1.5,
+    borderColor: "#0f172a",
+    borderRadius: 999,
+    backgroundColor: "#1e293b",
+    overflow: "hidden",
+  },
+});
+
+/** Right bridge party — text beside avatar (same structure as client column). */
+function ManifestHeroBridgePartyEnd({
+  roleLabel,
+  partyName,
+  entityType,
+  avatarSize,
+  avatarUrl,
+  avatarSeed,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  vehicleLabel,
+  vehicleId,
+}: {
+  roleLabel: string;
+  partyName: string;
+  entityType: "driver" | "supplier";
+  avatarSize: number;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  vehicleLabel?: string | null;
+  vehicleId?: string | null;
+}) {
+  const showVehicleBadge =
+    entityType === "driver" &&
+    !!String(vehicleLabel ?? "").trim();
+  const badgeSize = Math.max(10, Math.round(avatarSize * 0.42));
+  const iconWrapSize = avatarSize + 4;
+  const stackSize = avatarSize + (showVehicleBadge ? 6 : 0);
+
+  return (
+    <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
+      <View style={styles.refHeroBridgeTextColEnd}>
+        <Text
+          style={[styles.refHeroBridgeLabel, styles.refHeroBridgeLabelRight]}
+          numberOfLines={1}
+        >
+          {roleLabel}
+        </Text>
+        <Text
+          style={[styles.refHeroBridgeValue, styles.refHeroBridgeValueRight]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {partyName.toUpperCase()}
+        </Text>
+      </View>
+      <View
+        style={[
+          styles.refHeroBridgeIconWrap,
+          { width: iconWrapSize, height: iconWrapSize },
+        ]}
+      >
+        <View
+          style={[
+            manifestHeroBridgePartyStyles.avatarStack,
+            { width: stackSize, height: stackSize },
+          ]}
+        >
+          <PartyAvatar
+            name={partyName}
+            entityType={entityType}
+            size={avatarSize}
+            avatarUrl={avatarUrl ?? undefined}
+            avatarSeed={avatarSeed ?? undefined}
+            organizationImageUrl={organizationImageUrl ?? undefined}
+            organizationAvatarSeed={organizationAvatarSeed ?? undefined}
+            showIntegrationBadge={false}
+          />
+          {showVehicleBadge ? (
+            <View
+              style={manifestHeroBridgePartyStyles.vehicleBadge}
+              accessibilityLabel={`Vehicle ${vehicleLabel}`}
+            >
+              <PartyAvatar
+                name={vehicleLabel!}
+                entityType="driver"
+                size={badgeSize}
+                avatarSeed={vehicleId ?? undefined}
+                showIntegrationBadge={false}
+              />
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** Desktop neo hero — same party row layout as mobile bridge. */
+function NeoManifestHeroBridgePartyEnd({
+  roleLabel,
+  partyName,
+  entityType,
+  avatarSize,
+  avatarUrl,
+  avatarSeed,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  vehicleLabel,
+  vehicleId,
+  styles: neo,
+  partyStyles,
+}: {
+  roleLabel: string;
+  partyName: string;
+  entityType: "driver" | "supplier";
+  avatarSize: number;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  vehicleLabel?: string | null;
+  vehicleId?: string | null;
+  styles: {
+    heroParty: object;
+    heroPartyRight: object;
+    heroPartyTextRight: object;
+    heroKicker: object;
+    alignRight: object;
+    heroPartyName: object;
+    heroVehicleBadge: object;
+  };
+  partyStyles: typeof manifestHeroBridgePartyStyles;
+}) {
+  const showVehicleBadge =
+    entityType === "driver" && !!String(vehicleLabel ?? "").trim();
+  const badgeSize = Math.max(10, Math.round(avatarSize * 0.42));
+  const stackSize = avatarSize + (showVehicleBadge ? 6 : 0);
+
+  return (
+    <View style={[neo.heroParty, neo.heroPartyRight]}>
+      <View style={neo.heroPartyTextRight}>
+        <Text style={[neo.heroKicker, neo.alignRight]} numberOfLines={1}>
+          {roleLabel}
+        </Text>
+        <Text
+          style={[neo.heroPartyName, neo.alignRight]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {partyName.toUpperCase()}
+        </Text>
+      </View>
+      <View
+        style={[
+          partyStyles.avatarStack,
+          { width: stackSize, height: stackSize },
+        ]}
+      >
+        <PartyAvatar
+          name={partyName}
+          entityType={entityType}
+          size={avatarSize}
+          avatarUrl={avatarUrl ?? undefined}
+          avatarSeed={avatarSeed ?? undefined}
+          organizationImageUrl={organizationImageUrl ?? undefined}
+          organizationAvatarSeed={organizationAvatarSeed ?? undefined}
+          showIntegrationBadge={false}
+        />
+        {showVehicleBadge ? (
+          <View
+            style={partyStyles.vehicleBadge}
+            accessibilityLabel={`Vehicle ${vehicleLabel}`}
+          >
+            <PartyAvatar
+              name={vehicleLabel!}
+              entityType="driver"
+              size={badgeSize}
+              avatarSeed={vehicleId ?? undefined}
+              showIntegrationBadge={false}
+            />
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function TripDetailScreen({
   tripId,
   entryContext,
@@ -305,6 +553,13 @@ export default function TripDetailScreen({
   const [showFinanceProvisionPanel, setShowFinanceProvisionPanel] = useState<
     "client" | "supplier" | null
   >(null);
+  const [pendingCostDeduction, setPendingCostDeduction] =
+    useState<ClientPassThroughRecommendation | null>(null);
+  const [costDeductionSubmitting, setCostDeductionSubmitting] = useState(false);
+  const [provisionNotePdfContext, setProvisionNotePdfContext] =
+    useState<ProvisionNotePdfContext | null>(null);
+  const [provisionEditTarget, setProvisionEditTarget] =
+    useState<TripAdjustment | null>(null);
   const [provisionConfirm, setProvisionConfirm] = useState<{
     mode: "delete" | "edit";
     adjustment: TripAdjustment;
@@ -334,7 +589,22 @@ export default function TripDetailScreen({
     setProvisionConfirm(null);
     setProvisionVoidReason("");
     setEditingProvisionAdjustmentId(null);
+    setProvisionEditTarget(null);
   };
+
+  const openProvisionEdit = useCallback((adj: TripAdjustment) => {
+    if (isAdjustmentVoided(adj)) return;
+    setProvisionEditTarget(adj);
+    setShowFinanceProvisionPanel(adj.type === "revenue" ? "client" : "supplier");
+  }, []);
+
+  const handleRequestCostDeduction = useCallback(
+    (rec: ClientPassThroughRecommendation) => {
+      setPendingCostDeduction(rec);
+      setShowFinanceProvisionPanel(null);
+    },
+    [],
+  );
 
   const isMobile = screenWidth < 640;
   const isTablet = screenWidth >= 640 && screenWidth < 1024;
@@ -353,11 +623,80 @@ export default function TripDetailScreen({
     onBack,
   });
 
+  const manifestRefAssetInsights = useManifestRefAssetInsights({
+    orgId:
+      currentOrganization?.id ?? detail.trip?.organization_id ?? null,
+    driverId: detail.trip?.driver_id ?? null,
+    vehicleId: detail.trip?.vehicle_id ?? null,
+  });
+  const manifestDriverInsights =
+    manifestRefAssetInsights.data?.driver ?? {
+      ratingAvg: null,
+      docsIssue: false,
+    };
+  const manifestVehicleInsights =
+    manifestRefAssetInsights.data?.vehicle ?? {
+      ratingAvg: null,
+      docsIssue: false,
+    };
+
+  const handleConfirmCostDeduction = useCallback(async () => {
+    if (!pendingCostDeduction || costDeductionSubmitting) return;
+    setCostDeductionSubmitting(true);
+    try {
+      await detail.handleSaveAdjustment(buildCostDeductionSaveParams(pendingCostDeduction));
+      setPendingCostDeduction(null);
+    } finally {
+      setCostDeductionSubmitting(false);
+    }
+  }, [pendingCostDeduction, costDeductionSubmitting, detail.handleSaveAdjustment]);
+
   const expensePendingCount =
     (tripOperationsSummaryQuery.data?.financialSnapshot?.approvalPendingCount ?? 0) +
     (tripOperationsSummaryQuery.data?.financialSnapshot?.settlementPendingCount ?? 0);
 
+  const tripForAssetFinance = detail.trip;
+  const assignedDriverCompQuery = useQuery({
+    queryKey: [
+      "q",
+      "trip",
+      tripId,
+      "driver-comp",
+      tripForAssetFinance?.driver_id ?? "",
+    ],
+    enabled:
+      !!tripForAssetFinance?.driver_id &&
+      !!tripForAssetFinance.organization_id &&
+      !!tripForAssetFinance &&
+      isAssetExecutionTrip(tripForAssetFinance),
+    queryFn: async () => {
+      const res = await getDriverById(
+        tripForAssetFinance!.organization_id,
+        tripForAssetFinance!.driver_id!,
+      );
+      if (res.error) throw res.error;
+      return res.driver;
+    },
+    staleTime: 60_000,
+  });
+
+  const assetProvisionCostPreview = useMemo(() => {
+    if (!tripForAssetFinance || !isAssetExecutionTrip(tripForAssetFinance)) {
+      return null;
+    }
+    return selectAssetTripProvisionCostBreakdown({
+      trip: tripForAssetFinance,
+      events: tripOperationsSummaryQuery.data?.costEvents ?? [],
+      driverOffer: driverOfferFromDriverRow(assignedDriverCompQuery.data ?? null),
+    });
+  }, [
+    tripForAssetFinance,
+    tripOperationsSummaryQuery.data?.costEvents,
+    assignedDriverCompQuery.data,
+  ]);
+
   useEffect(() => {
+    if (!detail.trip || isAggregateTrip(detail.trip)) return;
     if (expenseTabAutoSelectedRef.current) return;
     if (activeTab !== "trip") return;
     if (expensePendingCount > 0) {
@@ -368,7 +707,19 @@ export default function TripDetailScreen({
     if (tripOperationsSummaryQuery.isFetched) {
       expenseTabAutoSelectedRef.current = true;
     }
-  }, [activeTab, expensePendingCount, tripOperationsSummaryQuery.isFetched]);
+  }, [
+    activeTab,
+    expensePendingCount,
+    tripOperationsSummaryQuery.isFetched,
+    detail.trip,
+  ]);
+
+  useEffect(() => {
+    if (!detail.trip || !isAggregateTrip(detail.trip)) return;
+    if (activeTab === "expenses") {
+      setActiveTab("trip");
+    }
+  }, [detail.trip, activeTab]);
 
   const trackingState = useTrackingState(
     detail.trip?.id ?? null,
@@ -380,6 +731,17 @@ export default function TripDetailScreen({
     },
   );
   const isPingTimedOut = detail.isPingTimedOut ?? false;
+  const journeyTrackingActive = useMemo(
+    () =>
+      detail.trip
+        ? isTripTrackingActive(detail.trip.status, detail.trip.completed_at)
+        : false,
+    [detail.trip?.status, detail.trip?.completed_at, detail.trip],
+  );
+  const showDriverTrackingOfflineOverlay = useMemo(
+    () => journeyTrackingActive && (detail.isDriverOffline ?? false),
+    [journeyTrackingActive, detail.isDriverOffline],
+  );
 
   // Must run before any early return (loading/error) — Rules of Hooks.
   // One cached/deduped migration RPC per aggregate assignable trip (not per render).
@@ -482,6 +844,9 @@ export default function TripDetailScreen({
   const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(
     null,
   );
+  const [manifestRouteEtaSeconds, setManifestRouteEtaSeconds] = useState<
+    number | null
+  >(null);
   const [simConfirmStep, setSimConfirmStep] = useState<{
     label: string;
     targetStatus: string;
@@ -496,6 +861,7 @@ export default function TripDetailScreen({
 
   useEffect(() => {
     setMapRouteDistanceKm(null);
+    setManifestRouteEtaSeconds(null);
   }, [tripId]);
 
   // Proactively fetch road distance as soon as coordinates are available.
@@ -584,33 +950,157 @@ export default function TripDetailScreen({
       });
   }, [detail.trip?.notes]);
 
-  /** ETA for tracking HUD — must run before loading/error early returns (hooks rule). */
-  const trackingEtaLabel = useMemo(() => {
-    const tr = detail.trip as (TripRow & TripWebExtra) | null | undefined;
-    if (!tr) return "—";
-    const dm = tr.duration_minutes;
-    const durationLabel =
-      dm != null && Number(dm) > 0
-        ? `${Math.floor(Number(dm) / 60)}h ${Number(dm) % 60}m`
-        : "—";
-    const raw = tr.estimated_duration;
-    if (raw != null && String(raw).trim()) {
-      const s = String(raw).trim();
-      const m = s.match(/^(\d{1,3}):(\d{2}):(\d{2})/);
-      if (m) {
-        const h = parseInt(m[1], 10);
-        const min = parseInt(m[2], 10);
-        if (!Number.isNaN(h) || !Number.isNaN(min)) {
-          if (h > 0 && min > 0) return `${h}h ${min}m`;
-          if (h > 0) return `${h}h`;
-          if (min > 0) return `${min}m`;
-        }
+  const [simLocationByKey, setSimLocationByKey] = useState<Record<string, string>>(
+    {},
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const pending = simLogEntries.filter(
+      (e) => e.lat != null && e.lng != null,
+    );
+    if (pending.length === 0) return;
+    void (async () => {
+      const next: Record<string, string> = {};
+      for (const sim of pending) {
+        const key = `${sim.status}|${sim.timestamp}`;
+        const label = await resolveMapLocationLabel(sim.lat!, sim.lng!, {
+          mode: "full",
+        });
+        if (label?.trim()) next[key] = label.trim();
       }
-      if (/^\d+h\s*\d+m$/i.test(s) || /^\d+[hm]/i.test(s)) return s;
-      return s.length > 14 ? s.slice(0, 14) + "…" : s;
+      if (!cancelled && Object.keys(next).length > 0) {
+        setSimLocationByKey((prev) => ({ ...prev, ...next }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [simLogEntries]);
+
+  const hasAssignedDriverForEta = useMemo(
+    () =>
+      !!(
+        detail.effectiveDriverIdForLocation?.trim() ||
+        detail.trip?.driver_id?.trim()
+      ),
+    [detail.effectiveDriverIdForLocation, detail.trip?.driver_id],
+  );
+
+  const manifestRouteFetchEndpoints = useMemo(() => {
+    const tr = detail.trip;
+    if (!tr || !hasAssignedDriverForEta) return null;
+    const dest =
+      detail.trackingMapDestinationCoordinate ??
+      (parseTripCoordinate(tr.drop_lat) != null &&
+      parseTripCoordinate(tr.drop_lon) != null
+        ? {
+            latitude: parseTripCoordinate(tr.drop_lat)!,
+            longitude: parseTripCoordinate(tr.drop_lon)!,
+          }
+        : null);
+    if (!dest) return null;
+
+    const driverPos =
+      trackingState?.currentPosition ??
+      (detail.driverLocation?.latitude != null &&
+      detail.driverLocation?.longitude != null
+        ? {
+            latitude: detail.driverLocation.latitude,
+            longitude: detail.driverLocation.longitude,
+          }
+        : null);
+    if (driverPos) {
+      return { from: driverPos, to: dest };
     }
-    return durationLabel !== "—" ? durationLabel : "—";
-  }, [detail.trip]);
+
+    const origin =
+      detail.trackingMapOriginCoordinate ??
+      (parseTripCoordinate(tr.pickup_lat) != null &&
+      parseTripCoordinate(tr.pickup_lon) != null
+        ? {
+            latitude: parseTripCoordinate(tr.pickup_lat)!,
+            longitude: parseTripCoordinate(tr.pickup_lon)!,
+          }
+        : null);
+    if (!origin) return null;
+    return { from: origin, to: dest };
+  }, [
+    detail.trip,
+    hasAssignedDriverForEta,
+    detail.trackingMapOriginCoordinate,
+    detail.trackingMapDestinationCoordinate,
+    trackingState?.currentPosition,
+    detail.driverLocation?.latitude,
+    detail.driverLocation?.longitude,
+  ]);
+
+  useEffect(() => {
+    if (!manifestRouteFetchEndpoints) {
+      setManifestRouteEtaSeconds(null);
+      return;
+    }
+    let cancelled = false;
+    void getOptimalRoute(
+      manifestRouteFetchEndpoints.from,
+      manifestRouteFetchEndpoints.to,
+    )
+      .then((result) => {
+        if (!cancelled && result?.duration != null) {
+          setManifestRouteEtaSeconds(result.duration);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setManifestRouteEtaSeconds(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    manifestRouteFetchEndpoints?.from.latitude,
+    manifestRouteFetchEndpoints?.from.longitude,
+    manifestRouteFetchEndpoints?.to.latitude,
+    manifestRouteFetchEndpoints?.to.longitude,
+  ]);
+
+  /** ETE manifest: driver route ETA when assigned; create-trip ETA otherwise. */
+  const manifestEteLabel = useMemo(() => {
+    const tr = detail.trip;
+    if (!tr) return "—";
+    if (hasAssignedDriverForEta) {
+      if (manifestRouteEtaSeconds != null) {
+        return formatManifestEteFromRouteSeconds(manifestRouteEtaSeconds);
+      }
+      return formatManifestEteFromEstimatedDuration(tr.estimated_duration);
+    }
+    return formatManifestEteFromEstimatedDuration(tr.estimated_duration);
+  }, [
+    detail.trip,
+    hasAssignedDriverForEta,
+    manifestRouteEtaSeconds,
+  ]);
+
+  const liveTrackingDeliveryPlan = useMemo(
+    () =>
+      buildManifestDeliveryPlan({
+        tripDistance: detail.trip?.distance,
+        mapRouteDistanceKm,
+        routeEtaSeconds: manifestRouteEtaSeconds,
+        estimatedDuration: detail.trip?.estimated_duration,
+        startedAt: detail.trip?.started_at,
+        pickupAt: detail.trip?.pickup_date,
+        createdAt: detail.trip?.created_at,
+      }),
+    [
+      detail.trip?.distance,
+      detail.trip?.estimated_duration,
+      detail.trip?.started_at,
+      detail.trip?.pickup_date,
+      detail.trip?.created_at,
+      mapRouteDistanceKm,
+      manifestRouteEtaSeconds,
+    ],
+  );
 
   // Vault upload hooks — must run before loading/error early returns (Rules of Hooks).
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
@@ -714,191 +1204,27 @@ export default function TripDetailScreen({
     ],
   );
 
-  const journeyLogs = useMemo(() => {
+  const journeyLogs = useMemo((): ManifestJourneyLogEntry[] => {
     const tr = detail.trip;
     if (!tr) return [];
-    const audits = detail.assignmentAuditRows;
-    /** Real assignment time — not scheduled pickup (`pickup_date`). */
-    const assignedAtIso: string | null = (() => {
-      if (audits.length > 0) {
-        const sorted = [...audits].sort(
-          (a, b) =>
-            new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime(),
-        );
-        const did = tr.driver_id;
-        if (did) {
-          const forCurrentDriver = [...sorted]
-            .reverse()
-            .find((r) => r.driver_id_new === did);
-          if (forCurrentDriver?.changed_at) return forCurrentDriver.changed_at;
-        }
-        return sorted[0]?.changed_at ?? null;
-      }
-      if (tr.driver_id)
-        return tr.updated_at ?? tr.created_at ?? null;
-      return null;
-    })();
-    const latestPing = detail.driverLocation;
-    const inTransitLocation =
-      detail.driverLocationAddress?.trim() ||
-      (latestPing ? MAP_LOCATION_LABEL_LOADING : "Route in progress");
-    const inTransitTime = latestPing?.recorded_at ?? tr.started_at;
-    const pingCount = (detail.locationTrailWithNames ?? detail.tripLocationPoints)
-      .length;
-    const inTransitDetails = detail.driverLocationAddress?.trim()
-      ? `Last known position: ${detail.driverLocationAddress.trim()}. ${
-          pingCount > 0
-            ? `${pingCount} GPS ping${pingCount === 1 ? "" : "s"} recorded on this trip.`
-            : "Vehicle moving towards destination through planned route."
-        }`
-      : pingCount > 0
-        ? `${pingCount} GPS ping${pingCount === 1 ? "" : "s"} recorded. Resolving latest position…`
-        : "Vehicle moving towards destination through planned route.";
-    const statusLc = (tr.status ?? "").toLowerCase();
-    const driverAcceptedAtIso: string | null = (() => {
-      if (statusLc === "pending_acceptance" || statusLc === "draft") {
-        return null;
-      }
-      if (
-        tr.status_updated_role === "driver" ||
-        Number(tr.status_revision ?? 0) > 0
-      ) {
-        return tr.updated_at ?? tr.started_at ?? assignedAtIso ?? null;
-      }
-      if (
-        statusLc === "assigned" ||
-        statusLc === "in_progress" ||
-        statusLc === "picked_up" ||
-        statusLc === "pickup" ||
-        statusLc === "in_transit" ||
-        statusLc === "at_drop" ||
-        statusLc === "completed" ||
-        statusLc === "delivered" ||
-        statusLc === "done"
-      ) {
-        return tr.updated_at ?? assignedAtIso ?? tr.created_at ?? null;
-      }
-      return null;
-    })();
-    return [
-      {
-        status: "Assigned",
-        location: tr.pickup_area?.trim() || "Origin hub",
-        time: assignedAtIso
-          ? new Date(assignedAtIso).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "—",
-        details: "Trip assigned and prepared for dispatch.",
-      },
-      {
-        status: "Driver Accepted",
-        location: tr.pickup_area?.trim() || "Awaiting driver",
-        time: driverAcceptedAtIso
-          ? new Date(driverAcceptedAtIso).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "—",
-        details:
-          statusLc === "pending_acceptance"
-            ? "Driver has been invited; acceptance pending on device."
-            : statusLc === "draft"
-              ? "Assignment is still being prepared."
-              : "Driver confirmed the assignment and can proceed to pickup.",
-      },
-      {
-        status: "Pickup",
-        location: tr.pickup_area?.trim() || "Pickup point",
-        time: tr.started_at
-          ? new Date(tr.started_at).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "—",
-        details: "Pickup verification completed and movement initiated.",
-      },
-      {
-        status: "In-Transit",
-        location: inTransitLocation,
-        time: inTransitTime
-          ? new Date(inTransitTime).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "—",
-        details: inTransitDetails,
-      },
-      ...(tr.start_odometer_km != null
-        ? [
-            {
-              status: "Start Odometer Added",
-              location: tr.pickup_area?.trim() || "Pickup point",
-              time: (tr.odometer_updated_at ?? tr.started_at)
-                ? new Date(
-                    (tr.odometer_updated_at ?? tr.started_at) as string,
-                  ).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "—",
-              details: `Starting odometer recorded: ${Number(
-                tr.start_odometer_km,
-              ).toLocaleString("en-IN", { maximumFractionDigits: 1 })} KM`,
-            },
-          ]
-        : []),
-      {
-        status: "Delivered",
-        location: tr.drop_location?.trim() || "Destination",
-        time: tr.completed_at
-          ? new Date(tr.completed_at).toLocaleTimeString("en-IN", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "—",
-        details: "Delivery completed and settlement flow closed.",
-      },
-      ...(tr.end_odometer_km != null
-        ? [
-            {
-              status: "Closing Odometer Added",
-              location: tr.drop_location?.trim() || "Destination",
-              time: tr.odometer_updated_at
-                ? new Date(tr.odometer_updated_at).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "—",
-              details: `Closing odometer recorded: ${Number(
-                tr.end_odometer_km,
-              ).toLocaleString("en-IN", { maximumFractionDigits: 1 })} KM`,
-            },
-          ]
-        : []),
-      ...(tr.gps_distance_km != null && tr.odometer_distance_km != null
-        ? [
-            {
-              status: "GPS Comparison Available",
-              location: "Distance verification",
-              time: tr.odometer_updated_at
-                ? new Date(tr.odometer_updated_at).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "—",
-              details: `Odometer ${Number(
-                tr.odometer_distance_km,
-              ).toLocaleString("en-IN", {
-                maximumFractionDigits: 1,
-              })} KM vs GPS ${Number(tr.gps_distance_km).toLocaleString("en-IN", {
-                maximumFractionDigits: 1,
-              })} KM`,
-            },
-          ]
-        : []),
-    ];
+    const trail = detail.locationTrailWithNames ?? [];
+    const locationPings =
+      trail.length > 0
+        ? trail
+        : detail.tripLocationPoints.map((p) => ({
+            ...p,
+            locationName: null as string | null,
+          }));
+    return buildManifestJourneyLogs({
+      trip: tr,
+      assignmentAuditRows: detail.assignmentAuditRows,
+      driverLocationAddress: detail.driverLocationAddress,
+      driverLocation: detail.driverLocation,
+      locationPings,
+      simLogs: simLogEntries,
+      simLocationByKey,
+      locationLoadingLabel: MAP_LOCATION_LABEL_LOADING,
+    });
   }, [
     detail.trip,
     detail.assignmentAuditRows,
@@ -906,6 +1232,8 @@ export default function TripDetailScreen({
     detail.driverLocationAddress,
     detail.locationTrailWithNames,
     detail.tripLocationPoints,
+    simLogEntries,
+    simLocationByKey,
   ]);
 
   const manifestDriverPings = useMemo(() => {
@@ -926,6 +1254,16 @@ export default function TripDetailScreen({
       }));
   }, [detail.locationTrailWithNames, detail.tripLocationPoints]);
 
+  const manifestPulseLastIndex = 4;
+  const currentStepIndex = detail.trip
+    ? getManifestCurrentStepIndex(detail.trip)
+    : 0;
+  const visibleJourneyLogs = useMemo(
+    () => getVisibleManifestJourneyLogs(journeyLogs, currentStepIndex),
+    [journeyLogs, currentStepIndex],
+  );
+  const manifestJourneyComplete = currentStepIndex >= manifestPulseLastIndex;
+
   const tripForAssignmentFlow = detail.trip;
   const canChangeManifestAssetsForNav =
     !!tripForAssignmentFlow &&
@@ -939,6 +1277,25 @@ export default function TripDetailScreen({
     },
     [tripForAssignmentFlow?.id, canChangeManifestAssetsForNav, router],
   );
+
+  const manifestHeroPartyContext = useMemo<AggregateTripKindPillContext>(
+    () => ({
+      viewerOrganizationId: currentOrganization?.id ?? null,
+      supplierLinkedOrganizationId: detail.partnerOrgId ?? null,
+    }),
+    [currentOrganization?.id, detail.partnerOrgId],
+  );
+  const showManifestHeroDriver = useMemo(
+    () =>
+      detail.trip
+        ? shouldShowManifestHeroDriverParty(
+            detail.trip,
+            manifestHeroPartyContext,
+          )
+        : false,
+    [detail.trip, manifestHeroPartyContext],
+  );
+
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
   }
@@ -965,35 +1322,8 @@ export default function TripDetailScreen({
   }
 
   const { trip } = detail;
-  const tripExecutionModel = getTripExecutionModel(trip);
-  const expenseTabLabel = tripExecutionModel === "asset" ? "Expense" : "Commercial";
-  const expenseHubLabel = tripExecutionModel === "asset" ? "Expense Hub" : "Commercial Hub";
-  const commercialAdjustments: TripCommercialAdjustment[] = (
-    detail.adjustments ?? []
-  )
-    .filter((adjustment) => !isAdjustmentVoided(adjustment))
-    .map((adjustment) => {
-      const direction: TripCommercialAdjustment["direction"] =
-        adjustment.type === "cost"
-          ? adjustment.impact === "plus"
-            ? "increase_cost"
-            : "reduce_cost"
-          : adjustment.impact === "plus"
-            ? "increase_margin"
-            : "reduce_margin";
-      return {
-        id: adjustment.id,
-        tripId: adjustment.trip_id,
-        type:
-          adjustment.type === "cost"
-            ? "supplier_adjustment"
-            : "brokerage_adjustment",
-        amount: Math.max(0, Number(adjustment.amount ?? 0) || 0),
-        direction,
-        postingState: "posted",
-        createdAt: adjustment.created_at ?? trip.created_at,
-      };
-    });
+  const expenseTabLabel = "Expense";
+  const expenseHubLabel = "Expense Hub";
   const isAggregate = isAggregateTrip(trip);
 
   const driverSummaryText = (() => {
@@ -1182,11 +1512,18 @@ export default function TripDetailScreen({
   const customerSales = Number(trip.client_price ?? 0);
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
+  const isAssetTripFinance = isAssetExecutionTrip(trip);
+  const assetApprovedCostInr =
+    tripOperationsSummaryQuery.data?.financialSnapshot?.approvedOperationalCostInr ?? 0;
   const cost = isPartnerSettlementView
     ? computePartnerIndentFreightCost(detail.subcontractRate)
-    : supplierCost;
+    : isAssetTripFinance
+      ? (assetProvisionCostPreview?.totalBaseCostInr ?? assetApprovedCostInr)
+      : supplierCost;
   const baseFreight = sales;
-  const totalExpenses = expenseRows.reduce((s, r) => s + r.amount, 0);
+  const totalExpenses = isAssetTripFinance
+    ? 0
+    : expenseRows.reduce((s, r) => s + r.amount, 0);
   const incomeAdjustmentRows = adjustmentsCountingAsIncome(detail.adjustments);
   const deductionAdjustmentRows = adjustmentsCountingAsDeductions(
     detail.adjustments,
@@ -1241,6 +1578,25 @@ export default function TripDetailScreen({
     });
     return rows;
   })();
+  const driverCashPayoutsForExpenses = detail.tripLedgerEntries
+    .filter(
+      (tx) =>
+        tx.contact_type === "driver" && Number(tx.amount_out ?? 0) > 0,
+    )
+    .map((tx) => ({
+      id: tx.id,
+      dateLabel: new Date(
+        tx.transaction_date ?? tx.created_at ?? "",
+      ).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      amount: Number(tx.amount_out ?? 0),
+      description: tx.description,
+    }));
+  const driverReimbursementDueInr =
+    tripOperationsSummaryQuery.data?.financialSnapshot?.payableOutstandingInr ?? 0;
   const paymentCaptured = detail.tripLedgerEntries.some(
     (row) => row.contact_type === "client" && Number(row.amount_in ?? 0) > 0,
   );
@@ -1276,6 +1632,45 @@ export default function TripDetailScreen({
     String(trip.vehicle_display_number ?? "").trim() ||
     String(tripExtra.vehicle_number ?? "").trim() ||
     "Pending";
+
+  const mapDbLocationTrail = mergeMapLocationTrail(
+    detail.tripLocationPoints ?? [],
+    (detail.trackingTrail ?? []).map((c) => ({
+      latitude: c.latitude,
+      longitude: c.longitude,
+      recorded_at: c.recorded_at,
+    })),
+  );
+  const mapTruckLocation = resolveMapTruckLocation({
+    tripCompleted: detail.tripCompleted,
+    currentPosition: trackingState?.currentPosition ?? null,
+    driverLocation: detail.driverLocation ?? null,
+    trail: mapDbLocationTrail,
+  });
+  const mapTruckStatus =
+    detail.tripCompleted || !mapTruckLocation
+      ? null
+      : {
+          truckNo: allocatedVehicleLabel,
+          speed: 0,
+          ignitionStatus: false,
+          location: detail.driverLocationAddress?.trim() || undefined,
+          lastUpdated:
+            detail.driverLocation?.recorded_at ??
+            trackingState?.lastSeenAt ??
+            mapDbLocationTrail[mapDbLocationTrail.length - 1]?.recorded_at,
+        };
+  const driverLastPingRecordedAt =
+    detail.driverLocation?.recorded_at ??
+    trackingState?.lastSeenAt ??
+    mapDbLocationTrail[mapDbLocationTrail.length - 1]?.recorded_at ??
+    null;
+  const driverLastPingDisplay = buildDriverLastPingDisplay({
+    latitude: mapTruckLocation?.latitude ?? null,
+    longitude: mapTruckLocation?.longitude ?? null,
+    locationAddress: detail.driverLocationAddress,
+    recordedAt: driverLastPingRecordedAt,
+  });
   const awaitingDataLabel = t("tripsHubAwaitingData");
   const clientNameForParty =
     detail.displayClientName?.trim() ||
@@ -1288,22 +1683,6 @@ export default function TripDetailScreen({
   const clientNameCard = clientNameForParty.toUpperCase();
   const supplierName = supplierNameForParty.toUpperCase();
   const isIntegratedTrip = Boolean(trip.indent_id);
-
-  // Manifest Pulse: 0=Assigned, 1=Driver Accepted, 2=Pickup, 3=In-Transit, 4=Delivered
-  const manifestPulseLastIndex = journeyLogs.length - 1;
-  const currentStepIndex = (() => {
-    const s = String(trip.status ?? "").toLowerCase();
-    if (
-      ["completed", "delivered", "done", "at_drop"].includes(s) ||
-      !!trip.completed_at
-    )
-      return 4;
-    if (s === "in_transit") return 3;
-    if (["in_progress", "picked_up", "pickup"].includes(s)) return 2;
-    if (s === "assigned") return 1;
-    if (s === "pending_acceptance") return 0;
-    return 0;
-  })();
 
   // Next step the business can simulate
   const nextSimulateStep = (() => {
@@ -1470,32 +1849,37 @@ export default function TripDetailScreen({
     const n = Number(trip.amount_paid ?? 0);
     return Number.isFinite(n) ? `₹${n.toLocaleString("en-IN")}` : "₹0";
   })();
-  const durationLabel = tripExtra.duration_minutes
-    ? `${Math.floor(tripExtra.duration_minutes / 60)}h ${tripExtra.duration_minutes % 60}m`
-    : "—";
 
-  const driverRatingLabel =
-    detail.driverRatingAvg != null &&
-    Number.isFinite(Number(detail.driverRatingAvg))
-      ? Number(detail.driverRatingAvg).toFixed(1)
-      : "—";
   const vehicleTypeLabel =
     String(tripExtra.vehicle_type ?? "").trim() ||
     String(tripExtra.truck_type ?? "").trim() ||
-    "MXL";
+    "";
   const vehicleCapacityLabel =
     String(tripExtra.capacity ?? "").trim() ||
     String(tripExtra.vehicle_capacity ?? "").trim() ||
-    "—";
+    "";
+  const vehicleSpecsMeta = [vehicleTypeLabel, vehicleCapacityLabel]
+    .filter(Boolean)
+    .join(" · ") || null;
+
   const adjSales = adjustedRevenue(sales, detail.adjustments);
   const adjCost = adjustedCost(cost, detail.adjustments);
-  const netManifestYield = Math.max(0, adjSales - adjCost - totalExpenses);
+  const netManifestYield = selectTripManifestMargin({
+    adjustedSaleInr: adjSales,
+    adjustedCostInr: adjCost,
+  });
+  const marginIsNegative = netManifestYield < 0;
+  const marginBasisLabel = isAssetTripFinance
+    ? "Client sale − trip cost"
+    : "Client sale − supplier cost";
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
   const receivableAfterAdjustments = Math.max(
     0,
     adjSales - collectedFromClient,
   );
+  const supplierDueAfterAdjustments = Math.max(0, adjCost - supplierPaid);
+  const hasLinkedClient = Boolean((clientIdFromContext ?? trip.client_id)?.trim());
   const financeCapturePaymentSlot = (
     <View style={neoStyles.capturePaymentSlot}>
       <TouchableOpacity
@@ -1523,11 +1907,11 @@ export default function TripDetailScreen({
         <Feather name="credit-card" size={16} color="#fff" />
         <Text style={neoStyles.capturePaymentBtnText}>Capture payment</Text>
       </TouchableOpacity>
-      <Text style={neoStyles.capturePaymentHint}>
-        {(clientIdFromContext ?? trip.client_id)
-          ? `Suggested cash-in: ${formatINR(receivableAfterAdjustments)} vs adjusted sale`
-          : "Link a client on the trip to pre-fill customer receipt"}
-      </Text>
+      {!hasLinkedClient ? (
+        <Text style={neoStyles.capturePaymentHint}>
+          Link a client on the trip to pre-fill customer receipt
+        </Text>
+      ) : null}
       {showRecordSupplierPayoutCta ? (
         <TouchableOpacity
           style={[
@@ -1535,7 +1919,7 @@ export default function TripDetailScreen({
             { marginTop: 10, backgroundColor: "#0f172a" },
           ]}
           onPress={() => {
-            const dueOut = Math.max(0, Math.round(supplierDue));
+            const dueOut = Math.max(0, Math.round(supplierDueAfterAdjustments));
             pushTripLedgerQuickEntry(
               {
                 trip,
@@ -1546,7 +1930,7 @@ export default function TripDetailScreen({
                 partnerName: detail.partnerName ?? null,
                 driverDisplayName: detail.driverName ?? null,
                 ledgerSyncExtraParams: {
-                  dueAmountOut: dueOut > 0 ? String(dueOut) : undefined,
+                  dueAmountOut: String(dueOut),
                 },
               },
               "supplier",
@@ -1560,8 +1944,54 @@ export default function TripDetailScreen({
           </Text>
         </TouchableOpacity>
       ) : null}
+      <View style={neoStyles.capturePaymentDueFooter}>
+        {hasLinkedClient ? (
+          <View style={neoStyles.capturePaymentDueRow}>
+            <Text style={neoStyles.capturePaymentDueLabel}>Client due</Text>
+            <Text
+              style={[
+                neoStyles.capturePaymentDueValue,
+                receivableAfterAdjustments > 0
+                  ? neoStyles.capturePaymentDueValueDue
+                  : neoStyles.capturePaymentDueValueSettled,
+              ]}
+            >
+              {receivableAfterAdjustments > 0
+                ? formatINR(receivableAfterAdjustments)
+                : "Nothing due"}
+            </Text>
+          </View>
+        ) : null}
+        {showRecordSupplierPayoutCta ? (
+          <View style={neoStyles.capturePaymentDueRow}>
+            <Text style={neoStyles.capturePaymentDueLabel}>Supplier due</Text>
+            <Text
+              style={[
+                neoStyles.capturePaymentDueValue,
+                supplierDueAfterAdjustments > 0
+                  ? neoStyles.capturePaymentDueValueDue
+                  : neoStyles.capturePaymentDueValueSettled,
+              ]}
+            >
+              {supplierDueAfterAdjustments > 0
+                ? formatINR(supplierDueAfterAdjustments)
+                : "Nothing due"}
+            </Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
+
+  const provisionCostPartyName = isAssetTripFinance
+    ? allocatedDriverName !== "Unassigned"
+      ? allocatedDriverName
+      : detail.driverName?.trim() || "Driver"
+    : supplierNameForParty;
+  const assetCostBreakdownLines =
+    isAssetTripFinance && assetProvisionCostPreview
+      ? buildAssetProvisionCostBreakdownLines(assetProvisionCostPreview)
+      : undefined;
 
   const financeAdjustmentSummaryWrappedEl = (
     <TripFinanceAdjustmentsPanel
@@ -1574,19 +2004,57 @@ export default function TripDetailScreen({
       costSideDelta={costSideDelta}
       clientName={clientNameForParty}
       clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
-      supplierName={supplierNameForParty}
-      supplierAvatarSeed={trip.supplier_id ?? null}
+      supplierName={provisionCostPartyName}
+      supplierAvatarUrl={isAssetTripFinance ? detail.driverAvatarUri : undefined}
+      supplierAvatarSeed={
+        isAssetTripFinance ? (trip.driver_id ?? null) : (trip.supplier_id ?? null)
+      }
+      isAssetExecution={isAssetTripFinance}
+      costLaneLabel={isAssetTripFinance ? "Revised trip cost" : undefined}
+      costBreakdownLines={assetCostBreakdownLines}
       lineMetaLabel={provisionLineMetaLabel}
       onOpenProvision={setShowFinanceProvisionPanel}
+      onRequestDeduction={handleRequestCostDeduction}
+      onViewNotePdf={(adj) => {
+        const isSale = adj.type === "revenue";
+        setProvisionNotePdfContext({
+          adjustment: adj,
+          tripCode: getTripDisplayNumber(trip, currentOrganization?.id),
+          companyName: currentOrganization?.name?.trim() || "Q",
+          partyName: isSale ? clientNameForParty : provisionCostPartyName,
+          laneLabel: isSale ? "Sale" : "Cost",
+          partyRole: isSale ? "Client" : isAssetTripFinance ? "Driver" : "Supplier",
+          baseLaneAmount: isSale ? sales : cost,
+          revisedLaneAmount: isSale ? adjSales : adjCost,
+        });
+      }}
+      onEditAdjustment={openProvisionEdit}
       capturePaymentSlot={financeCapturePaymentSlot}
     />
   );
 
   /** Shared mobile + desktop: trip margin hero only (detail in adjustments panel below). */
   const financeManifestSummaryBlock = (
-    <View style={[styles.refSettleCard, styles.refFinanceManifestHero]}>
-      <Text style={styles.refSettleLabel}>Margin</Text>
-      <Text style={styles.refSettleValue}>{formatINR(netManifestYield)}</Text>
+    <View
+      style={[
+        styles.refSettleCard,
+        styles.refFinanceManifestHero,
+        marginIsNegative && styles.refFinanceManifestHeroLoss,
+      ]}
+    >
+      <Text style={styles.refFinanceMarginLabel}>
+        {marginIsNegative ? "Margin · loss" : "Margin"}
+      </Text>
+      <Text
+        style={[
+          styles.refFinanceMarginValue,
+          marginIsNegative && styles.refFinanceMarginValueLoss,
+          !marginIsNegative && netManifestYield > 0 && styles.refFinanceMarginValueGain,
+        ]}
+      >
+        {formatINR(netManifestYield)}
+      </Text>
+      <Text style={styles.refFinanceMarginHint}>{marginBasisLabel}</Text>
     </View>
   );
 
@@ -1594,6 +2062,7 @@ export default function TripDetailScreen({
   const odometerPreviewEl = showOdometerVerification ? (
     <TripOdometerPreviewCard
       trip={trip}
+      compact
       onRecordStart={() => openOdometerVerification("start")}
       onRecordEnd={() => openOdometerVerification("end")}
     />
@@ -1959,7 +2428,7 @@ export default function TripDetailScreen({
                     <PartyAvatar
                       name={clientNameForParty}
                       entityType="client"
-                      size={26}
+                      size={MANIFEST_HERO_AVATAR_MOBILE}
                       organizationImageUrl={
                         detail.clientPartyAvatarFields?.organizationImageUrl ??
                         undefined
@@ -1976,61 +2445,47 @@ export default function TripDetailScreen({
                       }
                     />
                   </View>
-                  <View>
+                  <View style={styles.refHeroBridgeTextCol}>
                     <Text style={styles.refHeroBridgeLabel}>CLIENT</Text>
-                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>
+                    <Text
+                      style={styles.refHeroBridgeValue}
+                      numberOfLines={2}
+                      ellipsizeMode="tail"
+                    >
                       {clientNameCard}
                     </Text>
                   </View>
                 </View>
-                <FontAwesome name="exchange" size={12} color="#64748b" />
-                <View
-                  style={[
-                    styles.refHeroBridgeCol,
-                    styles.refHeroBridgeColRight,
-                  ]}
-                >
-                  <View>
-                    <Text
-                      style={[
-                        styles.refHeroBridgeLabel,
-                        styles.refHeroBridgeLabelRight,
-                      ]}
-                    >
-                      SUPPLIER
-                    </Text>
-                    <Text style={styles.refHeroBridgeValue} numberOfLines={1}>
-                      {supplierName}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.refHeroBridgeIconWrap,
-                      styles.refHeroBridgeIconWrapRose,
-                    ]}
-                  >
-                    <PartyAvatar
-                      name={supplierNameForParty}
-                      entityType="supplier"
-                      size={26}
-                      organizationImageUrl={
-                        detail.supplierPartyAvatarFields
-                          ?.organizationImageUrl ?? undefined
-                      }
-                      organizationAvatarSeed={
-                        detail.supplierPartyAvatarFields
-                          ?.organizationAvatarSeed ?? undefined
-                      }
-                      avatarUrl={
-                        detail.supplierPartyAvatarFields?.avatarUrl ?? undefined
-                      }
-                      avatarSeed={
-                        detail.supplierPartyAvatarFields?.avatarSeed ??
-                        undefined
-                      }
-                    />
-                  </View>
+                <View style={styles.refHeroBridgeSwap}>
+                  <FontAwesome name="exchange" size={12} color="#64748b" />
                 </View>
+                {showManifestHeroDriver ? (
+                  <ManifestHeroBridgePartyEnd
+                    roleLabel="DRIVER"
+                    partyName={allocatedDriverName}
+                    entityType="driver"
+                    avatarSize={MANIFEST_HERO_AVATAR_MOBILE}
+                    avatarUrl={detail.driverAvatarUri}
+                    avatarSeed={trip.driver_id}
+                    vehicleLabel={allocatedVehicleLabel}
+                    vehicleId={trip.vehicle_id}
+                  />
+                ) : (
+                  <ManifestHeroBridgePartyEnd
+                    roleLabel="SUPPLIER"
+                    partyName={supplierName}
+                    entityType="supplier"
+                    avatarSize={MANIFEST_HERO_AVATAR_MOBILE}
+                    avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl}
+                    avatarSeed={detail.supplierPartyAvatarFields?.avatarSeed}
+                    organizationImageUrl={
+                      detail.supplierPartyAvatarFields?.organizationImageUrl
+                    }
+                    organizationAvatarSeed={
+                      detail.supplierPartyAvatarFields?.organizationAvatarSeed
+                    }
+                  />
+                )}
               </View>
               <View style={styles.refHeroRouteRow}>
                 <View
@@ -2110,7 +2565,7 @@ export default function TripDetailScreen({
                   <View>
                     <Text style={styles.refHeroMetaLabel}>ETE manifest</Text>
                     <Text style={styles.refHeroMetaValue} numberOfLines={1}>
-                      {durationLabel}
+                      {manifestEteLabel}
                     </Text>
                   </View>
                   <View style={styles.refHeroMetaIconGhost}>
@@ -2121,60 +2576,29 @@ export default function TripDetailScreen({
             </View>
 
             <View style={styles.refAssetRow}>
-              <View style={styles.refAssetCard}>
-                <View style={styles.refAssetHead}>
-                  <View style={styles.refAssetIconWrap}>
-                    <Feather name="user" size={14} color="#4f46e5" />
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => openAssignmentFlow("driver")}
-                    style={styles.refAssetChangeBtn}
-                    activeOpacity={0.85}
-                    disabled={!canChangeManifestAssets}
-                  >
-                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.refAssetBody}>
-                  <Text style={styles.refAssetLabel}>Authorized Pilot</Text>
-                  <Text style={styles.refAssetValue} numberOfLines={1}>
-                    {allocatedDriverName}
-                  </Text>
-                  <Text style={styles.refAssetSubtle}>
-                    {driverRatingLabel} rank
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.refAssetCard}>
-                <View style={styles.refAssetHead}>
-                  <View
-                    style={[
-                      styles.refAssetIconWrap,
-                      styles.refAssetIconWrapDark,
-                    ]}
-                  >
-                    <Feather name="truck" size={14} color="#fff" />
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => openAssignmentFlow("vehicle")}
-                    style={styles.refAssetChangeBtn}
-                    activeOpacity={0.85}
-                    disabled={!canChangeManifestAssets}
-                  >
-                    <Text style={styles.refAssetChangeBtnText}>Change</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.refAssetBody}>
-                  <Text style={styles.refAssetLabel}>Vehicle Asset</Text>
-                  <Text style={styles.refAssetValue} numberOfLines={1}>
-                    {allocatedVehicleLabel}
-                  </Text>
-                  <Text style={styles.refAssetSubtle}>
-                    {vehicleTypeLabel} · {vehicleCapacityLabel}
-                  </Text>
-                </View>
-              </View>
+              <ManifestRefAssetCard
+                roleLabel="Driver"
+                primaryText={allocatedDriverName}
+                variant="driver"
+                ratingAvg={manifestDriverInsights.ratingAvg}
+                docsIssue={manifestDriverInsights.docsIssue}
+                insightsLoading={manifestRefAssetInsights.isLoading}
+                driverName={detail.driverName}
+                driverAvatarUrl={detail.driverAvatarUri}
+                driverId={trip.driver_id}
+                showChange={canChangeManifestAssets}
+                onChange={() => openAssignmentFlow("driver")}
+              />
+              <ManifestRefAssetCard
+                roleLabel="Vehicle"
+                primaryText={allocatedVehicleLabel}
+                variant="vehicle"
+                vehicleType={vehicleTypeLabel}
+                docsIssue={manifestVehicleInsights.docsIssue}
+                insightsLoading={manifestRefAssetInsights.isLoading}
+                showChange={canChangeManifestAssets}
+                onChange={() => openAssignmentFlow("vehicle")}
+              />
             </View>
 
             <View style={styles.refTabShell}>
@@ -2222,28 +2646,30 @@ export default function TripDetailScreen({
                   Finance
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.refTabBtn,
-                  activeTab === "expenses" && styles.refTabBtnActive,
-                ]}
-                onPress={() => setActiveTab("expenses")}
-                activeOpacity={0.85}
-              >
-                <Feather
-                  name="dollar-sign"
-                  size={12}
-                  color={activeTab === "expenses" ? "#818cf8" : "#94a3b8"}
-                />
-                <Text
+              {!isAggregate ? (
+                <TouchableOpacity
                   style={[
-                    styles.refTabBtnText,
-                    activeTab === "expenses" && styles.refTabBtnTextActive,
+                    styles.refTabBtn,
+                    activeTab === "expenses" && styles.refTabBtnActive,
                   ]}
+                  onPress={() => setActiveTab("expenses")}
+                  activeOpacity={0.85}
                 >
-                  {expenseTabLabel}
-                </Text>
-              </TouchableOpacity>
+                  <Feather
+                    name="dollar-sign"
+                    size={12}
+                    color={activeTab === "expenses" ? "#818cf8" : "#94a3b8"}
+                  />
+                  <Text
+                    style={[
+                      styles.refTabBtnText,
+                      activeTab === "expenses" && styles.refTabBtnTextActive,
+                    ]}
+                  >
+                    {expenseTabLabel}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
                 style={[
                   styles.refTabBtn,
@@ -2268,37 +2694,45 @@ export default function TripDetailScreen({
               </TouchableOpacity>
             </View>
 
-            {activeTab === "trip" ? (
-              <View style={styles.refTrackWrap}>
+            <PersistentTabPanel active={activeTab === "trip"}>
+              <>
                 {isTripTrackingActive(trip?.status, trip?.completed_at) ? (
-                  <TouchableOpacity
-                    style={styles.refLiveTrackBanner}
-                    onPress={() => detail.setShowTrackingModal(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Feather
-                      name="map-pin"
-                      size={15}
-                      color="#818cf8"
-                      style={styles.refLiveTrackBannerIcon}
-                    />
-                    <Text style={styles.refLiveTrackBannerLabel}>
-                      Live Tracking
-                    </Text>
-                    <Feather name="chevron-right" size={15} color="#94a3b8" />
-                  </TouchableOpacity>
+                  <TripDetailTrackingHub
+                    onOpenLiveTracking={() => detail.setShowTrackingModal(true)}
+                    deliveryPlan={liveTrackingDeliveryPlan}
+                    driverLastPing={driverLastPingDisplay}
+                    recordedAt={driverLastPingRecordedAt}
+                    broadcastActive={trackingState?.broadcastActive ?? false}
+                  />
                 ) : null}
                 <View style={styles.refTimelineCard}>
-                  {journeyLogs.map((log, index) => {
+                  {visibleJourneyLogs.map((log, index) => {
                     const expanded = expandedLog === index;
-                    const isLast = index === journeyLogs.length - 1;
+                    const isLast = index === visibleJourneyLogs.length - 1;
+                    const isCurrent =
+                      !manifestJourneyComplete && isLast;
+                    const phase: "completed" | "current" | "pending" = isCurrent
+                      ? "current"
+                      : "completed";
+                    const stepIndex = manifestStepIndexForLog(log.stepKey);
+                    const stepSimLogs = manifestSimLogsForStepIndex(
+                      stepIndex,
+                      simLogEntries,
+                    );
                     return (
                       <View
-                        key={`${log.status}-${index}`}
+                        key={`${log.stepKey}-${index}`}
                         style={styles.refTimelineItemWrap}
                       >
                         {!isLast ? (
-                          <View style={styles.refTimelineConnector} />
+                          <View
+                            style={[
+                              styles.refTimelineConnector,
+                              phase === "completed" && {
+                                backgroundColor: "#40B876",
+                              },
+                            ]}
+                          />
                         ) : null}
                         <TouchableOpacity
                           style={[
@@ -2310,8 +2744,8 @@ export default function TripDetailScreen({
                           }
                           activeOpacity={0.9}
                         >
-                          <View style={styles.refTimelineDotIcon}>
-                            <FontAwesome name="check" size={11} color="#fff" />
+                          <View style={neoStyles.manifestPulseIconColumn}>
+                            <ManifestPulseStepIcon phase={phase} />
                           </View>
                           <View style={styles.refTimelineBody}>
                             <View style={styles.refTimelineTop}>
@@ -2337,11 +2771,38 @@ export default function TripDetailScreen({
                             <Text style={styles.refTimelineLocation}>
                               {log.location}
                             </Text>
+                            {log.locationCoords ? (
+                              <Text style={styles.refTimelineCoords}>
+                                {log.locationCoords}
+                              </Text>
+                            ) : null}
                             {expanded ? (
                               <Text style={styles.refTimelineDetails}>
                                 {log.details}
                               </Text>
                             ) : null}
+                            {expanded && stepIndex === 3 ? (
+                              <ManifestDriverPingList
+                                pings={manifestDriverPings}
+                              />
+                            ) : null}
+                            {stepSimLogs.map((sim, si) => (
+                              <View
+                                key={`ref-sim-${si}`}
+                                style={neoStyles.simLogBadge}
+                              >
+                                <Feather
+                                  name="zap"
+                                  size={10}
+                                  color="#f59e0b"
+                                />
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={neoStyles.simLogBadgeText}>
+                                    Business simulated · {sim.userName}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
                           </View>
                         </TouchableOpacity>
                       </View>
@@ -2381,12 +2842,15 @@ export default function TripDetailScreen({
                     clientName={
                       detail.displayClientName ?? trip.client_name ?? null
                     }
+                    clientPartyAvatarFields={detail.clientPartyAvatarFields}
+                    supplierPartyAvatarFields={detail.supplierPartyAvatarFields}
                     paymentCaptured={paymentCaptured}
                     layoutVariant="registry"
                   />
                 </View>
-              </View>
-            ) : activeTab === "finance" ? (
+              </>
+            </PersistentTabPanel>
+            <PersistentTabPanel active={activeTab === "finance"}>
               <View style={styles.refFinanceWrap}>
                 <View style={styles.refFinanceSubTabs}>
                   <TouchableOpacity
@@ -2488,7 +2952,9 @@ export default function TripDetailScreen({
                   </>
                 )}
               </View>
-            ) : activeTab === "expenses" ? (
+            </PersistentTabPanel>
+            {!isAggregate ? (
+              <PersistentTabPanel active={activeTab === "expenses"}>
               <View style={styles.refFinanceWrap}>
                 {odometerPreviewEl}
                 <TripExpensesScreen
@@ -2496,15 +2962,46 @@ export default function TripDetailScreen({
                   embedded
                   onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                   onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
-                  onAddOtherExpense={() => setShowFinanceProvisionPanel("supplier")}
-                  commercialAdjustments={commercialAdjustments}
+                  onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
+                  onEditExpense={(event) => {
+                    const href = tripExpenseEntryEditRoute(trip.id, event.id);
+                    if (href) router.push(href as never);
+                  }}
+                  driverCashPayouts={driverCashPayoutsForExpenses}
+                  onRecordDriverPayment={
+                    trip.driver_id
+                      ? () =>
+                          pushTripLedgerQuickEntry(
+                            {
+                              trip,
+                              router,
+                              displayClientName: detail.displayClientName ?? null,
+                              clientIdFromContext: clientIdFromContext ?? null,
+                              clientNameFromContext: clientNameFromContext ?? null,
+                              partnerName: detail.partnerName ?? null,
+                              driverDisplayName: detail.driverName ?? null,
+                              ledgerSyncExtraParams: {
+                                dueAmountOut:
+                                  driverReimbursementDueInr > 0
+                                    ? String(
+                                        Math.round(driverReimbursementDueInr),
+                                      )
+                                    : undefined,
+                              },
+                            },
+                            "driver",
+                          )
+                      : undefined
+                  }
                 />
               </View>
-            ) : activeTab === "docs" ? (
+              </PersistentTabPanel>
+            ) : null}
+            <PersistentTabPanel active={activeTab === "docs"}>
               <View style={styles.refVaultWrap}>
                 <View style={styles.refVaultHeader}>
                   <View style={styles.refVaultHeaderIcon}>
-                    <Feather name="shield" size={20} color="#4f46e5" />
+                    <Feather name="shield" size={16} color="#4f46e5" />
                   </View>
                   <View>
                     <Text style={styles.refVaultTitle}>Asset Vault</Text>
@@ -2513,7 +3010,12 @@ export default function TripDetailScreen({
                     </Text>
                   </View>
                 </View>
-                <View style={styles.refVaultGrid}>
+                <View
+                  style={[
+                    styles.refVaultGrid,
+                    vaultDocs.length <= 3 && styles.refVaultGridThreeCol,
+                  ]}
+                >
                   {vaultDocs.map((doc) => {
                     const tone =
                       (doc.status as string) === "Missing"
@@ -2534,26 +3036,64 @@ export default function TripDetailScreen({
                       isPending && canUploadTripDocs
                         ? "upload"
                         : "external-link";
+                    const statusChipStyle =
+                      tone === "critical"
+                        ? styles.refVaultStatusCritical
+                        : tone === "pending"
+                          ? styles.refVaultStatusPending
+                          : styles.refVaultStatusOk;
                     return (
-                      <View key={doc.id} style={styles.refVaultCard}>
-                        <Feather
-                          name={
-                            tone === "critical" ? "alert-triangle" : "file-text"
-                          }
-                          size={18}
-                          color={tone === "critical" ? "#fb7185" : "#94a3b8"}
-                        />
-                        <Text
-                          style={styles.refVaultCardTitle}
-                          numberOfLines={2}
-                        >
-                          {doc.label}
-                        </Text>
-                        <Text style={styles.refVaultCardStatus}>
-                          {doc.status}
-                        </Text>
+                      <View
+                        key={doc.id}
+                        style={[
+                          styles.refVaultCard,
+                          vaultDocs.length <= 3 && styles.refVaultCardThird,
+                        ]}
+                      >
+                        <View style={styles.refVaultCardContent}>
+                          <View
+                            style={[
+                              styles.refVaultCardIconWrap,
+                              tone === "critical" && styles.refVaultCardIconCritical,
+                              tone === "ok" && styles.refVaultCardIconOk,
+                            ]}
+                          >
+                            <Feather
+                              name={
+                                tone === "critical" ? "alert-triangle" : "file-text"
+                              }
+                              size={13}
+                              color={
+                                tone === "critical"
+                                  ? "#e11d48"
+                                  : tone === "ok"
+                                    ? "#059669"
+                                    : "#64748b"
+                              }
+                            />
+                          </View>
+                          <Text
+                            style={styles.refVaultCardTitle}
+                            numberOfLines={2}
+                          >
+                            {doc.label}
+                          </Text>
+                          <View style={[styles.refVaultStatusChip, statusChipStyle]}>
+                            <Text
+                              style={styles.refVaultCardStatus}
+                              numberOfLines={1}
+                            >
+                              {doc.status}
+                            </Text>
+                          </View>
+                        </View>
                         <TouchableOpacity
-                          style={styles.refVaultViewBtn}
+                          style={[
+                            styles.refVaultViewBtn,
+                            isPending &&
+                              canUploadTripDocs &&
+                              styles.refVaultViewBtnPrimary,
+                          ]}
                           onPress={() => handleVaultCardPress(doc)}
                           activeOpacity={0.85}
                           disabled={isUploadingThis}
@@ -2564,10 +3104,21 @@ export default function TripDetailScreen({
                             <>
                               <Feather
                                 name={refBtnIcon}
-                                size={12}
-                                color="#64748b"
+                                size={11}
+                                color={
+                                  isPending && canUploadTripDocs
+                                    ? "#4f46e5"
+                                    : "#64748b"
+                                }
                               />
-                              <Text style={styles.refVaultViewText}>
+                              <Text
+                                style={[
+                                  styles.refVaultViewText,
+                                  isPending &&
+                                    canUploadTripDocs &&
+                                    styles.refVaultViewTextPrimary,
+                                ]}
+                              >
                                 {refBtnLabel}
                               </Text>
                             </>
@@ -2578,7 +3129,7 @@ export default function TripDetailScreen({
                   })}
                 </View>
               </View>
-            ) : null}
+            </PersistentTabPanel>
           </>
         ) : null}
 
@@ -2593,7 +3144,7 @@ export default function TripDetailScreen({
                       <PartyAvatar
                         name={clientNameForParty}
                         entityType="client"
-                        size={34}
+                        size={MANIFEST_HERO_AVATAR_DESKTOP}
                         organizationImageUrl={
                           detail.clientPartyAvatarFields
                             ?.organizationImageUrl ?? undefined
@@ -2612,7 +3163,11 @@ export default function TripDetailScreen({
                       />
                       <View style={neoStyles.heroPartyText}>
                         <Text style={neoStyles.heroKicker}>CLIENT</Text>
-                        <Text style={neoStyles.heroPartyName} numberOfLines={1}>
+                        <Text
+                          style={neoStyles.heroPartyName}
+                          numberOfLines={2}
+                          ellipsizeMode="tail"
+                        >
                           {clientNameCard}
                         </Text>
                       </View>
@@ -2620,41 +3175,40 @@ export default function TripDetailScreen({
                     <View style={neoStyles.swapIcon}>
                       <FontAwesome name="exchange" size={11} color="#64748b" />
                     </View>
-                    <View
-                      style={[neoStyles.heroParty, neoStyles.heroPartyRight]}
-                    >
-                      <View style={neoStyles.heroPartyTextRight}>
-                        <Text
-                          style={[neoStyles.heroKicker, neoStyles.alignRight]}
-                        >
-                          SUPPLIER
-                        </Text>
-                        <Text style={neoStyles.heroPartyName} numberOfLines={1}>
-                          {supplierName}
-                        </Text>
-                      </View>
-                      <PartyAvatar
-                        name={supplierNameForParty}
+                    {showManifestHeroDriver ? (
+                      <NeoManifestHeroBridgePartyEnd
+                        roleLabel="DRIVER"
+                        partyName={allocatedDriverName}
+                        entityType="driver"
+                        avatarSize={MANIFEST_HERO_AVATAR_DESKTOP}
+                        avatarUrl={detail.driverAvatarUri}
+                        avatarSeed={trip.driver_id}
+                        vehicleLabel={allocatedVehicleLabel}
+                        vehicleId={trip.vehicle_id}
+                        styles={neoStyles}
+                        partyStyles={manifestHeroBridgePartyStyles}
+                      />
+                    ) : (
+                      <NeoManifestHeroBridgePartyEnd
+                        roleLabel="SUPPLIER"
+                        partyName={supplierName}
                         entityType="supplier"
-                        size={34}
+                        avatarSize={MANIFEST_HERO_AVATAR_DESKTOP}
+                        avatarUrl={detail.supplierPartyAvatarFields?.avatarUrl}
+                        avatarSeed={
+                          detail.supplierPartyAvatarFields?.avatarSeed
+                        }
                         organizationImageUrl={
-                          detail.supplierPartyAvatarFields
-                            ?.organizationImageUrl ?? undefined
+                          detail.supplierPartyAvatarFields?.organizationImageUrl
                         }
                         organizationAvatarSeed={
                           detail.supplierPartyAvatarFields
-                            ?.organizationAvatarSeed ?? undefined
+                            ?.organizationAvatarSeed
                         }
-                        avatarUrl={
-                          detail.supplierPartyAvatarFields?.avatarUrl ??
-                          undefined
-                        }
-                        avatarSeed={
-                          detail.supplierPartyAvatarFields?.avatarSeed ??
-                          undefined
-                        }
+                        styles={neoStyles}
+                        partyStyles={manifestHeroBridgePartyStyles}
                       />
-                    </View>
+                    )}
                   </View>
 
                   <View style={neoStyles.routeHeroRow}>
@@ -2710,7 +3264,7 @@ export default function TripDetailScreen({
                         ETE Manifest
                       </Text>
                       <Text style={neoStyles.heroMetricValue}>
-                        {durationLabel}
+                        {manifestEteLabel}
                       </Text>
                     </View>
                     <View style={neoStyles.heroMetricDivider} />
@@ -2729,28 +3283,34 @@ export default function TripDetailScreen({
                 </View>
 
                 <View style={neoStyles.tabShell}>
-                  {[
-                    {
-                      id: "trip" as const,
-                      label: "Journey Log",
-                      icon: "activity" as const,
-                    },
-                    {
-                      id: "finance" as const,
-                      label: "Finance Hub",
-                      icon: "credit-card" as const,
-                    },
-                    {
-                      id: "expenses" as const,
-                      label: expenseHubLabel,
-                      icon: "dollar-sign" as const,
-                    },
-                    {
-                      id: "docs" as const,
-                      label: "Asset Vault",
-                      icon: "shield" as const,
-                    },
-                  ].map((tab) => {
+                  {(
+                    [
+                      {
+                        id: "trip" as const,
+                        label: "Journey Log",
+                        icon: "activity" as const,
+                      },
+                      {
+                        id: "finance" as const,
+                        label: "Finance Hub",
+                        icon: "credit-card" as const,
+                      },
+                      ...(!isAggregate
+                        ? [
+                            {
+                              id: "expenses" as const,
+                              label: expenseHubLabel,
+                              icon: "dollar-sign" as const,
+                            },
+                          ]
+                        : []),
+                      {
+                        id: "docs" as const,
+                        label: "Asset Vault",
+                        icon: "shield" as const,
+                      },
+                    ] as const
+                  ).map((tab) => {
                     const active = activeTab === tab.id;
                     return (
                       <TouchableOpacity
@@ -2805,31 +3365,22 @@ export default function TripDetailScreen({
                           </TouchableOpacity>
                         ) : null}
                       </View>
-                      {journeyLogs.map((log, index) => {
+                      {visibleJourneyLogs.map((log, index) => {
                         const expanded = expandedLog === index;
-                        const isLast = index === journeyLogs.length - 1;
-                        const isPending = index > currentStepIndex;
+                        const isLast = index === visibleJourneyLogs.length - 1;
                         const isCurrent =
-                          index === currentStepIndex &&
-                          currentStepIndex < manifestPulseLastIndex;
-                        const phase: "completed" | "current" | "pending" =
-                          isPending
-                            ? "pending"
-                            : isCurrent
-                              ? "current"
-                              : "completed";
-                        // Find simulation log entries for this step (indices align with Manifest Pulse rows)
-                        const stepStatusMap: Record<number, string[]> = {
-                          2: ["in_progress", "picked_up"],
-                          3: ["in_transit"],
-                          4: ["at_drop", "completed", "delivered", "done"],
-                        };
-                        const stepSimLogs = simLogEntries.filter((e) =>
-                          (stepStatusMap[index] ?? []).includes(e.status),
+                          !manifestJourneyComplete && isLast;
+                        const phase: "completed" | "current" | "pending" = isCurrent
+                          ? "current"
+                          : "completed";
+                        const stepIndex = manifestStepIndexForLog(log.stepKey);
+                        const stepSimLogs = manifestSimLogsForStepIndex(
+                          stepIndex,
+                          simLogEntries,
                         );
                         return (
                           <View
-                            key={`${log.status}-${index}`}
+                            key={`${log.stepKey}-${index}`}
                             style={[
                               neoStyles.timelineItemWrap,
                               !isLast && neoStyles.timelineItemWrapSpaced,
@@ -2839,9 +3390,7 @@ export default function TripDetailScreen({
                               <View
                                 style={[
                                   neoStyles.timelineConnector,
-                                  index < currentStepIndex && {
-                                    backgroundColor: "#40B876",
-                                  },
+                                  { backgroundColor: "#40B876" },
                                 ]}
                               />
                             ) : null}
@@ -2860,41 +3409,33 @@ export default function TripDetailScreen({
                               </View>
                               <View style={neoStyles.timelineBody}>
                                 <View style={neoStyles.timelineTop}>
-                                  <Text
-                                    style={[
-                                      neoStyles.timelineStatus,
-                                      isPending &&
-                                        neoStyles.manifestPulseTitlePending,
-                                    ]}
-                                  >
+                                  <Text style={neoStyles.timelineStatus}>
                                     {log.status}
                                   </Text>
-                                  <Text
-                                    style={[
-                                      neoStyles.timelineTime,
-                                      isPending &&
-                                        neoStyles.manifestPulseTimePending,
-                                    ]}
-                                  >
+                                  <Text style={neoStyles.timelineTime}>
                                     {log.time}
                                   </Text>
                                 </View>
                                 <Text
-                                  style={[
-                                    neoStyles.timelineLocation,
-                                    isPending &&
-                                      neoStyles.manifestPulseSubtitlePending,
-                                  ]}
-                                  numberOfLines={1}
+                                  style={neoStyles.timelineLocation}
+                                  numberOfLines={expanded ? undefined : 2}
                                 >
                                   {log.location}
                                 </Text>
+                                {log.locationCoords ? (
+                                  <Text
+                                    style={neoStyles.timelineLocationCoords}
+                                    numberOfLines={expanded ? undefined : 2}
+                                  >
+                                    {log.locationCoords}
+                                  </Text>
+                                ) : null}
                                 {expanded ? (
                                   <Text style={neoStyles.timelineDetails}>
                                     {log.details}
                                   </Text>
                                 ) : null}
-                                {expanded && index === 3 ? (
+                                {expanded && stepIndex === 3 ? (
                                   <ManifestDriverPingList pings={manifestDriverPings} />
                                 ) : null}
                                 {/* Business simulation log badges */}
@@ -3043,38 +3584,40 @@ export default function TripDetailScreen({
                           destCoords={
                             detail.trackingMapDestinationCoordinate ?? undefined
                           }
-                          truckLocation={
-                            detail.tripCompleted
-                              ? undefined
-                              : (detail.driverLocation ?? undefined)
-                          }
-                          dbLocationTrail={detail.trackingTrail ?? detail.tripLocationPoints}
-                          truckStatus={
-                            detail.tripCompleted || !detail.driverLocation
-                              ? null
-                              : {
-                                  truckNo: allocatedVehicleLabel,
-                                  speed: 0,
-                                  ignitionStatus: false,
-                                  location:
-                                    detail.driverLocationAddress?.trim() ||
-                                    undefined,
-                                  lastUpdated:
-                                    detail.driverLocation.recorded_at,
-                                }
-                          }
+                          truckLocation={mapTruckLocation}
+                          dbLocationTrail={mapDbLocationTrail}
+                          truckStatus={mapTruckStatus}
                           height="100%"
                           onDistanceCalculated={setMapRouteDistanceKm}
                           tripId={trip.id}
                           trackingEnabled={trackingState?.broadcastActive ?? false}
                         />
+                        {showDriverTrackingOfflineOverlay ? (
+                          <DriverTrackingOfflineOverlay
+                            variant="map"
+                            showReassign={detail.canAssign}
+                            onSendLoginReminder={detail.requestDriverPing}
+                            onReassignDriver={() => setShowReassignSheet(true)}
+                          />
+                        ) : null}
                       </View>
-                      <View style={neoStyles.radarLive} pointerEvents="none">
-                        <View style={neoStyles.radarLiveDot} />
-                        <Text style={neoStyles.radarLiveText}>
-                          Live Telemetry
-                        </Text>
-                      </View>
+                      {trackingState?.broadcastActive ? (
+                        <View style={neoStyles.radarLive} pointerEvents="none">
+                          <View style={neoStyles.radarLiveDot} />
+                          <Text style={neoStyles.radarLiveText}>
+                            Live Telemetry
+                          </Text>
+                        </View>
+                      ) : journeyTrackingActive ? (
+                        <View
+                          style={[neoStyles.radarLive, neoStyles.radarHistory]}
+                          pointerEvents="none"
+                        >
+                          <Text style={neoStyles.radarHistoryText}>
+                            Route history
+                          </Text>
+                        </View>
+                      ) : null}
                       {(trackingState?.broadcastActive ?? false) ? (
                         <TouchableOpacity
                           style={[
@@ -3107,7 +3650,7 @@ export default function TripDetailScreen({
                           </Text>
                         </TouchableOpacity>
                       ) : null}
-                      {isTripTrackingActive(trip?.status, trip?.completed_at) ? (
+                      {journeyTrackingActive ? (
                         <TouchableOpacity
                           style={neoStyles.radarLiveTrackBtn}
                           onPress={() => detail.setShowTrackingModal(true)}
@@ -3119,36 +3662,41 @@ export default function TripDetailScreen({
                           </Text>
                         </TouchableOpacity>
                       ) : null}
-                      <View style={neoStyles.radarBottom} pointerEvents="box-none">
+                      <View
+                        style={[
+                          neoStyles.radarBottom,
+                          isMobile && neoStyles.radarBottomMobile,
+                        ]}
+                        pointerEvents="box-none"
+                      >
                         <View style={neoStyles.radarBottomLeft}>
                           <Text style={neoStyles.radarMetaLabel}>
-                            Active Node
+                            Driver location
                           </Text>
                           <Text
                             style={neoStyles.radarMetaValue}
                             numberOfLines={2}
                           >
-                            {detail.driverLocationAddress?.trim() ||
-                              (detail.driverLocation
-                                ? "Live driver location"
-                                : statusLabel)}
+                            {driverLastPingDisplay.locationLabel?.trim() ||
+                              driverLastPingDisplay.cityLabel?.trim() ||
+                              "—"}
                           </Text>
                         </View>
                         <View style={neoStyles.radarBottomRight}>
                           <Text style={neoStyles.radarMetaLabel}>
-                            {(trackingState?.lastPingRespondedAt ?? null)
+                            {driverLastPingDisplay.recordedAtLabel
                               ? "Last ping"
                               : "Distance / ETA"}
                           </Text>
-                          {(trackingState?.lastPingRespondedAt ?? null) ? (
-                            <Text style={neoStyles.radarSpeed}>
-                              {trackingState?.lastSeenLabel ?? ""}
+                          {driverLastPingDisplay.recordedAtLabel ? (
+                            <Text style={neoStyles.radarMetaTime}>
+                              {driverLastPingDisplay.recordedAtLabel}
                             </Text>
                           ) : (
                             <Text style={neoStyles.radarSpeed}>
                               {resolvedDistanceLabel ?? "Calculating"}{" "}
                               <Text style={neoStyles.radarSpeedUnit}>
-                                · ETA {trackingEtaLabel}
+                                · ETA {manifestEteLabel}
                               </Text>
                             </Text>
                           )}
@@ -3525,8 +4073,37 @@ export default function TripDetailScreen({
                       embedded
                       onAddFuel={() => router.push(ROUTES.tripFuelEntry(trip.id) as never)}
                       onAddToll={() => router.push(ROUTES.tripTollEntry(trip.id) as never)}
-                      onAddOtherExpense={() => setShowFinanceProvisionPanel("supplier")}
-                      commercialAdjustments={commercialAdjustments}
+                      onAddOtherExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)}
+                      onEditExpense={(event) => {
+                        const href = tripExpenseEntryEditRoute(trip.id, event.id);
+                        if (href) router.push(href as never);
+                      }}
+                      driverCashPayouts={driverCashPayoutsForExpenses}
+                      onRecordDriverPayment={
+                        trip.driver_id
+                          ? () =>
+                              pushTripLedgerQuickEntry(
+                                {
+                                  trip,
+                                  router,
+                                  displayClientName: detail.displayClientName ?? null,
+                                  clientIdFromContext: clientIdFromContext ?? null,
+                                  clientNameFromContext: clientNameFromContext ?? null,
+                                  partnerName: detail.partnerName ?? null,
+                                  driverDisplayName: detail.driverName ?? null,
+                                  ledgerSyncExtraParams: {
+                                    dueAmountOut:
+                                      driverReimbursementDueInr > 0
+                                        ? String(
+                                            Math.round(driverReimbursementDueInr),
+                                          )
+                                        : undefined,
+                                  },
+                                },
+                                "driver",
+                              )
+                          : undefined
+                      }
                     />
                   </View>
                 ) : (
@@ -3602,54 +4179,33 @@ export default function TripDetailScreen({
                         Manifest Assets
                       </Text>
                     </View>
-                    <View style={neoStyles.assetCard}>
-                      <View style={neoStyles.assetLeft}>
-                        <View style={neoStyles.assetIcon}>
-                          <Feather name="user" size={18} color="#4f46e5" />
-                        </View>
-                        <View>
-                          <Text style={neoStyles.assetLabel}>Pilot Node</Text>
-                          <Text style={neoStyles.assetValue} numberOfLines={1}>
-                            {allocatedDriverName}
-                          </Text>
-                        </View>
-                      </View>
-                      {canChangeManifestAssets ? (
-                        <TouchableOpacity
-                          onPress={() => openAssignmentFlow("driver")}
-                          style={neoStyles.assetChangeBtn}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={neoStyles.assetChangeText}>Change</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                    <View style={neoStyles.assetCard}>
-                      <View style={neoStyles.assetLeft}>
-                        <View
-                          style={[neoStyles.assetIcon, neoStyles.assetIconDark]}
-                        >
-                          <Feather name="truck" size={18} color="#fff" />
-                        </View>
-                        <View>
-                          <Text style={neoStyles.assetLabel}>
-                            Vehicle Asset
-                          </Text>
-                          <Text style={neoStyles.assetValue} numberOfLines={1}>
-                            {allocatedVehicleLabel}
-                          </Text>
-                        </View>
-                      </View>
-                      {canChangeManifestAssets ? (
-                        <TouchableOpacity
-                          onPress={() => openAssignmentFlow("vehicle")}
-                          style={neoStyles.assetChangeBtn}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={neoStyles.assetChangeText}>Change</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
+                    <ManifestRefAssetCard
+                      desktop
+                      roleLabel="Driver"
+                      primaryText={allocatedDriverName}
+                      variant="driver"
+                      ratingAvg={manifestDriverInsights.ratingAvg}
+                      docsIssue={manifestDriverInsights.docsIssue}
+                      insightsLoading={manifestRefAssetInsights.isLoading}
+                      driverName={detail.driverName}
+                      driverAvatarUrl={detail.driverAvatarUri}
+                      driverId={trip.driver_id}
+                showChange={canChangeManifestAssets}
+                      onChange={() => openAssignmentFlow("driver")}
+                      style={neoStyles.assetCardWrap}
+                    />
+                    <ManifestRefAssetCard
+                      desktop
+                      roleLabel="Vehicle"
+                      primaryText={allocatedVehicleLabel}
+                      variant="vehicle"
+                      vehicleType={vehicleTypeLabel}
+                      docsIssue={manifestVehicleInsights.docsIssue}
+                      insightsLoading={manifestRefAssetInsights.isLoading}
+                      showChange={canChangeManifestAssets}
+                      onChange={() => openAssignmentFlow("vehicle")}
+                      style={neoStyles.assetCardWrap}
+                    />
                   </View>
                 </View>
 
@@ -3663,6 +4219,8 @@ export default function TripDetailScreen({
                     clientName={
                       detail.displayClientName ?? trip.client_name ?? null
                     }
+                    clientPartyAvatarFields={detail.clientPartyAvatarFields}
+                    supplierPartyAvatarFields={detail.supplierPartyAvatarFields}
                     paymentCaptured={detail.tripLedgerEntries.some(
                       (row) =>
                         row.contact_type === "client" &&
@@ -3841,17 +4399,22 @@ export default function TripDetailScreen({
                     destCoords={
                       detail.trackingMapDestinationCoordinate ?? undefined
                     }
-                    truckLocation={
-                      detail.tripCompleted
-                        ? undefined
-                        : (detail.driverLocation ?? undefined)
-                    }
-                    dbLocationTrail={detail.trackingTrail ?? detail.tripLocationPoints}
+                    truckLocation={mapTruckLocation}
+                    dbLocationTrail={mapDbLocationTrail}
+                    truckStatus={mapTruckStatus}
                     height={mapHeight}
                     onDistanceCalculated={setMapRouteDistanceKm}
                     tripId={trip.id}
                     trackingEnabled={trackingState?.broadcastActive ?? false}
                   />
+                  {showDriverTrackingOfflineOverlay ? (
+                    <DriverTrackingOfflineOverlay
+                      variant="map"
+                      showReassign={detail.canAssign}
+                      onSendLoginReminder={detail.requestDriverPing}
+                      onReassignDriver={() => setShowReassignSheet(true)}
+                    />
+                  ) : null}
                 </View>
               </View>
 
@@ -4327,17 +4890,22 @@ export default function TripDetailScreen({
                           destCoords={
                             detail.trackingMapDestinationCoordinate ?? undefined
                           }
-                          truckLocation={
-                            detail.tripCompleted
-                              ? undefined
-                              : (detail.driverLocation ?? undefined)
-                          }
-                          dbLocationTrail={detail.trackingTrail ?? detail.tripLocationPoints}
+                          truckLocation={mapTruckLocation}
+                          dbLocationTrail={mapDbLocationTrail}
+                          truckStatus={mapTruckStatus}
                           height={520}
                           onDistanceCalculated={setMapRouteDistanceKm}
                           tripId={trip.id}
                           trackingEnabled={trackingState?.broadcastActive ?? false}
                         />
+                        {showDriverTrackingOfflineOverlay ? (
+                          <DriverTrackingOfflineOverlay
+                            variant="map"
+                            showReassign={detail.canAssign}
+                            onSendLoginReminder={detail.requestDriverPing}
+                            onReassignDriver={() => setShowReassignSheet(true)}
+                          />
+                        ) : null}
                         <View style={styles.telemetryOverlay}>
                           <FontAwesome
                             name="compass"
@@ -4448,6 +5016,8 @@ export default function TripDetailScreen({
                     clientName={
                       detail.displayClientName ?? trip.client_name ?? null
                     }
+                    clientPartyAvatarFields={detail.clientPartyAvatarFields}
+                    supplierPartyAvatarFields={detail.supplierPartyAvatarFields}
                     paymentCaptured={detail.tripLedgerEntries.some(
                       (row) =>
                         row.contact_type === "client" &&
@@ -4553,25 +5123,64 @@ export default function TripDetailScreen({
         side={showFinanceProvisionPanel}
         onClose={closeFinanceProvisionModal}
         onSave={detail.handleSaveAdjustment}
+        editTarget={provisionEditTarget}
+        onUpdate={detail.handleUpdateAdjustment}
         tripCode={getTripDisplayNumber(trip, currentOrganization?.id)}
         partyLabel={
           showFinanceProvisionPanel === "client"
             ? (detail.displayClientName ?? trip.client_name ?? "Client")
-            : (detail.partnerName ?? trip.supplier_name ?? "Supplier")
+            : isAssetTripFinance
+              ? provisionCostPartyName
+              : (detail.partnerName ?? trip.supplier_name ?? "Supplier")
         }
         clientName={clientNameForParty}
         clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
-        supplierName={supplierNameForParty}
-        supplierAvatarSeed={trip.supplier_id ?? null}
+        supplierName={provisionCostPartyName}
+        supplierAvatarSeed={
+          isAssetTripFinance ? (trip.driver_id ?? null) : (trip.supplier_id ?? null)
+        }
         sales={sales}
         adjSales={adjSales}
         cost={cost}
         adjCost={adjCost}
         revenueSideDelta={revenueSideDelta}
         costSideDelta={costSideDelta}
+        isAssetExecution={isAssetTripFinance}
+        costLaneLabel={isAssetTripFinance ? "Revised trip cost" : undefined}
+        costBreakdownLines={assetCostBreakdownLines}
         adjustments={detail.adjustments}
         lineMetaLabel={provisionLineMetaLabel}
+        onRequestDeduction={handleRequestCostDeduction}
       />
+
+      <ProvisionDeductionConfirmModal
+        visible={pendingCostDeduction !== null}
+        recommendation={pendingCostDeduction}
+        isAssetExecution={isAssetTripFinance}
+        costPartyName={provisionCostPartyName}
+        adjCost={adjCost}
+        submitting={costDeductionSubmitting}
+        onCancel={() => {
+          if (!costDeductionSubmitting) setPendingCostDeduction(null);
+        }}
+        onConfirm={() => void handleConfirmCostDeduction()}
+      />
+
+      <ProvisionNotePdfModal
+        visible={provisionNotePdfContext !== null}
+        context={provisionNotePdfContext}
+        onClose={() => setProvisionNotePdfContext(null)}
+        onEdit={
+          provisionNotePdfContext &&
+          !isAdjustmentVoided(provisionNotePdfContext.adjustment)
+            ? (adj) => {
+                setProvisionNotePdfContext(null);
+                openProvisionEdit(adj);
+              }
+            : undefined
+        }
+      />
+
       {!useCompactAdjustmentWizard ? (
         <TripAdjustmentModal
           visible={detail.showAdjustmentModal}
@@ -5022,12 +5631,24 @@ export default function TripDetailScreen({
         visible={detail.showTrackingModal ?? false}
         onClose={() => detail.setShowTrackingModal(false)}
         trip={trip}
+        isDriverOffline={showDriverTrackingOfflineOverlay}
+        onSendLoginReminder={detail.requestDriverPing}
+        onReassignDriver={() => {
+          detail.setShowTrackingModal(false);
+          setShowReassignSheet(true);
+        }}
+        isClientIndentView={entryContext === "client"}
         trackingState={trackingState ?? defaultTrackingState}
         vehicleLabel={detail.vehicleLabel}
         locationLabels={detail.trackingMapLocationLabels}
         originCoordinate={detail.trackingMapOriginCoordinate}
         destinationCoordinate={detail.trackingMapDestinationCoordinate}
-        tripLocationPoints={detail.tripLocationPoints}
+        tripLocationPoints={mapDbLocationTrail}
+        mapTruckLocation={mapTruckLocation ?? null}
+        mapDbLocationTrail={mapDbLocationTrail}
+        mapTruckStatus={mapTruckStatus}
+        trackingBroadcastActive={trackingState?.broadcastActive ?? false}
+        lastPingRecordedAt={driverLastPingRecordedAt}
         locationAddress={detail.driverLocationAddress}
         driverActivityTimelineRows={detail.driverActivityTimelineRows}
         expandedTimelineEntryIds={detail.expandedTimelineEntryIds}
@@ -5035,7 +5656,14 @@ export default function TripDetailScreen({
         assignmentDriverNames={detail.assignmentDriverNames}
         assignmentVehicleLabels={detail.assignmentVehicleLabels}
         driverName={detail.driverName}
+        driverPhone={detail.driverPhone}
         currentUserId={detail.currentUserId}
+        routeEtaSeconds={manifestRouteEtaSeconds}
+        mapRouteDistanceKm={mapRouteDistanceKm}
+        deliveryPlan={liveTrackingDeliveryPlan}
+        displayClientName={
+          detail.displayClientName ?? trip.client_name ?? null
+        }
       />
     </View>
   );
@@ -6194,7 +6822,7 @@ const neoStyles = StyleSheet.create({
   },
   heroBridge: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 14,
     paddingBottom: 18,
@@ -6206,11 +6834,35 @@ const neoStyles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
   },
   heroPartyRight: {
     justifyContent: "flex-end",
+  },
+  heroPartyColEnd: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 6,
+    maxWidth: "46%",
+    minWidth: 0,
+  },
+  heroDriverAvatarStack: {
+    position: "relative",
+    width: MANIFEST_HERO_AVATAR_DESKTOP + 6,
+    height: MANIFEST_HERO_AVATAR_DESKTOP + 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroVehicleBadge: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    borderWidth: 1.5,
+    borderColor: "#0f172a",
+    borderRadius: 999,
+    backgroundColor: "#1e293b",
+    overflow: "hidden",
   },
   heroPartyIcon: {
     width: 34,
@@ -6510,6 +7162,14 @@ const neoStyles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "600",
   },
+  timelineLocationCoords: {
+    color: "#94a3b8",
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: "500",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+  },
   manifestPulseSubtitlePending: {
     color: "#CBD5E1",
   },
@@ -6748,6 +7408,17 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.4,
   },
+  radarHistory: {
+    backgroundColor: "rgba(99,102,241,0.12)",
+    borderColor: "rgba(99,102,241,0.25)",
+  },
+  radarHistoryText: {
+    color: "#a5b4fc",
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
   radarRouteLine: {
     position: "absolute",
     left: "18%",
@@ -6853,14 +7524,19 @@ const neoStyles = StyleSheet.create({
     bottom: 16,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 16,
+    alignItems: "flex-start",
+    gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 18,
     backgroundColor: "rgba(15, 23, 42, 0.88)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
+  },
+  radarBottomMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 10,
   },
   radarBottomRight: {
     alignItems: "flex-end",
@@ -6870,6 +7546,20 @@ const neoStyles = StyleSheet.create({
   radarBottomLeft: {
     flex: 1,
     minWidth: 0,
+    gap: 4,
+  },
+  radarMetaCoords: {
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "600",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    lineHeight: 14,
+  },
+  radarMetaTime: {
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "right",
   },
   radarMetaLabel: {
     color: "#64748b",
@@ -7508,6 +8198,38 @@ const neoStyles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     lineHeight: 12,
+  },
+  capturePaymentDueFooter: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e2e8f0",
+    gap: 8,
+  },
+  capturePaymentDueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  capturePaymentDueLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+    letterSpacing: 0.2,
+  },
+  capturePaymentDueValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  capturePaymentDueValueDue: {
+    color: Theme.primary,
+  },
+  capturePaymentDueValueSettled: {
+    color: "#64748b",
+    fontWeight: "700",
+    fontSize: 12,
   },
   adjustmentLedgerCard: {
     borderRadius: 22,
@@ -8155,13 +8877,13 @@ const neoStyles = StyleSheet.create({
   },
   vaultGrid: {
     backgroundColor: "rgba(248,250,252,0.8)",
-    borderRadius: 38,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#f1f5f9",
-    padding: 24,
+    borderColor: "#e6edf5",
+    padding: 10,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 14,
+    gap: 8,
   },
   vaultCard: {
     flexGrow: 0,
@@ -8169,42 +8891,42 @@ const neoStyles = StyleSheet.create({
     flexBasis: "31.8%",
     minWidth: 0,
     backgroundColor: "#fff",
-    borderRadius: 28,
-    padding: 24,
+    borderRadius: 14,
+    padding: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#fff",
+    borderColor: "#e6edf5",
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.04,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
   },
   vaultTitle: {
-    marginTop: 14,
+    marginTop: 8,
     color: "#0f172a",
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 9,
+    fontWeight: "800",
     textTransform: "uppercase",
     textAlign: "center",
-    letterSpacing: 1.3,
+    letterSpacing: 0.8,
   },
   vaultSub: {
-    marginTop: 7,
-    color: "#cbd5e1",
-    fontSize: 8.5,
-    fontWeight: "900",
+    marginTop: 4,
+    color: "#94a3b8",
+    fontSize: 8,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.6,
+    letterSpacing: 0.8,
   },
   vaultBtn: {
-    marginTop: 18,
+    marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    borderRadius: 13,
+    gap: 6,
+    borderRadius: 10,
     backgroundColor: "#0f172a",
-    paddingHorizontal: 18,
-    paddingVertical: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   vaultBtnUpload: {
     backgroundColor: "#4f46e5",
@@ -8251,6 +8973,9 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 3.2,
   },
+  assetCardWrap: {
+    marginBottom: 8,
+  },
   assetCard: {
     borderRadius: 28,
     backgroundColor: "rgba(248,250,252,0.72)",
@@ -8268,6 +8993,11 @@ const neoStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  assetTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
   assetIcon: {
     width: 42,
@@ -8296,7 +9026,12 @@ const neoStyles = StyleSheet.create({
     color: "#0f172a",
     fontSize: 13,
     fontWeight: "900",
-    maxWidth: 145,
+  },
+  assetSubtle: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "600",
   },
   assetChangeBtn: {
     borderRadius: 13,
@@ -8377,32 +9112,11 @@ const neoStyles = StyleSheet.create({
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  refTrackWrap: { gap: 14 },
-  refLiveTrackBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 48,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: DS_CARD,
-    borderWidth: 0.5,
-    borderColor: DS_BORDER,
-    borderRadius: 16,
-  },
-  refLiveTrackBannerIcon: {
-    marginRight: 10,
-  },
-  refLiveTrackBannerLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "500",
-    color: DS_TEXT,
-  },
   refHeroBridgeRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 4,
     marginBottom: 10,
     paddingBottom: 10,
     borderBottomWidth: 1,
@@ -8411,16 +9125,37 @@ const styles = StyleSheet.create({
   refHeroBridgeCol: {
     flex: 1,
     minWidth: 0,
+    maxWidth: "46%",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+  refHeroBridgeTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  refHeroBridgeTextColEnd: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-end",
+  },
+  refHeroBridgeSwap: {
+    flexShrink: 0,
+    width: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+  },
   refHeroBridgeColRight: {
     justifyContent: "flex-end",
   },
+  refHeroBridgeAvatarCol: {
+    alignItems: "center",
+    flexShrink: 0,
+  },
   refHeroBridgeIconWrap: {
-    width: 28,
-    height: 28,
+    width: MANIFEST_HERO_AVATAR_MOBILE + 4,
+    height: MANIFEST_HERO_AVATAR_MOBILE + 4,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -8441,6 +9176,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#fff",
     textTransform: "uppercase",
+    alignSelf: "stretch",
+  },
+  refHeroBridgeValueRight: {
+    textAlign: "right",
   },
   refHeroRouteRow: {
     flexDirection: "row",
@@ -8502,75 +9241,83 @@ const styles = StyleSheet.create({
   },
   refAssetRow: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "stretch",
+    gap: 6,
     marginTop: 0,
     marginBottom: 10,
   },
   refAssetCard: {
     flex: 1,
-    borderRadius: 18,
+    minWidth: 0,
+    minHeight: 96,
+    borderRadius: 16,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#eef2f7",
-    paddingVertical: 11,
+    paddingTop: 10,
+    paddingBottom: 10,
     paddingHorizontal: 10,
+    gap: 3,
   },
   refAssetHead: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-    minHeight: 0,
-    gap: 4,
-  },
-  refAssetBody: {
-    alignSelf: "stretch",
-    width: "100%",
+    marginBottom: 6,
+    minHeight: 30,
   },
   refAssetIconWrap: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#eef2ff",
+    flexShrink: 0,
   },
   refAssetIconWrapDark: {
     backgroundColor: "#0f172a",
   },
   refAssetChangeBtn: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     backgroundColor: "#f8fafc",
+    flexShrink: 0,
+  },
+  refAssetChangeSpacer: {
+    width: 52,
+    height: 26,
+    flexShrink: 0,
   },
   refAssetChangeBtnText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
-    color: "#0f172a",
+    color: Theme.primary,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
   refAssetLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     color: "#94a3b8",
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 0.6,
   },
   refAssetValue: {
-    marginTop: 2,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     color: "#0f172a",
-    lineHeight: 16,
+    lineHeight: 17,
   },
   refAssetSubtle: {
-    marginTop: 4,
+    marginTop: 1,
     fontSize: 10,
-    fontWeight: "700",
-    color: "#94a3b8",
-    textTransform: "uppercase",
+    fontWeight: "600",
+    color: "#64748b",
+    lineHeight: 14,
   },
   refTabShell: {
     marginBottom: 8,
@@ -8609,26 +9356,26 @@ const styles = StyleSheet.create({
   refFinanceSubTabs: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 20,
-    paddingHorizontal: 8,
-    marginBottom: 8,
+    gap: 16,
+    paddingHorizontal: 4,
+    marginBottom: 6,
   },
   refFinanceSubBtn: {
-    paddingBottom: 8,
+    paddingBottom: 6,
   },
   refFinanceSubBtnText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
     color: "#94a3b8",
   },
   refFinanceSubBtnTextActive: {
     color: "#0f172a",
   },
   refFinanceSubLine: {
-    marginTop: 4,
-    height: 3,
+    marginTop: 3,
+    height: 2,
     borderRadius: 999,
     backgroundColor: "#6366f1",
   },
@@ -8711,12 +9458,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   refTxnRow: {
-    borderRadius: 26,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#eef2f7",
+    borderColor: "#e6edf5",
     backgroundColor: "#fff",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -8728,12 +9475,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   refTxnIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -8752,8 +9499,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   refTxnLabel: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "600",
     color: "#0f172a",
   },
   refTxnMeta: {
@@ -8765,8 +9512,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   refTxnAmount: {
-    fontSize: 14,
-    fontWeight: "900",
+    fontSize: 11,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
   refTxnAmountIn: {
     color: "#10b981",
@@ -8775,11 +9523,11 @@ const styles = StyleSheet.create({
     color: "#f43f5e",
   },
   refVaultWrap: {
-    borderRadius: 34,
+    borderRadius: 20,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#eef2f7",
-    padding: 18,
+    padding: 14,
     gap: 12,
   },
   refVaultHeader: {
@@ -8788,9 +9536,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   refVaultHeaderIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
@@ -8798,70 +9546,132 @@ const styles = StyleSheet.create({
     borderColor: "#eef2f7",
   },
   refVaultTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "900",
     color: "#0f172a",
+    letterSpacing: -0.2,
   },
   refVaultSub: {
-    marginTop: 1,
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 0.9,
-  },
-  refVaultGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  refVaultCard: {
-    width: "48.3%",
-    borderRadius: 24,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#eef2f7",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    alignItems: "flex-start",
-    gap: 5,
-  },
-  refVaultCardTitle: {
-    textAlign: "left",
-    alignSelf: "stretch",
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#0f172a",
-    textTransform: "uppercase",
-  },
-  refVaultCardStatus: {
-    alignSelf: "stretch",
-    textAlign: "left",
+    marginTop: 2,
     fontSize: 8,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#94a3b8",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  refVaultViewBtn: {
-    marginTop: 6,
-    alignSelf: "stretch",
-    borderRadius: 10,
+  refVaultGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "stretch",
+  },
+  refVaultGridThreeCol: {
+    flexWrap: "nowrap",
+  },
+  refVaultCard: {
+    width: "48%",
+    minWidth: 0,
+    minHeight: 104,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 7,
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  refVaultCardThird: {
+    width: undefined,
+    flex: 1,
+    minWidth: 0,
+  },
+  refVaultCardContent: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+    gap: 4,
+  },
+  refVaultCardIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: "#eef2f7",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderColor: "#e6edf5",
+    flexShrink: 0,
+  },
+  refVaultCardIconCritical: {
+    backgroundColor: "#fff1f2",
+    borderColor: "#fecdd3",
+  },
+  refVaultCardIconOk: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#bbf7d0",
+  },
+  refVaultCardTitle: {
+    width: "100%",
+    fontSize: 8,
+    fontWeight: "600",
+    color: "#334155",
+    lineHeight: 11,
+  },
+  refVaultStatusChip: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    borderRadius: 999,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  refVaultStatusPending: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  refVaultStatusCritical: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecdd3",
+  },
+  refVaultStatusOk: {
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+  refVaultCardStatus: {
+    fontSize: 7,
+    fontWeight: "500",
+    color: "#64748b",
+    lineHeight: 10,
+  },
+  refVaultViewBtn: {
+    alignSelf: "stretch",
+    borderRadius: 8,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e6edf5",
+    paddingHorizontal: 6,
+    paddingVertical: 5,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
+    minHeight: 26,
+  },
+  refVaultViewBtnPrimary: {
+    backgroundColor: "#eef2ff",
+    borderColor: "#c7d2fe",
   },
   refVaultViewText: {
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 7,
+    fontWeight: "600",
     color: "#64748b",
-    textTransform: "uppercase",
+  },
+  refVaultViewTextPrimary: {
+    color: "#4f46e5",
   },
   refHeroCard: {
     marginBottom: 12,
@@ -9116,8 +9926,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   refFeedbackWrap: {
-    marginTop: 10,
-    borderRadius: 14,
+    marginTop: 8,
+    borderRadius: 12,
     overflow: "hidden",
   },
   assignModalBackdrop: {
@@ -9434,6 +10244,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 14,
   },
+  refTimelineCoords: {
+    marginTop: 2,
+    fontSize: 9,
+    color: "#94a3b8",
+    fontWeight: "500",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0.2,
+  },
   refTimelineDetails: {
     marginTop: 8,
     fontSize: 10,
@@ -9523,11 +10341,53 @@ const styles = StyleSheet.create({
   },
   refFinanceWrap: { gap: 8 },
   refFinanceManifestHero: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     overflow: "hidden",
     alignItems: "stretch",
-    borderRadius: 24,
+    borderRadius: 14,
+    borderColor: "#e6edf5",
+  },
+  refFinanceManifestHeroLoss: {
+    borderColor: "rgba(220,38,38,0.25)",
+    backgroundColor: Theme.negativeMuted,
+  },
+  refFinanceMarginLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#94a3b8",
+    textAlign: "center",
+  },
+  refFinanceMarginValue: {
+    marginTop: 3,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
+    letterSpacing: -0.2,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+    lineHeight: 22,
+  },
+  refFinanceMarginValueLoss: {
+    marginTop: 4,
+    fontSize: 26,
+    fontWeight: "900",
+    color: Theme.negative,
+    letterSpacing: -0.5,
+    lineHeight: 30,
+  },
+  refFinanceMarginValueGain: {
+    color: Theme.positive,
+  },
+  refFinanceMarginHint: {
+    marginTop: 3,
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 11,
   },
   refManifestNetHuge: {
     marginTop: 4,

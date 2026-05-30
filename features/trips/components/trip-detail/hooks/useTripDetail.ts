@@ -68,7 +68,12 @@ import { Alert } from "react-native";
 import { useRealtimeDriverLocations, useRealtimeTrip } from "../../../hooks/useRealtimeTrips";
 import { useTrackingTripBroadcast } from "@/features/tracking/hooks/useTrackingTripBroadcast";
 import { isTrackingBroadcastV1Enabled } from "@/features/tracking/trackingFeatureFlags";
-import { isTripTrackingActive } from "@/features/trips/utils/tripTrackingStatus.util";
+import {
+  getTrackingState,
+  isTripDriverMapEligible,
+  isTripTrackingActive,
+  shouldShowDriverTrackingOfflineOverlay,
+} from "@/features/trips/utils/tripTrackingStatus.util";
 import { useTripLiveTracking } from "@/features/trips/hooks/useTripLiveTracking";
 import { useRequestDriverPing } from "@/features/trips/hooks/useRequestDriverPing";
 import {
@@ -228,6 +233,7 @@ export function useTripDetail({
 
   // ── Assignment / driver / vehicle ─────────────────────────────────────────
   const [driverName, setDriverName] = useState<string | null>(null);
+  const [driverPhone, setDriverPhone] = useState<string | null>(null);
   const [driverAvatarUri, setDriverAvatarUri] = useState<string | null>(null);
   const [vehicleLabel, setVehicleLabel] = useState<string | null>(null);
   const [vehicleDocs, setVehicleDocs] = useState<VehicleDocuments | null>(null);
@@ -429,21 +435,57 @@ export function useTripDetail({
   );
 
   const trackingBroadcastEnabled =
-    isTrackingBroadcastV1Enabled() && isTripTrackingActive(trip?.status, trip?.completed_at) && !!trip?.id;
+    isTrackingBroadcastV1Enabled() &&
+    isTripTrackingActive(trip?.status, trip?.completed_at) &&
+    !!trip?.id;
+
+  /** Load presence + checkpoint trail whenever a driver is on an open trip (incl. assigned). */
+  const driverMapDataEnabled =
+    !!trip?.id &&
+    !!effectiveDriverIdForLocation &&
+    isTripDriverMapEligible(
+      trip.status,
+      trip.completed_at,
+      effectiveDriverIdForLocation,
+    );
 
   const liveTracking = useTripLiveTracking({
     tripId: trip?.id ?? null,
     driverId: effectiveDriverIdForLocation,
-    trackingEnabled: trackingBroadcastEnabled,
+    trackingEnabled: driverMapDataEnabled,
   });
 
   const driverPing = useRequestDriverPing({
     tripId: trip?.id ?? null,
-    trackingEnabled: trackingBroadcastEnabled,
+    trackingEnabled: trackingBroadcastEnabled || driverMapDataEnabled,
   });
 
   const isDriverOffline = useMemo(() => {
-    const statusLower = (trip?.status ?? "").toLowerCase();
+    if (!trip) return true;
+
+    if (isTripTrackingActive(trip.status, trip.completed_at)) {
+      const trailLast = liveTracking.trail[liveTracking.trail.length - 1]?.recorded_at;
+      const pointsLast = tripLocationPoints[tripLocationPoints.length - 1]?.recorded_at;
+      const lastLocationAt =
+        lastSeenAt ??
+        driverPing.lastPingRespondedAt ??
+        driverLocation?.recorded_at ??
+        trailLast ??
+        pointsLast ??
+        null;
+      return shouldShowDriverTrackingOfflineOverlay({
+        tripStatus: trip.status,
+        completedAt: trip.completed_at,
+        driverId: effectiveDriverIdForLocation ?? trip.driver_id,
+        driverOnline: getTrackingState(trip.id, trip.status, {
+          lastSeenAt,
+          lastPingRespondedAt: driverPing.lastPingRespondedAt,
+        }).driverOnline,
+        lastLocationAt,
+      });
+    }
+
+    const statusLower = (trip.status ?? "").toLowerCase();
     const hasJourneyRuntimeStatus =
       statusLower === "in_progress" ||
       statusLower === "in_transit" ||
@@ -460,17 +502,15 @@ export function useTripDetail({
     const hasLiveTrackingSignal = !!driverLocation || trailPointCount > 0;
     const viewerOrgId = currentOrganization?.id ?? null;
     const isSharedClientOrNonOwnerView =
-      !!trip &&
       !!viewerOrgId &&
       !!trip.organization_id &&
       trip.organization_id !== viewerOrgId;
     const isClientOwnerIndentView =
-      !!trip &&
       !!trip.indent_id &&
       !!viewerOrgId &&
       !!trip.organization_id &&
       trip.organization_id === viewerOrgId;
-    const isClientTrackingView = entryContext === "client" && !!trip;
+    const isClientTrackingView = entryContext === "client";
     if (
       isClientTrackingView ||
       isClientOwnerIndentView ||
@@ -488,6 +528,36 @@ export function useTripDetail({
     currentOrganization?.id,
     driverLocation,
     liveTracking.trail.length,
+    tripLocationPoints.length,
+    lastSeenAt,
+    driverPing.lastPingRespondedAt,
+  ]);
+
+  // Seed map store from DB pings when broadcast is off (assigned / stale broadcast).
+  useEffect(() => {
+    if (!trip?.id || !driverMapDataEnabled || trackingBroadcastEnabled) return;
+    const seed = liveTracking.seedPoint;
+    const lat = driverLocation?.latitude ?? seed?.latitude;
+    const lng = driverLocation?.longitude ?? seed?.longitude;
+    const recordedAt = driverLocation?.recorded_at ?? seed?.recorded_at;
+    if (lat == null || lng == null || !recordedAt) return;
+    getTripTrackingMapStore(trip.id).applySeed(lat, lng, recordedAt);
+    setLastSeenAt((prev) => {
+      if (!prev || new Date(recordedAt).getTime() >= new Date(prev).getTime()) {
+        return recordedAt;
+      }
+      return prev;
+    });
+  }, [
+    trip?.id,
+    driverMapDataEnabled,
+    trackingBroadcastEnabled,
+    driverLocation?.latitude,
+    driverLocation?.longitude,
+    driverLocation?.recorded_at,
+    liveTracking.seedPoint?.latitude,
+    liveTracking.seedPoint?.longitude,
+    liveTracking.seedPoint?.recorded_at,
   ]);
 
   const driverRatingAvg = useMemo(() => averageScore(tripRatings), [tripRatings]);
@@ -1023,6 +1093,7 @@ export function useTripDetail({
     if (bundleActive && bundleSeededRef.current) return;
     if (!trip?.organization_id) {
       setDriverName(null);
+      setDriverPhone(null);
       setDriverAvatarUri(null);
       setVehicleLabel(null);
       setVehicleDocs(null);
@@ -1050,6 +1121,7 @@ export function useTripDetail({
     };
     if (trip.driver_id) {
       setDriverName(fallbackDriverName);
+      setDriverPhone(null);
       setDriverAvatarUri(null);
       setDriverLinked(false);
       getDriverById(orgId, trip.driver_id).then((res) => {
@@ -1058,6 +1130,7 @@ export function useTripDetail({
         if (d) {
           const fromDriver = (d.name || d.phone || "").trim() || null;
           setDriverName(fromDriver ?? fallbackDriverName ?? "—");
+          setDriverPhone((d.phone ?? "").trim() || null);
           setDriverLinked(!!d.user_id);
           void resolveDriverAvatarUri(trip.driver_id!, d.avatar_url ?? null).then(
             (uri) => {
@@ -1081,6 +1154,7 @@ export function useTripDetail({
                 if (d2) {
                   const fromDriver2 = (d2.name || d2.phone || "").trim() || null;
                   setDriverName(fromDriver2 ?? fallbackDriverName ?? "—");
+                  setDriverPhone((d2.phone ?? "").trim() || null);
                   setDriverLinked(!!d2.user_id);
                   void resolveDriverAvatarUri(trip.driver_id!, d2.avatar_url ?? null).then(
                     (uri) => {
@@ -1100,6 +1174,7 @@ export function useTripDetail({
           const viewerOrgId = currentOrganization?.id;
           if (!viewerOrgId || viewerOrgId === orgId) {
             setDriverName(fallbackDriverName ?? "—");
+            setDriverPhone(null);
             void resolveDriverAvatarUri(trip.driver_id!, null).then((uri) => {
               if (!cancelled) setDriverAvatarUri(uri);
             });
@@ -1113,6 +1188,7 @@ export function useTripDetail({
               ? (d3.name || d3.phone || "").trim() || null
               : null;
             setDriverName(fromDriver3 ?? fallbackDriverName ?? "—");
+            setDriverPhone((d3?.phone ?? "").trim() || null);
             void resolveDriverAvatarUri(trip.driver_id!, d3?.avatar_url ?? null).then(
               (uri) => {
                 if (!cancelled) setDriverAvatarUri(uri);
@@ -1987,6 +2063,7 @@ export function useTripDetail({
     if (bundle.driver) {
       const d = bundle.driver;
       setDriverName((d.name || d.phone || '').trim() || (bundle.trip as unknown as TripRow).driver_display_name || null);
+      setDriverPhone((d.phone ?? "").trim() || null);
       setDriverLinked(!!d.user_id);
     }
     if (bundle.vehicle) {
@@ -2175,24 +2252,19 @@ export function useTripDetail({
     }
   }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp]);
 
-  // Legacy DB location fetch when broadcast tracking is off.
+  // Driver_locations history + latest fix (mobile app pings) — always for assigned / in-transit trips.
   useEffect(() => {
-    if (!trip?.id) {
+    if (!driverMapDataEnabled) {
       setDriverLocation(null);
       setTripLocationPoints([]);
       setDriverLocationLoading(false);
       return;
     }
-    const trackingActive =
-      isTripTrackingActive(trip.status, trip.completed_at) || trackingBroadcastEnabled;
-    if (trackingActive) return;
     void fetchDriverLocationFromDb();
   }, [
+    driverMapDataEnabled,
     trip?.id,
-    trip?.status,
-    trip?.completed_at,
     effectiveDriverIdForLocation,
-    trackingBroadcastEnabled,
     fetchDriverLocationFromDb,
   ]);
 
@@ -2284,14 +2356,12 @@ export function useTripDetail({
    * Disabled when broadcast is active — broadcast updates arrive at 30s cadence.
    */
   useEffect(() => {
-    if (!trip?.id || tripCompleted || trackingBroadcastEnabled) return;
-    const id = globalThis.setInterval(async () => {
-      const driverId = effectiveDriverIdForLocation;
-      const res = await driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id!, driverId);
-      if (!res.error && res.location) setDriverLocation(res.location);
+    if (!driverMapDataEnabled || tripCompleted) return;
+    const id = globalThis.setInterval(() => {
+      void fetchDriverLocationFromDb();
     }, 60_000);
     return () => globalThis.clearInterval(id);
-  }, [trip?.id, tripCompleted, effectiveDriverIdForLocation]);
+  }, [driverMapDataEnabled, tripCompleted, fetchDriverLocationFromDb]);
 
   // Counterparty entries
   useEffect(() => {
@@ -2516,6 +2586,7 @@ export function useTripDetail({
 
     // People
     driverName,
+    driverPhone,
     driverAvatarUri,
     vehicleLabel,
     vehicleDocs,

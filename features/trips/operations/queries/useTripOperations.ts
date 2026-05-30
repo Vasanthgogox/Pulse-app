@@ -8,7 +8,11 @@ import type {
   OperationalApprovalState,
   ReimbursementState,
   SaveFuelEntryInput,
+  SaveOtherExpenseInput,
   SaveTollEntryInput,
+  UpdateFuelEntryInput,
+  UpdateOtherExpenseInput,
+  UpdateTollEntryInput,
 } from "../types";
 import { getTripOperationalCapabilities } from "@/features/trips/capabilities";
 import {
@@ -38,20 +42,38 @@ import {
   createTripFuelEntry,
   getTripFuelEntries,
   updateTripFuelApprovalState,
+  updateTripFuelEntry,
   uploadFuelBillPhoto,
 } from "../fuel/fuel.service";
 import {
   createTripTollEntry,
   getTripTollEntries,
   updateTripTollApprovalState,
+  updateTripTollEntry,
   uploadTollReceiptPhoto,
 } from "../toll/toll.service";
+import {
+  createTripOtherExpense,
+  getTripOtherExpenses,
+  updateTripOtherExpense,
+  updateTripOtherExpenseApprovalState,
+  uploadOtherExpenseReceiptPhoto,
+} from "../other/otherExpense.service";
 import { compressOperationsPhoto } from "../uploads/photoUploads";
-import { evaluateAndPostFuelEntry, evaluateAndPostTollEntry } from "@/features/ledger/vehicle";
+import {
+  evaluateAndPostFuelEntry,
+  evaluateAndPostOtherExpenseEntry,
+  evaluateAndPostTollEntry,
+} from "@/features/ledger/vehicle";
+import {
+  describeVehiclePostingFailure,
+  isVehiclePostingSuccess,
+} from "@/features/ledger/vehicle/postingMessages.util";
 import { getTripOperationalTimelineEvents } from "../timeline/timelineEvents.service";
 import { getVehicleMaintenanceEntries } from "../maintenance/maintenance.service";
 import {
   updateFuelReimbursementState,
+  updateOtherReimbursementState,
   updateTollReimbursementState,
 } from "../reimbursement/reimbursement.service";
 import {
@@ -97,6 +119,20 @@ export function useTripTollEntries(tripId: string | null, opts?: { enabled?: boo
   });
 }
 
+export function useTripOtherExpenses(tripId: string | null, opts?: { enabled?: boolean }) {
+  const enabled = (opts?.enabled ?? true) && !!tripId;
+  return useQuery({
+    queryKey: tripId ? queryKeys.trips.otherEntries(tripId) : ["q", "trips", "other", "noop"],
+    queryFn: async () => {
+      const res = await getTripOtherExpenses(tripId!);
+      if (res.error) throw res.error;
+      return res.entries;
+    },
+    enabled,
+    staleTime: STALE.frequent,
+  });
+}
+
 export function useTripOperationsSummary(tripId: string | null, opts?: { enabled?: boolean }) {
   const enabled = (opts?.enabled ?? true) && !!tripId;
   return useQuery({
@@ -104,14 +140,16 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
       ? queryKeys.trips.operationsSummary(tripId)
       : ["q", "trips", "operations", "summary", "noop"],
     queryFn: async () => {
-      const [tripRes, fuelRes, tollRes] = await Promise.all([
+      const [tripRes, fuelRes, tollRes, otherRes] = await Promise.all([
         getTripById(tripId!),
         getTripFuelEntries(tripId!),
         getTripTollEntries(tripId!),
+        getTripOtherExpenses(tripId!),
       ]);
       if (tripRes.error || !tripRes.trip) throw tripRes.error ?? new Error("Trip not found");
       if (fuelRes.error) throw fuelRes.error;
       if (tollRes.error) throw tollRes.error;
+      if (otherRes.error) throw otherRes.error;
       const maintenanceRes =
         tripRes.trip.vehicle_id != null
           ? await getVehicleMaintenanceEntries({
@@ -125,11 +163,16 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         .from("vehicle_ledger_entries")
         .select("id,source_type,source_id")
         .eq("trip_id", tripId!)
-        .in("source_type", ["fuel", "toll"]);
+        .in("source_type", ["fuel", "toll", "manual_adjustment"]);
       if (ledgerError) throw new Error(ledgerError.message);
-      const ledgerBySource: { fuel: Record<string, string>; toll: Record<string, string> } = {
+      const ledgerBySource: {
+        fuel: Record<string, string>;
+        toll: Record<string, string>;
+        other: Record<string, string>;
+      } = {
         fuel: {},
         toll: {},
+        other: {},
       };
       for (const row of ledgerRows ?? []) {
         const sourceType = String((row as { source_type?: string | null }).source_type ?? "").toLowerCase();
@@ -138,6 +181,7 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         if (!sourceId || !ledgerId) continue;
         if (sourceType === "fuel") ledgerBySource.fuel[sourceId] = ledgerId;
         if (sourceType === "toll") ledgerBySource.toll[sourceId] = ledgerId;
+        if (sourceType === "manual_adjustment") ledgerBySource.other[sourceId] = ledgerId;
       }
       const mileage = computeTripMileageMetrics({
         trip: tripRes.trip,
@@ -151,6 +195,7 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
       const costEvents: TripCostEvent[] = mapTripOperationalRowsToCostEvents({
         fuelEntries: fuelRes.entries,
         tollEntries: tollRes.entries,
+        otherEntries: otherRes.entries,
         tripDisplay: {
           trip_operational_code: tripRes.trip.trip_operational_code ?? null,
           trip_code: tripRes.trip.trip_code ?? null,
@@ -213,6 +258,7 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         capabilities,
         fuelEntries: fuelRes.entries,
         tollEntries: tollRes.entries,
+        otherEntries: otherRes.entries,
         maintenanceEntries: maintenanceRes.entries,
         mileage,
         costEvents,
@@ -331,6 +377,38 @@ export function useSaveTripFuelEntry() {
   });
 }
 
+export function useUpdateTripFuelEntry() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateFuelEntryInput) => {
+      if (!isOnline) {
+        throw new Error("Editing fuel entries requires an internet connection.");
+      }
+      let billStoragePath: string | undefined;
+      if (input.billPhotoLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.billPhotoLocalUri);
+        const upload = await uploadFuelBillPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `fuel-bill-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        billStoragePath = upload.storagePath ?? undefined;
+      }
+      const save = await updateTripFuelEntry({ ...input, billStoragePath });
+      if (save.error) throw save.error;
+      return save.entry;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
 export function useSaveTripTollEntry() {
   const isOnline = useIsOnline();
   const qc = useQueryClient();
@@ -402,6 +480,38 @@ export function useSaveTripTollEntry() {
   });
 }
 
+export function useUpdateTripTollEntry() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateTollEntryInput) => {
+      if (!isOnline) {
+        throw new Error("Editing toll entries requires an internet connection.");
+      }
+      let receiptStoragePath: string | undefined;
+      if (input.receiptLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.receiptLocalUri);
+        const upload = await uploadTollReceiptPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `toll-receipt-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        receiptStoragePath = upload.storagePath ?? undefined;
+      }
+      const save = await updateTripTollEntry({ ...input, receiptStoragePath });
+      if (save.error) throw save.error;
+      return save.entry;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
 export function useReviewTripFuelEntry() {
   const qc = useQueryClient();
   return useMutation({
@@ -431,6 +541,9 @@ export function useReviewTripFuelEntry() {
           approvedBy: input.reviewerUserId,
         });
         if (postRes.error) throw postRes.error;
+        if (!isVehiclePostingSuccess(postRes.reason, postRes.posted)) {
+          throw new Error(describeVehiclePostingFailure(postRes.reason));
+        }
       }
       return approvalRes.entry;
       } finally {
@@ -452,6 +565,11 @@ export function useReviewTripFuelEntry() {
           organizationId: orgId,
           tripId: vars.tripId,
           vehicleId: vehicleId ?? null,
+        });
+        invalidateLedgerState({
+          queryClient: qc,
+          organizationId: orgId,
+          tripId: vars.tripId,
         });
       }
     },
@@ -487,6 +605,9 @@ export function useReviewTripTollEntry() {
           approvedBy: input.reviewerUserId,
         });
         if (postRes.error) throw postRes.error;
+        if (!isVehiclePostingSuccess(postRes.reason, postRes.posted)) {
+          throw new Error(describeVehiclePostingFailure(postRes.reason));
+        }
       }
       return approvalRes.entry;
       } finally {
@@ -510,6 +631,11 @@ export function useReviewTripTollEntry() {
           organizationId: orgId,
           tripId: vars.tripId,
           vehicleId,
+        });
+        invalidateLedgerState({
+          queryClient: qc,
+          organizationId: orgId,
+          tripId: vars.tripId,
         });
       }
     },
@@ -594,6 +720,189 @@ export function useSetTripTollReimbursementState() {
           tripId: vars.tripId,
         });
         invalidateOperationalIdentity({
+          queryClient: qc,
+          organizationId: orgId,
+          tripId: vars.tripId,
+        });
+      }
+    },
+  });
+}
+
+export function useSaveTripOtherExpense() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: SaveOtherExpenseInput) => {
+      if (!isOnline) {
+        throw new Error("Other trip expenses require an internet connection.");
+      }
+      let receiptStoragePath: string | null = null;
+      if (input.receiptLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.receiptLocalUri);
+        const upload = await uploadOtherExpenseReceiptPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `trip-expense-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        receiptStoragePath = upload.storagePath;
+      }
+      const save = await createTripOtherExpense({
+        tripId: input.tripId,
+        expenseCategory: input.expenseCategory,
+        amountInr: input.amountInr,
+        description: input.description,
+        locationName: input.locationName,
+        notes: input.notes,
+        enteredBy: input.enteredBy,
+        actorRole: input.actorRole ?? null,
+        paymentOwner: input.paymentOwner ?? null,
+        paymentMode: input.paymentMode ?? null,
+        receiptStoragePath,
+      });
+      if (save.error) throw save.error;
+      return { queued: false };
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
+export function useUpdateTripOtherExpense() {
+  const isOnline = useIsOnline();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateOtherExpenseInput) => {
+      if (!isOnline) {
+        throw new Error("Editing trip expenses requires an internet connection.");
+      }
+      let receiptStoragePath: string | undefined;
+      if (input.receiptLocalUri && input.enteredBy) {
+        const arrayBuffer = await compressOperationsPhoto(input.receiptLocalUri);
+        const upload = await uploadOtherExpenseReceiptPhoto({
+          tripId: input.tripId,
+          userId: input.enteredBy,
+          arrayBuffer,
+          fileName: `trip-expense-${Date.now()}.jpg`,
+        });
+        if (upload.error) throw upload.error;
+        receiptStoragePath = upload.storagePath ?? undefined;
+      }
+      const save = await updateTripOtherExpense({ ...input, receiptStoragePath });
+      if (save.error) throw save.error;
+      return save.entry;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(vars.tripId) });
+    },
+  });
+}
+
+export function useReviewTripOtherExpenseEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      tripId: string;
+      otherEntryId: string;
+      approvalState: OperationalApprovalState;
+      reviewerUserId: string | null;
+    }) => {
+      const opKey = `other:${input.tripId}:${input.otherEntryId}:${input.approvalState}`;
+      if (reviewInFlightKeys.has(opKey)) return null;
+      reviewInFlightKeys.add(opKey);
+      try {
+        const nextLedgerState =
+          input.approvalState === "approved" ? "not_posted" : "void";
+        const approvalRes = await updateTripOtherExpenseApprovalState({
+          entryId: input.otherEntryId,
+          approvalState: input.approvalState,
+          approvedBy: input.reviewerUserId,
+          ledgerState: nextLedgerState,
+        });
+        if (approvalRes.error) throw approvalRes.error;
+        if (input.approvalState === "approved") {
+          const postRes = await evaluateAndPostOtherExpenseEntry({
+            tripId: input.tripId,
+            otherEntryId: input.otherEntryId,
+            approvedBy: input.reviewerUserId,
+          });
+          if (postRes.error) throw postRes.error;
+          if (!isVehiclePostingSuccess(postRes.reason, postRes.posted)) {
+            throw new Error(describeVehiclePostingFailure(postRes.reason));
+          }
+        }
+        return approvalRes.entry;
+      } finally {
+        reviewInFlightKeys.delete(opKey);
+      }
+    },
+    onSuccess: (_result, vars) => {
+      const orgId = String(
+        qc.getQueryData<{ trip?: { organization_id?: string | null } }>(
+          queryKeys.trips.operationsSummary(vars.tripId),
+        )?.trip?.organization_id ?? "",
+      );
+      const vehicleId =
+        qc.getQueryData<{ trip?: { vehicle_id?: string | null } }>(
+          queryKeys.trips.operationsSummary(vars.tripId),
+        )?.trip?.vehicle_id ?? null;
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      if (orgId) {
+        syncOperationalFinanceProjection({
+          queryClient: qc,
+          organizationId: orgId,
+          tripId: vars.tripId,
+          vehicleId,
+        });
+        invalidateLedgerState({
+          queryClient: qc,
+          organizationId: orgId,
+          tripId: vars.tripId,
+        });
+      }
+    },
+  });
+}
+
+export function useSetTripOtherReimbursementState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      tripId: string;
+      otherEntryId: string;
+      nextState: ReimbursementState;
+      actorUserId: string | null;
+      notes?: string | null;
+    }) => {
+      const res = await updateOtherReimbursementState({
+        entryId: input.otherEntryId,
+        nextState: input.nextState,
+        actorUserId: input.actorUserId,
+        notes: input.notes,
+      });
+      if (res.error) throw res.error;
+      return res.entry;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+      const summary = qc.getQueryData<{ trip?: { organization_id?: string | null } }>(
+        queryKeys.trips.operationsSummary(vars.tripId),
+      );
+      const orgId = String(summary?.trip?.organization_id ?? "");
+      if (orgId) {
+        invalidateLedgerState({
+          queryClient: qc,
+          organizationId: orgId,
+          tripId: vars.tripId,
+        });
+        invalidateReconciliationState({
           queryClient: qc,
           organizationId: orgId,
           tripId: vars.tripId,

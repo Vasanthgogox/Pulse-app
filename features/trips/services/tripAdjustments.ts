@@ -63,6 +63,47 @@ export const COST_REASON_OPTIONS = [
   "Other",
 ] as const;
 
+/** Asset trip — reduce driver trip cost (salary deduction). Maps to cost CN (impact minus). */
+export const ASSET_DRIVER_DEDUCTION_REASON_OPTIONS = [
+  "Damage to cargo",
+  "Missing / shortage",
+  "Late delivery",
+  "Policy / safety violation",
+  "Advance recovery",
+  "Other",
+] as const;
+
+/** Asset trip — increase driver trip cost (tip / allowance). Maps to cost DN (impact plus). */
+export const ASSET_DRIVER_PAYMENT_REASON_OPTIONS = [
+  "Trip tip",
+  "Loading / unloading help",
+  "Detention allowance",
+  "Performance bonus",
+  "Reimbursement top-up",
+  "Other",
+] as const;
+
+export function getAdjustmentReasonOptions(input: {
+  type: TripAdjustmentType;
+  isAssetDriverCost?: boolean;
+  impact?: TripAdjustmentImpact;
+}): readonly string[] {
+  if (input.isAssetDriverCost) {
+    if (input.impact === "plus") {
+      return ASSET_DRIVER_PAYMENT_REASON_OPTIONS;
+    }
+    if (input.impact === "minus") {
+      return ASSET_DRIVER_DEDUCTION_REASON_OPTIONS;
+    }
+    return [
+      ...ASSET_DRIVER_DEDUCTION_REASON_OPTIONS,
+      ...ASSET_DRIVER_PAYMENT_REASON_OPTIONS.filter((r) => r !== "Other"),
+      "Other",
+    ];
+  }
+  return input.type === "revenue" ? REVENUE_REASON_OPTIONS : COST_REASON_OPTIONS;
+}
+
 function storageKey(tripId: string): string {
   return `${STORAGE_KEY_PREFIX}${tripId}`;
 }
