@@ -5,7 +5,6 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Easing,
   View,
@@ -15,6 +14,7 @@ import {
   Platform,
   useWindowDimensions,
 } from "react-native";
+import { showAppAlert } from "@/lib/appAlert";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowDown,
@@ -79,6 +79,8 @@ export function AddTripModal({
 }: AddTripModalProps) {
   const { width: winW } = useWindowDimensions();
   const wizardEnabled = Platform.OS !== "web" && winW < 600;
+  /** Desktop web: primary CTA lives in the form grid (row 3), not the sticky footer. */
+  const useDesktopInlineCta = Platform.OS === "web" && winW >= 720;
   const [wizardStep, setWizardStep] = useState<"route" | "client" | "allocation">(
     "route",
   );
@@ -88,6 +90,7 @@ export function AddTripModal({
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const {
@@ -101,6 +104,10 @@ export function AddTripModal({
     setWizardStep("route");
     setAllocationSubStep("supply");
   }, [wizardEnabled, organizationId]);
+
+  useEffect(() => {
+    if (form.canSubmit) setSubmitError(null);
+  }, [form.canSubmit]);
 
   const allocationSteps = useMemo(
     () => getAllocationSubSteps(form.state),
@@ -165,10 +172,21 @@ export function AddTripModal({
 
   const handleSubmit = async () => {
     setValidationAttempted(true);
-    if (!form.canSubmit || submitting) return;
-    const validationErr = form.getValidationError();
-    if (validationErr) {
-      Alert.alert("Invalid input", validationErr);
+    setSubmitError(null);
+    if (submitting) return;
+    if (!organizationId) {
+      const msg =
+        "Your workspace is still loading. Wait a moment and try again.";
+      setSubmitError(msg);
+      showAppAlert("Organization required", msg);
+      return;
+    }
+    if (!form.canSubmit) {
+      const validationErr = form.getValidationError();
+      const msg =
+        validationErr ?? "Please fill all required fields before creating the trip.";
+      setSubmitError(msg);
+      showAppAlert("Missing details", msg);
       return;
     }
     setSubmitting(true);
@@ -188,10 +206,9 @@ export function AddTripModal({
       }
       onClose();
     } catch (e) {
-      Alert.alert(
-        "Error",
-        e instanceof Error ? e.message : "Failed to create trip.",
-      );
+      const msg = e instanceof Error ? e.message : "Failed to create trip.";
+      setSubmitError(msg);
+      showAppAlert("Could not create trip", msg);
     } finally {
       setSubmitting(false);
     }
@@ -205,7 +222,9 @@ export function AddTripModal({
     }
     if (wizardStep === "route") {
       if (stepIssues.length > 0) {
-        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
+        const msg = stepIssues[0]?.message ?? "Fill required fields.";
+        setSubmitError(msg);
+        showAppAlert("Missing details", msg);
         return;
       }
       setWizardStep("client");
@@ -213,7 +232,9 @@ export function AddTripModal({
     }
     if (wizardStep === "client") {
       if (stepIssues.length > 0) {
-        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
+        const msg = stepIssues[0]?.message ?? "Fill required fields.";
+        setSubmitError(msg);
+        showAppAlert("Missing details", msg);
         return;
       }
       setAllocationSubStep(getAllocationSubSteps(form.state)[0] ?? "supply");
@@ -286,6 +307,8 @@ export function AddTripModal({
     );
   }
 
+  const StepShell = Platform.OS === "web" ? View : MotiView;
+
   return (
     <AddTripModalLayout
       title="Create Trip"
@@ -293,8 +316,9 @@ export function AddTripModal({
       submitLabel={wizardSubmitLabel}
       canSubmit={stepCanAdvance}
       submitting={submitting}
-      lockPrimaryUntilValid={validationAttempted}
-      validationMessage={visibleValidationMessage}
+      lockPrimaryUntilValid={false}
+      showFooter={!useDesktopInlineCta}
+      validationMessage={visibleValidationMessage ?? submitError}
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
     >
@@ -308,16 +332,25 @@ export function AddTripModal({
           currentStepId={wizardStep}
         />
       ) : null}
-      <MotiView
+      {submitError && validationAttempted ? (
+        <View style={submitErrorStyles.banner}>
+          <Text style={submitErrorStyles.bannerText}>{submitError}</Text>
+        </View>
+      ) : null}
+      <StepShell
         key={
           wizardEnabled
             ? `${wizardStep}-${allocationSubStep}`
             : "create-trip-form"
         }
-        from={{ opacity: 0, translateY: 14 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: "timing", duration: 360 }}
-        style={{ flex: 1, minHeight: 0 }}
+        {...(Platform.OS === "web"
+          ? { style: { flex: 1, minHeight: 0 } }
+          : {
+              from: { opacity: 0, translateY: 14 },
+              animate: { opacity: 1, translateY: 0 },
+              transition: { type: "timing" as const, duration: 360 },
+              style: { flex: 1, minHeight: 0 },
+            })}
       >
       <AddTripFormFields
         state={form.state}
@@ -328,19 +361,39 @@ export function AddTripModal({
         refetchClients={refetchClients}
         onSubmit={handleWizardPrimary}
         canSubmit={stepCanAdvance}
-        enablePrimaryWhenInvalid={validationAttempted}
+        enablePrimaryWhenInvalid
         validationIssues={visibleIssues}
         validationMessage={visibleValidationMessage}
         wizardSection={wizardEnabled ? wizardStep : undefined}
         allocationSubStep={
           wizardEnabled && wizardStep === "allocation" ? allocationSubStep : undefined
         }
-        showInlineCta={false}
+        showInlineCta={useDesktopInlineCta}
+        submitting={submitting}
       />
-      </MotiView>
+      </StepShell>
     </AddTripModalLayout>
   );
 }
+
+const submitErrorStyles = StyleSheet.create({
+  banner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: Theme.destructive,
+  },
+  bannerText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.destructive,
+    lineHeight: 18,
+  },
+});
 
 function AddTripOtpSuccessBody({
   createdResult,

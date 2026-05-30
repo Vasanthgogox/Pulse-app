@@ -70,6 +70,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ROUTES } from "@/lib/routes";
 import { ADD_TRIP_FORM } from "./addTripFormTokens";
+import { AddTripWebCurrencyField } from "./AddTripWebCurrencyField";
 import { PULSE_TRIP, PULSE_TRIP_RADIUS } from "./addTripPulseTheme";
 import type { AllocationSubStep } from "./allocationWizardSteps";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
@@ -193,6 +194,7 @@ export function AddTripFormFields({
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
+  const useWebCurrencyField = Platform.OS === "web" && winW >= 720;
   /** Native app + narrow web: tighter fields and section padding. */
   const isDenseForm = Platform.OS !== "web" || winW < 600;
   const fieldLabelStyle = [styles.label, labelStyle, isDenseForm && styles.labelDense];
@@ -1162,6 +1164,18 @@ export function AddTripFormFields({
               </View>
 
               <View style={styles.gridCol}>
+                {useWebCurrencyField ? (
+                  <AddTripWebCurrencyField
+                    label="Client sale price"
+                    value={state.clientPrice}
+                    onChange={setters.setClientPrice}
+                    required
+                    dense={isDenseForm}
+                    errorMessage={
+                      invalid("clientPrice") ? "Enter a sale price" : undefined
+                    }
+                  />
+                ) : (
                 <SmartInput
                   type="currency"
                   label="Client sale price"
@@ -1186,6 +1200,7 @@ export function AddTripFormFields({
                   }
                   errorMessage={invalid("clientPrice") ? "Enter a sale price" : undefined}
                 />
+                )}
                 {!isWide ? (
                   <View style={[styles.infoCallout, isDenseForm && styles.infoCalloutDense]}>
                     <Info size={isDenseForm ? 14 : 16} color={Theme.iconPrimary} />
@@ -2106,6 +2121,20 @@ export function AddTripFormFields({
                     </View>
                     <View style={[styles.gridRow, styles.gridRowWide]}>
                       <View style={styles.gridCol}>
+                        {useWebCurrencyField ? (
+                          <AddTripWebCurrencyField
+                            label="Partner rate"
+                            value={state.supplierRate}
+                            onChange={setters.setSupplierRate}
+                            required
+                            dense={isDenseForm}
+                            errorMessage={
+                              invalid("partnerRate")
+                                ? "Enter a partner rate"
+                                : undefined
+                            }
+                          />
+                        ) : (
                         <SmartInput
                           type="currency"
                           label="Partner rate"
@@ -2115,8 +2144,18 @@ export function AddTripFormFields({
                           required
                           errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
                         />
+                        )}
                       </View>
                       <View style={styles.gridCol}>
+                        {useWebCurrencyField ? (
+                          <AddTripWebCurrencyField
+                            label="Advance paid"
+                            value={state.advancePaid}
+                            onChange={setters.setAdvancePaid}
+                            placeholder="Optional"
+                            dense={isDenseForm}
+                          />
+                        ) : (
                         <SmartInput
                           type="currency"
                           label="Advance paid"
@@ -2125,6 +2164,7 @@ export function AddTripFormFields({
                           variant="field"
                           placeholder="Optional"
                         />
+                        )}
                       </View>
                     </View>
                   </>
@@ -2136,6 +2176,18 @@ export function AddTripFormFields({
                   ]}
                 >
                   <View style={styles.gridCol}>
+                    {useWebCurrencyField ? (
+                      <AddTripWebCurrencyField
+                        label="Partner rate"
+                        value={state.supplierRate}
+                        onChange={setters.setSupplierRate}
+                        required
+                        dense={isDenseForm}
+                        errorMessage={
+                          invalid("partnerRate") ? "Enter a partner rate" : undefined
+                        }
+                      />
+                    ) : (
                     <SmartInput
                       type="currency"
                       label="Partner rate"
@@ -2176,8 +2228,18 @@ export function AddTripFormFields({
                       }
                       errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
                     />
+                    )}
                   </View>
                   <View style={styles.gridCol}>
+                    {useWebCurrencyField ? (
+                      <AddTripWebCurrencyField
+                        label="Advance paid"
+                        value={state.advancePaid}
+                        onChange={setters.setAdvancePaid}
+                        placeholder="Optional"
+                        dense={isDenseForm}
+                      />
+                    ) : (
                     <SmartInput
                       type="currency"
                       label="Advance paid"
@@ -2186,6 +2248,7 @@ export function AddTripFormFields({
                       variant="field"
                       placeholder="Optional"
                     />
+                    )}
                   </View>
                 </View>
                 ) : null}
@@ -2622,17 +2685,19 @@ export function AddTripFormFields({
             <View
               style={[styles.ctaBlock, desktopFormGrid && styles.ctaGridSpanWeb]}
             >
-              <TouchableOpacity
-                style={[
+              <Pressable
+                style={({ pressed }) => [
                   styles.primaryCta,
                   primaryCtaDisabled && styles.primaryCtaDis,
-                  Platform.OS === "web"
+                  Platform.OS === "web" && !primaryCtaDisabled
                     ? ({ cursor: "pointer" } as ViewStyle)
                     : null,
+                  pressed && !primaryCtaDisabled && { opacity: 0.92 },
                 ]}
-                onPress={onSubmit}
+                onPress={primaryCtaDisabled ? undefined : onSubmit}
                 disabled={primaryCtaDisabled}
-                activeOpacity={0.9}
+                accessibilityRole="button"
+                accessibilityLabel="Create Trip Now"
               >
                 {submitting ? (
                   <ActivityIndicator color={Theme.textOnPrimary} />
@@ -2642,7 +2707,7 @@ export function AddTripFormFields({
                     <Text style={styles.primaryCtaText}>Create Trip Now</Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </Pressable>
               {!enablePrimaryWhenInvalid &&
               !canSubmit &&
               !submitting &&

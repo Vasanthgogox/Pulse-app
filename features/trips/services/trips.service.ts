@@ -708,6 +708,49 @@ export async function getVehicleOngoingTrip(
   return { error: null, trip: rows[0] ?? null };
 }
 
+/** Human-readable trip id for assignment conflict messages. */
+export function formatTripAssignmentLabel(
+  trip:
+    | {
+        trip_number?: string | null;
+        trip_code?: string | null;
+        trip_operational_code?: string | null;
+      }
+    | null
+    | undefined,
+): string {
+  return getTripIdentifierLabel(trip);
+}
+
+/** All driver/vehicle ids on non-terminal trips for an org (not limited to recent trip pages). */
+export async function getActiveTripAssignmentIds(orgId: string): Promise<{
+  error: Error | null;
+  driverIds: string[];
+  vehicleIds: string[];
+}> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("driver_id, vehicle_id")
+    .eq("organization_id", orgId)
+    .not("status", "in", `("${ONGOING_TRIP_TERMINAL_STATUSES.join('","')}")`);
+  if (error) {
+    return { error: new Error(error.message), driverIds: [], vehicleIds: [] };
+  }
+  const driverIds = new Set<string>();
+  const vehicleIds = new Set<string>();
+  for (const row of data ?? []) {
+    const d = (row as { driver_id?: string | null }).driver_id;
+    const v = (row as { vehicle_id?: string | null }).vehicle_id;
+    if (d) driverIds.add(d);
+    if (v) vehicleIds.add(v);
+  }
+  return {
+    error: null,
+    driverIds: Array.from(driverIds),
+    vehicleIds: Array.from(vehicleIds),
+  };
+}
+
 function getTripIdentifierLabel(
   trip:
     | {

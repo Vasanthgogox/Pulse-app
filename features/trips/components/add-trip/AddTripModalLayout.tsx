@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -118,18 +119,23 @@ export function AddTripModalLayout({
               <TouchableOpacity style={styles.topBarCancelBtn} onPress={onClose} activeOpacity={0.85}>
                 <Text style={styles.topBarCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.topBarSaveBtn, submitDisabled && styles.topBarSaveBtnDisabled]}
-                onPress={onSubmit}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.topBarSaveBtn,
+                  submitDisabled && styles.topBarSaveBtnDisabled,
+                  pressed && !submitDisabled && { opacity: 0.92 },
+                ]}
+                onPress={submitDisabled ? undefined : onSubmit}
                 disabled={submitDisabled}
-                activeOpacity={0.9}
+                accessibilityRole="button"
+                accessibilityLabel={submitLabel}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color={Theme.textOnPrimary} />
                 ) : (
                   <Text style={styles.topBarSaveText}>{submitLabel}</Text>
                 )}
-              </TouchableOpacity>
+              </Pressable>
             </View>
           ) : null}
         </View>
@@ -168,15 +174,18 @@ export function AddTripModalLayout({
               },
             ]}
           >
-            <TouchableOpacity
-              style={[
+            <Pressable
+              style={({ pressed }) => [
                 styles.submitBtn,
                 isDenseForm && styles.submitBtnDense,
                 submitDisabled && styles.submitBtnDisabled,
+                Platform.OS === "web" && !submitDisabled
+                  ? ({ cursor: "pointer" } as object)
+                  : null,
+                pressed && !submitDisabled && { opacity: 0.92 },
               ]}
-              onPress={onSubmit}
+              onPress={submitDisabled ? undefined : onSubmit}
               disabled={submitDisabled}
-              activeOpacity={0.9}
               accessibilityRole="button"
               accessibilityLabel={submitLabel}
               accessibilityHint={
@@ -201,7 +210,7 @@ export function AddTripModalLayout({
                   <Text style={styles.submitBtnText}>{submitLabel}</Text>
                 </>
               )}
-            </TouchableOpacity>
+            </Pressable>
             {submitDisabled && !submitting && (
               <Text style={[styles.footerHint, isDenseForm && styles.footerHintDense]}>
                 {validationMessage ?? "Fill client, route, price and allocation to continue"}
@@ -362,6 +371,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: PULSE_TRIP.border,
+    zIndex: 2,
+    ...Platform.select({
+      web: { position: "relative" as const },
+    }),
   },
   footerDense: {
     marginTop: 2,
