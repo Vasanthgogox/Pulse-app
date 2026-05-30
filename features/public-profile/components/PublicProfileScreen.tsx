@@ -15,8 +15,16 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
+import {
+  NetworkProfileInviteHero,
+  NetworkProfileInviteStats,
+} from "@/features/network/components/NetworkProfileInviteHero";
+import { networkProfileInviteStyles as inviteS } from "@/features/network/components/networkProfileInvite.styles";
+import {
+  partyAccentFromConnectionRole,
+  type PartyRoleLabel,
+} from "@/lib/partyEntityAccent";
 
 import type {
     PublicProfileEntity,
@@ -93,18 +101,7 @@ export default function PublicProfileScreen({
           onBack={onBack}
         />
 
-        {/* Content area — floating island overlaps the hero */}
-        <View
-          style={[
-            styles.content,
-            {
-              marginTop: -METRICS_OVERLAP,
-              paddingTop: METRICS_OVERLAP + 12,
-            },
-          ]}
-        >
-          <MetricIsland metrics={entity.metrics} />
-
+        <View style={styles.content}>
           <Section title="Professional Bio">
             <View style={styles.bioCard}>
               <Text style={styles.bioQuoteMark}>"</Text>
@@ -166,6 +163,32 @@ export default function PublicProfileScreen({
 
 /* ──────────────────────────────── Hero ──────────────────────────────── */
 
+function entityTypeToRole(entityType: PublicProfileEntity["entityType"]): PartyRoleLabel {
+  if (entityType === "supplier") return "SUPPLIER";
+  if (entityType === "driver") return "DRIVER";
+  return "CLIENT";
+}
+
+function ratingFromMetrics(metrics: readonly PublicProfileMetric[]): {
+  display: string;
+  empty: boolean;
+} {
+  const ratingMetric = metrics.find(
+    (m) =>
+      m.suffix === "★" ||
+      /rating/i.test(m.label) ||
+      /trust/i.test(m.label),
+  );
+  if (!ratingMetric) return { display: "No rating", empty: true };
+  const raw = asDisplay(ratingMetric.value);
+  if (raw === "No data" || raw === "—") return { display: "No rating", empty: true };
+  const suffix = ratingMetric.suffix ?? "";
+  return {
+    display: suffix ? `${raw}${suffix}` : raw,
+    empty: false,
+  };
+}
+
 function Hero({
   entity,
   insetsTop,
@@ -175,23 +198,22 @@ function Hero({
   insetsTop: number;
   onBack: () => void;
 }) {
-  const typeLabel =
-    entity.entityType === "client"
-      ? "CLIENT"
-      : entity.entityType === "supplier"
-        ? "SUPPLIER"
-        : "DRIVER";
+  const roleLabel = entityTypeToRole(entity.entityType);
+  const accent = partyAccentFromConnectionRole(roleLabel);
+  const { display: ratingDisplay, empty: ratingEmpty } = ratingFromMetrics(entity.metrics);
+  const linkLabel = entity.isIntegrated ? "ON PLATFORM" : "PUBLIC";
+  const linkLive = entity.isIntegrated;
 
   const onShare = useCallback(async () => {
     try {
       await Share.share({
-        message: `${entity.name} — ${typeLabel} on Pulse`,
+        message: `${entity.name} — ${roleLabel} on Pulse`,
         title: entity.name,
       });
     } catch {
       /* user dismissed */
     }
-  }, [entity.name, typeLabel]);
+  }, [entity.name, roleLabel]);
 
   const onMore = useCallback(() => {
     Alert.alert("Entity profile", "Additional actions will be available in a later release.", [
@@ -199,136 +221,69 @@ function Hero({
     ]);
   }, []);
 
-  return (
-    <View style={[styles.hero, { minHeight: HERO_HEIGHT + insetsTop }]}>
-      <LinearGradient
-        colors={["#0F172A", "#0B1026", "#1E1B4B"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.heroGlow} />
+  const statItems = entity.metrics.map((m) => ({
+    label: m.label.toUpperCase(),
+    value: `${asDisplay(m.value)}${m.suffix ?? ""}`,
+    live: m.tint === "positive",
+  }));
 
-      <View style={[styles.heroTopBar, { marginTop: insetsTop + 8 }]}>
+  const metaChips = useMemo(() => {
+    if (!entity.isIntegrated) return [];
+    return [{ label: "Verified partner" }];
+  }, [entity.isIntegrated]);
+
+  return (
+    <View style={[styles.heroShell, { paddingTop: insetsTop + 8 }]}>
+      <View style={styles.heroTopBar}>
         <TouchableOpacity
-          style={styles.heroChipBtn}
+          style={styles.heroChipBtnLight}
           onPress={onBack}
           activeOpacity={0.75}
           accessibilityLabel="Back"
         >
-          <FontAwesome name="chevron-left" size={16} color={Theme.textOnDark} />
+          <FontAwesome name="chevron-left" size={16} color={Theme.textPrimaryDark} />
         </TouchableOpacity>
         <View style={styles.heroTopRightGroup}>
           <TouchableOpacity
-            style={styles.heroChipBtn}
+            style={styles.heroChipBtnLight}
             onPress={onShare}
             activeOpacity={0.75}
             accessibilityLabel="Share profile"
           >
-            <Share2 size={18} color={Theme.textOnDark} strokeWidth={2.2} />
+            <Share2 size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.heroChipBtn}
+            style={styles.heroChipBtnLight}
             onPress={onMore}
             activeOpacity={0.75}
             accessibilityLabel="More options"
           >
-            <MoreVertical size={18} color={Theme.textOnDark} strokeWidth={2.2} />
+            <MoreVertical size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Avatar + role pills in one row (target); name below. */}
-      <View style={styles.heroIdentityBlock}>
-        <View style={styles.heroIdentityRow}>
-          <View style={styles.avatarFrame}>
-            <PartyAvatar
-              name={entity.name}
-              avatarUrl={entity.avatarUrl}
-              avatarSeed={entity.avatarSeed ?? null}
-              entityType={entity.entityType}
-              size={82}
-              borderStyle={styles.avatarImage}
-            />
-            {entity.isVerified && (
-              <View style={styles.verifiedBadge}>
-                <FontAwesome name="check" size={10} color={Theme.textOnPrimary} />
-              </View>
-            )}
-          </View>
-          <View style={styles.heroPillsStack}>
-            <View style={styles.heroBadgeRow}>
-              <View style={styles.typeBadge}>
-                <Text style={styles.typeBadgeText}>{typeLabel}</Text>
-              </View>
-              {entity.isIntegrated ? (
-                <View style={[styles.typeBadge, styles.activeBadge]}>
-                  <View style={styles.activeDot} />
-                  <Text style={styles.activeBadgeText}>ACTIVE ON APP</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-        </View>
-        <Text
-          style={styles.heroName}
-          numberOfLines={2}
-          allowFontScaling={false}
-        >
-          {entity.name}
-        </Text>
-        <Text style={styles.heroSubtitle} numberOfLines={1}>
-          {asDisplay(entity.subtitle)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-/* ───────────────────────── Metric Island ───────────────────────── */
-
-function MetricIsland({
-  metrics,
-}: {
-  metrics: readonly PublicProfileMetric[];
-}) {
-  return (
-    <View style={styles.islandShadow}>
-      <View style={styles.islandPill}>
-        {metrics.map((m, idx) => {
-          const tintColor =
-            m.tint === "positive"
-              ? Theme.positive
-              : m.tint === "warning"
-                ? Theme.warning
-                : m.tint === "negative"
-                  ? Theme.negative
-                  : Theme.textOnPrimary;
-          return (
-            <View
-              key={`${m.label}-${idx}`}
-              style={[
-                styles.islandCell,
-                idx < metrics.length - 1 && styles.islandCellDivider,
-              ]}
-            >
-              <Text style={styles.islandLabel}>{m.label}</Text>
-              <View style={styles.islandValueRow}>
-                <Text
-                  style={[styles.islandValue, { color: tintColor }]}
-                  numberOfLines={1}
-                >
-                  {asDisplay(m.value)}
-                </Text>
-                {m.suffix ? (
-                  <Text style={[styles.islandSuffix, { color: tintColor }]}>
-                    {m.suffix}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          );
-        })}
+      <View style={[styles.heroCardWrap, { borderColor: accent.ring }]}>
+        <NetworkProfileInviteHero
+          name={entity.name}
+          subtitle={
+            entity.facts.find((f) => f.icon === "location")?.value?.trim() ||
+            asDisplay(entity.subtitle)
+          }
+          roleLabel={roleLabel}
+          linkLabel={linkLabel}
+          linkLive={linkLive}
+          ratingDisplay={ratingDisplay}
+          ratingEmpty={ratingEmpty}
+          entityType={entity.entityType}
+          avatarUrl={entity.avatarUrl}
+          avatarSeed={entity.avatarSeed}
+          showVerified={entity.isVerified}
+          metaChips={metaChips}
+          avatarSize={86}
+          style={inviteS.card}
+          footer={<NetworkProfileInviteStats items={statItems} />}
+        />
       </View>
     </View>
   );
@@ -485,201 +440,46 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  /* Hero — midnight indigo; identity overlaps first cards */
-  hero: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-    overflow: "visible",
-  },
-  heroGlow: {
-    position: "absolute",
-    top: -120,
-    right: -120,
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: Theme.primaryLight ?? Theme.pulseIndigo,
-    opacity: 0.35,
+  heroShell: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: Theme.screenBackground,
   },
   heroTopBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 12,
   },
   heroTopRightGroup: {
     flexDirection: "row",
     gap: 10,
   },
-  heroChipBtn: {
+  heroChipBtnLight: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
-  heroIdentityBlock: {
-    marginTop: 12,
-    paddingBottom: 4,
-  },
-  heroIdentityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  heroPillsStack: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-  },
-  avatarFrame: {
-    width: 88,
-    height: 88,
+  heroCardWrap: {
     borderRadius: 20,
-    backgroundColor: Theme.textOnPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.25)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.35,
-    shadowRadius: 30,
-    elevation: 14,
-  },
-  avatarImage: {
-    width: 82,
-    height: 82,
-    borderRadius: 16,
-    borderWidth: 0,
-  },
-  avatarInitials: {
-    fontSize: 36,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.cinematicHeaderBg,
-    letterSpacing: -1,
-  },
-  verifiedBadge: {
-    position: "absolute",
-    right: -4,
-    bottom: -4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Theme.positive,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: Theme.cinematicHeaderBg,
-  },
-  heroBadgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-  },
-  typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  typeBadgeText: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    color: Theme.textOnPrimary,
-  },
-  activeBadge: {
-    backgroundColor: Theme.darkGreen,
-  },
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.positive,
-  },
-  activeBadgeText: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.6,
-    color: Theme.textOnPrimary,
-  },
-  heroName: {
-    fontSize: 22,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.textOnPrimary,
-    letterSpacing: -0.4,
-    lineHeight: 28,
-    marginTop: 14,
-  },
-  heroSubtitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textOnDarkMuted,
-    letterSpacing: 0.5,
+    backgroundColor: Theme.screenBackground,
   },
 
-  /* Content wrapper — paddingTop from METRICS_OVERLAP in component */
   content: {
-    paddingHorizontal: 20,
-    gap: 28,
-  },
-
-  /* Metric strip — single dark pill (TRUST TIER / TENURE / SYNC STATE) */
-  islandShadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  islandPill: {
-    flexDirection: "row",
-    borderRadius: 20,
-    backgroundColor: Theme.feedbackModalHeaderDriver,
-    paddingVertical: 18,
-    paddingHorizontal: 6,
-  },
-  islandCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 4,
-  },
-  islandCellDivider: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: "rgba(255,255,255,0.12)",
-  },
-  islandLabel: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    color: Theme.textSection,
-  },
-  islandValueRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 4,
-  },
-  islandValue: {
-    fontSize: 17,
-    fontWeight: "900",
-    fontStyle: "italic",
-    letterSpacing: -0.3,
-  },
-  islandSuffix: {
-    fontSize: 11,
-    fontWeight: "900",
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    gap: 22,
   },
 
   /* Section */
@@ -687,21 +487,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 3.2,
-    color: Theme.textSecondary,
-    paddingHorizontal: 6,
+    fontSize: 9,
+    fontWeight: "600",
+    fontStyle: "italic",
+    letterSpacing: 1.8,
+    color: Theme.textMutedDemo,
+    paddingHorizontal: 4,
     textTransform: "uppercase",
   },
 
   /* Bio */
   bioCard: {
-    backgroundColor: Theme.surfaceLight,
-    borderRadius: 28,
-    padding: 24,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 18,
+    padding: 20,
     borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
+    borderColor: Theme.borderLight,
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
   },
   bioQuoteMark: {
     fontSize: 44,
@@ -720,11 +526,16 @@ const styles = StyleSheet.create({
 
   /* Facts */
   factList: {
-    backgroundColor: Theme.textOnPrimary,
-    borderRadius: 24,
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: Theme.cinematicCardBorder,
+    borderColor: Theme.borderLight,
     overflow: "hidden",
+    shadowColor: Theme.shadow,
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
   },
   factRow: {
     flexDirection: "row",

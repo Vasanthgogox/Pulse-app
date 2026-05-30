@@ -251,7 +251,7 @@ export function buildPulseIntelligenceReportHtml(
 ): string {
   const {
     title,
-    companyName = "Q",
+    companyName = "PULSE",
     dateRangeLabel,
     filterCaption,
     generatedAtLabel = new Date().toLocaleString(),

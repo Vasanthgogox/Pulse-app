@@ -179,7 +179,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
               ) : (
                 <View style={styles.headerLogoFallback}>
                   <Text style={styles.headerLogoInitials}>
-                    {orgInitials(orgName || "Q")}
+                    {orgInitials(orgName || "PULSE")}
                   </Text>
                 </View>
               )}

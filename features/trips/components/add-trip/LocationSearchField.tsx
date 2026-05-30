@@ -165,24 +165,27 @@ export function LocationSearchField({
   const isPopularList = showPopular && !hasApiResults;
   const showNoMatchMessage = !loading && query.length >= MIN_QUERY_LENGTH && listToShow.length === 0;
 
+  const sheetType = compact ? sheetTypography.compact : sheetTypography.default;
+  const rowIconSize = compact ? 15 : 16;
+
   const dropdownListContent = (
     <>
       {loading && (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="small" color={Theme.primary} />
-          <Text style={styles.loadingText}>Searching…</Text>
+          <Text style={sheetType.loadingText}>Searching…</Text>
         </View>
       )}
       {showNoMatchMessage && (
         <View style={styles.emptyListWrap}>
-          <Text style={styles.emptyListSubtext}>
+          <Text style={sheetType.emptyListSubtext}>
             No suggestions for "{query}". You can use your text as a custom address below.
           </Text>
         </View>
       )}
       {!loading && listToShow.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>
+          <Text style={sheetType.sectionLabel}>
             {isPopularList
               ? query
                 ? "Suggestions"
@@ -196,16 +199,17 @@ export function LocationSearchField({
                 key={place.placeId}
                 style={[
                   styles.placeRow,
+                  compact && styles.placeRowCompact,
                   selected && styles.placeRowSelected,
                   webCursor,
                 ]}
                 onPress={() => handleSelect(place)}
                 activeOpacity={0.75}
               >
-                <View style={styles.rowIconCircle}>
-                  <MapPin size={18} color={Theme.iconPrimary} />
+                <View style={[styles.rowIconCircle, compact && styles.rowIconCircleCompact]}>
+                  <MapPin size={rowIconSize} color={Theme.iconPrimary} />
                 </View>
-                <Text style={styles.placeRowText} numberOfLines={3}>
+                <Text style={sheetType.placeRowText} numberOfLines={3}>
                   {place.displayName}
                 </Text>
               </TouchableOpacity>
@@ -215,14 +219,20 @@ export function LocationSearchField({
       )}
       {showCustomOption && (
         <TouchableOpacity
-          style={[styles.customAddressRow, webCursor]}
+          style={[styles.customAddressRow, compact && styles.customAddressRowCompact, webCursor]}
           onPress={handleUseCustom}
           activeOpacity={0.75}
         >
-          <View style={[styles.rowIconCircle, styles.customIconCircle]}>
-            <MapPin size={18} color={Theme.primary} />
+          <View
+            style={[
+              styles.rowIconCircle,
+              compact && styles.rowIconCircleCompact,
+              styles.customIconCircle,
+            ]}
+          >
+            <MapPin size={rowIconSize} color={Theme.primary} />
           </View>
-          <Text style={styles.customAddressText}>
+          <Text style={sheetType.customAddressText}>
             Use "{draft.trim()}" as custom address
           </Text>
         </TouchableOpacity>
@@ -306,21 +316,21 @@ export function LocationSearchField({
                   { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
                 ]}
               >
-                <View style={styles.sheetHead}>
+                <View style={[styles.sheetHead, compact && styles.sheetHeadCompact]}>
                   <View style={styles.sheetTitles}>
-                    <Text style={styles.sheetTitle}>Pick a place in India</Text>
-                    <Text style={styles.sheetSubtitle}>
+                    <Text style={sheetType.sheetTitle}>Pick a place in India</Text>
+                    <Text style={sheetType.sheetSubtitle}>
                       Search cities, areas, or landmarks
                     </Text>
                   </View>
                   <TouchableOpacity
                     onPress={closeDropdown}
-                    style={[styles.closeBtn, webCursor]}
+                    style={[styles.closeBtn, compact && styles.closeBtnCompact, webCursor]}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     accessibilityRole="button"
                     accessibilityLabel="Close"
                   >
-                    <X size={18} color={Theme.primary} strokeWidth={2.5} />
+                    <X size={compact ? 16 : 17} color={Theme.primary} strokeWidth={2.5} />
                   </TouchableOpacity>
                 </View>
 
@@ -337,6 +347,7 @@ export function LocationSearchField({
                   autoComplete="off"
                   autoFocus
                   compactChat
+                  compactChatSize={compact ? "sm" : "md"}
                   shellStyle={styles.searchShell}
                   accessibilityLabel="Search places"
                 />
@@ -366,7 +377,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   wrapperCompact: {
-    marginBottom: 4,
+    marginBottom: 0,
   },
   inputRow: {
     position: "relative",
@@ -378,10 +389,13 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     justifyContent: "center",
+    alignItems: "center",
+    width: 28,
     zIndex: 1,
   },
   leadingIconWrapCompact: {
-    left: 10,
+    left: 12,
+    width: 24,
   },
   inputWithLeadingIcon: {
     paddingLeft: 44,
@@ -403,14 +417,16 @@ const styles = StyleSheet.create({
     }),
   },
   inputCompact: {
-    borderRadius: 10,
-    minHeight: 40,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    minHeight: 46,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     paddingRight: 40,
   },
   inputPressable: {
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
   },
   inputValueText: {
     fontSize: 15,
@@ -491,20 +507,24 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
   },
+  sheetHeadCompact: {
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
   sheetTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "600",
     fontStyle: "normal",
     letterSpacing: 0,
     color: Theme.textPrimaryDark,
   },
   sheetSubtitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "400",
     fontStyle: "normal",
     marginTop: 2,
     color: Theme.textSecondary,
-    lineHeight: 18,
+    lineHeight: 15,
   },
   closeBtn: {
     width: 36,
@@ -515,6 +535,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
+  },
+  closeBtnCompact: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   searchShell: {
     marginHorizontal: 16,
@@ -530,22 +555,32 @@ const styles = StyleSheet.create({
   placeRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     gap: 10,
   },
+  placeRowCompact: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
   placeRowSelected: {
     backgroundColor: Theme.surfaceLight,
   },
   rowIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
+  },
+  rowIconCircleCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   customIconCircle: {
     backgroundColor: Theme.positiveMuted,
@@ -553,8 +588,8 @@ const styles = StyleSheet.create({
   placeRowText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "500",
     fontStyle: "normal",
     color: Theme.textPrimaryDark,
@@ -563,16 +598,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     marginTop: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.surfaceLight,
   },
+  customAddressRowCompact: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
   customAddressText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.primary,
   },
@@ -584,7 +624,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   loadingText: {
-    fontSize: 13,
+    fontSize: 12,
     color: Theme.textSecondary,
   },
   emptyListWrap: {
@@ -596,22 +636,85 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   emptyListSubtext: {
-    fontSize: 12,
+    fontSize: 11,
     color: Theme.textMuted,
     marginBottom: 4,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     fontStyle: "normal",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
     color: Theme.textMuted,
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 6,
+    paddingTop: 5,
+    paddingBottom: 5,
     backgroundColor: Theme.surfaceGray,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
 });
+
+/** Modal typography — default sizes reduced; compact matches dense create-trip forms. */
+const sheetTypography = {
+  default: StyleSheet.create({
+    sheetTitle: styles.sheetTitle,
+    sheetSubtitle: styles.sheetSubtitle,
+    sectionLabel: styles.sectionLabel,
+    placeRowText: styles.placeRowText,
+    customAddressText: styles.customAddressText,
+    loadingText: styles.loadingText,
+    emptyListSubtext: styles.emptyListSubtext,
+  }),
+  compact: StyleSheet.create({
+    sheetTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: Theme.textPrimaryDark,
+    },
+    sheetSubtitle: {
+      fontSize: 10,
+      fontWeight: "400",
+      marginTop: 2,
+      color: Theme.textSecondary,
+      lineHeight: 14,
+    },
+    sectionLabel: {
+      fontSize: 9,
+      fontWeight: "600",
+      letterSpacing: 0.3,
+      textTransform: "uppercase",
+      color: Theme.textMuted,
+      paddingHorizontal: 14,
+      paddingTop: 4,
+      paddingBottom: 4,
+      backgroundColor: Theme.surfaceGray,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: Theme.borderLight,
+    },
+    placeRowText: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: "500",
+      color: Theme.textPrimaryDark,
+    },
+    customAddressText: {
+      flex: 1,
+      fontSize: 11,
+      fontWeight: "700",
+      color: Theme.primary,
+    },
+    loadingText: {
+      fontSize: 11,
+      color: Theme.textSecondary,
+    },
+    emptyListSubtext: {
+      fontSize: 10,
+      color: Theme.textMuted,
+      marginBottom: 4,
+    },
+  }),
+};

@@ -9,8 +9,8 @@ import { SmartInput } from "@/components/mobile-input";
 import { type ClientRow } from "@/features/clients/services/clients.service";
 import {
     getDriversByOrganization,
-    searchExistingDriversByPhone,
     type DriverRow,
+    type ExistingDriverMatch,
 } from "@/features/drivers/services/drivers.service";
 import {
     getSuppliersByOrganization,
@@ -32,6 +32,12 @@ import {
     formatIndianVehicleNumberInput,
     formatMobileNumber,
 } from "@/lib/format";
+import {
+  applyIndianVehicleKeystroke,
+  getIndianVehicleFormatHint,
+  getIndianVehicleKeyboardType,
+  getIndianVehicleNormalizedLength,
+} from "@/lib/indianVehicleInput.util";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
@@ -76,8 +82,12 @@ import { PULSE_TRIP, PULSE_TRIP_RADIUS } from "./addTripPulseTheme";
 import type { AllocationSubStep } from "./allocationWizardSteps";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
+import { DriverPhoneRecommendations } from "./DriverPhoneRecommendations";
+import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
 import { LocationSearchField } from "./LocationSearchField";
 import type { AddTripFormState } from "./types";
+import { TripCommodityFields } from "./TripCommodityFields";
+import type { AddTripSourceIndent } from "./types";
 import type { AddTripIssueField, AddTripValidationIssue } from "./useAddTripForm";
 import type { useAddTripForm } from "./useAddTripForm";
 
@@ -154,7 +164,8 @@ export interface AddTripFormFieldsProps {
    * Mobile wizard mode: show a single section card at a time.
    * When unset, renders the full 01/02/03 cards.
    */
-  wizardSection?: "route" | "client" | "allocation";
+  wizardSection?: "route" | "commodity" | "client" | "allocation";
+  sourceIndent?: AddTripSourceIndent | null;
   /** Mobile allocation sub-step (one screen at a time). */
   allocationSubStep?: AllocationSubStep;
 }
@@ -175,6 +186,7 @@ export function AddTripFormFields({
   enablePrimaryWhenInvalid = false,
   wizardSection,
   allocationSubStep,
+  sourceIndent = null,
 }: AddTripFormFieldsProps) {
   void refetchClients;
   const invalidSet = useMemo(
@@ -195,44 +207,14 @@ export function AddTripFormFields({
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const isCompactMobile = winW < 480;
+  const isWeb = Platform.OS === "web";
   /** Native app + narrow web: tighter fields and section padding. */
-  const isDenseForm = Platform.OS !== "web" || winW < 600;
-  const fieldLabelStyle = [styles.label, labelStyle, isDenseForm && styles.labelDense];
-  const fieldInputStyle = [styles.input, inputStyle, isDenseForm && styles.inputDense];
+  const isDenseForm = !isWeb || winW < 600;
   const iconFieldInputStyle = [
     styles.iconInput,
     inputStyle,
     isDenseForm && styles.iconInputDense,
   ];
-  const renderValidationChecklist = () => {
-    if (validationIssues.length === 0) return null;
-    return (
-      <View
-        style={[
-          styles.validationChecklist,
-          !showInlineCta && {
-            marginHorizontal: isCompactMobile ? 16 : 0,
-            marginBottom: 12,
-          },
-        ]}
-      >
-        <View style={styles.validationChecklistHead}>
-          <AlertCircle size={18} color={Theme.destructive} />
-          <Text style={styles.validationChecklistTitle}>
-            Fix these before creating the trip
-          </Text>
-        </View>
-        {validationIssues.map((issue, idx) => (
-          <Text
-            key={`${issue.field}-${idx}`}
-            style={styles.validationChecklistItem}
-          >
-            • {issue.message}
-          </Text>
-        ))}
-      </View>
-    );
-  };
   const primaryCtaDisabled = enablePrimaryWhenInvalid
     ? submitting
     : !canSubmit || submitting;
@@ -244,16 +226,38 @@ export function AddTripFormFields({
    * Higher than `allocationWideLayout` so laptops ~1024–1100px don’t split those fields in half.
    */
   const driverVehicleSideBySide = winW >= 1100;
-  /** Web only: CSS grid — row1 route|client; row2 supply full width; row3 CTA (notes via modal). */
+  /** Web only: CSS grid — row1 route|commodity; row2 client; row3 supply; row4 CTA. */
   const desktopFormGrid =
     Platform.OS === "web" && winW >= 1080 && !isCompactMobile;
   /** Desktop form shell: use viewport minus padding, capped so ultra-wide stays readable. */
   const desktopFormMaxWidth = Math.min(winW - 28, 1680);
   const showRouteCard = wizardSection == null || wizardSection === "route";
+  const showCommodityCard =
+    wizardSection == null || wizardSection === "commodity";
   const showClientCard = wizardSection == null || wizardSection === "client";
+  const hideTonsOnRouteStep = wizardSection === "route";
   const showAllocationCard =
     wizardSection == null || wizardSection === "allocation";
   const mobileAllocWizard = allocationSubStep != null;
+  const isWizardRouteStep = wizardSection === "route";
+  const isWizardSingleCard =
+    wizardSection != null && wizardSection !== "allocation";
+  const isWizardAllocationCard = wizardSection === "allocation";
+  /** Web desktop: phone + recommendations side-by-side in allocation card. */
+  const webPhoneRecsAside =
+    isWeb && winW >= 720 && winW >= 1080 && !mobileAllocWizard;
+  const fieldLabelStyle = [
+    styles.label,
+    labelStyle,
+    isDenseForm && styles.labelDense,
+    isWizardSingleCard && styles.labelWizard,
+  ];
+  const fieldInputStyle = [
+    styles.input,
+    inputStyle,
+    isDenseForm && styles.inputDense,
+    isWizardSingleCard && styles.inputWizardDense,
+  ];
   const showAlloc = useCallback(
     (step: AllocationSubStep) =>
       allocationSubStep == null || allocationSubStep === step,
@@ -276,10 +280,10 @@ export function AddTripFormFields({
     mobileAllocWizard &&
     allocationSubStep === "supply" &&
     state.supplySource === "aggregate";
-  const aggregateTrackingStep = showDriverNameField
-    ? ("driverName" as const)
-    : showDriverPhoneField
-      ? ("driverPhone" as const)
+  const aggregateTrackingStep = showDriverPhoneField
+    ? ("driverPhone" as const)
+    : showDriverNameField
+      ? ("driverName" as const)
       : showVehicleField
         ? ("vehicle" as const)
         : null;
@@ -492,13 +496,49 @@ export function AddTripFormFields({
   const driverPhoneLookupTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const lastDriverPhoneNameRef = useRef<string | null>(null);
+  const driverPhoneLookupGenRef = useRef(0);
+  const [driverPhoneMatches, setDriverPhoneMatches] = useState<ExistingDriverMatch[]>(
+    [],
+  );
+  const [driverPhoneLookupLoading, setDriverPhoneLookupLoading] = useState(false);
+  const [selectedDriverMatchId, setSelectedDriverMatchId] = useState<string | null>(
+    null,
+  );
+
+  const applyDriverPhoneMatch = useCallback(
+    (match: ExistingDriverMatch) => {
+      const name = match.full_name?.trim() || "";
+      setSelectedDriverMatchId(match.user_id);
+      setters.setDriverPhoneName(name || null);
+      if (name) setters.setAggregateDriverName(name);
+      setters.setDriverPhoneConfirmed(Boolean(name));
+    },
+    [setters],
+  );
+
+  const renderDriverPhoneRecommendations = (
+    phoneComplete: boolean,
+    layout: "stack" | "aside" = "stack",
+  ) => (
+    <DriverPhoneRecommendations
+      matches={driverPhoneMatches}
+      loading={driverPhoneLookupLoading}
+      selectedUserId={selectedDriverMatchId}
+      onSelect={applyDriverPhoneMatch}
+      phoneComplete={phoneComplete}
+      compact={isDenseForm}
+      layout={layout}
+    />
+  );
+
   useEffect(() => {
     if (state.supplySource !== "aggregate" || state.assignLater) return;
     const trimmed = state.driverPhone.trim();
     if (!trimmed) {
+      setDriverPhoneMatches([]);
+      setDriverPhoneLookupLoading(false);
+      setSelectedDriverMatchId(null);
       setters.setDriverPhoneName(null);
-      lastDriverPhoneNameRef.current = null;
       setters.setDriverPhoneConfirmed(false);
       setters.setDriverPhoneTripConflict(false, null);
       return;
@@ -507,58 +547,57 @@ export function AddTripFormFields({
       clearTimeout(driverPhoneLookupTimeoutRef.current);
     driverPhoneLookupTimeoutRef.current = setTimeout(() => {
       driverPhoneLookupTimeoutRef.current = null;
-      const normalized = trimmed.replace(/\s+/g, "");
-      if (normalized.length < 10) {
+      const last10 = trimmed.replace(/\D/g, "").slice(-10);
+      if (last10.length < 10) {
+        setDriverPhoneMatches([]);
+        setDriverPhoneLookupLoading(false);
+        setSelectedDriverMatchId(null);
         setters.setDriverPhoneName(null);
         setters.setDriverPhoneConfirmed(false);
         setters.setDriverPhoneTripConflict(false, null);
         return;
       }
-      searchExistingDriversByPhone(normalized).then(
-        async ({ error: err, matches }) => {
-          const nextName =
-            !err && matches.length > 0
-              ? matches[0].full_name?.trim() || null
-              : null;
-          setters.setDriverPhoneName(nextName);
-          if (nextName) {
-            setters.setAggregateDriverName(nextName);
-            if (nextName !== lastDriverPhoneNameRef.current) {
-              setters.setDriverPhoneConfirmed(false);
-            }
-          } else {
-            // No profile match: still keep assignment unconfirmed and let
-            // global busy check decide availability.
-            setters.setDriverPhoneConfirmed(false);
-          }
-          lastDriverPhoneNameRef.current = nextName;
 
-          // Always run global busy check for a valid phone, even when profile lookup
-          // returns no name. This is the assignment authority for aggregate flow.
-          const { error: avErr, result } =
-            await getDriverAvailabilityByPhoneGlobal(normalized, {
-              anyOpenTripBlocks: true,
-              requireAuthoritativeRpc: true,
-            });
-          if (avErr) {
-            setters.setDriverPhoneTripConflict(true, "Busy check unavailable");
-            setters.setDriverPhoneConfirmed(false);
-            setters.setDriverPhoneName(null);
-            return;
-          }
-          setters.setDriverPhoneTripConflict(
-            result.isBusy,
-            result.ongoingTripLabel,
-          );
-          if (result.isBusy) {
-            setters.setDriverPhoneConfirmed(false);
-            // Busy drivers should never appear as assignable in aggregate flow.
-            setters.setDriverPhoneName(null);
-            setters.setAggregateDriverName("");
-            lastDriverPhoneNameRef.current = null;
-          }
-        },
-      );
+      const gen = ++driverPhoneLookupGenRef.current;
+      setDriverPhoneLookupLoading(true);
+      setSelectedDriverMatchId(null);
+      setters.setDriverPhoneName(null);
+      setters.setDriverPhoneConfirmed(false);
+
+      lookupDriversByPhoneVariants(trimmed).then(async ({ error: err, matches }) => {
+        if (driverPhoneLookupGenRef.current !== gen) return;
+        setDriverPhoneLookupLoading(false);
+        if (err) {
+          setDriverPhoneMatches([]);
+          return;
+        }
+        setDriverPhoneMatches(matches);
+
+        const { error: avErr, result } = await getDriverAvailabilityByPhoneGlobal(last10, {
+          anyOpenTripBlocks: true,
+          requireAuthoritativeRpc: true,
+        });
+        if (driverPhoneLookupGenRef.current !== gen) return;
+
+        if (avErr) {
+          setters.setDriverPhoneTripConflict(true, "Busy check unavailable");
+          setters.setDriverPhoneConfirmed(false);
+          return;
+        }
+        setters.setDriverPhoneTripConflict(result.isBusy, result.ongoingTripLabel);
+
+        if (result.isBusy) {
+          setSelectedDriverMatchId(null);
+          setters.setDriverPhoneName(null);
+          setters.setDriverPhoneConfirmed(false);
+          setters.setAggregateDriverName("");
+          return;
+        }
+
+        if (matches.length === 1) {
+          applyDriverPhoneMatch(matches[0]);
+        }
+      });
     }, 400);
     return () => {
       if (driverPhoneLookupTimeoutRef.current)
@@ -570,6 +609,7 @@ export function AddTripFormFields({
     state.assignLater,
     state.driverPhone,
     setters,
+    applyDriverPhoneMatch,
   ]);
 
   const handleSelectClient = (c: ClientRow) => {
@@ -669,6 +709,7 @@ export function AddTripFormFields({
         contentContainerStyle={[
           styles.scrollContent,
           isDenseForm && styles.scrollContentDense,
+          isWizardSingleCard && styles.scrollContentWizard,
           {
             paddingBottom:
               Layout.sectionSpacing +
@@ -701,7 +742,6 @@ export function AddTripFormFields({
             },
           ]}
         >
-          {renderValidationChecklist()}
           <View style={styles.mainGrid}>
             <View
               style={[
@@ -715,57 +755,80 @@ export function AddTripFormFields({
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
+                isWizardRouteStep && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridRouteWeb,
               ]}
             >
-            <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense]}>
-              <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
+            <View
+              style={[
+                styles.cardHead,
+                isDenseForm && styles.cardHeadDense,
+                isWizardRouteStep && styles.cardHeadWizard,
+              ]}
+            >
+              <View
+                style={[
+                  styles.stepBadge,
+                  isDenseForm && styles.stepBadgeDense,
+                  isWizardRouteStep && styles.stepBadgeWizard,
+                ]}
+              >
                 <Text style={styles.stepBadgeText}>01</Text>
               </View>
-              <Text style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}>
+              <Text
+                style={[
+                  styles.cardTitle,
+                  isDenseForm && styles.cardTitleDense,
+                  isWizardRouteStep && styles.cardTitleWizard,
+                ]}
+              >
                 Route Details
               </Text>
             </View>
 
-            <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
-              <View style={styles.gridCol}>
-                <LocationSearchField
-                  label="Pickup *"
-                  placeholder="Search or pick pickup location"
-                  value={state.pickupArea}
-                  onChangeText={setters.setPickupArea}
-                  onSelectPlace={(_name, coords) =>
-                    setters.setPickupCoords(coords.lat, coords.lon)
-                  }
-                  leadingIcon={<MapPin size={isDenseForm ? 13 : 14} color={Theme.iconMuted} />}
-                  inputStyle={[...fieldInputStyle, outlineErr("pickup")]}
-                  labelStyle={fieldLabelStyle}
-                  compact={isDenseForm}
-                  onDropdownOpenChange={setPickupDropdownOpen}
-                />
-              </View>
-              <View style={styles.gridCol}>
-                <LocationSearchField
-                  label="Drop *"
-                  placeholder="Search or pick drop location"
-                  value={state.dropLocation}
-                  onChangeText={setters.setDropLocation}
-                  onSelectPlace={(_name, coords) =>
-                    setters.setDropCoords(coords.lat, coords.lon)
-                  }
-                  leadingIcon={<Navigation size={isDenseForm ? 13 : 14} color={Theme.iconMuted} />}
-                  inputStyle={[...fieldInputStyle, outlineErr("drop")]}
-                  labelStyle={fieldLabelStyle}
-                  compact={isDenseForm}
-                  onDropdownOpenChange={setDropDropdownOpen}
-                />
-              </View>
-            </View>
-
-            <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
-              <View style={styles.gridCol}>
-                <Text style={fieldLabelStyle}>Trip start date</Text>
-                <View style={[styles.quickDateRow, isDenseForm && styles.quickDateRowDense]}>
+            {isWizardRouteStep ? (
+              <View style={styles.routeWizardBody}>
+                <View style={styles.routeLocationsStack}>
+                  <LocationSearchField
+                    label="Pickup *"
+                    placeholder="Search or pick pickup location"
+                    value={state.pickupArea}
+                    onChangeText={setters.setPickupArea}
+                    onSelectPlace={(_name, coords) =>
+                      setters.setPickupCoords(coords.lat, coords.lon)
+                    }
+                    leadingIcon={<MapPin size={13} color={Theme.iconMuted} />}
+                    inputStyle={[...fieldInputStyle, outlineErr("pickup")]}
+                    labelStyle={fieldLabelStyle}
+                    compact
+                    onDropdownOpenChange={setPickupDropdownOpen}
+                  />
+                  <LocationSearchField
+                    label="Drop *"
+                    placeholder="Search or pick drop location"
+                    value={state.dropLocation}
+                    onChangeText={setters.setDropLocation}
+                    onSelectPlace={(_name, coords) =>
+                      setters.setDropCoords(coords.lat, coords.lon)
+                    }
+                    leadingIcon={<Navigation size={13} color={Theme.iconMuted} />}
+                    inputStyle={[...fieldInputStyle, outlineErr("drop")]}
+                    labelStyle={fieldLabelStyle}
+                    compact
+                    onDropdownOpenChange={setDropDropdownOpen}
+                  />
+                </View>
+                <View style={styles.routeDateSection}>
+                  <Text style={[fieldLabelStyle, styles.routeDateLabel]}>
+                    Trip start date
+                  </Text>
+                <View
+                  style={[
+                    styles.quickDateRow,
+                    isDenseForm && styles.quickDateRowDense,
+                    isWizardRouteStep && styles.quickDateRowWizard,
+                  ]}
+                >
                   {(
                     [
                       { label: "Today", get: getToday },
@@ -907,35 +970,240 @@ export function AddTripFormFields({
                       ))}
                   </>
                 )}
+                </View>
               </View>
-              <View style={styles.gridCol}>
-                <Text style={fieldLabelStyle}>Tons</Text>
-                <TextInput
+            ) : (
+              <>
+                <View
                   style={[
-                    ...fieldInputStyle,
-                    outlineErr("tons"),
-                    isCompactMobile &&
-                    Platform.OS === "web" &&
-                    styles.mobileWebNoZoomInput,
+                    styles.gridRow,
+                    isDenseForm && styles.gridRowDense,
+                    isWide && styles.gridRowWide,
                   ]}
-                  placeholder="Enter load weight in tons"
-                  placeholderTextColor={Theme.placeholder}
-                  value={state.tons}
-                  onChangeText={(t) => onPadValueChange(setters.setTons, t)}
-                  keyboardType="decimal-pad"
-                  autoCorrect={false}
-                  inputAccessoryViewID={kbAccessoryId}
-                  onFocus={() => {
-                    focusPadField(
-                      () => focusNextField(clientPriceInputRef),
-                      state.tons,
-                      "Next",
-                    );
-                  }}
-                  blurOnSubmit={false}
-                />
-              </View>
-            </View>
+                >
+                  <View style={styles.gridCol}>
+                    <LocationSearchField
+                      label="Pickup *"
+                      placeholder="Search or pick pickup location"
+                      value={state.pickupArea}
+                      onChangeText={setters.setPickupArea}
+                      onSelectPlace={(_name, coords) =>
+                        setters.setPickupCoords(coords.lat, coords.lon)
+                      }
+                      leadingIcon={<MapPin size={isDenseForm ? 13 : 14} color={Theme.iconMuted} />}
+                      inputStyle={[...fieldInputStyle, outlineErr("pickup")]}
+                      labelStyle={fieldLabelStyle}
+                      compact={isDenseForm}
+                      onDropdownOpenChange={setPickupDropdownOpen}
+                    />
+                  </View>
+                  <View style={styles.gridCol}>
+                    <LocationSearchField
+                      label="Drop *"
+                      placeholder="Search or pick drop location"
+                      value={state.dropLocation}
+                      onChangeText={setters.setDropLocation}
+                      onSelectPlace={(_name, coords) =>
+                        setters.setDropCoords(coords.lat, coords.lon)
+                      }
+                      leadingIcon={<Navigation size={isDenseForm ? 13 : 14} color={Theme.iconMuted} />}
+                      inputStyle={[...fieldInputStyle, outlineErr("drop")]}
+                      labelStyle={fieldLabelStyle}
+                      compact={isDenseForm}
+                      onDropdownOpenChange={setDropDropdownOpen}
+                    />
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.gridRow,
+                    isDenseForm && styles.gridRowDense,
+                    isWide && styles.gridRowWide,
+                  ]}
+                >
+                  <View style={styles.gridCol}>
+                    <Text style={fieldLabelStyle}>Trip start date</Text>
+                    <View
+                      style={[
+                        styles.quickDateRow,
+                        isDenseForm && styles.quickDateRowDense,
+                      ]}
+                    >
+                      {(
+                        [
+                          { label: "Today", get: getToday },
+                          { label: "Tomorrow", get: getTomorrow },
+                          { label: "Day after", get: getDayAfter },
+                        ] as const
+                      ).map(({ label, get }) => {
+                        const iso = get();
+                        const isActive = state.tripStartDate === iso;
+                        return (
+                          <Pressable
+                            key={label}
+                            style={({ pressed }) => [
+                              styles.quickDateChip,
+                              isDenseForm && styles.quickDateChipDense,
+                              isActive && styles.quickDateChipActive,
+                              pressed && styles.quickDateChipPressed,
+                              Platform.OS === "web" &&
+                                ({ cursor: "pointer" } as ViewStyle),
+                            ]}
+                            onPress={() => setters.setTripStartDate(iso)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isActive }}
+                          >
+                            <Text
+                              style={[
+                                styles.quickDateChipText,
+                                isDenseForm && styles.quickDateChipTextDense,
+                                isActive && styles.quickDateChipTextActive,
+                              ]}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {Platform.OS === "web" ? (
+                      <TextInput
+                        style={[...fieldInputStyle, outlineErr("tripDate")]}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={Theme.placeholder}
+                        value={state.tripStartDate}
+                        onChangeText={setters.setTripStartDate}
+                        autoCorrect={false}
+                      />
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[
+                            ...fieldInputStyle,
+                            styles.dateTouchable,
+                            outlineErr("tripDate"),
+                          ]}
+                          onPress={() => setShowStartDatePicker(true)}
+                          activeOpacity={0.85}
+                        >
+                          <Text
+                            style={
+                              state.tripStartDate
+                                ? [
+                                    styles.dateTouchableText,
+                                    isDenseForm && styles.dateTouchableTextDense,
+                                  ]
+                                : [
+                                    styles.dateTouchablePlaceholder,
+                                    isDenseForm &&
+                                      styles.dateTouchablePlaceholderDense,
+                                  ]
+                            }
+                          >
+                            {state.tripStartDate
+                              ? new Date(
+                                  `${state.tripStartDate}T12:00:00`,
+                                ).toLocaleDateString("en-IN", {
+                                  weekday: "short",
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : "Tap to pick date"}
+                          </Text>
+                        </TouchableOpacity>
+                        {showStartDatePicker &&
+                          (Platform.OS === "android" ? (
+                            <DateTimePicker
+                              value={
+                                state.tripStartDate
+                                  ? new Date(`${state.tripStartDate}T12:00:00`)
+                                  : new Date()
+                              }
+                              mode="date"
+                              display="default"
+                              minimumDate={new Date()}
+                              onChange={(e, date) => {
+                                setShowStartDatePicker(false);
+                                if (e.type === "set" && date) {
+                                  setters.setTripStartDate(toISODate(date));
+                                }
+                              }}
+                            />
+                          ) : (
+                            <Modal visible transparent animationType="slide">
+                              <TouchableOpacity
+                                style={styles.datePickerBackdrop}
+                                activeOpacity={1}
+                                onPress={() => setShowStartDatePicker(false)}
+                              >
+                                <View
+                                  style={styles.datePickerSheet}
+                                  onStartShouldSetResponder={() => true}
+                                >
+                                  <View style={styles.datePickerHeader}>
+                                    <Text style={styles.datePickerTitle}>
+                                      Pick date
+                                    </Text>
+                                    <TouchableOpacity
+                                      onPress={() => setShowStartDatePicker(false)}
+                                      hitSlop={12}
+                                    >
+                                      <Text style={styles.datePickerDone}>Done</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                  <DateTimePicker
+                                    value={
+                                      state.tripStartDate
+                                        ? new Date(`${state.tripStartDate}T12:00:00`)
+                                        : new Date()
+                                    }
+                                    mode="date"
+                                    display="spinner"
+                                    minimumDate={new Date()}
+                                    onChange={(_, date) =>
+                                      date && setters.setTripStartDate(toISODate(date))
+                                    }
+                                  />
+                                </View>
+                              </TouchableOpacity>
+                            </Modal>
+                          ))}
+                      </>
+                    )}
+                  </View>
+                  {!hideTonsOnRouteStep ? (
+                    <View style={styles.gridCol}>
+                      <Text style={fieldLabelStyle}>Tons</Text>
+                      <TextInput
+                        style={[
+                          ...fieldInputStyle,
+                          outlineErr("tons"),
+                          isCompactMobile &&
+                            Platform.OS === "web" &&
+                            styles.mobileWebNoZoomInput,
+                        ]}
+                        placeholder="Enter load weight in tons"
+                        placeholderTextColor={Theme.placeholder}
+                        value={state.tons}
+                        onChangeText={(t) => onPadValueChange(setters.setTons, t)}
+                        keyboardType="decimal-pad"
+                        autoCorrect={false}
+                        inputAccessoryViewID={kbAccessoryId}
+                        onFocus={() => {
+                          focusPadField(
+                            () => focusNextField(clientPriceInputRef),
+                            state.tons,
+                            "Next",
+                          );
+                        }}
+                        blurOnSubmit={false}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+              </>
+            )}
 
             {state.pickupArea.trim() && state.dropLocation.trim() ? (
               <View style={styles.routePreviewPanel}>
@@ -982,20 +1250,97 @@ export function AddTripFormFields({
           </View>
           ) : null}
 
-          {/* 02 Client & Commercials */}
+          {showCommodityCard ? (
+            <View
+              style={[
+                styles.card,
+                isDenseForm && styles.cardDense,
+                wizardSection === "commodity" && styles.cardWizardStep,
+                desktopFormGrid && styles.cardGridCommodityWeb,
+              ]}
+            >
+              <View
+                style={[
+                  styles.cardHead,
+                  isDenseForm && styles.cardHeadDense,
+                  wizardSection === "commodity" && styles.cardHeadWizard,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.stepBadge,
+                    isDenseForm && styles.stepBadgeDense,
+                    wizardSection === "commodity" && styles.stepBadgeWizard,
+                  ]}
+                >
+                  <Text style={styles.stepBadgeText}>02</Text>
+                </View>
+                <Text
+                  style={[
+                    styles.cardTitle,
+                    isDenseForm && styles.cardTitleDense,
+                    wizardSection === "commodity" && styles.cardTitleWizard,
+                  ]}
+                >
+                  Commodity
+                </Text>
+              </View>
+              <TripCommodityFields
+                vehicleType={state.vehicleType}
+                loadType={state.loadType}
+                tons={state.tons}
+                onVehicleTypeChange={setters.setVehicleType}
+                onLoadTypeChange={setters.setLoadType}
+                onTonsChange={setters.setTons}
+                vehicleTypeError={invalid("vehicleType")}
+                loadTypeError={invalid("loadType")}
+                tonsError={invalid("tons")}
+                indentVehicleType={sourceIndent?.vehicle_type}
+                indentLoadType={sourceIndent?.load_type}
+                isWide={isWide && wizardSection == null}
+                useFormChrome={!isDenseForm && wizardSection == null}
+                preferWebSelect={Platform.OS === "web" && !isDenseForm}
+                fieldLabelStyle={fieldLabelStyle}
+                fieldInputStyle={fieldInputStyle}
+              />
+            </View>
+          ) : null}
+
+          {/* 03 Client & Commercials */}
           {showClientCard ? (
             <View
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
+                wizardSection === "client" && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridClientWeb,
               ]}
             >
-            <View style={[styles.cardHead, isDenseForm && styles.cardHeadDense]}>
-              <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
-                <Text style={styles.stepBadgeText}>02</Text>
+            <View
+              style={[
+                styles.cardHead,
+                isDenseForm && styles.cardHeadDense,
+                wizardSection === "client" && styles.cardHeadWizard,
+              ]}
+            >
+              <View
+                style={[
+                  styles.stepBadge,
+                  isDenseForm && styles.stepBadgeDense,
+                  wizardSection === "client" && styles.stepBadgeWizard,
+                ]}
+              >
+                <Text style={styles.stepBadgeText}>03</Text>
               </View>
-              <Text style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}>Client & Commercials</Text>
+              <Text
+                style={[
+                  styles.cardTitle,
+                  isDenseForm && styles.cardTitleDense,
+                  wizardSection === "client" && styles.cardTitleWizard,
+                ]}
+              >
+                Client & Commercials
+              </Text>
             </View>
 
             <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
@@ -1223,7 +1568,7 @@ export function AddTripFormFields({
           </View>
           ) : null}
 
-          {/* 03 Supply & Allocation */}
+          {/* 04 Supply & Allocation */}
           {showAllocationCard ? (
             <View
               style={[
@@ -1233,12 +1578,17 @@ export function AddTripFormFields({
                 mobileAllocWizard &&
                   aggregateTrackingStep != null &&
                   styles.cardAllocWizardStep,
+                isWizardAllocationCard &&
+                  mobileAllocWizard &&
+                  aggregateTrackingStep != null &&
+                  styles.cardWizardStep,
               ]}
             >
+            {!(mobileAllocWizard && aggregateTrackingStep) ? (
             <View style={[styles.cardHead, styles.cardHeadWithTrailingAction, isDenseForm && styles.cardHeadDense]}>
               <View style={styles.cardHeadTitleCluster}>
                 <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
-                  <Text style={styles.stepBadgeText}>03</Text>
+                  <Text style={styles.stepBadgeText}>04</Text>
                 </View>
                 <Text
                   style={[styles.cardTitle, isDenseForm && styles.cardTitleDense]}
@@ -1268,6 +1618,7 @@ export function AddTripFormFields({
                 ) : null}
               </TouchableOpacity>
             </View>
+            ) : null}
 
             {showAlloc("supply") ? (
             <>
@@ -1334,11 +1685,7 @@ export function AddTripFormFields({
                         assignmentShellStyles.assignSelectionGridDesktop,
                     ]}
                   >
-                    <View
-                      style={[
-                        invalid("assetDriver") && styles.fieldGroupRing,
-                      ]}
-                    >
+                    <View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
                       ) : (
@@ -1384,6 +1731,7 @@ export function AddTripFormFields({
                               title="Select Driver"
                               totalCount={driverOptions.length}
                               icon="user"
+                              errorOutline={invalid("assetDriver")}
                               selectedId={state.driverId}
                               onSelect={(id) => {
                                 const row = driverOptions.find((d) => d.id === id);
@@ -1412,11 +1760,7 @@ export function AddTripFormFields({
                       )}
                     </View>
                     {(showAlloc("fleetVehicle") || !mobileAllocWizard || showAssetFleetInline) ? (
-                    <View
-                      style={[
-                        invalid("assetVehicle") && styles.fieldGroupRing,
-                      ]}
-                    >
+                    <View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
                       ) : (
@@ -1469,6 +1813,7 @@ export function AddTripFormFields({
                               title="Select Vehicle"
                               totalCount={vehicleOptions.length}
                               icon="truck"
+                              errorOutline={invalid("assetVehicle")}
                               selectedId={state.vehicleId}
                               onSelect={(id) => {
                                 const row = vehicleOptions.find((v) => v.id === id);
@@ -1507,6 +1852,101 @@ export function AddTripFormFields({
               </>
             ) : (
               <>
+                {mobileAllocWizard && aggregateTrackingStep ? (
+                  <AggregateTrackingMobileStep
+                    webCentered={isWeb && winW >= 600}
+                    step={aggregateTrackingStep}
+                    driverName={state.aggregateDriverName}
+                    onDriverNameChange={(t) =>
+                      onPadValueChange(setters.setAggregateDriverName, t)
+                    }
+                    driverPhone={state.driverPhone}
+                    onDriverPhoneChange={(v) =>
+                      setters.setDriverPhone(formatMobileNumber(v))
+                    }
+                    vehicleText={state.aggregateVehicleText}
+                    onVehicleTextChange={(v) =>
+                      setters.setAggregateVehicleText(v)
+                    }
+                    invalid={invalid}
+                    driverNameInputRef={aggregateDriverNameInputRef}
+                    driverPhoneInputRef={driverPhoneInputRef}
+                    vehicleInputRef={aggregateVehicleInputRef}
+                    inputAccessoryViewID={kbAccessoryId}
+                    driverNameFromPlatform={state.driverPhoneName?.trim() || null}
+                    onFocusDriverName={() => {
+                      focusPadField(
+                        () => focusNextField(aggregateVehicleInputRef),
+                        state.aggregateDriverName,
+                      );
+                    }}
+                    onFocusDriverPhone={() => {
+                      focusPadField(
+                        () => focusNextField(aggregateDriverNameInputRef),
+                        state.driverPhone,
+                      );
+                    }}
+                    onFocusVehicle={() => {
+                      focusPadField(
+                        finishPadFieldEntry,
+                        state.aggregateVehicleText,
+                        "Next",
+                      );
+                    }}
+                    phoneDigitHint={
+                      state.driverPhone.length > 0 &&
+                      state.driverPhone.length < 10
+                        ? `${state.driverPhone.length}/10 digits`
+                        : null
+                    }
+                    phoneValidationMessage={
+                      state.driverPhone.trim() &&
+                      validatePhone(state.driverPhone.trim())
+                        ? validatePhone(state.driverPhone.trim())
+                        : null
+                    }
+                    phoneExtras={
+                      showDriverPhoneField ? (
+                        <>
+                          {renderDriverPhoneRecommendations(
+                            state.driverPhone.length >= 10,
+                            "stack",
+                          )}
+                          {state.driverPhoneTripConflict ? (
+                            <View
+                              style={[
+                                styles.driverConfirmCard,
+                                styles.driverConfirmCardError,
+                                { marginTop: 12 },
+                              ]}
+                              accessibilityRole="alert"
+                            >
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text
+                                  style={[
+                                    styles.driverConfirmMain,
+                                    { color: Theme.destructive },
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {state.driverPhoneName?.trim()
+                                    ? `${state.driverPhoneName.trim()} is already on a trip`
+                                    : "This driver is already on a trip"}
+                                </Text>
+                                <Text style={styles.driverConfirmSub}>
+                                  {state.driverPhoneTripConflictLabel
+                                    ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
+                                    : "Driver is Busy / On Trip. Use a different number or complete the current trip first."}
+                                </Text>
+                              </View>
+                              <AlertCircle size={20} color={Theme.destructive} />
+                            </View>
+                          ) : null}
+                        </>
+                      ) : null
+                    }
+                  />
+                ) : (
                 <View
                   style={[
                     styles.aggregateSplit,
@@ -1521,7 +1961,6 @@ export function AddTripFormFields({
                     style={[
                       styles.aggregateLeftPane,
                       allocationWideLayout && styles.aggregatePaneWide,
-                      invalid("partner") && styles.fieldGroupRing,
                     ]}
                   >
                     {suppliersLoading ? (
@@ -1603,6 +2042,7 @@ export function AddTripFormFields({
                             title="Select Transport Partner"
                             totalCount={suppliers.length}
                             icon="building"
+                            errorOutline={invalid("partner")}
                             selectedId={state.supplierId}
                             onSelect={(id) => {
                               const row = suppliers.find((s) => s.id === id);
@@ -1638,9 +2078,11 @@ export function AddTripFormFields({
                             onHeaderAction={handleAddSupplierShortcut}
                           />
                         ) : null}
-                        <Text style={assignmentShellStyles.supplyFooterHint}>
-                          Select a transport partner from your network to continue.
-                        </Text>
+                        {!state.supplierId ? (
+                          <Text style={assignmentShellStyles.supplyFooterHint}>
+                            Select a transport partner
+                          </Text>
+                        ) : null}
                       </>
                     )}
                   </View>
@@ -1768,162 +2210,11 @@ export function AddTripFormFields({
                 ) : null}
 
                 {!state.assignLater &&
+                !mobileAllocWizard &&
                 (showDriverNameField ||
                   showDriverPhoneField ||
                   showVehicleField) ? (
                   <>
-                    {mobileAllocWizard && aggregateTrackingStep ? (
-                      <AggregateTrackingMobileStep
-                        step={aggregateTrackingStep}
-                        driverName={state.aggregateDriverName}
-                        onDriverNameChange={(t) =>
-                          onPadValueChange(setters.setAggregateDriverName, t)
-                        }
-                        driverPhone={state.driverPhone}
-                        onDriverPhoneChange={(v) =>
-                          setters.setDriverPhone(formatMobileNumber(v))
-                        }
-                        vehicleText={state.aggregateVehicleText}
-                        onVehicleTextChange={(v) =>
-                          setters.setAggregateVehicleText(
-                            formatIndianVehicleNumberInput(v),
-                          )
-                        }
-                        invalid={invalid}
-                        driverNameInputRef={aggregateDriverNameInputRef}
-                        driverPhoneInputRef={driverPhoneInputRef}
-                        vehicleInputRef={aggregateVehicleInputRef}
-                        inputAccessoryViewID={kbAccessoryId}
-                        onFocusDriverName={() => {
-                          focusPadField(
-                            () => focusNextField(driverPhoneInputRef),
-                            state.aggregateDriverName,
-                          );
-                        }}
-                        onFocusDriverPhone={() => {
-                          focusPadField(
-                            () => focusNextField(aggregateVehicleInputRef),
-                            state.driverPhone,
-                          );
-                        }}
-                        onFocusVehicle={() => {
-                          focusPadField(
-                            finishPadFieldEntry,
-                            state.aggregateVehicleText,
-                            "Next",
-                          );
-                        }}
-                        phoneDigitHint={
-                          state.driverPhone.length > 0 &&
-                          state.driverPhone.length < 10
-                            ? `${state.driverPhone.length}/10 digits`
-                            : null
-                        }
-                        phoneValidationMessage={
-                          state.driverPhone.trim() &&
-                          validatePhone(state.driverPhone.trim())
-                            ? validatePhone(state.driverPhone.trim())
-                            : null
-                        }
-                        phoneExtras={
-                          showDriverPhoneField ? (
-                            <>
-                              {state.driverPhoneTripConflict ? (
-                                <View
-                                  style={[
-                                    styles.driverConfirmCard,
-                                    styles.driverConfirmCardError,
-                                    { marginTop: 12 },
-                                  ]}
-                                  accessibilityRole="alert"
-                                >
-                                  <View style={{ flex: 1, minWidth: 0 }}>
-                                    <Text
-                                      style={[
-                                        styles.driverConfirmMain,
-                                        { color: Theme.destructive },
-                                      ]}
-                                      numberOfLines={2}
-                                    >
-                                      {state.driverPhoneName?.trim()
-                                        ? `${state.driverPhoneName.trim()} is already on a trip`
-                                        : "This driver is already on a trip"}
-                                    </Text>
-                                    <Text style={styles.driverConfirmSub}>
-                                      {state.driverPhoneTripConflictLabel
-                                        ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
-                                        : "Driver is Busy / On Trip. Use a different number or complete the current trip first."}
-                                    </Text>
-                                  </View>
-                                  <AlertCircle
-                                    size={20}
-                                    color={Theme.destructive}
-                                  />
-                                </View>
-                              ) : state.driverPhoneName ? (
-                                <TouchableOpacity
-                                  onPress={() => {
-                                    const nextConfirmed = !state.driverPhoneConfirmed;
-                                    const resolved =
-                                      state.driverPhoneName?.trim() ?? "";
-                                    if (
-                                      nextConfirmed &&
-                                      resolved &&
-                                      !state.aggregateDriverName.trim()
-                                    ) {
-                                      setters.setAggregateDriverName(resolved);
-                                    }
-                                    setters.setDriverPhoneConfirmed(nextConfirmed);
-                                  }}
-                                  style={[
-                                    styles.driverConfirmCard,
-                                    { marginTop: 12 },
-                                    state.driverPhoneConfirmed &&
-                                      styles.driverConfirmCardConfirmed,
-                                    invalid("driverConfirm") &&
-                                      styles.driverConfirmCardError,
-                                  ]}
-                                >
-                                  <View style={{ flex: 1, minWidth: 0 }}>
-                                    <Text
-                                      style={[
-                                        styles.driverConfirmMain,
-                                        state.driverPhoneConfirmed &&
-                                          styles.driverConfirmMainOnDark,
-                                      ]}
-                                      numberOfLines={1}
-                                    >
-                                      {state.driverPhoneConfirmed
-                                        ? `Confirmed: ${state.driverPhoneName}`
-                                        : `Found: ${state.driverPhoneName}`}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.driverConfirmSub,
-                                        state.driverPhoneConfirmed &&
-                                          styles.driverConfirmSubOnDark,
-                                      ]}
-                                    >
-                                      {state.driverPhoneConfirmed
-                                        ? "Tap again to change"
-                                        : "Tap to confirm before creating the trip"}
-                                    </Text>
-                                  </View>
-                                  <CheckCircle2
-                                    size={18}
-                                    color={
-                                      state.driverPhoneConfirmed
-                                        ? Theme.textOnPrimary
-                                        : Theme.iconPrimary
-                                    }
-                                  />
-                                </TouchableOpacity>
-                              ) : null}
-                            </>
-                          ) : null
-                        }
-                      />
-                    ) : (
                     <View
                       style={[
                         styles.gridRow,
@@ -1932,11 +2223,104 @@ export function AddTripFormFields({
                         driverVehicleSideBySide && styles.gridRowWide,
                       ]}
                     >
+                      {showDriverPhoneField ? (
+                      <View
+                        style={[
+                          webPhoneRecsAside ? styles.webAggregatePhoneRow : null,
+                          mobileAllocWizard && styles.allocWizardFieldCol,
+                          webPhoneRecsAside && styles.webAggregatePhoneRowCol,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.gridCol,
+                            mobileAllocWizard && styles.allocWizardFieldCol,
+                            webPhoneRecsAside && styles.webAggregatePhoneFieldCol,
+                          ]}
+                        >
+                          <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
+                            Driver phone (tracking) *
+                          </Text>
+                          <View
+                            style={[
+                              styles.inPhoneOuter,
+                              isDenseForm && styles.inPhoneOuterDense,
+                              invalid("driverPhone") && styles.inputErrorOutline,
+                            ]}
+                          >
+                            <Text
+                              style={styles.inPhoneFlag}
+                              accessibilityLabel="India"
+                            >
+                              🇮🇳
+                            </Text>
+                            <Text style={styles.inPhoneCc}>+91</Text>
+                            <TextInput
+                              style={[
+                                styles.inPhoneInput,
+                                isDenseForm && styles.inPhoneInputDense,
+                                isCompactMobile &&
+                                  Platform.OS === "web" &&
+                                  styles.mobileWebNoZoomInput,
+                              ]}
+                              placeholder="98765 43210"
+                              placeholderTextColor={Theme.placeholder}
+                              value={state.driverPhone}
+                              onChangeText={(v) => {
+                                setters.setDriverPhone(formatMobileNumber(v));
+                              }}
+                              keyboardType="phone-pad"
+                              maxLength={10}
+                              ref={driverPhoneInputRef}
+                              inputAccessoryViewID={kbAccessoryId}
+                              onFocus={() => {
+                                focusPadField(
+                                  () => focusNextField(aggregateDriverNameInputRef),
+                                  state.driverPhone,
+                                );
+                              }}
+                              blurOnSubmit={false}
+                            />
+                          </View>
+                          {state.driverPhone.length > 0 &&
+                          state.driverPhone.length < 10 ? (
+                            <Text style={styles.phoneDigitHint}>
+                              {state.driverPhone.length}/10 digits
+                            </Text>
+                          ) : null}
+                          {state.driverPhone.trim() &&
+                          validatePhone(state.driverPhone.trim()) ? (
+                            <Text style={[styles.warningText, { marginTop: 4 }]}>
+                              {validatePhone(state.driverPhone.trim())}
+                            </Text>
+                          ) : null}
+                          {!mobileAllocWizard && !webPhoneRecsAside
+                            ? renderDriverPhoneRecommendations(
+                                state.driverPhone.length >= 10,
+                                "stack",
+                              )
+                            : null}
+                        </View>
+                        {webPhoneRecsAside ? (
+                          <View style={styles.webAggregateRecsCol}>
+                            {renderDriverPhoneRecommendations(
+                              state.driverPhone.length >= 10,
+                              "aside",
+                            )}
+                          </View>
+                        ) : null}
+                      </View>
+                      ) : null}
                       {showDriverNameField ? (
                       <View style={[styles.gridCol, mobileAllocWizard && styles.allocWizardFieldCol]}>
                         <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                           Driver name (tracking) *
                         </Text>
+                        {state.driverPhoneName?.trim() ? (
+                          <Text style={[styles.phoneDigitHint, { marginBottom: 6 }]}>
+                            From platform: {state.driverPhoneName.trim()}
+                          </Text>
+                        ) : null}
                         <View style={styles.iconField}>
                           <User
                             size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
@@ -1962,73 +2346,13 @@ export function AddTripFormFields({
                             inputAccessoryViewID={kbAccessoryId}
                             onFocus={() => {
                               focusPadField(
-                                () => focusNextField(driverPhoneInputRef),
+                                () => focusNextField(aggregateVehicleInputRef),
                                 state.aggregateDriverName,
                               );
                             }}
                             blurOnSubmit={false}
                           />
                         </View>
-                      </View>
-                      ) : null}
-                      {showDriverPhoneField ? (
-                      <View style={[styles.gridCol, mobileAllocWizard && styles.allocWizardFieldCol]}>
-                        <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
-                          Driver phone (tracking) *
-                        </Text>
-                        <View
-                          style={[
-                            styles.inPhoneOuter,
-                            isDenseForm && styles.inPhoneOuterDense,
-                            invalid("driverPhone") && styles.inputErrorOutline,
-                          ]}
-                        >
-                          <Text
-                            style={styles.inPhoneFlag}
-                            accessibilityLabel="India"
-                          >
-                            🇮🇳
-                          </Text>
-                          <Text style={styles.inPhoneCc}>+91</Text>
-                          <TextInput
-                            style={[
-                              styles.inPhoneInput,
-                              isDenseForm && styles.inPhoneInputDense,
-                              isCompactMobile &&
-                                Platform.OS === "web" &&
-                                styles.mobileWebNoZoomInput,
-                            ]}
-                            placeholder="98765 43210"
-                            placeholderTextColor={Theme.placeholder}
-                            value={state.driverPhone}
-                            onChangeText={(v) => {
-                              setters.setDriverPhone(formatMobileNumber(v));
-                            }}
-                            keyboardType="number-pad"
-                            maxLength={10}
-                            ref={driverPhoneInputRef}
-                            inputAccessoryViewID={kbAccessoryId}
-                            onFocus={() => {
-                              focusPadField(
-                                () => focusNextField(aggregateVehicleInputRef),
-                                state.driverPhone,
-                              );
-                            }}
-                            blurOnSubmit={false}
-                          />
-                        </View>
-                        {state.driverPhone.length > 0 &&
-                        state.driverPhone.length < 10 ? (
-                          <Text style={styles.phoneDigitHint}>
-                            {state.driverPhone.length}/10 digits
-                          </Text>
-                        ) : null}
-                        {state.driverPhone.trim() &&
-                        validatePhone(state.driverPhone.trim()) ? (
-                          <Text style={[styles.warningText, { marginTop: 4 }]}>
-                            {validatePhone(state.driverPhone.trim())}
-                          </Text>
-                        ) : null}
                       </View>
                       ) : null}
                       {showVehicleField ? (
@@ -2042,6 +2366,11 @@ export function AddTripFormFields({
                         <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
                           Vehicle number *
                         </Text>
+                        <Text style={[styles.phoneDigitHint, { marginBottom: 6 }]}>
+                          {getIndianVehicleFormatHint(
+                            getIndianVehicleNormalizedLength(state.aggregateVehicleText),
+                          )}
+                        </Text>
                         <View style={styles.iconField}>
                           <Truck
                             size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
@@ -2049,6 +2378,9 @@ export function AddTripFormFields({
                             style={[styles.iconInField, isDenseForm && styles.iconInFieldDense]}
                           />
                           <TextInput
+                            key={getIndianVehicleKeyboardType(
+                              getIndianVehicleNormalizedLength(state.aggregateVehicleText),
+                            )}
                             style={[
                               ...iconFieldInputStyle,
                               outlineErr("vehicleNumber"),
@@ -2057,15 +2389,23 @@ export function AddTripFormFields({
                                 Platform.OS === "web" &&
                                 styles.mobileWebNoZoomInput,
                             ]}
-                            placeholder="e.g. TN 67 GH 7654"
+                            placeholder="e.g. TN 12 AB 3456"
                             placeholderTextColor={Theme.placeholder}
                             value={state.aggregateVehicleText}
                             onChangeText={(v) => {
-                              setters.setAggregateVehicleText(
-                                formatIndianVehicleNumberInput(v),
-                              );
+                              setters.setAggregateVehicleText(applyIndianVehicleKeystroke(v));
                             }}
-                            autoCapitalize="characters"
+                            keyboardType={getIndianVehicleKeyboardType(
+                              getIndianVehicleNormalizedLength(state.aggregateVehicleText),
+                            )}
+                            autoCapitalize={
+                              getIndianVehicleKeyboardType(
+                                getIndianVehicleNormalizedLength(state.aggregateVehicleText),
+                              ) === "number-pad"
+                                ? "none"
+                                : "characters"
+                            }
+                            autoCorrect={false}
                             ref={aggregateVehicleInputRef}
                             inputAccessoryViewID={kbAccessoryId}
                             onFocus={() => {
@@ -2081,7 +2421,6 @@ export function AddTripFormFields({
                       </View>
                       ) : null}
                     </View>
-                    )}
                     {showDriverPhoneField &&
                     !mobileAllocWizard &&
                     state.driverPhoneTripConflict ? (
@@ -2115,65 +2454,6 @@ export function AddTripFormFields({
                           color={Theme.destructive}
                         />
                       </View>
-                    ) : showDriverPhoneField &&
-                      !mobileAllocWizard &&
-                      state.driverPhoneName ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            const nextConfirmed = !state.driverPhoneConfirmed;
-                            const resolved =
-                              state.driverPhoneName?.trim() ?? "";
-                            if (
-                              nextConfirmed &&
-                              resolved &&
-                              !state.aggregateDriverName.trim()
-                            ) {
-                              setters.setAggregateDriverName(resolved);
-                            }
-                            setters.setDriverPhoneConfirmed(nextConfirmed);
-                          }}
-                          style={[
-                            styles.driverConfirmCard,
-                            state.driverPhoneConfirmed &&
-                              styles.driverConfirmCardConfirmed,
-                            invalid("driverConfirm") &&
-                              styles.driverConfirmCardError,
-                          ]}
-                        >
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              style={[
-                                styles.driverConfirmMain,
-                                state.driverPhoneConfirmed &&
-                                  styles.driverConfirmMainOnDark,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {state.driverPhoneConfirmed
-                                ? `Confirmed: ${state.driverPhoneName}`
-                                : `Found: ${state.driverPhoneName}`}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.driverConfirmSub,
-                                state.driverPhoneConfirmed &&
-                                  styles.driverConfirmSubOnDark,
-                              ]}
-                            >
-                              {state.driverPhoneConfirmed
-                                ? "Tap again to change"
-                                : "Tap to confirm before creating the trip"}
-                            </Text>
-                          </View>
-                          <CheckCircle2
-                            size={18}
-                            color={
-                              state.driverPhoneConfirmed
-                                ? Theme.textOnPrimary
-                                : Theme.iconPrimary
-                            }
-                          />
-                        </TouchableOpacity>
                     ) : null}
                   </>
                 ) : (
@@ -2189,6 +2469,7 @@ export function AddTripFormFields({
                   </View>
                   ) : null}
                 </View>
+                )}
               </>
             )}
 
@@ -2301,6 +2582,10 @@ const styles = StyleSheet.create({
   scrollContentDense: {
     paddingTop: 6,
   },
+  scrollContentWizard: {
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
   contentMax: {
     width: "100%",
     maxWidth: 960,
@@ -2313,7 +2598,7 @@ const styles = StyleSheet.create({
     width: "100%",
     minWidth: 0,
   },
-  /** Desktop web: row1 route|client; row2 supply full width; row3 CTA. */
+  /** Desktop web: row1 route|commodity; row2 client; row3 supply; row4 CTA. */
   formColumnGridWeb: Platform.select<ViewStyle>({
     // CSS grid is not in ViewStyle — intentional RN-Web extension
     web: {
@@ -2326,20 +2611,24 @@ const styles = StyleSheet.create({
     default: {},
   }),
   ctaGridSpanWeb: Platform.select<ViewStyle>({
-    web: { gridColumn: "1 / -1", gridRow: 3 } as unknown as ViewStyle,
+    web: { gridColumn: "1 / -1", gridRow: 4 } as unknown as ViewStyle,
     default: {},
   }),
-  /** Desktop grid: route|client row1; supply spans row2 (notes via modal). */
+  /** Desktop grid: route | commodity on row 1. */
   cardGridRouteWeb: Platform.select<ViewStyle>({
     web: { gridColumn: 1, gridRow: 1 } as unknown as ViewStyle,
     default: {},
   }),
-  cardGridClientWeb: Platform.select<ViewStyle>({
+  cardGridCommodityWeb: Platform.select<ViewStyle>({
     web: { gridColumn: 2, gridRow: 1 } as unknown as ViewStyle,
     default: {},
   }),
-  cardGridSupplyWeb: Platform.select<ViewStyle>({
+  cardGridClientWeb: Platform.select<ViewStyle>({
     web: { gridColumn: "1 / -1", gridRow: 2 } as unknown as ViewStyle,
+    default: {},
+  }),
+  cardGridSupplyWeb: Platform.select<ViewStyle>({
+    web: { gridColumn: "1 / -1", gridRow: 3 } as unknown as ViewStyle,
     default: {},
   }),
   cardHeadWithTrailingAction: {
@@ -2484,10 +2773,22 @@ const styles = StyleSheet.create({
     minHeight: 320,
     paddingBottom: 8,
   },
+  cardWizardStep: {
+    marginBottom: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: PULSE_TRIP_RADIUS.cardDense,
+  },
   cardHeadDense: {
     paddingBottom: 4,
     marginBottom: 6,
     gap: 5,
+  },
+  cardHeadWizard: {
+    alignItems: "center",
+    gap: 10,
+    paddingBottom: 12,
+    marginBottom: 14,
   },
   cardHead: {
     flexDirection: "row",
@@ -2497,6 +2798,53 @@ const styles = StyleSheet.create({
     borderBottomColor: PULSE_TRIP.border,
     paddingBottom: 10,
     marginBottom: 12,
+  },
+  stepBadgeWizard: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+  },
+  cardTitleWizard: {
+    flex: 0,
+    fontSize: 11,
+    lineHeight: 26,
+    letterSpacing: 0.85,
+    paddingTop: 0,
+    ...Platform.select({
+      android: { includeFontPadding: false, textAlignVertical: "center" },
+      default: {},
+    }),
+  },
+  routeWizardBody: {
+    gap: 0,
+    width: "100%",
+  },
+  routeLocationsStack: {
+    gap: 12,
+    width: "100%",
+  },
+  routeDateSection: {
+    width: "100%",
+    marginTop: 14,
+    paddingTop: 0,
+  },
+  routeFieldCol: {
+    width: "100%",
+    minWidth: 0,
+  },
+  routeDateBlock: {
+    width: "100%",
+    marginTop: 2,
+  },
+  routeDateLabel: {
+    marginBottom: 6,
+  },
+  labelWizard: {
+    marginBottom: 4,
+    letterSpacing: 0.55,
+  },
+  inputWizardDense: {
+    marginBottom: 0,
   },
   stepBadgeDense: {
     width: 20,
@@ -2571,6 +2919,35 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: "100%",
   },
+  webAggregatePhoneRow: Platform.select<ViewStyle>({
+    web: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 20,
+      width: "100%",
+    },
+    default: {},
+  }),
+  webAggregatePhoneRowCol: {
+    width: "100%",
+    minWidth: 0,
+  },
+  webAggregatePhoneFieldCol: Platform.select<ViewStyle>({
+    web: {
+      flex: 0,
+      flexBasis: 280,
+      maxWidth: 320,
+      minWidth: 240,
+    },
+    default: {},
+  }),
+  webAggregateRecsCol: Platform.select<ViewStyle>({
+    web: {
+      flex: 1,
+      minWidth: 260,
+    },
+    default: {},
+  }),
   aggregateSplitWide: {
     flexDirection: "row",
     alignItems: "stretch",
@@ -2974,6 +3351,11 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 4,
   },
+  quickDateRowWizard: {
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
   quickDateRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -3026,7 +3408,9 @@ const styles = StyleSheet.create({
   },
   dateTouchableTextDense: {
     fontSize: 14,
+    fontWeight: "500",
     fontStyle: "normal",
+    color: Theme.textPrimaryDark,
   },
   dateTouchablePlaceholder: {
     ...FinanceTxnTypography.routeWhy,
@@ -3036,6 +3420,7 @@ const styles = StyleSheet.create({
   dateTouchablePlaceholderDense: {
     fontSize: 14,
     fontStyle: "normal",
+    color: Theme.placeholder,
   },
   datePickerBackdrop: {
     flex: 1,

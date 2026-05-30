@@ -8,9 +8,17 @@ const projectRoot = __dirname;
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(projectRoot);
 
-// ── Persistent transform cache (project-local; gitignored) ───────────────────
+// ── Transform cache ───────────────────────────────────────────────────────────
+// Persistent FileStore speeds CI/production builds but in dev it often leaves
+// stale module IDs after HMR / graph changes → "Requiring unknown module 5xxx"
+// and importedAll crashes. Use in-memory cache only while developing.
 const metroCacheRoot = path.join(projectRoot, '.metro-cache');
-config.cacheStores = [new FileStore({ root: metroCacheRoot })];
+const usePersistentMetroCache =
+  process.env.NODE_ENV === 'production' ||
+  process.env.METRO_PERSISTENT_CACHE === '1';
+if (usePersistentMetroCache) {
+  config.cacheStores = [new FileStore({ root: metroCacheRoot })];
+}
 
 // ── Worker concurrency (override with METRO_MAX_WORKERS) ─────────────────────
 const cpuCount = os.cpus().length;
@@ -77,6 +85,10 @@ const framerMotionNativeShimPath = path.resolve(
 const isFramerMotionRequest = (moduleName) =>
   moduleName === 'framer-motion' || moduleName.startsWith('framer-motion/');
 
+/** Metro passes `ios` / `android`; graph walks sometimes omit platform — still native. */
+const isNativePlatform = (platform) =>
+  platform == null || platform === 'ios' || platform === 'android' || platform === 'native';
+
 config.transformer = {
   ...transformer,
   babelTransformerPath: require.resolve('react-native-svg-transformer/expo'),
@@ -108,7 +120,7 @@ config.resolver = {
     }
     // react-native-webview ships both `src/` (package "react-native" field) and
     // compiled `lib/` — resolving both registers RNCWebView twice on native.
-    if (platform !== 'web' && moduleName === 'react-native-webview') {
+    if (isNativePlatform(platform) && moduleName === 'react-native-webview') {
       return {
         filePath: path.resolve(
           projectRoot,
@@ -120,7 +132,7 @@ config.resolver = {
     // Native-only `framer-motion` stub — keeps moti from dragging the DOM-only
     // framer-motion bundle into iOS/Android builds. Web falls through.
     // `platform` is occasionally undefined during Metro graph walks — treat as native.
-    if (platform !== 'web' && isFramerMotionRequest(moduleName)) {
+    if (isNativePlatform(platform) && isFramerMotionRequest(moduleName)) {
       return {
         filePath: framerMotionNativeShimPath,
         type: 'sourceFile',

@@ -75,6 +75,9 @@ export const ROUTES = {
 
   // Full-screen flows (root-level stack)
   ADD_TRIP:       '/add-trip'       as const,
+  /** User-local vehicle or product type label (device-only). */
+  addCommodityType: (kind: 'vehicle' | 'product') =>
+    `/add-commodity-type?kind=${kind}` as const,
   /** Full-screen driver & vehicle assignment from trip detail (Change). */
   tripAssignment: (tripId: string, focus?: 'driver' | 'vehicle') => {
     const base = `/trip/${encodeURIComponent(tripId)}/assignment` as const;

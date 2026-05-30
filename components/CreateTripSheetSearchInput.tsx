@@ -33,6 +33,8 @@ export interface CreateTripSheetSearchInputProps {
    * Dense strip matching Chat trip sidebar search (`ChatScreen` tripSearchScopeSearchWrap).
    */
   compactChat?: boolean;
+  /** When `compactChat`, `sm` uses smaller type (location picker modal). */
+  compactChatSize?: "md" | "sm";
 }
 
 export const CreateTripSheetSearchInput = forwardRef<
@@ -52,9 +54,11 @@ export const CreateTripSheetSearchInput = forwardRef<
     spellCheck = false,
     autoComplete = "off",
     compactChat = false,
+    compactChatSize = "md",
   },
   ref,
 ) {
+  const chatSm = compactChat && compactChatSize === "sm";
   const [focused, setFocused] = useState(false);
   const webCursor =
     Platform.OS === "web"
@@ -71,7 +75,12 @@ export const CreateTripSheetSearchInput = forwardRef<
       ]}
     >
       {compactChat ? (
-        <Search size={12} color="#94a3b8" strokeWidth={2} style={styles.chatSearchIcon} />
+        <Search
+          size={chatSm ? 11 : 12}
+          color="#94a3b8"
+          strokeWidth={2}
+          style={styles.chatSearchIcon}
+        />
       ) : (
         <View style={styles.iconChip}>
           <Search size={18} color={Theme.iconSlate} strokeWidth={2} />
@@ -79,7 +88,10 @@ export const CreateTripSheetSearchInput = forwardRef<
       )}
       <TextInput
         ref={ref}
-        style={[compactChat ? styles.inputChat : styles.input, webCursor]}
+        style={[
+          compactChat ? (chatSm ? styles.inputChatSm : styles.inputChat) : styles.input,
+          webCursor,
+        ]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -202,6 +214,18 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     fontSize: 11,
+    fontWeight: "500",
+    color: "#334155",
+    paddingVertical: Platform.OS === "android" ? 2 : 0,
+    borderWidth: 0,
+    ...Platform.select({
+      web: { outlineStyle: "none" } as unknown as TextStyle,
+    }),
+  },
+  inputChatSm: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
     fontWeight: "500",
     color: "#334155",
     paddingVertical: Platform.OS === "android" ? 2 : 0,

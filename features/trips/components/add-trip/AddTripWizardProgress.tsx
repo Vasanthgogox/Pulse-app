@@ -1,8 +1,7 @@
 import { memo } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { MotiView } from "moti";
+import { Platform, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
-import { PULSE_TRIP, PULSE_TRIP_RADIUS } from "./addTripPulseTheme";
+import { PULSE_TRIP } from "./addTripPulseTheme";
 
 export type AddTripWizardProgressStep = {
   id: string;
@@ -30,34 +29,24 @@ export const AddTripWizardProgress = memo(function AddTripWizardProgress({
           const active = i === currentIndex;
           const done = i < currentIndex;
           return (
-            <View key={step.id} style={styles.item}>
-              <MotiView
-                animate={{
-                  width: active ? 28 : done ? 14 : 8,
-                  backgroundColor: active || done ? PULSE_TRIP.indigo : "#e2e8f0",
-                  opacity: done && !active ? 0.5 : 1,
-                }}
-                transition={{ type: "timing", duration: 320 }}
-                style={styles.bar}
-              />
-              <MotiView
-                animate={{
-                  opacity: active ? 1 : 0.65,
-                  translateY: active ? 0 : 1,
-                }}
-                transition={{ type: "timing", duration: 280 }}
+            <View
+              key={step.id}
+              style={[
+                styles.item,
+                active && styles.itemActive,
+                done && !active && styles.itemDone,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.label,
+                  active && styles.labelActive,
+                  done && !active && styles.labelDone,
+                ]}
+                numberOfLines={1}
               >
-                <Text
-                  style={[
-                    styles.label,
-                    active && styles.labelActive,
-                    done && styles.labelDone,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {step.label}
-                </Text>
-              </MotiView>
+                {step.label}
+              </Text>
             </View>
           );
         })}
@@ -68,35 +57,44 @@ export const AddTripWizardProgress = memo(function AddTripWizardProgress({
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 4,
-    paddingBottom: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
     paddingTop: 4,
+    backgroundColor: PULSE_TRIP.cardBg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_TRIP.border,
   },
   row: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "stretch",
     gap: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: PULSE_TRIP.border,
-    paddingTop: 14,
   },
   item: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    justifyContent: "flex-end",
     minWidth: 0,
+    paddingVertical: 8,
     paddingHorizontal: 2,
+    borderBottomWidth: 3,
+    borderBottomColor: "transparent",
+    marginBottom: -StyleSheet.hairlineWidth,
+    ...Platform.select({
+      web: { cursor: "default" } as ViewStyle,
+      default: {},
+    }),
   },
-  bar: {
-    height: 4,
-    borderRadius: PULSE_TRIP_RADIUS.badge,
+  itemActive: {
+    borderBottomColor: PULSE_TRIP.indigo,
+  },
+  itemDone: {
+    borderBottomColor: "rgba(99, 102, 241, 0.35)",
   },
   label: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
     color: PULSE_TRIP.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     textAlign: "center",
   },
   labelActive: {
@@ -105,5 +103,7 @@ const styles = StyleSheet.create({
   },
   labelDone: {
     color: PULSE_TRIP.indigo,
+    fontWeight: "700",
+    opacity: 0.75,
   },
 });

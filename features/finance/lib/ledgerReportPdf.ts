@@ -68,7 +68,7 @@ export function buildLedgerReportHtml(
   options: LedgerReportPdfOptions,
 ): string {
   const {
-    companyName = "Q",
+    companyName = "PULSE",
     reportTitle,
     dateRangeLabel,
     logoUri,

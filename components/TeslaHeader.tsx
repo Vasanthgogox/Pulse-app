@@ -144,7 +144,7 @@ export function TeslaHeader({
         )}
         <View style={styles.titleBlock}>
           <Text style={[styles.brandText, isDark && styles.brandTextDark]} numberOfLines={1}>
-            Qu.
+            PULSE
           </Text>
           <Text
             style={[styles.title, isDark && styles.titleDark, titleTextStyle]}

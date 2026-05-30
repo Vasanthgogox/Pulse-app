@@ -1,5 +1,6 @@
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { AwardedIndentDeployModal } from "@/features/indents/components/AwardedIndentDeployModal";
+import { AwardedIndentDeployPeek } from "@/features/indents/components/AwardedIndentDeployPeek";
 import { buildPendingAwardedDeployQueue } from "@/features/indents/utils/pendingAwardedDeploy.util";
 import {
   useMarketIndentsQuery,
@@ -25,9 +26,12 @@ import { AppState, type AppStateStatus } from "react-native";
 
 export type AwardedIndentDeployModalContextValue = {
   pendingDeployCount: number;
+  /** Awards collapsed to the bottom peek (still in queue). */
+  minimizedDeployCount: number;
   /** When true, connection invitation modals should wait. */
   blocksConnectionInvitations: boolean;
   presentNextDeploy: () => void;
+  expandDeployModal: () => void;
 };
 
 const AwardedIndentDeployModalContext =
@@ -70,6 +74,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
   const [queueViewIndex, setQueueViewIndex] = useState(0);
   const [dismissedForSession, setDismissedForSession] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   /** Set when user taps Assign — keeps deploy cards hidden until allocation route ends. */
   const [deployFlowIndentId, setDeployFlowIndentId] = useState<string | null>(null);
 
@@ -107,9 +112,11 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
 
   const deployFlowActive = onDeployFlowScreen || deployFlowIndentId != null;
 
-  const showDeployModal = Boolean(activeItem) && !deployFlowActive;
+  const hasPendingDeploy = Boolean(activeItem) && !deployFlowActive;
+  const showExpandedDeployModal = hasPendingDeploy && !minimized;
+  const showMinimizedPeek = hasPendingDeploy && minimized;
 
-  const blocksConnectionInvitations = showDeployModal;
+  const blocksConnectionInvitations = showExpandedDeployModal;
 
   useEffect(() => {
     if (!orgId) return;
@@ -119,6 +126,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
         setQueueViewIndex(0);
         setDismissedForSession(false);
         setDeployFlowIndentId(null);
+        setMinimized(false);
       }
     };
     const sub = AppState.addEventListener("change", onAppStateChange);
@@ -130,6 +138,20 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
       setDismissedForSession(false);
     }
   }, [pendingQueue.length, visibleQueue.length]);
+
+  useEffect(() => {
+    if (activeItem?.indent.id) {
+      setMinimized(false);
+    }
+  }, [activeItem?.indent.id]);
+
+  const handleMinimize = useCallback(() => {
+    setMinimized(true);
+  }, []);
+
+  const handleExpand = useCallback(() => {
+    setMinimized(false);
+  }, []);
 
   const handleLater = useCallback(() => {
     if (!activeItem) return;
@@ -164,30 +186,50 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     setSessionSnoozedIds(new Set());
     setQueueViewIndex(0);
     setDeployFlowIndentId(null);
+    setMinimized(false);
   }, []);
 
   const value = useMemo(
     (): AwardedIndentDeployModalContextValue => ({
       pendingDeployCount: pendingQueue.length,
+      minimizedDeployCount: showMinimizedPeek ? visibleQueue.length : 0,
       blocksConnectionInvitations,
       presentNextDeploy,
+      expandDeployModal: handleExpand,
     }),
-    [blocksConnectionInvitations, pendingQueue.length, presentNextDeploy],
+    [
+      blocksConnectionInvitations,
+      handleExpand,
+      pendingQueue.length,
+      presentNextDeploy,
+      showMinimizedPeek,
+      visibleQueue.length,
+    ],
   );
 
   return (
     <AwardedIndentDeployModalContext.Provider value={value}>
       {children}
       {visibleQueue.length > 0 ? (
-        <AwardedIndentDeployModal
-          visible={showDeployModal}
-          items={visibleQueue}
-          pageIndex={queueViewIndex}
-          onPageChange={setQueueViewIndex}
-          onAssign={handleAssign}
-          onLater={handleLater}
-          onViewLoad={handleViewLoad}
-        />
+        <>
+          <AwardedIndentDeployModal
+            visible={showExpandedDeployModal}
+            items={visibleQueue}
+            pageIndex={queueViewIndex}
+            onPageChange={setQueueViewIndex}
+            onAssign={handleAssign}
+            onLater={handleLater}
+            onMinimize={handleMinimize}
+            onViewLoad={handleViewLoad}
+          />
+          {showMinimizedPeek ? (
+            <AwardedIndentDeployPeek
+              items={visibleQueue}
+              pageIndex={queueViewIndex}
+              onExpand={handleExpand}
+            />
+          ) : null}
+        </>
       ) : null}
     </AwardedIndentDeployModalContext.Provider>
   );

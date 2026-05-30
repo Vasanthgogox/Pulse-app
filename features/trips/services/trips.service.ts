@@ -546,6 +546,8 @@ export interface CreateTripData {
   pickup_date?: string | null;
   /** Optional load weight in tons (stored in trips.load_tons). */
   load_tons?: number | null;
+  /** Cargo / product type (trips.load_type). */
+  load_type?: string | null;
   /** Optional advance paid to supplier (stored in trips.advance_paid). */
   advance_paid?: number | null;
   supplier_id?: string | null;
@@ -1310,6 +1312,7 @@ export async function createTrip(
     notes: (data.notes ?? "").trim() || null,
     pickup_date: data.pickup_date ?? null,
     load_tons: loadTons,
+    load_type: (data.load_type ?? "").trim() || null,
     advance_paid: advancePaid,
     supplier_id: normalizedSupplierId,
     // Not all DBs have trips.supplier_name; resolve name via supplier_id + suppliers / views.

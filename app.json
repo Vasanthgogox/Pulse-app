@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "q-mobile",
+    "name": "PULSE",
     "slug": "q-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -59,8 +59,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow q-mobile to access your photos for profile and uploads.",
-          "cameraPermission": "Allow q-mobile to use the camera for profile photos."
+          "photosPermission": "Allow PULSE to access your photos for profile and uploads.",
+          "cameraPermission": "Allow PULSE to use the camera for profile photos."
         }
       ],
       "expo-detox-config-plugin"
