@@ -2,6 +2,8 @@
  * Live-bid card alerts: when a quote was awarded and pickup/deploy deadline.
  */
 
+import { formatEstimatedDuration } from "@/lib/formatEstimatedDuration";
+
 export type IndentBidAlertTone = "neutral" | "soon" | "urgent" | "overdue";
 
 export type IndentBidAlertInfo = {
@@ -124,5 +126,65 @@ export function buildIndentAwardedBidAlert(
     dueByLabel: due?.label ?? null,
     summaryLine: parts.join(" · "),
     tone: due?.tone ?? "neutral",
+  };
+}
+
+export type IndentDeployTimingInfo = {
+  dueByLabel: string | null;
+  /** e.g. "Awarded 2 hours ago" */
+  awardedDurationLabel: string | null;
+  /** e.g. "Est. 14H 22M" or "450 km" when stored on indent */
+  transitDurationLabel: string | null;
+  tone: IndentBidAlertTone;
+};
+
+/** Route / ETA hint from indent row when present (trips copy these fields on create). */
+export function formatIndentTransitDurationLabel(indent: {
+  distance?: unknown;
+  estimated_duration?: unknown;
+}): string | null {
+  const est =
+    typeof indent.estimated_duration === "string"
+      ? indent.estimated_duration.trim()
+      : "";
+  if (est) {
+    const formatted = formatEstimatedDuration(est);
+    if (formatted !== "—") return `Est. ${formatted}`;
+  }
+  const rawDist = indent.distance;
+  if (rawDist != null && rawDist !== "") {
+    const n =
+      typeof rawDist === "number"
+        ? rawDist
+        : parseFloat(String(rawDist).replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(n) && n > 0) {
+      return `${Math.round(n).toLocaleString("en-IN")} km`;
+    }
+  }
+  return null;
+}
+
+/** Pickup due + time since award (+ optional transit estimate) for deploy modal. */
+export function buildIndentDeployTiming(
+  quote: {
+    status?: string | null;
+    updated_at?: string | null;
+    created_at?: string | null;
+  },
+  indent: {
+    pickup_date?: string | null;
+    distance?: unknown;
+    estimated_duration?: unknown;
+  },
+  now: Date = new Date(),
+): IndentDeployTimingInfo {
+  const alert = buildIndentAwardedBidAlert(quote, indent.pickup_date, now);
+  const transitDurationLabel = formatIndentTransitDurationLabel(indent);
+
+  return {
+    dueByLabel: alert?.dueByLabel ?? null,
+    awardedDurationLabel: alert?.awardedAgoLabel ?? null,
+    transitDurationLabel,
+    tone: alert?.tone ?? "neutral",
   };
 }

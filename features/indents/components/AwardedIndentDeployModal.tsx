@@ -1,126 +1,123 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
+  ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  ArrowRight,
-  Check,
-  Scale,
-  Sparkles,
-  Truck,
-  Wallet,
-} from "lucide-react-native";
+import { Check } from "lucide-react-native";
 
-import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
-import { useOrganization } from "@/contexts/OrganizationContext";
-import { useIndentClientEntityAvatar } from "@/features/indents/hooks/useIndentClientEntityAvatar";
-import { getIndentDisplayNumber } from "@/features/indents/services/indents.service";
-import type { PendingAwardedDeployItem } from "@/features/indents/utils/pendingAwardedDeploy.util";
+import { AwardedIndentDeployModalPage } from "@/features/indents/components/AwardedIndentDeployModalPage";
 import { deployModalStyles as styles } from "@/features/indents/components/AwardedIndentDeployModal.styles";
-import { formatINR, formatIndentTonsToCarry } from "@/lib/format";
+import type { PendingAwardedDeployItem } from "@/features/indents/utils/pendingAwardedDeploy.util";
 
 export type AwardedIndentDeployModalProps = {
   visible: boolean;
-  item: PendingAwardedDeployItem;
-  queueIndex?: number;
-  queueTotal?: number;
+  items: PendingAwardedDeployItem[];
+  pageIndex: number;
+  onPageChange: (index: number) => void;
   onAssign: () => void;
   onLater: () => void;
   onViewLoad?: () => void;
 };
 
-/** Vehicle finance tab scorecard — same slate gradient as VehicleDetailScreen. */
 const FINANCE_SCORECARD_GRADIENT = [
   Theme.financeCardSlateFrom,
   Theme.financeCardSlateTo,
 ] as const;
 
-const VEHICLE_ACCENT = Theme.buttonMatteBlack;
-
-/** Hero text on finance scorecard gradient (matches entity hero styles). */
-const heroOnGradient = {
-  eyebrow: Theme.textOnDarkMuted,
-  subtitle: "rgba(255,255,255,0.78)",
-} as const;
-const NEXT_STEPS = [
-  "Assign driver and vehicle to put this trip on your books",
-  "Other invitations wait until you finish this deploy",
-] as const;
+function clampPageIndex(index: number, length: number): number {
+  if (length <= 0) return 0;
+  return Math.max(0, Math.min(index, length - 1));
+}
 
 export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
   visible,
-  item,
-  queueIndex = 1,
-  queueTotal = 1,
+  items,
+  pageIndex,
+  onPageChange,
   onAssign,
   onLater,
   onViewLoad,
 }: AwardedIndentDeployModalProps) {
   const insets = useSafeAreaInsets();
-  const { currentOrganization } = useOrganization();
-  const viewerOrgId = currentOrganization?.id ?? null;
-  const { indent, shipperName, awardAmountInr } = item;
+  const pagerRef = useRef<ScrollView>(null);
+  const [pageWidth, setPageWidth] = useState(0);
+  const isScrollingRef = useRef(false);
 
-  const { fields: clientAvatar } = useIndentClientEntityAvatar({
-    clientId: indent.client_id,
-    ownerOrgId: viewerOrgId,
-    shipperOrgId: indent.organization_id,
-    isOwner: false,
-    enabled: visible,
-  });
-  const indentNo = getIndentDisplayNumber(indent);
-  const origin = indent.pickup_area || "—";
-  const dest = indent.drop_location || "—";
-  const vehicleType = (indent.vehicle_type || "—").toUpperCase();
-  const tonsToCarry = formatIndentTonsToCarry(indent.weight);
+  const safeIndex = clampPageIndex(pageIndex, items.length);
+  const pageTotal = items.length;
+  const showPager = pageTotal > 1 && pageWidth > 0;
 
-  const pickupDateLabel = useMemo(() => {
-    const raw = indent.pickup_date ?? indent.created_at;
-    if (!raw) return null;
-    try {
-      const d = new Date(raw);
-      if (Number.isNaN(d.getTime())) return null;
-      return d.toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-    } catch {
-      return null;
-    }
-  }, [indent.created_at, indent.pickup_date]);
+  const syncScrollToIndex = useCallback(
+    (index: number, animated: boolean) => {
+      if (pageWidth <= 0) return;
+      pagerRef.current?.scrollTo({ x: index * pageWidth, animated });
+    },
+    [pageWidth],
+  );
 
-  const pickupMeta = useMemo(() => {
-    const raw = indent.pickup_date ?? indent.created_at;
-    if (!raw) return indentNo;
-    try {
-      const d = new Date(raw);
-      if (Number.isNaN(d.getTime())) return indentNo;
-      const time = d.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-      const date = d.toLocaleDateString("en-IN", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      });
-      return `${indentNo} · ${time} · ${date}`;
-    } catch {
-      return indentNo;
-    }
-  }, [indent.created_at, indent.pickup_date, indentNo]);
+  useEffect(() => {
+    if (!visible || !showPager) return;
+    syncScrollToIndex(safeIndex, false);
+  }, [visible, showPager, safeIndex, syncScrollToIndex]);
 
-  if (!visible) return null;
+  const handlePagerLayout = useCallback((width: number) => {
+    if (width > 0) setPageWidth(width);
+  }, []);
+
+  const reportPageFromOffset = useCallback(
+    (offsetX: number) => {
+      if (pageWidth <= 0) return;
+      const next = clampPageIndex(Math.round(offsetX / pageWidth), pageTotal);
+      if (next !== safeIndex) onPageChange(next);
+    },
+    [onPageChange, pageTotal, pageWidth, safeIndex],
+  );
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!showPager || pageWidth <= 0) return;
+      const offsetX = event.nativeEvent.contentOffset.x;
+      const next = clampPageIndex(Math.round(offsetX / pageWidth), pageTotal);
+      if (next !== safeIndex && !isScrollingRef.current) {
+        onPageChange(next);
+      }
+    },
+    [onPageChange, pageTotal, pageWidth, safeIndex, showPager],
+  );
+
+  const handleMomentumScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      isScrollingRef.current = false;
+      reportPageFromOffset(event.nativeEvent.contentOffset.x);
+    },
+    [reportPageFromOffset],
+  );
+
+  const handleScrollBeginDrag = useCallback(() => {
+    isScrollingRef.current = true;
+  }, []);
+
+  if (!visible || items.length === 0) return null;
+
+  const pagerContent = items.map((item, index) => (
+    <View key={item.indent.id} style={{ width: pageWidth || "100%" }}>
+      <AwardedIndentDeployModalPage
+        item={item}
+        pageNumber={index + 1}
+        pageTotal={pageTotal}
+        enabled={visible && index === safeIndex}
+      />
+    </View>
+  ));
 
   return (
     <Modal
@@ -137,124 +134,43 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
             { paddingBottom: Math.max(insets.bottom, 12) + 4 },
           ]}
         >
-          <LinearGradient
-            colors={[...FINANCE_SCORECARD_GRADIENT]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.hero}
+          <View
+            style={styles.pagerMeasure}
+            onLayout={(event) => handlePagerLayout(event.nativeEvent.layout.width)}
           >
-            <View style={styles.heroTopRow}>
-              <View style={styles.heroEyebrowRow}>
-                <Sparkles size={11} color={heroOnGradient.subtitle} strokeWidth={2.5} />
-                <Text style={styles.heroEyebrow}>ACTION REQUIRED</Text>
-              </View>
-              {queueTotal > 1 ? (
-                <View style={styles.queueBadge}>
-                  <Text style={styles.queueText}>
-                    {queueIndex}/{queueTotal}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+            {showPager ? (
+              <>
+                <ScrollView
+                  ref={pagerRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  bounces={pageTotal > 1}
+                  style={styles.pagerScroll}
+                  onScroll={handleScroll}
+                  onScrollBeginDrag={handleScrollBeginDrag}
+                  onScrollEndDrag={handleMomentumScrollEnd}
+                  onMomentumScrollEnd={handleMomentumScrollEnd}
+                >
+                  {pagerContent}
+                </ScrollView>
+              </>
+            ) : (
+              pagerContent[0] ?? null
+            )}
+          </View>
 
-            <View style={styles.heroBody}>
-              <View style={styles.heroLogoWrap}>
-                <PartyAvatar
-                  name={shipperName}
-                  avatarUrl={clientAvatar.avatarUrl}
-                  avatarSeed={clientAvatar.avatarSeed}
-                  organizationImageUrl={clientAvatar.organizationImageUrl}
-                  organizationAvatarSeed={clientAvatar.organizationAvatarSeed}
-                  initialsColorSeed={indent.organization_id ?? shipperName}
-                  entityType="client"
-                  size={56}
-                  style={styles.heroAvatar}
-                  borderStyle={styles.heroAvatar}
+          {showPager ? (
+            <View style={styles.pageDots}>
+              {items.map((item, index) => (
+                <View
+                  key={item.indent.id}
+                  style={[styles.pageDot, index === safeIndex ? styles.pageDotActive : null]}
                 />
-                <View style={styles.heroLogoBadge}>
-                  <Truck size={8} color="#fff" strokeWidth={2.5} />
-                </View>
-              </View>
-              <View style={styles.heroTextBlock}>
-                <Text style={styles.heroTitle} numberOfLines={2}>
-                  Trip awarded to you
-                </Text>
-                <Text style={styles.heroShipperName} numberOfLines={2}>
-                  {shipperName}
-                </Text>
-                <View style={styles.heroPillRow}>
-                  <View style={styles.heroPill}>
-                    <Text style={styles.heroPillText}>Vehicle deploy</Text>
-                  </View>
-                  {pickupDateLabel ? (
-                    <Text style={styles.heroDate}>Pickup {pickupDateLabel}</Text>
-                  ) : null}
-                </View>
-              </View>
-            </View>
-          </LinearGradient>
-
-          <View style={styles.body}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>YOUR OFFER</Text>
-              <View style={styles.offerPill}>
-                <Text style={styles.offerPillText}>2 details</Text>
-              </View>
-            </View>
-
-            <View style={styles.payGrid}>
-              <View style={[styles.payTile, styles.payTileAccent]}>
-                <View style={[styles.payTileIconWrap, styles.payTileIconOnAccent]}>
-                  <Wallet size={15} color={VEHICLE_ACCENT} strokeWidth={2.2} />
-                </View>
-                <Text style={styles.payTileAmount}>{formatINR(awardAmountInr)}</Text>
-                <Text style={styles.payTileLabel}>AGREED RATE</Text>
-                <Text style={styles.payTileHint} numberOfLines={1}>
-                  {shipperName}
-                </Text>
-              </View>
-
-              <View style={[styles.payTile, styles.payTileNeutral]}>
-                <View style={styles.payTileIconWrap}>
-                  <Scale size={15} color={VEHICLE_ACCENT} strokeWidth={2.2} />
-                </View>
-                <Text style={styles.payTileAmount} numberOfLines={1}>
-                  {tonsToCarry}
-                </Text>
-                <Text style={styles.payTileLabel}>TONS TO CARRY</Text>
-                <Text style={styles.payTileHint} numberOfLines={1}>
-                  {vehicleType}
-                </Text>
-              </View>
-            </View>
-
-            <LoadCardRouteRow
-              origin={origin}
-              destination={dest}
-              compact
-              style={styles.routeRow}
-            />
-
-            <View style={styles.metaRow}>
-              <Text style={styles.metaText} numberOfLines={1}>
-                {pickupMeta}
-              </Text>
-              <View style={styles.statusPill}>
-                <Truck size={10} color={VEHICLE_ACCENT} strokeWidth={2.2} />
-                <Text style={styles.statusPillText}>Vehicle required</Text>
-              </View>
-            </View>
-
-            <View style={styles.nextCard}>
-              <Text style={styles.nextTitle}>What happens next</Text>
-              {NEXT_STEPS.map((step) => (
-                <View key={step} style={styles.nextRow}>
-                  <ArrowRight size={12} color={VEHICLE_ACCENT} strokeWidth={2.4} />
-                  <Text style={styles.nextText}>{step}</Text>
-                </View>
               ))}
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.footer}>
             <View style={styles.actions}>

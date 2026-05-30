@@ -29,6 +29,36 @@ export const deployModalStyles = StyleSheet.create({
       ? { width: "100%", maxWidth: 440, borderRadius: 28 }
       : {}),
   },
+  pagerMeasure: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  pagerScroll: {
+    flexGrow: 0,
+    backgroundColor: Theme.cardWhite,
+  },
+  pagerPage: {
+    flexShrink: 0,
+    backgroundColor: Theme.cardWhite,
+  },
+  pageDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  pageDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.borderMedium,
+  },
+  pageDotActive: {
+    width: 16,
+    backgroundColor: Theme.buttonMatteBlack,
+  },
   hero: {
     paddingTop: 16,
     paddingHorizontal: 18,
@@ -143,6 +173,7 @@ export const deployModalStyles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 10,
     gap: 10,
+    backgroundColor: Theme.cardWhite,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -226,6 +257,43 @@ export const deployModalStyles = StyleSheet.create({
   routeRow: {
     marginTop: -2,
     marginBottom: -2,
+  },
+  timingCard: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    padding: 10,
+    gap: 6,
+  },
+  timingLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  timingText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  timingDueOverdue: {
+    color: "#B91C1C",
+  },
+  timingDueUrgent: {
+    color: "#C2410C",
+  },
+  timingDueSoon: {
+    color: "#B45309",
+  },
+  timingDueNeutral: {
+    color: Theme.buttonMatteBlack,
+  },
+  timingDuration: {
+    color: Theme.textMuted,
+    fontWeight: "500",
   },
   metaRow: {
     flexDirection: "row",

@@ -68,6 +68,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   );
 
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
+  const [queueViewIndex, setQueueViewIndex] = useState(0);
   const [dismissedForSession, setDismissedForSession] = useState(false);
   /** Set when user taps Assign — keeps deploy cards hidden until allocation route ends. */
   const [deployFlowIndentId, setDeployFlowIndentId] = useState<string | null>(null);
@@ -93,8 +94,16 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     [pendingQueue, sessionSnoozedIds],
   );
 
+  useEffect(() => {
+    if (queueViewIndex >= visibleQueue.length && visibleQueue.length > 0) {
+      setQueueViewIndex(0);
+    }
+  }, [queueViewIndex, visibleQueue.length]);
+
   const activeItem =
-    visibleQueue.length > 0 && !dismissedForSession ? visibleQueue[0] : null;
+    visibleQueue.length > 0 && !dismissedForSession
+      ? visibleQueue[queueViewIndex % visibleQueue.length]
+      : null;
 
   const deployFlowActive = onDeployFlowScreen || deployFlowIndentId != null;
 
@@ -102,15 +111,12 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
 
   const blocksConnectionInvitations = showDeployModal;
 
-  const queuePosition = activeItem
-    ? pendingQueue.findIndex((item) => item.indent.id === activeItem.indent.id) + 1
-    : 0;
-
   useEffect(() => {
     if (!orgId) return;
     const onAppStateChange = (next: AppStateStatus) => {
       if (next === "active") {
         setSessionSnoozedIds(new Set());
+        setQueueViewIndex(0);
         setDismissedForSession(false);
         setDeployFlowIndentId(null);
       }
@@ -134,6 +140,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
       if (remaining.length === 0) {
         setDismissedForSession(true);
       }
+      setQueueViewIndex((i) => Math.max(0, Math.min(i, Math.max(0, remaining.length - 1))));
       return next;
     });
   }, [activeItem, pendingQueue]);
@@ -155,6 +162,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const presentNextDeploy = useCallback(() => {
     setDismissedForSession(false);
     setSessionSnoozedIds(new Set());
+    setQueueViewIndex(0);
     setDeployFlowIndentId(null);
   }, []);
 
@@ -170,13 +178,12 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   return (
     <AwardedIndentDeployModalContext.Provider value={value}>
       {children}
-      {activeItem ? (
+      {visibleQueue.length > 0 ? (
         <AwardedIndentDeployModal
-          key={activeItem.indent.id}
           visible={showDeployModal}
-          item={activeItem}
-          queueIndex={queuePosition > 0 ? queuePosition : 1}
-          queueTotal={pendingQueue.length}
+          items={visibleQueue}
+          pageIndex={queueViewIndex}
+          onPageChange={setQueueViewIndex}
           onAssign={handleAssign}
           onLater={handleLater}
           onViewLoad={handleViewLoad}
