@@ -57,6 +57,7 @@ export function NetworkProfileInviteHero({
   onPressPhone,
   avatarSize = 80,
   style,
+  footer,
 }: NetworkProfileInviteHeroProps) {
   const accent = partyAccentFromConnectionRole(roleLabel);
   const resolvedEntity = entityType ?? roleToEntityType(roleLabel);
