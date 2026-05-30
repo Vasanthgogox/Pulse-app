@@ -1,7 +1,8 @@
 /**
  * IndentShareTicketModal — confirm-share dialog styled as a box-office
  * ticket. Replaces the generic ThemedConfirmModal for the
- * "Share to network?" flow in `app/create-indent/index.tsx`.
+ * "Share to network?" and "Save draft?" flows in
+ * `app/create-indent/index.tsx`.
  *
  * Visual language
  * ───────────────
@@ -55,6 +56,10 @@ export interface IndentShareTicketModalProps {
   fields: IndentShareTicketFields;
   /** Optional short reference / draft id printed on the ticket header. */
   ticketRef?: string | null;
+  title?: string;
+  headerCaption?: string;
+  headerKicker?: string;
+  stubFinePrint?: string;
   cancelText?: string;
   confirmText?: string;
   onCancel: () => void;
@@ -157,6 +162,10 @@ export function IndentShareTicketModal({
   visible,
   fields,
   ticketRef,
+  title = "Share to network?",
+  headerCaption = "One-way trip ticket",
+  headerKicker = "PULSE NETWORK · INDENT",
+  stubFinePrint = "Once shared, this indent becomes read-only and cannot be edited.",
   cancelText = "Cancel",
   confirmText = "Share now",
   onCancel,
@@ -215,10 +224,10 @@ export function IndentShareTicketModal({
             </View>
             <View style={styles.headerTextCol}>
               <Text style={styles.headerKicker} numberOfLines={1}>
-                PULSE NETWORK · INDENT
+                {headerKicker}
               </Text>
               <Text style={styles.headerCaption} numberOfLines={1}>
-                One-way trip ticket
+                {headerCaption}
               </Text>
             </View>
             <Text style={styles.headerCode} numberOfLines={1}>
@@ -228,7 +237,7 @@ export function IndentShareTicketModal({
 
           {/* ── Body (top portion) ─────────────────────────────────── */}
           <View style={styles.body}>
-            <Text style={styles.title}>Share to network?</Text>
+            <Text style={styles.title}>{title}</Text>
 
             <TicketRouteRow pickup={fields.pickup} drop={fields.drop} />
 
@@ -310,10 +319,7 @@ export function IndentShareTicketModal({
 
           {/* ── Stub (bottom portion) ──────────────────────────────── */}
           <View style={styles.stub}>
-            <Text style={styles.stubFinePrint}>
-              Once shared, this indent becomes read-only and cannot be
-              edited.
-            </Text>
+            <Text style={styles.stubFinePrint}>{stubFinePrint}</Text>
 
             <View style={styles.buttonRow}>
               <TouchableOpacity

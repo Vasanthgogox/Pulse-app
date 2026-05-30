@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -88,7 +89,18 @@ const ClusterSegment = memo(function ClusterSegment({
       accessibilityLabel={label}
     >
       <Animated.View style={[styles.segmentPill, pillStyle]} pointerEvents="none">
-        <View style={styles.segmentPillFill} />
+        <LinearGradient
+          colors={[
+            Theme.pulseTabClusterThumbGlassTop,
+            Theme.pulseTabClusterThumbSolid,
+            Theme.pulseTabClusterThumbGlassBottom,
+          ]}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.segmentPillFill}
+        />
+        <View style={styles.segmentPillRim} pointerEvents="none" />
       </Animated.View>
       <Animated.View style={[styles.iconStack, iconStyle]}>
         <Icon
@@ -148,6 +160,14 @@ export const PulseBottomTabCluster = memo(function PulseBottomTabCluster({
 
   return (
     <View style={[styles.track, compact && styles.trackCompact]}>
+      <LinearGradient
+        colors={[Theme.pulseTabClusterTrackTop, Theme.pulseTabClusterTrackBg, Theme.pulseTabClusterTrackBottom]}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View style={styles.trackRim} pointerEvents="none" />
       {tabs.map((tab, index) => (
         <ClusterSegment
@@ -174,15 +194,15 @@ const styles = StyleSheet.create({
     padding: CLUSTER_PILL_INSET,
     borderRadius: 28,
     backgroundColor: Theme.pulseTabClusterTrackBg,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: Theme.pulseTabClusterTrackBorder,
     position: 'relative',
-    overflow: 'hidden',
-    shadowColor: Theme.pulseIndigo,
+    shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
   trackCompact: {
     maxWidth: 280,
@@ -213,10 +233,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   segmentPillFill: {
-    flex: 1,
-    backgroundColor: Theme.pulseTabClusterThumbSolid,
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: Theme.pulseTabClusterThumbBorder,
+  },
+  segmentPillRim: {
+    position: 'absolute',
+    top: 0,
+    left: 10,
+    right: 10,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.pulseTabClusterThumbSpecular,
   },
   iconStack: {
     position: 'relative',

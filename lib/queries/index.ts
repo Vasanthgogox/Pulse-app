@@ -28,6 +28,7 @@ export {
   useIndentsQuery,
   useIndentsInfiniteQuery,
   useMarketIndentsQuery,
+  useVisibleIndentQuery,
   useMyDirectQuotesQuery,
   useIndentDirectQuotesQuery,
   useDirectQuoteCountsQuery,

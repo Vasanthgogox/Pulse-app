@@ -15,9 +15,13 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
+import type { LoadCenterTicketCommerce } from "@/features/network/utils/loadCenter.model";
+import { formatINR } from "@/lib/format";
 import { formatMobileTripSchedule } from "@/features/trips/components/TripsHubMobileTripCard";
 import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
+import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
 import type { ReactNode } from "react";
 import {
   Platform,
@@ -28,6 +32,9 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useRouter } from "expo-router";
+
+const ALLOCATION_AVATAR_SIZE = 24;
 
 const REF = {
   card: Theme.screenBackground,
@@ -52,6 +59,21 @@ function asLabel(value: unknown): string {
 
 function formatPartyName(value: string): string {
   return asLabel(value).toUpperCase();
+}
+
+function stripCurrencyPrefix(formatted: string): string {
+  return formatted.replace(/^[^\d,.-]+/, "").trim() || formatted;
+}
+
+function quoteStatusPillStyles(status: string) {
+  const s = status.toLowerCase();
+  if (s === "accepted") {
+    return { pill: styles.statusAwarded, text: styles.statusAwardedText };
+  }
+  if (s === "rejected") {
+    return { pill: styles.statusRejected, text: styles.statusRejectedText };
+  }
+  return { pill: styles.statusPending, text: styles.statusPendingText };
 }
 
 function RoutePin({ variant }: { variant: "origin" | "dest" }) {
@@ -122,11 +144,15 @@ export type LoadCenterHubMobileIndentCardProps = {
   pickupIso?: string | null;
   leftFooterLabel: string;
   rightFooterLabel: string;
+  /** Travel-ticket stub: target rate / your quote (GET LOAD, claimed). */
+  ticketCommerce?: LoadCenterTicketCommerce | null;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
   initialsColorSeed?: string;
+  /** Shown on Done → Converted to trips (driver + vehicle from linked trip). */
+  tripAllocation?: LoadCenterTripAllocation | null;
   onPress: () => void;
   /** Footer slot (share / pulse / CTA) — rendered outside the pressable body. */
   actions?: ReactNode;
@@ -156,17 +182,20 @@ export function LoadCenterHubMobileIndentCard({
   pickupIso,
   leftFooterLabel,
   rightFooterLabel,
+  ticketCommerce,
   avatarUrl,
   avatarSeed,
   organizationImageUrl,
   organizationAvatarSeed,
   initialsColorSeed,
+  tripAllocation,
   onPress,
   actions,
   dense = false,
   fillGrid = false,
   style,
 }: LoadCenterHubMobileIndentCardProps) {
+  const router = useRouter();
   const indentNo = asLabel(getIndentDisplayNumber(indent));
   const schedule = formatMobileTripSchedule(
     pickupIso ?? indent.pickup_date ?? indent.created_at,
@@ -177,6 +206,131 @@ export function LoadCenterHubMobileIndentCard({
     (indent.client_id
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
+  const bodyPadding = dense || fillGrid ? 12 : 16;
+  const useTicketStub = ticketCommerce != null;
+  const commerce = ticketCommerce;
+  const heroAmount =
+    commerce?.amountInr != null && commerce.amountInr > 0
+      ? stripCurrencyPrefix(formatINR(commerce.amountInr))
+      : null;
+  const referenceTarget =
+    commerce?.targetRateInr != null && commerce.targetRateInr > 0
+      ? stripCurrencyPrefix(formatINR(commerce.targetRateInr))
+      : null;
+  const quoteStatusNorm = (commerce?.quoteStatus ?? "").trim().toLowerCase();
+  const statusStyles =
+    quoteStatusNorm && commerce?.kicker === "YOUR QUOTE"
+      ? quoteStatusPillStyles(quoteStatusNorm)
+      : null;
+  const rightCaption =
+    commerce?.rightCaption?.trim() ||
+    (!heroAmount ? rightFooterLabel : null);
+
+  const stubBlock = (
+    <View
+      style={[
+        styles.stub,
+        fillGrid && styles.stubGrid,
+        dense && styles.stubDense,
+      ]}
+    >
+      <IndentHubPerforation contentPadding={bodyPadding} />
+      <View style={styles.refRow}>
+        <Text style={styles.refLine} numberOfLines={1}>
+          <Text style={styles.refId}>{indentNo}</Text>
+          <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+        </Text>
+      </View>
+      <View style={[styles.stubRow, fillGrid && styles.stubRowGrid]}>
+        <Text style={styles.stubVehicle} numberOfLines={2}>
+          {leftFooterLabel}
+        </Text>
+        {heroAmount ? (
+          <View style={styles.stubCommerce}>
+            <View style={styles.stubCommerceTop}>
+              <Text style={styles.stubKicker} numberOfLines={1}>
+                {commerce?.kicker ?? "TARGET RATE"}
+              </Text>
+              {statusStyles ? (
+                <View style={[styles.statusPill, statusStyles.pill]}>
+                  <Text style={[styles.statusPillText, statusStyles.text]}>
+                    {quoteStatusNorm === "accepted"
+                      ? "Awarded"
+                      : quoteStatusNorm === "rejected"
+                        ? "Rejected"
+                        : "Pending"}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.stubAmountRow}>
+              <Text style={styles.stubCurrency}>₹</Text>
+              <Text
+                style={styles.stubAmount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
+              >
+                {heroAmount}
+              </Text>
+            </View>
+            {referenceTarget ? (
+              <Text style={styles.stubReference} numberOfLines={1}>
+                {`Target · ₹ ${referenceTarget}`}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.stubCaption} numberOfLines={2}>
+            {rightCaption ?? rightFooterLabel}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+
+  const legacyFooter = fillGrid ? (
+    <View style={styles.metaBlockGrid}>
+      <View style={styles.metaBlockGridGrow} />
+      <View style={styles.refRow}>
+        <Text style={styles.refLine} numberOfLines={1}>
+          <Text style={styles.refId}>{indentNo}</Text>
+          <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+        </Text>
+      </View>
+      <View style={[styles.partyRow, styles.partyRowGrid]}>
+        <Text style={styles.footerLabel} numberOfLines={1}>
+          {leftFooterLabel}
+        </Text>
+        <Text
+          style={[styles.footerLabel, styles.footerLabelEnd]}
+          numberOfLines={1}
+        >
+          {rightFooterLabel}
+        </Text>
+      </View>
+    </View>
+  ) : (
+    <>
+      <View style={styles.refRow}>
+        <Text style={styles.refLine} numberOfLines={1}>
+          <Text style={styles.refId}>{indentNo}</Text>
+          <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+        </Text>
+      </View>
+      <View style={styles.partyRow}>
+        <Text style={styles.footerLabel} numberOfLines={1}>
+          {leftFooterLabel}
+        </Text>
+        <Text
+          style={[styles.footerLabel, styles.footerLabelEnd]}
+          numberOfLines={1}
+        >
+          {rightFooterLabel}
+        </Text>
+      </View>
+    </>
+  );
 
   return (
     <View
@@ -245,49 +399,86 @@ export function LoadCenterHubMobileIndentCard({
             />
           </View>
 
-          <View style={[styles.divider, fillGrid && styles.dividerGrid]} />
+          {!useTicketStub ? (
+            <View style={[styles.divider, fillGrid && styles.dividerGrid]} />
+          ) : null}
 
-          {fillGrid ? (
-            <View style={styles.metaBlockGrid}>
-              <View style={styles.metaBlockGridGrow} />
-              <View style={styles.refRow}>
-                <Text style={styles.refLine} numberOfLines={1}>
-                  <Text style={styles.refId}>{indentNo}</Text>
-                  <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
-                </Text>
+          {tripAllocation ? (
+            <View
+              style={[
+                styles.allocationRow,
+                fillGrid && styles.allocationRowGrid,
+              ]}
+            >
+              <View style={styles.allocationCell}>
+                <View style={styles.allocationPartyRow}>
+                  {tripAllocation.driverId ? (
+                    <Pressable
+                      onPress={() =>
+                        router.push(
+                          `/public-profile/driver/${tripAllocation.driverId}`,
+                        )
+                      }
+                      style={styles.allocationAvatarPress}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View driver profile for ${tripAllocation.driver}`}
+                      hitSlop={4}
+                    >
+                      <PartyAvatar
+                        name={tripAllocation.driver}
+                        avatarUrl={tripAllocation.driverAvatarUrl}
+                        avatarSeed={tripAllocation.driverAvatarSeed}
+                        entityType="driver"
+                        size={ALLOCATION_AVATAR_SIZE}
+                        initialsColorSeed={tripAllocation.driverId}
+                      />
+                    </Pressable>
+                  ) : (
+                    <PartyAvatar
+                      name={tripAllocation.driver}
+                      avatarUrl={tripAllocation.driverAvatarUrl}
+                      avatarSeed={tripAllocation.driverAvatarSeed}
+                      entityType="driver"
+                      size={ALLOCATION_AVATAR_SIZE}
+                      initialsColorSeed={tripAllocation.driver}
+                    />
+                  )}
+                  <View style={styles.allocationTextCol}>
+                    <Text style={styles.allocationLabel}>Driver</Text>
+                    <Text style={styles.allocationValue} numberOfLines={1}>
+                      {tripAllocation.driver}
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <View style={[styles.partyRow, styles.partyRowGrid]}>
-                <Text style={styles.footerLabel} numberOfLines={1}>
-                  {leftFooterLabel}
+              <View style={styles.allocationDivider} />
+              <View style={[styles.allocationCell, styles.allocationCellEnd]}>
+                <Text style={[styles.allocationLabel, styles.allocationLabelEnd]}>
+                  Vehicle
                 </Text>
                 <Text
-                  style={[styles.footerLabel, styles.footerLabelEnd]}
+                  style={[styles.allocationValue, styles.allocationValueEnd]}
                   numberOfLines={1}
                 >
-                  {rightFooterLabel}
+                  {tripAllocation.vehicle}
                 </Text>
               </View>
             </View>
+          ) : null}
+
+          {useTicketStub ? (
+            fillGrid ? (
+              <View style={styles.metaBlockGrid}>
+                <View style={styles.metaBlockGridGrow} />
+                {stubBlock}
+              </View>
+            ) : (
+              stubBlock
+            )
+          ) : fillGrid ? (
+            legacyFooter
           ) : (
-            <>
-              <View style={styles.refRow}>
-                <Text style={styles.refLine} numberOfLines={1}>
-                  <Text style={styles.refId}>{indentNo}</Text>
-                  <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
-                </Text>
-              </View>
-              <View style={styles.partyRow}>
-                <Text style={styles.footerLabel} numberOfLines={1}>
-                  {leftFooterLabel}
-                </Text>
-                <Text
-                  style={[styles.footerLabel, styles.footerLabelEnd]}
-                  numberOfLines={1}
-                >
-                  {rightFooterLabel}
-                </Text>
-              </View>
-            </>
+            legacyFooter
           )}
         </Pressable>
         {actions ? (
@@ -376,7 +567,7 @@ const styles = StyleSheet.create({
   },
   head: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
     marginBottom: 14,
@@ -406,14 +597,78 @@ const styles = StyleSheet.create({
   },
   headMeta: {
     flexShrink: 0,
-    maxWidth: "40%",
+    maxWidth: "38%",
+    marginTop: 2,
     fontSize: 9,
     lineHeight: 12,
-    fontWeight: "400",
+    fontWeight: "600",
     color: REF.muted,
     textAlign: "right",
     textTransform: "uppercase",
     letterSpacing: 0.3,
+  },
+  allocationRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    marginBottom: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: REF.hairline,
+    overflow: "hidden",
+  },
+  allocationRowGrid: {
+    marginBottom: 8,
+  },
+  allocationCell: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+  },
+  allocationPartyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  allocationAvatarPress: {
+    borderRadius: ALLOCATION_AVATAR_SIZE / 2,
+    borderWidth: 1,
+    borderColor: REF.hairline,
+  },
+  allocationTextCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  allocationCellEnd: {
+    alignItems: "flex-end",
+  },
+  allocationDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: REF.hairline,
+  },
+  allocationLabel: {
+    fontSize: 7,
+    fontWeight: "700",
+    color: REF.muted,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  allocationLabelEnd: {
+    textAlign: "right",
+  },
+  allocationValue: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: REF.ink,
+    letterSpacing: -0.1,
+  },
+  allocationValueEnd: {
+    textAlign: "right",
   },
   route: {
     flexDirection: "row",
@@ -578,4 +833,119 @@ const styles = StyleSheet.create({
   footerLabelEnd: {
     textAlign: "right",
   },
+  stub: {
+    minWidth: 0,
+  },
+  stubGrid: {
+    flexShrink: 0,
+  },
+  stubDense: {},
+  stubRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 4,
+    minWidth: 0,
+  },
+  stubRowGrid: {
+    marginTop: 2,
+    minHeight: HUB_GRID_PARTY_MIN_HEIGHT + 8,
+    flexShrink: 0,
+  },
+  stubVehicle: {
+    ...FinanceTxnTypography.partyTitle,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "46%",
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: -0.15,
+    fontWeight: "400",
+    color: REF.inkMid,
+    textTransform: "uppercase",
+    alignSelf: "center",
+  },
+  stubCommerce: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  stubCommerceTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    maxWidth: "100%",
+  },
+  stubKicker: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: REF.muted,
+    flexShrink: 1,
+  },
+  stubAmountRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    gap: 2,
+    maxWidth: "100%",
+  },
+  stubCurrency: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: REF.inkMid,
+    lineHeight: 18,
+    marginBottom: 1,
+  },
+  stubAmount: {
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    color: REF.ink,
+    lineHeight: 24,
+    flexShrink: 1,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  stubReference: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: REF.muted,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  stubCaption: {
+    ...FinanceTxnTypography.partyTitle,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "52%",
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "600",
+    color: REF.inkMid,
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
+  statusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  statusPillText: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  statusPending: { backgroundColor: "#F1F5F9" },
+  statusPendingText: { color: "#475569" },
+  statusAwarded: { backgroundColor: "#FEF3C7" },
+  statusAwardedText: { color: "#B45309" },
+  statusRejected: { backgroundColor: "#FEE2E2" },
+  statusRejectedText: { color: "#B91C1C" },
 });

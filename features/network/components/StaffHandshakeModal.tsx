@@ -17,8 +17,10 @@ import { formatMobileNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
-import { Building2, ListChecks, Truck } from "lucide-react-native";
+import { AssignmentEntityPicker } from "@/features/trips/components/AssignmentEntityPicker";
+import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { useRef } from "react";
+import { ChevronRight, Truck, User } from "lucide-react-native";
 import {
   ActivityIndicator,
   Modal,
@@ -34,6 +36,173 @@ import {
   View,
 } from "react-native";
 
+const ASSET_FLOW_STEPS = [
+  { id: "driver", label: "Driver" },
+  { id: "vehicle", label: "Vehicle" },
+] as const;
+
+type AssetFlowStep = (typeof ASSET_FLOW_STEPS)[number]["id"];
+
+type AssetRosterPickersProps = {
+  isFlow: boolean;
+  assetFlowStep: AssetFlowStep;
+  width: number;
+  activeDrivers: DriverRow[];
+  vehicles: VehicleRow[];
+  assignDriverId: string | null;
+  assignVehicleId: string | null | undefined;
+  set: StaffHandshakeResult["set"];
+  onNavigateAddDriver: () => void;
+  onNavigateAddVehicle: () => void;
+};
+
+export function AssetRosterPickers({
+  isFlow,
+  assetFlowStep,
+  width,
+  activeDrivers,
+  vehicles,
+  assignDriverId,
+  assignVehicleId,
+  set,
+  onNavigateAddDriver,
+  onNavigateAddVehicle,
+}: AssetRosterPickersProps) {
+  const selectedDriver = activeDrivers.find((d) => String(d.id) === assignDriverId);
+  const selectedVehicle =
+    typeof assignVehicleId === "string"
+      ? vehicles.find((v) => String(v.id) === assignVehicleId)
+      : null;
+
+  const showDriver = !isFlow || assetFlowStep === "driver";
+  const showVehicle = !isFlow || assetFlowStep === "vehicle";
+
+  const driverDisplay =
+    selectedDriver?.name ?? selectedDriver?.phone ?? "Not selected";
+  const vehicleDisplay = selectedVehicle?.vehicle_number ?? "Not selected";
+
+  return (
+    <>
+      {isFlow && showDriver ? (
+        <Pressable
+          style={[
+            assignmentShellStyles.choiceCard,
+            assetFlowStep === "driver" && styles.choiceActive,
+          ]}
+          onPress={() => {}}
+        >
+          <View style={assignmentShellStyles.choiceIconWrap}>
+            <User size={18} color={Theme.primary} strokeWidth={2} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={assignmentShellStyles.choiceTitle}>Driver</Text>
+            <Text style={assignmentShellStyles.choiceSub} numberOfLines={1}>
+              {driverDisplay}
+            </Text>
+          </View>
+          <ChevronRight
+            size={18}
+            color={Theme.textMuted}
+            style={assignmentShellStyles.choiceChevron}
+          />
+        </Pressable>
+      ) : null}
+
+      {showDriver ? (
+        <AssignmentEntityPicker
+          title="Select Driver"
+          totalCount={activeDrivers.length}
+          icon="user"
+          selectedId={assignDriverId}
+          onSelect={(id) => set.assignDriverId(id)}
+          items={activeDrivers.map((d) => ({
+            id: String(d.id),
+            title: d.name ?? d.phone ?? "—",
+            subtitle: d.phone ? `Phone: ${d.phone}` : "Available",
+          }))}
+          emptyMessage="No asset drivers were found in your organization. Add a salaried driver to continue with Asset-based assignment, or use the Aggregate flow from the previous step."
+          emptyActionLabel="Add Driver"
+          onEmptyAction={onNavigateAddDriver}
+        />
+      ) : null}
+
+      {isFlow && showVehicle ? (
+        <Pressable
+          style={[
+            assignmentShellStyles.choiceCard,
+            assetFlowStep === "vehicle" && styles.choiceActive,
+          ]}
+          onPress={() => {}}
+        >
+          <View style={[assignmentShellStyles.choiceIconWrap, styles.vehicleIcon]}>
+            <Truck size={18} color="#0f172a" strokeWidth={2} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={assignmentShellStyles.choiceTitle}>Vehicle</Text>
+            <Text style={assignmentShellStyles.choiceSub} numberOfLines={1}>
+              {vehicleDisplay}
+            </Text>
+          </View>
+          <ChevronRight
+            size={18}
+            color={Theme.textMuted}
+            style={assignmentShellStyles.choiceChevron}
+          />
+        </Pressable>
+      ) : null}
+
+      {showVehicle ? (
+        <AssignmentEntityPicker
+          title="Select Vehicle"
+          totalCount={vehicles.length}
+          icon="truck"
+          selectedId={typeof assignVehicleId === "string" ? assignVehicleId : null}
+          onSelect={(id) => set.assignVehicleId(id)}
+          items={vehicles.map((v) => ({
+            id: String(v.id),
+            title: v.vehicle_number ?? "—",
+            subtitle: v.vehicle_type
+              ? `${v.vehicle_type}${
+                  v.vehicle_body_type ? ` · ${v.vehicle_body_type}` : ""
+                }`
+              : "Fleet vehicle",
+          }))}
+          emptyMessage="No vehicles were found in your fleet. Add an own vehicle to continue with Asset-based assignment."
+          emptyActionLabel="Add Vehicle"
+          onEmptyAction={onNavigateAddVehicle}
+        />
+      ) : null}
+
+      {!isFlow ? (
+        <>
+          <Text style={assignmentShellStyles.supplyFooterHint}>
+            Select a driver and a vehicle from your org to continue.
+          </Text>
+          <View style={styles.assignSummaryBar}>
+            <View style={styles.assignSummaryRow}>
+              <View style={styles.assignSummaryBlock}>
+                <Text style={styles.assignSummaryLabel}>Selected Driver</Text>
+                <Text style={styles.assignSummaryValue}>{driverDisplay}</Text>
+              </View>
+              <View style={styles.assignSummaryDivider} />
+              <View style={styles.assignSummaryBlock}>
+                <Text style={styles.assignSummaryLabel}>Selected Vehicle</Text>
+                <Text style={styles.assignSummaryValue}>{vehicleDisplay}</Text>
+              </View>
+            </View>
+          </View>
+        </>
+      ) : (
+        <Text style={assignmentShellStyles.supplyFooterHint}>
+          {assetFlowStep === "driver"
+            ? "Choose a driver from your org, then continue."
+            : "Choose a fleet vehicle, then deploy."}
+        </Text>
+      )}
+    </>
+  );
+}
+
 interface StaffHandshakeModalProps {
   visible: boolean;
   handshake: StaffHandshakeResult;
@@ -46,6 +215,7 @@ interface StaffHandshakeModalProps {
   isCompactModalLayout: boolean;
   insets: { top: number; bottom: number };
   onSuccess: (msg: string) => void;
+  onClose?: () => void;
 }
 
 export function StaffHandshakeModal({
@@ -59,6 +229,7 @@ export function StaffHandshakeModal({
   isCompactModalLayout,
   insets,
   onSuccess,
+  onClose,
 }: StaffHandshakeModalProps) {
   const router = useRouter();
   const { state, set } = handshake;
@@ -92,6 +263,8 @@ export function StaffHandshakeModal({
   const aggregateDriverNameInputRef = useRef<TextInput | null>(null);
   const aggregateDriverPhoneInputRef = useRef<TextInput | null>(null);
   const aggregateVehicleInputRef = useRef<TextInput | null>(null);
+
+  if (!visible) return null;
 
   return (
     <Modal
@@ -247,122 +420,53 @@ export function StaffHandshakeModal({
                   </>
                 ) : (
                   <>
-                    <View style={styles.handshakeSegmentSection}>
-                      <View style={styles.handshakeSegmentPill}>
-                        <TouchableOpacity
-                          style={[
-                            styles.handshakeSegBtn,
-                            !useAdHocDriver && styles.handshakeSegBtnActive,
-                          ]}
-                          onPress={() => {
-                            set.useAdHocDriver(false);
-                            set.assignVehicleRegistration("");
-                            set.aggregateDriverPhone("");
-                            set.aggregateDriverTrackingName("");
-                            set.subcontractSupplierId(null);
-                            set.subcontractRate("");
-                            set.aggregateAdvancePaid("");
-                            set.aggregateDriverNameManualRef.current = false;
-                            set.aggregateDriverTrackingName("");
-                            set.aggregatePhoneName(null);
-                            set.aggregatePhoneNotFound(false);
-                            set.aggregatePhoneInTrip(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Truck
-                            size={14}
-                            color={!useAdHocDriver ? "#ffffff" : "#94a3b8"}
-                          />
-                          <Text
-                            style={[
-                              styles.handshakeSegBtnText,
-                              !useAdHocDriver && styles.handshakeSegBtnTextActive,
-                            ]}
-                          >
-                            Asset
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.handshakeSegBtn,
-                            useAdHocDriver && styles.handshakeSegBtnActive,
-                          ]}
-                          onPress={() => {
-                            set.useAdHocDriver(true);
-                            set.assignDriverId(null);
-                            set.assignVehicleId(undefined);
-                            set.assignVehicleRegistration("");
-                            set.aggregateDriverPhone("");
-                            set.aggregateDriverTrackingName("");
-                            set.subcontractSupplierId(null);
-                            set.subcontractRate("");
-                            set.aggregateAdvancePaid("");
-                            set.aggregateDriverNameManualRef.current = false;
-                            set.aggregateDriverTrackingName("");
-                            set.aggregatePhoneName(null);
-                            set.aggregatePhoneNotFound(false);
-                            set.aggregatePhoneInTrip(false);
-                          }}
-                          activeOpacity={0.88}
-                        >
-                          <Building2
-                            size={14}
-                            color={useAdHocDriver ? "#ffffff" : "#94a3b8"}
-                          />
-                          <Text
-                            style={[
-                              styles.handshakeSegBtnText,
-                              useAdHocDriver && styles.handshakeSegBtnTextActive,
-                            ]}
-                          >
-                            Aggregate
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.handshakeAssignLaterOuter,
-                        isCompactModalLayout && styles.handshakeAssignLaterOuterCompact,
-                      ]}
-                    >
-                      <View style={styles.handshakeAssignLaterLeft}>
-                        <View style={styles.handshakeAssignLaterIconWrap}>
-                          <ListChecks size={18} color="#64748b" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.handshakeAssignLaterTitle}>
-                            Assign later
-                          </Text>
-                          <Text style={styles.handshakeAssignLaterSub}>
-                            {useAdHocDriver
-                              ? "(vehicle & driver phone from trip detail)"
-                              : "(vehicle & driver from trip detail)"}
-                          </Text>
-                        </View>
-                      </View>
-                      <Switch
-                        value={staffHandshakeAssignLater}
-                        onValueChange={(v) => {
-                          set.staffHandshakeAssignLater(v);
-                          if (v) {
-                            set.assignDriverId(null);
-                            set.assignVehicleId(undefined);
-                            set.aggregateDriverPhone("");
-                            set.aggregateDriverNameManualRef.current = false;
-                            set.aggregateDriverTrackingName("");
-                            set.assignVehicleRegistration("");
-                          }
-                        }}
-                        trackColor={{
-                          false: "#e2e8f0",
-                          true: "#0f172a",
-                        }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
+                    <SupplyAllocationModeBar
+                      mode={useAdHocDriver ? "aggregate" : "asset"}
+                      compact={isCompactModalLayout}
+                      assignLater={staffHandshakeAssignLater}
+                      onModeChange={(mode) => {
+                        if (mode === "aggregate") {
+                          set.useAdHocDriver(true);
+                          set.assignDriverId(null);
+                          set.assignVehicleId(undefined);
+                          set.assignVehicleRegistration("");
+                          set.aggregateDriverPhone("");
+                          set.aggregateDriverTrackingName("");
+                          set.subcontractSupplierId(null);
+                          set.subcontractRate("");
+                          set.aggregateAdvancePaid("");
+                          set.aggregateDriverNameManualRef.current = false;
+                          set.aggregateDriverTrackingName("");
+                          set.aggregatePhoneName(null);
+                          set.aggregatePhoneNotFound(false);
+                          set.aggregatePhoneInTrip(false);
+                        } else {
+                          set.useAdHocDriver(false);
+                          set.assignVehicleRegistration("");
+                          set.aggregateDriverPhone("");
+                          set.aggregateDriverTrackingName("");
+                          set.subcontractSupplierId(null);
+                          set.subcontractRate("");
+                          set.aggregateAdvancePaid("");
+                          set.aggregateDriverNameManualRef.current = false;
+                          set.aggregateDriverTrackingName("");
+                          set.aggregatePhoneName(null);
+                          set.aggregatePhoneNotFound(false);
+                          set.aggregatePhoneInTrip(false);
+                        }
+                      }}
+                      onAssignLaterChange={(v) => {
+                        set.staffHandshakeAssignLater(v);
+                        if (v) {
+                          set.assignDriverId(null);
+                          set.assignVehicleId(undefined);
+                          set.aggregateDriverPhone("");
+                          set.aggregateDriverNameManualRef.current = false;
+                          set.aggregateDriverTrackingName("");
+                          set.assignVehicleRegistration("");
+                        }
+                      }}
+                    />
 
                     {!useAdHocDriver ? (
                       staffHandshakeAssignLater ? (
@@ -371,259 +475,58 @@ export function StaffHandshakeModal({
                           trip starts.
                         </Text>
                       ) : (
-                        <>
-                          {(() => {
-                            const selectedDriver = activeDrivers.find(
-                              (d) => String(d.id) === assignDriverId,
+                        <AssetRosterPickers
+                          isFlow={false}
+                          assetFlowStep="driver"
+                          width={width}
+                          activeDrivers={activeDrivers}
+                          vehicles={vehicles}
+                          assignDriverId={assignDriverId}
+                          assignVehicleId={assignVehicleId}
+                          set={set}
+                          onNavigateAddDriver={() => {
+                            const closeFn = onClose ?? (() => handshake.close());
+                            closeFn();
+                            setTimeout(
+                              () => {
+                                router.push(
+                                  "/(modals)/add-driver" as import("expo-router").Href,
+                                );
+                              },
+                              Platform.OS === "ios" ? 100 : 0,
                             );
-                            const selectedVehicle =
-                              typeof assignVehicleId === "string"
-                                ? vehicles.find(
-                                    (v) => String(v.id) === assignVehicleId,
-                                  )
-                                : null;
-                            return (
-                              <>
-                                <View
-                                  style={[
-                                    styles.assignSelectionGrid,
-                                    width >= 980 && styles.assignSelectionGridDesktop,
-                                  ]}
-                                >
-                                  <View style={styles.assignPickerCard}>
-                                    <View style={styles.assignPickerHeader}>
-                                      <Text style={styles.assignPickerTitle}>
-                                        Select Driver
-                                      </Text>
-                                      <View style={styles.assignPickerBadge}>
-                                        <Text style={styles.assignPickerBadgeText}>
-                                          {activeDrivers.length} Total
-                                        </Text>
-                                      </View>
-                                    </View>
-                                    {activeDrivers.map((d) => (
-                                      <TouchableOpacity
-                                        key={d.id}
-                                        style={[
-                                          styles.assignEntityRow,
-                                          assignDriverId === String(d.id) &&
-                                            styles.assignEntityRowActive,
-                                        ]}
-                                        onPress={() =>
-                                          set.assignDriverId(String(d.id))
-                                        }
-                                        activeOpacity={0.85}
-                                      >
-                                        <View style={styles.assignEntityIconWrap}>
-                                          <FontAwesome
-                                            name="user"
-                                            size={16}
-                                            color={
-                                              assignDriverId === String(d.id)
-                                                ? Theme.textOnPrimary
-                                                : Theme.textMuted
-                                            }
-                                          />
-                                        </View>
-                                        <View style={styles.assignEntityTextCol}>
-                                          <Text style={styles.assignEntityTitle}>
-                                            {d.name ?? d.phone ?? "—"}
-                                          </Text>
-                                          <Text style={styles.assignEntitySubtitle}>
-                                            {d.phone
-                                              ? `Phone: ${d.phone}`
-                                              : "Available"}
-                                          </Text>
-                                        </View>
-                                        <FontAwesome
-                                          name={
-                                            assignDriverId === String(d.id)
-                                              ? "check-circle"
-                                              : "chevron-right"
-                                          }
-                                          size={15}
-                                          color={
-                                            assignDriverId === String(d.id)
-                                              ? Theme.primary
-                                              : Theme.textMuted
-                                          }
-                                        />
-                                      </TouchableOpacity>
-                                    ))}
-                                    {activeDrivers.length === 0 ? (
-                                      <View style={styles.assignEmptyState}>
-                                        <Text style={styles.assignEmptyText}>
-                                          No asset drivers were found in your
-                                          organization. Add a salaried driver to
-                                          continue with Asset-based assignment, or use
-                                          the Aggregate flow from the previous step.
-                                        </Text>
-                                        <TouchableOpacity
-                                          style={styles.assignEmptyActionBtn}
-                                          onPress={() => {
-                                            handshake.close();
-                                            setTimeout(
-                                              () => {
-                                                router.push(
-                                                  "/(modals)/add-driver" as import("expo-router").Href,
-                                                );
-                                              },
-                                              Platform.OS === "ios" ? 100 : 0,
-                                            );
-                                          }}
-                                          activeOpacity={0.9}
-                                        >
-                                          <FontAwesome
-                                            name="plus"
-                                            size={12}
-                                            color={Theme.textOnPrimary}
-                                          />
-                                          <Text
-                                            style={styles.assignEmptyActionBtnText}
-                                          >
-                                            Add Driver
-                                          </Text>
-                                        </TouchableOpacity>
-                                      </View>
-                                    ) : null}
-                                  </View>
-
-                                  <View style={styles.assignPickerCard}>
-                                    <View style={styles.assignPickerHeader}>
-                                      <Text style={styles.assignPickerTitle}>
-                                        Select Vehicle
-                                      </Text>
-                                      <View style={styles.assignPickerBadge}>
-                                        <Text style={styles.assignPickerBadgeText}>
-                                          {vehicles.length} Total
-                                        </Text>
-                                      </View>
-                                    </View>
-                                    {vehicles.map((v) => (
-                                      <TouchableOpacity
-                                        key={v.id}
-                                        style={[
-                                          styles.assignEntityRow,
-                                          assignVehicleId === String(v.id) &&
-                                            styles.assignEntityRowActive,
-                                        ]}
-                                        onPress={() =>
-                                          set.assignVehicleId(String(v.id))
-                                        }
-                                        activeOpacity={0.85}
-                                      >
-                                        <View style={styles.assignEntityIconWrap}>
-                                          <FontAwesome
-                                            name="truck"
-                                            size={16}
-                                            color={
-                                              assignVehicleId === String(v.id)
-                                                ? Theme.textOnPrimary
-                                                : Theme.textMuted
-                                            }
-                                          />
-                                        </View>
-                                        <View style={styles.assignEntityTextCol}>
-                                          <Text style={styles.assignEntityTitle}>
-                                            {v.vehicle_number}
-                                          </Text>
-                                          <Text style={styles.assignEntitySubtitle}>
-                                            {v.vehicle_type
-                                              ? `${v.vehicle_type}${
-                                                  v.vehicle_body_type
-                                                    ? ` · ${v.vehicle_body_type}`
-                                                    : ""
-                                                }`
-                                              : "Fleet vehicle"}
-                                          </Text>
-                                        </View>
-                                        <FontAwesome
-                                          name={
-                                            assignVehicleId === String(v.id)
-                                              ? "check-circle"
-                                              : "chevron-right"
-                                          }
-                                          size={15}
-                                          color={
-                                            assignVehicleId === String(v.id)
-                                              ? Theme.primary
-                                              : Theme.textMuted
-                                          }
-                                        />
-                                      </TouchableOpacity>
-                                    ))}
-                                    {vehicles.length === 0 ? (
-                                      <View style={styles.assignEmptyState}>
-                                        <Text style={styles.assignEmptyText}>
-                                          No vehicles were found in your fleet. Add an
-                                          own vehicle to continue with Asset-based
-                                          assignment.
-                                        </Text>
-                                        <TouchableOpacity
-                                          style={styles.assignEmptyActionBtn}
-                                          onPress={() => {
-                                            handshake.close();
-                                            setTimeout(
-                                              () => {
-                                                router.push(
-                                                  "/(modals)/add-vehicle" as import("expo-router").Href,
-                                                );
-                                              },
-                                              Platform.OS === "ios" ? 100 : 0,
-                                            );
-                                          }}
-                                          activeOpacity={0.9}
-                                        >
-                                          <FontAwesome
-                                            name="plus"
-                                            size={12}
-                                            color={Theme.textOnPrimary}
-                                          />
-                                          <Text
-                                            style={styles.assignEmptyActionBtnText}
-                                          >
-                                            Add Vehicle
-                                          </Text>
-                                        </TouchableOpacity>
-                                      </View>
-                                    ) : null}
-                                  </View>
-                                </View>
-
-                                <View style={styles.assignSummaryBar}>
-                                  <View style={styles.assignSummaryRow}>
-                                    <View style={styles.assignSummaryBlock}>
-                                      <Text style={styles.assignSummaryLabel}>
-                                        Selected Driver
-                                      </Text>
-                                      <Text style={styles.assignSummaryValue}>
-                                        {selectedDriver?.name ??
-                                          selectedDriver?.phone ??
-                                          "Not selected"}
-                                      </Text>
-                                    </View>
-                                    <View style={styles.assignSummaryDivider} />
-                                    <View style={styles.assignSummaryBlock}>
-                                      <Text style={styles.assignSummaryLabel}>
-                                        Selected Vehicle
-                                      </Text>
-                                      <Text style={styles.assignSummaryValue}>
-                                        {selectedVehicle?.vehicle_number ??
-                                          "Not selected"}
-                                      </Text>
-                                    </View>
-                                  </View>
-                                </View>
-                              </>
+                          }}
+                          onNavigateAddVehicle={() => {
+                            const closeFn = onClose ?? (() => handshake.close());
+                            closeFn();
+                            setTimeout(
+                              () => {
+                                router.push(
+                                  "/(modals)/add-vehicle" as import("expo-router").Href,
+                                );
+                              },
+                              Platform.OS === "ios" ? 100 : 0,
                             );
-                          })()}
-                        </>
+                          }}
+                        />
                       )
                     ) : (
                       (() => {
                         const inlinePartners = visiblePartnersForHandshake;
                         const canWideAlign =
                           Platform.OS === "web" ? width >= 1200 : width >= 900;
+
+                        const openAddPartner = () => {
+                          handshake.close();
+                          setTimeout(
+                            () => {
+                              router.push(
+                                "/(modals)/add-supplier" as import("expo-router").Href,
+                              );
+                            },
+                            Platform.OS === "ios" ? 100 : 0,
+                          );
+                        };
 
                         const partnerPane = (
                           <View
@@ -632,104 +535,44 @@ export function StaffHandshakeModal({
                               canWideAlign && styles.aggregatePaneWide,
                             ]}
                           >
-                            <View style={styles.aggregatePaneHeaderRow}>
-                              <Text style={styles.aggregatePaneTitle}>
-                                Transport partner *
-                              </Text>
-                              <TouchableOpacity
-                                style={styles.partnerAddBtn}
-                                onPress={() => {
-                                  handshake.close();
-                                  setTimeout(
-                                    () => {
-                                      router.push(
-                                        "/(modals)/add-supplier" as import("expo-router").Href,
-                                      );
-                                    },
-                                    Platform.OS === "ios" ? 100 : 0,
-                                  );
-                                }}
-                                activeOpacity={0.9}
-                              >
-                                <FontAwesome
-                                  name="plus-circle"
-                                  size={12}
-                                  color={Theme.textPrimaryDark}
-                                />
-                                <Text style={styles.partnerAddBtnText}>
-                                  Add Partner
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                            {inlinePartners.length > 0 ? (
-                              <View style={styles.aggregatePartnerList}>
-                                {inlinePartners.map((p) => {
-                                  const partnerName =
-                                    p.company_name ||
-                                    p.name ||
-                                    p.contact_person ||
-                                    "—";
-                                  const partnerSub = [p.phone, p.email]
-                                    .filter(Boolean)
-                                    .join(" · ");
-                                  const isSelected = subcontractSupplierId === p.id;
-                                  return (
-                                    <TouchableOpacity
-                                      key={p.id}
-                                      style={[
-                                        styles.aggregatePartnerCard,
-                                        isSelected && styles.aggregatePartnerCardSelected,
-                                      ]}
-                                      onPress={() =>
-                                        set.subcontractSupplierId(
-                                          isSelected ? null : p.id,
-                                        )
-                                      }
-                                      activeOpacity={0.85}
-                                    >
-                                      <View style={styles.aggregatePartnerAvatar}>
-                                        <Text
-                                          style={styles.aggregatePartnerAvatarText}
-                                        >
-                                          {partnerName.slice(0, 2).toUpperCase()}
-                                        </Text>
-                                      </View>
-                                      <View style={{ flex: 1, minWidth: 0 }}>
-                                        <Text
-                                          style={styles.aggregatePartnerName}
-                                          numberOfLines={1}
-                                        >
-                                          {partnerName}
-                                        </Text>
-                                        {partnerSub ? (
-                                          <Text
-                                            style={styles.aggregatePartnerSub}
-                                            numberOfLines={1}
-                                          >
-                                            {partnerSub}
-                                          </Text>
-                                        ) : null}
-                                      </View>
-                                      <FontAwesome
-                                        name={
-                                          isSelected ? "check-circle" : "circle-thin"
-                                        }
-                                        size={22}
-                                        color={
-                                          isSelected ? Theme.primary : Theme.borderInput
-                                        }
-                                      />
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                            ) : (
-                              <View style={styles.aggregateViewMoreBtn}>
-                                <Text style={styles.aggregateViewMoreText}>
-                                  No partners yet. Add or select partner
-                                </Text>
-                              </View>
-                            )}
+                            <AssignmentEntityPicker
+                              title="Select Transport Partner"
+                              totalCount={inlinePartners.length}
+                              icon="building"
+                              selectedId={subcontractSupplierId}
+                              onSelect={(id) =>
+                                set.subcontractSupplierId(
+                                  subcontractSupplierId === id ? null : id,
+                                )
+                              }
+                              items={inlinePartners.map((p) => {
+                                const partnerName =
+                                  p.company_name ||
+                                  p.name ||
+                                  p.contact_person ||
+                                  "—";
+                                const partnerSub = [
+                                  p.supplier_type,
+                                  p.phone,
+                                  p.email,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ");
+                                return {
+                                  id: p.id,
+                                  title: partnerName,
+                                  subtitle: partnerSub || undefined,
+                                };
+                              })}
+                              emptyMessage="No partners yet. Add a transport partner to continue."
+                              emptyActionLabel="Add partner"
+                              onEmptyAction={openAddPartner}
+                              headerActionLabel="Add partner"
+                              onHeaderAction={openAddPartner}
+                            />
+                            <Text style={assignmentShellStyles.supplyFooterHint}>
+                              Select a transport partner from your network to continue.
+                            </Text>
                           </View>
                         );
 
@@ -1743,5 +1586,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.negative,
     marginTop: 4,
+  },
+  choiceActive: {
+    borderColor: Theme.primary,
+    backgroundColor: "rgba(79, 70, 229, 0.06)",
+  },
+  vehicleIcon: {
+    backgroundColor: "#e2e8f0",
   },
 });

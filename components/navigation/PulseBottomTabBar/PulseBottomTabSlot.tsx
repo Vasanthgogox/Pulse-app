@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Theme.pulseIndigo,
     borderWidth: 1,
-    borderColor: Theme.pulseIndigo,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   iconForeground: {
     alignItems: 'center',

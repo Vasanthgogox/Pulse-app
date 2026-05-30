@@ -396,7 +396,12 @@ export async function getMarketIndentsForOrganization(
     });
     const withActiveLinked = await mergeLinkedShipperActiveIndents(orgId, indents);
     const merged = await mergeQuotedIndentsForSupplier(orgId, withActiveLinked);
-    return { error: null, indents: merged.map((i) => normalizeIndentRow(i)) };
+    return {
+      error: null,
+      indents: merged.map((i) =>
+        maskIndentRowForSupplierList(normalizeIndentRow(i), orgId),
+      ),
+    };
   }
 
   const linkMap = await fetchPartnerShipperLinkSinceMap(orgId);
@@ -435,7 +440,12 @@ export async function getMarketIndentsForOrganization(
     } as IndentRow & { trips?: IndentTripJoin[] | null });
   });
   const merged = await mergeQuotedIndentsForSupplier(orgId, indents);
-  return { error: null, indents: merged.map((i) => normalizeIndentRow(i)) };
+  return {
+    error: null,
+    indents: merged.map((i) =>
+      maskIndentRowForSupplierList(normalizeIndentRow(i), orgId),
+    ),
+  };
 }
 
 /**
@@ -493,6 +503,54 @@ async function mergeQuotedIndentsForSupplier(
   return merged;
 }
 
+async function resolveShipperOrganizationName(
+  organizationId: string | null | undefined,
+): Promise<string | null> {
+  const oid = (organizationId ?? "").trim();
+  if (!oid) return null;
+  const { data, error } = await supabase()
+    .from("organizations")
+    .select("name")
+    .eq("id", oid)
+    .maybeSingle();
+  if (error) return null;
+  return (data?.name ?? null) as string | null;
+}
+
+/** Supplier viewers: show shipper org only; never expose shipper's end client on the row. */
+function maskIndentRowForSupplierList(
+  row: IndentRow,
+  viewerOrgId: string,
+): IndentRow {
+  if (row.organization_id === viewerOrgId) return row;
+  return {
+    ...row,
+    client_name: "",
+    client_id: null,
+  };
+}
+
+async function prepareIndentForSupplierViewer(
+  row: IndentRow,
+  viewerOrgId: string | null,
+): Promise<IndentRow> {
+  if (!viewerOrgId || row.organization_id === viewerOrgId) {
+    return row;
+  }
+  let creatorName = (row.creator_organization_name ?? "").trim();
+  if (!creatorName) {
+    creatorName =
+      (await resolveShipperOrganizationName(row.organization_id)) ?? "";
+  }
+  return maskIndentRowForSupplierList(
+    {
+      ...row,
+      creator_organization_name: creatorName || null,
+    },
+    viewerOrgId,
+  );
+}
+
 /** Fetch a single indent by id (for detail screen). */
 export async function getIndentById(
   indentId: string,
@@ -510,15 +568,26 @@ export async function getIndentById(
   return { error: null, indent };
 }
 
+import { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
+
+export { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
+
+export type GetVisibleIndentByIdOptions = {
+  /** Cached Find Work / Claimed rows — skips `market_indents_for_org` when the indent is present. */
+  marketIndentsHint?: IndentRow[];
+};
+
 /**
  * Fetch a single indent visible to the current organization.
  * - First tries direct owner read (`indents` table).
+ * - Then optional in-memory market cache.
  * - Falls back to market-visible data via RPC for integrated suppliers.
  * Also supports display IDs (e.g. IND007) as input.
  */
 export async function getVisibleIndentById(
   orgId: string | null,
   indentIdOrDisplayId: string,
+  options?: GetVisibleIndentByIdOptions,
 ): Promise<{ error: Error | null; indent: IndentRow | null }> {
   const raw = (indentIdOrDisplayId ?? "").trim();
   if (!raw) return { error: null, indent: null };
@@ -526,50 +595,24 @@ export async function getVisibleIndentById(
   const direct = await getIndentById(raw);
   if (direct.error) return direct;
   if (direct.indent) {
-    const row = direct.indent;
-    if (
-      orgId &&
-      row.organization_id &&
-      row.organization_id !== orgId &&
-      !(row.creator_organization_name ?? "").trim()
-    ) {
-      const { data: ownerOrg, error: ownerOrgErr } = await supabase()
-        .from("organizations")
-        .select("name")
-        .eq("id", row.organization_id)
-        .maybeSingle();
-      if (ownerOrgErr) {
-        return { error: new Error(ownerOrgErr.message), indent: null };
-      }
-      return {
-        error: null,
-        indent: {
-          ...row,
-          creator_organization_name: (ownerOrg?.name ?? null) as string | null,
-        },
-      };
-    }
-    return direct;
+    const prepared = await prepareIndentForSupplierViewer(direct.indent, orgId);
+    return { error: null, indent: prepared };
   }
 
   if (!orgId) return { error: null, indent: null };
+
+  const cached = options?.marketIndentsHint
+    ? findIndentInMarketList(options.marketIndentsHint, raw)
+    : null;
+  if (cached) {
+    return { error: null, indent: cached };
+  }
 
   const { error: marketErr, indents } =
     await getMarketIndentsForOrganization(orgId);
   if (marketErr) return { error: marketErr, indent: null };
 
-  const needle = raw.toLowerCase();
-  const match =
-    indents.find((row) => row.id === raw) ??
-    indents.find((row) => (row.indent_operational_code ?? "").toLowerCase() === needle) ??
-    indents.find((row) => (row.indent_code ?? "").toLowerCase() === needle) ??
-    indents.find(
-      (row) => (row.display_indent_id ?? "").toLowerCase() === needle,
-    ) ??
-    indents.find((row) => (row.indent_number ?? "").toLowerCase() === needle) ??
-    null;
-
-  return { error: null, indent: match };
+  return { error: null, indent: findIndentInMarketList(indents, raw) };
 }
 
 /** Display label for an indent (IND001-style when present). */

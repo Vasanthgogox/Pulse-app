@@ -6,12 +6,18 @@
 
 import { getIndentDisplayNumber, type DirectQuoteRow, type IndentRow } from "@/features/indents";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import { useCallback, useMemo } from "react";
 import {
   statusMatchesFilter,
+  type DoneSubTab,
   type LoadSubTab,
   type StatusFilterTab,
 } from "@/features/network/utils/loadCenter.model";
+import {
+  isDoneConvertedToTrip,
+  isDoneRejectedQuote,
+} from "@/features/network/utils/loadCenterTripAllocation.util";
 
 export interface UseLoadCenterFiltersParams {
   orgId: string | null;
@@ -22,6 +28,8 @@ export interface UseLoadCenterFiltersParams {
   quoteCounts: Record<string, number>;
   loadSubTab: LoadSubTab;
   statusFilterTab: StatusFilterTab;
+  /** When `statusFilterTab` is DONE, splits the done list. */
+  doneSubTab: DoneSubTab;
   searchQuery: string;
 }
 
@@ -42,6 +50,12 @@ export interface LoadCenterFiltersResult {
   filteredFindWorkList: IndentRow[];
   filteredClaimedLoads: IndentRow[];
   filteredClaimedDoneLoads: IndentRow[];
+  filteredHirePartnerDoneLoads: IndentRow[];
+  tripByIndentId: Map<string, TripRow>;
+  doneSubTabCounts: {
+    REJECTED: number;
+    CONVERTED: number;
+  };
   statusTabCounts: {
     OPEN: number;
     QUOTED: number;
@@ -60,6 +74,7 @@ export function useLoadCenterFilters({
   quoteCounts,
   loadSubTab,
   statusFilterTab,
+  doneSubTab,
   searchQuery,
 }: UseLoadCenterFiltersParams): LoadCenterFiltersResult {
   /** O(myQuotes.length): map indent_id -> quote for Find Work "Quote Sent" / "Update quote" and modal prefill. */
@@ -70,15 +85,20 @@ export function useLoadCenterFilters({
   }, [myQuotes]);
 
   /** Indent ids that already have a trip (owner or supplier). Exclude these from Claimed so we don't show "ASSIGN STAFF & DEPLOY" again after deploy. */
-  const indentIdsWithTrip = useMemo(() => {
-    const list = trips ?? [];
-    const ids: string[] = [];
-    for (const t of list) {
-      const id = (t as { indent_id?: string | null }).indent_id;
-      if (id) ids.push(id);
+  const tripByIndentId = useMemo(() => {
+    const m = new Map<string, TripRow>();
+    for (const t of trips ?? []) {
+      const row = t as TripRow;
+      const id = (row.indent_id ?? "").trim();
+      if (id) m.set(id, row);
     }
-    return new Set(ids);
+    return m;
   }, [trips]);
+
+  const indentIdsWithTrip = useMemo(
+    () => new Set(tripByIndentId.keys()),
+    [tripByIndentId],
+  );
 
   /** All indents from my org (for Hire Partner — filter by status tab). */
   const hirePartnerLoads = useMemo(
@@ -188,7 +208,12 @@ export function useLoadCenterFilters({
       const tripId = getTripOperationalDisplay({
         trip_number: load["trip_number"] ?? null,
       }).toLowerCase();
-      const client = (load.client_name || "").toLowerCase();
+      const client = (
+        orgId && load.organization_id === orgId
+          ? load.client_name || ""
+          : (load as { creator_organization_name?: string | null })
+              .creator_organization_name || ""
+      ).toLowerCase();
       const creator = (
         (load as { creator_organization_name?: string })
           .creator_organization_name || ""
@@ -203,39 +228,6 @@ export function useLoadCenterFilters({
     },
     [],
   );
-
-  /** Status-filtered lists for each role tab, then search-filtered. */
-  const filteredHirePartnerLoads = useMemo(() => {
-    const statusFiltered = hirePartnerLoads.filter((load) => {
-      const status = (load.status || "").toLowerCase();
-      if (statusFilterTab === "QUOTED") {
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        const isNotTerminal =
-          !statusMatchesFilter(status, "AWARDED") &&
-          !statusMatchesFilter(status, "DONE");
-        return (isQuotedStatus || hasBids) && isNotTerminal;
-      }
-      if (statusFilterTab === "OPEN") {
-        // Hire Partner: once a load has any bids (or becomes "quoted"), it should
-        // move out of Created and into Quoted.
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
-        if (hasBids || isQuotedStatus) return false;
-        return statusMatchesFilter(status, "OPEN");
-      }
-      return statusMatchesFilter(status, statusFilterTab);
-    });
-    return statusFiltered.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
-    );
-  }, [
-    hirePartnerLoads,
-    statusFilterTab,
-    quoteCounts,
-    searchQuery,
-    loadMatchesSearch,
-  ]);
 
   const filteredFindWorkLoads = useMemo(() => {
     const statusFiltered = (() => {
@@ -266,11 +258,82 @@ export function useLoadCenterFilters({
     awardedLoads,
   ]);
 
+  const findWorkDoneRejectedLoads = useMemo(
+    () =>
+      findWorkDoneUnionLoads.filter((load) =>
+        isDoneRejectedQuote(load.id, myQuoteByIndentId),
+      ),
+    [findWorkDoneUnionLoads, myQuoteByIndentId],
+  );
+
+  const findWorkDoneConvertedLoads = useMemo(
+    () =>
+      findWorkDoneUnionLoads.filter((load) =>
+        isDoneConvertedToTrip(load.id, indentIdsWithTrip),
+      ),
+    [findWorkDoneUnionLoads, indentIdsWithTrip],
+  );
+
+  const hirePartnerDoneLoads = useMemo(
+    () =>
+      hirePartnerLoads.filter((load) =>
+        statusMatchesFilter(load.status || "", "DONE"),
+      ),
+    [hirePartnerLoads],
+  );
+
+  const hirePartnerDoneRejectedLoads = useMemo(
+    () =>
+      hirePartnerDoneLoads.filter((load) => {
+        const s = (load.status || "").toLowerCase();
+        return s === "cancelled" || s === "expired" || s === "closed";
+      }),
+    [hirePartnerDoneLoads],
+  );
+
+  const hirePartnerDoneConvertedLoads = useMemo(
+    () =>
+      hirePartnerDoneLoads.filter((load) =>
+        isDoneConvertedToTrip(load.id, indentIdsWithTrip),
+      ),
+    [hirePartnerDoneLoads, indentIdsWithTrip],
+  );
+
+  const claimedDoneRejectedLoads = useMemo(
+    () =>
+      awardedLoadsDone.filter((load) =>
+        isDoneRejectedQuote(load.id, myQuoteByIndentId),
+      ),
+    [awardedLoadsDone, myQuoteByIndentId],
+  );
+
+  const claimedDoneConvertedLoads = useMemo(
+    () =>
+      awardedLoadsDone.filter((load) =>
+        isDoneConvertedToTrip(load.id, indentIdsWithTrip),
+      ),
+    [awardedLoadsDone, indentIdsWithTrip],
+  );
+
+  const pickDoneSubList = useCallback(
+    (rejected: IndentRow[], converted: IndentRow[]) =>
+      doneSubTab === "REJECTED" ? rejected : converted,
+    [doneSubTab],
+  );
+
   const filteredFindWorkDoneLoads = useMemo(() => {
-    return findWorkDoneUnionLoads.filter((load) =>
-      loadMatchesSearch(load, searchQuery),
+    const base = pickDoneSubList(
+      findWorkDoneRejectedLoads,
+      findWorkDoneConvertedLoads,
     );
-  }, [findWorkDoneUnionLoads, searchQuery, loadMatchesSearch]);
+    return base.filter((load) => loadMatchesSearch(load, searchQuery));
+  }, [
+    pickDoneSubList,
+    findWorkDoneRejectedLoads,
+    findWorkDoneConvertedLoads,
+    searchQuery,
+    loadMatchesSearch,
+  ]);
 
   const filteredFindWorkList = useMemo(
     () =>
@@ -285,10 +348,97 @@ export function useLoadCenterFilters({
   }, [awardedLoads, searchQuery, loadMatchesSearch]);
 
   const filteredClaimedDoneLoads = useMemo(() => {
-    return awardedLoadsDone.filter((load) =>
+    const base = pickDoneSubList(
+      claimedDoneRejectedLoads,
+      claimedDoneConvertedLoads,
+    );
+    return base.filter((load) => loadMatchesSearch(load, searchQuery));
+  }, [
+    pickDoneSubList,
+    claimedDoneRejectedLoads,
+    claimedDoneConvertedLoads,
+    searchQuery,
+    loadMatchesSearch,
+  ]);
+
+  const filteredHirePartnerDoneLoads = useMemo(() => {
+    const base = pickDoneSubList(
+      hirePartnerDoneRejectedLoads,
+      hirePartnerDoneConvertedLoads,
+    );
+    return base.filter((load) => loadMatchesSearch(load, searchQuery));
+  }, [
+    pickDoneSubList,
+    hirePartnerDoneRejectedLoads,
+    hirePartnerDoneConvertedLoads,
+    searchQuery,
+    loadMatchesSearch,
+  ]);
+
+  /** Status-filtered lists for each role tab, then search-filtered. */
+  const filteredHirePartnerLoads = useMemo(() => {
+    if (statusFilterTab === "DONE") {
+      return filteredHirePartnerDoneLoads;
+    }
+    const statusFiltered = hirePartnerLoads.filter((load) => {
+      const status = (load.status || "").toLowerCase();
+      if (statusFilterTab === "QUOTED") {
+        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
+        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
+        const isNotTerminal =
+          !statusMatchesFilter(status, "AWARDED") &&
+          !statusMatchesFilter(status, "DONE");
+        return (isQuotedStatus || hasBids) && isNotTerminal;
+      }
+      if (statusFilterTab === "OPEN") {
+        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
+        const isQuotedStatus = statusMatchesFilter(status, "QUOTED");
+        if (hasBids || isQuotedStatus) return false;
+        return statusMatchesFilter(status, "OPEN");
+      }
+      return statusMatchesFilter(status, statusFilterTab);
+    });
+    return statusFiltered.filter((load) =>
       loadMatchesSearch(load, searchQuery),
     );
-  }, [awardedLoadsDone, searchQuery, loadMatchesSearch]);
+  }, [
+    hirePartnerLoads,
+    statusFilterTab,
+    quoteCounts,
+    searchQuery,
+    loadMatchesSearch,
+    filteredHirePartnerDoneLoads,
+  ]);
+
+  const doneSubTabCounts = useMemo(() => {
+    if (loadSubTab === "GIVE_LOAD") {
+      return {
+        REJECTED: hirePartnerDoneRejectedLoads.length,
+        CONVERTED: hirePartnerDoneConvertedLoads.length,
+      };
+    }
+    if (loadSubTab === "GET_LOAD") {
+      return {
+        REJECTED: findWorkDoneRejectedLoads.length,
+        CONVERTED: findWorkDoneConvertedLoads.length,
+      };
+    }
+    if (loadSubTab === "AWARDED") {
+      return {
+        REJECTED: claimedDoneRejectedLoads.length,
+        CONVERTED: claimedDoneConvertedLoads.length,
+      };
+    }
+    return { REJECTED: 0, CONVERTED: 0 };
+  }, [
+    loadSubTab,
+    hirePartnerDoneRejectedLoads,
+    hirePartnerDoneConvertedLoads,
+    findWorkDoneRejectedLoads,
+    findWorkDoneConvertedLoads,
+    claimedDoneRejectedLoads,
+    claimedDoneConvertedLoads,
+  ]);
 
   /** Counts per status tab for the current role tab (Hire Partner / Find Work / Claimed). */
   const statusTabCounts = useMemo(() => {
@@ -353,6 +503,7 @@ export function useLoadCenterFilters({
   return {
     myQuoteByIndentId,
     indentIdsWithTrip,
+    tripByIndentId,
     hirePartnerLoads,
     awardedToMeIndentIds,
     awardedLoads,
@@ -367,6 +518,8 @@ export function useLoadCenterFilters({
     filteredFindWorkList,
     filteredClaimedLoads,
     filteredClaimedDoneLoads,
+    filteredHirePartnerDoneLoads,
+    doneSubTabCounts,
     statusTabCounts,
     loadMatchesSearch,
   };

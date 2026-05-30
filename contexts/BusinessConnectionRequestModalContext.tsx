@@ -1,4 +1,5 @@
 import { ThemedConfirmModal } from '@/components/ThemedConfirmModal';
+import { useOptionalAwardedIndentDeployModal } from '@/contexts/AwardedIndentDeployModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { BusinessConnectionRequestModal } from '@/features/network/components/BusinessConnectionRequestModal';
 import { isConnectionProtocolInvite } from '@/features/network/utils/businessConnectionOffer.util';
@@ -46,6 +47,7 @@ export function useBusinessConnectionRequestModal(): BusinessConnectionRequestMo
 export function BusinessConnectionRequestModalProvider({ children }: { children: ReactNode }) {
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
+  const deployGate = useOptionalAwardedIndentDeployModal();
 
   const { receivedItems, refreshInboundProtocol } = useInboundProtocolInvites(orgId);
   const { inviteActionId, handleInviteAction } = useInboundProtocolInviteActions(orgId);
@@ -115,7 +117,10 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     queueViewIndex,
   ]);
 
-  const showModal = !!activeInvite && !declineTarget;
+  const showModal =
+    !!activeInvite &&
+    !declineTarget &&
+    !deployGate?.blocksConnectionInvitations;
 
   const presentConnectionInvite = useCallback(
     (item: InboundProtocolInviteItem) => {

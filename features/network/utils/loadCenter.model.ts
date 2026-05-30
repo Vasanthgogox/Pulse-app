@@ -4,11 +4,46 @@
  */
 
 import Theme from "@/constants/Theme";
+import { formatINR } from "@/lib/format";
 
 export type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
 
+/** Give Load: card pill when at least one supplier bid exists. */
+export const GIVE_LOAD_QUOTE_RECEIVED_STATUS = "quote received";
+
+export function getLoadCenterStatusTabLabel(
+  loadSubTab: LoadSubTab,
+  tabId: StatusFilterTab,
+  defaultLabel: string,
+): string {
+  if (loadSubTab === "GIVE_LOAD" && tabId === "OPEN") return "Created";
+  if (loadSubTab === "GIVE_LOAD" && tabId === "QUOTED") return "Quote received";
+  return defaultLabel;
+}
+
+export function giveLoadBidReceivedDisplayStatus(
+  indentStatus: string,
+  bidCount: number,
+): string {
+  const status = indentStatus.toLowerCase();
+  const terminalForQuotePill =
+    status === "awarded" || statusMatchesFilter(status, "DONE");
+  if (!terminalForQuotePill && bidCount > 0) {
+    return GIVE_LOAD_QUOTE_RECEIVED_STATUS;
+  }
+  return status;
+}
+
 /** Status filter tabs: Open | Quoted | Awarded | Done. Maps to indent status values. */
 export type StatusFilterTab = "OPEN" | "QUOTED" | "AWARDED" | "DONE";
+
+/** Done tab sub-filters (Find Work / Claimed / Give Load). */
+export type DoneSubTab = "REJECTED" | "CONVERTED";
+
+export const DONE_SUB_TABS: { id: DoneSubTab; label: string }[] = [
+  { id: "REJECTED", label: "Rejected" },
+  { id: "CONVERTED", label: "Converted to trips" },
+];
 
 export const STATUS_TABS: {
   id: StatusFilterTab;
@@ -36,6 +71,141 @@ export function statusMatchesFilter(
   const s = status.toLowerCase();
   const tab = STATUS_TABS.find((t) => t.id === filter);
   return tab?.statuses.includes(s) ?? false;
+}
+
+/** Mobile GET LOAD card labels — Done tab uses outcome status, not live quote state. */
+export function resolveGetLoadMobileCardLabels(
+  statusFilterTab: StatusFilterTab,
+  doneSubTab: DoneSubTab,
+  load: { id: string; status?: string | null; load_type?: string | null },
+  existingQuote: { status?: string | null; amount?: number | null } | undefined,
+  indentIdsWithTrip: ReadonlySet<string>,
+): { statusLabel: string; rightFooter: string } {
+  const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
+  const indentStatus = (load.status || "").toLowerCase();
+  const loadTypeDetail = (load.load_type || "—").toUpperCase();
+  const hasTrip = indentIdsWithTrip.has(load.id);
+
+  if (statusFilterTab === "DONE") {
+    if (doneSubTab === "REJECTED" || quoteStatus === "rejected") {
+      return {
+        statusLabel: "declined",
+        rightFooter: "Quote not selected",
+      };
+    }
+    return {
+      statusLabel: "completed",
+      rightFooter: hasTrip ? "On books" : "Closed",
+    };
+  }
+
+  const isPending = quoteStatus === "pending";
+  const isRejected = quoteStatus === "rejected";
+  const isAccepted = quoteStatus === "accepted";
+  const statusLabel = isAccepted
+    ? "awarded"
+    : isRejected
+      ? "declined"
+      : isPending
+        ? "quoted"
+        : "open";
+  const rightFooter = isPending
+    ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
+    : isAccepted
+      ? "Awarded"
+      : loadTypeDetail;
+
+  return { statusLabel, rightFooter };
+}
+
+/** GET LOAD hub ticket — target rate vs your quote in the card stub. */
+export type LoadCenterTicketCommerce = {
+  kicker: string;
+  amountInr: number | null;
+  targetRateInr?: number | null;
+  quoteStatus?: string | null;
+  /** Shown when there is no numeric hero (bids, load type, done outcome). */
+  rightCaption?: string | null;
+};
+
+export function resolveGetLoadTicketCommerce(
+  statusFilterTab: StatusFilterTab,
+  doneSubTab: DoneSubTab,
+  load: { id: string; status?: string | null; supplier_target?: number | null },
+  existingQuote: { status?: string | null; amount?: number | null } | undefined,
+  indentIdsWithTrip: ReadonlySet<string>,
+): LoadCenterTicketCommerce {
+  const targetRateInr = Number(load.supplier_target ?? 0);
+  const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
+  const quoteAmount = Number(existingQuote?.amount ?? 0);
+  const hasQuote = quoteAmount > 0;
+  const hasTrip = indentIdsWithTrip.has(load.id);
+
+  if (statusFilterTab === "DONE") {
+    if (doneSubTab === "REJECTED" || quoteStatus === "rejected") {
+      return {
+        kicker: "DECLINED",
+        amountInr: null,
+        rightCaption: "Quote not selected",
+      };
+    }
+    return {
+      kicker: "COMPLETED",
+      amountInr: null,
+      rightCaption: hasTrip ? "On books" : "Closed",
+    };
+  }
+
+  if (quoteStatus === "pending" && hasQuote) {
+    return {
+      kicker: "YOUR QUOTE",
+      amountInr: quoteAmount,
+      targetRateInr: targetRateInr > 0 ? targetRateInr : null,
+      quoteStatus,
+    };
+  }
+  if (quoteStatus === "accepted") {
+    return {
+      kicker: "AWARDED",
+      amountInr: hasQuote ? quoteAmount : null,
+      rightCaption: "Awarded",
+      quoteStatus,
+    };
+  }
+  if (quoteStatus === "rejected") {
+    return {
+      kicker: "TARGET RATE",
+      amountInr: targetRateInr > 0 ? targetRateInr : null,
+      rightCaption: "Declined",
+      quoteStatus,
+    };
+  }
+
+  return {
+    kicker: "TARGET RATE",
+    amountInr: targetRateInr > 0 ? targetRateInr : null,
+    rightCaption: targetRateInr > 0 ? null : "Open freight",
+  };
+}
+
+/** Give Load mobile card status on Done → show completed when a trip exists. */
+export function resolveGiveLoadMobileDisplayStatus(
+  statusFilterTab: StatusFilterTab,
+  indentStatus: string,
+  bidCount: number,
+  indentIdsWithTrip: ReadonlySet<string>,
+  indentId: string,
+): string {
+  const status = indentStatus.toLowerCase();
+  const terminalForQuotePill =
+    status === "awarded" || statusMatchesFilter(status, "DONE");
+  if (statusFilterTab === "DONE") {
+    if (indentIdsWithTrip.has(indentId) || status === "completed") {
+      return "completed";
+    }
+    return status;
+  }
+  return giveLoadBidReceivedDisplayStatus(status, bidCount);
 }
 
 /** Hide GET LOAD row state pill when the active status chip already matches (see GET LOAD cards). */
@@ -76,7 +246,7 @@ export function giveLoadStatusPillStyles(status: string): {
       text: { color: Theme.textSecondary },
     };
   }
-  if (s === "quoted") {
+  if (s === "quoted" || s === GIVE_LOAD_QUOTE_RECEIVED_STATUS) {
     return {
       pill: {
         backgroundColor: Theme.screenBackground,

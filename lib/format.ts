@@ -144,3 +144,26 @@ export function formatIndianVehicleNumberInput(next: string): string {
   const parts = [m[1], m[2], m[3], m[4]].filter(Boolean);
   return parts.join(' ');
 }
+
+/**
+ * Indent `weight` is stored in kg; operators think in metric tons.
+ * Returns e.g. "12 TONS" for offer cards and deploy prompts.
+ */
+export function formatIndentTonsToCarry(
+  weightKg: number | null | undefined,
+): string {
+  const kg = Number(weightKg);
+  if (!Number.isFinite(kg) || kg <= 0) return "—";
+  const tons = kg / 1000;
+  if (tons >= 100) {
+    return `${Math.round(tons).toLocaleString("en-IN")} TONS`;
+  }
+  if (Math.abs(tons - Math.round(tons)) < 0.05) {
+    return `${Math.round(tons).toLocaleString("en-IN")} TONS`;
+  }
+  const rounded = Math.round(tons * 10) / 10;
+  const text = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toLocaleString("en-IN", { maximumFractionDigits: 1 });
+  return `${text} TONS`;
+}
