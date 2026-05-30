@@ -11,7 +11,11 @@ import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useTripChat } from "@/features/chat/contexts/TripChatContext";
-import { pushTripLedgerQuickEntry } from "@/features/finance/ledger/tripLedgerEntryChooser";
+import {
+  openTripLedgerEntryChooser,
+  pushTripLedgerQuickEntry,
+} from "@/features/finance/ledger/tripLedgerEntryChooser";
+import { TripPayableReceivableSummaryCard } from "@/features/trips/components/trip-detail/adjustment/TripPayableReceivableSummaryCard";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
@@ -1879,22 +1883,55 @@ export default function TripDetailScreen({
     adjSales - collectedFromClient,
   );
   const supplierDueAfterAdjustments = Math.max(0, adjCost - supplierPaid);
+  const provisionCostPartyName = isAssetTripFinance
+    ? allocatedDriverName !== "Unassigned"
+      ? allocatedDriverName
+      : detail.driverName?.trim() || "Driver"
+    : supplierNameForParty;
   const hasLinkedClient = Boolean((clientIdFromContext ?? trip.client_id)?.trim());
+  const showPayableSettlementLane =
+    showRecordSupplierPayoutCta || isAssetTripFinance;
+  const tripLedgerNavContext = {
+    trip,
+    router,
+    displayClientName: detail.displayClientName ?? null,
+    clientIdFromContext: clientIdFromContext ?? null,
+    clientNameFromContext: clientNameFromContext ?? null,
+    partnerName: detail.partnerName ?? null,
+    driverDisplayName: detail.driverName ?? null,
+  };
   const financeCapturePaymentSlot = (
     <View style={neoStyles.capturePaymentSlot}>
+      <TripPayableReceivableSummaryCard
+        showReceivable={hasLinkedClient || adjSales > 0}
+        clientName={clientNameForParty}
+        clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
+        revisedReceivable={adjSales}
+        collectedAmount={collectedFromClient}
+        receivableDue={receivableAfterAdjustments}
+        showPayable={showPayableSettlementLane}
+        payablePartyName={provisionCostPartyName}
+        payableAvatarUrl={
+          isAssetTripFinance ? detail.driverAvatarUri : undefined
+        }
+        payableAvatarSeed={
+          isAssetTripFinance
+            ? (trip.driver_id ?? null)
+            : (trip.supplier_id ?? null)
+        }
+        payableEntityType={isAssetTripFinance ? "driver" : "supplier"}
+        payableLaneLabel={isAssetTripFinance ? "Driver payable" : "Payable"}
+        revisedPayable={adjCost}
+        paidAmount={supplierPaid}
+        payableDue={supplierDueAfterAdjustments}
+      />
       <TouchableOpacity
         style={neoStyles.capturePaymentBtn}
         onPress={() => {
           const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
           pushTripLedgerQuickEntry(
             {
-              trip,
-              router,
-              displayClientName: detail.displayClientName ?? null,
-              clientIdFromContext: clientIdFromContext ?? null,
-              clientNameFromContext: clientNameFromContext ?? null,
-              partnerName: detail.partnerName ?? null,
-              driverDisplayName: detail.driverName ?? null,
+              ...tripLedgerNavContext,
               ledgerSyncExtraParams: {
                 dueAmountIn: String(dueHint),
               },
@@ -1912,23 +1949,27 @@ export default function TripDetailScreen({
           Link a client on the trip to pre-fill customer receipt
         </Text>
       ) : null}
+      <TouchableOpacity
+        style={neoStyles.markPaymentsBtn}
+        onPress={() => openTripLedgerEntryChooser(tripLedgerNavContext)}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel="Mark payments"
+      >
+        <Feather name="check-circle" size={16} color={Theme.primary} />
+        <Text style={neoStyles.markPaymentsBtnText}>Mark payments</Text>
+      </TouchableOpacity>
       {showRecordSupplierPayoutCta ? (
         <TouchableOpacity
           style={[
             neoStyles.capturePaymentBtn,
-            { marginTop: 10, backgroundColor: "#0f172a" },
+            { marginTop: 4, backgroundColor: "#0f172a" },
           ]}
           onPress={() => {
             const dueOut = Math.max(0, Math.round(supplierDueAfterAdjustments));
             pushTripLedgerQuickEntry(
               {
-                trip,
-                router,
-                displayClientName: detail.displayClientName ?? null,
-                clientIdFromContext: clientIdFromContext ?? null,
-                clientNameFromContext: clientNameFromContext ?? null,
-                partnerName: detail.partnerName ?? null,
-                driverDisplayName: detail.driverName ?? null,
+                ...tripLedgerNavContext,
                 ledgerSyncExtraParams: {
                   dueAmountOut: String(dueOut),
                 },
@@ -1944,50 +1985,9 @@ export default function TripDetailScreen({
           </Text>
         </TouchableOpacity>
       ) : null}
-      <View style={neoStyles.capturePaymentDueFooter}>
-        {hasLinkedClient ? (
-          <View style={neoStyles.capturePaymentDueRow}>
-            <Text style={neoStyles.capturePaymentDueLabel}>Client due</Text>
-            <Text
-              style={[
-                neoStyles.capturePaymentDueValue,
-                receivableAfterAdjustments > 0
-                  ? neoStyles.capturePaymentDueValueDue
-                  : neoStyles.capturePaymentDueValueSettled,
-              ]}
-            >
-              {receivableAfterAdjustments > 0
-                ? formatINR(receivableAfterAdjustments)
-                : "Nothing due"}
-            </Text>
-          </View>
-        ) : null}
-        {showRecordSupplierPayoutCta ? (
-          <View style={neoStyles.capturePaymentDueRow}>
-            <Text style={neoStyles.capturePaymentDueLabel}>Supplier due</Text>
-            <Text
-              style={[
-                neoStyles.capturePaymentDueValue,
-                supplierDueAfterAdjustments > 0
-                  ? neoStyles.capturePaymentDueValueDue
-                  : neoStyles.capturePaymentDueValueSettled,
-              ]}
-            >
-              {supplierDueAfterAdjustments > 0
-                ? formatINR(supplierDueAfterAdjustments)
-                : "Nothing due"}
-            </Text>
-          </View>
-        ) : null}
-      </View>
     </View>
   );
 
-  const provisionCostPartyName = isAssetTripFinance
-    ? allocatedDriverName !== "Unassigned"
-      ? allocatedDriverName
-      : detail.driverName?.trim() || "Driver"
-    : supplierNameForParty;
   const assetCostBreakdownLines =
     isAssetTripFinance && assetProvisionCostPreview
       ? buildAssetProvisionCostBreakdownLines(assetProvisionCostPreview)
@@ -8198,6 +8198,24 @@ const neoStyles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     lineHeight: 12,
+  },
+  markPaymentsBtn: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.35)",
+    backgroundColor: "rgba(99,102,241,0.06)",
+  },
+  markPaymentsBtnText: {
+    color: Theme.primary,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
   capturePaymentDueFooter: {
     marginTop: 12,

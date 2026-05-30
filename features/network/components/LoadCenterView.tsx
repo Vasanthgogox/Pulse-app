@@ -40,30 +40,43 @@ import {
     type IndentRow,
 } from "@/features/indents";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
+import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import {
+    DONE_SUB_TABS,
     formatIndentCardDate,
     giveLoadStatusPillStyles,
+    getLoadCenterStatusTabLabel,
+    giveLoadBidReceivedDisplayStatus,
+    resolveGetLoadMobileCardLabels,
+    resolveGetLoadTicketCommerce,
+    resolveGiveLoadMobileDisplayStatus,
     shouldHideGetLoadStatePill,
     STATUS_TABS,
     statusMatchesFilter,
+    type DoneSubTab,
     type LoadSubTab,
     type StatusFilterTab,
 } from "@/features/network/utils/loadCenter.model";
+import {
+  resolveTripAllocationDisplay,
+  type LoadCenterDriverProfile,
+} from "@/features/network/utils/loadCenterTripAllocation.util";
 import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
 import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilters";
-import { useStaffHandshake } from "@/features/network/hooks/useStaffHandshake";
 import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
 import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
 import { AwardModal } from "@/features/network/components/AwardModal";
 import { BidModal } from "@/features/network/components/BidModal";
-import { StaffHandshakeModal } from "@/features/network/components/StaffHandshakeModal";
+import { LoadCenterPulseConnectCard } from "@/features/network/components/LoadCenterPulseConnectCard";
 import {
     assignmentShellColors,
     assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { formatINR } from "@/lib/format";
+import { ROUTES } from "@/lib/routes";
+import { useRouter } from "expo-router";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
     useIndentOfferCountsQuery,
@@ -135,6 +148,7 @@ export function LoadCenterView({
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
@@ -145,6 +159,7 @@ export function LoadCenterView({
   const loadTabsActiveAnim = useRef(new Animated.Value(0)).current;
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
+  const [doneSubTab, setDoneSubTab] = useState<DoneSubTab>("REJECTED");
   const [searchQuery, setSearchQuery] = useState("");
   const [creatorOrgProfileMap, setCreatorOrgProfileMap] = useState<
     Record<string, { avatarUrl?: string; avatarSeed?: string }>
@@ -236,12 +251,14 @@ export function LoadCenterView({
     quoteCounts,
     loadSubTab,
     statusFilterTab,
+    doneSubTab,
     searchQuery,
   });
 
   const {
     myQuoteByIndentId,
     indentIdsWithTrip,
+    tripByIndentId,
     hirePartnerLoads,
     awardedLoads,
     findWorkLoads,
@@ -249,8 +266,38 @@ export function LoadCenterView({
     filteredFindWorkList,
     filteredClaimedLoads,
     filteredClaimedDoneLoads,
+    doneSubTabCounts,
     statusTabCounts,
   } = filters;
+
+  const driverProfileById = useMemo(() => {
+    const m = new Map<string, LoadCenterDriverProfile>();
+    for (const d of drivers) {
+      const name = String(
+        (d as { full_name?: string; name?: string }).full_name ??
+          (d as { name?: string }).name ??
+          "",
+      ).trim();
+      if (!d.id) continue;
+      m.set(d.id, {
+        name: name || "Driver",
+        avatarUrl: (d as { avatar_url?: string | null }).avatar_url ?? null,
+        avatarSeed: (d as { avatar_seed?: string | null }).avatar_seed ?? null,
+      });
+    }
+    return m;
+  }, [drivers]);
+
+  const tripAllocationForLoad = useCallback(
+    (loadId: string) => {
+      if (statusFilterTab !== "DONE" || doneSubTab !== "CONVERTED") return null;
+      return resolveTripAllocationDisplay(
+        tripByIndentId.get(loadId),
+        driverProfileById,
+      );
+    },
+    [statusFilterTab, doneSubTab, tripByIndentId, driverProfileById],
+  );
 
   const displayedClaimedLoads = useMemo(
     () =>
@@ -260,7 +307,7 @@ export function LoadCenterView({
     [statusFilterTab, filteredClaimedDoneLoads, filteredClaimedLoads],
   );
 
-  const loadGridPaginationResetKey = `${loadSubTab}|${statusFilterTab}|${searchQuery}`;
+  const loadGridPaginationResetKey = `${loadSubTab}|${statusFilterTab}|${doneSubTab}|${searchQuery}`;
   const giveLoadGridPagination = useHubGridPagination(
     filteredHirePartnerLoads,
     loadGridPaginationResetKey,
@@ -277,22 +324,12 @@ export function LoadCenterView({
   // ── Award Quote hook ────────────────────────────────────────────────────────
   const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess });
 
-  // ── Staff Handshake hook ────────────────────────────────────────────────────
-  const handshake = useStaffHandshake({ orgId, myQuotes, onSuccess: triggerSuccess });
-
-  const visiblePartnersForHandshake = useMemo(() => {
-    const base = suppliers;
-    const subcontractSupplierId = handshake.state.subcontractSupplierId;
-    // Never hide the currently selected partner (keeps existing selection stable).
-    if (
-      subcontractSupplierId &&
-      !base.some((s) => s.id === subcontractSupplierId)
-    ) {
-      const selected = suppliers.find((s) => s.id === subcontractSupplierId);
-      if (selected) return [selected, ...base];
-    }
-    return base;
-  }, [suppliers, handshake.state.subcontractSupplierId]);
+  const openIndentAllocation = useCallback(
+    (load: IndentRow) => {
+      router.push(ROUTES.indentAllocation(load.id) as import("expo-router").Href);
+    },
+    [router],
+  );
 
   // ── Trip Deployment hook ────────────────────────────────────────────────────
   const tripDeployment = useTripDeployment({
@@ -382,6 +419,55 @@ export function LoadCenterView({
     }
   }, [loadSubTab, statusFilterTab, refetchQuoteCounts]);
 
+  useEffect(() => {
+    if (statusFilterTab === "DONE") return;
+    setDoneSubTab("REJECTED");
+  }, [statusFilterTab]);
+
+  useEffect(() => {
+    setDoneSubTab("REJECTED");
+  }, [loadSubTab]);
+
+  const renderDoneSubTabs = () => {
+    if (statusFilterTab !== "DONE") return null;
+    return (
+      <View style={styles.doneSubTabWrap}>
+        {DONE_SUB_TABS.map((tab) => {
+          const isActive = doneSubTab === tab.id;
+          const count = doneSubTabCounts[tab.id];
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[
+                styles.doneSubTabChip,
+                isActive && styles.doneSubTabChipActive,
+              ]}
+              onPress={() => setDoneSubTab(tab.id)}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.doneSubTabChipText,
+                  isActive && styles.doneSubTabChipTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {tab.label}
+              </Text>
+              <Text
+                style={[
+                  styles.doneSubTabChipCount,
+                  isActive && styles.doneSubTabChipCountActive,
+                ]}
+              >
+                {count}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
 
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
@@ -450,8 +536,7 @@ export function LoadCenterView({
     () =>
       statusTabsForRole.map((tab) => ({
         id: tab.id,
-        label:
-          loadSubTab === "GIVE_LOAD" && tab.id === "OPEN" ? "Created" : tab.label,
+        label: getLoadCenterStatusTabLabel(loadSubTab, tab.id, tab.label),
         count: statusTabCounts[tab.id],
       })),
     [statusTabsForRole, loadSubTab, statusTabCounts],
@@ -461,10 +546,13 @@ export function LoadCenterView({
     (load: IndentRow) => {
       const status = (load.status || "").toLowerCase();
       const bidCount = quoteCounts[load.id] ?? 0;
-      const terminalForQuotePill =
-        status === "awarded" || statusMatchesFilter(status, "DONE");
-      const displayStatus =
-        !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+      const displayStatus = resolveGiveLoadMobileDisplayStatus(
+        statusFilterTab,
+        status,
+        bidCount,
+        indentIdsWithTrip,
+        load.id,
+      );
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "General").toUpperCase();
       const clientName = (load.client_name || "—").trim() || "—";
@@ -493,39 +581,41 @@ export function LoadCenterView({
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          tripAllocation={tripAllocationForLoad(load.id)}
           onPress={() => onIndentPress(load)}
         />
       );
     },
-    [clientById, linkedOrgByOrganizationId, onIndentPress, quoteCounts],
+    [
+      clientById,
+      indentIdsWithTrip,
+      linkedOrgByOrganizationId,
+      onIndentPress,
+      quoteCounts,
+      statusFilterTab,
+      tripAllocationForLoad,
+    ],
   );
 
   const renderGetLoadMobileCard = useCallback(
     (load: IndentRow) => {
       const existingQuote = myQuoteByIndentId.get(load.id);
-      const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
-      const isPending = quoteStatus === "pending";
-      const isRejected = quoteStatus === "rejected";
-      const isAccepted = quoteStatus === "accepted";
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
-      const loadTypeDetail = (load.load_type || "—").toUpperCase();
-      const clientLabel = (
-        load.creator_organization_name ||
-        load.client_name ||
-        "Partner"
-      ).trim();
-      const statusLabel = isAccepted
-        ? "awarded"
-        : isRejected
-          ? "declined"
-          : isPending
-            ? "quoted"
-            : "open";
-      const rightFooter = isPending
-        ? `Quote ${formatINR(Number(existingQuote?.amount ?? 0))}`
-        : isAccepted
-          ? "Awarded"
-          : loadTypeDetail;
+      const clientLabel = resolveMarketIndentShipperLabel(load);
+      const { statusLabel, rightFooter } = resolveGetLoadMobileCardLabels(
+        statusFilterTab,
+        doneSubTab,
+        load,
+        existingQuote,
+        indentIdsWithTrip,
+      );
+      const ticketCommerce = resolveGetLoadTicketCommerce(
+        statusFilterTab,
+        doneSubTab,
+        load,
+        existingQuote,
+        indentIdsWithTrip,
+      );
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
       return (
         <LoadCenterHubMobileIndentCard
@@ -538,16 +628,26 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
+          ticketCommerce={ticketCommerce}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          tripAllocation={tripAllocationForLoad(load.id)}
           onPress={() => onIndentPress(load)}
         />
       );
     },
-    [creatorOrgProfileMap, myQuoteByIndentId, onIndentPress],
+    [
+      creatorOrgProfileMap,
+      doneSubTab,
+      indentIdsWithTrip,
+      myQuoteByIndentId,
+      onIndentPress,
+      statusFilterTab,
+      tripAllocationForLoad,
+    ],
   );
 
   const renderClaimedMobileCard = useCallback(
@@ -561,11 +661,7 @@ export function LoadCenterView({
         acceptedQuote?.amount != null
           ? Number(acceptedQuote.amount)
           : Number(load.client_price || 0);
-      const clientLabel = (
-        load.creator_organization_name ||
-        load.client_name ||
-        "Claimed load"
-      ).trim();
+      const clientLabel = resolveMarketIndentShipperLabel(load);
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
       return (
         <LoadCenterHubMobileIndentCard
@@ -580,11 +676,17 @@ export function LoadCenterView({
           rightFooterLabel={
             isDone ? "On books" : formatINR(supplierRate)
           }
+          ticketCommerce={{
+            kicker: isDone ? "COMPLETED" : "AWARDED",
+            amountInr: isDone ? null : supplierRate,
+            rightCaption: isDone ? "On books" : null,
+          }}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          tripAllocation={tripAllocationForLoad(load.id)}
           onPress={() => onIndentPress(load)}
           actions={
             <LoadCenterIndentCardFooter>
@@ -594,7 +696,7 @@ export function LoadCenterView({
                 assigning={tripDeployment.assigningTripId === load.id}
                 onIndentPress={onIndentPress}
                 onShareIndent={handleShareIndent}
-                onAssignDeploy={handshake.open}
+                onAssignDeploy={openIndentAllocation}
               />
             </LoadCenterIndentCardFooter>
           }
@@ -604,9 +706,10 @@ export function LoadCenterView({
     [
       creatorOrgProfileMap,
       handleShareIndent,
-      handshake.open,
+      openIndentAllocation,
       myQuotes,
       onIndentPress,
+      tripAllocationForLoad,
       tripDeployment.assigningTripId,
     ],
   );
@@ -622,10 +725,13 @@ export function LoadCenterView({
       const isAwaitingSupplierDeploy =
         isAwardedPendingTrip || hasDirectSupplier;
       const bidCount = quoteCounts[load.id] ?? 0;
-      const terminalForQuotePill =
-        status === "awarded" || statusMatchesFilter(status, "DONE");
-      const displayStatus =
-        !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+      const displayStatus = resolveGiveLoadMobileDisplayStatus(
+        statusFilterTab,
+        status,
+        bidCount,
+        indentIdsWithTrip,
+        load.id,
+      );
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "General").toUpperCase();
       const clientName = (load.client_name || "—").trim() || "—";
@@ -677,6 +783,7 @@ export function LoadCenterView({
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          tripAllocation={tripAllocationForLoad(load.id)}
           onPress={() => onIndentPress(load)}
           dense
           fillGrid
@@ -715,6 +822,8 @@ export function LoadCenterView({
       onIndentPress,
       onShareToNetwork,
       quoteCounts,
+      statusFilterTab,
+      tripAllocationForLoad,
     ],
   );
 
@@ -730,11 +839,7 @@ export function LoadCenterView({
         indentIdsWithTrip.has(load.id);
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "—").toUpperCase();
-      const clientLabel = (
-        load.creator_organization_name ||
-        load.client_name ||
-        "Partner"
-      ).trim();
+      const clientLabel = resolveMarketIndentShipperLabel(load);
       const statusLabel = isAccepted
         ? "awarded"
         : isRejected
@@ -755,6 +860,13 @@ export function LoadCenterView({
       const rightFooter = isAccepted
         ? "Awarded"
         : loadTypeDetail;
+      const ticketCommerce = resolveGetLoadTicketCommerce(
+        statusFilterTab,
+        doneSubTab,
+        load,
+        existingQuote,
+        indentIdsWithTrip,
+      );
       const ctaLabel = isAccepted
         ? isDoneOutcome
           ? "View details"
@@ -777,11 +889,13 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
+          ticketCommerce={ticketCommerce}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          tripAllocation={tripAllocationForLoad(load.id)}
           onPress={() => onIndentPress(load)}
           dense
           fillGrid
@@ -807,11 +921,14 @@ export function LoadCenterView({
     },
     [
       creatorOrgProfileMap,
+      doneSubTab,
       handleShareIndent,
       indentIdsWithTrip,
       myQuoteByIndentId,
       onIndentPress,
       setLoadSubTab,
+      statusFilterTab,
+      tripAllocationForLoad,
     ],
   );
 
@@ -826,11 +943,7 @@ export function LoadCenterView({
         acceptedQuote?.amount != null
           ? Number(acceptedQuote.amount)
           : Number(load.client_price || 0);
-      const clientLabel = (
-        load.creator_organization_name ||
-        load.client_name ||
-        "Claimed load"
-      ).trim();
+      const clientLabel = resolveMarketIndentShipperLabel(load);
 
       const avatar = marketLoadIndentAvatarProps(load, creatorOrgProfileMap);
 
@@ -844,11 +957,17 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}
+          ticketCommerce={{
+            kicker: isDone ? "COMPLETED" : "AWARDED",
+            amountInr: isDone ? null : supplierRate,
+            rightCaption: isDone ? "On books" : null,
+          }}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          tripAllocation={tripAllocationForLoad(load.id)}
           onPress={() => onIndentPress(load)}
           dense
           fillGrid
@@ -860,7 +979,7 @@ export function LoadCenterView({
                 assigning={tripDeployment.assigningTripId === load.id}
                 onIndentPress={onIndentPress}
                 onShareIndent={handleShareIndent}
-                onAssignDeploy={handshake.open}
+                onAssignDeploy={openIndentAllocation}
                 dense
               />
             </LoadCenterIndentCardFooter>
@@ -871,9 +990,10 @@ export function LoadCenterView({
     [
       creatorOrgProfileMap,
       handleShareIndent,
-      handshake.open,
+      openIndentAllocation,
       myQuotes,
       onIndentPress,
+      tripAllocationForLoad,
       tripDeployment.assigningTripId,
     ],
   );
@@ -1010,7 +1130,7 @@ export function LoadCenterView({
               ) : (
                 <TouchableOpacity
                   style={styles.reviewBidsBtn}
-                  onPress={() => handshake.open(load)}
+                  onPress={() => openIndentAllocation(load)}
                   activeOpacity={0.9}
                   disabled={tripDeployment.assigningTripId === load.id}
                 >
@@ -1211,10 +1331,11 @@ export function LoadCenterView({
                   {statusTabsForRole.map((tab) => {
                     const count = statusTabCounts[tab.id];
                     const isActive = statusFilterTab === tab.id;
-                    const tabLabel =
-                      loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
-                        ? "Created"
-                        : tab.label;
+                    const tabLabel = getLoadCenterStatusTabLabel(
+                      loadSubTab,
+                      tab.id,
+                      tab.label,
+                    );
                     return (
                       <TouchableOpacity
                         key={tab.id}
@@ -1246,6 +1367,7 @@ export function LoadCenterView({
                   })}
                 </View>
               ) : null}
+              {renderDoneSubTabs()}
             </>
           ) : null}
         </View>
@@ -1279,10 +1401,11 @@ export function LoadCenterView({
                 {statusTabsForRole.map((tab) => {
                   const count = statusTabCounts[tab.id];
                   const isActive = statusFilterTab === tab.id;
-                  const tabLabel =
-                    loadSubTab === "GIVE_LOAD" && tab.id === "OPEN"
-                      ? "Created"
-                      : tab.label;
+                  const tabLabel = getLoadCenterStatusTabLabel(
+                    loadSubTab,
+                    tab.id,
+                    tab.label,
+                  );
                   return (
                     <TouchableOpacity
                       key={tab.id}
@@ -1314,6 +1437,7 @@ export function LoadCenterView({
                 })}
               </View>
             ) : null}
+            {renderDoneSubTabs()}
           </View>
         ) : null}
       </View>
@@ -1346,6 +1470,11 @@ export function LoadCenterView({
             ) : undefined
           }
         >
+          {isMobileView && statusFilterTab === "DONE" ? (
+            <View style={styles.doneSubTabWrapMobile}>
+              {renderDoneSubTabs()}
+            </View>
+          ) : null}
           {loadSubTab === "GIVE_LOAD" && (
             <>
               {isLoading ? (
@@ -1368,7 +1497,9 @@ export function LoadCenterView({
                         ? "Created"
                         : "Open"
                       : statusFilterTab === "QUOTED"
-                        ? "Quoted"
+                        ? loadSubTab === "GIVE_LOAD"
+                          ? "Quote received"
+                          : "Quoted"
                         : statusFilterTab === "AWARDED"
                           ? "Awarded"
                           : "Done"}
@@ -1379,7 +1510,9 @@ export function LoadCenterView({
                         ? "Created loads will appear here."
                         : "Open loads will appear here."
                       : statusFilterTab === "QUOTED"
-                        ? "Quoted loads will appear here."
+                        ? loadSubTab === "GIVE_LOAD"
+                          ? "Loads with supplier quotes will appear here."
+                          : "Quoted loads will appear here."
                         : statusFilterTab === "DONE"
                           ? "Done loads will appear here."
                           : "Awarded loads will appear here."}
@@ -1485,11 +1618,10 @@ export function LoadCenterView({
                       parseAmount(load.supplier_target) ??
                       parseAmount(load.client_price);
                     const bidCount = quoteCounts[load.id] ?? 0;
-                    const terminalForQuotePill =
-                      status === "awarded" ||
-                      statusMatchesFilter(status, "DONE");
-                    const displayStatus =
-                      !terminalForQuotePill && bidCount > 0 ? "quoted" : status;
+                    const displayStatus = giveLoadBidReceivedDisplayStatus(
+                      status,
+                      bidCount,
+                    );
                     const statusPill = giveLoadStatusPillStyles(displayStatus);
                     const showPulseToNetwork =
                       Boolean(onShareToNetwork) &&
@@ -1741,19 +1873,44 @@ export function LoadCenterView({
                 retrying={marketRefetching}
               />
             ) : filteredFindWorkList.length === 0 ? (
-              <View style={styles.emptyWrap}>
-                <View style={styles.emptyIconWrapMuted}>
-                  <FontAwesome
-                    name="trophy"
-                    size={56}
-                    color={Theme.textMuted}
-                  />
-                </View>
-                <Text style={styles.emptyTitle}>Get Load</Text>
-                <Text style={styles.emptySub}>
-                  Loads shared with you by partners will appear here. Connect as
-                  an integrated supplier to see loads from shippers.
-                </Text>
+              <View
+                style={
+                  statusFilterTab === "DONE"
+                    ? styles.emptyWrap
+                    : styles.getLoadEmptyWrap
+                }
+              >
+                {statusFilterTab !== "DONE" ? (
+                  <>
+                    {onMyNetworkPress ? (
+                      <LoadCenterPulseConnectCard onPress={onMyNetworkPress} />
+                    ) : null}
+                    <Text style={styles.getLoadEmptyTitle}>Get Load</Text>
+                    <Text style={styles.getLoadEmptySub}>
+                      Open loads from shippers in your Pulse network appear here.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.emptyIconWrapMuted}>
+                      <FontAwesome
+                        name="trophy"
+                        size={56}
+                        color={Theme.textMuted}
+                      />
+                    </View>
+                    <Text style={styles.emptyTitle}>
+                      {doneSubTab === "REJECTED"
+                        ? "Rejected"
+                        : "Converted to trips"}
+                    </Text>
+                    <Text style={styles.emptySub}>
+                      {doneSubTab === "REJECTED"
+                        ? "Loads where your quote was declined will appear here."
+                        : "Awarded loads converted to trips with driver and vehicle show here."}
+                    </Text>
+                  </>
+                )}
               </View>
             ) : isMobileView ? (
               <LoadCenterHubMobileListCanvas>
@@ -1805,23 +1962,28 @@ export function LoadCenterView({
                   const openBidModal = () => {
                     setBidLoad(load);
                   };
-                  const clientLabel = (
-                    load.creator_organization_name ||
-                    load.client_name ||
-                    ""
-                  ).trim();
+                  const clientLabel = resolveMarketIndentShipperLabel(load);
                   const getStatePill = () => {
                     if (isAccepted) {
+                      const awardedLabel = isDoneOutcome
+                        ? "COMPLETED"
+                        : (existingQuote?.status || "AWARDED").toUpperCase();
                       return {
                         wrap: {
-                          backgroundColor: Theme.positive,
+                          backgroundColor: isDoneOutcome
+                            ? Theme.surfaceGray
+                            : Theme.positive,
                           borderWidth: 1,
-                          borderColor: Theme.darkGreen,
+                          borderColor: isDoneOutcome
+                            ? Theme.borderMedium
+                            : Theme.darkGreen,
                         },
-                        txt: { color: Theme.textOnPrimary },
-                        label: (
-                          existingQuote?.status || "AWARDED"
-                        ).toUpperCase(),
+                        txt: {
+                          color: isDoneOutcome
+                            ? Theme.textSecondary
+                            : Theme.textOnPrimary,
+                        },
+                        label: awardedLabel,
                       };
                     }
                     if (isRejected) {
@@ -2299,21 +2461,6 @@ export function LoadCenterView({
         insets={insets}
       />
 
-      {/* Staff Handshake modal */}
-      <StaffHandshakeModal
-        visible={handshake.state.isOpen}
-        handshake={handshake}
-        activeDrivers={activeDrivers}
-        vehicles={vehicles}
-        suppliers={suppliers}
-        visiblePartnersForHandshake={visiblePartnersForHandshake}
-        orgId={orgId}
-        width={width}
-        isCompactModalLayout={isCompactModalLayout}
-        insets={insets}
-        onSuccess={triggerSuccess}
-      />
-
     </View>
   );
 }
@@ -2533,6 +2680,54 @@ const styles = StyleSheet.create({
         outlineStyle: "none",
       } as any,
     }),
+  },
+  doneSubTabWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
+  doneSubTabWrapMobile: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  doneSubTabChip: {
+    flex: 1,
+    minWidth: 120,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  doneSubTabChipActive: {
+    backgroundColor: Theme.pulseIndigoWash,
+    borderColor: Theme.pulseIndigoRing,
+  },
+  doneSubTabChipText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    flexShrink: 1,
+  },
+  doneSubTabChipTextActive: {
+    color: Theme.pulseIndigo,
+    fontWeight: "700",
+  },
+  doneSubTabChipCount: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  doneSubTabChipCountActive: {
+    color: Theme.pulseIndigo,
   },
   loadTypeFilterWrap: {
     flexDirection: "row",
@@ -3519,6 +3714,29 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textMuted,
     textAlign: "center",
+  },
+  getLoadEmptyWrap: {
+    paddingTop: 20,
+    paddingBottom: 40,
+    alignItems: "center",
+    gap: 16,
+  },
+  getLoadEmptyTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    marginTop: 4,
+    textTransform: "uppercase",
+    letterSpacing: 1.6,
+  },
+  getLoadEmptySub: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal + 12,
+    lineHeight: 18,
+    maxWidth: 340,
   },
   emptyWrap: {
     paddingVertical: 64,

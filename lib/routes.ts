@@ -81,6 +81,12 @@ export const ROUTES = {
     if (!focus) return base;
     return `${base}?focus=${focus}` as const;
   },
+  /** Load / indent detail (GET LOAD hub, review, deploy entry). */
+  indentDetail: (indentId: string) =>
+    `/indent/${encodeURIComponent(indentId)}` as const,
+  /** Awarded indent → deploy trip (asset roster or aggregate partner flow). */
+  indentAllocation: (indentId: string) =>
+    `/indent/${encodeURIComponent(indentId)}/allocation` as const,
   /** Optional trip odometer verification (start/end). */
   tripVerification: (tripId: string, side: "start" | "end" = "start") =>
     `/trip/${encodeURIComponent(tripId)}/verification?side=${side}` as const,
@@ -106,6 +112,51 @@ export const ROUTES = {
   /** Load Center + share indent to Pulse (story); use when Network is story-only. */
   PULSE_LOADS:   '/pulse-loads'   as const,
 } as const;
+
+/** True when the user is on the full-screen indent deploy / allocation wizard. */
+export function isIndentAllocationPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return /\/indent\/[^/]+\/allocation(?:\/|$|\?)/.test(pathname);
+}
+
+export function parseIndentIdFromAllocationPath(
+  pathname: string | null | undefined,
+): string | null {
+  if (!pathname) return null;
+  const m = pathname.match(/\/indent\/([^/]+)\/allocation/);
+  return m?.[1] ? decodeURIComponent(m[1]) : null;
+}
+
+/** True on `/indent/[id]` detail — not allocation sub-route. */
+export function isIndentDetailPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  if (isIndentAllocationPath(pathname)) return false;
+  const path = pathname.split("?")[0] ?? "";
+  return /\/indent\/[^/]+$/.test(path);
+}
+
+export function parseIndentIdFromDetailPath(
+  pathname: string | null | undefined,
+): string | null {
+  if (!pathname || !isIndentDetailPath(pathname)) return null;
+  const path = pathname.split("?")[0] ?? "";
+  const m = path.match(/\/indent\/([^/]+)$/);
+  return m?.[1] ? decodeURIComponent(m[1]) : null;
+}
+
+/** Allocation wizard or indent detail — hide global deploy prompt while focused. */
+export function isIndentDeployFlowPath(pathname: string | null | undefined): boolean {
+  return isIndentAllocationPath(pathname) || isIndentDetailPath(pathname);
+}
+
+export function parseIndentIdFromDeployFlowPath(
+  pathname: string | null | undefined,
+): string | null {
+  return (
+    parseIndentIdFromAllocationPath(pathname) ??
+    parseIndentIdFromDetailPath(pathname)
+  );
+}
 
 /** Navigate to fuel/toll/other entry screen for editing an existing line item (`fuel:uuid`, etc.). */
 export function tripExpenseEntryEditRoute(tripId: string, costEventId: string): string | null {

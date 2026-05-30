@@ -3,7 +3,12 @@
  * Extracted from LoadCenterView.tsx.
  */
 import Theme from "@/constants/Theme";
-import { getIndentDisplayNumber, type DirectQuoteRow, type IndentRow } from "@/features/indents";
+import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
+import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
+import {
+  indentReviewHubStyles,
+  indentReviewHubText,
+} from "@/features/indents/styles/indentReviewHubStyles";
 import { type AwardQuoteResult } from "@/features/network/hooks/useAwardQuote";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -63,31 +68,41 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
             <View style={styles.reviewHubModalHeaderSpacer} />
           </View>
           {currentLoad ? (
-            <View style={styles.reviewHubHero}>
+            <View style={indentReviewHubStyles.reviewHubHero}>
               <View
-                style={[styles.reviewHubHeroGlow, { pointerEvents: "none" }]}
+                style={[
+                  indentReviewHubStyles.reviewHubHeroGlow,
+                  { pointerEvents: "none" },
+                ]}
               />
-              <Text style={styles.reviewHubHeroKicker}>Target route</Text>
-              <Text style={styles.reviewHubHeroRoute} numberOfLines={3}>
+              <Text style={indentReviewHubStyles.reviewHubHeroKicker}>
+                Target route
+              </Text>
+              <Text style={indentReviewHubStyles.reviewHubHeroRoute} numberOfLines={3}>
                 {(currentLoad.pickup_area || "—").toUpperCase()} →{" "}
                 {(currentLoad.drop_location || "—").toUpperCase()}
               </Text>
-              <View style={styles.reviewHubHeroMeta}>
-                <View style={styles.reviewHubHeroMetaCol}>
-                  <Text style={styles.reviewHubHeroStatLabel}>Offers</Text>
-                  <Text style={styles.reviewHubHeroStatValue} numberOfLines={1}>
+              <View style={indentReviewHubStyles.reviewHubHeroMeta}>
+                <View style={indentReviewHubStyles.reviewHubHeroMetaCol}>
+                  <Text style={indentReviewHubStyles.reviewHubHeroStatLabel}>
+                    Offers
+                  </Text>
+                  <Text
+                    style={indentReviewHubStyles.reviewHubHeroStatValue}
+                    numberOfLines={1}
+                  >
                     {quotesLoading ? "—" : String(sortedQuotes.length)}
                   </Text>
                 </View>
                 {lowestPendingAmount != null && pendingCount > 0 ? (
-                  <View style={styles.reviewHubHeroMetaColEnd}>
-                    <Text style={styles.reviewHubHeroStatLabel}>
+                  <View style={indentReviewHubStyles.reviewHubHeroMetaColEnd}>
+                    <Text style={indentReviewHubStyles.reviewHubHeroStatLabel}>
                       Lowest bid
                     </Text>
                     <Text
                       style={[
-                        styles.reviewHubHeroStatValue,
-                        styles.reviewHubHeroStatValueEnd,
+                        indentReviewHubStyles.reviewHubHeroStatValue,
+                        indentReviewHubStyles.reviewHubHeroStatValueEnd,
                       ]}
                       numberOfLines={1}
                     >
@@ -95,12 +110,14 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                     </Text>
                   </View>
                 ) : (
-                  <View style={styles.reviewHubHeroMetaColEnd}>
-                    <Text style={styles.reviewHubHeroStatLabel}>Pending</Text>
+                  <View style={indentReviewHubStyles.reviewHubHeroMetaColEnd}>
+                    <Text style={indentReviewHubStyles.reviewHubHeroStatLabel}>
+                      Pending
+                    </Text>
                     <Text
                       style={[
-                        styles.reviewHubHeroStatValue,
-                        styles.reviewHubHeroStatValueEnd,
+                        indentReviewHubStyles.reviewHubHeroStatValue,
+                        indentReviewHubStyles.reviewHubHeroStatValueEnd,
                       ]}
                       numberOfLines={1}
                     >
@@ -131,46 +148,19 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
             </View>
           ) : (
             <>
-              <View style={styles.quoteHeaderRowDark}>
-                <Text style={styles.quoteHeaderNameDark}>Bidder</Text>
-                <Text style={styles.quoteHeaderAmountDark}>Amount</Text>
-                <Text style={styles.quoteHeaderStatusDark}>Status</Text>
-              </View>
               <ScrollView
-                style={{ maxHeight: 280 }}
+                style={{ maxHeight: 360 }}
                 showsVerticalScrollIndicator
               >
-                {sortedQuotes.map((q: DirectQuoteRow) => {
-                  const isPending =
-                    (q.status || "").toLowerCase() === "pending";
-                  const isSelected = selectedQuoteId === q.id;
-                  return (
-                    <TouchableOpacity
-                      key={q.id}
-                      style={[
-                        styles.quoteRow,
-                        isSelected && styles.quoteRowSelected,
-                        !isPending && styles.quoteRowDisabled,
-                      ]}
-                      onPress={() =>
-                        isPending &&
-                        award.selectQuote(isSelected ? null : q.id)
-                      }
-                      activeOpacity={0.8}
-                      disabled={!isPending}
-                    >
-                      <Text style={styles.quoteRowName} numberOfLines={1}>
-                        {q.bidder_organization_name ?? "—"}
-                      </Text>
-                      <Text style={styles.quoteRowAmount}>
-                        {formatINR(Number(q.amount ?? 0))}
-                      </Text>
-                      <Text style={styles.quoteRowStatus}>
-                        {(q.status || "").toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                <IndentLiveBidsPanel
+                  quotes={sortedQuotes}
+                  clientPriceInr={Number(currentLoad?.client_price ?? 0)}
+                  targetRateInr={Number(currentLoad?.supplier_target ?? 0)}
+                  pickupDateIso={currentLoad?.pickup_date}
+                  selectedQuoteId={selectedQuoteId}
+                  onSelectQuote={award.selectQuote}
+                  canSelect={pendingCount > 0}
+                />
               </ScrollView>
               {pendingCount === 0 && (
                 <Text style={styles.bidEmptySubtext}>
@@ -269,109 +259,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    fontStyle: "italic",
+    ...indentReviewHubText.partyTitle,
+    fontSize: 12,
+    textAlign: "center",
+    width: "100%",
   },
   modalTitleCenter: {
     textAlign: "center",
     width: "100%",
   },
-  modalSubtitle: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 1.6,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  reviewHubHero: {
-    borderRadius: 28,
-    backgroundColor: Theme.textPrimaryDark,
-    padding: 18,
-    marginBottom: 16,
-    overflow: "hidden",
-  },
-  reviewHubHeroGlow: {
-    position: "absolute",
-    top: -40,
-    right: -40,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "rgba(255,255,255,0.07)",
-  },
-  reviewHubHeroKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.4,
-    marginBottom: 8,
-    fontStyle: "italic",
-  },
-  reviewHubHeroRoute: {
-    fontSize: 18,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    textTransform: "uppercase",
-    letterSpacing: -0.2,
-    lineHeight: 24,
-  },
-  reviewHubHeroMeta: {
-    flexDirection: "row",
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderOnDark,
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 8,
-    minWidth: 0,
-  },
-  reviewHubHeroMetaCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  reviewHubHeroMetaColEnd: {
-    flexShrink: 1,
-    minWidth: 0,
-    maxWidth: "58%",
-    alignItems: "flex-end",
-  },
-  reviewHubHeroStatValueEnd: {
-    textAlign: "right",
-    alignSelf: "stretch",
-  },
-  reviewHubHeroStatLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  reviewHubHeroStatValue: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: Theme.textOnDark,
-  },
-  bidEmptyWrap: { paddingVertical: 32, alignItems: "center" },
+  modalSubtitle: indentReviewHubStyles.reviewHubModalSubtitle,
+  bidEmptyWrap: { paddingVertical: 24, alignItems: "center" },
   bidEmptyText: {
-    fontSize: 10,
-    fontWeight: "700",
+    ...indentReviewHubText.sectionTitle,
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   bidEmptySubtext: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    marginTop: 8,
+    ...indentReviewHubText.bodyMuted,
+    marginTop: 6,
     textAlign: "center",
   },
   quoteHeaderRowDark: {
@@ -386,31 +291,16 @@ const styles = StyleSheet.create({
   },
   quoteHeaderNameDark: {
     flex: 1,
-    fontSize: 9,
-    fontWeight: "800",
+    ...indentReviewHubText.freightGridLabelDark,
     color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
     marginRight: 8,
-    letterSpacing: 0.6,
-    fontStyle: "italic",
   },
   quoteHeaderAmountDark: {
-    fontSize: 9,
-    fontWeight: "800",
+    ...indentReviewHubText.freightGridLabelDark,
     color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
     marginRight: 8,
-    letterSpacing: 0.6,
-    fontStyle: "italic",
   },
-  quoteHeaderStatusDark: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    fontStyle: "italic",
-  },
+  quoteHeaderStatusDark: indentReviewHubText.freightGridLabelDark,
   quoteRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -428,22 +318,18 @@ const styles = StyleSheet.create({
   quoteRowDisabled: { opacity: 0.6 },
   quoteRowName: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
+    ...indentReviewHubText.quoteRowName,
     color: Theme.textPrimaryDark,
     marginRight: 8,
   },
   quoteRowAmount: {
-    fontSize: 12,
-    fontWeight: "800",
+    ...indentReviewHubText.quoteRowAmount,
     color: Theme.textPrimaryDark,
     marginRight: 8,
   },
   quoteRowStatus: {
-    fontSize: 9,
-    fontWeight: "700",
+    ...indentReviewHubText.quoteRowStatus,
     color: Theme.textMuted,
-    textTransform: "uppercase",
   },
   modalSubmit: {
     flexDirection: "row",

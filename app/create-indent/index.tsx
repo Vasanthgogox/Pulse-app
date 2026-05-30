@@ -6,7 +6,10 @@ import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchIn
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
-import { IndentShareTicketModal } from "@/features/indents/components/IndentShareTicketModal";
+import {
+  IndentShareTicketModal,
+  type IndentShareTicketFields,
+} from "@/features/indents/components/IndentShareTicketModal";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -164,33 +167,49 @@ function compactLocationLabel(value: string): string {
   return `${compact.slice(0, MAX_LEN - 1).trimEnd()}…`;
 }
 
-function formatIndentMoneyLine(raw: string, label: string): string {
-  const s = (raw ?? "").trim();
-  if (!s) return `${label}: —`;
-  return `${label}: ${s}`;
+function indentTicketFieldsFromForm(form: FormState): IndentShareTicketFields {
+  return {
+    pickup: compactLocationLabel(form.pickup_area) || "",
+    drop: compactLocationLabel(form.drop_location) || "",
+    client: (form.client_name ?? "").trim(),
+    tripDate: (form.pickup_date ?? "").trim(),
+    tons: (form.weight ?? "").trim(),
+    vehicle: (form.vehicle_type ?? "").trim(),
+    loadType: (form.load_type ?? "").trim(),
+    clientPrice: (form.client_price ?? "").trim(),
+    supplierTarget: (form.supplier_target ?? "").trim(),
+  };
 }
 
-/** Multiline summary for confirm dialogs (draft / share). */
-function buildIndentSummaryMessage(form: FormState): string {
-  const pickup = compactLocationLabel(form.pickup_area) || "—";
-  const drop = compactLocationLabel(form.drop_location) || "—";
-  const client = (form.client_name ?? "").trim() || "—";
-  const date = (form.pickup_date ?? "").trim() || "—";
-  const tons = (form.weight ?? "").trim() || "—";
-  const vehicle = (form.vehicle_type ?? "").trim() || "—";
-  const loadType = (form.load_type ?? "").trim() || "—";
-  return [
-    `Pickup: ${pickup}`,
-    `Drop: ${drop}`,
-    `Client: ${client}`,
-    `Trip date: ${date}`,
-    `Tons: ${tons}`,
-    `Vehicle: ${vehicle}`,
-    `Load type: ${loadType}`,
-    formatIndentMoneyLine(form.client_price, "Client price"),
-    formatIndentMoneyLine(form.supplier_target, "Supplier target"),
-  ].join("\n");
-}
+type IndentTicketConfirmKind = "draft" | "share";
+
+const INDENT_TICKET_CONFIRM_COPY: Record<
+  IndentTicketConfirmKind,
+  {
+    title: string;
+    headerKicker: string;
+    headerCaption: string;
+    stubFinePrint: string;
+    confirmText: string;
+  }
+> = {
+  draft: {
+    title: "Save draft?",
+    headerKicker: "PULSE · DRAFT",
+    headerCaption: "Box office preview",
+    stubFinePrint:
+      "Save this indent as a draft? You can keep editing until you share it to the network.",
+    confirmText: "Save draft",
+  },
+  share: {
+    title: "Share to network?",
+    headerKicker: "PULSE NETWORK · INDENT",
+    headerCaption: "One-way trip ticket",
+    stubFinePrint:
+      "Once shared, this indent becomes read-only and cannot be edited.",
+    confirmText: "Share now",
+  },
+};
 
 const initialFormState: FormState = {
   client_name: "",
@@ -411,15 +430,13 @@ export default function CreateIndentScreen() {
     resolve: null,
   });
 
-  /** Share-to-network confirmation uses a dedicated ticket-styled
-   *  modal (`IndentShareTicketModal`) instead of the generic
-   *  `ThemedConfirmModal`. The promise resolver is held here so the
-   *  share-handler can `await` the user's decision the same way it
-   *  used to await `confirmDialog`. */
-  const [shareTicketState, setShareTicketState] = useState<{
+  /** Draft save + share confirmations use the ticket-styled modal
+   *  (`IndentShareTicketModal`) instead of the generic confirm sheet. */
+  const [ticketConfirmState, setTicketConfirmState] = useState<{
     visible: boolean;
+    kind: IndentTicketConfirmKind;
     resolve: ((value: boolean) => void) | null;
-  }>({ visible: false, resolve: null });
+  }>({ visible: false, kind: "share", resolve: null });
 
   const showDialog = useCallback((title: string, message?: string) => {
     setAlertState({ visible: true, title, message: message ?? "" });
@@ -463,15 +480,14 @@ export default function CreateIndentScreen() {
     [],
   );
 
-  /** Open the share-to-network ticket modal and resolve when the
-   *  user picks Cancel (false) or Share now (true). Mirrors the
-   *  `confirmDialog` promise contract so handlers can keep
-   *  `const shouldShare = await requestShareConfirm()`. */
-  const requestShareConfirm = useCallback((): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setShareTicketState({ visible: true, resolve });
-    });
-  }, []);
+  const requestIndentTicketConfirm = useCallback(
+    (kind: IndentTicketConfirmKind): Promise<boolean> => {
+      return new Promise((resolve) => {
+        setTicketConfirmState({ visible: true, kind, resolve });
+      });
+    },
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -749,12 +765,7 @@ export default function CreateIndentScreen() {
       );
       return;
     }
-    const summary = buildIndentSummaryMessage(form);
-    const shouldSaveDraft = await confirmDialog(
-      "Save draft?",
-      `${summary}\n\nSave this indent as a draft? You can keep editing until you share it to the network.`,
-      "Save draft",
-    );
+    const shouldSaveDraft = await requestIndentTicketConfirm("draft");
     if (!shouldSaveDraft) return;
 
     const payload = buildPayload();
@@ -820,7 +831,7 @@ export default function CreateIndentScreen() {
     invalidateIndents,
     router,
     showDialog,
-    confirmDialog,
+    requestIndentTicketConfirm,
   ]);
 
   const handleSubmit = useCallback(async () => {
@@ -834,7 +845,7 @@ export default function CreateIndentScreen() {
     const errs = validateForm(form);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    const shouldShare = await requestShareConfirm();
+    const shouldShare = await requestIndentTicketConfirm("share");
     if (!shouldShare) return;
 
     const payload = buildPayload();
@@ -891,7 +902,7 @@ export default function CreateIndentScreen() {
     buildPayload,
     draftIndentId,
     showDialog,
-    requestShareConfirm,
+    requestIndentTicketConfirm,
   ]);
 
   if (!canCreate) {
@@ -2441,26 +2452,37 @@ export default function CreateIndentScreen() {
         }}
       />
       <IndentShareTicketModal
-        visible={shareTicketState.visible}
+        visible={ticketConfirmState.visible}
         ticketRef={draftIndentId}
-        fields={{
-          pickup: compactLocationLabel(form.pickup_area) || "",
-          drop: compactLocationLabel(form.drop_location) || "",
-          client: (form.client_name ?? "").trim(),
-          tripDate: (form.pickup_date ?? "").trim(),
-          tons: (form.weight ?? "").trim(),
-          vehicle: (form.vehicle_type ?? "").trim(),
-          loadType: (form.load_type ?? "").trim(),
-          clientPrice: (form.client_price ?? "").trim(),
-          supplierTarget: (form.supplier_target ?? "").trim(),
-        }}
+        fields={indentTicketFieldsFromForm(form)}
+        title={INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].title}
+        headerKicker={
+          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerKicker
+        }
+        headerCaption={
+          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerCaption
+        }
+        stubFinePrint={
+          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].stubFinePrint
+        }
+        confirmText={
+          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].confirmText
+        }
         onCancel={() => {
-          if (shareTicketState.resolve) shareTicketState.resolve(false);
-          setShareTicketState({ visible: false, resolve: null });
+          if (ticketConfirmState.resolve) ticketConfirmState.resolve(false);
+          setTicketConfirmState({
+            visible: false,
+            kind: "share",
+            resolve: null,
+          });
         }}
         onConfirm={() => {
-          if (shareTicketState.resolve) shareTicketState.resolve(true);
-          setShareTicketState({ visible: false, resolve: null });
+          if (ticketConfirmState.resolve) ticketConfirmState.resolve(true);
+          setTicketConfirmState({
+            visible: false,
+            kind: "share",
+            resolve: null,
+          });
         }}
       />
     </View>

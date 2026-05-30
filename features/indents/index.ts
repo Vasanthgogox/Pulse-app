@@ -32,5 +32,17 @@ export { awardIndentToTrip, batchAwardIndentsToTrips } from '@/features/indents/
 export type { AwardIndentOptions, BatchAwardResult } from '@/features/indents/services/indentConversionService';
 
 export { IndentDetailScreen };
+export { IndentBidAmountEntry } from '@/features/indents/components/IndentBidAmountEntry';
+export type { IndentBidAmountEntryProps } from '@/features/indents/components/IndentBidAmountEntry';
+export { IndentLiveBidsPanel } from '@/features/indents/components/IndentLiveBidsPanel';
+export { IndentLiveBidCard } from '@/features/indents/components/IndentLiveBidCard';
+export { IndentSupplierQuoteCard } from '@/features/indents/components/IndentSupplierQuoteCard';
+export { buildIndentLiveBidsViewModel } from '@/features/indents/utils/indentLiveBids.util';
 export { BidReceivedHammer } from '@/features/indents/components/BidReceivedHammer';
+export {
+  indentReviewHubLayout,
+  indentReviewHubSpecValue,
+  indentReviewHubStyles,
+  indentReviewHubText,
+} from '@/features/indents/styles/indentReviewHubStyles';
 

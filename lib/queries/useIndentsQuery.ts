@@ -9,12 +9,15 @@
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DirectQuoteRow } from '@/features/indents/services/direct-quotes.service';
+import type { IndentRow } from '@/features/indents/services/indents.service';
+import { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { STALE } from '@/lib/queryClient';
 
 const loadIndentsService = () =>
   import('@/features/indents/services/indents.service');
+
 const loadDirectQuotesService = () =>
   import('@/features/indents/services/direct-quotes.service');
 const loadBidsService = () => import('@/features/network/services/bids.service');
@@ -66,6 +69,42 @@ export function useMyDirectQuotesQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
+  });
+}
+
+/**
+ * Single indent for detail / allocation — uses cached market list when available
+ * so suppliers avoid refetching the full Find Work feed.
+ */
+export function useVisibleIndentQuery(
+  orgId: string | null,
+  indentId: string | null,
+) {
+  const qc = useQueryClient();
+  return useQuery<IndentRow>({
+    queryKey: queryKeys.indents.visible(orgId ?? '', indentId ?? ''),
+    queryFn: async () => {
+      const { getVisibleIndentById } = await loadIndentsService();
+      const hint = qc.getQueryData<IndentRow[]>(
+        queryKeys.indents.market(orgId ?? ''),
+      );
+      const res = await getVisibleIndentById(orgId, indentId!, {
+        marketIndentsHint: hint ?? undefined,
+      });
+      if (res.error) throw res.error;
+      if (!res.indent) throw new Error('Indent not found');
+      return res.indent;
+    },
+    enabled: !!orgId && !!indentId,
+    staleTime: STALE.moderate,
+    placeholderData: () => {
+      if (!orgId || !indentId) return undefined;
+      const hint = qc.getQueryData<IndentRow[]>(
+        queryKeys.indents.market(orgId),
+      );
+      if (!hint?.length) return undefined;
+      return findIndentInMarketList(hint, indentId) ?? undefined;
+    },
   });
 }
 
@@ -143,5 +182,6 @@ export function useInvalidateIndents() {
     qc.invalidateQueries({ queryKey: queryKeys.indents.finite(orgId) });
     qc.invalidateQueries({ queryKey: ['q', 'indents', orgId, 'infinite'] });
     qc.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) });
+    qc.invalidateQueries({ queryKey: ['q', 'indents', orgId, 'visible'] });
   };
 }

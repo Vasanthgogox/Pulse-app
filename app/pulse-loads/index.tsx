@@ -40,6 +40,9 @@ export default function PulseLoadsScreen() {
         onCreateIndentPress={() => router.push(ROUTES.CREATE_INDENT as import("expo-router").Href)}
         onIndentPress={(indent) => router.push(`/indent/${indent.id}` as import("expo-router").Href)}
         onShareToNetwork={(indent) => setShareLoad(indent)}
+        onMyNetworkPress={() =>
+          router.push(ROUTES.TABS.NETWORK as import("expo-router").Href)
+        }
         contentTopPadding={0}
       />
       <ShareLoadSheet

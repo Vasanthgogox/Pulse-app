@@ -600,7 +600,7 @@ export function ClaimedIndentCardActions({
       dense={dense}
       inline={dense}
       label={
-        isDone ? "View" : assigning ? "…" : "Deploy"
+        isDone ? "View" : assigning ? "…" : "Assign vehicle"
       }
       onPress={() => (isDone ? onIndentPress(load) : onAssignDeploy(load))}
       disabled={assigning}

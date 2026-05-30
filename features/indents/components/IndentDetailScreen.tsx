@@ -4,11 +4,23 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import {
+  indentReviewHubLayout,
+  indentReviewHubSpecValue,
+  indentReviewHubText,
+} from "@/features/indents/styles/indentReviewHubStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidReceivedHammer } from "@/features/indents/components/BidReceivedHammer";
+import { IndentBidAmountEntry } from "@/features/indents/components/IndentBidAmountEntry";
+import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
+import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
+import { IndentSupplierPartySummary } from "@/features/indents/components/IndentSupplierPartySummary";
+import type { SupplierQuoteActionHint } from "@/features/indents/components/IndentSupplierQuoteCard";
+import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
+import { buildIndentAwardedBidAlert } from "@/features/indents/utils/indentBidAlert.util";
+import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
 import {
     createDirectQuote,
     updateDirectQuoteStatus,
@@ -22,17 +34,28 @@ import {
     updateIndent,
     type IndentRow,
 } from "@/features/indents/services/indents.service";
+import {
+  resolveTripPartyLabels,
+  type LoadCenterDriverProfile,
+} from "@/features/network/utils/loadCenterTripAllocation.util";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { formatINR } from "@/lib/format";
+import {
+    useDriversQuery,
+    useSuppliersQuery,
+    useTripsQuery,
+    useVehiclesQuery,
+} from "@/lib/queries";
 import {
     useIndentDirectQuotesQuery,
     useInvalidateIndents,
     useMyDirectQuotesQuery,
 } from "@/lib/queries/useIndentsQuery";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
+import { ROUTES } from "@/lib/routes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
@@ -43,8 +66,8 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -117,33 +140,23 @@ function formatIndentDate(
   }
 }
 
-/** Abbreviate client name for display (e.g. "KABIL ORGANIZATION" → "Kabil Org.") */
-function abbreviateClientName(name: string, maxLen = 14): string {
-  const t = (name || "").trim();
-  if (!t) return "—";
-  if (t.length <= maxLen) return t;
-  const words = t.split(/\s+/);
-  if (words.length >= 2) {
-    const first =
-      words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase();
-    const last = words[words.length - 1];
-    const abbr = last.length > 3 ? last.slice(0, 3) + "." : last;
-    return `${first} ${abbr}`;
-  }
-  return t.slice(0, maxLen - 2) + "…";
-}
-
 export function IndentDetailScreen({
   indentId,
   onBack,
   onEditPress,
 }: IndentDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
   const invalidateIndents = useInvalidateIndents();
   const invalidatePosts = useInvalidatePosts(orgId);
+  const { data: trips = [] } = useTripsQuery(orgId);
+  const { data: drivers = [] } = useDriversQuery(orgId);
+  const { data: vehicles = [] } = useVehiclesQuery(orgId);
+  const { data: suppliers = [] } = useSuppliersQuery(orgId);
   const [indent, setIndent] = useState<IndentRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -155,8 +168,8 @@ export function IndentDetailScreen({
   const [broadcastError, setBroadcastError] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
-  const [quoteAmount, setQuoteAmount] = useState("");
   const [quoteModalVisible, setQuoteModalVisible] = useState(false);
+  const [quoteEntryError, setQuoteEntryError] = useState<string | undefined>();
   const [submittingQuote, setSubmittingQuote] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
@@ -334,51 +347,36 @@ export function IndentDetailScreen({
     refetchQuotes,
   ]);
 
-  const handleSubmitQuote = useCallback(async () => {
-    if (!indent || !orgId) return;
-    const amount = Number(quoteAmount.replace(/,/g, "").trim());
-    if (!Number.isFinite(amount) || amount <= 0) {
-      Alert.alert(
-        "Enter valid quote",
-        "Please enter a quote amount greater than 0.",
-      );
-      return;
-    }
-    try {
-      setSubmittingQuote(true);
-      const { error: quoteError } = await createDirectQuote(
-        indent.id,
-        orgId,
-        amount,
-      );
-      if (quoteError) {
-        Alert.alert("Could not submit quote", quoteError.message);
-        return;
-      }
-      queryClient.invalidateQueries({
-        queryKey: ["indents", indent.id, "direct-quotes"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["indents", "quote-counts"],
-      });
-      setQuoteModalVisible(false);
-      await Promise.allSettled([refetchMyQuotes(), refetchQuotes(), load()]);
-      Alert.alert("Quote submitted", "Your quote was sent for this load.");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      Alert.alert("Could not submit quote", msg);
-    } finally {
-      setSubmittingQuote(false);
-    }
-  }, [
-    indent,
-    orgId,
-    quoteAmount,
-    queryClient,
-    refetchMyQuotes,
-    refetchQuotes,
-    load,
-  ]);
+  const handleCancelLoad = useCallback(() => {
+    if (!indent || cancelling) return;
+    Alert.alert(
+      "Cancel load",
+      "Are you sure you want to cancel this load? Connected suppliers will no longer see it under Find Work.",
+      [
+        { text: "Keep load", style: "cancel" },
+        {
+          text: "Cancel load",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setCancelling(true);
+              const { error: cancelError } = await cancelIndent(indent.id);
+              setCancelling(false);
+              if (cancelError) {
+                Alert.alert("Could not cancel", cancelError.message);
+                return;
+              }
+              await load();
+            } catch (e) {
+              setCancelling(false);
+              const msg = e instanceof Error ? e.message : "Unknown error";
+              Alert.alert("Could not cancel", msg);
+            }
+          },
+        },
+      ],
+    );
+  }, [cancelling, indent, load]);
 
   useEffect(() => {
     load();
@@ -388,6 +386,156 @@ export function IndentDetailScreen({
     () =>
       indent ? (myQuotes.find((q) => q.indent_id === indent.id) ?? null) : null,
     [myQuotes, indent],
+  );
+
+  const linkedTrip = useMemo(() => {
+    if (!indent) return null;
+    return trips.find((t) => (t.indent_id ?? "") === indent.id) ?? null;
+  }, [trips, indent]);
+
+  const driverProfileById = useMemo(() => {
+    const m = new Map<string, LoadCenterDriverProfile>();
+    for (const d of drivers) {
+      const name = String(
+        (d as { full_name?: string; name?: string }).full_name ??
+          (d as { name?: string }).name ??
+          "",
+      ).trim();
+      if (!d.id) continue;
+      m.set(d.id, {
+        name: name || "Driver",
+        avatarUrl: (d as { avatar_url?: string | null }).avatar_url ?? null,
+        avatarSeed: (d as { avatar_seed?: string | null }).avatar_seed ?? null,
+      });
+    }
+    return m;
+  }, [drivers]);
+
+  const vehicleById = useMemo(() => {
+    const m = new Map<string, { vehicle_number?: string | null }>();
+    for (const v of vehicles) {
+      if (!v.id) continue;
+      m.set(v.id, { vehicle_number: v.vehicle_number ?? null });
+    }
+    return m;
+  }, [vehicles]);
+
+  const linkedTripPartyLabels = useMemo(
+    () =>
+      resolveTripPartyLabels(linkedTrip, {
+        quote: myQuote,
+        driverById: driverProfileById,
+        vehicleById,
+      }),
+    [linkedTrip, myQuote, driverProfileById, vehicleById],
+  );
+
+  const handleSupplierAllocate = useCallback(() => {
+    if (!indent) return;
+    if (linkedTrip?.id) {
+      router.push(ROUTES.tripAssignment(linkedTrip.id, "vehicle") as never);
+      return;
+    }
+    router.push(ROUTES.indentAllocation(indent.id) as never);
+  }, [indent, linkedTrip, router]);
+
+  const closeQuoteEntry = useCallback(() => {
+    setQuoteModalVisible(false);
+    setQuoteEntryError(undefined);
+  }, []);
+
+  const openQuoteEntry = useCallback(() => {
+    setQuoteEntryError(undefined);
+    setQuoteModalVisible(true);
+  }, []);
+
+  const submitQuoteAmount = useCallback(
+    async (amount: number): Promise<boolean> => {
+      if (!indent || !orgId || submittingQuote) return false;
+      try {
+        setSubmittingQuote(true);
+        const { error: quoteError } = await createDirectQuote(
+          indent.id,
+          orgId,
+          amount,
+        );
+        if (quoteError) {
+          setQuoteEntryError(quoteError.message);
+          return false;
+        }
+        queryClient.invalidateQueries({
+          queryKey: ["indents", indent.id, "direct-quotes"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["indents", "quote-counts"],
+        });
+        setQuoteModalVisible(false);
+        setQuoteEntryError(undefined);
+        await Promise.allSettled([refetchMyQuotes(), refetchQuotes(), load()]);
+        Alert.alert(
+          "Quote submitted",
+          myQuote
+            ? "Your bid was updated for this load."
+            : "Your quote was sent for this load.",
+        );
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error.";
+        setQuoteEntryError(msg);
+        return false;
+      } finally {
+        setSubmittingQuote(false);
+      }
+    },
+    [
+      indent,
+      orgId,
+      myQuote,
+      queryClient,
+      refetchMyQuotes,
+      refetchQuotes,
+      load,
+      submittingQuote,
+    ],
+  );
+
+  const myQuoteStatus = normalizeStatus(myQuote?.status);
+  const supplierQuoteAlert = useMemo(
+    () =>
+      myQuote && myQuoteStatus === "accepted"
+        ? buildIndentAwardedBidAlert(myQuote, indent?.pickup_date ?? null)
+        : null,
+    [indent?.pickup_date, myQuote, myQuoteStatus],
+  );
+
+  const isOwnerBeforeRender = !!orgId && indent?.organization_id === orgId;
+  const statusLowerBeforeRender = normalizeStatus(indent?.status);
+  const canSupplierBidBeforeRender =
+    !isOwnerBeforeRender &&
+    SUPPLIER_BID_ENABLED_STATUSES.has(statusLowerBeforeRender);
+  const canOpenQuoteModalBeforeRender =
+    canSupplierBidBeforeRender &&
+    statusLowerBeforeRender !== "awarded" &&
+    statusLowerBeforeRender !== "completed";
+
+  const supplierFooterInsight = useMemo(
+    () =>
+      !isOwnerBeforeRender && indent
+        ? buildSupplierQuoteFooterInsight({
+            amount: Number(myQuote?.amount ?? 0),
+            targetRateInr: Number(indent.supplier_target ?? 0),
+            status: myQuoteStatus,
+            canUpdateBid: canOpenQuoteModalBeforeRender,
+            hasQuote: !!myQuote,
+          })
+        : null,
+    [
+      isOwnerBeforeRender,
+      indent,
+      myQuote,
+      myQuoteStatus,
+      canOpenQuoteModalBeforeRender,
+    ],
   );
 
   if (loading && !indent) {
@@ -438,11 +586,7 @@ export function IndentDetailScreen({
   const isDirect =
     (indent.circulation_target || "").toLowerCase() !== "marketplace";
   const isOwner = !!orgId && indent.organization_id === orgId;
-  const clientEntityRawName =
-    (isOwner
-      ? indent.client_name
-      : (indent.creator_organization_name ?? indent.client_name)) || "—";
-  const clientName = abbreviateClientName(clientEntityRawName);
+  const clientEntityRawName = resolveIndentClientEntityDisplayName(indent, orgId);
   const awardedQuote =
     quotes.find((q) => normalizeStatus(q.status) === "accepted") ?? null;
   const awardedSupplierAmount =
@@ -477,7 +621,6 @@ export function IndentDetailScreen({
     isOwner && clientPriceNum > 0 && supplierNum > 0
       ? Math.round(((clientPriceNum - supplierNum) / clientPriceNum) * 100)
       : null;
-  const myQuoteStatus = normalizeStatus(myQuote?.status);
   const hasMyPendingQuote = myQuoteStatus === "pending";
   const canSupplierBid =
     !isOwner && SUPPLIER_BID_ENABLED_STATUSES.has(statusLower);
@@ -492,25 +635,7 @@ export function IndentDetailScreen({
     statusLower !== "completed" &&
     statusLower !== "deployed";
   const liveBidsCount = isOwner ? quotes.length : myQuote ? 1 : 0;
-  const supplierQuoteTitle = myQuote ? "Your Quote" : "No Quote Sent Yet";
   const isIndentCompleted = statusLower === "completed";
-  const supplierQuoteMessage = myQuote
-    ? myQuoteStatus === "accepted"
-      ? isIndentCompleted
-        ? "This load is completed. You can review the final details on this page."
-        : "Your quote is awarded. Continue from Claimed to assign and deploy."
-      : myQuoteStatus === "rejected"
-        ? "Your quote was not selected for this load."
-        : "Your quote is submitted. You can update it while this load remains open."
-    : "Place your bid to participate in this load.";
-  const supplierLockedMessage =
-    myQuoteStatus === "accepted"
-      ? isIndentCompleted
-        ? "Load completed."
-        : "Bid accepted. Continue from Claimed."
-      : myQuoteStatus === "rejected"
-        ? "Bidding closed for this load."
-        : "Bidding unavailable for current status";
   const supplierFooterStatus =
     myQuoteStatus === "accepted"
       ? isIndentCompleted
@@ -519,8 +644,29 @@ export function IndentDetailScreen({
       : myQuoteStatus === "rejected"
         ? "BID REJECTED"
         : "BIDDING LOCKED";
-  const hideSupplierQuoteSummaryInStatusCard =
-    isIndentCompleted && myQuoteStatus === "accepted";
+
+  const showSupplierPartySummaries =
+    !isOwner &&
+    !!myQuote &&
+    myQuoteStatus === "accepted" &&
+    (isIndentCompleted || !!linkedTrip);
+  const canSupplierAllocateVehicle =
+    !isOwner &&
+    myQuoteStatus === "accepted" &&
+    !isIndentCompleted &&
+    (statusLower === "awarded" || statusLower === "assigned" || statusLower === "deployed");
+
+  const supplierQuoteActionHint: SupplierQuoteActionHint = canSupplierAllocateVehicle
+    ? "allocate"
+    : !canOpenQuoteModal && !showSupplierPartySummaries
+      ? "locked"
+      : isIndentCompleted && myQuoteStatus === "accepted"
+        ? "completed"
+        : null;
+
+  const supplierAllocateLabel = linkedTrip?.id
+    ? "ASSIGN VEHICLE"
+    : "ALLOCATE VEHICLE";
 
   return (
     <View style={styles.container}>
@@ -571,7 +717,7 @@ export function IndentDetailScreen({
         style={[styles.scroll, { backgroundColor: Theme.surface }]}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 16 + 72 + insets.bottom },
+          { paddingBottom: 12 + 64 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -597,217 +743,58 @@ export function IndentDetailScreen({
           </View>
         ) : null}
 
-        {/* Summary card — same structure as Load Center list cards */}
-        <View style={styles.indentSummaryCard}>
-          <View style={[styles.indentSummaryOrb, { pointerEvents: "none" }]} />
-          <View style={styles.indentSummaryHeroRow}>
-            <View style={styles.indentSummaryPillRow}>
-              <View style={styles.indentSummaryTypePill}>
-                <Text style={styles.indentSummaryTypePillText}>
-                  {isOwner ? "GIVE LOAD" : "LOAD"}
-                </Text>
-              </View>
-              <View style={styles.indentSummaryStatePill}>
-                <Text style={styles.indentSummaryStatePillText}>{status}</Text>
-              </View>
-              {isDirect ? (
-                <View style={styles.indentSummaryDirectPill}>
-                  <Text style={styles.indentSummaryDirectPillText}>DIRECT</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.indentSummaryDate}>{dateLabel}</Text>
-          </View>
-          <LoadCardRouteRow origin={origin} destination={destination} />
-          <Text style={styles.indentSummaryId} numberOfLines={1}>
-            {displayNumber}
-          </Text>
-          <View style={styles.indentSummarySpecsHeader}>
-            <Text style={styles.indentSummarySpecsTitle}>SHIPMENT PROFILE</Text>
-            {isOwner && canEditLoad ? (
-              <TouchableOpacity
-                onPress={handleEditAll}
-                hitSlop={Layout.touchTargetHitSlop}
-              >
-                <Text style={styles.editAllText}>Edit All</Text>
-              </TouchableOpacity>
-            ) : isOwner ? (
-              <Text style={styles.editAllTextDisabled}>Locked</Text>
-            ) : null}
-          </View>
-          {!isOwner && (
-            <View style={styles.supplierReadOnlyPill}>
-              <FontAwesome name="eye" size={11} color={Theme.textMuted} />
-              <Text style={styles.supplierReadOnlyText}>
-                Read only load details
-              </Text>
-            </View>
-          )}
-          <View style={styles.indentSummarySpecsPanel}>
-            <View style={styles.indentSummarySpecsGrid}>
-              <View style={styles.indentSummarySpecsLabelsRow}>
-                <View style={styles.indentSummarySpecCell}>
-                  <Text style={styles.indentSummarySpecLabel}>Vehicle</Text>
-                </View>
-                <View
-                  style={[
-                    styles.indentSummarySpecCell,
-                    styles.indentSummarySpecDivider,
-                  ]}
-                >
-                  <Text style={styles.indentSummarySpecLabel}>Weight</Text>
-                </View>
-                <View
-                  style={[
-                    styles.indentSummarySpecCell,
-                    styles.indentSummarySpecDivider,
-                  ]}
-                >
-                  <Text style={styles.indentSummarySpecLabel}>Load</Text>
-                </View>
-              </View>
-              <View style={styles.indentSummarySpecsValuesRow}>
-                <View style={styles.indentSummarySpecCell}>
-                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
-                    {vehicleType}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.indentSummarySpecCell,
-                    styles.indentSummarySpecDivider,
-                  ]}
-                >
-                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
-                    {weightKg}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.indentSummarySpecCell,
-                    styles.indentSummarySpecDivider,
-                  ]}
-                >
-                  <Text style={styles.indentSummarySpecValue} numberOfLines={2}>
-                    {material}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Freight Card with gradient — owners see full economics; integrated suppliers see target rate only */}
-        <LinearGradient
-          colors={[Theme.darkSurface, Theme.darkBackground]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.freightCard}
+        <IndentReviewHubCard
+          isOwner={isOwner}
+          typeLabel={isOwner ? "GIVE LOAD" : "GET LOAD"}
+          status={status}
+          isDirect={isDirect}
+          dateLabel={dateLabel}
+          origin={origin}
+          destination={destination}
+          vehicleType={vehicleType}
+          weightKg={weightKg}
+          material={material}
+          canCancelLoad={canCancelLoad}
+          cancelling={cancelling}
+          onCancelLoad={handleCancelLoad}
+          canEditLoad={canEditLoad}
+          onEditAll={handleEditAll}
+          primaryAmount={
+            isOwner
+              ? freight
+              : supplierNum > 0
+                ? supplierRate
+                : "—"
+          }
+          supplierRate={supplierRate}
+          marginPct={marginPct}
+          client={{
+            displayName: clientEntityRawName,
+            avatarName: clientEntityRawName,
+            clientId: indent.client_id,
+            ownerOrgId: orgId,
+            shipperOrgId: indent.organization_id,
+            isOwner,
+          }}
+          quoteStatus={myQuote ? myQuoteStatus || "pending" : null}
+          quoteAmountInr={myQuote ? Number(myQuote.amount ?? 0) : null}
+          targetRateInr={Number(indent.supplier_target ?? 0)}
+          footerInsight={supplierFooterInsight}
+          alertInfo={supplierQuoteAlert}
+          onQuotePress={canOpenQuoteModal ? openQuoteEntry : undefined}
         >
-          <View style={styles.freightGlow} />
-          <View style={styles.freightContent}>
-            {isOwner ? (
-              <>
-                <View style={styles.freightHeaderRow}>
-                  <View>
-                    <Text style={styles.freightLabel}>EST. MARKET FREIGHT</Text>
-                    <View style={styles.freightValueRow}>
-                      <Text style={styles.freightCurrency}>₹</Text>
-                      <Text style={styles.freightValue}>
-                        {freight.replace(/^[^\d,.-]+/, "").trim() || freight}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.freightChartIcon}>
-                    <FontAwesome
-                      name="line-chart"
-                      size={18}
-                      color={Theme.positive}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.freightDivider} />
-
-                <View style={styles.freightGrid}>
-                  <View style={styles.freightGridItem}>
-                    <Text style={styles.freightGridLabel}>SUPPLIER RATE</Text>
-                    <View style={styles.freightGridValueRow}>
-                      <Text style={styles.freightGridValue}>
-                        {supplierRate}
-                      </Text>
-                      {marginPct != null && (
-                        <Text style={styles.freightMarginPct}>
-                          {" "}
-                          ({marginPct}%)
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.freightGridItem,
-                      styles.freightGridItemRight,
-                    ]}
-                  >
-                    <Text style={styles.freightGridLabel}>CLIENT ENTITY</Text>
-                    <Text style={styles.freightGridValue} numberOfLines={1}>
-                      {clientName}
-                    </Text>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.freightHeaderRow}>
-                  <View>
-                    <Text style={styles.freightLabel}>TARGET RATE</Text>
-                    <View style={styles.freightValueRow}>
-                      <Text style={styles.freightCurrency}>₹</Text>
-                      <Text style={styles.freightValue}>
-                        {supplierNum > 0
-                          ? supplierRate.replace(/^[^\d,.-]+/, "").trim() ||
-                            supplierRate
-                          : "—"}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.freightChartIcon}>
-                    <FontAwesome
-                      name="line-chart"
-                      size={18}
-                      color={Theme.positive}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.freightDivider} />
-
-                <View style={styles.freightGrid}>
-                  <View style={styles.freightGridItem}>
-                    <Text style={styles.freightGridLabel}>CLIENT ENTITY</Text>
-                    <View style={styles.clientEntityRow}>
-                      <Text style={styles.freightGridValue} numberOfLines={1}>
-                        {clientName}
-                      </Text>
-                      {myQuote ? (
-                        <View style={styles.yourQuoteStatusBlock}>
-                          <Text style={styles.yourQuoteStatusLabel}>
-                            Your Quote Status
-                          </Text>
-                          <Text style={styles.yourQuoteStatusValue}>
-                            {(myQuoteStatus || "pending").toUpperCase()} •{" "}
-                            {formatINR(Number(myQuote.amount ?? 0))}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
-                </View>
-              </>
-            )}
-          </View>
-        </LinearGradient>
+          {showSupplierPartySummaries ? (
+            <IndentSupplierPartySummary
+              orgId={orgId}
+              shipperName={clientEntityRawName}
+              awardedQuoteInr={Number(myQuote?.amount ?? 0)}
+              trip={linkedTrip}
+              driverLabel={linkedTripPartyLabels.driver}
+              vehicleLabel={linkedTripPartyLabels.vehicle}
+              allocationPending={!linkedTripPartyLabels.isAllocated}
+            />
+          ) : null}
+        </IndentReviewHubCard>
 
         {/* Live Bids */}
         <View style={styles.sectionHeader}>
@@ -833,7 +820,7 @@ export function IndentDetailScreen({
             <View style={styles.bidsEmptyIconWrap}>
               <FontAwesome name="inbox" size={22} color={Theme.textMuted} />
             </View>
-            <Text style={styles.bidsEmptyTitle}>No Bids Received</Text>
+            <Text style={styles.bidsEmptyTitleCenter}>No Bids Received</Text>
             <Text style={styles.bidsEmptyBody}>
               Ready to find the best rate? Broadcast this indent to your
               logistics network.
@@ -875,129 +862,25 @@ export function IndentDetailScreen({
           </View>
         ) : isOwner ? (
           <View style={styles.offersListWrap}>
-            {quotes.map((q: DirectQuoteRow) => {
-              const isPending = (q.status || "").toLowerCase() === "pending";
-              const isSelected = selectedQuoteId === q.id;
-              return (
-                <TouchableOpacity
-                  key={q.id}
-                  style={[
-                    styles.quoteRow,
-                    isSelected && styles.quoteRowSelected,
-                    !isPending && styles.quoteRowDisabled,
-                  ]}
-                  onPress={() =>
-                    canAward &&
-                    isPending &&
-                    setSelectedQuoteId(isSelected ? null : q.id)
-                  }
-                  activeOpacity={0.8}
-                  disabled={!canAward || !isPending}
-                >
-                  <Text style={styles.quoteRowName} numberOfLines={1}>
-                    {q.bidder_organization_name ?? "—"}
-                  </Text>
-                  <Text style={styles.quoteRowAmount}>
-                    {formatINR(Number(q.amount ?? 0))}
-                  </Text>
-                  <Text style={styles.quoteRowStatus}>
-                    {q.status === "accepted"
-                      ? "AWARDED"
-                      : (q.status || "").toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-            {canAward &&
-              quotes.some((q) => normalizeStatus(q.status) === "pending") && (
-                <TouchableOpacity
-                  style={[
-                    styles.awardSelectedBtn,
-                    (awarding ||
-                      !selectedQuoteId ||
-                      !quotes.some(
-                        (q) =>
-                          q.id === selectedQuoteId &&
-                          (q.status || "").toLowerCase() === "pending",
-                      )) &&
-                      styles.awardSelectedBtnDisabled,
-                  ]}
-                  onPress={handleAwardQuote}
-                  disabled={
-                    awarding ||
-                    !selectedQuoteId ||
-                    !quotes.some(
-                      (q) =>
-                        q.id === selectedQuoteId &&
-                        (q.status || "").toLowerCase() === "pending",
-                    )
-                  }
-                  activeOpacity={0.9}
-                >
-                  {awarding ? (
-                    <LoadingIndicator size="small" color={Theme.textOnDark} />
-                  ) : (
-                    <Text style={styles.awardSelectedBtnText}>
-                      Award selected
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              )}
+            <IndentLiveBidsPanel
+              quotes={quotes}
+              clientPriceInr={clientPriceNum}
+              targetRateInr={effectiveSupplierAmount}
+              pickupDateIso={indent.pickup_date}
+              selectedQuoteId={selectedQuoteId}
+              onSelectQuote={setSelectedQuoteId}
+              canSelect={canAward}
+            />
           </View>
-        ) : (
-          <View style={styles.bidsEmptyCard}>
-            <View style={styles.bidsEmptyIconWrap}>
-              <FontAwesome
-                name={myQuote ? "paper-plane" : "inbox"}
-                size={22}
-                color={Theme.textMuted}
-              />
-            </View>
-            {!hideSupplierQuoteSummaryInStatusCard ? (
-              <>
-                <Text style={styles.bidsEmptyTitle}>{supplierQuoteTitle}</Text>
-                <Text style={styles.bidsEmptyBody}>
-                  {myQuote
-                    ? `Status: ${(myQuote.status || "pending").toUpperCase()} • ${formatINR(Number(myQuote.amount ?? 0))}`
-                    : supplierQuoteMessage}
-                </Text>
-                {myQuote ? (
-                  <Text style={styles.supplierQuoteSubtext}>
-                    {supplierQuoteMessage}
-                  </Text>
-                ) : null}
-              </>
-            ) : null}
-            {canOpenQuoteModal ? (
-              <TouchableOpacity
-                style={styles.broadcastBtn}
-                onPress={() => {
-                  setQuoteAmount(myQuote?.amount ? String(myQuote.amount) : "");
-                  setQuoteModalVisible(true);
-                }}
-                activeOpacity={0.9}
-                disabled={submittingQuote}
-              >
-                <FontAwesome
-                  name="gavel"
-                  size={14}
-                  color={Theme.textOnPrimary}
-                  style={styles.broadcastBtnIcon}
-                />
-                <Text style={styles.broadcastBtnText}>
-                  {hasMyPendingQuote ? "UPDATE BID" : "BID NOW"}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.broadcastLockedPill}>
-                <FontAwesome name="lock" size={12} color={Theme.textMuted} />
-                <Text style={styles.broadcastLockedText}>
-                  {supplierLockedMessage}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+        ) : !myQuote && !canOpenQuoteModal ? (
+          <Text style={styles.supplierQuoteSectionHint}>
+            {supplierQuoteActionHint === "locked"
+              ? "Bidding is closed for this load."
+              : supplierQuoteActionHint === "completed"
+                ? "This load is completed."
+                : null}
+          </Text>
+        ) : null}
       </ScrollView>
 
       {/* Fixed footer (light style) */}
@@ -1025,72 +908,53 @@ export function IndentDetailScreen({
                 color={canEditLoad ? Theme.textSecondary : Theme.textMuted}
               />
             </TouchableOpacity>
-            {canCancelLoad ? (
+            {canAward &&
+            quotes.some((q) => normalizeStatus(q.status) === "pending") ? (
               <TouchableOpacity
-                style={styles.footerCancelBtn}
-                onPress={() => {
-                  if (cancelling) return;
-                  Alert.alert(
-                    "Cancel load",
-                    "Are you sure you want to cancel this load? Connected suppliers will no longer see it under Find Work.",
-                    [
-                      { text: "Keep load", style: "cancel" },
-                      {
-                        text: "Cancel load",
-                        style: "destructive",
-                        onPress: async () => {
-                          try {
-                            setCancelling(true);
-                            const { error: cancelError } = await cancelIndent(
-                              indent.id,
-                            );
-                            setCancelling(false);
-                            if (cancelError) {
-                              Alert.alert(
-                                "Could not cancel",
-                                cancelError.message,
-                              );
-                              return;
-                            }
-                            await load();
-                          } catch (e) {
-                            setCancelling(false);
-                            const msg =
-                              e instanceof Error ? e.message : "Unknown error";
-                            Alert.alert("Could not cancel", msg);
-                          }
-                        },
-                      },
-                    ],
-                  );
-                }}
+                style={[
+                  styles.footerAwardBtn,
+                  (awarding ||
+                    !selectedQuoteId ||
+                    !quotes.some(
+                      (q) =>
+                        q.id === selectedQuoteId &&
+                        (q.status || "").toLowerCase() === "pending",
+                    )) &&
+                    styles.footerAwardBtnDisabled,
+                ]}
+                onPress={handleAwardQuote}
+                disabled={
+                  awarding ||
+                  !selectedQuoteId ||
+                  !quotes.some(
+                    (q) =>
+                      q.id === selectedQuoteId &&
+                      (q.status || "").toLowerCase() === "pending",
+                  )
+                }
                 activeOpacity={0.9}
-                accessibilityLabel="Cancel load"
+                accessibilityLabel="Award selected bid"
                 hitSlop={Layout.touchTargetHitSlop}
               >
-                <FontAwesome
-                  name="ban"
-                  size={16}
-                  color={Theme.buttonDestructiveText}
-                />
-                <Text style={styles.footerCancelText}>
-                  {cancelling ? "CANCELLING…" : "CANCEL LOAD"}
-                </Text>
+                {awarding ? (
+                  <LoadingIndicator size="small" color={Theme.textOnDark} />
+                ) : (
+                  <Text style={styles.footerAwardBtnText}>Award selected</Text>
+                )}
               </TouchableOpacity>
-            ) : (
+            ) : !canCancelLoad ? (
               <View style={styles.footerLockedPill}>
                 <FontAwesome name="lock" size={14} color={Theme.textMuted} />
                 <Text style={styles.footerLockedText}>LOAD LOCKED</Text>
               </View>
+            ) : (
+              <View style={styles.footerSpacer} />
             )}
           </>
         ) : canOpenQuoteModal ? (
           <TouchableOpacity
             style={styles.footerBidBtn}
-            onPress={() => {
-              setQuoteAmount(myQuote?.amount ? String(myQuote.amount) : "");
-              setQuoteModalVisible(true);
-            }}
+            onPress={openQuoteEntry}
             activeOpacity={0.9}
             accessibilityLabel="Submit bid"
             hitSlop={Layout.touchTargetHitSlop}
@@ -1104,6 +968,17 @@ export function IndentDetailScreen({
                   ? "UPDATE BID"
                   : "BID NOW"}
             </Text>
+          </TouchableOpacity>
+        ) : canSupplierAllocateVehicle ? (
+          <TouchableOpacity
+            style={styles.footerBidBtn}
+            onPress={handleSupplierAllocate}
+            activeOpacity={0.9}
+            accessibilityLabel={supplierAllocateLabel}
+            hitSlop={Layout.touchTargetHitSlop}
+          >
+            <FontAwesome name="truck" size={16} color={Theme.textOnDark} />
+            <Text style={styles.footerCancelText}>{supplierAllocateLabel}</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.footerLockedPill}>
@@ -1198,67 +1073,26 @@ export function IndentDetailScreen({
         </Pressable>
       </Modal>
 
-      <Modal
+      <IndentBidAmountEntry
         visible={quoteModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setQuoteModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setQuoteModalVisible(false)}
-        >
-          <Pressable
-            style={styles.shareConfirmCard}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.shareConfirmTitle}>
-              {hasMyPendingQuote ? "Update Your Bid" : "Place Your Bid"}
-            </Text>
-            <Text style={styles.shareConfirmSubtitle}>
-              Enter your quoted supplier rate for {displayNumber}.
-            </Text>
-            <View style={styles.quoteInputShell}>
-              <Text style={styles.quoteInputPrefix}>INR</Text>
-              <TextInput
-                value={quoteAmount}
-                onChangeText={(raw) =>
-                  setQuoteAmount(raw.replace(/[^\d]/g, ""))
-                }
-                placeholder="Enter amount"
-                placeholderTextColor={Theme.textMuted}
-                keyboardType={Platform.OS === "web" ? "numeric" : "number-pad"}
-                style={styles.quoteInput}
-                autoFocus
-              />
-            </View>
-            <View style={styles.shareConfirmActions}>
-              <TouchableOpacity
-                style={styles.shareConfirmCancelBtn}
-                onPress={() => setQuoteModalVisible(false)}
-                activeOpacity={0.9}
-                disabled={submittingQuote}
-              >
-                <Text style={styles.shareConfirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.shareConfirmShareBtn}
-                onPress={handleSubmitQuote}
-                activeOpacity={0.9}
-                disabled={submittingQuote}
-              >
-                {submittingQuote ? (
-                  <LoadingIndicator size="small" color={Theme.textOnDark} />
-                ) : (
-                  <Text style={styles.shareConfirmShareText}>
-                    {hasMyPendingQuote ? "Update bid" : "Submit bid"}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={closeQuoteEntry}
+        onSubmitAmount={submitQuoteAmount}
+        indentDisplayNumber={displayNumber}
+        origin={origin}
+        destination={destination}
+        targetRateInr={supplierNum > 0 ? supplierNum : undefined}
+        initialAmount={myQuote?.amount != null ? Number(myQuote.amount) : null}
+        isUpdate={hasMyPendingQuote}
+        validationError={
+          submittingQuote
+            ? "Submitting…"
+            : quoteEntryError
+        }
+        onClearValidationError={() => setQuoteEntryError(undefined)}
+        onInvalidAmount={() =>
+          setQuoteEntryError("Enter an amount greater than 0.")
+        }
+      />
     </View>
   );
 }
@@ -1297,13 +1131,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 8,
   },
-  headerId: {
-    fontSize: 14,
-    fontWeight: "800",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    letterSpacing: 1,
-  },
+  headerId: indentReviewHubText.headerId,
   headerSubtitleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1317,11 +1145,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.darkBackground,
   },
   headerSubtitle: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    ...indentReviewHubText.headerSubtitle,
     color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
   },
   errorStateBody: {
     flex: 1,
@@ -1340,7 +1165,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    paddingTop: 10,
     backgroundColor: Theme.surface,
   },
   draftBanner: {
@@ -1357,27 +1182,42 @@ const styles = StyleSheet.create({
   },
   draftBannerText: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    ...indentReviewHubText.bodyMuted,
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
   },
 
   // Summary card (aligned with Load Center `loadCard`)
+  summaryCancelLink: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 2,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  summaryCancelLinkText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.negative,
+    letterSpacing: 0.2,
+  },
   indentSummaryCard: {
     position: "relative" as const,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 28,
-    padding: 18,
-    marginBottom: 12,
+    borderRadius: indentReviewHubLayout.summaryCardRadius,
+    padding: indentReviewHubLayout.summaryCardPadding,
+    marginBottom: 10,
     shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
     overflow: "hidden",
+  },
+  indentSummaryRoute: {
+    marginBottom: 6,
   },
   indentSummaryOrb: {
     position: "absolute",
@@ -1393,8 +1233,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 10,
+    marginBottom: 8,
     zIndex: 1,
+  },
+  indentSummaryHeroRowWithCancel: {
+    paddingRight: 76,
   },
   indentSummaryPillRow: {
     flexDirection: "row",
@@ -1412,11 +1255,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   indentSummaryTypePillText: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.35,
+    ...indentReviewHubText.chipLabel,
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
   },
   indentSummaryStatePill: {
     paddingHorizontal: 8,
@@ -1427,10 +1267,8 @@ const styles = StyleSheet.create({
     borderColor: Theme.positiveMutedDarkBorder,
   },
   indentSummaryStatePillText: {
-    fontSize: 7,
-    fontWeight: "800",
+    ...indentReviewHubText.chipLabel,
     letterSpacing: 0.45,
-    textTransform: "uppercase",
     color: Theme.positive,
   },
   indentSummaryDirectPill: {
@@ -1442,28 +1280,13 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   indentSummaryDirectPillText: {
-    fontSize: 7,
-    fontWeight: "800",
+    ...indentReviewHubText.chipLabel,
     letterSpacing: 0.45,
-    textTransform: "uppercase",
     color: Theme.textPrimaryDark,
   },
   indentSummaryDate: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1.2,
+    ...indentReviewHubText.dateLine,
     marginTop: 2,
-    zIndex: 1,
-  },
-  indentSummaryId: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    marginBottom: 12,
     zIndex: 1,
   },
   indentSummarySpecsHeader: {
@@ -1473,18 +1296,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     zIndex: 1,
   },
-  indentSummarySpecsTitle: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
+  indentSummarySpecsTitle: indentReviewHubText.fieldLabel,
   indentSummarySpecsPanel: {
     backgroundColor: Theme.surfaceGray,
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     zIndex: 1,
@@ -1514,156 +1331,8 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     marginLeft: 4,
   },
-  indentSummarySpecLabel: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  indentSummarySpecValue: {
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 12,
-    ...Platform.select({
-      android: { includeFontPadding: false as const },
-      default: {},
-    }),
-  },
-
-  // Freight card (compact dark card)
-  freightCard: {
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    overflow: "hidden",
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  freightGlow: {
-    position: "absolute",
-    top: -30,
-    right: -30,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: Theme.driverWhiteMuted,
-  },
-  freightContent: {
-    zIndex: 1,
-  },
-  freightHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 4,
-  },
-  freightLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-  },
-  freightValueRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 4,
-  },
-  freightCurrency: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-    opacity: 0.8,
-  },
-  freightValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    letterSpacing: -0.3,
-  },
-  freightChartIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Theme.positiveMutedDark,
-    borderWidth: 1,
-    borderColor: Theme.positiveMutedDarkBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  freightDivider: {
-    height: 1,
-    backgroundColor: Theme.separatorDark,
-    marginVertical: 12,
-  },
-  freightGrid: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  freightGridItem: {
-    flex: 1,
-  },
-  freightGridItemRight: {
-    alignItems: "flex-end",
-  },
-  freightGridLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  freightGridValue: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-  },
-  freightGridValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  freightMarginPct: {
-    fontSize: 10,
-    fontWeight: "400",
-    color: Theme.positive,
-  },
-  yourQuoteStatusBlock: {
-    marginTop: 0,
-    paddingTop: 0,
-    borderTopWidth: 0,
-    borderTopColor: "transparent",
-    alignItems: "flex-end",
-    flexShrink: 0,
-    maxWidth: 170,
-  },
-  yourQuoteStatusLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    color: Theme.textOnDarkMuted,
-    textTransform: "uppercase",
-    marginBottom: 4,
-    textAlign: "right",
-  },
-  yourQuoteStatusValue: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textOnDark,
-    lineHeight: 16,
-    textAlign: "right",
-  },
-  clientEntityRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+  indentSummarySpecLabel: indentReviewHubText.specLabel,
+  indentSummarySpecValue: indentReviewHubSpecValue,
 
   sectionHeader: {
     flexDirection: "row",
@@ -1672,23 +1341,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 0,
   },
-  sectionTitle: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-  },
+  sectionTitle: indentReviewHubText.sectionTitle,
   editAllText: {
-    fontSize: 10,
-    fontWeight: "700",
+    ...indentReviewHubText.buttonLabel,
+    fontSize: 8,
+    letterSpacing: 0.4,
     color: Theme.darkBackground,
   },
   editAllTextDisabled: {
-    fontSize: 10,
-    fontWeight: "700",
+    ...indentReviewHubText.chipLabel,
+    fontSize: 8,
     color: Theme.textMuted,
-    textTransform: "uppercase",
   },
   supplierReadOnlyPill: {
     flexDirection: "row",
@@ -1704,11 +1367,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   supplierReadOnlyText: {
-    fontSize: 10,
+    ...indentReviewHubText.chipLabel,
+    fontSize: 8,
+    color: Theme.textMuted,
+  },
+  supplierQuoteSectionHint: {
+    fontSize: 12,
     fontWeight: "600",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    lineHeight: 17,
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
   // Live Bids
   liveBidsTitleRow: {
@@ -1733,69 +1402,97 @@ const styles = StyleSheet.create({
   bidsEmptyCard: {
     backgroundColor: Theme.screenBackground,
     borderRadius: 12,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: "center",
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
   },
-  bidsEmptyIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: Theme.surfaceLight,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
+  quoteStatusCard: {
+    alignItems: "stretch",
+    paddingVertical: 12,
   },
-  bidsEmptyTitle: {
-    fontSize: 14,
+  quoteStatusCardTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    width: "100%",
+    marginBottom: 10,
+  },
+  quoteStatusCardBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  quoteStatusLine: indentReviewHubText.bodyMuted,
+  quoteStatusLineStrong: {
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+  },
+  bidsEmptyBodyLeft: {
+    ...indentReviewHubText.bodyMuted,
+    textAlign: "left",
+  },
+  supplierQuoteSubtextLeft: {
+    ...indentReviewHubText.bodyMuted,
+    color: Theme.textSecondary,
+    textAlign: "left",
+  },
+  bidsEmptyIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(99,102,241,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(99,102,241,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  bidsEmptyTitle: {
+    ...indentReviewHubText.partyTitle,
+    textAlign: "left",
+    marginBottom: 0,
+  },
+  bidsEmptyTitleCenter: {
+    ...indentReviewHubText.partyTitle,
+    textAlign: "center",
     marginBottom: 4,
   },
   bidsEmptyBody: {
-    fontSize: 11,
-    color: Theme.textMuted,
+    ...indentReviewHubText.bodyMuted,
     textAlign: "center",
-    marginBottom: 14,
-    lineHeight: 16,
+    marginBottom: 12,
   },
   supplierQuoteSubtext: {
-    fontSize: 11,
+    ...indentReviewHubText.bodyMuted,
     color: Theme.textSecondary,
     textAlign: "center",
-    marginTop: -6,
-    marginBottom: 12,
-    lineHeight: 16,
-    fontWeight: "600",
+    marginTop: -4,
+    marginBottom: 10,
   },
   broadcastBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.darkBackground,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
     borderRadius: 10,
-    minHeight: 40,
+    minHeight: 38,
   },
   broadcastBtnIcon: {
     marginRight: 8,
   },
   broadcastBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    ...indentReviewHubText.buttonLabel,
     color: Theme.textOnDark,
-    letterSpacing: 1,
   },
   broadcastLockedPill: {
     flexDirection: "row",
@@ -1809,13 +1506,48 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   broadcastLockedText: {
-    fontSize: 10,
-    fontWeight: "600",
+    ...indentReviewHubText.bodyMuted,
+    fontSize: 8,
     color: Theme.textMuted,
+  },
+  allocateHintPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+  },
+  allocateHintText: {
+    ...indentReviewHubText.bodyMuted,
+    flex: 1,
+    fontSize: 8,
+    color: Theme.pulseIndigo,
+    fontWeight: "600",
+  },
+  completedStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  completedStatusText: {
+    ...indentReviewHubText.bodyMuted,
+    fontSize: 8,
+    color: Theme.positive,
+    fontWeight: "600",
   },
   broadcastErrorText: {
     marginTop: 10,
-    fontSize: 11,
+    ...indentReviewHubText.bodyMuted,
     color: Theme.negative,
     textAlign: "center",
   },
@@ -1843,41 +1575,14 @@ const styles = StyleSheet.create({
   quoteRowDisabled: { opacity: 0.6 },
   quoteRowName: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textBody,
+    ...indentReviewHubText.quoteRowName,
     marginRight: 8,
   },
   quoteRowAmount: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textBody,
+    ...indentReviewHubText.quoteRowAmount,
     marginRight: 8,
   },
-  quoteRowStatus: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-  },
-  awardSelectedBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    backgroundColor: Theme.darkBackground,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  awardSelectedBtnDisabled: { opacity: 0.5 },
-  awardSelectedBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-
+  quoteRowStatus: indentReviewHubText.quoteRowStatus,
   // Footer (light)
   footer: {
     position: "absolute",
@@ -1908,25 +1613,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 10,
   },
-  footerCancelBtn: {
+  footerAwardBtn: {
     flex: 1,
     height: 44,
     borderRadius: 12,
-    backgroundColor: Theme.buttonDestructive,
-    flexDirection: "row",
+    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
   },
-  footerBidBtn: {
+  footerAwardBtnDisabled: {
+    opacity: 0.5,
+  },
+  footerAwardBtnText: {
+    ...indentReviewHubText.buttonLabel,
+    fontSize: 9,
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+  },
+  footerSpacer: {
     flex: 1,
     height: 44,
-    borderRadius: 12,
+  },
+  footerBidBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
     backgroundColor: Theme.darkBackground,
     flexDirection: "row",
     alignItems: "center",
@@ -1939,11 +1655,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   footerCancelText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    ...indentReviewHubText.buttonLabel,
+    fontSize: 9,
     color: Theme.textOnDark,
-    textTransform: "uppercase",
   },
   footerLockedPill: {
     flex: 1,
@@ -1958,11 +1672,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   footerLockedText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.8,
+    ...indentReviewHubText.buttonLabel,
+    fontSize: 9,
     color: Theme.textMuted,
-    textTransform: "uppercase",
   },
 
   // Broadcast modal
@@ -1994,29 +1706,6 @@ const styles = StyleSheet.create({
   shareConfirmActions: {
     flexDirection: "row",
     gap: 10,
-  },
-  quoteInputShell: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
-    borderRadius: 10,
-    backgroundColor: Theme.surface,
-    minHeight: 44,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  quoteInputPrefix: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    marginRight: 8,
-  },
-  quoteInput: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
   },
   shareConfirmCancelBtn: {
     flex: 1,

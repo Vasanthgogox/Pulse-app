@@ -30,6 +30,7 @@ import {
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { AwardedIndentDeployModalProvider } from '@/contexts/AwardedIndentDeployModalContext';
 import { BusinessConnectionRequestModalProvider } from '@/contexts/BusinessConnectionRequestModalContext';
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -213,11 +214,13 @@ export default function TabLayout() {
   }
 
   return (
-    <BusinessConnectionRequestModalProvider>
-      <DemoTabBarScrollProvider>
-        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
-      </DemoTabBarScrollProvider>
-    </BusinessConnectionRequestModalProvider>
+    <AwardedIndentDeployModalProvider>
+      <BusinessConnectionRequestModalProvider>
+        <DemoTabBarScrollProvider>
+          <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
+        </DemoTabBarScrollProvider>
+      </BusinessConnectionRequestModalProvider>
+    </AwardedIndentDeployModalProvider>
   );
 }
 
