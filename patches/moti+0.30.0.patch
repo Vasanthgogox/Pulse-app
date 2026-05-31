@@ -1,0 +1,109 @@
+diff --git a/node_modules/moti/build/core/index.js b/node_modules/moti/build/core/index.js
+index 1111111..2222222 100644
+--- a/node_modules/moti/build/core/index.js
++++ b/node_modules/moti/build/core/index.js
+@@ -1,5 +1,5 @@
+ export { default as motify } from './motify';
+-export { AnimatePresence } from 'framer-motion';
++export { AnimatePresence } from '../framer-motion-shim';
+ export * from './types';
+ export { default as useAnimationState } from './use-animator';
+ export { default as useDynamicAnimation } from './use-dynamic-animation';
+diff --git a/node_modules/moti/build/core/motify.js b/node_modules/moti/build/core/motify.js
+index 1111111..2222222 100644
+--- a/node_modules/moti/build/core/motify.js
++++ b/node_modules/moti/build/core/motify.js
+@@ -1,5 +1,5 @@
+ import { jsx as _jsx } from "react/jsx-runtime";
+-import { usePresence, PresenceContext } from 'framer-motion';
++import { usePresence, PresenceContext } from '../framer-motion-shim';
+ import { forwardRef, useContext, } from 'react';
+ import Animated from 'react-native-reanimated';
+ import { useMotify } from './use-motify';
+diff --git a/node_modules/moti/build/framer-motion-shim.js b/node_modules/moti/build/framer-motion-shim.js
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/node_modules/moti/build/framer-motion-shim.js
+@@ -0,0 +1,25 @@
++"use strict";
++
++const React = require("react");
++
++const PresenceContext = React.createContext(null);
++
++function usePresence() {
++  return [true, function noopSafeToRemove() {}];
++}
++
++function AnimatePresence(props) {
++  return props && props.children != null ? props.children : null;
++}
++
++module.exports = {
++  __esModule: true,
++  AnimatePresence,
++  PresenceContext,
++  usePresence,
++  default: {
++    AnimatePresence,
++    PresenceContext,
++    usePresence,
++  },
++};
+diff --git a/node_modules/moti/src/core/index.ts b/node_modules/moti/src/core/index.ts
+index 1111111..2222222 100644
+--- a/node_modules/moti/src/core/index.ts
++++ b/node_modules/moti/src/core/index.ts
+@@ -1,5 +1,5 @@
+ export { default as motify } from './motify'
+-export { AnimatePresence } from 'framer-motion'
++export { AnimatePresence } from '../framer-motion-shim'
+ 
+ export * from './types'
+ export { default as useAnimationState } from './use-animator'
+diff --git a/node_modules/moti/src/core/motify.tsx b/node_modules/moti/src/core/motify.tsx
+index 1111111..2222222 100644
+--- a/node_modules/moti/src/core/motify.tsx
++++ b/node_modules/moti/src/core/motify.tsx
+@@ -1,4 +1,4 @@
+-import { usePresence, PresenceContext } from 'framer-motion'
++import { usePresence, PresenceContext } from '../framer-motion-shim'
+ import React, {
+   forwardRef,
+   ComponentType,
+diff --git a/node_modules/moti/src/framer-motion-shim.js b/node_modules/moti/src/framer-motion-shim.js
+new file mode 100644
+index 0000000..4444444
+--- /dev/null
++++ b/node_modules/moti/src/framer-motion-shim.js
+@@ -0,0 +1,29 @@
++"use strict";
++
++/**
++ * Native-safe framer-motion subset for moti (patched — do not import real framer-motion on RN).
++ * See polyfills/framer-motion-native.js in the app repo for rationale.
++ */
++const React = require("react");
++
++const PresenceContext = React.createContext(null);
++
++function usePresence() {
++  return [true, function noopSafeToRemove() {}];
++}
++
++function AnimatePresence(props) {
++  return props && props.children != null ? props.children : null;
++}
++
++module.exports = {
++  __esModule: true,
++  AnimatePresence,
++  PresenceContext,
++  usePresence,
++  default: {
++    AnimatePresence,
++    PresenceContext,
++    usePresence,
++  },
++};

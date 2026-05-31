@@ -2020,7 +2020,7 @@ export default function TripDetailScreen({
         setProvisionNotePdfContext({
           adjustment: adj,
           tripCode: getTripDisplayNumber(trip, currentOrganization?.id),
-          companyName: currentOrganization?.name?.trim() || "Q",
+          companyName: currentOrganization?.name?.trim() || "PULSE",
           partyName: isSale ? clientNameForParty : provisionCostPartyName,
           laneLabel: isSale ? "Sale" : "Cost",
           partyRole: isSale ? "Client" : isAssetTripFinance ? "Driver" : "Supplier",

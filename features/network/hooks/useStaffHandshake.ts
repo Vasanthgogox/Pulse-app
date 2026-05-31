@@ -7,6 +7,15 @@
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
+import {
+  isDeployTripDetailsReady,
+  parseTonsInputToWeightKg,
+  seedDeployLoadTypeFromIndent,
+  seedDeployPickupDateFromIndent,
+  seedDeployVehicleTypeFromIndent,
+  seedDeployWeightTonsFromIndent,
+} from "@/features/indents/utils/indentDeployTripDetails.util";
+import { isValidIsoDateString } from "@/lib/dateIso.util";
 import { setInitialTripForDetail } from "@/features/trips/initialTripForDetail";
 import {
   assignAggregateTripDriverByPhone,
@@ -33,6 +42,35 @@ interface UseStaffHandshakeParams {
   onSuccess: (msg: string) => void;
 }
 
+async function persistIndentDeployTripDetails(
+  indentId: string,
+  pickupDate: string,
+  weightTons: string,
+  vehicleType: string,
+  loadType: string,
+): Promise<{ error: Error | null }> {
+  if (!isValidIsoDateString(pickupDate)) {
+    return { error: new Error("Pick a valid trip start date.") };
+  }
+  const weightKg = parseTonsInputToWeightKg(weightTons);
+  if (weightKg == null) {
+    return { error: new Error("Enter load weight in tons (greater than 0).") };
+  }
+  if (!vehicleType.trim()) {
+    return { error: new Error("Select vehicle type.") };
+  }
+  if (!loadType.trim()) {
+    return { error: new Error("Select product type.") };
+  }
+  const { error } = await updateIndent(indentId, {
+    pickup_date: pickupDate.trim(),
+    weight: weightKg,
+    vehicle_type: vehicleType.trim(),
+    load_type: loadType.trim(),
+  });
+  return { error };
+}
+
 export interface StaffHandshakeResult {
   state: {
     isOpen: boolean;
@@ -56,7 +94,12 @@ export interface StaffHandshakeResult {
     deployOtpExpiresAt: string | null;
     deployTripIdForOtp: string | null;
     staffHandshakeAssignLater: boolean;
+    deployPickupDate: string;
+    deployWeightTons: string;
+    deployVehicleType: string;
+    deployLoadType: string;
     // computed readiness flags:
+    tripDetailsReady: boolean;
     rosterReady: boolean;
     adHocReady: boolean;
     aggregateTrackingFlowReady: boolean;
@@ -81,6 +124,10 @@ export interface StaffHandshakeResult {
     deployOtpExpiresAt: (v: string | null) => void;
     deployTripIdForOtp: (v: string | null) => void;
     staffHandshakeAssignLater: (v: boolean) => void;
+    deployPickupDate: (v: string) => void;
+    deployWeightTons: (v: string) => void;
+    deployVehicleType: (v: string) => void;
+    deployLoadType: (v: string) => void;
     aggregateDriverNameManualRef: React.MutableRefObject<boolean>;
   };
   open: (load: IndentRow) => void;
@@ -138,6 +185,17 @@ export function useStaffHandshake({
   );
   const [staffHandshakeAssignLater, setStaffHandshakeAssignLater] =
     useState(false);
+  const [deployPickupDate, setDeployPickupDate] = useState("");
+  const [deployWeightTons, setDeployWeightTons] = useState("");
+  const [deployVehicleType, setDeployVehicleType] = useState("");
+  const [deployLoadType, setDeployLoadType] = useState("");
+
+  const tripDetailsReady = isDeployTripDetailsReady(
+    deployPickupDate,
+    deployWeightTons,
+    deployVehicleType,
+    deployLoadType,
+  );
 
   // Phone lookup side-effect — stays inside the hook
   useEffect(() => {
@@ -228,12 +286,20 @@ export function useStaffHandshake({
     setDeployOtpExpiresAt(null);
     setDeployTripIdForOtp(null);
     setStaffHandshakeAssignLater(false);
+    setDeployPickupDate("");
+    setDeployWeightTons("");
+    setDeployVehicleType("");
+    setDeployLoadType("");
     aggregateDriverNameManualRef.current = false;
   }, []);
 
   const open = useCallback(
     (load: IndentRow) => {
       resetForm();
+      setDeployPickupDate(seedDeployPickupDateFromIndent(load));
+      setDeployWeightTons(seedDeployWeightTonsFromIndent(load));
+      setDeployVehicleType(seedDeployVehicleTypeFromIndent(load));
+      setDeployLoadType(seedDeployLoadTypeFromIndent(load));
       setCurrentLoad(load);
     },
     [resetForm],
@@ -290,12 +356,30 @@ export function useStaffHandshake({
       );
       return;
     }
+    if (!tripDetailsReady) {
+      Alert.alert(
+        "Trip details required",
+        "Set trip start date and load weight in tons before deploying.",
+      );
+      return;
+    }
     if (staffHandshakeDeployLockRef.current) {
       return;
     }
     staffHandshakeDeployLockRef.current = true;
     try {
       setIsDeploying(true);
+      const { error: detailsErr } = await persistIndentDeployTripDetails(
+        load.id,
+        deployPickupDate,
+        deployWeightTons,
+        deployVehicleType,
+        deployLoadType,
+      );
+      if (detailsErr) {
+        Alert.alert("Could not save trip details", detailsErr.message);
+        return;
+      }
       const { error: assignErr } = await updateDirectQuoteAssignment(
         acceptedQuote.id,
         assignDriverId,
@@ -347,6 +431,11 @@ export function useStaffHandshake({
     myQuotes,
     assignDriverId,
     assignVehicleId,
+    deployPickupDate,
+    deployWeightTons,
+    deployVehicleType,
+    deployLoadType,
+    tripDetailsReady,
     invalidateTrips,
     invalidateIndents,
     onSuccess,
@@ -439,12 +528,30 @@ export function useStaffHandshake({
       Alert.alert("Invalid driver phone", phoneErr);
       return;
     }
+    if (!tripDetailsReady) {
+      Alert.alert(
+        "Trip details required",
+        "Set trip start date and load weight in tons before deploying.",
+      );
+      return;
+    }
     if (staffHandshakeDeployLockRef.current) {
       return;
     }
     staffHandshakeDeployLockRef.current = true;
     try {
       setIsDeploying(true);
+      const { error: detailsErr } = await persistIndentDeployTripDetails(
+        load.id,
+        deployPickupDate,
+        deployWeightTons,
+        deployVehicleType,
+        deployLoadType,
+      );
+      if (detailsErr) {
+        Alert.alert("Could not save trip details", detailsErr.message);
+        return;
+      }
       const vehicleIdForQuote = deferHandshakeAssignment
         ? null
         : typeof assignVehicleId === "string"
@@ -634,6 +741,11 @@ export function useStaffHandshake({
     aggregateDriverPhone,
     assignVehicleRegistration,
     assignVehicleId,
+    deployPickupDate,
+    deployWeightTons,
+    deployVehicleType,
+    deployLoadType,
+    tripDetailsReady,
     queryClient,
     invalidateTrips,
     invalidateIndents,
@@ -663,6 +775,11 @@ export function useStaffHandshake({
       deployOtpExpiresAt,
       deployTripIdForOtp,
       staffHandshakeAssignLater,
+      deployPickupDate,
+      deployWeightTons,
+      deployVehicleType,
+      deployLoadType,
+      tripDetailsReady,
       rosterReady,
       adHocReady,
       aggregateTrackingFlowReady,
@@ -687,6 +804,10 @@ export function useStaffHandshake({
       deployOtpExpiresAt: setDeployOtpExpiresAt,
       deployTripIdForOtp: setDeployTripIdForOtp,
       staffHandshakeAssignLater: setStaffHandshakeAssignLater,
+      deployPickupDate: setDeployPickupDate,
+      deployWeightTons: setDeployWeightTons,
+      deployVehicleType: setDeployVehicleType,
+      deployLoadType: setDeployLoadType,
       aggregateDriverNameManualRef,
     },
     open,

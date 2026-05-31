@@ -56,7 +56,7 @@ export interface AddTripModalLayoutProps {
 
 export function AddTripModalLayout({
   title,
-  subtitle = "Route · Client & Price · Allocation",
+  subtitle = "Route · Commodity · Client & Price · Allocation",
   submitLabel,
   canSubmit,
   lockPrimaryUntilValid = true,
@@ -111,7 +111,9 @@ export function AddTripModalLayout({
             </TouchableOpacity>
             <View style={styles.topBarTextWrap}>
               <Text style={styles.topBarTitle}>{title}</Text>
-              <Text style={styles.topBarSubtitle}>{subtitle}</Text>
+              {subtitle && !isDenseForm ? (
+                <Text style={styles.topBarSubtitle}>{subtitle}</Text>
+              ) : null}
             </View>
           </View>
           {shouldShowHeaderActions ? (

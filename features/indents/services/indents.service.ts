@@ -808,6 +808,7 @@ export async function updateIndent(
       | "load_type"
       | "pickup_date"
       | "circulation_target"
+      | "weight"
       | "status"
     >
   >,
@@ -830,6 +831,7 @@ export async function updateIndent(
     payload.pickup_date = updates.pickup_date;
   if (updates.circulation_target !== undefined)
     payload.circulation_target = updates.circulation_target;
+  if (updates.weight !== undefined) payload.weight = updates.weight;
   if (updates.status !== undefined) payload.status = updates.status;
 
   if (Object.keys(payload).length === 0) {

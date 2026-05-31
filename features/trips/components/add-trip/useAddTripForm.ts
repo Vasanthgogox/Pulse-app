@@ -21,6 +21,8 @@ export type AddTripIssueField =
   | 'drop'
   | 'tripDate'
   | 'tons'
+  | 'vehicleType'
+  | 'loadType'
   | 'client'
   | 'clientPrice'
   | 'partner'
@@ -129,9 +131,23 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     !state.driverPhoneConfirmed &&
     !state.driverPhoneTripConflict
   ) {
-    push('driverConfirm', `Tap to confirm the driver: ${state.driverPhoneName}`);
+    push('driverConfirm', 'Select a driver name from the recommendations');
   }
 
+  return issues;
+}
+
+/** Mobile wizard commodity step — optional fields; validate tons only when provided. */
+export function computeCommodityStepIssues(
+  state: AddTripFormState,
+): AddTripValidationIssue[] {
+  const issues: AddTripValidationIssue[] = [];
+  if (state.tons.trim()) {
+    const tonsNum = Number(state.tons);
+    if (!Number.isFinite(tonsNum) || tonsNum <= 0) {
+      issues.push({ field: 'tons', message: 'Tons: enter a valid weight greater than 0' });
+    }
+  }
   return issues;
 }
 
@@ -140,6 +156,8 @@ const initialState: AddTripFormState = {
   dropLocation: '',
   tripStartDate: '',
   tons: '',
+  vehicleType: '',
+  loadType: '',
   pickupLat: null,
   pickupLon: null,
   dropLat: null,
@@ -186,6 +204,18 @@ export function useAddTripForm() {
   const setDropCoords = useCallback((lat: number, lon: number) => setState((s) => ({ ...s, dropLat: lat, dropLon: lon })), []);
   const setTripStartDate = useCallback((v: string) => setState((s) => ({ ...s, tripStartDate: v })), []);
   const setTons = useCallback((v: string) => setState((s) => ({ ...s, tons: v })), []);
+  const setVehicleType = useCallback(
+    (v: string) => setState((s) => ({ ...s, vehicleType: v })),
+    [],
+  );
+  const setLoadType = useCallback(
+    (v: string) => setState((s) => ({ ...s, loadType: v })),
+    [],
+  );
+  const applyPrefill = useCallback((partial: Partial<AddTripFormState>) => {
+    setState((s) => ({ ...s, ...partial }));
+  }, []);
+  const resetForm = useCallback(() => setState(initialState), []);
   const setClientName = useCallback((v: string) => setState((s) => ({ ...s, clientName: v, clientId: null })), []);
   const setClientId = useCallback((id: string | null) => setState((s) => ({ ...s, clientId: id })), []);
   const setClientSelection = useCallback((id: string | null, name: string) => setState((s) => ({ ...s, clientId: id, clientName: name })), []);
@@ -414,6 +444,11 @@ export function useAddTripForm() {
     const supplierRate = state.supplySource === 'asset' ? 0 : parseAmount(state.supplierRate);
     const advancePaid = parseAmount(state.advancePaid);
     let notes = state.notes.trim();
+    if (state.vehicleType.trim()) {
+      notes =
+        (notes ? notes + '\n' : '') +
+        `Vehicle type: ${state.vehicleType.trim()}`;
+    }
     if (state.tons.trim()) {
       notes = (notes ? notes + '\n' : '') + `Load: ${state.tons.trim()} Tons`;
     }
@@ -460,6 +495,8 @@ export function useAddTripForm() {
           ? state.aggregateVehicleText.trim()
           : undefined,
       tons: state.tons.trim() || null,
+      load_type: state.loadType.trim() || null,
+      vehicle_type: state.vehicleType.trim() || null,
     };
   }, [state]);
 
@@ -471,6 +508,10 @@ export function useAddTripForm() {
       setDropCoords,
       setTripStartDate,
       setTons,
+      setVehicleType,
+      setLoadType,
+      applyPrefill,
+      resetForm,
       setClientName,
       setClientId,
       setClientSelection,
@@ -498,6 +539,10 @@ export function useAddTripForm() {
       setDropCoords,
       setTripStartDate,
       setTons,
+      setVehicleType,
+      setLoadType,
+      applyPrefill,
+      resetForm,
       setClientName,
       setClientId,
       setClientSelection,

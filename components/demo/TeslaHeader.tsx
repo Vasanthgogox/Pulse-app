@@ -77,7 +77,7 @@ export function TeslaHeader({
           <FontAwesome name="terminal" size={11} color={Theme.textPrimaryDark} />
         </View>
         <View style={styles.titleBlock}>
-          <Text style={styles.brandText} numberOfLines={1}>Qu.</Text>
+          <Text style={styles.brandText} numberOfLines={1}>PULSE</Text>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           {subtitle != null && subtitle !== '' && (
             <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>

@@ -87,10 +87,28 @@ export const networkHubListCardChromeStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  /** Native app + mobile web — 2-up hub grid cells. */
+  /** Phone / narrow web — 3-up connection tiles (transparent, avatar + name). */
   cardMobileGrid: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    width: "100%",
+    alignSelf: "stretch",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderRadius: 0,
+    paddingHorizontal: 2,
+    paddingVertical: 8,
+    minHeight: 0,
+    alignItems: "center",
+    overflow: "visible",
+    ...Platform.select({
+      ios: {
+        shadowOpacity: 0,
+        shadowRadius: 0,
+        shadowOffset: { width: 0, height: 0 },
+      },
+      android: { elevation: 0 },
+      web: { boxShadow: "none" } as object,
+      default: {},
+    }),
   },
   cardDesktopPane: {
     paddingHorizontal: 14,

@@ -2,8 +2,6 @@ import 'react-native-gesture-handler';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
-// First JS evaluation — mark parse start before any other import runs.
-markStartupPhase('js_parse_start');
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
@@ -41,7 +39,10 @@ import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supaba
 import {
   installWebDeployRecoveryListener,
   isStaleWebChunkError,
+  clearNativeBundleReloadGuard,
+  installNativeBundleRecoveryHandler,
   isStaleNativeBundleError,
+  recoverStaleNativeBundle,
   recoverStaleWebDeploy,
 } from '@/lib/webDeployRecovery';
 import {
@@ -78,6 +79,8 @@ import { WalletProvider } from '@/contexts/WalletContext';
 import { LazyChatProviders } from '@/components/LazyChatProviders';
 import { GlobalSyncProvider } from '@/lib/globalSync/GlobalSyncContext';
 
+markStartupPhase('js_parse_start');
+
 function isNetworkError(error: Error): boolean {
   const msg = error.message;
   return (
@@ -107,6 +110,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
     if (isStaleWebChunkError(error)) {
       recoverStaleWebDeploy();
+      return;
+    }
+    if (isStaleNativeBundleError(error)) {
+      recoverStaleNativeBundle();
     }
   }, [error]);
 
@@ -165,6 +172,9 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
             : () => {
                 if (Platform.OS === 'web' && isStaleWebChunkError(error)) {
                   recoverStaleWebDeploy();
+                  return;
+                }
+                if (staleNativeBundle && recoverStaleNativeBundle()) {
                   return;
                 }
                 retry();
@@ -227,6 +237,8 @@ LogBox.ignoreLogs([
 
 export default function RootLayout() {
   useEffect(() => {
+    clearNativeBundleReloadGuard();
+    installNativeBundleRecoveryHandler();
     installWebDeployRecoveryListener();
     if (Platform.OS !== 'web') return;
     return installWebViewportHeight();
@@ -413,6 +425,10 @@ function RootLayoutNav() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="add-trip" />
+              <Stack.Screen
+                name="add-commodity-type"
+                options={{ animation: "slide_from_right", headerShown: false }}
+              />
               <Stack.Screen name="network" />
               <Stack.Screen name="load-board" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen

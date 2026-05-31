@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -58,7 +59,12 @@ export function AssignmentFlowShell({
   fullScreen = false,
 }: AssignmentFlowShellProps) {
   const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
   const { keyboardVisible } = useKeyboardVisible();
+  const webDesktopContent =
+    Platform.OS === "web" && winW >= 900
+      ? { maxWidth: Math.min(winW - 48, 880), alignSelf: "center" as const, width: "100%" as const }
+      : undefined;
   const isPulse = variant === "pulse";
   const footerPad = dockPaddingBottom(insets.bottom, keyboardVisible, 12);
 
@@ -158,6 +164,7 @@ export function AssignmentFlowShell({
           styles.bodyContent,
           fullScreen && styles.bodyContentFullScreen,
           isPulse ? styles.bodyContentPulse : styles.bodyContentSlate,
+          webDesktopContent,
           !footer && { paddingBottom: Math.max(24, insets.bottom) },
         ]}
         keyboardShouldPersistTaps="handled"

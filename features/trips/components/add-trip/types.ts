@@ -36,8 +36,12 @@ export interface AddTripFormData {
   vehicle_id?: string | null;
   /** Aggregate only: vehicle number for display (persisted as trip.vehicle_display_number). */
   vehicle_display_number?: string | null;
-  /** Optional load weight in tons; stored in notes as metadata text. */
+  /** Optional load weight in tons; stored in trips.load_tons. */
   tons?: string | null;
+  /** Cargo / product type (trips.load_type). */
+  load_type?: string | null;
+  /** Requested vehicle type (stored in trip notes when no vehicle_id). */
+  vehicle_type?: string | null;
 }
 
 export interface AddTripFormState {
@@ -47,6 +51,8 @@ export interface AddTripFormState {
   tripStartDate: string;
   /** Optional load weight in tons as text input. */
   tons: string;
+  vehicleType: string;
+  loadType: string;
   pickupLat: number | null;
   pickupLon: number | null;
   dropLat: number | null;
@@ -101,6 +107,8 @@ export interface AddTripSuccessDetails {
 /** Snapshot for OTP success UI (filled client-side in AddTripModal). */
 export interface AddTripOtpScreenContext {
   driverName?: string;
+  driverPhone?: string;
+  vehicleNumber?: string;
   pickupArea: string;
   dropLocation: string;
   clientName?: string;
@@ -117,8 +125,23 @@ export interface AddTripCompleteResult {
   otpScreenContext?: AddTripOtpScreenContext;
 }
 
+/** When creating a trip from an indent, seed route + commodity from this row. */
+export type AddTripSourceIndent = {
+  id: string;
+  pickup_area: string;
+  drop_location: string;
+  pickup_date?: string | null;
+  weight?: number | null;
+  vehicle_type?: string | null;
+  load_type?: string | null;
+  client_name?: string;
+  client_price?: number;
+  client_id?: string | null;
+};
+
 export interface AddTripModalProps {
   organizationId: string | null;
+  sourceIndent?: AddTripSourceIndent | null;
   onClose: () => void;
   /** Called on submit. May return { trip, otp } for aggregate so modal shows OTP card. */
   onComplete: (

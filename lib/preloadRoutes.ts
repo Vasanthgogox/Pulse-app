@@ -30,6 +30,12 @@ export function scheduleDispatcherTabPreloads(
   opts?: { queryClient?: QueryClient; orgId?: string | null },
 ): void {
   const run = () => {
+    // Idle preloads of large lazy chunks race with Fast Refresh in dev and
+    // surface as "Requiring unknown module NNNN" on the next navigation.
+    if (__DEV__) {
+      if (lastTabRoute) preloadTabForRoute(lastTabRoute);
+      return;
+    }
     const orgId = opts?.orgId ?? null;
     if (opts?.queryClient && orgId) {
       preloadFinanceWarmup(opts.queryClient, orgId);

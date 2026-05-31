@@ -8,13 +8,14 @@ import { StyleSheet, Text } from "react-native";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { IndentAllocationTripDetailsStep } from "@/features/indents/components/IndentAllocationTripDetailsStep";
 import { AssetRosterPickers } from "@/features/network/components/StaffHandshakeModal";
 import { useStaffHandshake } from "@/features/network/hooks/useStaffHandshake";
 import { AddTripWizardProgress } from "@/features/trips/components/add-trip/AddTripWizardProgress";
 import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
 import { AssignmentFlowShell } from "@/features/trips/components/assignment/AssignmentFlowShell";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
-import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
+import { formatIsoDateForDisplay, isValidIsoDateString } from "@/lib/dateIso.util";
 import {
   useDriversQuery,
   useInvalidateIndents,
@@ -25,12 +26,15 @@ import {
 import { useRouter } from "expo-router";
 import { Platform } from "react-native";
 
-const FLOW_STEPS = [
+const ROSTER_FLOW_STEPS = [
   { id: "driver", label: "Driver" },
   { id: "vehicle", label: "Vehicle" },
+  { id: "commodity", label: "Commodity" },
 ] as const;
 
-type FlowStep = (typeof FLOW_STEPS)[number]["id"];
+const ASSIGN_LATER_STEPS = [{ id: "commodity", label: "Commodity" }] as const;
+
+type FlowStep = (typeof ROSTER_FLOW_STEPS)[number]["id"];
 
 export interface IndentAllocationFlowScreenProps {
   indentId: string;
@@ -80,7 +84,20 @@ export function IndentAllocationFlowScreen({
     staffHandshakeAssignLater,
     rosterReady,
     deployOtpCode,
+    deployPickupDate,
+    deployWeightTons,
+    deployVehicleType,
+    deployLoadType,
+    tripDetailsReady,
   } = state;
+
+  const flowSteps = useMemo(
+    () =>
+      staffHandshakeAssignLater
+        ? [...ASSIGN_LATER_STEPS]
+        : [...ROSTER_FLOW_STEPS],
+    [staffHandshakeAssignLater],
+  );
 
   const openedIndentIdRef = useRef<string | null>(null);
 
@@ -89,6 +106,7 @@ export function IndentAllocationFlowScreen({
     if (openedIndentIdRef.current === indent.id) return;
     openedIndentIdRef.current = indent.id;
     open(indent);
+    setStep("driver");
   }, [indent, open]);
 
   useEffect(() => {
@@ -102,6 +120,14 @@ export function IndentAllocationFlowScreen({
     if (!orgId || !indentId || indentPending) return;
     if (!indent || indentError) onBack();
   }, [orgId, indentId, indent, indentPending, indentError, onBack]);
+
+  useEffect(() => {
+    if (staffHandshakeAssignLater) {
+      setStep("commodity");
+    } else if (step === "commodity" && !staffHandshakeAssignLater) {
+      setStep("driver");
+    }
+  }, [staffHandshakeAssignLater, step]);
 
   const handleClose = useCallback(() => {
     close();
@@ -117,13 +143,29 @@ export function IndentAllocationFlowScreen({
       : null;
   const vehicleLabel = selectedVehicle?.vehicle_number ?? "Not selected";
 
+  const tripDateLabel = deployPickupDate
+    ? formatIsoDateForDisplay(deployPickupDate)
+    : "—";
+  const tripWeightLabel = deployWeightTons.trim()
+    ? `${deployWeightTons.trim()} t`
+    : "—";
+
   const stepSubtitle = deployOtpCode
     ? "Share this code with the driver to claim the trip"
     : useAdHocDriver
       ? "Switch to Asset on the step above, or use Load Center for aggregate deploy"
       : step === "driver"
         ? "Step 1 · Choose from your fleet"
-        : "Step 2 · Choose fleet vehicle";
+        : step === "vehicle"
+          ? "Step 2 · Choose fleet vehicle"
+          : "Step 3 · Commodity, vehicle type, and tons";
+
+  const footerSummary =
+    step === "commodity" || staffHandshakeAssignLater
+      ? `${tripDateLabel} · ${tripWeightLabel}`
+      : step === "vehicle"
+        ? `${driverLabel} · ${vehicleLabel}`
+        : driverLabel;
 
   const handlePrimary = useCallback(() => {
     if (deployOtpCode) {
@@ -134,40 +176,64 @@ export function IndentAllocationFlowScreen({
       return;
     }
     if (staffHandshakeAssignLater) {
-      void deployRoster();
+      if (tripDetailsReady) void deployRoster();
       return;
     }
     if (step === "driver") {
       if (assignDriverId) setStep("vehicle");
       return;
     }
-    if (rosterReady) void deployRoster();
+    if (step === "vehicle") {
+      if (typeof assignVehicleId === "string") setStep("commodity");
+      return;
+    }
+    if (tripDetailsReady) void deployRoster();
   }, [
     assignDriverId,
+    assignVehicleId,
     deployOtpCode,
     deployRoster,
     handleClose,
-    rosterReady,
     staffHandshakeAssignLater,
     step,
+    tripDetailsReady,
     useAdHocDriver,
   ]);
 
   const primaryDisabled = useAdHocDriver
     ? true
     : staffHandshakeAssignLater
-      ? isDeploying
+      ? !tripDetailsReady || isDeploying
       : step === "driver"
         ? !assignDriverId
-        : !rosterReady || isDeploying;
+        : step === "vehicle"
+          ? typeof assignVehicleId !== "string"
+          : !tripDetailsReady || isDeploying;
 
   const primaryLabel = deployOtpCode
     ? "Done"
-    : staffHandshakeAssignLater
+    : step === "commodity" || staffHandshakeAssignLater
       ? "Authorize & deploy voyage"
-      : step === "driver"
-        ? "Continue"
-        : "Authorize & deploy voyage";
+      : "Continue";
+
+  const showBack =
+    !deployOtpCode &&
+    (step === "vehicle" || step === "commodity") &&
+    !staffHandshakeAssignLater;
+
+  const handleBack = useCallback(() => {
+    if (step === "commodity") setStep("vehicle");
+    else if (step === "vehicle") setStep("driver");
+  }, [step]);
+
+  const pickupDateError =
+    deployPickupDate && !isValidIsoDateString(deployPickupDate)
+      ? "Use a valid date (YYYY-MM-DD)."
+      : null;
+  const weightError =
+    deployWeightTons.trim() && !tripDetailsReady && step === "commodity"
+      ? "Enter weight in tons (greater than 0)."
+      : null;
 
   if (!currentLoad) {
     return <CenteredLoadingView message="Loading allocation…" />;
@@ -207,20 +273,18 @@ export function IndentAllocationFlowScreen({
       fullScreen
       title={deployOtpCode ? "Trip claim code" : "Driver & vehicle"}
       subtitle={stepSubtitle}
-      onClose={() =>
-        deployOtpCode ? backFromOtp() : handleClose()
-      }
-      onBack={!deployOtpCode && step === "vehicle" ? () => setStep("driver") : undefined}
-      showBack={!deployOtpCode && step === "vehicle"}
+      onClose={() => (deployOtpCode ? backFromOtp() : handleClose())}
+      onBack={showBack ? handleBack : undefined}
+      showBack={showBack}
       progress={
         !deployOtpCode ? (
-          <AddTripWizardProgress steps={FLOW_STEPS} currentStepId={step} />
+          <AddTripWizardProgress steps={flowSteps} currentStepId={step} />
         ) : null
       }
       footer={
         deployOtpCode ? undefined : (
           <AssignmentFlowFooter
-            summary={`${driverLabel} · ${vehicleLabel}`}
+            summary={footerSummary}
             primaryLabel={primaryLabel}
             onPrimaryPress={handlePrimary}
             primaryDisabled={primaryDisabled}
@@ -232,7 +296,8 @@ export function IndentAllocationFlowScreen({
     >
       {!deployOtpCode ? (
         <>
-          {(step === "driver" || staffHandshakeAssignLater) ? (
+          {(step === "driver" || staffHandshakeAssignLater) &&
+          !staffHandshakeAssignLater ? (
             <SupplyAllocationModeBar
               mode="asset"
               assignLater={staffHandshakeAssignLater}
@@ -244,19 +309,70 @@ export function IndentAllocationFlowScreen({
                 if (v) {
                   set.assignDriverId(null);
                   set.assignVehicleId(undefined);
+                  setStep("commodity");
+                } else {
+                  setStep("driver");
                 }
               }}
             />
           ) : null}
 
           {staffHandshakeAssignLater ? (
-            <Text style={styles.assignLaterHint}>
-              Assign vehicle and driver on the trip screen before the trip starts.
-            </Text>
+            <>
+              <SupplyAllocationModeBar
+                mode="asset"
+                assignLater
+                onModeChange={(mode) => {
+                  if (mode === "aggregate") set.useAdHocDriver(true);
+                }}
+                onAssignLaterChange={(v) => {
+                  set.staffHandshakeAssignLater(v);
+                  if (!v) setStep("driver");
+                }}
+              />
+              <Text style={styles.assignLaterHint}>
+                Assign vehicle and driver on the trip screen before the trip starts.
+              </Text>
+              <IndentAllocationTripDetailsStep
+                pickupDate={deployPickupDate}
+                weightTons={deployWeightTons}
+                vehicleType={deployVehicleType}
+                loadType={deployLoadType}
+                onPickupDateChange={set.deployPickupDate}
+                onWeightTonsChange={set.deployWeightTons}
+                onVehicleTypeChange={set.deployVehicleType}
+                onLoadTypeChange={set.deployLoadType}
+                pickupDateError={pickupDateError}
+                weightError={weightError}
+                vehicleTypeError={!deployVehicleType.trim()}
+                loadTypeError={!deployLoadType.trim()}
+                tonsError={weightError != null}
+                indentVehicleType={currentLoad.vehicle_type}
+                indentLoadType={currentLoad.load_type}
+              />
+            </>
+          ) : step === "commodity" ? (
+            <IndentAllocationTripDetailsStep
+              pickupDate={deployPickupDate}
+              weightTons={deployWeightTons}
+              vehicleType={deployVehicleType}
+              loadType={deployLoadType}
+              onPickupDateChange={set.deployPickupDate}
+              onWeightTonsChange={set.deployWeightTons}
+              onVehicleTypeChange={set.deployVehicleType}
+              onLoadTypeChange={set.deployLoadType}
+              pickupDateError={pickupDateError}
+              weightError={weightError}
+              vehicleTypeError={!deployVehicleType.trim()}
+              loadTypeError={!deployLoadType.trim()}
+              tonsError={weightError != null}
+              indentVehicleType={currentLoad.vehicle_type}
+              indentLoadType={currentLoad.load_type}
+            />
           ) : (
             <AssetRosterPickers
               isFlow
-              assetFlowStep={step}
+              assetFlowStep={step === "vehicle" ? "vehicle" : "driver"}
               width={0}
               activeDrivers={activeDrivers}
               vehicles={vehicles}
@@ -307,5 +423,6 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 17,
     marginTop: 8,
+    marginBottom: 12,
   },
 });

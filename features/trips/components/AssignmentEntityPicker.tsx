@@ -1,7 +1,17 @@
 import Theme from "@/constants/Theme";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Plus } from "lucide-react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type ViewStyle,
+} from "react-native";
 
 export type AssignmentEntityItem = {
   id: string;
@@ -22,7 +32,11 @@ export type AssignmentEntityPickerProps = {
   onEmptyAction?: () => void;
   headerActionLabel?: string;
   onHeaderAction?: () => void;
+  /** Subtle card border when step validation failed (no outer red wrapper). */
+  errorOutline?: boolean;
 };
+
+const LIST_MAX_HEIGHT = 300;
 
 export function AssignmentEntityPicker({
   title,
@@ -36,27 +50,50 @@ export function AssignmentEntityPicker({
   onEmptyAction,
   headerActionLabel,
   onHeaderAction,
+  errorOutline = false,
 }: AssignmentEntityPickerProps) {
+  const webCursor =
+    Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
+
+  const iconName =
+    icon === "truck" ? "truck" : icon === "building" ? "building" : "user";
+
   return (
-    <View style={assignmentShellStyles.assignPickerCard}>
+    <View
+      style={[
+        assignmentShellStyles.assignPickerCard,
+        errorOutline && assignmentShellStyles.assignPickerCardError,
+      ]}
+    >
       <View style={assignmentShellStyles.assignPickerHeader}>
-        <Text style={assignmentShellStyles.assignPickerTitle}>{title}</Text>
-        <View style={styles.headerRight}>
-          {headerActionLabel && onHeaderAction ? (
-            <TouchableOpacity
-              onPress={onHeaderAction}
-              activeOpacity={0.85}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.headerActionText}>{headerActionLabel}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <View style={assignmentShellStyles.assignPickerBadge}>
-            <Text style={assignmentShellStyles.assignPickerBadgeText}>
-              {totalCount} Total
+        <View style={assignmentShellStyles.assignPickerHeaderTop}>
+          <Text style={assignmentShellStyles.assignPickerTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <View style={assignmentShellStyles.assignPickerCountBadge}>
+            <Text style={assignmentShellStyles.assignPickerCountText}>
+              {totalCount}
             </Text>
           </View>
         </View>
+        {headerActionLabel && onHeaderAction ? (
+          <Pressable
+            onPress={onHeaderAction}
+            style={({ pressed }) => [
+              assignmentShellStyles.assignPickerHeaderAction,
+              pressed && assignmentShellStyles.assignPickerHeaderActionPressed,
+              webCursor,
+            ]}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={headerActionLabel}
+          >
+            <Plus size={14} color={Theme.primary} strokeWidth={2.5} />
+            <Text style={assignmentShellStyles.assignPickerHeaderActionText}>
+              {headerActionLabel}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {items.length === 0 ? (
@@ -70,7 +107,7 @@ export function AssignmentEntityPicker({
               onPress={onEmptyAction}
               activeOpacity={0.9}
             >
-              <FontAwesome name="plus" size={12} color={Theme.textOnDark} />
+              <FontAwesome name="plus" size={12} color={Theme.textOnPrimary} />
               <Text style={assignmentShellStyles.assignEmptyActionBtnText}>
                 {emptyActionLabel}
               </Text>
@@ -78,74 +115,85 @@ export function AssignmentEntityPicker({
           ) : null}
         </View>
       ) : (
-        items.map((item) => {
-          const selected = selectedId === item.id;
-          const disabled = item.disabled === true;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                assignmentShellStyles.assignEntityRow,
-                selected && assignmentShellStyles.assignEntityRowActive,
-                disabled && assignmentShellStyles.assignEntityRowDisabled,
-              ]}
-              onPress={() => {
-                if (disabled) return;
-                onSelect(item.id);
-              }}
-              disabled={disabled}
-              activeOpacity={0.85}
-            >
-              <View style={assignmentShellStyles.assignEntityIconWrap}>
-                <FontAwesome
-                  name={
-                    icon === "truck"
-                      ? "truck"
-                      : icon === "building"
-                        ? "building"
-                        : "user"
-                  }
-                  size={16}
-                  color={selected ? Theme.primary : Theme.textMuted}
-                />
-              </View>
-              <View style={assignmentShellStyles.assignEntityTextCol}>
-                <Text style={assignmentShellStyles.assignEntityTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                {item.subtitle ? (
+        <ScrollView
+          style={styles.listScroll}
+          contentContainerStyle={assignmentShellStyles.assignEntityList}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
+        >
+          {items.map((item, index) => {
+            const selected = selectedId === item.id;
+            const disabled = item.disabled === true;
+            const isLast = index === items.length - 1;
+            return (
+              <Pressable
+                key={item.id}
+                style={({ pressed }) => [
+                  assignmentShellStyles.assignEntityRow,
+                  selected && assignmentShellStyles.assignEntityRowActive,
+                  disabled && assignmentShellStyles.assignEntityRowDisabled,
+                  pressed && !disabled && assignmentShellStyles.assignEntityRowPressed,
+                  isLast && styles.entityRowLast,
+                  webCursor,
+                ]}
+                onPress={() => {
+                  if (disabled) return;
+                  onSelect(item.id);
+                }}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityState={{ selected, disabled }}
+              >
+                {selected ? (
+                  <View style={assignmentShellStyles.assignEntityActiveBar} />
+                ) : null}
+                <View style={assignmentShellStyles.assignEntityIconWrap}>
+                  <FontAwesome
+                    name={iconName}
+                    size={15}
+                    color={selected ? Theme.primary : Theme.textMuted}
+                  />
+                </View>
+                <View style={assignmentShellStyles.assignEntityTextCol}>
                   <Text
-                    style={assignmentShellStyles.assignEntitySubtitle}
+                    style={[
+                      assignmentShellStyles.assignEntityTitle,
+                      selected && assignmentShellStyles.assignEntityTitleActive,
+                    ]}
                     numberOfLines={1}
                   >
-                    {item.subtitle}
+                    {item.title}
                   </Text>
-                ) : null}
-              </View>
-              <FontAwesome
-                name={selected ? "check-circle" : "chevron-right"}
-                size={15}
-                color={selected ? Theme.primary : Theme.textMuted}
-              />
-            </TouchableOpacity>
-          );
-        })
+                  {item.subtitle ? (
+                    <Text
+                      style={assignmentShellStyles.assignEntitySubtitle}
+                      numberOfLines={1}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+                <FontAwesome
+                  name={selected ? "check-circle" : "chevron-right"}
+                  size={15}
+                  color={selected ? Theme.primary : Theme.textMuted}
+                />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  listScroll: {
+    maxHeight: LIST_MAX_HEIGHT,
+    width: "100%",
   },
-  headerActionText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
+  entityRowLast: {
+    marginBottom: 0,
   },
 });

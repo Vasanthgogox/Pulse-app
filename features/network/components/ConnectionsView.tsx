@@ -990,8 +990,8 @@ export function ConnectionsView({
     <ConnectionProfileCard
       item={item}
       compact={hubListCompact}
-      mobileGrid={isMobileHub && hubConnectionsLayout.columns > 1}
-      nativeListRow={hubConnectionsLayout.columns === 1}
+      mobileGrid={hubConnectionsLayout.columns > 1}
+      nativeListRow={false}
       onOpenProfile={onOpenProfile}
       onPressMutuals={onPressMutuals}
       onPressMutual={onPressMutual}
@@ -1022,7 +1022,9 @@ export function ConnectionsView({
         <EmptyState />
       </View>
     ) : (
-      renderHubConnectionsBody()
+      <View style={styles.connectionsPhotoSurface}>
+        {renderHubConnectionsBody()}
+      </View>
     )
   ) : isLoading ? (
     <View style={styles.embeddedLoading}>
@@ -1255,6 +1257,14 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
+  /** White canvas for the 3-up avatar grid only (Operations pulse → Your connections). */
+  connectionsPhotoSurface: {
+    width: "100%",
+    alignSelf: "stretch",
+    backgroundColor: Theme.screenBackground,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {
     flexDirection: "row",

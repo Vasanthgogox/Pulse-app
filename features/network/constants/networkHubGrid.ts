@@ -7,17 +7,26 @@ export const NETWORK_HUB_GRID_ROW_PADDING_H = 22;
 /** Horizontal space between Grow your network and People you may know (desktop split). */
 export const NETWORK_HUB_SPLIT_COLUMN_GAP_PX = 24;
 
-/** Your connections — mobile web (<820): 1 column × 6 rows per page. */
-export const NETWORK_HUB_CONNECTION_SCROLL_COLUMNS = 1;
-export const NETWORK_HUB_CONNECTION_SCROLL_ROWS = 6;
-export const NETWORK_HUB_CONNECTION_PAGE_SIZE =
-  NETWORK_HUB_CONNECTION_SCROLL_COLUMNS * NETWORK_HUB_CONNECTION_SCROLL_ROWS;
+/** Your connections — phone / narrow web (<820): 3 tiles per row × 2 rows. */
+export const NETWORK_HUB_CONNECTION_MOBILE_COLUMNS = 3;
+export const NETWORK_HUB_CONNECTION_MOBILE_ROWS = 2;
+export const NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE =
+  NETWORK_HUB_CONNECTION_MOBILE_COLUMNS * NETWORK_HUB_CONNECTION_MOBILE_ROWS;
 
-/** Your connections — native app: 1 column × 6 rows per page. */
-export const NETWORK_HUB_CONNECTION_NATIVE_COLUMNS = 1;
-export const NETWORK_HUB_CONNECTION_NATIVE_ROWS = 6;
+/** @deprecated Use {@link NETWORK_HUB_CONNECTION_MOBILE_COLUMNS}. */
+export const NETWORK_HUB_CONNECTION_SCROLL_COLUMNS =
+  NETWORK_HUB_CONNECTION_MOBILE_COLUMNS;
+/** @deprecated Use {@link NETWORK_HUB_CONNECTION_MOBILE_ROWS}. */
+export const NETWORK_HUB_CONNECTION_SCROLL_ROWS = NETWORK_HUB_CONNECTION_MOBILE_ROWS;
+export const NETWORK_HUB_CONNECTION_PAGE_SIZE = NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE;
+
+/** @deprecated Use {@link NETWORK_HUB_CONNECTION_MOBILE_COLUMNS}. */
+export const NETWORK_HUB_CONNECTION_NATIVE_COLUMNS =
+  NETWORK_HUB_CONNECTION_MOBILE_COLUMNS;
+/** @deprecated Use {@link NETWORK_HUB_CONNECTION_MOBILE_ROWS}. */
+export const NETWORK_HUB_CONNECTION_NATIVE_ROWS = NETWORK_HUB_CONNECTION_MOBILE_ROWS;
 export const NETWORK_HUB_CONNECTION_NATIVE_PAGE_SIZE =
-  NETWORK_HUB_CONNECTION_NATIVE_COLUMNS * NETWORK_HUB_CONNECTION_NATIVE_ROWS;
+  NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE;
 
 /** Your connections — desktop (≥820): 3 columns × 2 rows per page. */
 export const NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS = 3;
@@ -36,10 +45,10 @@ export type NetworkHubLayoutOptions = {
   nativeApp?: boolean;
 };
 
-/** Your connections grid: desktop 3-up, mobile + native 1-up. */
+/** Your connections grid: 3 compact tiles per row (desktop + mobile + native). */
 export function getNetworkHubConnectionsLayout(
   windowWidth: number,
-  options?: NetworkHubLayoutOptions,
+  _options?: NetworkHubLayoutOptions,
 ): NetworkHubConnectionsLayout {
   if (windowWidth >= SPLIT_STACK_BREAKPOINT) {
     return {
@@ -48,17 +57,10 @@ export function getNetworkHubConnectionsLayout(
       pageSize: NETWORK_HUB_CONNECTION_DESKTOP_PAGE_SIZE,
     };
   }
-  if (options?.nativeApp) {
-    return {
-      columns: NETWORK_HUB_CONNECTION_NATIVE_COLUMNS,
-      rows: NETWORK_HUB_CONNECTION_NATIVE_ROWS,
-      pageSize: NETWORK_HUB_CONNECTION_NATIVE_PAGE_SIZE,
-    };
-  }
   return {
-    columns: NETWORK_HUB_CONNECTION_SCROLL_COLUMNS,
-    rows: NETWORK_HUB_CONNECTION_SCROLL_ROWS,
-    pageSize: NETWORK_HUB_CONNECTION_PAGE_SIZE,
+    columns: NETWORK_HUB_CONNECTION_MOBILE_COLUMNS,
+    rows: NETWORK_HUB_CONNECTION_MOBILE_ROWS,
+    pageSize: NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE,
   };
 }
 

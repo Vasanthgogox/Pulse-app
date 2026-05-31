@@ -16,13 +16,17 @@ import {
 import { getTripOtpForDisplay } from '@/features/trips/services/tripOtp.service';
 import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
 import { useInvalidateTrips } from '@/lib/queries/useTripsQuery';
-import { useRouter } from 'expo-router';
+import { useVisibleIndentQuery } from '@/lib/queries/useIndentsQuery';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 
 export default function AddTripPage() {
   const router = useRouter();
+  const { indentId } = useLocalSearchParams<{ indentId?: string }>();
   const { currentOrganization } = useOrganization();
+  const orgId = currentOrganization?.id ?? null;
+  const { data: sourceIndent } = useVisibleIndentQuery(orgId, indentId ?? null);
   const { user, profile } = useAuth();
   const invalidateTrips = useInvalidateTrips();
 
@@ -93,6 +97,7 @@ export default function AddTripPage() {
         supplier_name: data.supplier_name ?? undefined,
         pickup_date: data.pickup_date ?? undefined,
         load_tons: loadTons,
+        load_type: data.load_type ?? undefined,
         advance_paid: normalizedAdvancePaid,
         notes: data.notes ?? undefined,
         vehicle_display_number: data.vehicle_display_number?.trim() || undefined,
@@ -172,6 +177,7 @@ export default function AddTripPage() {
       supplier_name: data.supplier_name ?? undefined,
       pickup_date: data.pickup_date ?? undefined,
       load_tons: loadTons,
+      load_type: data.load_type ?? undefined,
       advance_paid: normalizedAdvancePaid,
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
@@ -230,7 +236,8 @@ export default function AddTripPage() {
     <View style={{ flex: 1 }}>
       <StatusBar style="light" />
       <AddTripModal
-        organizationId={currentOrganization?.id ?? null}
+        organizationId={orgId}
+        sourceIndent={sourceIndent ?? null}
         onClose={closeAndGoBack}
         onComplete={handleComplete}
       />

@@ -2,6 +2,7 @@
  * "Your connections" list row — full-width horizontal card (reference list layout).
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
@@ -21,6 +22,7 @@ import {
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { SPLIT_STACK_BREAKPOINT } from "@/features/network/constants/networkHubGrid";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
+import { partyAccentFromEntityType } from "@/lib/partyEntityAccent";
 import { Building2, Phone, Send } from "lucide-react-native";
 import { useMemo } from "react";
 import {
@@ -218,6 +220,61 @@ export function NetworkPartyHubListCard({
       )}
     </View>
   ) : null;
+
+  if (mobileGrid) {
+    const avatarPressHandler = onOpenProfile ?? onPressCard;
+    const gridAvatarSize = 64;
+    const accent = partyAccentFromEntityType(entityType);
+    return (
+      <Pressable
+        onPress={onPressCard}
+        disabled={!onPressCard}
+        style={({ pressed }) => [pressed && onPressCard && { opacity: 0.94 }]}
+        accessibilityRole="button"
+        accessibilityLabel={displayName}
+      >
+        <View
+          style={[
+            networkHubListCardChromeStyles.cardMobileGrid,
+            styles.cardGridTile,
+          ]}
+        >
+          <Pressable
+            onPress={avatarPressHandler}
+            disabled={!avatarPressHandler}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.gridTileAvatarCol,
+              pressed && avatarPressHandler && { opacity: 0.88 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={displayName}
+          >
+            <PartyEntityAvatarGlow accent={accent} size={gridAvatarSize}>
+              <PartyAvatar
+                name={displayName}
+                initialsColorSeed={partyId}
+                avatarSeed={avatarSeed}
+                avatarUrl={avatarUrl}
+                entityType={entityType}
+                size={gridAvatarSize}
+              />
+            </PartyEntityAvatarGlow>
+            {showOnline ? (
+              <View style={[styles.onlineDot, styles.gridTileOnlineDot]} />
+            ) : null}
+          </Pressable>
+          <Text
+            style={styles.partyNameMobileGrid}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {displayName}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  }
 
   if (nativeListRow) {
     const avatarPressHandler = onOpenProfile ?? onPressCard;

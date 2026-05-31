@@ -18,7 +18,7 @@ export function getAllocationSubSteps(
     // Partner picker is on the supply screen (mobile + desktop).
     steps.push("rates");
     if (!state.assignLater) {
-      steps.push("driverName", "driverPhone", "vehicle");
+      steps.push("driverPhone", "driverName", "vehicle");
     }
   }
   // Asset: driver + vehicle pickers stay on the supply screen (no extra sub-steps).

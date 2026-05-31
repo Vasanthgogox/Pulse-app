@@ -172,6 +172,10 @@ export default function TabLayout() {
   /** Warm trips first (default tab), then fiscal + network — staggered to avoid Metro OOM. */
   useEffect(() => {
     if (isDesktopWeb) return;
+    if (__DEV__) {
+      // Staggered tab preloads + Fast Refresh → stale module IDs (unknown module errors).
+      return;
+    }
     preloadTabScreen('trips');
     const t0 = setTimeout(() => preloadTabScreen('finance'), 700);
     const t1 = setTimeout(() => preloadTabScreen('network'), 1400);

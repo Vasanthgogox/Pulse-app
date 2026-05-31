@@ -8,6 +8,9 @@ export const deployModalStyles = StyleSheet.create({
     backgroundColor: "rgba(15,23,42,0.75)",
     justifyContent: "flex-end",
   },
+  backdropTap: {
+    ...StyleSheet.absoluteFillObject,
+  },
   backdropWeb: {
     position: "fixed" as "absolute",
     top: 0,
@@ -25,9 +28,22 @@ export const deployModalStyles = StyleSheet.create({
     borderTopRightRadius: 28,
     overflow: "hidden",
     alignSelf: "stretch",
+    position: "relative",
     ...(Platform.OS === "web"
       ? { width: "100%", maxWidth: 440, borderRadius: 28 }
       : {}),
+  },
+  sheetDragging: {
+    opacity: 0.96,
+  },
+  /** Invisible swipe-down target — overlays top edge; no layout shift. */
+  sheetDragCapture: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 28,
+    zIndex: 20,
   },
   pagerMeasure: {
     width: "100%",

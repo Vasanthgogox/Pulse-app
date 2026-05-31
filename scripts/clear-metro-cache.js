@@ -9,6 +9,7 @@ const os = require('os');
 
 const roots = [
   path.join(__dirname, '..', '.metro-cache'),
+  path.join(__dirname, '..', '.expo'),
   path.join(__dirname, '..', 'node_modules', '.cache', 'metro'),
   path.join(__dirname, '..', 'node_modules', '.cache'),
   path.join(os.tmpdir(), 'q-web-metro-cache'),

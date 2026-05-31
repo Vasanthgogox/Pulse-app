@@ -1,9 +1,12 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  PanResponder,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -25,6 +28,8 @@ export type AwardedIndentDeployModalProps = {
   onPageChange: (index: number) => void;
   onAssign: () => void;
   onLater: () => void;
+  /** Collapse to bottom peek — trip stays in queue (unlike Later). */
+  onMinimize: () => void;
   onViewLoad?: () => void;
 };
 
@@ -32,6 +37,9 @@ const FINANCE_SCORECARD_GRADIENT = [
   Theme.financeCardSlateFrom,
   Theme.financeCardSlateTo,
 ] as const;
+
+const MINIMIZE_DRAG_PX = 72;
+const MINIMIZE_VELOCITY = 0.65;
 
 function clampPageIndex(index: number, length: number): number {
   if (length <= 0) return 0;
@@ -45,16 +53,69 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
   onPageChange,
   onAssign,
   onLater,
+  onMinimize,
   onViewLoad,
 }: AwardedIndentDeployModalProps) {
   const insets = useSafeAreaInsets();
   const pagerRef = useRef<ScrollView>(null);
   const [pageWidth, setPageWidth] = useState(0);
   const isScrollingRef = useRef(false);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const [isDragging, setIsDragging] = useState(false);
 
   const safeIndex = clampPageIndex(pageIndex, items.length);
   const pageTotal = items.length;
   const showPager = pageTotal > 1 && pageWidth > 0;
+
+  const resetDrag = useCallback(() => {
+    Animated.spring(dragY, {
+      toValue: 0,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 120,
+    }).start();
+    setIsDragging(false);
+  }, [dragY]);
+
+  const finishMinimize = useCallback(() => {
+    Animated.timing(dragY, {
+      toValue: 420,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        dragY.setValue(0);
+        setIsDragging(false);
+        onMinimize();
+      }
+    });
+  }, [dragY, onMinimize]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dy > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2,
+        onPanResponderGrant: () => setIsDragging(true),
+        onPanResponderMove: (_, gesture) => {
+          if (gesture.dy > 0) {
+            dragY.setValue(gesture.dy);
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (
+            gesture.dy >= MINIMIZE_DRAG_PX ||
+            gesture.vy >= MINIMIZE_VELOCITY
+          ) {
+            finishMinimize();
+            return;
+          }
+          resetDrag();
+        },
+        onPanResponderTerminate: resetDrag,
+      }),
+    [dragY, finishMinimize, resetDrag],
+  );
 
   const syncScrollToIndex = useCallback(
     (index: number, animated: boolean) => {
@@ -68,6 +129,13 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
     if (!visible || !showPager) return;
     syncScrollToIndex(safeIndex, false);
   }, [visible, showPager, safeIndex, syncScrollToIndex]);
+
+  useEffect(() => {
+    if (visible) {
+      dragY.setValue(0);
+      setIsDragging(false);
+    }
+  }, [visible, dragY]);
 
   const handlePagerLayout = useCallback((width: number) => {
     if (width > 0) setPageWidth(width);
@@ -119,43 +187,62 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
     </View>
   ));
 
+  const sheetTranslate = dragY.interpolate({
+    inputRange: [0, 400],
+    outputRange: [0, 400],
+    extrapolate: "clamp",
+  });
+
   return (
     <Modal
       visible
       transparent
       animationType="slide"
-      onRequestClose={onLater}
+      onRequestClose={onMinimize}
       statusBarTranslucent
     >
       <View style={[styles.backdrop, Platform.OS === "web" ? styles.backdropWeb : null]}>
-        <View
+        <Pressable
+          style={styles.backdropTap}
+          onPress={onMinimize}
+          accessibilityRole="button"
+          accessibilityLabel="Minimize deploy card"
+        />
+        <Animated.View
           style={[
             styles.sheet,
             { paddingBottom: Math.max(insets.bottom, 12) + 4 },
+            { transform: [{ translateY: sheetTranslate }] },
+            isDragging && styles.sheetDragging,
           ]}
         >
+          <View
+            style={styles.sheetDragCapture}
+            {...panResponder.panHandlers}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+
           <View
             style={styles.pagerMeasure}
             onLayout={(event) => handlePagerLayout(event.nativeEvent.layout.width)}
           >
             {showPager ? (
-              <>
-                <ScrollView
-                  ref={pagerRef}
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  scrollEventThrottle={16}
-                  bounces={pageTotal > 1}
-                  style={styles.pagerScroll}
-                  onScroll={handleScroll}
-                  onScrollBeginDrag={handleScrollBeginDrag}
-                  onScrollEndDrag={handleMomentumScrollEnd}
-                  onMomentumScrollEnd={handleMomentumScrollEnd}
-                >
-                  {pagerContent}
-                </ScrollView>
-              </>
+              <ScrollView
+                ref={pagerRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                bounces={pageTotal > 1}
+                style={styles.pagerScroll}
+                onScroll={handleScroll}
+                onScrollBeginDrag={handleScrollBeginDrag}
+                onScrollEndDrag={handleMomentumScrollEnd}
+                onMomentumScrollEnd={handleMomentumScrollEnd}
+              >
+                {pagerContent}
+              </ScrollView>
             ) : (
               pagerContent[0] ?? null
             )}
@@ -180,6 +267,7 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
                 activeOpacity={0.82}
                 accessibilityRole="button"
                 accessibilityLabel="Later"
+                accessibilityHint="Hides this award for now and shows the next one in queue"
               >
                 <Text style={styles.laterBtnOutlineText}>Later</Text>
               </TouchableOpacity>
@@ -215,7 +303,7 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
               </TouchableOpacity>
             ) : null}
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
