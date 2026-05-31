@@ -768,24 +768,26 @@ export function AddTripFormFields({
                 isWizardRouteStep && styles.cardHeadWizard,
               ]}
             >
-              <View
-                style={[
-                  styles.stepBadge,
-                  isDenseForm && styles.stepBadgeDense,
-                  isWizardRouteStep && styles.stepBadgeWizard,
-                ]}
-              >
-                <Text style={styles.stepBadgeText}>01</Text>
+              <View style={styles.cardHeadTitleCluster}>
+                <View
+                  style={[
+                    styles.stepBadge,
+                    isDenseForm && styles.stepBadgeDense,
+                    isWizardRouteStep && styles.stepBadgeWizard,
+                  ]}
+                >
+                  <Text style={styles.stepBadgeText}>01</Text>
+                </View>
+                <Text
+                  style={[
+                    styles.cardTitle,
+                    isDenseForm && styles.cardTitleDense,
+                    isWizardRouteStep && styles.cardTitleWizard,
+                  ]}
+                >
+                  Route Details
+                </Text>
               </View>
-              <Text
-                style={[
-                  styles.cardTitle,
-                  isDenseForm && styles.cardTitleDense,
-                  isWizardRouteStep && styles.cardTitleWizard,
-                ]}
-              >
-                Route Details
-              </Text>
             </View>
 
             {isWizardRouteStep ? (
@@ -1268,24 +1270,26 @@ export function AddTripFormFields({
                   wizardSection === "commodity" && styles.cardHeadWizard,
                 ]}
               >
-                <View
-                  style={[
-                    styles.stepBadge,
-                    isDenseForm && styles.stepBadgeDense,
-                    wizardSection === "commodity" && styles.stepBadgeWizard,
-                  ]}
-                >
-                  <Text style={styles.stepBadgeText}>02</Text>
+                <View style={styles.cardHeadTitleCluster}>
+                  <View
+                    style={[
+                      styles.stepBadge,
+                      isDenseForm && styles.stepBadgeDense,
+                      wizardSection === "commodity" && styles.stepBadgeWizard,
+                    ]}
+                  >
+                    <Text style={styles.stepBadgeText}>02</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.cardTitle,
+                      isDenseForm && styles.cardTitleDense,
+                      wizardSection === "commodity" && styles.cardTitleWizard,
+                    ]}
+                  >
+                    Commodity
+                  </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.cardTitle,
-                    isDenseForm && styles.cardTitleDense,
-                    wizardSection === "commodity" && styles.cardTitleWizard,
-                  ]}
-                >
-                  Commodity
-                </Text>
               </View>
               <TripCommodityFields
                 vehicleType={state.vehicleType}
@@ -1325,24 +1329,26 @@ export function AddTripFormFields({
                 wizardSection === "client" && styles.cardHeadWizard,
               ]}
             >
-              <View
-                style={[
-                  styles.stepBadge,
-                  isDenseForm && styles.stepBadgeDense,
-                  wizardSection === "client" && styles.stepBadgeWizard,
-                ]}
-              >
-                <Text style={styles.stepBadgeText}>03</Text>
+              <View style={styles.cardHeadTitleCluster}>
+                <View
+                  style={[
+                    styles.stepBadge,
+                    isDenseForm && styles.stepBadgeDense,
+                    wizardSection === "client" && styles.stepBadgeWizard,
+                  ]}
+                >
+                  <Text style={styles.stepBadgeText}>03</Text>
+                </View>
+                <Text
+                  style={[
+                    styles.cardTitle,
+                    isDenseForm && styles.cardTitleDense,
+                    wizardSection === "client" && styles.cardTitleWizard,
+                  ]}
+                >
+                  Client & Commercials
+                </Text>
               </View>
-              <Text
-                style={[
-                  styles.cardTitle,
-                  isDenseForm && styles.cardTitleDense,
-                  wizardSection === "client" && styles.cardTitleWizard,
-                ]}
-              >
-                Client & Commercials
-              </Text>
             </View>
 
             <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
@@ -2850,6 +2856,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   cardHeadWizard: {
+    width: "100%",
     alignItems: "center",
     gap: 10,
     paddingBottom: 12,
@@ -2870,13 +2877,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   cardTitleWizard: {
-    flex: 0,
     fontSize: 11,
     lineHeight: 26,
     letterSpacing: 0.85,
     paddingTop: 0,
     ...Platform.select({
       android: { includeFontPadding: false, textAlignVertical: "center" },
+      web: { whiteSpace: "nowrap" } as object,
       default: {},
     }),
   },

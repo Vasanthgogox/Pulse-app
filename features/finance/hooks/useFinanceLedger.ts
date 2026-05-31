@@ -9,7 +9,7 @@ import {
 } from "@/features/trips/visibility/tripVisibility";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
-import { useTransactionsQuery } from "@/lib/queries";
+import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -47,6 +47,9 @@ export interface UseFinanceLedgerResult {
   setLedgerRefreshKey: (fn: (k: number) => number) => void;
   /** Refetch ledger and return a promise so callers can await and clear refresh state. */
   refetchLedger: () => Promise<unknown>;
+  fetchNextLedgerPage: () => void;
+  hasNextLedgerPage: boolean;
+  ledgerPageLoading: boolean;
   financePeriodFilter: FinancePeriodFilter;
   setFinancePeriodFilter: (v: FinancePeriodFilter) => void;
   financeCustomRangeFrom: string | null;
@@ -121,8 +124,12 @@ export function useFinanceLedger({
     data: ledgerData,
     isPending: ledgerLoading,
     refetch,
-  } = useTransactionsQuery(orgId);
-  const ledgerTransactions = ledgerData ?? null;
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useTransactionsInfiniteQuery(orgId);
+  const ledgerTransactions =
+    ledgerData?.pages.flatMap((p) => p.transactions) ?? null;
 
   const [ledgerRefreshKey, setLedgerRefreshKeyState] = useState(0);
   const setLedgerRefreshKey = useCallback(
@@ -589,5 +596,8 @@ export function useFinanceLedger({
     tripDetailsMap,
     clearFilters,
     isAnyFilterActive,
+    fetchNextLedgerPage: fetchNextPage,
+    hasNextLedgerPage: hasNextPage ?? false,
+    ledgerPageLoading: isFetchingNextPage,
   };
 }

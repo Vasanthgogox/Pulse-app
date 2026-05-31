@@ -598,6 +598,10 @@ export interface LedgerTransactionListViewProps {
   driverRows?: DriverRow[];
   /** Optional signed/public image URLs by driver id (e.g. FinanceScreen `getProfileImage`). */
   driverProfileImageUrls?: Record<string, string>;
+  /** Called when user taps "Load more" — signals the parent to fetch the next page. */
+  onLoadMore?: () => void;
+  /** When true, shows a loading spinner instead of the "Load more" button. */
+  loadingMore?: boolean;
 }
 
 export function LedgerTransactionListView({
@@ -628,6 +632,8 @@ export function LedgerTransactionListView({
   renderPartyAvatar,
   driverRows = [],
   driverProfileImageUrls,
+  onLoadMore,
+  loadingMore = false,
 }: LedgerTransactionListViewProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const { t } = useLanguage();
@@ -2404,6 +2410,18 @@ export function LedgerTransactionListView({
                     <Text style={styles.gridFooterText}>Secured</Text>
                   </View>
                 )}
+                {onLoadMore ? (
+                  <TouchableOpacity
+                    style={styles.loadMoreBtn}
+                    onPress={onLoadMore}
+                    disabled={loadingMore}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.loadMoreText}>
+                      {loadingMore ? "Loading…" : "Load more"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.scrollBottomSpacer} />
               </ScrollWrapper>
             );
@@ -2678,6 +2696,22 @@ const styles = StyleSheet.create({
     paddingBottom: Layout.sectionSpacing + 8,
   },
   scrollBottomSpacer: { height: Layout.sectionSpacing },
+  loadMoreBtn: {
+    alignSelf: "center",
+    marginVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: Theme.primary,
+    backgroundColor: "rgba(79,70,229,0.06)",
+  },
+  loadMoreText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.primary,
+    letterSpacing: 0.3,
+  },
   tableViewSection: { marginBottom: 16 },
   tableViewDateBar: {
     flexDirection: "row",

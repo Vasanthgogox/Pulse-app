@@ -36,8 +36,8 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
         verifying
           ? flow.resendVerification
           : () => {
+              router.replace(ROUTES.TABS.TRIPS);
               flow.finishBusinessSignup();
-              router.replace(ROUTES.INDEX);
             }
       }
       primaryDisabled={verifying && flow.resendingSecs > 0}

@@ -24,7 +24,8 @@ import { LedgerTransactionListView } from "./LedgerTransactionListView";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { useDisputeMapQuery, useDriverProfileImagesQuery, useTransactionsQuery } from "@/lib/queries";
+import { useDisputeMapQuery, useDriverProfileImagesQuery } from "@/lib/queries";
+import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
 import {
   buildFinancialRowDataForLedgerRow,
   formatLedgerEntryDate,
@@ -164,10 +165,15 @@ export function LedgerTab({
   );
 
   const {
-    data: cachedTransactions = [],
+    data: infiniteData,
     isPending: queryLoading,
     refetch,
-  } = useTransactionsQuery(isControlled ? null : organizationId);
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useTransactionsInfiniteQuery(isControlled ? null : organizationId);
+
+  const cachedTransactions = infiniteData?.pages.flatMap((p) => p.transactions) ?? [];
 
   useEffect(() => {
     if (isControlled || !organizationId) return;
@@ -262,6 +268,8 @@ export function LedgerTab({
   const transactionContent = (
     <LedgerTransactionListView
       transactions={transactionListRows}
+      onLoadMore={!isControlled && hasNextPage ? fetchNextPage : undefined}
+      loadingMore={!isControlled && isFetchingNextPage}
       onRowPress={(id) => {
         setExpandedLedgerRowId((prev) => (prev === id ? null : id));
       }}

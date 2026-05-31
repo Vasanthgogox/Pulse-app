@@ -431,10 +431,21 @@ export default function TripsScreen() {
   };
 
   const getStageLabelForTrip = useCallback(
-    (t: TripRow) =>
-      t.driver_id == null
-        ? tr("unassigned").toUpperCase()
-        : (t.status || "ACTIVE").toUpperCase(),
+    (t: TripRow) => {
+      if (t.driver_id == null) return tr("unassigned").toUpperCase();
+      const s = (t.status ?? "").trim().toLowerCase();
+      if (s === "in_progress")
+        return t.started_at ? "IN TRANSIT" : "LOADING";
+      if (s === "in_transit" || s === "transit" || s === "dispatched")
+        return "IN TRANSIT";
+      if (s === "picked_up" || s === "pickup") return "LOADING";
+      if (s === "at_drop" || s === "unloading" || s === "arrived" || s === "at_destination")
+        return "UNLOADING";
+      if (s === "assigned") return "ASSIGNED";
+      if (s === "completed" || s === "delivered" || s === "done") return "COMPLETED";
+      if (s === "cancelled") return "CANCELLED";
+      return s.replace(/_/g, " ").toUpperCase() || "ACTIVE";
+    },
     [tr],
   );
 

@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseField } from '../SignUpPulseField';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
-import { SignUpPulsePrimaryButton } from '../SignUpPulsePrimaryButton';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function AccountStep({ flow }: { flow: SignUpFlow }) {
@@ -23,6 +22,8 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       subtitle="Enter your email and password to finish."
       primaryLabel="Create account"
       onPrimary={flow.createAccount}
+      primaryDisabled={!canSubmit}
+      primaryLoading={flow.loading}
       inlinePrimary
     >
       <SignUpPulseField
@@ -103,14 +104,6 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         }
       />
 
-      <SignUpPulsePrimaryButton
-        label="Create account"
-        onPress={flow.createAccount}
-        disabled={!canSubmit}
-        loading={flow.loading}
-        style={styles.createBtn}
-      />
-
       <Pressable
         onPress={flow.continueWithGoogle}
         disabled={flow.loading || flow.googleLoading}
@@ -127,10 +120,6 @@ const styles = StyleSheet.create({
   eyeBtn: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-  },
-  createBtn: {
-    marginTop: 8,
-    marginBottom: 12,
   },
   googleBtn: {
     flexDirection: 'row',

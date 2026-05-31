@@ -109,7 +109,9 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
 
   return (
     <View style={Platform.OS === 'web' ? [styles.webFill, WEB_APP_VIEWPORT_STYLE as object] : undefined}>
-      {device}
+      <View style={Platform.OS === 'web' ? styles.webCenterWrap : styles.nativeFill}>
+        {device}
+      </View>
     </View>
   );
 });
@@ -132,6 +134,16 @@ function createStyles(theme: SignUpShellTheme) {
     webFill: {
       flex: 1,
       width: '100%',
+      alignItems: 'center',
+      backgroundColor: theme.canvas,
+    },
+    webCenterWrap: {
+      flex: 1,
+      width: '100%',
+      maxWidth: 480,
+    },
+    nativeFill: {
+      flex: 1,
     },
     deviceFramed: {
       flex: 0,
