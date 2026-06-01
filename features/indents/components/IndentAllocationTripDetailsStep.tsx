@@ -60,9 +60,12 @@ export const IndentAllocationTripDetailsStep = memo(
     indentLoadType,
   }: IndentAllocationTripDetailsStepProps) {
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const { width } = useWindowDimensions();
+    const isWide = Platform.OS === "web" && width >= 720;
+    const preferWebSelect = Platform.OS === "web";
 
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, isWide && styles.rootWebWide]}>
         <View style={wizard.fieldBlock}>
           <Text style={wizard.fieldLabel}>TRIP START DATE</Text>
           <View style={styles.quickDateRow}>

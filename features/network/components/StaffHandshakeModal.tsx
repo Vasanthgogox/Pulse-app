@@ -17,10 +17,13 @@ import { formatMobileNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
+import { IndianVehicleRegistrationInput } from "@/components/indianVehicle/IndianVehicleRegistrationInput";
+import { AssignmentEntityAvatarGrid } from "@/features/trips/components/AssignmentEntityAvatarGrid";
 import { AssignmentEntityPicker } from "@/features/trips/components/AssignmentEntityPicker";
+import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
-import { useRef } from "react";
-import { ChevronRight, Truck, User } from "lucide-react-native";
+import { useMemo, useRef } from "react";
+import { useFleetAssignmentAvailability } from "@/features/trips/hooks/useFleetAssignmentAvailability";
 import {
   ActivityIndicator,
   Modal,
@@ -47,6 +50,7 @@ type AssetRosterPickersProps = {
   isFlow: boolean;
   assetFlowStep: AssetFlowStep;
   width: number;
+  orgId: string | null;
   activeDrivers: DriverRow[];
   vehicles: VehicleRow[];
   assignDriverId: string | null;
@@ -60,6 +64,7 @@ export function AssetRosterPickers({
   isFlow,
   assetFlowStep,
   width,
+  orgId,
   activeDrivers,
   vehicles,
   assignDriverId,
@@ -81,96 +86,178 @@ export function AssetRosterPickers({
     selectedDriver?.name ?? selectedDriver?.phone ?? "Not selected";
   const vehicleDisplay = selectedVehicle?.vehicle_number ?? "Not selected";
 
+  const fleetAvailability = useFleetAssignmentAvailability(orgId, {
+    selectedDriverId: assignDriverId,
+    selectedVehicleId: assignVehicleId,
+    onClearDriver: () => set.assignDriverId(null),
+    onClearVehicle: () => set.assignVehicleId(undefined),
+  });
+
+  const { driverIdsOnActiveTrip, vehicleIdsOnActiveTrip, isDriverBusy, isVehicleBusy } =
+    fleetAvailability;
+
+  const driverPickerItems = useMemo(
+    () =>
+      activeDrivers.map((d) => {
+        const id = String(d.id);
+        const busy = isDriverBusy(id);
+        return {
+          id,
+          title: d.name ?? d.phone ?? "—",
+          avatarUrl: d.avatar_url,
+          avatarSeed: d.avatar_seed,
+          entityType: "driver" as const,
+          disabled: busy,
+          statusLabel: busy ? "On trip" : undefined,
+          listSubtitle: busy
+            ? "On trip"
+            : d.phone
+              ? `Phone: ${d.phone}`
+              : "Available",
+        };
+      }),
+    [activeDrivers, driverIdsOnActiveTrip],
+  );
+
+  const vehiclePickerItems = useMemo(
+    () =>
+      vehicles.map((v) => {
+        const id = String(v.id);
+        const busy = isVehicleBusy(id);
+        const typeLine = v.vehicle_type
+          ? `${v.vehicle_type}${v.vehicle_body_type ? ` · ${v.vehicle_body_type}` : ""}`
+          : "Fleet vehicle";
+        return {
+          id,
+          title: v.vehicle_number ?? "—",
+          entityType: "driver" as const,
+          disabled: busy,
+          statusLabel: busy ? "On trip" : undefined,
+          listSubtitle: busy ? "On trip" : typeLine,
+        };
+      }),
+    [vehicles, vehicleIdsOnActiveTrip],
+  );
+
+  const hasBusyDrivers = driverIdsOnActiveTrip.length > 0;
+  const hasBusyVehicles = vehicleIdsOnActiveTrip.length > 0;
+
+  const driverGridFooterHint =
+    showDriver && isFlow
+      ? hasBusyDrivers
+        ? "Drivers on another trip cannot be selected. Pick an available driver or use Assign later."
+        : "Choose an available driver, then continue."
+      : undefined;
+
+  const vehicleGridFooterHint =
+    showVehicle && isFlow
+      ? hasBusyVehicles
+        ? "Vehicles on another trip cannot be selected. Pick an available vehicle or use Assign later."
+        : "Choose an available fleet vehicle, then continue."
+      : undefined;
+
   return (
     <>
-      {isFlow && showDriver ? (
-        <Pressable
-          style={[
-            assignmentShellStyles.choiceCard,
-            assetFlowStep === "driver" && styles.choiceActive,
-          ]}
-          onPress={() => {}}
-        >
-          <View style={assignmentShellStyles.choiceIconWrap}>
-            <User size={18} color={Theme.primary} strokeWidth={2} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={assignmentShellStyles.choiceTitle}>Driver</Text>
-            <Text style={assignmentShellStyles.choiceSub} numberOfLines={1}>
-              {driverDisplay}
-            </Text>
-          </View>
-          <ChevronRight
-            size={18}
-            color={Theme.textMuted}
-            style={assignmentShellStyles.choiceChevron}
-          />
-        </Pressable>
+      {showDriver && !isFlow && hasBusyDrivers ? (
+        <Text style={styles.fleetBusyBanner}>
+          Some drivers are on active trips and cannot be selected.
+        </Text>
       ) : null}
 
       {showDriver ? (
-        <AssignmentEntityPicker
-          title="Select Driver"
-          totalCount={activeDrivers.length}
-          icon="user"
-          selectedId={assignDriverId}
-          onSelect={(id) => set.assignDriverId(id)}
-          items={activeDrivers.map((d) => ({
-            id: String(d.id),
-            title: d.name ?? d.phone ?? "—",
-            subtitle: d.phone ? `Phone: ${d.phone}` : "Available",
-          }))}
-          emptyMessage="No asset drivers were found in your organization. Add a salaried driver to continue with Asset-based assignment, or use the Aggregate flow from the previous step."
-          emptyActionLabel="Add Driver"
-          onEmptyAction={onNavigateAddDriver}
-        />
+        isFlow ? (
+          <AssignmentEntityAvatarGrid
+            title="Select Driver"
+            totalCount={activeDrivers.length}
+            selectedId={assignDriverId}
+            onSelect={(id) => {
+              if (isDriverBusy(id)) return;
+              set.assignDriverId(id);
+            }}
+            items={driverPickerItems}
+            emptyMessage="No asset drivers were found in your organization. Add a salaried driver to continue with Asset-based assignment, or use the Aggregate flow from the previous step."
+            emptyActionLabel="Add Driver"
+            onEmptyAction={onNavigateAddDriver}
+            headerActionLabel="Add Driver"
+            onHeaderAction={onNavigateAddDriver}
+            footerHint={driverGridFooterHint}
+          />
+        ) : (
+          <AssignmentEntityPicker
+            title="Select Driver"
+            totalCount={activeDrivers.length}
+            icon="user"
+            selectedId={assignDriverId}
+            onSelect={(id) => {
+              if (isDriverBusy(id)) return;
+              set.assignDriverId(id);
+            }}
+            items={driverPickerItems.map((d) => ({
+              id: d.id,
+              title: d.title,
+              subtitle: d.listSubtitle,
+              disabled: d.disabled,
+            }))}
+            emptyMessage="No asset drivers were found in your organization. Add a salaried driver to continue with Asset-based assignment, or use the Aggregate flow from the previous step."
+            emptyActionLabel="Add Driver"
+            onEmptyAction={onNavigateAddDriver}
+            headerActionLabel="Add Driver"
+            onHeaderAction={onNavigateAddDriver}
+          />
+        )
       ) : null}
 
-      {isFlow && showVehicle ? (
-        <Pressable
-          style={[
-            assignmentShellStyles.choiceCard,
-            assetFlowStep === "vehicle" && styles.choiceActive,
-          ]}
-          onPress={() => {}}
-        >
-          <View style={[assignmentShellStyles.choiceIconWrap, styles.vehicleIcon]}>
-            <Truck size={18} color="#0f172a" strokeWidth={2} />
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={assignmentShellStyles.choiceTitle}>Vehicle</Text>
-            <Text style={assignmentShellStyles.choiceSub} numberOfLines={1}>
-              {vehicleDisplay}
-            </Text>
-          </View>
-          <ChevronRight
-            size={18}
-            color={Theme.textMuted}
-            style={assignmentShellStyles.choiceChevron}
-          />
-        </Pressable>
+      {showVehicle && !isFlow && hasBusyVehicles ? (
+        <Text style={styles.fleetBusyBanner}>
+          Some vehicles are on active trips and cannot be selected.
+        </Text>
       ) : null}
 
       {showVehicle ? (
-        <AssignmentEntityPicker
-          title="Select Vehicle"
-          totalCount={vehicles.length}
-          icon="truck"
-          selectedId={typeof assignVehicleId === "string" ? assignVehicleId : null}
-          onSelect={(id) => set.assignVehicleId(id)}
-          items={vehicles.map((v) => ({
-            id: String(v.id),
-            title: v.vehicle_number ?? "—",
-            subtitle: v.vehicle_type
-              ? `${v.vehicle_type}${
-                  v.vehicle_body_type ? ` · ${v.vehicle_body_type}` : ""
-                }`
-              : "Fleet vehicle",
-          }))}
-          emptyMessage="No vehicles were found in your fleet. Add an own vehicle to continue with Asset-based assignment."
-          emptyActionLabel="Add Vehicle"
-          onEmptyAction={onNavigateAddVehicle}
-        />
+        isFlow ? (
+          <AssignmentEntityAvatarGrid
+            title="Select Vehicle"
+            totalCount={vehicles.length}
+            selectedId={
+              typeof assignVehicleId === "string" ? assignVehicleId : null
+            }
+            onSelect={(id) => {
+              if (isVehicleBusy(id)) return;
+              set.assignVehicleId(id);
+            }}
+            items={vehiclePickerItems}
+            emptyMessage="No vehicles were found in your fleet. Add an own vehicle to continue with Asset-based assignment."
+            emptyActionLabel="Add Vehicle"
+            onEmptyAction={onNavigateAddVehicle}
+            headerActionLabel="Add Vehicle"
+            onHeaderAction={onNavigateAddVehicle}
+            footerHint={vehicleGridFooterHint}
+          />
+        ) : (
+          <AssignmentEntityPicker
+            title="Select Vehicle"
+            totalCount={vehicles.length}
+            icon="truck"
+            selectedId={
+              typeof assignVehicleId === "string" ? assignVehicleId : null
+            }
+            onSelect={(id) => {
+              if (isVehicleBusy(id)) return;
+              set.assignVehicleId(id);
+            }}
+            items={vehiclePickerItems.map((v) => ({
+              id: v.id,
+              title: v.title,
+              subtitle: v.listSubtitle,
+              disabled: v.disabled,
+            }))}
+            emptyMessage="No vehicles were found in your fleet. Add an own vehicle to continue with Asset-based assignment."
+            emptyActionLabel="Add Vehicle"
+            onEmptyAction={onNavigateAddVehicle}
+            headerActionLabel="Add Vehicle"
+            onHeaderAction={onNavigateAddVehicle}
+          />
+        )
       ) : null}
 
       {!isFlow ? (
@@ -192,13 +279,7 @@ export function AssetRosterPickers({
             </View>
           </View>
         </>
-      ) : (
-        <Text style={assignmentShellStyles.supplyFooterHint}>
-          {assetFlowStep === "driver"
-            ? "Choose a driver from your org, then continue."
-            : "Choose a fleet vehicle, then deploy."}
-        </Text>
-      )}
+      ) : null}
     </>
   );
 }
@@ -479,6 +560,7 @@ export function StaffHandshakeModal({
                           isFlow={false}
                           assetFlowStep="driver"
                           width={width}
+                          orgId={orgId}
                           activeDrivers={activeDrivers}
                           vehicles={vehicles}
                           assignDriverId={assignDriverId}
@@ -535,44 +617,23 @@ export function StaffHandshakeModal({
                               canWideAlign && styles.aggregatePaneWide,
                             ]}
                           >
-                            <AssignmentEntityPicker
+                            <AssignmentEntityAvatarGrid
                               title="Select Transport Partner"
                               totalCount={inlinePartners.length}
-                              icon="building"
                               selectedId={subcontractSupplierId}
                               onSelect={(id) =>
                                 set.subcontractSupplierId(
                                   subcontractSupplierId === id ? null : id,
                                 )
                               }
-                              items={inlinePartners.map((p) => {
-                                const partnerName =
-                                  p.company_name ||
-                                  p.name ||
-                                  p.contact_person ||
-                                  "—";
-                                const partnerSub = [
-                                  p.supplier_type,
-                                  p.phone,
-                                  p.email,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ");
-                                return {
-                                  id: p.id,
-                                  title: partnerName,
-                                  subtitle: partnerSub || undefined,
-                                };
-                              })}
+                              items={suppliersToAvatarGridItems(inlinePartners)}
                               emptyMessage="No partners yet. Add a transport partner to continue."
                               emptyActionLabel="Add partner"
                               onEmptyAction={openAddPartner}
                               headerActionLabel="Add partner"
                               onHeaderAction={openAddPartner}
+                              footerHint="Select a transport partner from your network to continue."
                             />
-                            <Text style={assignmentShellStyles.supplyFooterHint}>
-                              Select a transport partner from your network to continue.
-                            </Text>
                           </View>
                         );
 
@@ -715,18 +776,13 @@ export function StaffHandshakeModal({
                                     >
                                       Vehicle Number *
                                     </Text>
-                                    <TextInput
-                                      style={[
-                                        styles.assignVehicleInput,
-                                        assignmentShellStyles.inputWell,
-                                      ]}
-                                      placeholder="e.g. TN 67 GH 7652"
-                                      placeholderTextColor={Theme.textMuted}
+                                    <IndianVehicleRegistrationInput
+                                      variant="compact"
+                                      showLabel={false}
                                       value={assignVehicleRegistration}
                                       onChangeText={set.assignVehicleRegistration}
-                                      ref={aggregateVehicleInputRef}
-                                      editable
-                                      returnKeyType="done"
+                                      inputRef={aggregateVehicleInputRef}
+                                      testID="handshake-vehicle-input"
                                     />
                                   </View>
                                 </View>
@@ -1318,6 +1374,13 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     backgroundColor: Theme.borderLight,
     marginHorizontal: 12,
+  },
+  fleetBusyBanner: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.warning,
+    lineHeight: 17,
+    marginBottom: 8,
   },
   assignSummaryLabel: {
     fontSize: 10,

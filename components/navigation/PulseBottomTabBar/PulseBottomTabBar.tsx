@@ -30,6 +30,8 @@ export type PulseBottomTabBarProps = {
   activeLoadCount: number;
   onTabChange: (tab: DemoTabId) => void;
   onOpenChat: () => void;
+  /** Finger-down: prefetch chat chunks + bootstrap before navigation. */
+  onOpenChatWarm?: () => void;
   onCollapseNetworkDock: () => void;
   onWarmTab?: (tab: DemoTabId) => void;
 };
@@ -44,6 +46,7 @@ function PulseBottomTabBarInner({
   activeLoadCount,
   onTabChange,
   onOpenChat,
+  onOpenChatWarm,
   onCollapseNetworkDock,
   onWarmTab,
 }: PulseBottomTabBarProps) {
@@ -150,6 +153,7 @@ function PulseBottomTabBarInner({
           active={isChatRoute}
           badgeCount={messageUnreadCount}
           compact={isCompactMobile}
+          onPressIn={onOpenChatWarm}
           onPress={() => {
             onCollapseNetworkDock();
             onOpenChat();
@@ -177,6 +181,7 @@ function propsEqual(prev: PulseBottomTabBarProps, next: PulseBottomTabBarProps):
     prev.activeLoadCount === next.activeLoadCount &&
     prev.onTabChange === next.onTabChange &&
     prev.onOpenChat === next.onOpenChat &&
+    prev.onOpenChatWarm === next.onOpenChatWarm &&
     prev.onCollapseNetworkDock === next.onCollapseNetworkDock &&
     prev.onWarmTab === next.onWarmTab
   );

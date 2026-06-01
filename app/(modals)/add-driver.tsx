@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThemedAlertModal } from '@/components/ThemedAlertModal';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -16,9 +16,12 @@ type CloseModalRouter = Parameters<typeof closeModal>[0];
 
 export default function AddDriverScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
   const queryClient = useQueryClient();
   const partyPortal = usePartyPortalRouteHandlers();
   const { currentOrganization } = useOrganization();
+  const returnToParam = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const returnTo = returnToParam?.startsWith('/') ? returnToParam : undefined;
   const [themedInfo, setThemedInfo] = useState<{
     title: string;
     message: string;
@@ -78,7 +81,7 @@ export default function AddDriverScreen() {
       <PartyRegistrationPortal
         visible
         initialKind="driver"
-        onClose={() => closeModal(router as CloseModalRouter)}
+        onClose={() => closeModal(router as CloseModalRouter, returnTo)}
         organizationId={partyPortal.organizationId}
         noOrganizationMessage={
           currentOrganization ? null : partyPortal.NO_ORG_MESSAGE

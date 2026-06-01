@@ -1220,7 +1220,11 @@ function EmptyState() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Theme.networkPageBackground },
-  containerEmbedded: { flex: 0, flexGrow: 0 },
+  containerEmbedded: {
+    flex: 0,
+    flexGrow: 0,
+    backgroundColor: "transparent",
+  },
   embeddedLoading: {
     minHeight: 120,
     alignItems: "center",
@@ -1257,12 +1261,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
-  /** White canvas for the 3-up avatar grid only (Operations pulse → Your connections). */
+  /** Avatar grid sits on the white Operations pulse panel (parent sectionBodyConnections). */
   connectionsPhotoSurface: {
     width: "100%",
     alignSelf: "stretch",
-    backgroundColor: Theme.screenBackground,
-    paddingTop: 10,
+    backgroundColor: "transparent",
+    paddingTop: 4,
     paddingBottom: 6,
   },
   embeddedGridRoot: { paddingBottom: 8 },

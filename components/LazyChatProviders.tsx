@@ -23,7 +23,12 @@
  * No module-level cache: HMR can hot-swap either provider module without us
  * holding a stale reference.
  */
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { CenteredLoadingView } from '@/components/CenteredLoadingView';
+import { useLayoutEffect, useState, type ComponentType, type ReactNode } from 'react';
+import {
+  preloadChatProviderModules,
+  preloadChatScreenModule,
+} from '@/lib/preloadChatWarmup';
 import { scheduleIdleWork } from '@/lib/scheduleIdleWork';
 
 type TripChatProviderShape = ComponentType<{ children: ReactNode; isActive?: boolean }>;
@@ -41,20 +46,26 @@ export interface LazyChatProvidersProps {
    * idle even after the provider mounts (e.g. dispatcher off chat routes).
    */
   isActive: boolean;
+  /**
+   * When true, children are not rendered until providers are loaded (chat modal).
+   * Prevents `useTripChat` errors and lets bootstrap start before ChatScreen mounts.
+   */
+  requireProviders?: boolean;
 }
 
-export function LazyChatProviders({ children, isActive }: LazyChatProvidersProps) {
+export function LazyChatProviders({
+  children,
+  isActive,
+  requireProviders = false,
+}: LazyChatProvidersProps) {
   const [loaded, setLoaded] = useState<Loaded>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loaded) return;
     let cancelled = false;
     const load = () => {
       if (cancelled) return;
-      void Promise.all([
-        import('@/features/chat/contexts/TripChatContext'),
-        import('@/features/chat/contexts/IntegratedChatContext'),
-      ]).then(([trip, integrated]) => {
+      void preloadChatProviderModules().then(([trip, integrated]) => {
         if (cancelled) return;
         setLoaded({
           Trip: trip.TripChatProvider as unknown as TripChatProviderShape,
@@ -62,17 +73,24 @@ export function LazyChatProviders({ children, isActive }: LazyChatProvidersProps
         });
       });
     };
-    // Eager load if user is on a chat route already — avoids a race where
-    // a chat screen renders before `useTripChat` is provided. Idle-load on
-    // non-chat routes keeps the initial paint cheap.
-    if (isActive) load();
-    else scheduleIdleWork(load);
+    // Eager load on chat-adjacent routes or when the chat modal is opening.
+    if (isActive || requireProviders) {
+      void preloadChatScreenModule();
+      load();
+    } else {
+      scheduleIdleWork(load);
+    }
     return () => {
       cancelled = true;
     };
-  }, [isActive, loaded]);
+  }, [isActive, requireProviders, loaded]);
 
-  if (!loaded) return <>{children}</>;
+  if (!loaded) {
+    if (requireProviders) {
+      return <CenteredLoadingView message="Loading chat…" />;
+    }
+    return <>{children}</>;
+  }
   const { Trip, Integrated } = loaded;
   return (
     <Trip isActive={isActive}>

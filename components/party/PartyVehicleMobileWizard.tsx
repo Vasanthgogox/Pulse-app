@@ -1,17 +1,11 @@
 /**
  * Full-screen step-by-step vehicle wizard (mobile / narrow).
  */
-import { memo, useCallback, useRef, type ReactNode } from "react";
-import {
-  Pressable,
-  Text,
-  TextInput,
-  View,
-  type TextInput as TextInputType,
-} from "react-native";
+import { memo, useCallback, type ReactNode } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
 
 import Theme from "@/constants/Theme";
-import { formatIndianVehicleNumberInput } from "@/lib/format";
+import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
 import { VEHICLE_CATEGORY_LABELS } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import { PartyMobileWizardShell } from "./PartyMobileWizardShell";
 import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
@@ -99,7 +93,7 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
   onAdvance,
   advanceLabel = "Continue",
 }: PartyVehicleMobileWizardProps) {
-  const regRef = useRef<TextInputType>(null);
+  const isRegistrationStep = wizardStep === "registration";
 
   const handleBack = useCallback(() => {
     const idx = stepIndex(wizardStep);
@@ -144,22 +138,12 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
     switch (wizardStep) {
       case "registration":
         return (
-          <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>REGISTRATION</Text>
-            <TextInput
-              ref={regRef}
-              style={styles.input}
-              placeholder="TN 01 CM 2026"
-              placeholderTextColor={Theme.textMuted}
-              autoCapitalize="characters"
-              value={vehicleReg}
-              onChangeText={(t) =>
-                onVehicleRegChange(formatIndianVehicleNumberInput(t))
-              }
-              autoFocus
-              testID="party-vehicle-reg-input"
-            />
-          </View>
+          <IndianVehicleRegistrationKeypadFlow
+            value={vehicleReg}
+            onChangeText={onVehicleRegChange}
+            error={Boolean(formError)}
+            testID="party-vehicle-reg-input"
+          />
         );
       case "category":
         return (
@@ -322,6 +306,7 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
       onClose={onClose}
       stepTitle={stepTitle}
       stepHint={stepHint}
+      bodyLayout={isRegistrationStep ? "keypad" : "default"}
       formError={formError}
       noOrganizationBanner={noOrganizationBanner}
       canAdvance={canAdvance}

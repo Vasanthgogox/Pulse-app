@@ -30,11 +30,13 @@ import {
   Truck,
   X,
 } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -61,6 +63,9 @@ const PURPLE = Theme.pulseIndigo;
 const PURPLE_DARK = Theme.actionAccentBorder;
 const LAVENDER = 'rgba(199,210,254,0.95)';
 
+const DISMISS_DRAG_PX = 72;
+const DISMISS_VELOCITY = 0.65;
+
 function offerIcon(kind: ConnectionOfferTile['icon'], size = 16) {
   if (kind === 'client') {
     return <Building2 size={size} color={PURPLE} strokeWidth={2.2} />;
@@ -83,6 +88,10 @@ export function BusinessConnectionRequestModal({
   onNext,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const dragY = useRef(new Animated.Value(0)).current;
+  const dismissingRef = useRef(false);
+  const [shellVisible, setShellVisible] = useState(visible);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const [senderAvatarLoadFailed, setSenderAvatarLoadFailed] = useState(false);
@@ -91,6 +100,82 @@ export function BusinessConnectionRequestModal({
     setLogoLoadFailed(false);
     setSenderAvatarLoadFailed(false);
   }, [invite.id]);
+
+  useEffect(() => {
+    if (visible) {
+      dismissingRef.current = false;
+      setShellVisible(true);
+      dragY.setValue(0);
+      setIsDragging(false);
+      return;
+    }
+    if (!dismissingRef.current) {
+      setShellVisible(false);
+      dragY.setValue(0);
+      setIsDragging(false);
+    }
+  }, [visible, dragY, invite.id]);
+
+  const resetDrag = useCallback(() => {
+    Animated.spring(dragY, {
+      toValue: 0,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 120,
+    }).start();
+    setIsDragging(false);
+  }, [dragY]);
+
+  const requestDismiss = useCallback(() => {
+    if (busy || dismissingRef.current) return;
+    dismissingRef.current = true;
+    Animated.timing(dragY, {
+      toValue: 480,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      dismissingRef.current = false;
+      if (!finished) return;
+      dragY.setValue(0);
+      setIsDragging(false);
+      setShellVisible(false);
+      onLater();
+    });
+  }, [busy, dragY, onLater]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          !busy &&
+          gesture.dy > 6 &&
+          Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.2,
+        onPanResponderGrant: () => setIsDragging(true),
+        onPanResponderMove: (_, gesture) => {
+          if (gesture.dy > 0) {
+            dragY.setValue(gesture.dy);
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (
+            gesture.dy >= DISMISS_DRAG_PX ||
+            gesture.vy >= DISMISS_VELOCITY
+          ) {
+            requestDismiss();
+            return;
+          }
+          resetDrag();
+        },
+        onPanResponderTerminate: resetDrag,
+      }),
+    [busy, dragY, requestDismiss, resetDrag],
+  );
+
+  const sheetTranslate = dragY.interpolate({
+    inputRange: [0, 480],
+    outputRange: [0, 480],
+    extrapolate: 'clamp',
+  });
 
   const orgLogoUri = useMemo(
     () =>
@@ -149,22 +234,40 @@ export function BusinessConnectionRequestModal({
   );
   const reviewsLabel = formatConnectionRatingCount(invite.ratingCount);
 
+  if (!shellVisible && !visible) return null;
+
   return (
     <Modal
-      visible={visible}
+      visible={shellVisible}
       transparent
-      animationType="slide"
-      onRequestClose={onLater}
+      animationType="none"
+      onRequestClose={requestDismiss}
       statusBarTranslucent
     >
       <View style={[styles.backdrop, Platform.OS === 'web' ? styles.backdropWeb : null]}>
-        <View
-          key={invite.id}
+        <Pressable
+          style={styles.backdropTouch}
+          onPress={requestDismiss}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss connection request"
+        />
+        <Animated.View
           style={[
             styles.sheet,
-            { paddingBottom: Math.max(insets.bottom, 16) + 4 },
+            { transform: [{ translateY: sheetTranslate }] },
+            isDragging && styles.sheetDragging,
           ]}
         >
+          <View
+            style={styles.sheetDragCapture}
+            {...panResponder.panHandlers}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <View style={styles.dragHandle} />
+          </View>
+
           <LinearGradient
             colors={[PURPLE_DARK, PURPLE]}
             start={{ x: 0, y: 0 }}
@@ -185,7 +288,7 @@ export function BusinessConnectionRequestModal({
                   </View>
                 ) : null}
                 <Pressable
-                  onPress={onLater}
+                  onPress={requestDismiss}
                   style={styles.closeBtn}
                   hitSlop={8}
                   accessibilityRole="button"
@@ -229,52 +332,56 @@ export function BusinessConnectionRequestModal({
                   </View>
                 </View>
               </View>
-
-              {showSenderRow ? (
-                <View style={styles.heroSenderRow}>
-                  <View style={styles.heroSenderAvatarWrap}>
-                    {!senderAvatarLoadFailed ? (
-                      <Image
-                        source={{ uri: senderAvatarUri }}
-                        style={styles.heroSenderAvatar}
-                        resizeMode="cover"
-                        onError={() => setSenderAvatarLoadFailed(true)}
-                      />
-                    ) : (
-                      <View
-                        style={[
-                          styles.heroSenderAvatarFallback,
-                          { backgroundColor: senderInitialsBg },
-                        ]}
-                      >
-                        <Text style={styles.heroSenderInitials}>{senderInitials}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.heroSenderText}>
-                    <View style={styles.heroSenderHeadRow}>
-                      <Text style={styles.heroSenderName} numberOfLines={1}>
-                        {senderLabel}
-                      </Text>
-                      <Text style={styles.heroSenderKicker}>Invited by</Text>
-                    </View>
-                    {senderPhone ? (
-                      <Text style={styles.heroSenderMeta} numberOfLines={1}>
-                        {senderPhone}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              ) : null}
             </View>
           </LinearGradient>
 
           <ScrollView
             style={styles.body}
-            contentContainerStyle={[styles.bodyContent, { paddingBottom: 8 }]}
+            contentContainerStyle={[
+              styles.bodyContent,
+              { paddingBottom: Math.max(insets.bottom, 16) + 4 },
+            ]}
             showsVerticalScrollIndicator={false}
-            bounces={false}
+            bounces
+            keyboardShouldPersistTaps="handled"
           >
+            {showSenderRow ? (
+              <View style={styles.senderRow}>
+                <View style={styles.senderAvatarWrap}>
+                  {!senderAvatarLoadFailed ? (
+                    <Image
+                      source={{ uri: senderAvatarUri }}
+                      style={styles.senderAvatar}
+                      resizeMode="cover"
+                      onError={() => setSenderAvatarLoadFailed(true)}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.senderAvatarFallback,
+                        { backgroundColor: senderInitialsBg },
+                      ]}
+                    >
+                      <Text style={styles.senderInitials}>{senderInitials}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.senderText}>
+                  <View style={styles.senderHeadRow}>
+                    <Text style={styles.senderName} numberOfLines={1}>
+                      {senderLabel}
+                    </Text>
+                    <Text style={styles.senderKicker}>Invited by</Text>
+                  </View>
+                  {senderPhone ? (
+                    <Text style={styles.senderMeta} numberOfLines={1}>
+                      {senderPhone}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.experienceCard}>
               <Text style={styles.experienceCardTitle}>Their track record</Text>
               <View style={styles.experienceMetricsRow}>
@@ -352,64 +459,64 @@ export function BusinessConnectionRequestModal({
                 This request stays active until you accept or decline.
               </Text>
             </View>
-          </ScrollView>
 
-          <View style={styles.footer}>
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.declineBtn}
-                onPress={onDecline}
-                disabled={busy}
-                activeOpacity={0.82}
-              >
-                <Text style={styles.declineText}>Decline</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.acceptBtn, busy && styles.disabled]}
-                onPress={onAccept}
-                disabled={busy}
-                activeOpacity={0.88}
-              >
-                <LinearGradient
-                  colors={[PURPLE, PURPLE_DARK]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.acceptGradient}
+            <View style={styles.footer}>
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={styles.declineBtn}
+                  onPress={onDecline}
+                  disabled={busy}
+                  activeOpacity={0.82}
                 >
-                  {busy ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Check size={15} color="#fff" strokeWidth={3} />
-                      <Text style={styles.acceptText}>Accept & connect</Text>
-                    </>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                  <Text style={styles.declineText}>Decline</Text>
+                </TouchableOpacity>
 
-            {queueTotal > 1 && onNext ? (
+                <TouchableOpacity
+                  style={[styles.acceptBtn, busy && styles.disabled]}
+                  onPress={onAccept}
+                  disabled={busy}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={[PURPLE, PURPLE_DARK]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.acceptGradient}
+                  >
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Check size={15} color="#fff" strokeWidth={3} />
+                        <Text style={styles.acceptText}>Accept & connect</Text>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+
+              {queueTotal > 1 && onNext ? (
+                <TouchableOpacity
+                  onPress={onNext}
+                  disabled={busy}
+                  style={styles.nextRequestBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.nextRequestText}>View next request</Text>
+                </TouchableOpacity>
+              ) : null}
+
               <TouchableOpacity
-                onPress={onNext}
+                onPress={requestDismiss}
                 disabled={busy}
-                style={styles.nextRequestBtn}
+                style={styles.laterBtn}
                 activeOpacity={0.7}
               >
-                <Text style={styles.nextRequestText}>View next request</Text>
+                <Text style={styles.laterText}>Remind me later</Text>
               </TouchableOpacity>
-            ) : null}
-
-            <TouchableOpacity
-              onPress={onLater}
-              disabled={busy}
-              style={styles.laterBtn}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.laterText}>Remind me later</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            </View>
+          </ScrollView>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -420,6 +527,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(15,23,42,0.75)',
     justifyContent: 'flex-end',
+  },
+  backdropTouch: {
+    ...StyleSheet.absoluteFillObject,
+    ...Platform.select({
+      web: { cursor: 'pointer' as const },
+      default: {},
+    }),
   },
   backdropWeb: {
     position: 'fixed' as 'absolute',
@@ -438,9 +552,32 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: Theme.screenBackground,
     maxHeight: Platform.OS === 'web' ? '92%' : '82%',
+    flexDirection: 'column',
+    alignSelf: 'stretch',
+    position: 'relative',
     ...(Platform.OS === 'web'
       ? { width: '100%', maxWidth: 440, borderRadius: 28 }
       : {}),
+  },
+  sheetDragging: {
+    opacity: 0.98,
+  },
+  sheetDragCapture: {
+    position: 'absolute',
+    top: 0,
+    alignSelf: 'center',
+    width: 88,
+    height: 36,
+    zIndex: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 8,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   hero: {
     paddingTop: 18,
@@ -500,74 +637,69 @@ const styles = StyleSheet.create({
     gap: 12,
     minWidth: 0,
   },
-  heroSenderRow: {
+  senderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     alignSelf: 'stretch',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    marginBottom: 2,
   },
-  heroSenderAvatarWrap: {
+  senderAvatarWrap: {
     width: 36,
     height: 36,
     borderRadius: 999,
-    backgroundColor: '#fff',
+    backgroundColor: Theme.surfaceForm,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.85)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
     flexShrink: 0,
   },
-  heroSenderAvatar: {
+  senderAvatar: {
     width: '100%',
     height: '100%',
   },
-  heroSenderAvatarFallback: {
+  senderAvatarFallback: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroSenderInitials: {
+  senderInitials: {
     fontSize: 12,
     fontWeight: '800',
     color: Theme.textPrimaryDark,
   },
-  heroSenderText: {
+  senderText: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  heroSenderHeadRow: {
+  senderHeadRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
     width: '100%',
   },
-  heroSenderKicker: {
+  senderKicker: {
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    color: 'rgba(237, 242, 255, 0.95)',
+    color: Theme.textMuted,
     flexShrink: 0,
   },
-  heroSenderName: {
+  senderName: {
     flex: 1,
     minWidth: 0,
     fontSize: 13,
     fontWeight: '700',
-    color: '#ffffff',
+    color: Theme.textPrimaryDark,
     lineHeight: 17,
   },
-  heroSenderMeta: {
+  senderMeta: {
     fontSize: 11,
     fontWeight: '500',
-    color: 'rgba(237, 242, 255, 0.92)',
+    color: Theme.textSecondary,
     lineHeight: 14,
   },
   heroLogoWrap: {
@@ -639,13 +771,15 @@ const styles = StyleSheet.create({
     color: LAVENDER,
   },
   body: {
-    flexGrow: 0,
+    flexGrow: 1,
     flexShrink: 1,
+    minHeight: 0,
   },
   bodyContent: {
     paddingHorizontal: 18,
     paddingTop: 14,
     gap: 10,
+    flexGrow: 1,
   },
   experienceCard: {
     borderRadius: 12,
@@ -831,7 +965,7 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   footer: {
-    paddingHorizontal: 18,
+    marginTop: 4,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,

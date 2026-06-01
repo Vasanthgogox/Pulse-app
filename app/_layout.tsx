@@ -389,6 +389,9 @@ function RootLayoutNav() {
       pathname === ROUTES.TABS.NETWORK ||
       pathname === ROUTES.CHAT ||
       pathname.startsWith('/chat'));
+  const isChatModalRoute =
+    !isDriverRole &&
+    (pathname === ROUTES.CHAT || pathname.startsWith('/chat'));
 
   useEffect(() => {
     installForegroundPruning();
@@ -407,7 +410,10 @@ function RootLayoutNav() {
           Chat providers are lazy: ~1.1k LOC of realtime + store + service stays
           out of the startup chunk. They re-wrap the tree after first idle.
         */}
-        <LazyChatProviders isActive={isDispatcherChatRouteActive}>
+        <LazyChatProviders
+          isActive={isDispatcherChatRouteActive}
+          requireProviders={isChatModalRoute}
+        >
           <View style={{ flex: 1 }}>
             <GlobalOperationsToast />
             <AppAlertHost />

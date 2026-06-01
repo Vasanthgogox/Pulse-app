@@ -18,6 +18,7 @@ import {
 } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { preloadChatRoute } from "@/lib/preloadChatWarmup";
 import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
 import { preloadPulseLoadsRoute, preloadTabScreen } from "@/lib/preloadRoutes";
 import { useQueryClient } from "@tanstack/react-query";
@@ -248,10 +249,16 @@ export function DemoTabBar({
         if (tab === "finance" && orgId) {
           preloadFinanceWarmup(queryClient, orgId);
         }
+        if ((tab === "trips" || tab === "network") && orgId) {
+          preloadChatRoute(orgId);
+        }
       }
     },
     [orgId, queryClient],
   );
+  const warmChatRoute = useCallback(() => {
+    preloadChatRoute(orgId);
+  }, [orgId]);
   const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
   /** Operation shelf row ids the user has opened in the Alert Registry (session-only; badge excludes them). */
   const [seenRegistryOperationIds, setSeenRegistryOperationIds] = useState<
@@ -457,8 +464,18 @@ export function DemoTabBar({
     setInviteActionId(null);
     if (error) {
       await refreshInboundProtocol();
+      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+      return;
     }
-    await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+    const refetchInvites = () =>
+      Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        void refetchInvites();
+      });
+    } else {
+      setTimeout(() => void refetchInvites(), 0);
+    }
   };
 
   const bottomInset = useEffectiveBottomInset();
@@ -568,6 +585,9 @@ export function DemoTabBar({
     runNetworkDockAction(() => {
       router.push(ROUTES.CHAT);
     });
+  };
+  const openMessagesFromPressIn = () => {
+    warmChatRoute();
   };
   const mobileNetworkSubDockVisibilityStyle = useAnimatedStyle(() => {
     const p = dockVisibilityProgress.value;
@@ -690,6 +710,7 @@ export function DemoTabBar({
             <AnimatedPress
               style={styles.webBellBtn}
               activeOpacity={0.8}
+              onPressIn={warmChatRoute}
               onPress={() => {
                 setShowNotifications(false);
                 setShowInvitations(false);
@@ -820,6 +841,7 @@ export function DemoTabBar({
       activeLoadCount={activeLoadCount}
       onTabChange={onTabChange}
       onOpenChat={openMessages}
+      onOpenChatWarm={openMessagesFromPressIn}
       onCollapseNetworkDock={collapseNetworkDock}
       onWarmTab={onWarmTab}
     />

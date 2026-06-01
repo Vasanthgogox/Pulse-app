@@ -296,12 +296,6 @@ export default function CreateIndentScreen() {
     });
   }, []);
 
-  const openLoadTypePickerNext = useCallback(() => {
-    requestAnimationFrame(() => {
-      setLoadTypePickerOpen(true);
-    });
-  }, []);
-
   const openPickupDateNext = useCallback(() => {
     requestAnimationFrame(() => {
       setShowDatePicker(true);
@@ -405,6 +399,30 @@ export default function CreateIndentScreen() {
     if (!isMobileWizard || wizardStep !== "client") return;
     if (!form.client_id?.trim()) setClientListExpanded(true);
   }, [form.client_id, isMobileWizard, wizardStep]);
+
+  useEffect(() => {
+    setVehicleTypePickerOpen(false);
+    setLoadTypePickerOpen(false);
+  }, [wizardStep]);
+
+  /** Desktop / wide form: chain vehicle → load picker. Mobile wizard uses separate steps. */
+  const openLoadTypePickerNext = useCallback(() => {
+    if (isMobileWizard) return;
+    requestAnimationFrame(() => {
+      setVehicleTypePickerOpen(false);
+      setLoadTypePickerOpen(true);
+    });
+  }, [isMobileWizard]);
+
+  const openVehicleTypePicker = useCallback(() => {
+    setLoadTypePickerOpen(false);
+    setVehicleTypePickerOpen(true);
+  }, []);
+
+  const openLoadTypePicker = useCallback(() => {
+    setVehicleTypePickerOpen(false);
+    setLoadTypePickerOpen(true);
+  }, []);
 
   const [alertState, setAlertState] = useState<{
     visible: boolean;
@@ -1769,14 +1787,14 @@ export default function CreateIndentScreen() {
                     placeholder={
                       vehicleTypeIsOther ? "Type vehicle" : "Select vehicle"
                     }
-                    onPressPicker={() => setVehicleTypePickerOpen(true)}
+                    onPressPicker={openVehicleTypePicker}
                     onChangeText={(t) => update({ vehicle_type: t })}
                     hasError={Boolean(errors.vehicle_type)}
                     inputRef={vehicleTypeInputRef}
                     footerExtra={
                       vehicleTypeIsOther ? (
                         <TouchableOpacity
-                          onPress={() => setVehicleTypePickerOpen(true)}
+                          onPress={openVehicleTypePicker}
                           style={styles.switchToPresetLink}
                         >
                           <Text style={styles.switchToPresetLinkText}>
@@ -1815,7 +1833,7 @@ export default function CreateIndentScreen() {
                     mode="picker"
                     value={form.load_type}
                     placeholder="Select load category"
-                    onPressPicker={() => setLoadTypePickerOpen(true)}
+                    onPressPicker={openLoadTypePicker}
                     hasError={Boolean(errors.load_type)}
                   />
                   {errors.load_type ? (
@@ -1911,7 +1929,7 @@ export default function CreateIndentScreen() {
                           { justifyContent: "center" },
                           errors.vehicle_type && styles.inputError,
                         ]}
-                        onPress={() => setVehicleTypePickerOpen(true)}
+                        onPress={openVehicleTypePicker}
                         activeOpacity={0.8}
                       >
                         <Text
@@ -1928,7 +1946,7 @@ export default function CreateIndentScreen() {
                     )}
                     {vehicleTypeIsOther ? (
                       <TouchableOpacity
-                        onPress={() => setVehicleTypePickerOpen(true)}
+                        onPress={openVehicleTypePicker}
                         style={styles.switchToPresetLink}
                       >
                         <Text style={styles.switchToPresetLinkText}>
@@ -1956,7 +1974,7 @@ export default function CreateIndentScreen() {
                         webPointer,
                         errors.load_type && styles.inputError,
                       ]}
-                      onPress={() => setLoadTypePickerOpen(true)}
+                      onPress={openLoadTypePicker}
                       activeOpacity={0.8}
                     >
                       <Text

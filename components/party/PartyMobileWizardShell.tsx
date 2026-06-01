@@ -9,6 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, ChevronLeft } from "lucide-react-native";
 
+import Theme from "@/constants/Theme";
 import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
 
 export interface PartyMobileWizardShellProps {
@@ -25,6 +26,8 @@ export interface PartyMobileWizardShellProps {
   noOrganizationBanner?: ReactNode;
   children: ReactNode;
   hideFooter?: boolean;
+  /** Keypad steps: flex body + no keyboard avoidance (custom pad at bottom). */
+  bodyLayout?: "default" | "keypad";
   canAdvance?: boolean;
   onAdvance?: () => void;
   advanceLabel?: string;
@@ -44,6 +47,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
   noOrganizationBanner,
   children,
   hideFooter = false,
+  bodyLayout = "default",
   canAdvance = false,
   onAdvance,
   advanceLabel = "Continue",
@@ -51,12 +55,16 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
   const insets = useSafeAreaInsets();
   const currentIdx = Math.max(0, stepIds.indexOf(currentStep));
 
+  const isKeypadLayout = bodyLayout === "keypad";
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={
+        isKeypadLayout ? undefined : Platform.OS === "ios" ? "padding" : undefined
+      }
     >
-      <View style={[styles.root, { paddingTop: insets.top }]}>
+      <View style={[styles.root, styles.shellColumn, { paddingTop: insets.top }]}>
         <View style={styles.topBar}>
           <Pressable
             style={styles.backBtn}
@@ -65,7 +73,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
-            <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
+            <ChevronLeft size={20} color={Theme.textPrimaryDark} strokeWidth={2.5} />
           </Pressable>
           <View style={styles.progressRow}>
             {stepIds.map((id, i) => (
@@ -99,10 +107,29 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
           </View>
         ) : null}
 
-        <View style={styles.body}>
-          <Text style={styles.stepTitle}>{stepTitle}</Text>
-          <Text style={styles.stepHint}>{stepHint}</Text>
-          {children}
+        <View
+          style={[
+            styles.body,
+            isKeypadLayout
+              ? styles.bodyKeypad
+              : hideFooter
+                ? styles.bodySource
+                : styles.bodyFields,
+          ]}
+        >
+          <View style={isKeypadLayout ? styles.bodyKeypadHeader : undefined}>
+            <Text style={styles.stepTitle}>{stepTitle}</Text>
+            {isKeypadLayout ? (
+              <Text style={styles.stepHintKeypad}>{stepHint}</Text>
+            ) : stepHint ? (
+              <Text style={styles.stepHint}>{stepHint}</Text>
+            ) : null}
+          </View>
+          {isKeypadLayout ? (
+            <View style={styles.bodyKeypadContent}>{children}</View>
+          ) : (
+            children
+          )}
         </View>
 
         {!hideFooter ? (
@@ -114,7 +141,7 @@ export const PartyMobileWizardShell = memo(function PartyMobileWizardShell({
               accessibilityRole="button"
               accessibilityLabel={advanceLabel}
             >
-              <ArrowRight size={22} color="#fff" strokeWidth={2.8} />
+              <ArrowRight size={20} color={Theme.textOnPrimary} strokeWidth={2.8} />
             </Pressable>
             <Text style={styles.footerHint}>{advanceLabel}</Text>
           </View>

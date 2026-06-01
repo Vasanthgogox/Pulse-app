@@ -1,5 +1,5 @@
 /**
- * Your connections — paginated list grid (desktop 3×2, mobile 2×3) with Previous / Next.
+ * Your connections — horizontal swipe pages (3×2 grid) + compact Previous / Next.
  */
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -10,8 +10,23 @@ import {
   NETWORK_HUB_GRID_ROW_PADDING_H,
 } from "@/features/network/constants/networkHubGrid";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 
 export type NetworkHubConnectionsPagedGridProps<T> = {
   items: T[];
@@ -29,6 +44,14 @@ function chunkRow<T>(items: T[], columns: number): (T | null)[] {
   return row;
 }
 
+function buildPages<T>(items: T[], pageSize: number, pageCount: number): T[][] {
+  const pages: T[][] = [];
+  for (let p = 0; p < pageCount; p += 1) {
+    pages.push(items.slice(p * pageSize, (p + 1) * pageSize));
+  }
+  return pages;
+}
+
 export function NetworkHubConnectionsPagedGrid<T>({
   items,
   layout,
@@ -38,54 +61,75 @@ export function NetworkHubConnectionsPagedGrid<T>({
 }: NetworkHubConnectionsPagedGridProps<T>) {
   const { t } = useLanguage();
   const [page, setPage] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const listRef = useRef<FlatList<T[]>>(null);
   const { columns, rows, pageSize } = layout;
 
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const pages = useMemo(
+    () => buildPages(items, pageSize, pageCount),
+    [items, pageSize, pageCount],
+  );
+
+  const singleColumn = columns === 1;
+
+  const goToPage = useCallback(
+    (target: number, animated = true) => {
+      const next = Math.max(0, Math.min(pageCount - 1, target));
+      setPage(next);
+      if (viewportWidth > 0 && listRef.current) {
+        listRef.current.scrollToOffset({
+          offset: next * viewportWidth,
+          animated,
+        });
+      }
+    },
+    [pageCount, viewportWidth],
+  );
 
   useEffect(() => {
     setPage(0);
-  }, [resetKey]);
+    if (viewportWidth > 0 && listRef.current) {
+      listRef.current.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [resetKey, viewportWidth]);
 
   useEffect(() => {
     setPage((current) => Math.min(current, pageCount - 1));
   }, [pageCount]);
 
-  const pageItems = useMemo(
-    () => items.slice(page * pageSize, (page + 1) * pageSize),
-    [items, page, pageSize],
+  const onPagerScrollSettled = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (viewportWidth <= 0) return;
+      const idx = Math.round(e.nativeEvent.contentOffset.x / viewportWidth);
+      setPage(Math.max(0, Math.min(pageCount - 1, idx)));
+    },
+    [viewportWidth, pageCount],
   );
 
-  const gridRows = useMemo(() => {
-    const result: (T | null)[][] = [];
-    for (let r = 0; r < rows; r += 1) {
-      const start = r * columns;
-      result.push(
-        chunkRow(pageItems.slice(start, start + columns), columns),
-      );
-    }
-    return result;
-  }, [pageItems, columns, rows]);
+  const renderPageBody = useCallback(
+    (pageItems: T[]) => {
+      if (singleColumn) {
+        return (
+          <View style={styles.nativeList}>
+            {pageItems.map((item) => (
+              <View key={keyExtractor(item)} style={styles.nativeListItem}>
+                {renderItem(item)}
+              </View>
+            ))}
+          </View>
+        );
+      }
 
-  const canGoPrevious = page > 0;
-  const canGoNext = page < pageCount - 1;
+      const gridRows: (T | null)[][] = [];
+      for (let r = 0; r < rows; r += 1) {
+        const start = r * columns;
+        gridRows.push(
+          chunkRow(pageItems.slice(start, start + columns), columns),
+        );
+      }
 
-  if (items.length === 0) {
-    return null;
-  }
-
-  const singleColumn = columns === 1;
-
-  return (
-    <View style={styles.root}>
-      {singleColumn ? (
-        <View style={styles.nativeList}>
-          {pageItems.map((item) => (
-            <View key={keyExtractor(item)} style={styles.nativeListItem}>
-              {renderItem(item)}
-            </View>
-          ))}
-        </View>
-      ) : (
+      return (
         <View style={styles.grid}>
           {gridRows.map((row, rowIndex) => (
             <View key={`hub-page-row-${rowIndex}`} style={styles.row}>
@@ -104,12 +148,63 @@ export function NetworkHubConnectionsPagedGrid<T>({
             </View>
           ))}
         </View>
+      );
+    },
+    [columns, keyExtractor, renderItem, rows, singleColumn],
+  );
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const canGoPrevious = page > 0;
+  const canGoNext = page < pageCount - 1;
+  const slideWidth = viewportWidth > 0 ? viewportWidth : undefined;
+
+  return (
+    <View
+      style={styles.root}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && w !== viewportWidth) {
+          setViewportWidth(w);
+        }
+      }}
+    >
+      {pageCount > 1 && slideWidth ? (
+        <FlatList
+          ref={listRef}
+          data={pages}
+          horizontal
+          pagingEnabled
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          bounces={false}
+          overScrollMode="never"
+          keyExtractor={(_, index) => `connections-hub-page-${index}`}
+          getItemLayout={(_, index) => ({
+            length: slideWidth,
+            offset: slideWidth * index,
+            index,
+          })}
+          onMomentumScrollEnd={onPagerScrollSettled}
+          onScrollEndDrag={onPagerScrollSettled}
+          renderItem={({ item: pageItems }) => (
+            <View style={[styles.pageSlide, { width: slideWidth }]}>
+              {renderPageBody(pageItems)}
+            </View>
+          )}
+          style={styles.pagerList}
+        />
+      ) : (
+        renderPageBody(pages[0] ?? [])
       )}
 
       {pageCount > 1 ? (
         <View style={styles.pager}>
           <Pressable
-            onPress={() => setPage((p) => Math.max(0, p - 1))}
+            onPress={() => goToPage(page - 1)}
             disabled={!canGoPrevious}
             style={({ pressed }) => [
               styles.pagerBtn,
@@ -120,7 +215,7 @@ export function NetworkHubConnectionsPagedGrid<T>({
             accessibilityLabel={t("networkConnectionsPrevious")}
           >
             <ChevronLeft
-              size={16}
+              size={12}
               color={canGoPrevious ? Theme.textPrimaryDark : Theme.textMuted}
               strokeWidth={2.4}
             />
@@ -136,7 +231,7 @@ export function NetworkHubConnectionsPagedGrid<T>({
           </Text>
 
           <Pressable
-            onPress={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            onPress={() => goToPage(page + 1)}
             disabled={!canGoNext}
             style={({ pressed }) => [
               styles.pagerBtn,
@@ -152,7 +247,7 @@ export function NetworkHubConnectionsPagedGrid<T>({
               {t("networkConnectionsNext")}
             </Text>
             <ChevronRight
-              size={16}
+              size={12}
               color={canGoNext ? Theme.textPrimaryDark : Theme.textMuted}
               strokeWidth={2.4}
             />
@@ -166,7 +261,13 @@ export function NetworkHubConnectionsPagedGrid<T>({
 const styles = StyleSheet.create({
   root: {
     width: "100%",
-    gap: 12,
+    gap: 8,
+  },
+  pagerList: {
+    width: "100%",
+  },
+  pageSlide: {
+    flexShrink: 0,
   },
   grid: {
     width: "100%",
@@ -200,43 +301,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingTop: 2,
     paddingBottom: 4,
-    gap: 12,
+    gap: 8,
   },
   pagerBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.networkCardBackground,
-    minWidth: 108,
-    justifyContent: "center",
+    backgroundColor: Theme.screenBackground,
   },
   pagerBtnPressed: {
     opacity: 0.88,
   },
   pagerBtnDisabled: {
-    opacity: 0.45,
-    backgroundColor: Theme.surfaceGray,
+    opacity: 0.42,
+    backgroundColor: Theme.surfaceForm,
   },
   pagerBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.8,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   pagerBtnTextDisabled: {
     color: Theme.textMuted,
   },
   pagerMeta: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 });

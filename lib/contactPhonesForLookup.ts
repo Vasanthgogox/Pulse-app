@@ -42,7 +42,14 @@ export async function loadContactPhonesForNetworkLookup(): Promise<{
     const available = await Contacts.isAvailableAsync();
     if (!available) return { entries: [], error: "unavailable" };
 
-    const { status } = await Contacts.requestPermissionsAsync();
+    // Check current status first — avoids re-triggering the OS dialog on every
+    // sync if the user previously made a choice. requestPermissionsAsync() would
+    // still return "denied" silently on iOS, but skipping the request when already
+    // granted also removes an unnecessary async round-trip.
+    let { status } = await Contacts.getPermissionsAsync();
+    if (status === "undetermined") {
+      ({ status } = await Contacts.requestPermissionsAsync());
+    }
     if (status !== "granted") {
       return { entries: [], error: "permission_denied" };
     }

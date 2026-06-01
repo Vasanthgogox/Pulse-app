@@ -2,6 +2,7 @@
  * On-demand route warm-up only. Do NOT fire many dynamic imports at once —
  * each tab/stack screen is ~3k modules and parallel preloads OOM Metro in dev.
  */
+import { preloadChatRoute } from '@/lib/preloadChatWarmup';
 import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
   preloadPulseLoadsChunk,
@@ -15,10 +16,15 @@ export type { PreloadableTab } from '@/lib/preloadTabChunks';
 export { preloadTabScreen } from '@/lib/preloadTabChunks';
 
 /** Map bookmarkable tab routes to lazy chunk preload keys. */
-export function preloadTabForRoute(route: string): void {
+export function preloadTabForRoute(route: string, orgId?: string | null): void {
   if (route === '/(tabs)/finance') preloadTabScreen('finance');
-  else if (route === '/(tabs)/trips') preloadTabScreen('trips');
-  else if (route === '/(tabs)/network') preloadTabScreen('network');
+  else if (route === '/(tabs)/trips') {
+    preloadTabScreen('trips');
+    preloadChatRoute(orgId);
+  } else if (route === '/(tabs)/network') {
+    preloadTabScreen('network');
+    preloadChatRoute(orgId);
+  }
 }
 
 /**
@@ -32,17 +38,17 @@ export function scheduleDispatcherTabPreloads(
   const run = () => {
     // Idle preloads of large lazy chunks race with Fast Refresh in dev and
     // surface as "Requiring unknown module NNNN" on the next navigation.
+    const orgId = opts?.orgId ?? null;
     if (__DEV__) {
-      if (lastTabRoute) preloadTabForRoute(lastTabRoute);
+      if (lastTabRoute) preloadTabForRoute(lastTabRoute, orgId);
       return;
     }
-    const orgId = opts?.orgId ?? null;
     if (opts?.queryClient && orgId) {
       preloadFinanceWarmup(opts.queryClient, orgId);
     } else {
       preloadTabScreen('finance');
     }
-    if (lastTabRoute) preloadTabForRoute(lastTabRoute);
+    if (lastTabRoute) preloadTabForRoute(lastTabRoute, orgId);
   };
   scheduleIdleWork(run);
 }

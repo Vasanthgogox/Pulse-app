@@ -117,10 +117,12 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     queueViewIndex,
   ]);
 
-  const showModal =
-    !!activeInvite &&
-    !declineTarget &&
-    !deployGate?.blocksConnectionInvitations;
+  const userOpenedInvite = focusedInviteId != null;
+  const blockedByDeploy =
+    Boolean(deployGate?.blocksConnectionInvitations) ||
+    (Boolean(deployGate?.deferConnectionInvitations) && !userOpenedInvite);
+
+  const showModal = !!activeInvite && !declineTarget && !blockedByDeploy;
 
   const presentConnectionInvite = useCallback(
     (item: InboundProtocolInviteItem) => {
@@ -220,7 +222,6 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
       {orgId && activeInvite ? (
         <BusinessConnectionRequestModal
-          key={activeInvite.id}
           visible={showModal}
           invite={activeInvite}
           queueIndex={queueIndex}

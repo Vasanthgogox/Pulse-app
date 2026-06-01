@@ -2,6 +2,9 @@
  * Dispatcher Pulse Chat — full-screen root route (not nested under tab modal stack).
  */
 import { LazyRouteScreen } from "@/components/LazyRouteScreen";
+import { preloadChatRoute, preloadChatScreenModule } from "@/lib/preloadChatWarmup";
+
+void preloadChatRoute();
 
 export default function ChatRoute() {
   return (
@@ -9,7 +12,7 @@ export default function ChatRoute() {
       fallback="inline"
       message="Loading chat…"
       loader={() =>
-        import("@/features/chat/components/ChatScreen").then((m) => ({
+        preloadChatScreenModule().then((m) => ({
           default: m.ChatScreen,
         }))
       }

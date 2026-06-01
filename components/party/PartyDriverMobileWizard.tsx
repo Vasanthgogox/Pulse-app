@@ -1,20 +1,19 @@
 /**
  * Full-screen step-by-step driver wizard (mobile / narrow).
  */
-import { memo, useCallback, useRef, type ReactNode } from "react";
+import { memo, useCallback, type ReactNode } from "react";
 import {
-  Platform,
   Pressable,
   Text,
   TextInput,
   View,
-  type TextInput as TextInputType,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { BookUser } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
-import { IndiaFlagIcon } from "./IndiaFlagIcon";
+import { IndianDrivingLicenseKeypadFlow } from "@/components/party/keypad/IndianDrivingLicenseKeypadFlow";
+import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
 import { PartyMobileWizardShell } from "./PartyMobileWizardShell";
 import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
 
@@ -118,9 +117,9 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
   onAdvance,
   advanceLabel = "Continue",
 }: PartyDriverMobileWizardProps) {
-  const nameRef = useRef<TextInputType>(null);
-  const phoneRef = useRef<TextInputType>(null);
-  const dlRef = useRef<TextInputType>(null);
+  const isPhoneStep = wizardStep === "phone";
+  const isLicenseStep = wizardStep === "license";
+  const isKeypadStep = isPhoneStep || isLicenseStep;
 
   const handleBack = useCallback(() => {
     const idx = stepIndex(wizardStep);
@@ -169,37 +168,40 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
     switch (wizardStep) {
       case "source":
         return (
-          <View style={styles.sourceBlock}>
-            <Pressable
-              style={[
-                styles.importPrimary,
-                (!contactPickerAvailable || importLoading) &&
-                  styles.importPrimaryDim,
-              ]}
-              onPress={onImportContacts}
-              disabled={!contactPickerAvailable || importLoading}
-            >
-              <BookUser size={22} color="#fff" strokeWidth={2} />
-              <Text style={styles.importPrimaryText}>
-                {importLoading ? "Opening contacts…" : "Import from contacts"}
-              </Text>
-            </Pressable>
-            {importError ? (
-              <Text style={styles.importError}>{importError}</Text>
-            ) : null}
-            {!contactPickerAvailable ? (
-              <Text style={styles.importHint}>
-                Contact import is not available on this device. Use manual entry
-                below.
-              </Text>
-            ) : null}
-            <Pressable
-              style={styles.manualLink}
-              onPress={() => onWizardStepChange("name")}
-            >
-              <FontAwesome name="pencil" size={14} color={Theme.primary} />
-              <Text style={styles.manualLinkText}>Enter manually</Text>
-            </Pressable>
+          <View style={styles.sourceCard}>
+            <View style={styles.sourceBlock}>
+              <Pressable
+                style={[
+                  styles.importPrimary,
+                  (!contactPickerAvailable || importLoading) &&
+                    styles.importPrimaryDim,
+                ]}
+                onPress={onImportContacts}
+                disabled={!contactPickerAvailable || importLoading}
+              >
+                <BookUser size={18} color={Theme.textOnPrimary} strokeWidth={2} />
+                <Text style={styles.importPrimaryText}>
+                  {importLoading ? "Opening contacts…" : "Import from contacts"}
+                </Text>
+              </Pressable>
+              {importError ? (
+                <Text style={styles.importError}>{importError}</Text>
+              ) : null}
+              {!contactPickerAvailable ? (
+                <Text style={styles.importHint}>
+                  Contact import is not available on this device. Use manual entry
+                  below.
+                </Text>
+              ) : null}
+              <View style={styles.sourceDivider} />
+              <Pressable
+                style={styles.manualLink}
+                onPress={() => onWizardStepChange("name")}
+              >
+                <FontAwesome name="pencil" size={13} color={Theme.primary} />
+                <Text style={styles.manualLinkText}>Enter manually</Text>
+              </Pressable>
+            </View>
           </View>
         );
       case "name":
@@ -207,7 +209,6 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
           <View style={styles.fieldBlock}>
             <Text style={styles.fieldLabel}>FULL NAME</Text>
             <TextInput
-              ref={nameRef}
               style={styles.input}
               placeholder="Legal name"
               placeholderTextColor={Theme.textMuted}
@@ -220,45 +221,25 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
         );
       case "phone":
         return (
-          <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>MOBILE (+91)</Text>
-            <View style={styles.phoneRow}>
-              <View style={styles.phoneCc}>
-                <IndiaFlagIcon width={20} height={15} />
-                <Text style={styles.phoneCcText}>+91</Text>
-              </View>
-              <TextInput
-                ref={phoneRef}
-                style={[styles.input, styles.phoneInput]}
-                keyboardType="phone-pad"
-                maxLength={phoneMaxLength}
-                placeholder="10-digit number"
-                placeholderTextColor={Theme.textMuted}
-                value={driverPhone}
-                onChangeText={onDriverPhoneChange}
-                autoFocus
-                testID="party-driver-phone-input"
-              />
-            </View>
-            {phoneStepExtras}
-          </View>
+          <PhoneNumberKeypadFlow
+            value={driverPhone}
+            onChangeText={onDriverPhoneChange}
+            maxLength={phoneMaxLength}
+            label="MOBILE (+91)"
+            placeholder="10-digit number"
+            error={Boolean(formError)}
+            testID="party-driver-phone-input"
+            footerExtras={phoneStepExtras}
+          />
         );
       case "license":
         return (
-          <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>LICENCE NUMBER</Text>
-            <TextInput
-              ref={dlRef}
-              style={styles.input}
-              placeholder="TN01 20200001234"
-              placeholderTextColor={Theme.textMuted}
-              autoCapitalize="characters"
-              value={driverDl}
-              onChangeText={(t) => onDriverDlChange(t.toUpperCase())}
-              autoFocus
-              testID="party-driver-dl-input"
-            />
-          </View>
+          <IndianDrivingLicenseKeypadFlow
+            value={driverDl}
+            onChangeText={onDriverDlChange}
+            error={Boolean(formError)}
+            testID="party-driver-dl-input"
+          />
         );
       case "extras":
         return (
@@ -378,6 +359,7 @@ export const PartyDriverMobileWizard = memo(function PartyDriverMobileWizard({
       stepTitle={stepTitle}
       stepHint={stepHint}
       showEntitySubtitle={wizardStep === "source"}
+      bodyLayout={isKeypadStep ? "keypad" : "default"}
       formError={formError}
       noOrganizationBanner={noOrganizationBanner}
       hideFooter={wizardStep === "source"}

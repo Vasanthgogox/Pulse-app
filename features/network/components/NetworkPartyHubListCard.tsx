@@ -223,7 +223,7 @@ export function NetworkPartyHubListCard({
 
   if (mobileGrid) {
     const avatarPressHandler = onOpenProfile ?? onPressCard;
-    const gridAvatarSize = 64;
+    const gridAvatarSize = 52;
     const accent = partyAccentFromEntityType(entityType);
     return (
       <Pressable

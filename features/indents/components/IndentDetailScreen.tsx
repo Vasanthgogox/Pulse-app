@@ -146,7 +146,9 @@ export function IndentDetailScreen({
   onEditPress,
 }: IndentDetailScreenProps) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const compactHub = windowHeight < 820;
+  const footerReserve = compactHub ? 52 : 64;
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -674,6 +676,7 @@ export function IndentDetailScreen({
       <View
         style={[
           styles.header,
+          compactHub && styles.headerCompact,
           { paddingTop: insets.top + Layout.headerPaddingBelowInset },
         ]}
       >
@@ -692,13 +695,16 @@ export function IndentDetailScreen({
           </Text>
           <View style={styles.headerSubtitleRow}>
             <View style={styles.headerStatusDot} />
-            <Text style={styles.headerSubtitle}>
-              Review Hub • {status === "OPEN" ? "Active" : status} Indent{" "}
-              {getTripOperationalDisplay({
-                trip_number: indent.trip_number ?? null,
-              }) !== "—"
-                ? `· ${getTripOperationalDisplay({ trip_number: indent.trip_number ?? null })}`
-                : ""}
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {compactHub
+                ? `Review Hub · ${status === "OPEN" ? "Active" : status}`
+                : `Review Hub • ${status === "OPEN" ? "Active" : status} Indent${
+                    getTripOperationalDisplay({
+                      trip_number: indent.trip_number ?? null,
+                    }) !== "—"
+                      ? ` · ${getTripOperationalDisplay({ trip_number: indent.trip_number ?? null })}`
+                      : ""
+                  }`}
             </Text>
           </View>
         </View>
@@ -717,7 +723,8 @@ export function IndentDetailScreen({
         style={[styles.scroll, { backgroundColor: Theme.surface }]}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 12 + 64 + insets.bottom },
+          compactHub && styles.scrollContentCompact,
+          { paddingBottom: 8 + footerReserve + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -744,6 +751,7 @@ export function IndentDetailScreen({
         ) : null}
 
         <IndentReviewHubCard
+          compact={compactHub}
           isOwner={isOwner}
           typeLabel={isOwner ? "GIVE LOAD" : "GET LOAD"}
           status={status}
@@ -797,7 +805,9 @@ export function IndentDetailScreen({
         </IndentReviewHubCard>
 
         {/* Live Bids */}
-        <View style={styles.sectionHeader}>
+        <View
+          style={[styles.sectionHeader, compactHub && styles.sectionHeaderCompact]}
+        >
           <View style={styles.liveBidsTitleRow}>
             <Text style={styles.sectionTitle}>
               {isOwner ? "LIVE BIDS" : "QUOTE STATUS"}
@@ -816,18 +826,58 @@ export function IndentDetailScreen({
         </View>
 
         {isOwner && quotes.length === 0 ? (
-          <View style={styles.bidsEmptyCard}>
-            <View style={styles.bidsEmptyIconWrap}>
-              <FontAwesome name="inbox" size={22} color={Theme.textMuted} />
+          <View
+            style={[
+              styles.bidsEmptyCard,
+              compactHub && styles.bidsEmptyCardCompact,
+            ]}
+          >
+            <View
+              style={[
+                styles.bidsEmptyTop,
+                compactHub && styles.bidsEmptyTopCompact,
+              ]}
+            >
+              <View
+                style={[
+                  styles.bidsEmptyIconWrap,
+                  compactHub && styles.bidsEmptyIconWrapCompact,
+                ]}
+              >
+                <FontAwesome
+                  name="inbox"
+                  size={compactHub ? 16 : 22}
+                  color={Theme.textMuted}
+                />
+              </View>
+              <View style={styles.bidsEmptyCopy}>
+                <Text
+                  style={[
+                    styles.bidsEmptyTitle,
+                    compactHub && styles.bidsEmptyTitleCompact,
+                  ]}
+                >
+                  No bids received
+                </Text>
+                <Text
+                  style={[
+                    styles.bidsEmptyBodyLeft,
+                    compactHub && styles.bidsEmptyBodyCompact,
+                  ]}
+                  numberOfLines={compactHub ? 2 : 3}
+                >
+                  {canBroadcast
+                    ? "Broadcast this indent to your network for rates."
+                    : "Waiting for transporters to respond on this load."}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.bidsEmptyTitleCenter}>No Bids Received</Text>
-            <Text style={styles.bidsEmptyBody}>
-              Ready to find the best rate? Broadcast this indent to your
-              logistics network.
-            </Text>
             {canBroadcast ? (
               <TouchableOpacity
-                style={styles.broadcastBtn}
+                style={[
+                  styles.broadcastBtn,
+                  compactHub && styles.broadcastBtnCompact,
+                ]}
                 onPress={handleBroadcast}
                 activeOpacity={0.9}
                 disabled={isBroadcasting || sharingDraft}
@@ -847,11 +897,19 @@ export function IndentDetailScreen({
                 )}
               </TouchableOpacity>
             ) : (
-              <View style={styles.broadcastLockedPill}>
+              <View
+                style={[
+                  styles.broadcastLockedPill,
+                  compactHub && styles.broadcastLockedPillCompact,
+                ]}
+              >
                 <FontAwesome name="lock" size={12} color={Theme.textMuted} />
-                <Text style={styles.broadcastLockedText}>
+                <Text
+                  style={styles.broadcastLockedText}
+                  numberOfLines={compactHub ? 2 : 3}
+                >
                   {statusLower === "broadcast"
-                    ? "This indent has been shared and cannot be edited"
+                    ? "Shared — editing is locked"
                     : "Broadcast unavailable for current status"}
                 </Text>
               </View>
@@ -887,8 +945,9 @@ export function IndentDetailScreen({
       <View
         style={[
           styles.footer,
+          compactHub && styles.footerCompact,
           {
-            paddingBottom: 16 + insets.bottom,
+            paddingBottom: (compactHub ? 10 : 16) + insets.bottom,
           },
         ]}
       >
@@ -1113,6 +1172,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Theme.borderOnDark,
   },
+  headerCompact: {
+    paddingBottom: 6,
+  },
   headerIconBtn: {
     width: 40,
     height: 40,
@@ -1167,6 +1229,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
     backgroundColor: Theme.surface,
+  },
+  scrollContentCompact: {
+    paddingTop: 6,
   },
   draftBanner: {
     marginBottom: 10,
@@ -1341,6 +1406,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 0,
   },
+  sectionHeaderCompact: {
+    marginBottom: 4,
+  },
   sectionTitle: indentReviewHubText.sectionTitle,
   editAllText: {
     ...indentReviewHubText.buttonLabel,
@@ -1404,7 +1472,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 12,
-    alignItems: "center",
+    alignItems: "stretch",
     borderWidth: 1,
     borderColor: Theme.borderLight,
     marginBottom: 12,
@@ -1413,6 +1481,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
+    gap: 10,
+  },
+  bidsEmptyCardCompact: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    marginBottom: 6,
+    gap: 8,
+    borderRadius: 10,
+  },
+  bidsEmptyTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    width: "100%",
+  },
+  bidsEmptyTopCompact: {
+    gap: 8,
+  },
+  bidsEmptyCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   quoteStatusCard: {
     alignItems: "stretch",
@@ -1455,10 +1545,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
+  bidsEmptyIconWrapCompact: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+  },
   bidsEmptyTitle: {
     ...indentReviewHubText.partyTitle,
     textAlign: "left",
     marginBottom: 0,
+  },
+  bidsEmptyTitleCompact: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  bidsEmptyBodyCompact: {
+    fontSize: 8,
+    lineHeight: 12,
   },
   bidsEmptyTitleCenter: {
     ...indentReviewHubText.partyTitle,
@@ -1486,6 +1589,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
     minHeight: 38,
+    alignSelf: "stretch",
+  },
+  broadcastBtnCompact: {
+    minHeight: 34,
+    paddingVertical: 7,
   },
   broadcastBtnIcon: {
     marginRight: 8,
@@ -1504,6 +1612,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceLight,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    alignSelf: "stretch",
+  },
+  broadcastLockedPillCompact: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   broadcastLockedText: {
     ...indentReviewHubText.bodyMuted,
@@ -1601,6 +1714,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 3,
+  },
+  footerCompact: {
+    paddingTop: 6,
   },
   footerEditBtn: {
     width: 44,

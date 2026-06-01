@@ -14,7 +14,8 @@ import Theme from "@/constants/Theme";
 import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubStyles";
 import { useIndentClientEntityAvatar } from "@/features/indents/hooks/useIndentClientEntityAvatar";
 
-const AVATAR_SIZE = 28;
+const AVATAR_SIZE_LIGHT = 40;
+const AVATAR_SIZE_DARK = 32;
 
 export type IndentFreightClientEntityProps = {
   label?: string;
@@ -32,6 +33,8 @@ export type IndentFreightClientEntityProps = {
   surface?: "light" | "dark";
   /** Hide the entity sub-label when the parent row already shows a section title. */
   hideLabel?: boolean;
+  /** Override default avatar diameter (light cards default 40, dark 32). */
+  avatarSize?: number;
 };
 
 export const IndentFreightClientEntity = memo(function IndentFreightClientEntity({
@@ -47,24 +50,39 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
   style,
   surface = "light",
   hideLabel = false,
+  avatarSize,
 }: IndentFreightClientEntityProps) {
   const router = useRouter();
-  const { fields, canOpenPublicProfile, publicProfileClientId } =
-    useIndentClientEntityAvatar({
-      clientId,
-      ownerOrgId,
-      shipperOrgId,
-      isOwner,
-      enabled: true,
-    });
+  const {
+    fields,
+    canOpenPublicProfile,
+    publicProfileClientId,
+    publicProfileTarget,
+  } = useIndentClientEntityAvatar({
+    clientId,
+    ownerOrgId,
+    shipperOrgId,
+    isOwner,
+    enabled: true,
+  });
 
   const isRight = align === "right";
   const onLight = surface === "light";
   const resolvedAvatarName = (avatarName ?? displayName).trim() || displayName;
+  const resolvedAvatarSize =
+    avatarSize ?? (onLight ? AVATAR_SIZE_LIGHT : AVATAR_SIZE_DARK);
 
   const openProfile = () => {
-    if (!canOpenPublicProfile || !publicProfileClientId) return;
-    router.push(`/public-profile/client/${publicProfileClientId}`);
+    if (!canOpenPublicProfile) return;
+    if (isOwner && publicProfileClientId) {
+      router.push(`/public-profile/client/${publicProfileClientId}`);
+      return;
+    }
+    if (publicProfileTarget) {
+      router.push(
+        `/public-profile/${publicProfileTarget.type}/${publicProfileTarget.id}`,
+      );
+    }
   };
 
   const avatar = (
@@ -75,7 +93,7 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
       organizationImageUrl={fields.organizationImageUrl}
       organizationAvatarSeed={fields.organizationAvatarSeed}
       entityType="client"
-      size={AVATAR_SIZE}
+      size={resolvedAvatarSize}
       initialsColorSeed={
         publicProfileClientId ?? shipperOrgId ?? resolvedAvatarName
       }
@@ -113,6 +131,7 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
             onPress={openProfile}
             style={({ pressed }) => [
               styles.avatarPress,
+              { borderRadius: resolvedAvatarSize / 2 },
               pressed && styles.avatarPressPressed,
             ]}
             accessibilityRole="button"
@@ -122,7 +141,9 @@ export const IndentFreightClientEntity = memo(function IndentFreightClientEntity
             {avatar}
           </Pressable>
         ) : (
-          <View style={styles.avatarPress}>{avatar}</View>
+          <View style={[styles.avatarPress, { borderRadius: resolvedAvatarSize / 2 }]}>
+            {avatar}
+          </View>
         )}
         <Text
           style={[
@@ -157,7 +178,7 @@ const styles = StyleSheet.create({
   },
   nameRow: {
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     minWidth: 0,
     alignSelf: "stretch",
     width: "100%",
@@ -174,7 +195,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   avatarPress: {
-    borderRadius: AVATAR_SIZE / 2,
     borderWidth: 1,
     borderColor: Theme.separatorDark,
   },

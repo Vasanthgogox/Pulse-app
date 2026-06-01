@@ -43,6 +43,8 @@ export interface AssignmentFlowShellProps {
   submitting?: boolean;
   /** Trip detail route: edge-to-edge on device (no web modal chrome). */
   fullScreen?: boolean;
+  /** Fill viewport with children + docked keypad (no body ScrollView). */
+  fillBody?: boolean;
 }
 
 export function AssignmentFlowShell({
@@ -57,6 +59,7 @@ export function AssignmentFlowShell({
   variant = "pulse",
   submitting = false,
   fullScreen = false,
+  fillBody = false,
 }: AssignmentFlowShellProps) {
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
@@ -147,6 +150,15 @@ export function AssignmentFlowShell({
     </View>
   );
 
+  const bodyContentStyle = [
+    styles.bodyContent,
+    fullScreen && styles.bodyContentFullScreen,
+    isPulse ? styles.bodyContentPulse : styles.bodyContentSlate,
+    webDesktopContent,
+    fillBody && styles.bodyContentFill,
+    !footer && !fillBody && { paddingBottom: Math.max(24, insets.bottom) },
+  ];
+
   return (
     <KeyboardAvoidingView
       style={[
@@ -154,24 +166,22 @@ export function AssignmentFlowShell({
         isPulse ? styles.rootPulse : styles.rootSlate,
         fullScreen ? styles.rootFullScreen : { flex: Platform.OS === "web" ? 0 : 1 },
       ]}
-      behavior={Platform.OS === "ios" ? "padding" : "padding"}
-      keyboardVerticalOffset={insets.top}
+      behavior={fillBody ? undefined : Platform.OS === "ios" ? "padding" : "padding"}
+      keyboardVerticalOffset={fillBody ? 0 : insets.top}
     >
       {header}
-      <ScrollView
-        style={styles.body}
-        contentContainerStyle={[
-          styles.bodyContent,
-          fullScreen && styles.bodyContentFullScreen,
-          isPulse ? styles.bodyContentPulse : styles.bodyContentSlate,
-          webDesktopContent,
-          !footer && { paddingBottom: Math.max(24, insets.bottom) },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {children}
-      </ScrollView>
+      {fillBody ? (
+        <View style={[styles.body, styles.bodyFill, bodyContentStyle]}>{children}</View>
+      ) : (
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={bodyContentStyle}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      )}
       {footer ? (
         <View
           style={[
@@ -280,6 +290,15 @@ const styles = StyleSheet.create({
   },
   bodyContentSlate: {
     backgroundColor: "#f8fafc",
+  },
+  bodyFill: {
+    flex: 1,
+    minHeight: 0,
+  },
+  bodyContentFill: {
+    flex: 1,
+    minHeight: 0,
+    paddingBottom: 0,
   },
   footerPulse: {
     paddingHorizontal: 16,

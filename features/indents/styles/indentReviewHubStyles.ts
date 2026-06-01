@@ -194,11 +194,29 @@ export const indentReviewHubText = {
 };
 
 export const indentReviewHubLayout = {
-  summaryCardRadius: 14,
-  summaryCardPadding: 12,
-  freightCardPadding: 10,
-  freightCardRadius: 12,
+  summaryCardRadius: 12,
+  summaryCardPadding: 10,
+  /** List / hub ticket cards (Load Center, trips hub). */
+  hubCardPaddingComfort: 12,
+  hubCardPaddingDense: 10,
+  freightCardPadding: 8,
+  freightCardRadius: 10,
+  sectionGap: 8,
+  insetGap: 6,
 };
+
+/** Shared elevation for white hub / ticket cards (detail, load center, bids). */
+export const indentHubCardShadow = Platform.select({
+  ios: {
+    shadowColor: Theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+  },
+  android: { elevation: 2 },
+  web: { boxShadow: "0 2px 12px rgba(15, 23, 42, 0.08)" },
+  default: {},
+});
 
 /** Dark hero + meta row (Award / Bid modals). */
 export const indentReviewHubStyles = StyleSheet.create({
@@ -306,6 +324,76 @@ export const indentReviewHubStyles = StyleSheet.create({
     padding: indentReviewHubLayout.freightCardPadding,
     marginBottom: 10,
     overflow: "hidden",
+  },
+  /** Load Center list + Review Hub scroll sections */
+  hubTicketCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: indentReviewHubLayout.summaryCardRadius,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  hubTicketBody: {
+    paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
+    paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
+    paddingBottom: indentReviewHubLayout.hubCardPaddingComfort,
+  },
+  hubTicketBodyDense: {
+    paddingHorizontal: indentReviewHubLayout.hubCardPaddingDense,
+    paddingTop: indentReviewHubLayout.hubCardPaddingDense,
+    paddingBottom: indentReviewHubLayout.hubCardPaddingDense,
+  },
+  hubSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: indentReviewHubLayout.sectionGap,
+    minWidth: 0,
+  },
+  hubEmptyCard: {
+    backgroundColor: Theme.screenBackground,
+    borderRadius: indentReviewHubLayout.summaryCardRadius,
+    paddingVertical: indentReviewHubLayout.hubCardPaddingComfort,
+    paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignSelf: "stretch",
+    gap: indentReviewHubLayout.sectionGap,
+  },
+  hubEmptyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    width: "100%",
+  },
+  hubEmptyCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  hubPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surfaceGray,
+  },
+  hubPillText: {
+    ...indentReviewHubText.chipLabel,
+    color: Theme.textPrimaryDark,
+  },
+  hubStatePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  hubStatePillText: {
+    ...indentReviewHubText.chipLabel,
+    color: Theme.positive,
   },
 });
 

@@ -24,11 +24,13 @@ import {
   updateTripSupplier,
 } from "@/features/trips/services/trips.service";
 import { generateTripOtp } from "@/features/trips/services/tripOtp.service";
-import { searchExistingDriversByPhone } from "@/features/drivers/services/drivers.service";
+import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
+import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
 import { updateDirectQuoteAssignment } from "@/features/indents";
 import { useInvalidateIndents, useInvalidateTrips } from "@/lib/queries";
 import { validatePhone } from "@/lib/phoneValidation";
-import { formatMobileNumber } from "@/lib/format";
+import { formatIndianVehicleNumber, formatMobileNumber } from "@/lib/format";
+import { isIndianVehiclePlateComplete } from "@/lib/indianVehicleInput.util";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -87,6 +89,9 @@ export interface StaffHandshakeResult {
     aggregatePhoneName: string | null;
     aggregatePhoneNotFound: boolean;
     aggregatePhoneInTrip: boolean;
+    aggregatePhoneMatches: ExistingDriverMatch[];
+    aggregatePhoneLookupLoading: boolean;
+    aggregatePhoneSelectedUserId: string | null;
     subcontractSupplierId: string | null;
     subcontractRate: string;
     aggregateAdvancePaid: string;
@@ -117,6 +122,7 @@ export interface StaffHandshakeResult {
     aggregatePhoneName: (v: string | null) => void;
     aggregatePhoneNotFound: (v: boolean) => void;
     aggregatePhoneInTrip: (v: boolean) => void;
+    applyAggregatePhoneMatch: (match: ExistingDriverMatch) => void;
     subcontractSupplierId: (id: string | null) => void;
     subcontractRate: (v: string) => void;
     aggregateAdvancePaid: (v: string) => void;
@@ -168,7 +174,15 @@ export function useStaffHandshake({
   );
   const [aggregatePhoneNotFound, setAggregatePhoneNotFound] = useState(false);
   const [aggregatePhoneInTrip, setAggregatePhoneInTrip] = useState(false);
+  const [aggregatePhoneMatches, setAggregatePhoneMatches] = useState<
+    ExistingDriverMatch[]
+  >([]);
+  const [aggregatePhoneLookupLoading, setAggregatePhoneLookupLoading] =
+    useState(false);
+  const [aggregatePhoneSelectedUserId, setAggregatePhoneSelectedUserId] =
+    useState<string | null>(null);
   const aggregatePhoneLookupTimeoutRef = useRef<number | null>(null);
+  const aggregatePhoneLookupGenRef = useRef(0);
   /** Prevents double-submit on Staff Handshake (parallel creates → unique trip_number 409). */
   const staffHandshakeDeployLockRef = useRef(false);
   const [subcontractSupplierId, setSubcontractSupplierId] = useState<
@@ -197,53 +211,86 @@ export function useStaffHandshake({
     deployLoadType,
   );
 
-  // Phone lookup side-effect — stays inside the hook
+  const applyAggregatePhoneMatch = useCallback((match: ExistingDriverMatch) => {
+    const name = match.full_name?.trim() || "";
+    setAggregatePhoneSelectedUserId(match.user_id);
+    setAggregatePhoneName(name || null);
+    aggregateDriverNameManualRef.current = false;
+    if (name) setAggregateDriverTrackingName(name);
+  }, []);
+
+  // Phone lookup — suggest driver name(s) from platform when number is complete
   useEffect(() => {
     const trimmed = aggregateDriverPhone.trim();
     if (aggregatePhoneLookupTimeoutRef.current)
       clearTimeout(aggregatePhoneLookupTimeoutRef.current);
     aggregatePhoneLookupTimeoutRef.current = setTimeout(() => {
       aggregatePhoneLookupTimeoutRef.current = null;
-      const digits = trimmed.replace(/\D/g, "");
-      const last10 = digits.slice(-10);
+      const last10 = trimmed.replace(/\D/g, "").slice(-10);
       if (last10.length < 10) {
+        setAggregatePhoneMatches([]);
+        setAggregatePhoneLookupLoading(false);
+        setAggregatePhoneSelectedUserId(null);
         setAggregatePhoneName(null);
         setAggregatePhoneNotFound(false);
         setAggregatePhoneInTrip(false);
         return;
       }
 
-      searchExistingDriversByPhone(last10).then(async ({ matches }) => {
-        const direct = matches[0]?.full_name ?? null;
-        let foundName = direct;
+      const gen = ++aggregatePhoneLookupGenRef.current;
+      setAggregatePhoneLookupLoading(true);
+      setAggregatePhoneSelectedUserId(null);
+      setAggregatePhoneName(null);
+      setAggregatePhoneNotFound(false);
+      setAggregatePhoneInTrip(false);
 
-        if (!foundName) {
-          const { matches: matchesWithCode } =
-            await searchExistingDriversByPhone(`+91${last10}`);
-          foundName = matchesWithCode[0]?.full_name ?? null;
-        }
+      lookupDriversByPhoneVariants(trimmed).then(async ({ matches, error }) => {
+        if (aggregatePhoneLookupGenRef.current !== gen) return;
+        setAggregatePhoneLookupLoading(false);
+        setAggregatePhoneMatches(matches);
 
+        const foundName = matches[0]?.full_name?.trim() || null;
         setAggregatePhoneName(foundName);
-        if (foundName && !aggregateDriverNameManualRef.current) {
-          setAggregateDriverTrackingName(foundName);
-        }
-        setAggregatePhoneNotFound(!foundName);
+        setAggregatePhoneNotFound(!error && matches.length === 0);
+
         if (!orgId) {
-          setAggregatePhoneInTrip(false);
+          if (
+            matches.length === 1 &&
+            !aggregateDriverNameManualRef.current
+          ) {
+            applyAggregatePhoneMatch(matches[0]);
+          }
           return;
         }
+
         const { result } = await getDriverAvailabilityByPhoneGlobal(last10, {
           anyOpenTripBlocks: true,
           requireAuthoritativeRpc: true,
         });
-        setAggregatePhoneInTrip(result.isBusy);
+        if (aggregatePhoneLookupGenRef.current !== gen) return;
+
+        const busy = result.isBusy;
+        setAggregatePhoneInTrip(busy);
+
+        if (busy) {
+          setAggregatePhoneSelectedUserId(null);
+          setAggregatePhoneName(null);
+          if (!aggregateDriverNameManualRef.current) {
+            setAggregateDriverTrackingName("");
+          }
+          return;
+        }
+
+        if (matches.length === 1 && !aggregateDriverNameManualRef.current) {
+          applyAggregatePhoneMatch(matches[0]);
+        }
       });
     }, 400) as unknown as number;
     return () => {
       if (aggregatePhoneLookupTimeoutRef.current)
         clearTimeout(aggregatePhoneLookupTimeoutRef.current);
     };
-  }, [aggregateDriverPhone, orgId]);
+  }, [aggregateDriverPhone, orgId, applyAggregatePhoneMatch]);
 
   // Computed readiness flags
   const rosterReady =
@@ -252,7 +299,9 @@ export function useStaffHandshake({
 
   const aggregateHasDriverName = aggregateDriverTrackingName.trim().length > 0;
   const aggregateHasDriverPhone = aggregateDriverPhone.trim().length > 0;
-  const aggregateHasVehicleText = assignVehicleRegistration.trim().length > 0;
+  const aggregateHasVehicleText = isIndianVehiclePlateComplete(
+    assignVehicleRegistration,
+  );
   const aggregateTrackingFlowReady =
     aggregateHasDriverName && aggregateHasDriverPhone && aggregateHasVehicleText;
 
@@ -279,6 +328,9 @@ export function useStaffHandshake({
     setAggregatePhoneName(null);
     setAggregatePhoneNotFound(false);
     setAggregatePhoneInTrip(false);
+    setAggregatePhoneMatches([]);
+    setAggregatePhoneLookupLoading(false);
+    setAggregatePhoneSelectedUserId(null);
     setSubcontractSupplierId(null);
     setSubcontractRate("");
     setAggregateAdvancePaid("");
@@ -501,7 +553,7 @@ export function useStaffHandshake({
       : aggregateDriverPhone.trim();
     const regTrimmed = deferHandshakeAssignment
       ? ""
-      : assignVehicleRegistration.trim();
+      : formatIndianVehicleNumber(assignVehicleRegistration).trim();
     if (!deferHandshakeAssignment && nameTrimmed.length === 0) {
       Alert.alert(
         "Driver name required",
@@ -768,6 +820,9 @@ export function useStaffHandshake({
       aggregatePhoneName,
       aggregatePhoneNotFound,
       aggregatePhoneInTrip,
+      aggregatePhoneMatches,
+      aggregatePhoneLookupLoading,
+      aggregatePhoneSelectedUserId,
       subcontractSupplierId,
       subcontractRate,
       aggregateAdvancePaid,
@@ -797,6 +852,7 @@ export function useStaffHandshake({
       aggregatePhoneName: setAggregatePhoneName,
       aggregatePhoneNotFound: setAggregatePhoneNotFound,
       aggregatePhoneInTrip: setAggregatePhoneInTrip,
+      applyAggregatePhoneMatch,
       subcontractSupplierId: setSubcontractSupplierId,
       subcontractRate: setSubcontractRate,
       aggregateAdvancePaid: setAggregateAdvancePaid,
