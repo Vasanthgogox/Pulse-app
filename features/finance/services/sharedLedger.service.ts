@@ -113,18 +113,7 @@ export async function getSharedLedgerConnections(orgId: string): Promise<{
   error: Error | null;
   connections: SharedLedgerConnection[];
 }> {
-  const { data, error } = await supabase().rpc('get_shared_ledger_connections', {
-    org_id: orgId,
-  });
-  if (!error) {
-    const rows = (Array.isArray(data) ? data : []) as Array<{ partner_org_id: string; contact_id?: string }>;
-    const connections: SharedLedgerConnection[] = rows.map((r) => ({
-      partner_org_id: r.partner_org_id ?? '',
-      contact_id: r.contact_id,
-    }));
-    return { error: null, connections };
-  }
-  // RPC not available and table doesn't exist yet — return empty
+  // Feature not yet deployed — return empty until RPC/table exists
   return { error: null, connections: [] };
 }
 
