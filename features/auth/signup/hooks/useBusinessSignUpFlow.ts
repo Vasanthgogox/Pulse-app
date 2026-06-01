@@ -27,8 +27,8 @@ import {
 } from '@/lib/phoneValidation';
 import { validateFullName, validatePassword } from '@/lib/validation';
 import {
+  pickAndUploadAvatar,
   pickAndUploadOrgLogo,
-  pickLocalAvatar,
   uploadAvatarFromLocal,
   updateOrganizationLogo,
 } from '@/lib/avatarUpload';
@@ -62,7 +62,8 @@ export function useBusinessSignUpFlow() {
   const isOnline = useIsOnline();
   const { signUp, signIn, signInWithGoogle, refreshSession } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
-  const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
+  const accountScrollRef = useRef<ScrollView>(null);
+  const sessionEnsuredRef = useRef(false);
 
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const useMobileLayout = !isDesktop;
@@ -228,11 +229,18 @@ export function useBusinessSignUpFlow() {
   }, []);
 
   // Resolve org when entering branding steps (trigger may lag sign-up).
+  // sessionEnsuredRef prevents re-running ensureAuthSession on every back/forward
+  // between steps 6 and 7, which would otherwise fire signIn+refreshSession on each
+  // step change and risk a routing cascade from app/index.tsx.
   useEffect(() => {
     if (step !== 6 && step !== 7) return;
     let cancelled = false;
     void (async () => {
-      await ensureAuthSession();
+      if (!sessionEnsuredRef.current) {
+        const ok = await ensureAuthSession();
+        if (cancelled) return;
+        if (ok) sessionEnsuredRef.current = true;
+      }
       if (cancelled || provisionedOrgId) return;
       const orgId = await resolveProvisionedOrgId();
       if (!cancelled && orgId) setProvisionedOrgId(orgId);
@@ -269,6 +277,16 @@ export function useBusinessSignUpFlow() {
   const handleBack = () => {
     if (step === 0) { router.back(); return; }
     if (step === 8) {
+      clearBusinessSignupBranding();
+      router.replace('/');
+      return;
+    }
+    // Step 6 is the first post-account-creation step. Pressing back here would
+    // land on an already-submitted form, and further back presses would trigger
+    // router.back() which exits the screen — then the branding flag redirects
+    // straight back, creating a reload loop. Treat back from step 6 as "finish
+    // later": clear the flag and let app/index.tsx route to the right screen.
+    if (step === 6) {
       clearBusinessSignupBranding();
       router.replace('/');
       return;
@@ -692,9 +710,9 @@ export function useBusinessSignUpFlow() {
     if (ok) goToPage(8);
   };
 
-  const scrollConfirmPasswordIntoView = () => {
+  const scrollAccountFieldIntoView = () => {
     setTimeout(() => {
-      pageVerticalScrollRefs.current[5]?.scrollToEnd({ animated: true });
+      accountScrollRef.current?.scrollToEnd({ animated: true });
     }, CONFIRM_SCROLL_DELAY_MS);
   };
 
@@ -704,7 +722,7 @@ export function useBusinessSignUpFlow() {
     useMobileLayout,
     pageWidth,
     scrollRef,
-    pageVerticalScrollRefs,
+    accountScrollRef,
     isOnline,
 
     // step
@@ -773,7 +791,7 @@ export function useBusinessSignUpFlow() {
     step5Errors,
     passwordStrength,
     confirmMismatch,
-    scrollConfirmPasswordIntoView,
+    scrollAccountFieldIntoView,
 
     // step 6 — logo
     provisionedOrgId,

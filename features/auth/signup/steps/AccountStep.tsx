@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { SignUpPulseField } from '../SignUpPulseField';
 import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
+import { SIGNUP_ACCOUNT_SCROLL_PAD } from '../signUpConstants';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function AccountStep({ flow }: { flow: SignUpFlow }) {
@@ -25,6 +26,9 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       primaryDisabled={!canSubmit}
       primaryLoading={flow.loading}
       inlinePrimary
+      keyboardAware
+      scrollRef={flow.accountScrollRef}
+      scrollPaddingBottom={SIGNUP_ACCOUNT_SCROLL_PAD}
     >
       <SignUpPulseField
         label="Full Name"
@@ -52,6 +56,7 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPulseField
         label="Password"
         required
+        dense
         passwordField="new"
         value={flow.password}
         onChangeText={flow.setPassword}
@@ -62,6 +67,7 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.step5Attempted ? flow.step5Errors.password : null}
+        onFocus={flow.scrollAccountFieldIntoView}
         trailing={
           <Pressable onPress={flow.toggleShowPassword} style={styles.eyeBtn} hitSlop={8}>
             {flow.showPassword ? (
@@ -76,6 +82,7 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPulseField
         label="Confirm Password"
         required
+        dense
         passwordField="confirm"
         value={flow.confirmPassword}
         onChangeText={flow.setConfirmPassword}
@@ -85,7 +92,7 @@ export function AccountStep({ flow }: { flow: SignUpFlow }) {
         spellCheck={false}
         maxLength={128}
         editable={!flow.loading}
-        onFocus={flow.scrollConfirmPasswordIntoView}
+        onFocus={flow.scrollAccountFieldIntoView}
         errorMessage={
           flow.confirmMismatch
             ? 'Passwords do not match.'

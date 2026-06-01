@@ -9,10 +9,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
+import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
@@ -71,8 +73,11 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   theme = PULSE_SIGNUP,
 }: SignUpPulseKeypadStepProps) {
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
   const useKeypad = useSignupKeypadInput();
+  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
   const inputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const blink = useRef(new Animated.Value(1)).current;
   const digits = value.replace(/\D/g, '').slice(0, maxDigits);
   const display = digits.length > 0 ? formatDisplay(digits) : emptyPlaceholder;
@@ -86,6 +91,11 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     }
     return undefined;
   }, [useKeypad]);
+
+  useEffect(() => {
+    if (useKeypad || !keyboardVisible) return;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [keyboardVisible, useKeypad]);
 
   useEffect(() => {
     if (!useKeypad) return undefined;
@@ -236,15 +246,31 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     </>
   );
 
+  const webKeyboardPad =
+    !useKeypad && keyboardVisible ? Math.max(keyboardHeight, 0) + 16 : 0;
+
+  const contentScrollInner = [
+    styles.contentScrollInner,
+    { paddingBottom: 24 + webKeyboardPad },
+  ];
+
   return (
     <View style={[styles.root, !useKeypad && styles.rootWeb]}>
       <View style={[styles.main, !useKeypad && styles.mainWeb]}>
         {useKeypad ? (
-          <View style={styles.content}>{content}</View>
-        ) : (
           <ScrollView
             style={styles.contentScroll}
-            contentContainerStyle={styles.contentScrollInner}
+            contentContainerStyle={styles.contentScrollInnerKeypad}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {content}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            ref={scrollRef}
+            style={styles.contentScroll}
+            contentContainerStyle={contentScrollInner}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -254,7 +280,12 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
       </View>
 
       {useKeypad ? (
-        <View style={styles.keypadDock}>
+        <View
+          style={[
+            styles.keypadDock,
+            { paddingBottom: Math.max(insets.bottom, Platform.OS === 'web' ? 6 : 8) },
+          ]}
+        >
           <DecimalKeypad onKey={handleKey} showDecimal={false} variant="pay" size="compact" />
         </View>
       ) : null}
@@ -289,10 +320,13 @@ function createStyles(theme: SignUpTheme) {
       flex: 1,
     },
     contentScrollInner: {
-      flexGrow: 1,
       paddingHorizontal: 24,
       paddingTop: 8,
-      paddingBottom: 24,
+    },
+    contentScrollInnerKeypad: {
+      paddingHorizontal: 24,
+      paddingTop: 8,
+      paddingBottom: 8,
     },
     fieldLabel: {
       fontSize: 10,
@@ -444,9 +478,8 @@ function createStyles(theme: SignUpTheme) {
       borderTopColor: theme.border,
       borderTopLeftRadius: PULSE_SIGNUP_RADIUS.keypadTray,
       borderTopRightRadius: PULSE_SIGNUP_RADIUS.keypadTray,
-      paddingTop: 24,
+      paddingTop: Platform.OS === 'web' ? 8 : 24,
       paddingHorizontal: 24,
-      paddingBottom: 8,
     },
   });
 }

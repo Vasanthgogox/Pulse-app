@@ -21,6 +21,8 @@ export interface SignUpPulseFieldProps extends TextInputProps {
   theme?: SignUpTheme;
   /** Applies iOS-safe autofill props so Strong Password UI does not block typing. */
   passwordField?: SignUpPasswordFieldRole;
+  /** Tighter vertical spacing (Account step with keyboard). */
+  dense?: boolean;
 }
 
 export const SignUpPulseField = memo(function SignUpPulseField({
@@ -31,11 +33,12 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   trailing,
   theme = PULSE_SIGNUP,
   passwordField,
+  dense = false,
   style,
   ...inputProps
 }: SignUpPulseFieldProps) {
   const hasError = !!errorMessage;
-  const fieldStyles = useMemo(() => createFieldStyles(theme), [theme]);
+  const fieldStyles = useMemo(() => createFieldStyles(theme, dense), [theme, dense]);
   const passwordAutofillProps = passwordField
     ? signUpPasswordInputProps(passwordField)
     : {};
@@ -75,10 +78,10 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   );
 });
 
-function createFieldStyles(theme: SignUpTheme) {
+function createFieldStyles(theme: SignUpTheme, dense: boolean) {
   return StyleSheet.create({
     wrap: {
-      marginBottom: 16,
+      marginBottom: dense ? 10 : 16,
     },
     label: {
       fontSize: 10,

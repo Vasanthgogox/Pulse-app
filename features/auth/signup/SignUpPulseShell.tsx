@@ -1,8 +1,17 @@
-import { memo, type ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useRef, type ReactNode } from 'react';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 
+import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
@@ -11,6 +20,8 @@ import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPul
 const DEVICE_WIDTH = 430;
 const DEVICE_HEIGHT = 900;
 const DEVICE_BORDER = 12;
+/** Min width per progress segment when the rail scrolls horizontally. */
+const PROGRESS_ITEM_MIN_WIDTH = 52;
 
 export type SignUpShellTheme = SignUpTheme;
 
@@ -38,6 +49,16 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
   const insets = useSafeAreaInsets();
   const stepIndex = Math.min(Math.max(currentStepIndex, 0), stepLabels.length - 1);
   const styles = createStyles(theme);
+  const useScrollableProgress = stepLabels.length > 5;
+  const progressScrollRef = useRef<ScrollView>(null);
+  const { keyboardVisible } = useKeyboardVisible();
+  const showProgress = !hideProgress && stepLabels.length > 0 && !keyboardVisible;
+
+  useEffect(() => {
+    if (!useScrollableProgress) return;
+    const x = Math.max(0, stepIndex * PROGRESS_ITEM_MIN_WIDTH - 72);
+    progressScrollRef.current?.scrollTo({ x, animated: true });
+  }, [stepIndex, useScrollableProgress]);
 
   const device = (
     <View
@@ -70,24 +91,56 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
         {children}
       </View>
 
-      {!hideProgress && stepLabels.length > 0 ? (
+      {showProgress ? (
         <View
           style={[
             styles.progressFooter,
-            { paddingBottom: Math.max(insets.bottom, isDesktop ? 24 : 16) },
+            { paddingBottom: Math.max(insets.bottom, isDesktop ? 24 : 12) },
           ]}
         >
-          {stepLabels.map((label, i) => {
-            const active = i <= stepIndex;
-            return (
-              <View key={label} style={styles.progressItem}>
-                <View style={[styles.progressBar, active && styles.progressBarActive]} />
-                <Text style={[styles.progressLabel, active && styles.progressLabelActive]}>
-                  {label}
-                </Text>
-              </View>
-            );
-          })}
+          {useScrollableProgress ? (
+            <ScrollView
+              ref={progressScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.progressScrollContent}
+            >
+              {stepLabels.map((label, i) => {
+                const active = i <= stepIndex;
+                return (
+                  <View
+                    key={`${label}-${i}`}
+                    style={[styles.progressItem, styles.progressItemScroll]}
+                  >
+                    <View style={[styles.progressBar, active && styles.progressBarActive]} />
+                    <Text
+                      style={[styles.progressLabel, active && styles.progressLabelActive]}
+                      numberOfLines={1}
+                    >
+                      {label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.progressRow}>
+              {stepLabels.map((label, i) => {
+                const active = i <= stepIndex;
+                return (
+                  <View key={`${label}-${i}`} style={styles.progressItem}>
+                    <View style={[styles.progressBar, active && styles.progressBarActive]} />
+                    <Text
+                      style={[styles.progressLabel, active && styles.progressLabelActive]}
+                      numberOfLines={1}
+                    >
+                      {label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
       ) : null}
     </View>
@@ -107,8 +160,13 @@ export const SignUpPulseShell = memo(function SignUpPulseShell({
     );
   }
 
+  const shellRootStyle: ViewStyle | ViewStyle[] =
+    Platform.OS === 'web'
+      ? [styles.webFill, WEB_APP_VIEWPORT_STYLE as object as ViewStyle]
+      : styles.nativeFill;
+
   return (
-    <View style={Platform.OS === 'web' ? [styles.webFill, WEB_APP_VIEWPORT_STYLE as object] : undefined}>
+    <View style={shellRootStyle}>
       <View style={Platform.OS === 'web' ? styles.webCenterWrap : styles.nativeFill}>
         {device}
       </View>
@@ -207,20 +265,37 @@ function createStyles(theme: SignUpShellTheme) {
       minHeight: 0,
     },
     progressFooter: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      paddingTop: 16,
-      paddingHorizontal: 24,
+      paddingTop: 10,
+      paddingHorizontal: 16,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
       backgroundColor: theme.bg,
     },
+    progressRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-end',
+    },
+    progressScrollContent: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 4,
+      paddingHorizontal: 4,
+    },
     progressItem: {
       flex: 1,
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
       minWidth: 0,
       paddingHorizontal: 2,
+    },
+    progressItemScroll: {
+      flex: 0,
+      flexGrow: 0,
+      flexShrink: 0,
+      minWidth: PROGRESS_ITEM_MIN_WIDTH,
+      maxWidth: 72,
+      paddingHorizontal: 4,
     },
     progressBar: {
       width: '100%',
@@ -232,12 +307,13 @@ function createStyles(theme: SignUpShellTheme) {
       backgroundColor: theme.primary,
     },
     progressLabel: {
-      fontSize: 8,
+      fontSize: 7,
       fontWeight: '800',
-      letterSpacing: 0.8,
+      letterSpacing: 0.4,
       textTransform: 'uppercase',
       color: theme.placeholder,
       textAlign: 'center',
+      width: '100%',
     },
     progressLabelActive: {
       color: theme.primary,

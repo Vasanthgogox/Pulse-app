@@ -1,5 +1,15 @@
-import { memo, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { memo, type ReactNode, type RefObject } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+
+import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
@@ -17,6 +27,11 @@ export interface SignUpPulseFormStepProps {
   inlinePrimary?: boolean;
   /** Vertically center scroll content (success / celebration steps). */
   centerContent?: boolean;
+  /** Extra bottom padding (e.g. clear fixed progress rail on Account step). */
+  scrollPaddingBottom?: number;
+  /** Adds keyboard height to scroll padding and KeyboardAvoidingView on native. */
+  keyboardAware?: boolean;
+  scrollRef?: RefObject<ScrollView | null>;
   theme?: SignUpTheme;
   secondaryAction?: {
     label: string;
@@ -35,9 +50,17 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   footerAccessory,
   inlinePrimary = false,
   centerContent = false,
+  scrollPaddingBottom = 0,
+  keyboardAware = false,
+  scrollRef,
   theme = PULSE_SIGNUP,
   secondaryAction,
 }: SignUpPulseFormStepProps) {
+  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  const bottomPad =
+    scrollPaddingBottom +
+    (keyboardAware && keyboardVisible ? Math.max(keyboardHeight, 0) : 0);
+
   const cta = (
     <View style={styles.ctaBlock}>
       {footerAccessory}
@@ -58,22 +81,38 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
     </View>
   );
 
+  const scroll = (
+    <ScrollView
+      ref={scrollRef}
+      style={styles.scroll}
+      contentContainerStyle={[
+        styles.scrollContent,
+        { paddingBottom: 16 + bottomPad },
+        centerContent && styles.scrollContentCentered,
+      ]}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      keyboardDismissMode="on-drag"
+    >
+      <SignUpPulseTitle title={title} subtitle={subtitle} />
+      {children}
+      {inlinePrimary ? cta : null}
+    </ScrollView>
+  );
+
   return (
     <View style={styles.root}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          centerContent && styles.scrollContentCentered,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        keyboardDismissMode="on-drag"
-      >
-        <SignUpPulseTitle title={title} subtitle={subtitle} />
-        {children}
-        {inlinePrimary ? cta : null}
-      </ScrollView>
+      {keyboardAware && Platform.OS !== 'web' ? (
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={8}
+        >
+          {scroll}
+        </KeyboardAvoidingView>
+      ) : (
+        scroll
+      )}
       {!inlinePrimary ? (
         <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.bg }]}>
           {cta}
@@ -88,17 +127,20 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  keyboardAvoid: {
+    flex: 1,
+    minHeight: 0,
+  },
   scroll: {
     flex: 1,
     minHeight: 0,
   },
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 16,
   },
   scrollContentCentered: {
+    flexGrow: 1,
     justifyContent: 'center',
   },
   footer: {

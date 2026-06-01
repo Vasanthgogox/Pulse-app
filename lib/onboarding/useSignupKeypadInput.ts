@@ -1,6 +1,14 @@
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 
-/** Custom keypad on iOS/Android; OS keyboard + TextInput on web (all widths). */
+/** Match signup wizard / dense form breakpoint. */
+const MOBILE_WEB_KEYPAD_MAX_WIDTH = 600;
+
+/**
+ * Custom docked keypad on native and narrow web.
+ * Desktop web keeps OS keyboard + TextInput.
+ */
 export function useSignupKeypadInput(): boolean {
-  return Platform.OS === 'ios' || Platform.OS === 'android';
+  const { width } = useWindowDimensions();
+  if (Platform.OS === 'ios' || Platform.OS === 'android') return true;
+  return Platform.OS === 'web' && width < MOBILE_WEB_KEYPAD_MAX_WIDTH;
 }

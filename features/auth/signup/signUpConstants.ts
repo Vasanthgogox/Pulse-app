@@ -11,10 +11,13 @@ export const OTP_RESEND_SECS = 30;
 export const EMAIL_RESEND_SECS = 60;
 export const DESKTOP_BREAKPOINT = 1024;
 export const DESKTOP_MAX_PANEL_WIDTH = 560;
-export const SCROLL_BOTTOM_PAD = 220;
+/** Account step: room below confirm password for progress rail + mobile keyboard. */
+export const SCROLL_BOTTOM_PAD = 24;
+export const SIGNUP_ACCOUNT_SCROLL_PAD = 88;
 export const CONFIRM_SCROLL_DELAY_MS = 150;
 
-export const STEP_LABELS = ['Phone', 'Verify', 'Company', 'Details', 'Location', 'Account', 'Logo', 'Photo'] as const;
+/** Short labels — 8 steps on ~390px web; longer names overlap in the progress rail. */
+export const STEP_LABELS = ['Phone', 'Verify', 'Org', 'Profile', 'City', 'Account', 'Logo', 'Photo'] as const;
 
 export const BUSINESS_ACTIVATION_HEADERS: Record<
   number,

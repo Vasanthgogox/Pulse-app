@@ -16,6 +16,7 @@ export const C = {
 } as const;
 
 export const styles = StyleSheet.create({
+  screenRoot: { flex: 1, minHeight: 0, backgroundColor: C.bg },
   container: { flex: 1, backgroundColor: C.bg },
   mobileStepFlex: { flex: 1, minHeight: 0 },
   mobileShell: { flex: 1 },

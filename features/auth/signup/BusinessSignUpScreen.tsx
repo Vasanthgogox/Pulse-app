@@ -51,17 +51,19 @@ export default function BusinessSignUpScreen() {
   const backLabel = flow.step === 0 ? 'Back' : flow.step === 8 ? '' : 'Back';
 
   return (
-    <SignUpPulseShell
-      backLabel={backLabel || 'Back'}
-      onBack={flow.handleBack}
-      stepLabels={STEP_LABELS}
-      currentStepIndex={Math.min(flow.step, STEP_LABELS.length - 1)}
-      hideProgress={flow.step >= 8}
-      isDesktop={flow.isDesktop && Platform.OS !== 'web'}
-    >
-      <View style={styles.mobileStepFlex}>
-        <BusinessStepContent flow={flow} step={flow.step} />
-      </View>
-    </SignUpPulseShell>
+    <View style={styles.screenRoot}>
+      <SignUpPulseShell
+        backLabel={backLabel || 'Back'}
+        onBack={flow.handleBack}
+        stepLabels={STEP_LABELS}
+        currentStepIndex={Math.min(flow.step, STEP_LABELS.length - 1)}
+        hideProgress={flow.step >= 8}
+        isDesktop={flow.isDesktop && Platform.OS !== 'web'}
+      >
+        <View style={styles.mobileStepFlex}>
+          <BusinessStepContent flow={flow} step={flow.step} />
+        </View>
+      </SignUpPulseShell>
+    </View>
   );
 }
