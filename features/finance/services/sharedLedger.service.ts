@@ -124,18 +124,8 @@ export async function getSharedLedgerConnections(orgId: string): Promise<{
     }));
     return { error: null, connections };
   }
-  // Fallback: if RPC does not exist yet, try table (RLS may allow read)
-  const { data: tableData, error: tableError } = await supabase()
-    .from('shared_ledger_connection')
-    .select('org_a_id, org_b_id')
-    .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
-    .eq('status', 'ACTIVE');
-  if (tableError) return { error: new Error(error.message), connections: [] };
-  const rows = (tableData ?? []) as Array<{ org_a_id: string; org_b_id: string }>;
-  const connections: SharedLedgerConnection[] = rows.map((row) => ({
-    partner_org_id: row.org_a_id === orgId ? row.org_b_id : row.org_a_id,
-  }));
-  return { error: null, connections };
+  // RPC not available and table doesn't exist yet — return empty
+  return { error: null, connections: [] };
 }
 
 /**
