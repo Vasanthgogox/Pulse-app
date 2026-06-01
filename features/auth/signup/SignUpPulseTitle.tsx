@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 export interface SignUpPulseTitleProps {
   title: string;
@@ -46,25 +46,25 @@ export const SignUpPulseTitle = memo(function SignUpPulseTitle({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 24,
+    marginBottom: Platform.OS === 'web' ? 16 : 24,
   },
   wrapCompact: {
-    marginBottom: 20,
+    marginBottom: Platform.OS === 'web' ? 14 : 20,
   },
   centered: {
     alignItems: 'center',
   },
   title: {
-    fontSize: 26,
+    fontSize: Platform.OS === 'web' ? 22 : 26,
     fontWeight: '900',
     letterSpacing: -0.4,
-    lineHeight: 32,
+    lineHeight: Platform.OS === 'web' ? 28 : 32,
     color: '#111827',
     textAlign: 'center',
   },
   titleCompact: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: Platform.OS === 'web' ? 19 : 22,
+    lineHeight: Platform.OS === 'web' ? 24 : 28,
     letterSpacing: -0.3,
   },
   subtitle: {

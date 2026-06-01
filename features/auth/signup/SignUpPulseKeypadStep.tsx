@@ -80,8 +80,9 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
   const scrollRef = useRef<ScrollView>(null);
   const blink = useRef(new Animated.Value(1)).current;
   const digits = value.replace(/\D/g, '').slice(0, maxDigits);
-  const display = digits.length > 0 ? formatDisplay(digits) : emptyPlaceholder;
   const isEmpty = digits.length === 0;
+  const displayText = isEmpty ? emptyPlaceholder : formatDisplay(digits);
+  const showCursor = digits.length < maxDigits;
   const ready = digits.length >= maxDigits && !primaryDisabled && !primaryLoading;
 
   useEffect(() => {
@@ -143,17 +144,27 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
               <View style={[styles.displayRow, errorMessage ? styles.displayError : null]}>
                 {displayFlag ? <Text style={styles.flag}>{displayFlag}</Text> : null}
                 {displayPrefix ? <Text style={styles.prefix}>{displayPrefix}</Text> : null}
-                <Text
-                  style={[styles.displayValue, isEmpty && styles.placeholder]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.65}
-                >
-                  {display}
-                </Text>
-                {digits.length < maxDigits ? (
-                  <Animated.View style={[styles.cursor, { opacity: blink }]} />
-                ) : null}
+                <View style={styles.digitArea}>
+                  {showCursor && isEmpty ? (
+                    <Animated.View
+                      style={[styles.cursor, styles.cursorLeading, { opacity: blink }]}
+                    />
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.displayValue,
+                      isEmpty ? styles.placeholder : styles.displayValueTyped,
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.65}
+                  >
+                    {displayText}
+                  </Text>
+                  {showCursor && !isEmpty ? (
+                    <Animated.View style={[styles.cursor, { opacity: blink }]} />
+                  ) : null}
+                </View>
               </View>
             )
           ) : customDisplay ? (
@@ -195,6 +206,7 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
                   placeholderTextColor={theme.placeholder}
                   autoComplete="tel"
                   textContentType="telephoneNumber"
+                  selection={{ start: digits.length, end: digits.length }}
                   style={styles.webInput}
                   accessibilityLabel={fieldLabel}
                 />
@@ -367,15 +379,24 @@ function createStyles(theme: SignUpTheme) {
       color: theme.text,
       marginRight: 8,
     },
-    displayValue: {
+    digitArea: {
       flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      minWidth: 0,
+    },
+    displayValue: {
       fontSize: 18,
       fontWeight: '700',
       letterSpacing: 2.4,
       color: theme.text,
       minWidth: 0,
     },
+    displayValueTyped: {
+      flexShrink: 1,
+    },
     placeholder: {
+      flex: 1,
       color: theme.placeholder,
       fontWeight: '500',
       letterSpacing: 2,
@@ -386,6 +407,11 @@ function createStyles(theme: SignUpTheme) {
       borderRadius: 1,
       backgroundColor: theme.primary,
       marginLeft: 4,
+      flexShrink: 0,
+    },
+    cursorLeading: {
+      marginLeft: 0,
+      marginRight: 4,
     },
     webInputRow: {
       flexDirection: 'row',

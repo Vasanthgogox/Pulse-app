@@ -57,9 +57,13 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   secondaryAction,
 }: SignUpPulseFormStepProps) {
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  // On web the outer shell already shrinks to visualViewport height (--app-vh),
+  // so adding keyboardHeight would double-count and push content too far down.
   const bottomPad =
     scrollPaddingBottom +
-    (keyboardAware && keyboardVisible ? Math.max(keyboardHeight, 0) : 0);
+    (keyboardAware && keyboardVisible && Platform.OS !== 'web'
+      ? Math.max(keyboardHeight, 0)
+      : 0);
 
   const cta = (
     <View style={styles.ctaBlock}>
@@ -137,7 +141,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: Platform.OS === 'web' ? 4 : 8,
   },
   scrollContentCentered: {
     flexGrow: 1,

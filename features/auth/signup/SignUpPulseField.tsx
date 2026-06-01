@@ -103,7 +103,10 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       flexDirection: 'row',
       alignItems: 'center',
       position: 'relative',
-      overflow: 'hidden',
+      // iOS Safari (mobile web): overflow:hidden on a container of <input> can
+      // silently block the virtual keyboard. Use visible on web; border-radius
+      // still renders correctly without needing to clip child backgrounds here.
+      overflow: Platform.OS === 'web' ? 'visible' : 'hidden',
     },
     inputShellMultiline: {
       alignItems: 'flex-start',
@@ -121,7 +124,7 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       color: theme.text,
       minHeight: 48,
       ...Platform.select({
-        web: { outlineStyle: 'none' } as object,
+        web: { outlineStyle: 'none', cursor: 'text' } as object,
       }),
     },
     inputMultiline: {

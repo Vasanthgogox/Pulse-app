@@ -1,16 +1,44 @@
+/** Match `useKeyboardVisible` — keyboard open when visual viewport inset exceeds this. */
+export const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
+
+function readVisualViewportKeyboardInset(): number {
+  if (typeof window === "undefined") return 0;
+  const vv = window.visualViewport;
+  if (!vv) return 0;
+  return Math.max(
+    0,
+    Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)),
+  );
+}
+
 /**
  * Mobile web: `100vh` is taller than the visible viewport when browser chrome is shown.
- * Sets `--app-vh` from visualViewport so shells and fixed footers align with the real screen.
+ * Sets `--app-vh` from the layout viewport and freezes it while the keyboard is open so
+ * shells do not collapse when `visualViewport.height` shrinks (iOS Safari / some Android).
+ * Keyboard occlusion is handled separately via `--keyboard-height` in `useKeyboardVisible`.
  */
 export function installWebViewportHeight(): () => void {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return () => {};
   }
 
+  let stableLayoutHeight = Math.round(window.innerHeight);
+
   const setAppVh = () => {
     const vv = window.visualViewport;
-    const height = Math.round(vv?.height ?? window.innerHeight);
-    document.documentElement.style.setProperty("--app-vh", `${height}px`);
+    const inner = window.innerHeight;
+    const visible = Math.round(vv?.height ?? inner);
+    const keyboardOpen =
+      readVisualViewportKeyboardInset() >= WEB_KEYBOARD_INSET_THRESHOLD_PX;
+
+    if (!keyboardOpen) {
+      stableLayoutHeight = Math.max(visible, inner);
+    }
+
+    document.documentElement.style.setProperty(
+      "--app-vh",
+      `${stableLayoutHeight}px`,
+    );
   };
 
   setAppVh();

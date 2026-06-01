@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { SignUpPulsePrimaryButton } from '../SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from '../SignUpPulseTitle';
@@ -71,14 +71,14 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 8,
-    paddingBottom: 24,
+    paddingHorizontal: Platform.OS === 'web' ? 20 : 24,
+    paddingTop: Platform.OS === 'web' ? 4 : 8,
+    paddingBottom: Platform.OS === 'web' ? 16 : 24,
   },
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: Platform.OS === 'web' ? 20 : 24,
+    paddingTop: Platform.OS === 'web' ? 10 : 12,
+    paddingBottom: Platform.OS === 'web' ? 10 : 12,
     gap: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
