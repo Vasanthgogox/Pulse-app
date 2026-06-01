@@ -24,6 +24,19 @@ function isTripAssignmentAuditTableMissing(
   return false;
 }
 
+function isLatestAssignmentAuditRpcMissing(
+  err: { message?: string; code?: string } | null | undefined,
+): boolean {
+  if (!err) return false;
+  const code = String(err.code ?? '');
+  if (code === '42883' || code === 'PGRST202') return true;
+  const m = String(err.message ?? '').toLowerCase();
+  return (
+    m.includes('could not find the function') ||
+    (m.includes('function') && m.includes('does not exist'))
+  );
+}
+
 export type AssignmentEventType = 'assignment' | 'reassignment' | 'completed';
 
 export interface InsertTripAssignmentAuditParams {
@@ -101,6 +114,50 @@ export interface TripAssignmentAuditRow {
  * Get latest assignment/reassignment event per trip. Returns map trip_id -> { changed_by, changed_at }.
  * If table does not exist, returns empty map (all trips treated as private).
  */
+function mapLatestAssignmentAuditRows(
+  rows: LatestAssignmentByTrip[],
+): Map<string, { changed_by: string | null; changed_at: string }> {
+  const byTripId = new Map<string, { changed_by: string | null; changed_at: string }>();
+  for (const row of rows) {
+    byTripId.set(row.trip_id, {
+      changed_by: row.changed_by ?? null,
+      changed_at: row.changed_at,
+    });
+  }
+  return byTripId;
+}
+
+async function fetchLatestAssignmentAuditByTripIdsLegacy(
+  tripIds: string[],
+): Promise<{
+  error: Error | null;
+  byTripId: Map<string, { changed_by: string | null; changed_at: string }>;
+}> {
+  const byTripId = new Map<string, { changed_by: string | null; changed_at: string }>();
+  const { data, error } = await supabase()
+    .from('trip_assignment_audit')
+    .select('trip_id, changed_by, changed_at')
+    .in('trip_id', tripIds)
+    .in('event_type', ['assignment', 'reassignment'])
+    .order('changed_at', { ascending: false });
+
+  if (error) {
+    if (isTripAssignmentAuditTableMissing(error)) {
+      tripAssignmentAuditTableUnavailable = true;
+      return { error: null, byTripId };
+    }
+    return { error: new Error(error.message), byTripId };
+  }
+
+  const rows = (data ?? []) as LatestAssignmentByTrip[];
+  for (const row of rows) {
+    if (!byTripId.has(row.trip_id)) {
+      byTripId.set(row.trip_id, { changed_by: row.changed_by ?? null, changed_at: row.changed_at });
+    }
+  }
+  return { error: null, byTripId };
+}
+
 export async function getLatestAssignmentAuditByTripIds(
   tripIds: string[]
 ): Promise<{ error: Error | null; byTripId: Map<string, { changed_by: string | null; changed_at: string }> }> {
@@ -109,14 +166,14 @@ export async function getLatestAssignmentAuditByTripIds(
   if (tripAssignmentAuditTableUnavailable) return { error: null, byTripId };
 
   try {
-    const { data, error } = await supabase()
-      .from('trip_assignment_audit')
-      .select('trip_id, changed_by, changed_at')
-      .in('trip_id', tripIds)
-      .in('event_type', ['assignment', 'reassignment'])
-      .order('changed_at', { ascending: false });
+    const { data, error } = await supabase().rpc('get_latest_assignment_audit_by_trip_ids', {
+      p_trip_ids: tripIds,
+    });
 
     if (error) {
+      if (isLatestAssignmentAuditRpcMissing(error)) {
+        return fetchLatestAssignmentAuditByTripIdsLegacy(tripIds);
+      }
       if (isTripAssignmentAuditTableMissing(error)) {
         tripAssignmentAuditTableUnavailable = true;
         return { error: null, byTripId };
@@ -124,13 +181,10 @@ export async function getLatestAssignmentAuditByTripIds(
       return { error: new Error(error.message), byTripId };
     }
 
-    const rows = (data ?? []) as LatestAssignmentByTrip[];
-    for (const row of rows) {
-      if (!byTripId.has(row.trip_id)) {
-        byTripId.set(row.trip_id, { changed_by: row.changed_by ?? null, changed_at: row.changed_at });
-      }
-    }
-    return { error: null, byTripId };
+    return {
+      error: null,
+      byTripId: mapLatestAssignmentAuditRows((data ?? []) as LatestAssignmentByTrip[]),
+    };
   } catch (e) {
     const err = e as { message?: string; code?: string; status?: number };
     if (isTripAssignmentAuditTableMissing(err)) return { error: null, byTripId };

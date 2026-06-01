@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 import {
   ArrowDownLeft,
   ArrowRight,
@@ -287,9 +288,14 @@ function formatDueCompact(value: number): string {
   return value.toLocaleString("en-IN");
 }
 
+/** Footer FAB + hint — keep list scroll end above this on mobile web. */
+const WIZARD_FOOTER_CLEARANCE = 88;
+
 export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: LedgerMobileWizardProps) {
   const insets = useSafeAreaInsets();
+  const bottomInset = useEffectiveBottomInset();
   const compact = props.compact !== false;
+  const listBottomPad = bottomInset + WIZARD_FOOTER_CLEARANCE;
   const steps = useMemo(() => buildSteps(props), [props]);
   const [stepIndex, setStepIndex] = useState(() => resolveInitialStepIndex(steps, props));
   const [partySearch, setPartySearch] = useState("");
@@ -683,7 +689,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
         data={filteredParties}
         keyExtractor={(item) => item.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPad }]}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No parties match your search.</Text>
         }
@@ -793,7 +799,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             ) : null}
           </Pressable>
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPad }]}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
             {tripDueFilter === "has_due"
@@ -1054,7 +1060,14 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           {body}
         </View>
 
-        <View style={[c.footer, compact && styles.footerCompact, { paddingBottom: insets.bottom + 12 }]}>
+        <View
+          style={[
+            c.footer,
+            compact && styles.footerCompact,
+            styles.footerAboveBrowserChrome,
+            { paddingBottom: bottomInset + 12 },
+          ]}
+        >
           {currentStep === "review" ? (
             <Pressable
               style={[
@@ -1130,6 +1143,13 @@ const styles = StyleSheet.create({
   topBarCompact: { paddingHorizontal: 12, paddingBottom: 2 },
   bodyCompact: { paddingHorizontal: 16, paddingTop: 0 },
   footerCompact: { paddingHorizontal: 16, paddingTop: 2 },
+  footerAboveBrowserChrome: Platform.select({
+    web: {
+      flexShrink: 0,
+      backgroundColor: "#fff",
+    },
+    default: {},
+  }),
   entityTitleCompact: { fontSize: 10, letterSpacing: 1.4 },
   subtitleCompact: { fontSize: 12, marginTop: 4 },
   stepTitleCompact: { fontSize: 20, letterSpacing: -0.3 },

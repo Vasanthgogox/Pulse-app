@@ -53,6 +53,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 
 /** TripOption with organization_id and driver_display_name for entity filtering. */
 type TripOptionWithOrg = TripOption & {
@@ -1162,8 +1163,8 @@ const styles = StyleSheet.create({
       web: {
         width: "100%",
         alignSelf: "stretch",
-        minHeight: "100vh",
-      } as object,
+        ...(WEB_APP_VIEWPORT_STYLE as object),
+      },
     }),
   },
   header: {

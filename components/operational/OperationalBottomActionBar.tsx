@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffectiveBottomInset } from '@/lib/safeAreaWeb';
 
 import { colors } from '@/design-system/colors';
 import { layout } from '@/design-system/layout';
@@ -19,7 +19,7 @@ export const OperationalBottomActionBar = memo(function OperationalBottomActionB
   reserveSafeArea = true,
   style,
 }: OperationalBottomActionBarProps) {
-  const insets = useSafeAreaInsets();
+  const bottomInset = useEffectiveBottomInset();
 
   return (
     <View
@@ -27,7 +27,7 @@ export const OperationalBottomActionBar = memo(function OperationalBottomActionB
         styles.bar,
         {
           paddingBottom: reserveSafeArea
-            ? Math.max(insets.bottom, space[3])
+            ? Math.max(bottomInset, space[3])
             : space[3],
           paddingHorizontal: layout.screenPaddingX,
         },

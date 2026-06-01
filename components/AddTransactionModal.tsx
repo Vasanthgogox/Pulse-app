@@ -108,6 +108,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Ledger sync full-page — protocol tiles & typography (matches web reference). */
@@ -798,6 +800,7 @@ export function AddTransactionModal({
   ledgerWorkspaceSubtitle,
 }: AddTransactionModalProps) {
   const insets = useSafeAreaInsets();
+  const bottomInset = useEffectiveBottomInset();
   const winW = useLedgerViewportWidth();
   const stackTripFinancialBand = winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT;
   /** Desktop full-page: flex viewport (header + split band + footer), no outer page scroll. */
@@ -6210,7 +6213,7 @@ export function AddTransactionModal({
             style={[
               styles.fullPageFooter,
               ledgerFullPageViewportFit && styles.fullPageFooterPinned,
-              { paddingBottom: insets.bottom + 16 },
+              { paddingBottom: bottomInset + 16 },
             ]}
           >
             {submitButton}
@@ -6485,9 +6488,8 @@ const styles = StyleSheet.create({
     minHeight: 0,
     ...Platform.select({
       web: {
-        height: "100%",
-        maxHeight: "100%",
-      } as object,
+        ...(WEB_APP_VIEWPORT_STYLE as object),
+      },
     }),
   },
   panel: {
@@ -6508,8 +6510,8 @@ const styles = StyleSheet.create({
     backgroundColor: LedgerSyncPalette.page,
     ...Platform.select({
       web: {
-        minHeight: "100%",
-      } as object,
+        ...(WEB_APP_VIEWPORT_STYLE as object),
+      },
     }),
   },
   panelFullPageColumn: {
