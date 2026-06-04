@@ -471,6 +471,21 @@ export function LoadCenterView({
     );
   };
 
+  const renderAddLoadButton = () => (
+    <TouchableOpacity
+      style={styles.addLoadBtn}
+      onPress={onCreateIndentPress}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel="Add load"
+    >
+      <Plus size={13} color="#ffffff" strokeWidth={2.4} />
+      <Text style={styles.addLoadBtnText} numberOfLines={1}>
+        Add Load
+      </Text>
+    </TouchableOpacity>
+  );
+
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
     const { error } = await shareDraftIndent(load.id);
@@ -523,8 +538,7 @@ export function LoadCenterView({
     [drivers],
   );
 
-  // Add Load is now an inline pill in the search row; the scroll body no
-  // longer needs to reserve clearance for a floating FAB.
+  // Add Load: mobile hub header + desktop Give Load header; empty state CTA when no rows.
   const paddingBottom = useMemo(
     () => layout.scrollBottomPadding(36),
     [layout],
@@ -1254,6 +1268,7 @@ export function LoadCenterView({
               })}
             </View>
           </View>
+          {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
           {onMyNetworkPress ? (
             <TouchableOpacity
               style={styles.loadMyNetworkBtn}
@@ -1478,6 +1493,9 @@ export function LoadCenterView({
                           ? "Done loads will appear here."
                           : "Awarded loads will appear here."}
                   </Text>
+                  <View style={styles.emptyAddLoadWrap}>
+                    {renderAddLoadButton()}
+                  </View>
                 </View>
               ) : useGridLayout ? (
                 <View style={styles.gridList}>
@@ -1490,27 +1508,6 @@ export function LoadCenterView({
                         <View style={styles.loadSectionPill}>
                           <Text style={styles.loadSectionPillText}>Live</Text>
                         </View>
-                        {!isMobileView ? (
-                          <TouchableOpacity
-                            style={styles.addLoadBtn}
-                            onPress={onCreateIndentPress}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel="Broadcast new load"
-                          >
-                            <Plus
-                              size={13}
-                              color="#ffffff"
-                              strokeWidth={2.4}
-                            />
-                            <Text
-                              style={styles.addLoadBtnText}
-                              numberOfLines={1}
-                            >
-                              Add Load
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
                       </View>
                     </View>
                     {onShareToNetwork ? (
@@ -1545,25 +1542,6 @@ export function LoadCenterView({
                           <View style={styles.loadSectionPill}>
                             <Text style={styles.loadSectionPillText}>Live</Text>
                           </View>
-                          <TouchableOpacity
-                            style={styles.addLoadBtn}
-                            onPress={onCreateIndentPress}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel="Broadcast new load"
-                          >
-                            <Plus
-                              size={13}
-                              color="#ffffff"
-                              strokeWidth={2.4}
-                            />
-                            <Text
-                              style={styles.addLoadBtnText}
-                              numberOfLines={1}
-                            >
-                              Add Load
-                            </Text>
-                          </TouchableOpacity>
                         </View>
                       </View>
                       {onShareToNetwork ? (
@@ -2083,12 +2061,12 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  /** Inline "Add Load" pill that sits next to the Live chip on the
-   *  "Your active indents" section header. Matches Add Trip / Add Indent. */
+  /** Give Load — create indent CTA (desktop header, mobile hub, empty state). */
   addLoadBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
+    flexShrink: 0,
     minHeight: 34,
     paddingVertical: 7,
     paddingHorizontal: 16,
@@ -3246,6 +3224,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 40,
     lineHeight: 20,
+  },
+  emptyAddLoadWrap: {
+    marginTop: 20,
   },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,
