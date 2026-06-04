@@ -172,27 +172,28 @@ export function NetworkLoadsQuickCards({
     router.push(ROUTES.PULSE_LOADS);
   };
 
-  const renderCard = (action: (typeof ACTIONS)[number], variant: "tile" | "sidebar") => (
-    <Pressable
-      key={action.id}
-      onPress={openLoadCenter}
-      style={({ pressed }) => [
-        variant === "tile" ? styles.cardPress : styles.sidebarCardPress,
-        pressed && styles.pressableScale,
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={`${action.label} — open Load Center`}
-    >
-      {({ pressed }) => (
-        <GlassMarketplaceCard
-          {...action}
-          pressed={pressed}
-          compact={compact}
-          variant={variant}
-        />
-      )}
-    </Pressable>
-  );
+  const renderCard = (action: (typeof ACTIONS)[number], variant: "tile" | "sidebar") => {
+    const tile = variant === "tile";
+    return (
+      <View key={action.id} style={tile ? styles.cardSlot : styles.sidebarCardPress}>
+        <Pressable
+          onPress={openLoadCenter}
+          style={({ pressed }) => [tile ? styles.cardPress : styles.sidebarCardPressInner, pressed && styles.pressableScale]}
+          accessibilityRole="button"
+          accessibilityLabel={`${action.label} — open Load Center`}
+        >
+          {({ pressed }) => (
+            <GlassMarketplaceCard
+              {...action}
+              pressed={pressed}
+              compact={compact}
+              variant={variant}
+            />
+          )}
+        </Pressable>
+      </View>
+    );
+  };
 
   if (sidebar) {
     /** Desktop wide layout (web ≥ 1180px) — the parent rail already labels
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    paddingHorizontal: 2,
+    width: "100%",
   },
   headSidebar: {
     paddingHorizontal: 0,
@@ -299,6 +300,7 @@ const styles = StyleSheet.create({
   rail: {
     flexDirection: "row",
     alignItems: "stretch",
+    alignSelf: "stretch",
     gap: 12,
     width: "100%",
   },
@@ -323,6 +325,8 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.985 }],
   },
   shellTile: {
+    flex: 1,
+    width: "100%",
     minHeight: 80,
     borderRadius: 20,
   },
@@ -455,11 +459,21 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 13,
   },
+  cardSlot: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
   cardPress: {
     flex: 1,
+    alignSelf: "stretch",
     minWidth: 0,
   },
   sidebarCardPress: {
+    width: "100%",
+    minWidth: 0,
+  },
+  sidebarCardPressInner: {
     width: "100%",
     minWidth: 0,
   },

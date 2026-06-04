@@ -6,6 +6,7 @@ import {
   inviteeSuggestedCompanyName,
   type ConnectionInviteeByPhone,
 } from "@/features/connections/services/connectionRequests.service";
+import { Platform } from "react-native";
 
 export type NetworkContactRecommendation = {
   normalizedPhone: string;
@@ -36,6 +37,10 @@ export function useNetworkContactRecommendations({
   const [unavailable, setUnavailable] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const runningRef = useRef(false);
+  // Ref so the filter step always sees the latest connected-org set without
+  // triggering a full contact re-sync when connections change.
+  const connectedOrgIdsRef = useRef(connectedOrgIds);
+  connectedOrgIdsRef.current = connectedOrgIds;
 
   const syncFromContacts = useCallback(async () => {
     if (!orgId || !enabled || runningRef.current) return;
@@ -70,7 +75,7 @@ export function useNetworkContactRecommendations({
       for (const [normalizedPhone, invitee] of inviteesByPhone) {
         if (!invitee.organization_id || invitee.organization_id === orgId) continue;
         // Already-connected orgs are skipped so the panel only shows actionable / new matches.
-        if (connectedOrgIds.has(invitee.organization_id)) continue;
+        if (connectedOrgIdsRef.current.has(invitee.organization_id)) continue;
 
         const isDriver = inviteeProfileIsDriver(invitee.profile_role);
         const company =
@@ -99,14 +104,43 @@ export function useNetworkContactRecommendations({
       setLoadedOnce(true);
       runningRef.current = false;
     }
-  }, [orgId, enabled, connectedOrgIds]);
+  }, [orgId, enabled]);  // connectedOrgIds read via ref — no re-sync on connection changes
 
   useEffect(() => {
     if (!orgId || !enabled) {
       setRecommendations([]);
       return;
     }
-    void syncFromContacts();
+    if (Platform.OS === "web") {
+      setUnavailable(true);
+      return;
+    }
+    // Check current permission without showing the OS dialog. If already granted,
+    // auto-sync. If denied, surface the "Contacts access needed" UI immediately.
+    // If undetermined, let the user trigger the sync (and dialog) manually.
+    async function checkPermissionAndSync() {
+      try {
+        const Contacts = await import("expo-contacts");
+        const available = await Contacts.isAvailableAsync();
+        if (!available) {
+          setUnavailable(true);
+          return;
+        }
+        const { status } = await Contacts.getPermissionsAsync();
+        if (status === "denied") {
+          setPermissionDenied(true);
+          setLoadedOnce(true);
+          return;
+        }
+        if (status === "granted") {
+          void syncFromContacts();
+        }
+        // "undetermined": show "Sync contacts" CTA and wait for user tap.
+      } catch {
+        void syncFromContacts();
+      }
+    }
+    void checkPermissionAndSync();
   }, [orgId, enabled, syncFromContacts]);
 
   return {

@@ -15,13 +15,13 @@ export function getAllocationSubSteps(
 ): AllocationSubStep[] {
   const steps: AllocationSubStep[] = ["supply"];
   if (state.supplySource === "aggregate") {
-    // Partner picker is on the supply screen (mobile + desktop).
     steps.push("rates");
     if (!state.assignLater) {
       steps.push("driverPhone", "driverName", "vehicle");
     }
+  } else if (state.supplySource === "asset" && !state.assignLater) {
+    steps.push("fleetDriver", "fleetVehicle");
   }
-  // Asset: driver + vehicle pickers stay on the supply screen (no extra sub-steps).
   return steps;
 }
 
@@ -31,9 +31,6 @@ export function allocationSubStepFields(
 ): Set<string> {
   switch (step) {
     case "supply":
-      if (state?.supplySource === "asset" && !state.assignLater) {
-        return new Set(["assetDriver", "assetVehicle"]);
-      }
       if (state?.supplySource === "aggregate") {
         return new Set(["partner"]);
       }

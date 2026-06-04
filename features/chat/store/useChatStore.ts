@@ -1274,6 +1274,13 @@ export const useChatStore = create<ChatState>()(
       chatBootstrapInFlightFor = orgId;
 
       let seededFromDisk = false;
+
+      const networkPromise = fetchChatBootstrapPayload(orgId, {
+        tripLimit: CHAT_BOOTSTRAP_TRIP_PAGE,
+        tripOffset: 0,
+        hubTripBucket: "active",
+      });
+
       try {
         const cached = await loadChatBootstrapSummaries(orgId);
         if (cached?.length) {
@@ -1300,11 +1307,7 @@ export const useChatStore = create<ChatState>()(
       if (!seededFromDisk) set({ isLoading: true });
 
       try {
-        const { conversations, lanes, hasMoreTrips } = await fetchChatBootstrapPayload(orgId, {
-          tripLimit: CHAT_BOOTSTRAP_TRIP_PAGE,
-          tripOffset: 0,
-          hubTripBucket: "active",
-        });
+        const { conversations, lanes, hasMoreTrips } = await networkPromise;
 
         const base = seededFromDisk
           ? {

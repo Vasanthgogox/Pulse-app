@@ -13,6 +13,10 @@ export function getIndianVehicleNormalizedLength(display: string): number {
   return normalizeVehicleNumberForMatch(display).length;
 }
 
+export function isIndianVehiclePlateComplete(display: string): boolean {
+  return getIndianVehicleNormalizedLength(display) >= INDIAN_VEHICLE_TOTAL_LENGTH;
+}
+
 export type IndianVehicleKeyboardKind = "letters" | "numbers";
 
 /** Which character class is expected at the current cursor position. */
@@ -45,6 +49,19 @@ export function getIndianVehicleFormatHint(normalizedLen: number): string {
 /**
  * Filters keystrokes to match segment rules, then applies display spacing.
  */
+/** Remove the last plate character (display spacing preserved). */
+export function deleteIndianVehicleLastChar(display: string): string {
+  const norm = normalizeVehicleNumberForMatch(display);
+  if (norm.length === 0) return "";
+  return formatIndianVehicleNumberInput(norm.slice(0, -1));
+}
+
+/** Append one character if it matches the current segment rules. */
+export function appendIndianVehicleChar(display: string, char: string): string {
+  const upper = char.toUpperCase();
+  return applyIndianVehicleKeystroke(display + upper);
+}
+
 export function applyIndianVehicleKeystroke(nextRaw: string): string {
   const norm = normalizeVehicleNumberForMatch(nextRaw);
   let built = "";

@@ -5,16 +5,23 @@ import { ROUTES } from '@/lib/routes';
 
 const FALLBACK_AFTER_ADD_DRIVER = ROUTES.TABS.NETWORK;
 
-export function closeModal(router: ReturnType<typeof useRouter>) {
+export function closeModal(
+  router: ReturnType<typeof useRouter>,
+  returnTo?: string,
+) {
   if (typeof router.dismiss === 'function') {
     router.dismiss();
     return;
   }
   if (router.canGoBack()) {
     router.back();
-  } else {
-    router.replace(FALLBACK_AFTER_ADD_DRIVER);
+    return;
   }
+  if (returnTo) {
+    router.replace(returnTo as Parameters<typeof router.replace>[0]);
+    return;
+  }
+  router.replace(FALLBACK_AFTER_ADD_DRIVER);
 }
 
 export default function AddDriverCloseModal() {

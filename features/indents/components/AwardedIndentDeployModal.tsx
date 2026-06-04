@@ -61,6 +61,8 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
   const [pageWidth, setPageWidth] = useState(0);
   const isScrollingRef = useRef(false);
   const dragY = useRef(new Animated.Value(0)).current;
+  const dismissingRef = useRef(false);
+  const [shellVisible, setShellVisible] = useState(visible);
   const [isDragging, setIsDragging] = useState(false);
 
   const safeIndex = clampPageIndex(pageIndex, items.length);
@@ -77,19 +79,33 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
     setIsDragging(false);
   }, [dragY]);
 
-  const finishMinimize = useCallback(() => {
-    Animated.timing(dragY, {
-      toValue: 420,
-      duration: 220,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
+  const runSheetExit = useCallback(
+    (onComplete: () => void) => {
+      if (dismissingRef.current) return;
+      dismissingRef.current = true;
+      Animated.timing(dragY, {
+        toValue: 420,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        dismissingRef.current = false;
+        if (!finished) return;
         dragY.setValue(0);
         setIsDragging(false);
-        onMinimize();
-      }
-    });
-  }, [dragY, onMinimize]);
+        setShellVisible(false);
+        onComplete();
+      });
+    },
+    [dragY],
+  );
+
+  const finishMinimize = useCallback(() => {
+    runSheetExit(onMinimize);
+  }, [onMinimize, runSheetExit]);
+
+  const finishLater = useCallback(() => {
+    runSheetExit(onLater);
+  }, [onLater, runSheetExit]);
 
   const panResponder = useMemo(
     () =>
@@ -132,6 +148,14 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
 
   useEffect(() => {
     if (visible) {
+      dismissingRef.current = false;
+      setShellVisible(true);
+      dragY.setValue(0);
+      setIsDragging(false);
+      return;
+    }
+    if (!dismissingRef.current) {
+      setShellVisible(false);
       dragY.setValue(0);
       setIsDragging(false);
     }
@@ -174,7 +198,7 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
     isScrollingRef.current = true;
   }, []);
 
-  if (!visible || items.length === 0) return null;
+  if ((!shellVisible && !visible) || items.length === 0) return null;
 
   const pagerContent = items.map((item, index) => (
     <View key={item.indent.id} style={{ width: pageWidth || "100%" }}>
@@ -195,10 +219,10 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
 
   return (
     <Modal
-      visible
+      visible={shellVisible}
       transparent
-      animationType="slide"
-      onRequestClose={onMinimize}
+      animationType="none"
+      onRequestClose={finishMinimize}
       statusBarTranslucent
     >
       <View style={[styles.backdrop, Platform.OS === "web" ? styles.backdropWeb : null]}>
@@ -263,7 +287,7 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
             <View style={styles.actions}>
               <TouchableOpacity
                 style={styles.laterBtnOutline}
-                onPress={onLater}
+                onPress={finishLater}
                 activeOpacity={0.82}
                 accessibilityRole="button"
                 accessibilityLabel="Later"

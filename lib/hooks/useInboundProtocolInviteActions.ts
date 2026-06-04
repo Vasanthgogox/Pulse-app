@@ -69,12 +69,28 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       setInviteActionId(null);
       if (error) {
         await refreshInboundProtocol();
+        await Promise.all([
+          receivedQ.refetch(),
+          sentQ.refetch(),
+          driverInvitesSentQ.refetch(),
+        ]);
+        return;
       }
-      await Promise.all([
-        receivedQ.refetch(),
-        sentQ.refetch(),
-        driverInvitesSentQ.refetch(),
-      ]);
+      // Optimistic patch already updated global sync; defer refetch so home modals
+      // do not flash while the dismiss animation completes.
+      const refetchNetworkLists = () =>
+        Promise.all([
+          receivedQ.refetch(),
+          sentQ.refetch(),
+          driverInvitesSentQ.refetch(),
+        ]);
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => {
+          void refetchNetworkLists();
+        });
+      } else {
+        setTimeout(() => void refetchNetworkLists(), 0);
+      }
     },
     [
       orgId,

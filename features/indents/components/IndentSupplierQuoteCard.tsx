@@ -13,7 +13,10 @@ import { AlertTriangle, Clock3, Inbox, Send, Trophy } from "lucide-react-native"
 import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
-import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubStyles";
+import {
+  indentReviewHubLayout,
+  indentReviewHubText,
+} from "@/features/indents/styles/indentReviewHubStyles";
 import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
 import type {
   IndentBidFooterMetric,
@@ -414,7 +417,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.995 }],
   },
   card: {
-    borderRadius: 14,
+    borderRadius: indentReviewHubLayout.summaryCardRadius,
     padding: 14,
     overflow: "hidden",
     borderWidth: 1,

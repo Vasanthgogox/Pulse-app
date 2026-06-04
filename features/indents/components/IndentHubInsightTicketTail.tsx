@@ -23,14 +23,18 @@ const RECO_STAR = "#D97706";
 
 function MetricValueText({
   metric,
+  compact,
 }: {
   metric: IndentBidFooterMetric;
+  compact?: boolean;
 }) {
   return (
     <Text
       style={[
         styles.metricValue,
+        compact && styles.metricValueCompact,
         metric.label === "TARGET RATE" && styles.metricValueTarget,
+        metric.label === "TARGET RATE" && compact && styles.metricValueTargetCompact,
         metricValueStyle(metric.tone),
       ]}
       numberOfLines={2}
@@ -68,7 +72,13 @@ function alertPanelStyles(tone: IndentBidAlertInfo["tone"]) {
   }
 }
 
-function TicketMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
+function TicketMetrics({
+  metrics,
+  compact,
+}: {
+  metrics: IndentBidFooterMetric[];
+  compact?: boolean;
+}) {
   const shown = metrics.slice(0, 3);
   if (shown.length === 0) return null;
 
@@ -76,10 +86,14 @@ function TicketMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
     <View style={styles.metricsRow}>
       {shown.map((metric, index) => (
         <Fragment key={metric.label}>
-          {index > 0 ? <View style={styles.metricDivider} /> : null}
+          {index > 0 ? (
+            <View style={[styles.metricDivider, compact && styles.metricDividerCompact]} />
+          ) : null}
           <View style={styles.metricCell}>
-            <Text style={styles.metricLabel}>{metric.label}</Text>
-            <MetricValueText metric={metric} />
+            <Text style={[styles.metricLabel, compact && styles.metricLabelCompact]}>
+              {metric.label}
+            </Text>
+            <MetricValueText metric={metric} compact={compact} />
           </View>
         </Fragment>
       ))}
@@ -94,6 +108,8 @@ export type IndentHubInsightTicketTailProps = {
   perforationDashColor?: string;
   /** Third metric line (e.g. VS HIGHEST on live bid cards). */
   extraMetric?: IndentBidFooterMetric | null;
+  /** Tighter metrics block for live bid cards on white tickets. */
+  compact?: boolean;
 };
 
 /** Detachable ticket stub — perforation + white metrics card + recommendation + alerts. */
@@ -103,6 +119,7 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
   contentPadding = indentReviewHubLayout.summaryCardPadding,
   perforationDashColor,
   extraMetric,
+  compact = false,
 }: IndentHubInsightTicketTailProps) {
   const reco = insight?.recommendation?.trim() ?? "";
   const hasMetricsPanel =
@@ -115,19 +132,22 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
     /lowest|competing|recommended/i.test(reco) ? "star" : "info";
 
   return (
-    <View style={styles.tail}>
+    <View style={[styles.tail, compact && styles.tailCompact]}>
       <IndentHubPerforation
         contentPadding={contentPadding}
         dashColor={perforationDashColor}
       />
-      <View style={styles.tailStack}>
+      <View style={[styles.tailStack, compact && styles.tailStackCompact]}>
         {hasMetricsPanel ? (
-          <View style={styles.metricsPanel}>
+          <View style={[styles.metricsPanel, compact && styles.metricsPanelCompact]}>
             {insight && insight.metrics.length > 0 ? (
-              <TicketMetrics metrics={insight.metrics} />
+              <TicketMetrics metrics={insight.metrics} compact={compact} />
             ) : null}
             {extraMetric ? (
-              <Text style={styles.metricExtraLine} numberOfLines={1}>
+              <Text
+                style={[styles.metricExtraLine, compact && styles.metricExtraLineCompact]}
+                numberOfLines={1}
+              >
                 {extraMetric.label}:{" "}
                 <Text
                   style={[
@@ -140,9 +160,12 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
               </Text>
             ) : null}
             {reco ? (
-              <View style={styles.recoRow}>
-                <Feather name={recoIcon} size={11} color={RECO_STAR} />
-                <Text style={styles.recoText} numberOfLines={2}>
+              <View style={[styles.recoRow, compact && styles.recoRowCompact]}>
+                <Feather name={recoIcon} size={compact ? 10 : 11} color={RECO_STAR} />
+                <Text
+                  style={[styles.recoText, compact && styles.recoTextCompact]}
+                  numberOfLines={2}
+                >
                   {reco}
                 </Text>
               </View>
@@ -199,8 +222,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
     zIndex: 1,
   },
+  tailCompact: {
+    marginTop: 2,
+  },
   tailStack: {
     gap: 8,
+  },
+  tailStackCompact: {
+    gap: 6,
   },
   metricsPanel: {
     borderRadius: 10,
@@ -211,6 +240,17 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     gap: 10,
     ...panelShadow,
+  },
+  metricsPanelCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: Theme.surface,
+    ...Platform.select<ViewStyle>({
+      web: { boxShadow: "none" },
+      default: { elevation: 0 },
+    }),
   },
   metricsRow: {
     flexDirection: "row",
@@ -235,15 +275,29 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textRouteCard,
   },
+  metricLabelCompact: {
+    fontSize: 7,
+    letterSpacing: 0.35,
+  },
   metricValue: {
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
   },
+  metricValueCompact: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
   metricValueTarget: {
     fontSize: 13,
     color: Theme.textPrimaryDark,
+  },
+  metricValueTargetCompact: {
+    fontSize: 11,
+  },
+  metricDividerCompact: {
+    marginHorizontal: 6,
   },
   metricValuePositive: {
     color: Theme.success,
@@ -262,6 +316,10 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
+  recoRowCompact: {
+    paddingTop: 0,
+    gap: 6,
+  },
   recoText: {
     flex: 1,
     fontSize: 10,
@@ -269,10 +327,17 @@ const styles = StyleSheet.create({
     color: Theme.textRouteCard,
     lineHeight: 14,
   },
+  recoTextCompact: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
   metricExtraLine: {
     fontSize: 10,
     fontWeight: "600",
     color: Theme.textRouteCard,
+  },
+  metricExtraLineCompact: {
+    fontSize: 9,
   },
   metricExtraValue: {
     fontWeight: "800",

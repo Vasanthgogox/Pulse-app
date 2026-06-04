@@ -18,6 +18,7 @@ import { IndentHubInsightTicketTail } from "@/features/indents/components/Indent
 import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
 import type { IndentFreightCardClientProps } from "@/features/indents/components/IndentFreightCard";
 import {
+  indentHubCardShadow,
   indentReviewHubLayout,
   indentReviewHubSpecValue,
   indentReviewHubText,
@@ -26,17 +27,7 @@ import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert
 import type { IndentBidFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
 import { formatINR } from "@/lib/format";
 
-const cardShadow = Platform.select<ViewStyle>({
-  ios: {
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-  },
-  android: { elevation: 2 },
-  web: { boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)" },
-  default: {},
-});
+const cardShadow = indentHubCardShadow as ViewStyle;
 
 export type IndentReviewHubCardProps = {
   isOwner: boolean;
@@ -64,6 +55,8 @@ export type IndentReviewHubCardProps = {
   footerInsight?: IndentBidFooterInsight | null;
   alertInfo?: IndentBidAlertInfo | null;
   onQuotePress?: () => void;
+  /** Tighter layout for indent detail on smaller viewports. */
+  compact?: boolean;
   children?: ReactNode;
 };
 
@@ -145,9 +138,11 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   footerInsight,
   alertInfo,
   onQuotePress,
+  compact = false,
   children,
 }: IndentReviewHubCardProps) {
   const hasQuote = quoteAmountInr != null && quoteAmountInr > 0;
+  const ownerInlineFreight = isOwner && !onQuotePress;
   const quoteStatusNorm = (quoteStatus ?? "").trim().toLowerCase();
   const statusStyles = quoteStatus ? quoteStatusStyles(quoteStatusNorm) : null;
 
@@ -167,17 +162,62 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
 
   const heroBlock = onQuotePress ? (
     <Pressable onPress={onQuotePress} style={styles.heroPressable}>
-      {renderHero()}
+      {renderHero(false)}
     </Pressable>
   ) : (
-    renderHero()
+    renderHero(false)
   );
 
-  function renderHero() {
+  function renderHero(inline = false) {
+    const amountStyle = inline
+      ? compact
+        ? styles.heroAmountInlineCompact
+        : styles.heroAmountInline
+      : compact
+        ? styles.heroAmountCompact
+        : styles.heroAmount;
+    const currencyStyle = inline
+      ? compact
+        ? styles.heroCurrencyInlineCompact
+        : styles.heroCurrencyInline
+      : compact
+        ? styles.heroCurrencyCompact
+        : styles.heroCurrency;
+
+    if (inline) {
+      return (
+        <>
+          <Text
+            style={[
+              styles.heroKicker,
+              styles.heroKickerInline,
+              compact && styles.heroKickerCompact,
+            ]}
+            numberOfLines={2}
+          >
+            {heroKicker}
+          </Text>
+          <View style={[styles.heroAmountRow, styles.heroAmountRowInline]}>
+            <Text style={currencyStyle}>₹</Text>
+            <Text
+              style={amountStyle}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {heroAmount}
+            </Text>
+          </View>
+        </>
+      );
+    }
+
     return (
       <View style={styles.heroBlock}>
         <View style={styles.heroTopRow}>
-          <Text style={styles.heroKicker}>{heroKicker}</Text>
+          <Text style={[styles.heroKicker, compact && styles.heroKickerCompact]}>
+            {heroKicker}
+          </Text>
           {statusStyles && heroIsQuote ? (
             <View style={[styles.statusPill, statusStyles.pill]}>
               <Text style={[styles.statusPillText, statusStyles.text]}>
@@ -191,18 +231,18 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
           ) : null}
         </View>
         <View style={styles.heroAmountRow}>
-          <Text style={styles.heroCurrency}>₹</Text>
+          <Text style={currencyStyle}>₹</Text>
           <Text
-            style={styles.heroAmount}
+            style={amountStyle}
             numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.8}
+            minimumFontScale={0.75}
           >
             {heroAmount}
           </Text>
         </View>
         {referenceTarget ? (
-          <Text style={styles.heroReference}>
+          <Text style={[styles.heroReference, compact && styles.heroReferenceCompact]}>
             Shipper target · ₹ {referenceTarget}
           </Text>
         ) : null}
@@ -214,7 +254,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   }
 
   return (
-    <View style={[styles.card, cardShadow]}>
+    <View style={[styles.card, compact && styles.cardCompact, cardShadow]}>
       <View style={styles.orb} pointerEvents="none" />
 
       {isOwner && canCancelLoad ? (
@@ -235,6 +275,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
       <View
         style={[
           styles.heroRow,
+          compact && styles.heroRowCompact,
           isOwner && canCancelLoad && styles.heroRowWithCancel,
         ]}
       >
@@ -258,14 +299,14 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
         origin={origin}
         destination={destination}
         compact
-        style={styles.route}
+        style={[styles.route, compact && styles.routeCompact]}
       />
 
       <IndentHubPerforation
         contentPadding={indentReviewHubLayout.summaryCardPadding}
       />
 
-      <View style={styles.stub}>
+      <View style={[styles.stub, compact && styles.stubCompact]}>
         <View style={styles.specsHeader}>
           <Text style={styles.specsTitle}>SHIPMENT PROFILE</Text>
           {isOwner && canEditLoad ? (
@@ -284,11 +325,13 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
           </View>
         ) : null}
 
-        <View style={styles.insetPanel}>
+        <View style={[styles.insetPanel, compact && styles.insetPanelCompact]}>
           <View style={styles.gridRow}>
             {(["Vehicle", "Weight", "Load"] as const).map((label, i) => (
               <HubGridColumn key={label} showLeftBorder={i > 0}>
-                <Text style={styles.specLabel}>{label}</Text>
+                <Text style={[styles.specLabel, compact && styles.specLabelCompact]}>
+                  {label}
+                </Text>
                 <SpecValue value={[vehicleType, weightKg, material][i]} />
               </HubGridColumn>
             ))}
@@ -300,7 +343,11 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
               <View style={styles.gridRow}>
                 <HubGridColumn showLeftBorder={false}>
                   <Text style={styles.commerceLabel}>SUPPLIER RATE</Text>
-                  <Text style={styles.commerceValue}>{supplierRate}</Text>
+                  <Text
+                    style={[styles.commerceValue, compact && styles.commerceValueCompact]}
+                  >
+                    {supplierRate}
+                  </Text>
                   {marginPct != null ? (
                     <View style={styles.marginChip}>
                       <Text style={styles.marginChipText}>{marginPct}% margin</Text>
@@ -317,11 +364,19 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
                     shipperOrgId={client.shipperOrgId}
                     isOwner={client.isOwner}
                     align="left"
-                    nameLines={2}
+                    nameLines={compact ? 1 : 2}
                     surface="light"
                   />
                 </HubGridColumn>
               </View>
+              {ownerInlineFreight ? (
+                <>
+                  <View style={styles.panelRowDivider} />
+                  <View style={styles.freightInlineRow}>
+                    {renderHero(true)}
+                  </View>
+                </>
+              ) : null}
             </>
           ) : (
             <>
@@ -353,7 +408,11 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
           )}
         </View>
 
-        <View style={styles.heroPanel}>{heroBlock}</View>
+        {!ownerInlineFreight ? (
+          <View style={[styles.heroPanel, compact && styles.heroPanelCompact]}>
+            {heroBlock}
+          </View>
+        ) : null}
       </View>
 
       <IndentHubInsightTicketTail
@@ -375,8 +434,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     borderRadius: indentReviewHubLayout.summaryCardRadius,
     padding: indentReviewHubLayout.summaryCardPadding,
-    marginBottom: 10,
+    marginBottom: 8,
     overflow: "hidden",
+  },
+  cardCompact: {
+    marginBottom: 6,
   },
   orb: {
     position: "absolute",
@@ -408,6 +470,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 8,
     zIndex: 1,
+  },
+  heroRowCompact: {
+    marginBottom: 6,
   },
   heroRowWithCancel: {
     paddingRight: 76,
@@ -457,9 +522,13 @@ const styles = StyleSheet.create({
   },
   dateLine: indentReviewHubText.dateLine,
   route: { marginBottom: 2, zIndex: 1 },
+  routeCompact: { marginBottom: 0 },
   stub: {
     zIndex: 1,
     gap: 10,
+  },
+  stubCompact: {
+    gap: 6,
   },
   specsHeader: {
     flexDirection: "row",
@@ -506,6 +575,19 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     gap: 10,
   },
+  insetPanelCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 6,
+    borderRadius: 10,
+  },
+  freightInlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    minWidth: 0,
+  },
   gridRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -533,6 +615,9 @@ const styles = StyleSheet.create({
     ...indentReviewHubText.specLabel,
     marginBottom: 2,
   },
+  specLabelCompact: {
+    marginBottom: 0,
+  },
   specValue: {
     ...indentReviewHubSpecValue,
     lineHeight: 14,
@@ -554,6 +639,10 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
     lineHeight: 18,
+  },
+  commerceValueCompact: {
+    fontSize: 13,
+    lineHeight: 16,
   },
   marginChip: {
     alignSelf: "flex-start",
@@ -578,6 +667,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  heroPanelCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
   heroPressable: {
     borderRadius: 10,
   },
@@ -597,10 +691,21 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textRouteCard,
   },
+  heroKickerInline: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroKickerCompact: {
+    fontSize: 8,
+    letterSpacing: 0.6,
+  },
   heroAmountRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 4,
+  },
+  heroAmountRowInline: {
+    flexShrink: 0,
   },
   heroCurrency: {
     fontSize: 18,
@@ -608,6 +713,19 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     lineHeight: 24,
     marginBottom: 1,
+  },
+  heroCurrencyCompact: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  heroCurrencyInline: {
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 0,
+  },
+  heroCurrencyInlineCompact: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   heroAmount: {
     fontSize: 28,
@@ -618,11 +736,27 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontVariant: ["tabular-nums"],
   },
+  heroAmountCompact: {
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  heroAmountInline: {
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  heroAmountInlineCompact: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
   heroReference: {
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textRouteCard,
     marginTop: 2,
+  },
+  heroReferenceCompact: {
+    fontSize: 10,
+    marginTop: 0,
   },
   heroTapHint: {
     fontSize: 11,

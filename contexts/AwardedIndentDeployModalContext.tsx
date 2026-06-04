@@ -19,17 +19,23 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
+/** Delay before connection-invite modals may appear after minimizing the deploy alert. */
+const CONNECTION_INVITE_DEFER_AFTER_MINIMIZE_MS = 3000;
+
 export type AwardedIndentDeployModalContextValue = {
   pendingDeployCount: number;
   /** Awards collapsed to the bottom peek (still in queue). */
   minimizedDeployCount: number;
-  /** When true, connection invitation modals should wait. */
+  /** When true, connection invitation modals must not show (deploy sheet expanded). */
   blocksConnectionInvitations: boolean;
+  /** When true, auto-presented invites wait (e.g. shortly after minimizing deploy). */
+  deferConnectionInvitations: boolean;
   presentNextDeploy: () => void;
   expandDeployModal: () => void;
 };
@@ -75,8 +81,29 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const [queueViewIndex, setQueueViewIndex] = useState(0);
   const [dismissedForSession, setDismissedForSession] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [inviteDeferralActive, setInviteDeferralActive] = useState(false);
+  const inviteDeferralTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Set when user taps Assign — keeps deploy cards hidden until allocation route ends. */
   const [deployFlowIndentId, setDeployFlowIndentId] = useState<string | null>(null);
+
+  const clearInviteDeferral = useCallback(() => {
+    if (inviteDeferralTimerRef.current != null) {
+      clearTimeout(inviteDeferralTimerRef.current);
+      inviteDeferralTimerRef.current = null;
+    }
+    setInviteDeferralActive(false);
+  }, []);
+
+  const startInviteDeferral = useCallback(() => {
+    clearInviteDeferral();
+    setInviteDeferralActive(true);
+    inviteDeferralTimerRef.current = setTimeout(() => {
+      inviteDeferralTimerRef.current = null;
+      setInviteDeferralActive(false);
+    }, CONNECTION_INVITE_DEFER_AFTER_MINIMIZE_MS);
+  }, [clearInviteDeferral]);
+
+  useEffect(() => () => clearInviteDeferral(), [clearInviteDeferral]);
 
   const deployFlowPathIndentId = useMemo(
     () => parseIndentIdFromDeployFlowPath(pathname),
@@ -117,11 +144,13 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   const showMinimizedPeek = hasPendingDeploy && minimized;
 
   const blocksConnectionInvitations = showExpandedDeployModal;
+  const deferConnectionInvitations = inviteDeferralActive;
 
   useEffect(() => {
     if (!orgId) return;
     const onAppStateChange = (next: AppStateStatus) => {
       if (next === "active") {
+        clearInviteDeferral();
         setSessionSnoozedIds(new Set());
         setQueueViewIndex(0);
         setDismissedForSession(false);
@@ -131,27 +160,29 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     };
     const sub = AppState.addEventListener("change", onAppStateChange);
     return () => sub.remove();
-  }, [orgId]);
+  }, [orgId, clearInviteDeferral]);
 
   useEffect(() => {
-    if (pendingQueue.length > 0 && visibleQueue.length > 0) {
+    if (!dismissedForSession && pendingQueue.length > 0 && visibleQueue.length > 0) {
+      return;
+    }
+    const hasNewVisibleAward = pendingQueue.some(
+      (item) => !sessionSnoozedIds.has(item.indent.id),
+    );
+    if (hasNewVisibleAward) {
       setDismissedForSession(false);
     }
-  }, [pendingQueue.length, visibleQueue.length]);
-
-  useEffect(() => {
-    if (activeItem?.indent.id) {
-      setMinimized(false);
-    }
-  }, [activeItem?.indent.id]);
+  }, [dismissedForSession, pendingQueue, sessionSnoozedIds, visibleQueue.length]);
 
   const handleMinimize = useCallback(() => {
     setMinimized(true);
-  }, []);
+    startInviteDeferral();
+  }, [startInviteDeferral]);
 
   const handleExpand = useCallback(() => {
     setMinimized(false);
-  }, []);
+    clearInviteDeferral();
+  }, [clearInviteDeferral]);
 
   const handleLater = useCallback(() => {
     if (!activeItem) return;
@@ -182,23 +213,26 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   }, [activeItem, router]);
 
   const presentNextDeploy = useCallback(() => {
+    clearInviteDeferral();
     setDismissedForSession(false);
     setSessionSnoozedIds(new Set());
     setQueueViewIndex(0);
     setDeployFlowIndentId(null);
     setMinimized(false);
-  }, []);
+  }, [clearInviteDeferral]);
 
   const value = useMemo(
     (): AwardedIndentDeployModalContextValue => ({
       pendingDeployCount: pendingQueue.length,
       minimizedDeployCount: showMinimizedPeek ? visibleQueue.length : 0,
       blocksConnectionInvitations,
+      deferConnectionInvitations,
       presentNextDeploy,
       expandDeployModal: handleExpand,
     }),
     [
       blocksConnectionInvitations,
+      deferConnectionInvitations,
       handleExpand,
       pendingQueue.length,
       presentNextDeploy,

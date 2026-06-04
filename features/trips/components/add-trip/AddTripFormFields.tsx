@@ -24,7 +24,13 @@ import {
     getVehiclesByOrganization,
     type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
-import { AssignmentEntityPicker } from "@/features/trips/components/AssignmentEntityPicker";
+import { AssignmentEntityAvatarGrid } from "@/features/trips/components/AssignmentEntityAvatarGrid";
+import {
+  driverOptionsToAvatarGridItems,
+  vehicleOptionsToAvatarGridItems,
+} from "@/features/trips/utils/fleetAvatarGridItems.util";
+import { clientsToAvatarGridItems } from "@/features/clients/utils/clientAvatarGridItems.util";
+import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import {
@@ -80,7 +86,14 @@ import { ROUTES } from "@/lib/routes";
 import { ADD_TRIP_FORM } from "./addTripFormTokens";
 import { AddTripWebCurrencyField } from "./AddTripWebCurrencyField";
 import { PULSE_TRIP, PULSE_TRIP_RADIUS } from "./addTripPulseTheme";
-import type { AllocationSubStep } from "./allocationWizardSteps";
+import {
+  allocationSubStepLabel,
+  getAllocationSubSteps,
+  type AllocationSubStep,
+} from "./allocationWizardSteps";
+import { AllocationMobileWizardShell } from "./AllocationMobileWizardShell";
+import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
+import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { DriverPhoneRecommendations } from "./DriverPhoneRecommendations";
@@ -169,6 +182,30 @@ export interface AddTripFormFieldsProps {
   sourceIndent?: AddTripSourceIndent | null;
   /** Mobile allocation sub-step (one screen at a time). */
   allocationSubStep?: AllocationSubStep;
+}
+
+function allocationProgressTabLabel(
+  step: AllocationSubStep,
+  supplySource: AddTripFormState["supplySource"],
+): string {
+  switch (step) {
+    case "supply":
+      return supplySource === "aggregate" ? "Partner" : "Mode";
+    case "rates":
+      return "Rates";
+    case "driverPhone":
+      return "Phone";
+    case "driverName":
+      return "Name";
+    case "vehicle":
+      return "Vehicle";
+    case "fleetDriver":
+      return "Driver";
+    case "fleetVehicle":
+      return "Vehicle";
+    default:
+      return allocationSubStepLabel(step);
+  }
 }
 
 export function AddTripFormFields({
@@ -271,12 +308,6 @@ export function AddTripFormFields({
     !mobileAllocWizard || allocationSubStep === "driverPhone";
   const showVehicleField =
     !mobileAllocWizard || allocationSubStep === "vehicle";
-  /** Asset fleet pickers share the supply sub-step on mobile (not separate steps). */
-  const showAssetFleetInline =
-    mobileAllocWizard &&
-    allocationSubStep === "supply" &&
-    state.supplySource === "asset" &&
-    !state.assignLater;
   /** Aggregate partner list on the supply sub-step (mobile). */
   const showAggregatePartnerInline =
     mobileAllocWizard &&
@@ -289,6 +320,27 @@ export function AddTripFormFields({
       : showVehicleField
         ? ("vehicle" as const)
         : null;
+  const isAggregateMobileWizard =
+    mobileAllocWizard && state.supplySource === "aggregate";
+  const allocKeypadFullscreen =
+    isAggregateMobileWizard &&
+    (aggregateTrackingStep != null || allocationSubStep === "rates");
+  /** Keypad steps: flex column in modal body (footer stays below; no ScrollView overlap). */
+  const allocationFillBody =
+    mobileAllocWizard && allocKeypadFullscreen && isWizardAllocationCard;
+  const wizardFooterPad = isDenseForm ? 104 : 116;
+  const allocationWizardProgressSteps = useMemo(() => {
+    if (!mobileAllocWizard || !isWizardAllocationCard) return [];
+    return getAllocationSubSteps(state).map((id) => ({
+      id,
+      label: allocationProgressTabLabel(id, state.supplySource),
+    }));
+  }, [
+    mobileAllocWizard,
+    isWizardAllocationCard,
+    state.supplySource,
+    state.assignLater,
+  ]);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   /** Expanded picker vs minimized summary chip — start collapsed when a value is already set. */
   const [clientListExpanded, setClientListExpanded] = useState(() => !state.clientId);
@@ -670,6 +722,26 @@ export function AddTripFormFields({
     Boolean(state.driverId && !driverListExpanded && selectedDriverRow);
   const showVehicleFleetSummary =
     Boolean(state.vehicleId && !vehicleListExpanded && selectedVehicleRow);
+  const driverAvatarGridItems = useMemo(
+    () =>
+      driverOptionsToAvatarGridItems(
+        drivers.map((d) => ({
+          ...d,
+          isBusy: driverIdsOnActiveTrip.includes(d.id),
+        })),
+      ),
+    [drivers, driverIdsOnActiveTrip],
+  );
+  const vehicleAvatarGridItems = useMemo(
+    () =>
+      vehicleOptionsToAvatarGridItems(
+        vehicles.map((v) => ({
+          ...v,
+          isBusy: vehicleIdsOnActiveTrip.includes(v.id),
+        })),
+      ),
+    [vehicles, vehicleIdsOnActiveTrip],
+  );
 
   const scrollBlocked =
     pickupDropdownOpen || dropDropdownOpen || notesModalOpen;
@@ -677,6 +749,14 @@ export function AddTripFormFields({
   const supplyIsAsset = state.supplySource === "asset";
   const selectedClientRow = clients.find((c) => c.id === state.clientId) ?? null;
   const selectedSupplierRow = suppliers.find((s) => s.id === state.supplierId) ?? null;
+  const showClientList = !state.clientId || clientListExpanded;
+  const showClientSummary = Boolean(
+    state.clientId && !clientListExpanded && selectedClientRow,
+  );
+  const clientAvatarGridItems = useMemo(
+    () => clientsToAvatarGridItems(clients),
+    [clients],
+  );
   const showPartnerList = !state.supplierId || partnerListExpanded;
   const showPartnerSummary = Boolean(
     state.supplierId && !partnerListExpanded && selectedSupplierRow,
@@ -708,26 +788,43 @@ export function AddTripFormFields({
     <View style={styles.pageWrap}>
       <ScrollView
         style={styles.scroll}
+        scrollEnabled={
+          allocationFillBody
+            ? false
+            : Platform.OS === "web"
+              ? true
+              : isCompactMobile
+                ? true
+                : !scrollBlocked
+        }
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={
+          allocationFillBody
+            ? false
+            : Platform.OS === "web" || isCompactMobile
+              ? true
+              : !scrollBlocked
+        }
         contentContainerStyle={[
           styles.scrollContent,
           isDenseForm && styles.scrollContentDense,
           isWizardSingleCard && styles.scrollContentWizard,
+          allocationFillBody && styles.scrollContentFillBody,
           {
-            paddingBottom:
-              Layout.sectionSpacing +
-              insets.bottom +
-              (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
+            paddingBottom: allocationFillBody
+              ? 8
+              : mobileAllocWizard && isWizardAllocationCard
+                ? wizardFooterPad + insets.bottom
+                : Layout.sectionSpacing +
+                  insets.bottom +
+                  (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
           },
         ]}
-        showsVerticalScrollIndicator
-        keyboardShouldPersistTaps="handled"
-        scrollEnabled={
-          Platform.OS === "web" ? true : isCompactMobile ? true : !scrollBlocked
-        }
       >
         <View
           style={[
             styles.contentMax,
+            allocationFillBody && styles.contentMaxFill,
             {
               maxWidth: desktopFormGrid
                 ? desktopFormMaxWidth
@@ -744,11 +841,12 @@ export function AddTripFormFields({
             },
           ]}
         >
-          <View style={styles.mainGrid}>
+          <View style={[styles.mainGrid, allocationFillBody && styles.mainGridFill]}>
             <View
               style={[
                 styles.formColumn,
                 desktopFormGrid && styles.formColumnGridWeb,
+                allocationFillBody && styles.formColumnFill,
               ]}
             >
           {/* 01 Route */}
@@ -1408,121 +1506,79 @@ export function AddTripFormFields({
                   <Text style={styles.mutedSmall}>
                     No clients yet. Add clients from the Clients page first.
                   </Text>
-                ) : state.clientId && !clientListExpanded && selectedClientRow ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.clientCard,
-                      isDenseForm && styles.clientCardDense,
-                      styles.selectionSummaryCard,
-                      isWide && !isDenseForm && styles.clientCardWideBesidePrice,
-                    ]}
-                    onPress={() => setClientListExpanded(true)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.clientMain}>
-                      <PartyAvatar
-                        name={selectedClientRow.name ?? selectedClientRow.contact_person ?? "Client"}
-                        avatarUrl={
-                          (selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null
-                        }
-                        avatarSeed={
-                          (selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null
-                        }
-                        entityType="client"
-                        size={isDenseForm ? 32 : 38}
-                        borderStyle={styles.clientAvatarOn}
-                      />
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
-                          {selectedClientRow.name}
-                        </Text>
-                        {selectedClientRow.address ? (
-                          <Text style={styles.selectionSummarySub} numberOfLines={1}>
-                            {selectedClientRow.address}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                    <View style={styles.selectionSummaryPill}>
-                      <Text style={styles.selectionSummaryPillText}>Change</Text>
-                    </View>
-                  </TouchableOpacity>
                 ) : (
-                  <ScrollView
-                    style={styles.clientList}
-                    nestedScrollEnabled
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {clients.map((c) => {
-                      const selected = state.clientId === c.id;
-                      return (
-                        <TouchableOpacity
-                          key={c.id}
-                          style={[
-                            styles.clientCard,
-                            isDenseForm && styles.clientCardDense,
-                            selected && styles.clientCardRowSelected,
-                            Platform.OS === "web"
-                              ? ({ cursor: "pointer" } as ViewStyle)
-                              : null,
-                          ]}
-                          onPress={() => handleSelectClient(c)}
-                          activeOpacity={0.85}
-                        >
-                          <View style={styles.clientMain}>
-                            <PartyAvatar
-                              name={c.name ?? c.contact_person ?? "Client"}
-                              avatarUrl={
-                                (c as { avatar_url?: string | null }).avatar_url ?? null
-                              }
-                              avatarSeed={
-                                (c as { avatar_seed?: string | null }).avatar_seed ?? null
-                              }
-                              entityType="client"
-                              size={38}
-                              borderStyle={selected ? styles.clientAvatarOn : styles.clientAvatar}
-                            />
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              style={[
-                                styles.clientName,
-                                isDenseForm && styles.clientNameDense,
-                                selected && styles.clientNameOn,
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {c.name}
+                  <>
+                    {showClientSummary ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.clientCard,
+                          isDenseForm && styles.clientCardDense,
+                          styles.selectionSummaryCard,
+                          isWide && !isDenseForm && styles.clientCardWideBesidePrice,
+                          { marginBottom: 10 },
+                        ]}
+                        onPress={() => setClientListExpanded(true)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.clientMain}>
+                          <PartyAvatar
+                            name={
+                              selectedClientRow!.name ??
+                              selectedClientRow!.contact_person ??
+                              "Client"
+                            }
+                            avatarUrl={selectedClientRow!.avatar_url ?? null}
+                            avatarSeed={selectedClientRow!.avatar_seed ?? null}
+                            entityType="client"
+                            size={isDenseForm ? 32 : 38}
+                            borderStyle={styles.clientAvatarOn}
+                          />
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
+                              {selectedClientRow!.name}
                             </Text>
-                              {c.address ? (
-                                <View style={styles.clientMetaRow}>
-                                  <Clock size={11} color={Theme.textMuted} />
-                                  <Text
-                                    style={styles.clientSub}
-                                    numberOfLines={1}
-                                  >
-                                    {c.address}
-                                  </Text>
-                                </View>
-                              ) : null}
-                            </View>
-                          </View>
-                          <View
-                            style={[
-                              styles.radioOuter,
-                              selected && styles.radioOuterOn,
-                            ]}
-                          >
-                            {selected ? (
-                              <CheckCircle2
-                                size={16}
-                                color={Theme.darkGreen}
-                              />
+                            {selectedClientRow!.address ? (
+                              <Text style={styles.selectionSummarySub} numberOfLines={1}>
+                                {selectedClientRow!.address}
+                              </Text>
                             ) : null}
                           </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
+                        </View>
+                        <View style={styles.selectionSummaryPill}>
+                          <Text style={styles.selectionSummaryPillText}>Change</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ) : null}
+                    {showClientList ? (
+                      <AssignmentEntityAvatarGrid
+                        title="Select Client"
+                        totalCount={clients.length}
+                        errorOutline={invalid("client")}
+                        selectedId={state.clientId}
+                        onSelect={(id) => {
+                          const row = clients.find((c) => c.id === id);
+                          if (!row) return;
+                          if (state.clientId === id) {
+                            releaseAccessoryBar();
+                            Keyboard.dismiss();
+                            setters.setClientSelection(null, "");
+                            setClientListExpanded(true);
+                            return;
+                          }
+                          handleSelectClient(row);
+                        }}
+                        items={clientAvatarGridItems}
+                        emptyMessage="No clients yet. Add clients from your network first."
+                        emptyActionLabel="Add client"
+                        onEmptyAction={handleAddClientShortcut}
+                        headerActionLabel="Add client"
+                        onHeaderAction={handleAddClientShortcut}
+                        footerHint={
+                          !state.clientId ? "Select a client to continue" : undefined
+                        }
+                      />
+                    ) : null}
+                  </>
                 )}
               </View>
 
@@ -1591,21 +1647,378 @@ export function AddTripFormFields({
 
           {/* 04 Supply & Allocation */}
           {showAllocationCard ? (
+            mobileAllocWizard && isWizardAllocationCard ? (
+            <AllocationMobileWizardShell
+              progressSteps={allocationWizardProgressSteps}
+              currentStepId={allocationSubStep ?? "supply"}
+              fillBody={allocationFillBody}
+            >
+            <View
+              style={
+                allocationFillBody ? styles.allocationKeypadBody : styles.allocationStepBody
+              }
+            >
+            {showAlloc("supply") ? (
+            <>
+            <SupplyAllocationModeBar
+              mode={supplyIsAsset ? "asset" : "aggregate"}
+              compact={isCompactMobile}
+              assignLater={state.assignLater}
+              assignLaterDisabled={assignLaterSwitchDisabled}
+              onModeChange={(mode) => setters.setSupplySource(mode)}
+              onAssignLaterChange={setters.setAssignLater}
+            />
+            <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
+              {assignLaterSwitchDisabled ? (
+                <Text style={styles.assignLaterLockedHintBelow}>
+                  Remove driver or vehicle assignment to enable assign later.
+                </Text>
+              ) : null}
+            </View>
+            {state.assignLater ? (
+              <Text style={styles.warningText}>
+                {supplyIsAsset
+                  ? "Assign vehicle and driver on the trip screen before the trip starts."
+                  : "Add vehicle number and driver phone on the trip screen before the trip starts."}
+              </Text>
+            ) : null}
+            {showAggregatePartnerInline ? (
+              suppliersLoading ? (
+                <ActivityIndicator color={Theme.iconPrimary} />
+              ) : (
+                <>
+                  {showPartnerSummary ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.clientCard,
+                        isDenseForm && styles.clientCardDense,
+                        styles.selectionSummaryCard,
+                        { marginBottom: 10 },
+                      ]}
+                      onPress={() => setPartnerListExpanded(true)}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.clientMain}>
+                        <PartyAvatar
+                          name={
+                            selectedSupplierRow!.company_name?.trim() ||
+                            selectedSupplierRow!.name?.trim() ||
+                            "—"
+                          }
+                          organizationImageUrl={
+                            (selectedSupplierRow as {
+                              organization_avatar_url?: string | null;
+                            }).organization_avatar_url ?? null
+                          }
+                          organizationAvatarSeed={
+                            (selectedSupplierRow as {
+                              organization_avatar_seed?: string | null;
+                            }).organization_avatar_seed ?? null
+                          }
+                          avatarUrl={
+                            (selectedSupplierRow as { avatar_url?: string | null })
+                              .avatar_url ?? null
+                          }
+                          avatarSeed={
+                            (selectedSupplierRow as { avatar_seed?: string | null })
+                              .avatar_seed ?? null
+                          }
+                          entityType="supplier"
+                          size={38}
+                          borderStyle={styles.clientAvatarOn}
+                        />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text
+                            style={styles.selectionSummaryTitle}
+                            numberOfLines={1}
+                          >
+                            {selectedSupplierRow!.company_name?.trim() ||
+                              selectedSupplierRow!.name?.trim() ||
+                              "—"}
+                          </Text>
+                          <Text
+                            style={styles.selectionSummarySub}
+                            numberOfLines={1}
+                          >
+                            {[
+                              selectedSupplierRow!.supplier_type,
+                              selectedSupplierRow!.phone,
+                              selectedSupplierRow!.email,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.selectionSummaryPill}>
+                        <Text style={styles.selectionSummaryPillText}>Change</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ) : null}
+                  {showPartnerList ? (
+                    <AssignmentEntityAvatarGrid
+                      title="Select Transport Partner"
+                      totalCount={suppliers.length}
+                      errorOutline={invalid("partner")}
+                      selectedId={state.supplierId}
+                      onSelect={(id) => {
+                        const row = suppliers.find((s) => s.id === id);
+                        const primary =
+                          row?.company_name?.trim() || row?.name?.trim() || "—";
+                        if (state.supplierId === id) {
+                          releaseAccessoryBar();
+                          Keyboard.dismiss();
+                          setters.setSupplierSelection(null);
+                          return;
+                        }
+                        setters.setSupplierSelection(id, primary);
+                        setPartnerListExpanded(false);
+                      }}
+                      items={suppliersToAvatarGridItems(suppliers)}
+                      emptyMessage="No partners yet. Add suppliers from your network first."
+                      emptyActionLabel="Add partner"
+                      onEmptyAction={handleAddSupplierShortcut}
+                      headerActionLabel="Add partner"
+                      onHeaderAction={handleAddSupplierShortcut}
+                      footerHint={
+                        !state.supplierId ? "Select a transport partner" : undefined
+                      }
+                      scrollMaxHeight={280}
+                    />
+                  ) : null}
+                </>
+              )
+            ) : null}
+            </>
+            ) : null}
+
+            {supplyIsAsset && showAlloc("fleetDriver") && !state.assignLater ? (
+              <>
+                {busyFleetHintAsset ? (
+                  <View style={styles.warnBanner}>
+                    <AlertCircle size={14} color={Theme.warning} />
+                    <Text style={styles.warnBannerText}>
+                      {drivers.length === 0
+                        ? "No drivers yet. Add drivers from Drivers first."
+                        : "Some drivers are currently on active trips. Select an available driver or use Assign later."}
+                    </Text>
+                  </View>
+                ) : null}
+                {fleetLoading ? (
+                  <ActivityIndicator color={Theme.iconPrimary} />
+                ) : (
+                  <>
+                    {showDriverFleetSummary ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.clientCard,
+                          isDenseForm && styles.clientCardDense,
+                          styles.selectionSummaryCard,
+                          { marginBottom: 10 },
+                        ]}
+                        onPress={() => setDriverListExpanded(true)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.clientMain}>
+                          <PartyAvatar
+                            name={selectedDriverRow!.name ?? "Driver"}
+                            avatarUrl={
+                              (selectedDriverRow as { avatar_url?: string | null })
+                                .avatar_url ?? null
+                            }
+                            avatarSeed={
+                              (selectedDriverRow as { avatar_seed?: string | null })
+                                .avatar_seed ?? null
+                            }
+                            entityType="driver"
+                            size={38}
+                            borderStyle={styles.clientAvatarOn}
+                          />
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
+                              {selectedDriverRow!.name || "—"}
+                            </Text>
+                            <Text style={styles.selectionSummarySub} numberOfLines={1}>
+                              {[selectedDriverRow!.phone, selectedDriverRow!.email]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.selectionSummaryPill}>
+                          <Text style={styles.selectionSummaryPillText}>Change</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ) : null}
+                    {showDriverFleetList ? (
+                      <AssignmentEntityAvatarGrid
+                        title="Select Driver"
+                        totalCount={driverOptions.length}
+                        errorOutline={invalid("assetDriver")}
+                        selectedId={state.driverId}
+                        onSelect={(id) => {
+                          const row = driverOptions.find((d) => d.id === id);
+                          if (row?.isBusy) return;
+                          setters.setDriverId(state.driverId === id ? null : id);
+                          setDriverListExpanded(false);
+                        }}
+                        items={driverAvatarGridItems}
+                        emptyMessage="No drivers added yet. Add a driver to continue."
+                        emptyActionLabel="Add driver"
+                        onEmptyAction={handleAddDriverShortcut}
+                        headerActionLabel="Add driver"
+                        onHeaderAction={handleAddDriverShortcut}
+                        footerHint={
+                          !state.driverId ? "Choose an available driver" : undefined
+                        }
+                        scrollMaxHeight={320}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </>
+            ) : null}
+
+            {supplyIsAsset && showAlloc("fleetVehicle") && !state.assignLater ? (
+              <>
+                {!state.assignLater &&
+                availableVehicles.length === 0 &&
+                !fleetLoading ? (
+                  <View style={styles.warnBanner}>
+                    <AlertCircle size={14} color={Theme.warning} />
+                    <Text style={styles.warnBannerText}>
+                      {vehicles.length === 0
+                        ? "No vehicles yet. Add vehicles from Vehicles first."
+                        : "Vehicles marked 'On trip' are currently busy. Choose an available vehicle or use Assign later."}
+                    </Text>
+                  </View>
+                ) : null}
+                {fleetLoading ? (
+                  <ActivityIndicator color={Theme.iconPrimary} />
+                ) : (
+                  <>
+                    {showVehicleFleetSummary ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.clientCard,
+                          isDenseForm && styles.clientCardDense,
+                          styles.selectionSummaryCard,
+                          { marginBottom: 10 },
+                        ]}
+                        onPress={() => setVehicleListExpanded(true)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.clientMain}>
+                          <View style={styles.vehicleCardIconSummary}>
+                            <Truck size={18} color={Theme.textOnDarkMuted} />
+                          </View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
+                              {formatIndianVehicleNumber(
+                                selectedVehicleRow!.vehicle_number || "",
+                              ) || "—"}
+                            </Text>
+                            <Text style={styles.selectionSummarySub} numberOfLines={1}>
+                              {[
+                                selectedVehicleRow!.vehicle_body_type ||
+                                  selectedVehicleRow!.vehicle_type,
+                                [
+                                  selectedVehicleRow!.vehicle_size,
+                                  selectedVehicleRow!.vehicle_axle,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" "),
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
+                                .toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.selectionSummaryPill}>
+                          <Text style={styles.selectionSummaryPillText}>Change</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ) : null}
+                    {showVehicleFleetList ? (
+                      <AssignmentEntityAvatarGrid
+                        title="Select Vehicle"
+                        totalCount={vehicleOptions.length}
+                        errorOutline={invalid("assetVehicle")}
+                        selectedId={state.vehicleId}
+                        onSelect={(id) => {
+                          const row = vehicleOptions.find((v) => v.id === id);
+                          if (row?.isBusy) return;
+                          setters.setVehicleId(state.vehicleId === id ? null : id);
+                          setVehicleListExpanded(false);
+                        }}
+                        items={vehicleAvatarGridItems}
+                        emptyMessage="No vehicles added yet. Add a vehicle to continue."
+                        emptyActionLabel="Add vehicle"
+                        onEmptyAction={handleAddVehicleShortcut}
+                        headerActionLabel="Add vehicle"
+                        onHeaderAction={handleAddVehicleShortcut}
+                        footerHint={
+                          !state.vehicleId ? "Choose an available vehicle" : undefined
+                        }
+                        scrollMaxHeight={320}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </>
+            ) : null}
+
+            {showAlloc("rates") ? (
+              <PartnerRatesKeypadFlow
+                partnerRate={state.supplierRate}
+                onPartnerRateChange={(v) => setters.setSupplierRate(v)}
+                advancePaid={state.advancePaid}
+                onAdvancePaidChange={(v) => setters.setAdvancePaid(v)}
+                partyPreview={
+                  selectedSupplierRow
+                    ? supplierToNumericPartyPreview(selectedSupplierRow)
+                    : undefined
+                }
+                keypadInset
+              />
+            ) : null}
+
+            {aggregateTrackingStep ? (
+              <AggregateTrackingMobileStep
+                step={aggregateTrackingStep}
+                driverName={state.aggregateDriverName}
+                onDriverNameChange={(t) =>
+                  onPadValueChange(setters.setAggregateDriverName, t)
+                }
+                driverPhone={state.driverPhone}
+                onDriverPhoneChange={(v) =>
+                  setters.setDriverPhone(formatMobileNumber(v))
+                }
+                vehicleText={state.aggregateVehicleText}
+                onVehicleTextChange={(v) =>
+                  setters.setAggregateVehicleText(v)
+                }
+                invalid={invalid}
+                driverNameInputRef={aggregateDriverNameInputRef}
+                driverPhoneMatches={driverPhoneMatches}
+                driverPhoneLookupLoading={driverPhoneLookupLoading}
+                selectedDriverMatchId={selectedDriverMatchId}
+                onSelectDriverMatch={applyDriverPhoneMatch}
+                driverPhoneInTrip={state.driverPhoneTripConflict}
+                driverNameFromPlatform={state.driverPhoneName?.trim() || null}
+              />
+            ) : null}
+            </View>
+            </AllocationMobileWizardShell>
+            ) : (
             <View
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardGridSupplyWeb,
-                mobileAllocWizard &&
-                  aggregateTrackingStep != null &&
-                  styles.cardAllocWizardStep,
-                isWizardAllocationCard &&
-                  mobileAllocWizard &&
-                  aggregateTrackingStep != null &&
-                  styles.cardWizardStep,
               ]}
             >
-            {!(mobileAllocWizard && aggregateTrackingStep) ? (
             <View style={[styles.cardHead, styles.cardHeadWithTrailingAction, isDenseForm && styles.cardHeadDense]}>
               <View style={styles.cardHeadTitleCluster}>
                 <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
@@ -1639,7 +2052,6 @@ export function AddTripFormFields({
                 ) : null}
               </TouchableOpacity>
             </View>
-            ) : null}
 
             {showAlloc("supply") ? (
             <>
@@ -1671,8 +2083,7 @@ export function AddTripFormFields({
             {supplyIsAsset &&
             (!mobileAllocWizard ||
               showAlloc("fleetDriver") ||
-              showAlloc("fleetVehicle") ||
-              showAssetFleetInline) ? (
+              showAlloc("fleetVehicle")) ? (
               <>
                 {busyFleetHintAsset ? (
                   <View style={styles.warnBanner}>
@@ -1698,7 +2109,7 @@ export function AddTripFormFields({
                 ) : null}
 
                 {!state.assignLater &&
-                (showAlloc("fleetDriver") || !mobileAllocWizard || showAssetFleetInline) ? (
+                (showAlloc("fleetDriver") || !mobileAllocWizard) ? (
                   <View
                     style={[
                       assignmentShellStyles.assignSelectionGrid,
@@ -1748,10 +2159,9 @@ export function AddTripFormFields({
                             </TouchableOpacity>
                           ) : null}
                           {showDriverFleetList ? (
-                            <AssignmentEntityPicker
+                            <AssignmentEntityAvatarGrid
                               title="Select Driver"
                               totalCount={driverOptions.length}
-                              icon="user"
                               errorOutline={invalid("assetDriver")}
                               selectedId={state.driverId}
                               onSelect={(id) => {
@@ -1760,27 +2170,23 @@ export function AddTripFormFields({
                                 setters.setDriverId(state.driverId === id ? null : id);
                                 setDriverListExpanded(false);
                               }}
-                              items={driverOptions.map((d) => ({
-                                id: d.id,
-                                title: d.name || "—",
-                                subtitle: d.phone
-                                  ? `Phone: ${d.phone}`
-                                  : d.isBusy
-                                    ? "On trip"
-                                    : undefined,
-                                disabled: d.isBusy,
-                              }))}
+                              items={driverAvatarGridItems}
                               emptyMessage="No drivers added yet. Add a driver to continue."
                               emptyActionLabel="Add driver"
                               onEmptyAction={handleAddDriverShortcut}
                               headerActionLabel="Add driver"
                               onHeaderAction={handleAddDriverShortcut}
+                              footerHint={
+                                !state.driverId
+                                  ? "Choose an available driver"
+                                  : undefined
+                              }
                             />
                           ) : null}
                         </>
                       )}
                     </View>
-                    {(showAlloc("fleetVehicle") || !mobileAllocWizard || showAssetFleetInline) ? (
+                    {(showAlloc("fleetVehicle") || !mobileAllocWizard) ? (
                     <View>
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
@@ -1830,10 +2236,9 @@ export function AddTripFormFields({
                             </TouchableOpacity>
                           ) : null}
                           {showVehicleFleetList ? (
-                            <AssignmentEntityPicker
+                            <AssignmentEntityAvatarGrid
                               title="Select Vehicle"
                               totalCount={vehicleOptions.length}
-                              icon="truck"
                               errorOutline={invalid("assetVehicle")}
                               selectedId={state.vehicleId}
                               onSelect={(id) => {
@@ -1842,23 +2247,17 @@ export function AddTripFormFields({
                                 setters.setVehicleId(state.vehicleId === id ? null : id);
                                 setVehicleListExpanded(false);
                               }}
-                              items={vehicleOptions.map((v) => ({
-                                id: v.id,
-                                title:
-                                  formatIndianVehicleNumber(v.vehicle_number || "") || "—",
-                                subtitle: [
-                                  v.vehicle_body_type || v.vehicle_type,
-                                  [v.vehicle_size, v.vehicle_axle].filter(Boolean).join(" "),
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · "),
-                                disabled: v.isBusy,
-                              }))}
+                              items={vehicleAvatarGridItems}
                               emptyMessage="No vehicles added yet. Add a vehicle to continue."
                               emptyActionLabel="Add vehicle"
                               onEmptyAction={handleAddVehicleShortcut}
                               headerActionLabel="Add vehicle"
                               onHeaderAction={handleAddVehicleShortcut}
+                              footerHint={
+                                !state.vehicleId
+                                  ? "Choose an available vehicle"
+                                  : undefined
+                              }
                             />
                           ) : null}
                         </>
@@ -1872,107 +2271,10 @@ export function AddTripFormFields({
                 ) : null}
               </>
             ) : (
-              <>
-                {mobileAllocWizard && aggregateTrackingStep ? (
-                  <AggregateTrackingMobileStep
-                    webCentered={isWeb && winW >= 600}
-                    step={aggregateTrackingStep}
-                    driverName={state.aggregateDriverName}
-                    onDriverNameChange={(t) =>
-                      onPadValueChange(setters.setAggregateDriverName, t)
-                    }
-                    driverPhone={state.driverPhone}
-                    onDriverPhoneChange={(v) =>
-                      setters.setDriverPhone(formatMobileNumber(v))
-                    }
-                    vehicleText={state.aggregateVehicleText}
-                    onVehicleTextChange={(v) =>
-                      setters.setAggregateVehicleText(v)
-                    }
-                    invalid={invalid}
-                    driverNameInputRef={aggregateDriverNameInputRef}
-                    driverPhoneInputRef={driverPhoneInputRef}
-                    vehicleInputRef={aggregateVehicleInputRef}
-                    inputAccessoryViewID={kbAccessoryId}
-                    driverNameFromPlatform={state.driverPhoneName?.trim() || null}
-                    onFocusDriverName={() => {
-                      focusPadField(
-                        () => focusNextField(aggregateVehicleInputRef),
-                        state.aggregateDriverName,
-                      );
-                    }}
-                    onFocusDriverPhone={() => {
-                      focusPadField(
-                        () => focusNextField(aggregateDriverNameInputRef),
-                        state.driverPhone,
-                      );
-                    }}
-                    onFocusVehicle={() => {
-                      focusPadField(
-                        finishPadFieldEntry,
-                        state.aggregateVehicleText,
-                        "Next",
-                      );
-                    }}
-                    phoneDigitHint={
-                      state.driverPhone.length > 0 &&
-                      state.driverPhone.length < 10
-                        ? `${state.driverPhone.length}/10 digits`
-                        : null
-                    }
-                    phoneValidationMessage={
-                      state.driverPhone.trim() &&
-                      validatePhone(state.driverPhone.trim())
-                        ? validatePhone(state.driverPhone.trim())
-                        : null
-                    }
-                    phoneExtras={
-                      showDriverPhoneField ? (
-                        <>
-                          {renderDriverPhoneRecommendations(
-                            state.driverPhone.length >= 10,
-                            "stack",
-                          )}
-                          {state.driverPhoneTripConflict ? (
-                            <View
-                              style={[
-                                styles.driverConfirmCard,
-                                styles.driverConfirmCardError,
-                                { marginTop: 12 },
-                              ]}
-                              accessibilityRole="alert"
-                            >
-                              <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text
-                                  style={[
-                                    styles.driverConfirmMain,
-                                    { color: Theme.destructive },
-                                  ]}
-                                  numberOfLines={2}
-                                >
-                                  {state.driverPhoneName?.trim()
-                                    ? `${state.driverPhoneName.trim()} is already on a trip`
-                                    : "This driver is already on a trip"}
-                                </Text>
-                                <Text style={styles.driverConfirmSub}>
-                                  {state.driverPhoneTripConflictLabel
-                                    ? `Open trip: ${state.driverPhoneTripConflictLabel}. Use another number or finish that trip first.`
-                                    : "Driver is Busy / On Trip. Use a different number or complete the current trip first."}
-                                </Text>
-                              </View>
-                              <AlertCircle size={20} color={Theme.destructive} />
-                            </View>
-                          ) : null}
-                        </>
-                      ) : null
-                    }
-                  />
-                ) : (
                 <View
                   style={[
                     styles.aggregateSplit,
                     allocationWideLayout && styles.aggregateSplitWide,
-                    mobileAllocWizard && styles.aggregateSplitMobileWizard,
                   ]}
                 >
                   {(showAlloc("partner") ||
@@ -2059,10 +2361,9 @@ export function AddTripFormFields({
                           </TouchableOpacity>
                         ) : null}
                         {showPartnerList ? (
-                          <AssignmentEntityPicker
+                          <AssignmentEntityAvatarGrid
                             title="Select Transport Partner"
                             totalCount={suppliers.length}
-                            icon="building"
                             errorOutline={invalid("partner")}
                             selectedId={state.supplierId}
                             onSelect={(id) => {
@@ -2080,29 +2381,18 @@ export function AddTripFormFields({
                               setters.setSupplierSelection(id, primary);
                               setPartnerListExpanded(false);
                             }}
-                            items={suppliers.map((s) => {
-                              const primary =
-                                s.company_name?.trim() || s.name?.trim() || "—";
-                              const secondary = [s.supplier_type, s.phone, s.email]
-                                .filter(Boolean)
-                                .join(" · ");
-                              return {
-                                id: s.id,
-                                title: primary,
-                                subtitle: secondary || undefined,
-                              };
-                            })}
+                            items={suppliersToAvatarGridItems(suppliers)}
                             emptyMessage="No partners yet. Add suppliers from your network first."
                             emptyActionLabel="Add partner"
                             onEmptyAction={handleAddSupplierShortcut}
                             headerActionLabel="Add partner"
                             onHeaderAction={handleAddSupplierShortcut}
+                            footerHint={
+                              !state.supplierId
+                                ? "Select a transport partner"
+                                : undefined
+                            }
                           />
-                        ) : null}
-                        {!state.supplierId ? (
-                          <Text style={assignmentShellStyles.supplyFooterHint}>
-                            Select a transport partner
-                          </Text>
                         ) : null}
                       </>
                     )}
@@ -2193,7 +2483,7 @@ export function AddTripFormFields({
                       </View>
                     </View>
                   </>
-                ) : (showAlloc("rates") || !mobileAllocWizard) ? (
+                ) : !mobileAllocWizard ? (
                 <View
                   style={[
                     styles.gridRow,
@@ -2222,33 +2512,7 @@ export function AddTripFormFields({
                       required
                       partyPreview={
                         selectedSupplierRow
-                          ? {
-                              name:
-                                selectedSupplierRow.company_name?.trim() ||
-                                selectedSupplierRow.name?.trim() ||
-                                "Partner",
-                              subtitle: [
-                                selectedSupplierRow.supplier_type,
-                                selectedSupplierRow.phone,
-                              ]
-                                .filter(Boolean)
-                                .join(" · "),
-                              entityType: "supplier",
-                              avatarUrl:
-                                (selectedSupplierRow as { avatar_url?: string | null })
-                                  .avatar_url ?? null,
-                              avatarSeed:
-                                (selectedSupplierRow as { avatar_seed?: string | null })
-                                  .avatar_seed ?? null,
-                              organizationImageUrl:
-                                (selectedSupplierRow as {
-                                  organization_avatar_url?: string | null;
-                                }).organization_avatar_url ?? null,
-                              organizationAvatarSeed:
-                                (selectedSupplierRow as {
-                                  organization_avatar_seed?: string | null;
-                                }).organization_avatar_seed ?? null,
-                            }
+                          ? supplierToNumericPartyPreview(selectedSupplierRow)
                           : undefined
                       }
                       errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
@@ -2538,11 +2802,9 @@ export function AddTripFormFields({
                   </View>
                   ) : null}
                 </View>
-                )}
-              </>
             )}
-
-          </View>
+            </View>
+            )
           ) : null}
 
           {showInlineCta ? (
@@ -2657,17 +2919,41 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
+  scrollContentFillBody: {
+    flexGrow: 1,
+  },
+  allocationKeypadBody: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+  },
+  allocationStepBody: {
+    width: "100%",
+    minHeight: 0,
+  },
   contentMax: {
     width: "100%",
     maxWidth: 960,
     alignSelf: "center",
   },
+  contentMaxFill: {
+    flex: 1,
+    minHeight: 0,
+  },
   mainGrid: {
     width: "100%",
+  },
+  mainGridFill: {
+    flex: 1,
+    minHeight: 0,
   },
   formColumn: {
     width: "100%",
     minWidth: 0,
+  },
+  formColumnFill: {
+    flex: 1,
+    minHeight: 0,
   },
   /** Desktop web: row1 route|commodity; row2 client; row3 supply; row4 CTA. */
   formColumnGridWeb: Platform.select<ViewStyle>({
@@ -2840,9 +3126,10 @@ const styles = StyleSheet.create({
     marginBottom: ADD_TRIP_FORM.cardGap,
   },
   cardAllocWizardStep: {
-    flexGrow: 1,
-    minHeight: 320,
-    paddingBottom: 8,
+    flex: 1,
+    minHeight: 0,
+    paddingBottom: 0,
+    marginBottom: 0,
   },
   cardWizardStep: {
     marginBottom: 0,

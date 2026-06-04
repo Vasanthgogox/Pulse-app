@@ -7,6 +7,8 @@ export interface NumericEntryRecipientHeroProps {
   party: NumericEntryPartyPreview;
   /** e.g. "Client sale price" — shown above the party name */
   caption?: string;
+  /** Tighter block for allocation keypad steps above sticky footer. */
+  compact?: boolean;
 }
 
 /**
@@ -15,9 +17,10 @@ export interface NumericEntryRecipientHeroProps {
 export function NumericEntryRecipientHero({
   party,
   caption,
+  compact = false,
 }: NumericEntryRecipientHeroProps) {
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, compact && styles.rootCompact]}>
       <PartyAvatar
         name={party.name}
         avatarUrl={party.avatarUrl ?? null}
@@ -25,7 +28,7 @@ export function NumericEntryRecipientHero({
         organizationImageUrl={party.organizationImageUrl ?? null}
         organizationAvatarSeed={party.organizationAvatarSeed ?? null}
         entityType={party.entityType ?? "client"}
-        size={56}
+        size={compact ? 48 : 56}
       />
       {caption ? (
         <Text style={styles.caption} numberOfLines={1}>
@@ -51,6 +54,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
     gap: 6,
+  },
+  rootCompact: {
+    paddingTop: 4,
+    paddingBottom: 0,
+    gap: 4,
   },
   caption: {
     marginTop: 10,

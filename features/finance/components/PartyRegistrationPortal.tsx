@@ -45,6 +45,7 @@ import {
 import { showAppAlert } from "@/lib/appAlert";
 import { validateEmail } from "@/lib/emailValidation";
 import { formatIndianVehicleNumberInput, formatMobileNumber } from "@/lib/format";
+import { applyIndianDlKeystroke } from "@/lib/indianDrivingLicenseInput.util";
 import {
   normalizeIndianPhoneForMetadata,
   validatePhone,
@@ -649,7 +650,9 @@ function PartyRegistrationPortalInner(
           setDriverName((prev) => (prev.trim() ? prev : one.full_name));
           const dlFromRpc = one.license_number?.trim();
           if (dlFromRpc) {
-            setDriverDl((prev) => (prev.trim() ? prev : dlFromRpc.toUpperCase()));
+            setDriverDl((prev) =>
+              prev.trim() ? prev : applyIndianDlKeystroke(dlFromRpc),
+            );
           }
           const em = one.email?.trim();
           if (em) {
@@ -666,6 +669,10 @@ function PartyRegistrationPortalInner(
     setDriverExistingMatches([]);
     setDriverPhoneLookupError(null);
     setDriverPreferOfflineOnly(false);
+  };
+
+  const handleDriverDlChange = (text: string) => {
+    setDriverDl(applyIndianDlKeystroke(text));
   };
 
   const handleAddDriverOfflineInstead = () => {
@@ -733,8 +740,17 @@ function PartyRegistrationPortalInner(
         setFormError(t("errorDriverCannotAddAsSupplier"));
         return false;
       }
+      const orgOk = orgOrCompanyName.trim().length >= 2;
       const nameOk = contactName.trim().length >= 2;
       const phoneErr = validatePhone(phoneDigits);
+      if (!orgOk) {
+        setFormError(
+          kind === "client"
+            ? "Enter the organization or billing name."
+            : "Enter the supplier company name.",
+        );
+        return false;
+      }
       if (!nameOk) {
         setFormError("Enter the contact person's name.");
         return false;
@@ -1316,7 +1332,8 @@ function PartyRegistrationPortalInner(
     ) : null;
 
   const contactWizardCanAdvance =
-    contactWizardStep === "organization" ||
+    (contactWizardStep === "organization" &&
+      orgOrCompanyName.trim().length >= 2) ||
     (contactWizardStep === "contact" && contactName.trim().length >= 2) ||
     (contactWizardStep === "phone" &&
       contactName.trim().length >= 2 &&
@@ -1326,6 +1343,14 @@ function PartyRegistrationPortalInner(
   const handleContactWizardAdvance = () => {
     setFormError(null);
     if (contactWizardStep === "organization") {
+      if (orgOrCompanyName.trim().length < 2) {
+        setFormError(
+          kind === "client"
+            ? "Enter the organization or billing name."
+            : "Enter the supplier company name.",
+        );
+        return;
+      }
       setContactWizardStep("contact");
       return;
     }
@@ -1569,14 +1594,37 @@ function PartyRegistrationPortalInner(
     vehicleAxle,
   );
 
-  const renderVehiclePickerModals = () => (
-    <>
-      <Modal
-        visible={modelPickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setModelPickerOpen(false)}
-      >
+  const renderVehiclePickerModals = (opts?: { overlay?: boolean }) => {
+    const useOverlay = opts?.overlay === true;
+
+    const wrapPicker = (
+      visible: boolean,
+      onClose: () => void,
+      sheet: ReactNode,
+    ) => {
+      if (!visible) return null;
+      if (useOverlay) {
+        return (
+          <View style={styles.vehiclePickOverlayHost} pointerEvents="box-none">
+            {sheet}
+          </View>
+        );
+      }
+      return (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          presentationStyle="overFullScreen"
+          statusBarTranslucent
+          onRequestClose={onClose}
+        >
+          {sheet}
+        </Modal>
+      );
+    };
+
+    const modelSheet = (
         <KeyboardAvoidingView
           style={styles.vehiclePickBackdrop}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -1662,14 +1710,9 @@ function PartyRegistrationPortalInner(
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+    );
 
-      <Modal
-        visible={bodyLengthPickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setBodyLengthPickerOpen(false)}
-      >
+    const bodyLengthSheet = (
         <KeyboardAvoidingView
           style={styles.vehiclePickBackdrop}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -1755,9 +1798,19 @@ function PartyRegistrationPortalInner(
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-    </>
-  );
+    );
+
+    return (
+      <>
+        {wrapPicker(modelPickerOpen, () => setModelPickerOpen(false), modelSheet)}
+        {wrapPicker(
+          bodyLengthPickerOpen,
+          () => setBodyLengthPickerOpen(false),
+          bodyLengthSheet,
+        )}
+      </>
+    );
+  };
 
   if (useContactWizard) {
     return (
@@ -1782,7 +1835,6 @@ function PartyRegistrationPortalInner(
               }
               orgValue={orgOrCompanyName}
               onOrgChange={setOrgOrCompanyName}
-              orgOptional
               contactLabel="Primary contact"
               contactValue={contactName}
               onContactChange={setContactName}
@@ -1905,7 +1957,7 @@ function PartyRegistrationPortalInner(
               }
               phoneMaxLength={onInviteDriver ? 10 : 14}
               driverDl={driverDl}
-              onDriverDlChange={setDriverDl}
+              onDriverDlChange={handleDriverDlChange}
               driverEmail={driverEmail}
               onDriverEmailChange={setDriverEmail}
               driverPayableAmount={driverPayableAmount}
@@ -2008,8 +2060,8 @@ function PartyRegistrationPortalInner(
               onConfirm={() => void confirmSave()}
             />
           )}
+          {renderVehiclePickerModals({ overlay: true })}
         </Modal>
-        {renderVehiclePickerModals()}
       </>
     );
   }
@@ -2155,7 +2207,6 @@ function PartyRegistrationPortalInner(
                           ? "Organization / billing name"
                           : "Supplier company name"
                       }
-                      optionalHint="optional"
                     >
                       <TextInput
                         style={styles.input}
@@ -2331,7 +2382,7 @@ function PartyRegistrationPortalInner(
                               placeholderTextColor={Theme.textMuted}
                               autoCapitalize="characters"
                               value={driverDl}
-                              onChangeText={(t) => setDriverDl(t.toUpperCase())}
+                              onChangeText={handleDriverDlChange}
                               testID="party-driver-dl-input"
                             />
                           </View>
@@ -3097,6 +3148,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     marginTop: 6,
     lineHeight: 15,
+  },
+  vehiclePickOverlayHost: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    elevation: 100,
   },
   vehiclePickBackdrop: {
     flex: 1,

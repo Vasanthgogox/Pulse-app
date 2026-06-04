@@ -4,6 +4,10 @@ import {
   getClientById,
   getLinkedOrgProfile,
 } from "@/features/clients/services/clients.service";
+import {
+  resolveIndentPartnerPublicProfile,
+  type IndentPartnerPublicProfileTarget,
+} from "@/features/indents/utils/indentPartnerPublicProfile.util";
 
 export type IndentClientAvatarFields = {
   avatarUrl: string | null;
@@ -41,13 +45,18 @@ export function useIndentClientEntityAvatar(options: {
   fields: IndentClientAvatarFields;
   canOpenPublicProfile: boolean;
   publicProfileClientId: string | null;
+  publicProfileTarget: IndentPartnerPublicProfileTarget | null;
 } {
   const { clientId, ownerOrgId, shipperOrgId, isOwner, enabled } = options;
   const [fields, setFields] = useState<IndentClientAvatarFields>(EMPTY);
+  const [publicProfileTarget, setPublicProfileTarget] =
+    useState<IndentPartnerPublicProfileTarget | null>(null);
 
   const publicProfileClientId =
     isOwner && isUuid(clientId) ? (clientId as string) : null;
-  const canOpenPublicProfile = !!publicProfileClientId;
+  const canOpenPublicProfile = isOwner
+    ? !!publicProfileClientId
+    : !!publicProfileTarget;
 
   useEffect(() => {
     if (!enabled) {
@@ -94,10 +103,24 @@ export function useIndentClientEntityAvatar(options: {
     }
 
     setFields(EMPTY);
+    setPublicProfileTarget(null);
+
+    async function loadSupplierPublicProfileTarget() {
+      const viewerOrgId = (ownerOrgId ?? "").trim();
+      const partnerOrgId = (shipperOrgId ?? "").trim();
+      if (!viewerOrgId || !partnerOrgId) return;
+      const target = await resolveIndentPartnerPublicProfile(
+        viewerOrgId,
+        partnerOrgId,
+      );
+      if (!cancelled) setPublicProfileTarget(target);
+    }
+
     if (isOwner) {
       void loadOwnerClient();
     } else {
       void loadShipperOrg();
+      void loadSupplierPublicProfileTarget();
     }
 
     return () => {
@@ -105,5 +128,10 @@ export function useIndentClientEntityAvatar(options: {
     };
   }, [clientId, ownerOrgId, shipperOrgId, isOwner, enabled]);
 
-  return { fields, canOpenPublicProfile, publicProfileClientId };
+  return {
+    fields,
+    canOpenPublicProfile,
+    publicProfileClientId,
+    publicProfileTarget,
+  };
 }

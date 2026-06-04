@@ -1,0 +1,274 @@
+/**
+ * Single-step UI for aggregate (partner supply) indent deploy wizard.
+ */
+import { memo, useCallback, useMemo } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { User } from "lucide-react-native";
+
+import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
+import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
+import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
+import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
+import Theme from "@/constants/Theme";
+import { formatMobileNumber } from "@/lib/format";
+import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneLookup.util";
+import type { StaffHandshakeResult } from "@/features/network/hooks/useStaffHandshake";
+import { AssignmentEntityAvatarGrid } from "@/features/trips/components/AssignmentEntityAvatarGrid";
+import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip/DriverPhoneRecommendations";
+import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
+import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import type { IndentAggregateStep } from "@/features/indents/components/indentAllocationWizardSteps";
+
+export type IndentAggregateAllocationStepProps = {
+  step: IndentAggregateStep;
+  suppliers: SupplierRow[];
+  state: StaffHandshakeResult["state"];
+  set: StaffHandshakeResult["set"];
+  onAddPartner: () => void;
+};
+
+export const IndentAggregateAllocationStep = memo(function IndentAggregateAllocationStep({
+  step,
+  suppliers,
+  state,
+  set,
+  onAddPartner,
+}: IndentAggregateAllocationStepProps) {
+  const {
+    subcontractSupplierId,
+    subcontractRate,
+    aggregateAdvancePaid,
+    aggregateDriverTrackingName,
+    aggregateDriverPhone,
+    assignVehicleRegistration,
+    aggregatePhoneMatches,
+    aggregatePhoneLookupLoading,
+    aggregatePhoneSelectedUserId,
+    aggregatePhoneInTrip,
+  } = state;
+
+  const phoneLast10 = useMemo(
+    () => normalizeIndianMobileLast10(aggregateDriverPhone),
+    [aggregateDriverPhone],
+  );
+  const phoneComplete = phoneLast10.length >= 10;
+
+  const handlePhoneChange = useCallback(
+    (value: string) => {
+      set.aggregateDriverPhone(formatMobileNumber(value));
+    },
+    [set],
+  );
+
+  const phoneFooterExtras = useMemo(
+    () => (
+      <>
+        {aggregatePhoneInTrip ? (
+          <Text style={styles.phoneBusy}>
+            This driver is already on an active trip — use another number.
+          </Text>
+        ) : (
+          <DriverPhoneRecommendations
+            matches={aggregatePhoneMatches}
+            loading={aggregatePhoneLookupLoading}
+            selectedUserId={aggregatePhoneSelectedUserId}
+            onSelect={set.applyAggregatePhoneMatch}
+            phoneComplete={phoneComplete}
+            compact
+          />
+        )}
+      </>
+    ),
+    [
+      aggregatePhoneInTrip,
+      aggregatePhoneMatches,
+      aggregatePhoneLookupLoading,
+      aggregatePhoneSelectedUserId,
+      phoneComplete,
+      set,
+    ],
+  );
+
+  if (step === "partner") {
+    return (
+      <>
+        <AssignmentEntityAvatarGrid
+          title="Select Transport Partner"
+          totalCount={suppliers.length}
+          selectedId={subcontractSupplierId}
+          onSelect={(id) =>
+            set.subcontractSupplierId(subcontractSupplierId === id ? null : id)
+          }
+          items={suppliersToAvatarGridItems(suppliers)}
+          emptyMessage="No partners yet. Add a transport partner to continue."
+          emptyActionLabel="Add partner"
+          onEmptyAction={onAddPartner}
+          headerActionLabel="Add partner"
+          onHeaderAction={onAddPartner}
+          footerHint="Select the sub-supplier (transport partner) for this trip."
+        />
+      </>
+    );
+  }
+
+  if (step === "rates") {
+    const selectedPartner = suppliers.find((s) => s.id === subcontractSupplierId);
+    return (
+      <PartnerRatesKeypadFlow
+        partnerRate={subcontractRate}
+        onPartnerRateChange={set.subcontractRate}
+        advancePaid={aggregateAdvancePaid}
+        onAdvancePaidChange={set.aggregateAdvancePaid}
+        partyPreview={
+          selectedPartner ? supplierToNumericPartyPreview(selectedPartner) : undefined
+        }
+      />
+    );
+  }
+
+  if (step === "driverPhone") {
+    return (
+      <PhoneNumberKeypadFlow
+        label="DRIVER PHONE (TRACKING) *"
+        placeholder="10-digit number"
+        value={aggregateDriverPhone}
+        onChangeText={handlePhoneChange}
+        footerExtras={phoneFooterExtras}
+        testID="indent-allocation-driver-phone"
+      />
+    );
+  }
+
+  if (step === "driverName") {
+    const suggestedName = aggregatePhoneMatches.find(
+      (m) => m.user_id === aggregatePhoneSelectedUserId,
+    )?.full_name?.trim();
+    const showSuggestion =
+      suggestedName &&
+      suggestedName !== aggregateDriverTrackingName.trim();
+
+    return (
+      <View style={styles.fieldStack}>
+        {showSuggestion ? (
+          <Pressable
+            style={styles.suggestRow}
+            onPress={() => {
+              set.aggregateDriverNameManualRef.current = false;
+              set.aggregateDriverTrackingName(suggestedName);
+            }}
+            accessibilityRole="button"
+          >
+            <View style={styles.suggestAvatar}>
+              <User size={16} color={Theme.iconPrimary} />
+            </View>
+            <View style={styles.suggestText}>
+              <Text style={styles.suggestLabel}>Use suggested name</Text>
+              <Text style={styles.suggestName} numberOfLines={1}>
+                {suggestedName}
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
+
+        {aggregatePhoneMatches.length > 1 && !aggregatePhoneSelectedUserId ? (
+          <DriverPhoneRecommendations
+            matches={aggregatePhoneMatches}
+            loading={false}
+            selectedUserId={aggregatePhoneSelectedUserId}
+            onSelect={set.applyAggregatePhoneMatch}
+            phoneComplete
+            compact
+          />
+        ) : null}
+
+        <Text style={styles.label}>Driver name (tracking) *</Text>
+        <TextInput
+          style={[styles.input, assignmentShellStyles.inputWell]}
+          placeholder="e.g. Suresh Kumar"
+          placeholderTextColor={Theme.textMuted}
+          value={aggregateDriverTrackingName}
+          onChangeText={(value) => {
+            set.aggregateDriverNameManualRef.current = true;
+            set.aggregateDriverTrackingName(value);
+          }}
+          autoCorrect={false}
+          autoCapitalize="words"
+        />
+      </View>
+    );
+  }
+
+  if (step === "vehicleReg") {
+    return (
+      <IndianVehicleRegistrationKeypadFlow
+        value={assignVehicleRegistration}
+        onChangeText={set.assignVehicleRegistration}
+        testID="indent-allocation-vehicle-keypad"
+      />
+    );
+  }
+
+  return null;
+});
+
+const styles = StyleSheet.create({
+  fieldStack: { gap: 12, paddingTop: 4 },
+  label: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+  },
+  input: {
+    minHeight: 48,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  phoneBusy: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.destructive,
+    lineHeight: 17,
+  },
+  suggestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.primary,
+    backgroundColor: Theme.cardWhite,
+  },
+  suggestAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Theme.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  suggestText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  suggestLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  suggestName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginTop: 2,
+  },
+});

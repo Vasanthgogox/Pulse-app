@@ -31,7 +31,11 @@ export function isStaleNativeBundleError(error: Error): boolean {
     /Unable to resolve module/i.test(msg) ||
     /Requiring unknown module/i.test(msg) ||
     /Cannot read property 'create' of undefined/i.test(msg) ||
-    /is not a function \(it is undefined\)/i.test(msg)
+    /is not a function \(it is undefined\)/i.test(msg) ||
+    /Could not load bundle/i.test(msg) ||
+    /LoadBundleFromServerError/i.test(msg) ||
+    /Unable to download JS bundle/i.test(msg) ||
+    /Metro.*connect/i.test(msg)
   );
 }
 

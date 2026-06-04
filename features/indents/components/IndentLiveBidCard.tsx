@@ -1,13 +1,11 @@
 import { memo, useMemo } from "react";
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
   type ViewStyle,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { IndentHubInsightTicketTail } from "@/features/indents/components/IndentHubInsightTicketTail";
 
@@ -16,7 +14,11 @@ import Theme from "@/constants/Theme";
 import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
 import type { IndentBidBadge } from "@/features/indents/utils/indentLiveBids.util";
 import { buildIndentBidFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
-import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubStyles";
+import {
+  indentHubCardShadow,
+  indentReviewHubLayout,
+  indentReviewHubText,
+} from "@/features/indents/styles/indentReviewHubStyles";
 import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
 import { formatINR } from "@/lib/format";
 
@@ -33,12 +35,9 @@ export interface IndentLiveBidCardProps {
   onPress?: () => void;
 }
 
-/** Live bid ticket — light gray header + white metrics stub (hub ticket tail). */
+/** Live bid ticket — white card + inset metrics stub. */
 const BID = {
-  gradient: ["#F8FAFC", "#F1F5F9", "#ECEFF3"] as const,
-  gradientRejected: ["#F5F5F4", "#EFEFEF", "#E7E5E4"] as const,
   border: Theme.borderLight,
-  glow: "rgba(15, 23, 42, 0.05)",
   kicker: Theme.textRouteCard,
   label: Theme.textMuted,
   body: Theme.textPrimaryDark,
@@ -74,19 +73,7 @@ const BID = {
   badgeAwardedText: "#B45309",
 } as const;
 
-const cardShadow = Platform.select<ViewStyle>({
-  ios: {
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-  },
-  android: { elevation: 2 },
-  web: {
-    boxShadow: "0 4px 14px rgba(15, 23, 42, 0.08)",
-  },
-  default: {},
-});
+const AVATAR_SIZE = 34;
 
 function stripCurrencyPrefix(formatted: string): string {
   return formatted.replace(/^[^\d,.-]+/, "").trim() || formatted;
@@ -214,20 +201,17 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
   const hasFooter = Boolean(alertInfo || footerInsight);
 
   const content = (
-    <LinearGradient
-      colors={isRejected ? [...BID.gradientRejected] : [...BID.gradient]}
-      start={{ x: 0.15, y: 0 }}
-      end={{ x: 0.85, y: 1 }}
+    <View
       style={[
         styles.card,
-        cardShadow,
+        indentHubCardShadow as ViewStyle,
         selected && styles.cardSelected,
         disabled && styles.cardDisabled,
         alertPanel?.cardRim,
         isAccepted && styles.cardAwarded,
+        isRejected && styles.cardRejected,
       ]}
     >
-      <View style={styles.glow} pointerEvents="none" />
       {selected ? <View style={styles.selectedRail} pointerEvents="none" /> : null}
 
       <View style={styles.topSection}>
@@ -235,7 +219,7 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
           name={partyName}
           avatarSeed={quote.bidder_organization_id}
           entityType="supplier"
-          size={44}
+          size={AVATAR_SIZE}
           showIntegrationBadge={false}
         />
         <View style={styles.body}>
@@ -300,12 +284,13 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         <IndentHubInsightTicketTail
           insight={footerInsight}
           alertInfo={alertInfo}
-          contentPadding={12}
+          compact
+          contentPadding={indentReviewHubLayout.summaryCardPadding}
           perforationDashColor={BID.ticketDivider}
           extraMetric={extraMetric}
         />
       ) : null}
-    </LinearGradient>
+    </View>
   );
 
   if (onPress && !disabled) {
@@ -332,14 +317,19 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.995 }],
   },
   card: {
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: indentReviewHubLayout.summaryCardRadius,
+    padding: indentReviewHubLayout.summaryCardPadding,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: BID.border,
+    backgroundColor: Theme.cardWhite,
   },
   cardAwarded: {
     borderColor: "#FDE68A",
+  },
+  cardRejected: {
+    backgroundColor: Theme.cardWhite,
+    borderColor: BID.alertOverdueBorder,
   },
   cardSelected: {
     borderColor: Theme.positive,
@@ -356,15 +346,6 @@ const styles = StyleSheet.create({
   cardRimSoon: {
     borderColor: BID.alertSoonBorder,
   },
-  glow: {
-    position: "absolute",
-    top: -40,
-    right: -28,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: BID.glow,
-  },
   selectedRail: {
     position: "absolute",
     left: 0,
@@ -372,25 +353,26 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 3,
     backgroundColor: BID.valuePositive,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
+    borderTopLeftRadius: indentReviewHubLayout.summaryCardRadius,
+    borderBottomLeftRadius: indentReviewHubLayout.summaryCardRadius,
   },
   topSection: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 8,
     zIndex: 1,
   },
   body: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
-    paddingTop: 2,
+    gap: 2,
+    paddingTop: 1,
   },
   partyKicker: {
-    ...indentReviewHubText.freightLabelDark,
+    ...indentReviewHubText.fieldLabel,
     color: BID.kicker,
-    fontSize: 8,
+    fontSize: 7,
+    marginBottom: 0,
   },
   titleRow: {
     flexDirection: "row",
@@ -398,17 +380,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   partyName: {
-    ...indentReviewHubText.freightGridValueDark,
+    ...indentReviewHubText.partyTitle,
     flex: 1,
-    fontSize: 13,
-    lineHeight: 17,
-    letterSpacing: -0.15,
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: -0.1,
     color: BID.body,
   },
   selectedMark: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: Theme.positive,
     alignItems: "center",
     justifyContent: "center",
@@ -454,9 +436,9 @@ const styles = StyleSheet.create({
   badgeTextAwarded: { color: BID.badgeAwardedText },
   amountCol: {
     alignItems: "flex-end",
-    gap: 6,
+    gap: 4,
     flexShrink: 0,
-    paddingTop: 2,
+    paddingTop: 1,
   },
   amountHero: {
     flexDirection: "row",
@@ -464,20 +446,25 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   amountCurrency: {
-    ...indentReviewHubText.freightCurrency,
-    color: BID.body,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    lineHeight: 15,
   },
   amount: {
-    ...indentReviewHubText.freightAmount,
-    fontSize: 16,
-    maxWidth: 120,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: -0.35,
+    maxWidth: 108,
     color: BID.body,
+    fontVariant: ["tabular-nums"],
+    lineHeight: 17,
   },
   statusPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
@@ -490,7 +477,7 @@ const styles = StyleSheet.create({
     borderColor: BID.alertOverdueBorder,
   },
   statusText: {
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: "800",
     letterSpacing: 0.4,
     textTransform: "uppercase",

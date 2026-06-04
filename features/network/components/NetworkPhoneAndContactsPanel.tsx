@@ -738,109 +738,79 @@ export function NetworkPhoneAndContactsPanel({
               />
             ) : null}
 
-            {contactRecs.recommendations.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.contactScroll}
-              >
-                {contactRecs.recommendations.map((rec) => {
-                  const targetId = rec.invitee.organization_id;
-                  const status = connectionStatusForOrg(
-                    targetId,
-                    connectedOrgIds,
-                    sentQ.data ?? [],
-                  );
-                  const pendingRole =
-                    sentRoles[targetId] ??
-                    pendingRoleForOrg(targetId, sentQ.data ?? []);
-                  return (
-                    <View key={rec.normalizedPhone} style={styles.contactCard}>
-                      {/* Driver chip floats top-right of the card so the
-                       *  user sees at a glance that this match cannot
-                       *  receive a B2B connection request. */}
-                      {rec.isDriver ? (
-                        <View style={styles.contactDriverPill}>
-                          <Text
-                            style={styles.contactDriverPillText}
-                            numberOfLines={1}
-                          >
-                            {t("networkContactsDriverPill")}
-                          </Text>
-                        </View>
-                      ) : null}
-                      <View style={styles.contactCardHead}>
-                        <PartyAvatar
-                          name={rec.displayName.toUpperCase()}
-                          entityType={rec.isDriver ? "driver" : "client"}
-                          size={40}
-                        />
-                        <View style={styles.contactCardText}>
-                          <Text style={styles.contactOrgName} numberOfLines={1}>
-                            {rec.displayName}
-                          </Text>
-                          <Text style={styles.contactSub} numberOfLines={1}>
-                            {rec.contactName}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.contactConnectRow}>
-                        {!rec.isDriver && status === "pending" && pendingRole ? (
-                          <View style={styles.contactPendingRolePill}>
-                            <Text
-                              style={styles.contactPendingRolePillText}
-                              numberOfLines={1}
-                            >
-                              {pendingRole === "supplier"
-                                ? t("networkDiscoverPendingRoleSupplier")
-                                : t("networkDiscoverPendingRoleClient")}
-                            </Text>
-                          </View>
-                        ) : null}
-                        {rec.isDriver ? (
-                          /* Drivers are informational — the disabled
-                           *  button keeps card height consistent across
-                           *  the horizontal scroll without offering a
-                           *  connect action that the backend can't
-                           *  fulfil. */
-                          <View
-                            style={[
-                              styles.contactConnectBtn,
-                              styles.contactConnectBtnMuted,
-                            ]}
-                          >
-                            <Text style={styles.contactConnectBtnText}>
-                              {t("networkContactsDriverDisabledCta")}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Pressable
-                            style={({ pressed }) => [
-                              styles.contactConnectBtn,
-                              (status !== "none" || connectingId === targetId) &&
-                                styles.contactConnectBtnMuted,
-                              pressed && { opacity: 0.88 },
-                            ]}
-                            disabled={
-                              status !== "none" || connectingId === targetId || atDailyLimit
-                            }
-                            onPress={() => openRoleModal(targetId, rec.displayName)}
-                          >
-                            <Text style={styles.contactConnectBtnText}>
-                              {status === "approved"
-                                ? t("networkDiscoverConnected")
-                                : status === "pending"
-                                  ? t("networkDiscoverRequestSent")
-                                  : t("networkDiscoverConnect")}
-                            </Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            ) : null}
+            {contactRecs.recommendations.length > 0 ? (() => {
+                const orgRecs = contactRecs.recommendations.filter((r) => !r.isDriver);
+                const driverCount = contactRecs.recommendations.length - orgRecs.length;
+                return (
+                  <View style={styles.contactList}>
+                    {orgRecs.length > 0 ? (
+                      <>
+                        <Text style={styles.contactListHeading}>
+                          {orgRecs.length}{" "}
+                          {orgRecs.length === 1
+                            ? t("networkContactsOnPulseSingular")
+                            : t("networkContactsOnPulsePlural")}
+                        </Text>
+                        {orgRecs.map((rec, idx) => {
+                          const targetId = rec.invitee.organization_id;
+                          const status = connectionStatusForOrg(
+                            targetId,
+                            connectedOrgIds,
+                            sentQ.data ?? [],
+                          );
+                          const pendingRole =
+                            sentRoles[targetId] ??
+                            pendingRoleForOrg(targetId, sentQ.data ?? []);
+                          return (
+                            <View key={rec.normalizedPhone}>
+                              {idx > 0 ? <View style={styles.contactRowDivider} /> : null}
+                              <NetworkPartyDiscoverListCard
+                                orgId={targetId}
+                                name={rec.displayName}
+                                locationLabel={rec.contactName}
+                                connectionStatus={status}
+                                pendingRole={pendingRole}
+                                loading={connectingId === targetId}
+                                viewerOrgId={orgId}
+                                onOpenProfile={
+                                  onOpenProfile
+                                    ? () =>
+                                        onOpenProfile({
+                                          id: targetId,
+                                          name: rec.displayName,
+                                          connection_status: status,
+                                        })
+                                    : undefined
+                                }
+                                onConnect={
+                                  status === "none"
+                                    ? () => openRoleModal(targetId, rec.displayName)
+                                    : undefined
+                                }
+                                onCancel={
+                                  status === "pending"
+                                    ? () => void handleCancel(targetId)
+                                    : undefined
+                                }
+                                nativeListRow
+                              />
+                            </View>
+                          );
+                        })}
+                      </>
+                    ) : null}
+                    {driverCount > 0 ? (
+                      <Text style={styles.contactDriverNote}>
+                        {driverCount}{" "}
+                        {driverCount === 1
+                          ? t("networkContactsDriverNoteSingular")
+                          : t("networkContactsDriverNotePlural")}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })()
+            : null}
           </View>
         ) : null}
         </View>
@@ -1410,103 +1380,27 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
   },
-  contactScroll: {
-    gap: 10,
-    paddingVertical: 2,
-    paddingRight: 2,
+  contactList: {
+    gap: 0,
   },
-  contactCard: {
-    width: 216,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceGray,
-    gap: 10,
-    /** required so the absolute-positioned driver pill anchors to the card */
-    position: "relative",
-    overflow: "hidden",
-  },
-  /** Floating "DRIVER" tag pinned to the top-right corner of the contact
-   *  card. Mirrors the "INTEGRATED" tag pattern used in network rows so
-   *  the typography is recognisable. */
-  contactDriverPill: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    zIndex: 2,
-  },
-  contactDriverPillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.7,
+  contactListHeading: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
     color: Theme.textSecondary,
+    marginBottom: 6,
+    paddingHorizontal: 2,
   },
-  contactCardHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  contactRowDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 2,
   },
-  contactCardText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  contactOrgName: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
-  contactSub: {
+  contactDriverNote: {
     fontSize: 11,
     color: Theme.textMuted,
-    marginTop: 2,
-  },
-  /** Row container for the action area. When the request is pending and
-   *  the role is known we render a leading "Client" / "Supplier" pill so
-   *  the viewer can see which role was used when the invitation was sent.
-   *  The button itself stretches to fill remaining width. */
-  contactConnectRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  contactPendingRolePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    flexShrink: 0,
-  },
-  contactPendingRolePillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.7,
-    textTransform: "uppercase",
-    color: Theme.textSecondary,
-  },
-  contactConnectBtn: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: Theme.primary,
-  },
-  contactConnectBtnMuted: {
-    backgroundColor: Theme.borderMedium,
-  },
-  contactConnectBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.buttonPrimaryText,
+    marginTop: 10,
+    paddingHorizontal: 2,
   },
 });

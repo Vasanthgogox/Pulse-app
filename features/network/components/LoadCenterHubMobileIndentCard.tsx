@@ -11,16 +11,20 @@ import {
   HUB_GRID_PARTY_MIN_HEIGHT,
   HUB_GRID_ROUTE_MIN_HEIGHT,
 } from "@/components/hub/hubGridCardLayout";
+import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
+import {
+  indentHubCardShadow,
+  indentReviewHubLayout,
+  indentReviewHubText,
+} from "@/features/indents/styles/indentReviewHubStyles";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
 import type { LoadCenterTicketCommerce } from "@/features/network/utils/loadCenter.model";
 import { formatINR } from "@/lib/format";
 import { formatMobileTripSchedule } from "@/features/trips/components/TripsHubMobileTripCard";
-import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
 import type { ReactNode } from "react";
 import {
@@ -36,18 +40,6 @@ import { useRouter } from "expo-router";
 
 const ALLOCATION_AVATAR_SIZE = 24;
 
-const REF = {
-  card: Theme.screenBackground,
-  ink: "#1c1c1e",
-  inkMid: "#3d4650",
-  muted: "#9aa3ad",
-  hairline: "#e8ecf0",
-  accent: "#1a73e8",
-  radius: 16,
-} as const;
-
-const ROUTE_ARROW_TOP = 2;
-const ROUTE_PIN_SIZE = 8;
 /** @deprecated Use `HUB_GRID_CARD_MIN_HEIGHT` from `@/components/hub/hubGridCardLayout`. */
 export const LOAD_CENTER_GRID_CARD_MIN_HEIGHT = HUB_GRID_CARD_MIN_HEIGHT;
 
@@ -74,65 +66,6 @@ function quoteStatusPillStyles(status: string) {
     return { pill: styles.statusRejected, text: styles.statusRejectedText };
   }
   return { pill: styles.statusPending, text: styles.statusPendingText };
-}
-
-function RoutePin({ variant }: { variant: "origin" | "dest" }) {
-  return (
-    <View
-      style={[
-        styles.routePin,
-        variant === "origin" ? styles.routePinOrigin : styles.routePinDest,
-      ]}
-    />
-  );
-}
-
-function RouteLeg({
-  location,
-  variant,
-  align,
-  dense,
-}: {
-  location: string;
-  variant: "origin" | "dest";
-  align: "left" | "right";
-  dense?: boolean;
-}) {
-  const { city, state } = splitHubRouteLocationDisplay(location);
-  const end = align === "right";
-  return (
-    <View style={[styles.leg, end && styles.legEnd]}>
-      <View style={[styles.legRow, end && styles.legRowEnd]}>
-        {!end ? <RoutePin variant={variant} /> : null}
-        <View style={[styles.legText, end && styles.legTextEnd]}>
-          <Text
-            style={[
-              styles.legCity,
-              dense && styles.legCityDense,
-              end && styles.textEnd,
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {asLabel(city)}
-          </Text>
-          <Text
-            style={[
-              styles.legState,
-              dense && styles.legStateDense,
-              end && styles.textEnd,
-              !state && styles.legStatePlaceholder,
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {state || "\u00a0"}
-          </Text>
-        </View>
-        {end ? <RoutePin variant={variant} /> : null}
-      </View>
-    </View>
-  );
 }
 
 export type LoadCenterHubMobileIndentCardProps = {
@@ -206,7 +139,10 @@ export function LoadCenterHubMobileIndentCard({
     (indent.client_id
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
-  const bodyPadding = dense || fillGrid ? 12 : 16;
+  const bodyPadding =
+    dense || fillGrid
+      ? indentReviewHubLayout.hubCardPaddingDense
+      : indentReviewHubLayout.hubCardPaddingComfort;
   const useTicketStub = ticketCommerce != null;
   const commerce = ticketCommerce;
   const heroAmount =
@@ -375,29 +311,16 @@ export function LoadCenterHubMobileIndentCard({
             </Text>
           </View>
 
-          <View
+          <LoadCardRouteRow
+            origin={origin}
+            destination={dest}
+            compact={dense || fillGrid}
             style={[
               styles.route,
               dense && styles.routeDense,
               fillGrid && styles.routeGrid,
             ]}
-          >
-            <RouteLeg
-              location={origin}
-              variant="origin"
-              align="left"
-              dense={dense || fillGrid}
-            />
-            <View style={styles.routeMid}>
-              <Text style={styles.routeArrow}>→</Text>
-            </View>
-            <RouteLeg
-              location={dest}
-              variant="dest"
-              align="right"
-              dense={dense || fillGrid}
-            />
-          </View>
+          />
 
           {!useTicketStub ? (
             <View style={[styles.divider, fillGrid && styles.dividerGrid]} />
@@ -507,21 +430,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   card: {
-    backgroundColor: REF.card,
-    borderRadius: REF.radius,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: indentReviewHubLayout.summaryCardRadius,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
     overflow: "hidden",
-    ...Platform.select({
-      web: {
-        boxShadow: "0 2px 12px rgba(15, 23, 42, 0.08)",
-      } as ViewStyle,
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-        elevation: 2,
-      },
-    }),
+    ...indentHubCardShadow,
   },
   cardGrid: {
     flex: 1,
@@ -530,14 +444,14 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   body: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
+    paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
+    paddingBottom: indentReviewHubLayout.hubCardPaddingComfort,
   },
   bodyDense: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: indentReviewHubLayout.hubCardPaddingDense,
+    paddingTop: indentReviewHubLayout.hubCardPaddingDense,
+    paddingBottom: indentReviewHubLayout.hubCardPaddingDense,
   },
   bodyGrid: {
     flex: 1,
@@ -589,23 +503,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brand: {
-    ...FinanceTxnTypography.partyTitle,
+    ...indentReviewHubText.partyTitle,
     fontSize: 11,
     lineHeight: 14,
     letterSpacing: -0.15,
-    fontWeight: "400",
+    fontWeight: "700",
   },
   headMeta: {
+    ...indentReviewHubText.chipLabel,
     flexShrink: 0,
     maxWidth: "38%",
     marginTop: 2,
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "600",
-    color: REF.muted,
+    fontSize: 8,
+    lineHeight: 11,
+    color: Theme.textMuted,
     textAlign: "right",
     textTransform: "uppercase",
-    letterSpacing: 0.3,
   },
   allocationRow: {
     flexDirection: "row",
@@ -614,7 +527,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: REF.hairline,
+    borderColor: Theme.borderLight,
     overflow: "hidden",
   },
   allocationRowGrid: {
@@ -636,7 +549,7 @@ const styles = StyleSheet.create({
   allocationAvatarPress: {
     borderRadius: ALLOCATION_AVATAR_SIZE / 2,
     borderWidth: 1,
-    borderColor: REF.hairline,
+    borderColor: Theme.borderLight,
   },
   allocationTextCol: {
     flex: 1,
@@ -648,12 +561,12 @@ const styles = StyleSheet.create({
   },
   allocationDivider: {
     width: StyleSheet.hairlineWidth,
-    backgroundColor: REF.hairline,
+    backgroundColor: Theme.borderLight,
   },
   allocationLabel: {
     fontSize: 7,
     fontWeight: "700",
-    color: REF.muted,
+    color: Theme.textMuted,
     letterSpacing: 0.35,
     textTransform: "uppercase",
     marginBottom: 2,
@@ -664,118 +577,28 @@ const styles = StyleSheet.create({
   allocationValue: {
     fontSize: 10,
     fontWeight: "700",
-    color: REF.ink,
+    color: Theme.textPrimaryDark,
     letterSpacing: -0.1,
   },
   allocationValueEnd: {
     textAlign: "right",
   },
   route: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 4,
     width: "100%",
     maxWidth: "100%",
-    overflow: "hidden",
+    marginBottom: 2,
   },
   routeDense: {
-    gap: 3,
+    marginBottom: 0,
   },
   routeGrid: {
     minHeight: HUB_GRID_ROUTE_MIN_HEIGHT,
     flexShrink: 0,
-  },
-  leg: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
-    maxWidth: "48%",
-    overflow: "hidden",
-  },
-  legEnd: {
-    alignItems: "flex-end",
-  },
-  legRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    minWidth: 0,
-  },
-  legRowEnd: {
-    justifyContent: "flex-end",
-  },
-  legText: {
-    flex: 1,
-    minWidth: 0,
-    overflow: "hidden",
-    ...Platform.select({
-      web: { width: "100%" } as ViewStyle,
-      default: {},
-    }),
-  },
-  legTextEnd: {
-    alignItems: "flex-end",
-  },
-  routePin: {
-    width: ROUTE_PIN_SIZE,
-    height: ROUTE_PIN_SIZE,
-    borderRadius: ROUTE_PIN_SIZE / 2,
-    marginTop: 2,
-    flexShrink: 0,
-  },
-  routePinOrigin: {
-    backgroundColor: REF.accent,
-  },
-  routePinDest: {
-    backgroundColor: Theme.positive,
-  },
-  legCity: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: REF.ink,
-    letterSpacing: -0.15,
-    lineHeight: 14,
-    textTransform: "uppercase",
-    width: "100%",
-  },
-  legCityDense: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  legState: {
-    marginTop: 1,
-    fontSize: 9,
-    fontWeight: "400",
-    color: REF.muted,
-    lineHeight: 12,
-    width: "100%",
-  },
-  legStateDense: {
-    fontSize: 8,
-    lineHeight: 11,
-  },
-  legStatePlaceholder: {
-    opacity: 0,
-  },
-  textEnd: {
-    textAlign: "right",
-  },
-  routeMid: {
-    width: 24,
-    paddingTop: ROUTE_ARROW_TOP,
-    alignItems: "center",
-    justifyContent: "flex-start",
-    flexShrink: 0,
-  },
-  routeArrow: {
-    fontSize: 16,
-    fontWeight: "300",
-    color: REF.muted,
-    lineHeight: 18,
+    marginBottom: 0,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: REF.hairline,
+    backgroundColor: Theme.borderLight,
     marginTop: 12,
     marginBottom: 10,
   },
@@ -787,23 +610,15 @@ const styles = StyleSheet.create({
   refRow: {
     minWidth: 0,
   },
-  refLine: {
-    fontSize: 8,
-    lineHeight: 11,
-    letterSpacing: 0.1,
-  },
+  refLine: indentReviewHubText.dateLine,
   refId: {
+    ...indentReviewHubText.fieldValue,
     fontSize: 8,
-    fontWeight: "500",
-    color: REF.inkMid,
     lineHeight: 11,
     fontVariant: ["tabular-nums"],
   },
   refMuted: {
-    fontSize: 8,
-    fontWeight: "400",
-    color: REF.muted,
-    lineHeight: 11,
+    ...indentReviewHubText.dateLine,
     fontVariant: ["tabular-nums"],
   },
   partyRow: {
@@ -820,15 +635,13 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   footerLabel: {
-    ...FinanceTxnTypography.partyTitle,
+    ...indentReviewHubText.specLabel,
     flex: 1,
     minWidth: 0,
-    fontSize: 9,
-    lineHeight: 12,
-    letterSpacing: -0.15,
-    fontWeight: "400",
-    color: REF.inkMid,
+    fontSize: 8,
+    lineHeight: 11,
     textTransform: "uppercase",
+    color: Theme.textSecondary,
   },
   footerLabelEnd: {
     textAlign: "right",
@@ -854,16 +667,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stubVehicle: {
-    ...FinanceTxnTypography.partyTitle,
+    ...indentReviewHubText.specLabel,
     flex: 1,
     minWidth: 0,
     maxWidth: "46%",
-    fontSize: 9,
-    lineHeight: 12,
-    letterSpacing: -0.15,
-    fontWeight: "400",
-    color: REF.inkMid,
+    fontSize: 8,
+    lineHeight: 11,
     textTransform: "uppercase",
+    color: Theme.textSecondary,
     alignSelf: "center",
   },
   stubCommerce: {
@@ -880,11 +691,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   stubKicker: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: REF.muted,
+    ...indentReviewHubText.fieldLabel,
     flexShrink: 1,
   },
   stubAmountRow: {
@@ -897,36 +704,34 @@ const styles = StyleSheet.create({
   stubCurrency: {
     fontSize: 14,
     fontWeight: "700",
-    color: REF.inkMid,
+    color: Theme.textSecondary,
     lineHeight: 18,
     marginBottom: 1,
   },
   stubAmount: {
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    color: REF.ink,
-    lineHeight: 24,
+    ...indentReviewHubText.freightAmount,
+    fontSize: 20,
+    lineHeight: 22,
+    color: Theme.textPrimaryDark,
     flexShrink: 1,
     textAlign: "right",
-    fontVariant: ["tabular-nums"],
   },
   stubReference: {
     fontSize: 8,
     fontWeight: "600",
-    color: REF.muted,
+    color: Theme.textMuted,
     textAlign: "right",
     fontVariant: ["tabular-nums"],
   },
   stubCaption: {
-    ...FinanceTxnTypography.partyTitle,
+    ...indentReviewHubText.specLabel,
     flex: 1,
     minWidth: 0,
     maxWidth: "52%",
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "600",
-    color: REF.inkMid,
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "700",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     textAlign: "right",
   },

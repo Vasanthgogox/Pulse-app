@@ -1,4 +1,5 @@
 import Theme from "@/constants/Theme";
+import { indentReviewHubLayout } from "@/features/indents/styles/indentReviewHubStyles";
 import { StyleSheet, View } from "react-native";
 
 const NOTCH = 10;
@@ -12,8 +13,8 @@ type IndentHubPerforationProps = {
 
 /** Ticket-style divider on white hub cards. */
 export function IndentHubPerforation({
-  contentPadding = 16,
-  dashColor = "#E2E8F0",
+  contentPadding = indentReviewHubLayout.summaryCardPadding,
+  dashColor = Theme.borderLight,
 }: IndentHubPerforationProps) {
   const notchOffset = -contentPadding - NOTCH / 2;
   return (
@@ -30,8 +31,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: NOTCH,
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: 6,
+    marginBottom: 6,
   },
   notchLeft: {
     width: NOTCH,

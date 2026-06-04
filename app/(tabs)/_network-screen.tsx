@@ -895,23 +895,26 @@ function NetworkScreenInner() {
                 </View>
               </View>
             ) : (
-              <>
-                <NetworkStoryStrip
-                  orgId={orgId}
-                  orgName={organization?.name ?? ""}
-                  feedPosts={feedPosts}
-                  feedLoading={feedQ.isLoading}
-                  onCreatePost={onCreatePost}
-                />
-                <View
-                  style={[styles.loadsRowShell, isCompactPhone && styles.loadsRowShellCompact]}
-                >
-                  <NetworkLoadsQuickCards compact={isCompactPhone} />
-                </View>
-              </>
+              <NetworkStoryStrip
+                orgId={orgId}
+                orgName={organization?.name ?? ""}
+                feedPosts={feedPosts}
+                feedLoading={feedQ.isLoading}
+                onCreatePost={onCreatePost}
+              />
             )}
               </View>
         </View>
+        {!showStoryLoadsSplit ? (
+          <View
+            style={[
+              styles.loadsMarketplaceSection,
+              isCompactPhone && styles.loadsMarketplaceSectionCompact,
+            ]}
+          >
+            <NetworkLoadsQuickCards compact={isCompactPhone} />
+          </View>
+        ) : null}
         {ENABLE_UNLINKED_COUNTERPARTIES && orgId ? (
           <UnlinkedCounterpartiesSection orgId={orgId} />
         ) : null}
@@ -1536,15 +1539,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignSelf: "stretch",
     paddingVertical: 8,
+    backgroundColor: Theme.screenBackground,
   },
-  loadsRowShell: {
+  loadsMarketplaceSection: {
+    alignSelf: "stretch",
     width: "100%",
     minWidth: 0,
-    marginTop: 4,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: 8,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: Theme.screenBackground,
   },
-  loadsRowShellCompact: {
-    marginTop: 0,
+  loadsMarketplaceSectionCompact: {
+    marginTop: 6,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
   commandMainCard: {
     flex: 1,
@@ -2538,6 +2548,7 @@ const styles = StyleSheet.create({
   },
   sectionBodyConnections: {
     paddingBottom: 0,
+    backgroundColor: Theme.screenBackground,
   },
   sectionBodyDiscover: {
     paddingBottom: 24,
