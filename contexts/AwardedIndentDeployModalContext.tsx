@@ -202,7 +202,9 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     if (!activeItem) return;
     const indentId = activeItem.indent.id;
     setDeployFlowIndentId(indentId);
-    router.push(ROUTES.indentAllocation(indentId) as import("expo-router").Href);
+    router.push(
+      ROUTES.indentAllocation(indentId, "vehicle") as import("expo-router").Href,
+    );
   }, [activeItem, router]);
 
   const handleViewLoad = useCallback(() => {

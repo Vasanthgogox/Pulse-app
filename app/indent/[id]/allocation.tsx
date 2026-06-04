@@ -4,16 +4,23 @@ import { useLocalSearchParams } from "expo-router";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 
 export default function IndentAllocationRoute() {
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; focus?: string }>();
   const safeBack = useSafeBack();
   const indentId =
     typeof params.id === "string" ? params.id : (params.id?.[0] ?? "");
+  const focusRaw =
+    typeof params.focus === "string" ? params.focus : params.focus?.[0];
+  const initialFocus = focusRaw === "vehicle" ? "vehicle" : "driver";
 
   if (!indentId) {
     return <CenteredLoadingView message="Missing indent" />;
   }
 
   return (
-    <IndentAllocationFlowScreen indentId={indentId} onBack={safeBack} />
+    <IndentAllocationFlowScreen
+      indentId={indentId}
+      initialFocus={initialFocus}
+      onBack={safeBack}
+    />
   );
 }

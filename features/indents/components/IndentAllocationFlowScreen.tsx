@@ -34,20 +34,27 @@ import {
   useVehiclesQuery,
 } from "@/lib/queries";
 
+export type IndentAllocationFlowFocus = "driver" | "vehicle";
+
 export interface IndentAllocationFlowScreenProps {
   indentId: string;
+  /** From award modal “Assign vehicle” — open fleet vehicle step first. */
+  initialFocus?: IndentAllocationFlowFocus;
   onBack: () => void;
 }
 
 export function IndentAllocationFlowScreen({
   indentId,
+  initialFocus = "driver",
   onBack,
 }: IndentAllocationFlowScreenProps) {
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const invalidateIndents = useInvalidateIndents();
-  const [step, setStep] = useState<IndentAllocationStepId>("driver");
+  const [step, setStep] = useState<IndentAllocationStepId>(
+    initialFocus === "vehicle" ? "vehicle" : "driver",
+  );
 
   const {
     data: indent,
@@ -119,8 +126,8 @@ export function IndentAllocationFlowScreen({
     if (openedIndentIdRef.current === indent.id) return;
     openedIndentIdRef.current = indent.id;
     open(indent);
-    setStep("driver");
-  }, [indent, open]);
+    setStep(initialFocus === "vehicle" ? "vehicle" : "driver");
+  }, [indent, open, initialFocus]);
 
   useEffect(() => {
     return () => {

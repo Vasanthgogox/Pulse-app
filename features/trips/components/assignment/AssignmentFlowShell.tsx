@@ -121,31 +121,38 @@ export function AssignmentFlowShell({
       {progress ? <View style={styles.progressWrap}>{progress}</View> : null}
     </View>
   ) : (
-    <View style={[assignmentShellStyles.modalHero, { paddingTop: insets.top + 8 }]}>
-      <View style={assignmentShellStyles.modalHeroText}>
-        {showBack && onBack ? (
-          <TouchableOpacity
-            style={assignmentShellStyles.wizardBackPill}
-            onPress={onBack}
-            activeOpacity={0.85}
-          >
-            <ChevronLeft size={14} color={Theme.primary} strokeWidth={2.5} />
-            <Text style={assignmentShellStyles.wizardBackText}>Back</Text>
-          </TouchableOpacity>
-        ) : null}
-        <Text style={assignmentShellStyles.modalTitle}>{title}</Text>
-        {subtitle ? (
-          <Text style={assignmentShellStyles.modalSubtitle}>{subtitle}</Text>
-        ) : null}
-      </View>
-      <TouchableOpacity
-        onPress={onClose}
-        style={assignmentShellStyles.modalCloseBtn}
-        hitSlop={8}
-        accessibilityLabel="Close"
+    <View style={styles.slateHeaderStack}>
+      <View
+        style={[
+          assignmentShellStyles.modalHero,
+          { paddingTop: insets.top + 8, borderBottomWidth: 0 },
+        ]}
       >
-        <FontAwesome name="times" size={18} color={Theme.textMuted} />
-      </TouchableOpacity>
+        <View style={assignmentShellStyles.modalHeroText}>
+          {showBack && onBack ? (
+            <TouchableOpacity
+              style={assignmentShellStyles.wizardBackPill}
+              onPress={onBack}
+              activeOpacity={0.85}
+            >
+              <ChevronLeft size={14} color={Theme.primary} strokeWidth={2.5} />
+              <Text style={assignmentShellStyles.wizardBackText}>Back</Text>
+            </TouchableOpacity>
+          ) : null}
+          <Text style={assignmentShellStyles.modalTitle}>{title}</Text>
+          {subtitle ? (
+            <Text style={assignmentShellStyles.modalSubtitle}>{subtitle}</Text>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          onPress={onClose}
+          style={assignmentShellStyles.modalCloseBtn}
+          hitSlop={8}
+          accessibilityLabel="Close"
+        >
+          <FontAwesome name="times" size={18} color={Theme.textMuted} />
+        </TouchableOpacity>
+      </View>
       {progress ? <View style={styles.progressWrapSlate}>{progress}</View> : null}
     </View>
   );
@@ -272,9 +279,17 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(255,255,255,0.12)",
   },
+  slateHeaderStack: {
+    width: "100%",
+    backgroundColor: assignmentShellColors.cardWhite,
+    borderBottomWidth: 1,
+    borderBottomColor: assignmentShellColors.borderSlate,
+  },
   progressWrapSlate: {
     width: "100%",
-    marginTop: 12,
+    marginTop: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: assignmentShellColors.borderSlate,
   },
   body: { flex: 1, minHeight: 0 },
   bodyContent: {

@@ -88,8 +88,11 @@ export const ROUTES = {
   indentDetail: (indentId: string) =>
     `/indent/${encodeURIComponent(indentId)}` as const,
   /** Awarded indent → deploy trip (asset roster or aggregate partner flow). */
-  indentAllocation: (indentId: string) =>
-    `/indent/${encodeURIComponent(indentId)}/allocation` as const,
+  indentAllocation: (indentId: string, focus?: "driver" | "vehicle") => {
+    const base = `/indent/${encodeURIComponent(indentId)}/allocation` as const;
+    if (!focus) return base;
+    return `${base}?focus=${focus}` as const;
+  },
   /** Optional trip odometer verification (start/end). */
   tripVerification: (tripId: string, side: "start" | "end" = "start") =>
     `/trip/${encodeURIComponent(tripId)}/verification?side=${side}` as const,
