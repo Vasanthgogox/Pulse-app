@@ -48,6 +48,7 @@ import {
 import {
   installWebViewportHeight,
 } from '@/lib/webViewportHeight';
+import { installDevConsoleFilters } from '@/lib/devConsoleFilters';
 import type { ViewStyle } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
@@ -233,10 +234,21 @@ LogBox.ignoreLogs([
   'Refresh Token Not Found',
   'AuthApiError',
   'No native splash screen registered',
+  // RN Web dev noise (harmless on web; native still uses shadow* props).
+  '"shadow*" style props are deprecated',
+  'props.pointerEvents is deprecated',
+  // Metro allow-list — fixed via direct imports; ignore if a dev chunk still cycles.
+  'Require cycle:',
+  // Expo Router file is app/add-commodity-type/index.tsx (screen name includes /index).
+  'No route named "add-commodity-type"',
+  // React Strict Mode double-mount vs Supabase auth Web Lock (dev-only recovery).
+  'Lock "lock:sb-',
+  'was not released within',
 ]);
 
 export default function RootLayout() {
   useEffect(() => {
+    installDevConsoleFilters();
     clearNativeBundleReloadGuard();
     installNativeBundleRecoveryHandler();
     installWebDeployRecoveryListener();
@@ -432,7 +444,7 @@ function RootLayoutNav() {
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="add-trip" />
               <Stack.Screen
-                name="add-commodity-type"
+                name="add-commodity-type/index"
                 options={{ animation: "slide_from_right", headerShown: false }}
               />
               <Stack.Screen name="network" />

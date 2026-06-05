@@ -228,7 +228,7 @@ export const AwardedIndentDeployModal = memo(function AwardedIndentDeployModal({
       <View style={[styles.backdrop, Platform.OS === "web" ? styles.backdropWeb : null]}>
         <Pressable
           style={styles.backdropTap}
-          onPress={onMinimize}
+          onPress={finishMinimize}
           accessibilityRole="button"
           accessibilityLabel="Minimize deploy card"
         />

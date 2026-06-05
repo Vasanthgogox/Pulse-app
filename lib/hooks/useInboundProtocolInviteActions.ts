@@ -14,6 +14,11 @@ import {
   rejectConnectionRequest,
 } from "@/features/connections/services/connectionRequests.service";
 
+function isIgnorableInviteRefetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.toLowerCase().includes("lock was stolen by another request");
+}
+
 export function useInboundProtocolInviteActions(orgId: string | null) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
@@ -86,10 +91,23 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
         ]);
       if (typeof requestAnimationFrame === "function") {
         requestAnimationFrame(() => {
-          void refetchNetworkLists();
+          void refetchNetworkLists().catch((refetchError) => {
+            if (!isIgnorableInviteRefetchError(refetchError)) {
+              console.warn("[InboundProtocolInviteActions] deferred refetch failed", refetchError);
+            }
+          });
         });
       } else {
-        setTimeout(() => void refetchNetworkLists(), 0);
+        setTimeout(() => {
+          void refetchNetworkLists().catch((refetchError) => {
+            if (!isIgnorableInviteRefetchError(refetchError)) {
+              console.warn(
+                "[InboundProtocolInviteActions] deferred refetch failed",
+                refetchError,
+              );
+            }
+          });
+        }, 0);
       }
     },
     [

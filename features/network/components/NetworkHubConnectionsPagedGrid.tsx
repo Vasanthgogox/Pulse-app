@@ -1,5 +1,5 @@
 /**
- * Your connections — horizontal swipe pages (3×2 grid) + compact Previous / Next.
+ * Your connections — horizontal swipe pages (6×1 desktop, 3×2 mobile) + Previous / Next.
  */
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";

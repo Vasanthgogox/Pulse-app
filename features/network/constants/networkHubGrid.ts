@@ -28,9 +28,9 @@ export const NETWORK_HUB_CONNECTION_NATIVE_ROWS = NETWORK_HUB_CONNECTION_MOBILE_
 export const NETWORK_HUB_CONNECTION_NATIVE_PAGE_SIZE =
   NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE;
 
-/** Your connections — desktop (≥820): 3 columns × 2 rows per page. */
-export const NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS = 3;
-export const NETWORK_HUB_CONNECTION_DESKTOP_ROWS = 2;
+/** Your connections — desktop (≥820): 7 columns × 1 row per page. */
+export const NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS = 7;
+export const NETWORK_HUB_CONNECTION_DESKTOP_ROWS = 1;
 export const NETWORK_HUB_CONNECTION_DESKTOP_PAGE_SIZE =
   NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS * NETWORK_HUB_CONNECTION_DESKTOP_ROWS;
 
@@ -45,7 +45,7 @@ export type NetworkHubLayoutOptions = {
   nativeApp?: boolean;
 };
 
-/** Your connections grid: 3 compact tiles per row (desktop + mobile + native). */
+/** Your connections grid: 7 per row on desktop (≥820), 3×2 on mobile. */
 export function getNetworkHubConnectionsLayout(
   windowWidth: number,
   _options?: NetworkHubLayoutOptions,

@@ -126,8 +126,6 @@ function tryReadWebSession(): {
       };
     };
     if (!parsed?.access_token || !parsed?.user?.id) return empty;
-    // Treat tokens expiring within 60 s as stale — let async restore refresh them.
-    if (parsed.expires_at && parsed.expires_at * 1000 - Date.now() < 60_000) return empty;
     const meta = parsed.user.user_metadata ?? {};
     const uid = parsed.user.id;
     const email = parsed.user.email ?? "";
@@ -511,8 +509,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (mounted && isCurrentAuthAttempt(initAttemptId)) {
           logAuthError("restore_error", err);
-          setRestoreError(authErrorFromUnknown(err));
-          clearAuthState(false);
+          const stored = await authService.getSession().catch(() => null);
+          if (stored) {
+            setUser(stored.user);
+            setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
+            setRoleVerified(false);
+            setStatus("authenticated");
+            setRestoreError(authErrorFromUnknown(err));
+            logAuth("restore_error_degraded_session_preserved", {
+              uid: stored.user.uid,
+            }, "warn");
+          } else {
+            setRestoreError(authErrorFromUnknown(err));
+            clearAuthState(false);
+          }
         }
       } finally {
         restoringRef.current = false;
@@ -529,6 +539,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribeRef.current = undefined;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- profile backfill (session metadata when DB/network is flaky) ----
+
+  useEffect(() => {
+    if (!user || profile) return;
+    let cancelled = false;
+    void authService.getSession().then((stored) => {
+      if (cancelled || !stored) return;
+      setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
+      setStatus("authenticated");
+      logAuth("profile_backfill_from_session", { uid: stored.user.uid }, "warn");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, profile]);
 
   // ---- zombie recovery ----
 

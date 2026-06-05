@@ -26,7 +26,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
         />
 
         {/*
@@ -38,12 +38,26 @@ export default function Root({ children }: { children: React.ReactNode }) {
         {/* Static CSS only; no user input — safe for dangerouslySetInnerHTML. */}
         <style dangerouslySetInnerHTML={{ __html: mobileWebReset }} />
         <script dangerouslySetInnerHTML={{ __html: viewportHeightBootstrap }} />
+        <script dangerouslySetInnerHTML={{ __html: androidInteractiveWidgetViewport }} />
         {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
       <body>{children}</body>
     </html>
   );
 }
+
+const androidInteractiveWidgetViewport = `
+(function () {
+  var ua = navigator.userAgent || '';
+  var isAndroidChrome = /Android/i.test(ua) && /Chrome/i.test(ua);
+  if (!isAndroidChrome) return;
+  var meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  var content = meta.getAttribute('content') || '';
+  if (content.indexOf('interactive-widget=') >= 0) return;
+  meta.setAttribute('content', content + ', interactive-widget=overlays-content');
+})();
+`;
 
 const viewportHeightBootstrap = `
 (function () {
