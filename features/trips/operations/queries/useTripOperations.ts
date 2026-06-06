@@ -21,10 +21,16 @@ import {
   invalidateReconciliationState,
   invalidateTripOperationalState,
 } from "@/lib/queries/operationalInvalidation";
-import { syncOperationalFinanceProjection } from "@/features/finance/projections";
+import { syncOperationalFinanceProjection } from "@/features/finance/projections/syncOperationalFinanceProjection";
+import type {
+  TripCostEvent,
+  TripCostFinancialSnapshot,
+} from "@/features/finance/domain/tripCostEvent";
 import {
   deriveTripCostFinancialSnapshot,
   mapTripOperationalRowsToCostEvents,
+} from "@/features/finance/mappers/tripCostEventMappers";
+import {
   selectAggregateTripBrokerageMargin,
   selectAggregateTripNetMargin,
   selectAggregateTripSupplierCost,
@@ -33,11 +39,11 @@ import {
   selectAssetTripMarginImpact,
   selectAssetTripOutstandingPayables,
   selectAssetTripPostedExpenses,
+} from "@/features/finance/selectors/tripAccountingSelectors";
+import {
   selectTripAccountingIntegrity,
   selectTripPostingIntegrity,
-  type TripCostEvent,
-  type TripCostFinancialSnapshot,
-} from "@/features/finance";
+} from "@/features/finance/selectors/integritySelectors";
 import {
   createTripFuelEntry,
   getTripFuelEntries,

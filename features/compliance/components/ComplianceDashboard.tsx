@@ -41,12 +41,12 @@ import {
   useComplianceSummaryQuery,
   useExpiringDocumentsQuery,
 } from "@/lib/queries/useDocumentsQuery";
-import {
-  getBlockingDocCodes,
-  type ComplianceDashboardCard,
-  type ComplianceLevel,
-  type DocumentCenterSection,
-} from "@/features/compliance";
+import type {
+  ComplianceDashboardCard,
+  ComplianceLevel,
+  DocumentCenterSection,
+} from "@/features/compliance/types/compliance.types";
+import { getBlockingDocCodes } from "@/features/compliance/utils/docTypes.util";
 
 export interface ComplianceDashboardProps {
   orgId: string | null;

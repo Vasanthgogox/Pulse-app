@@ -84,6 +84,11 @@ import {
 } from "@/lib/layoutInsets";
 import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 
+function isIgnorableInviteRefetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.toLowerCase().includes("lock was stolen by another request");
+}
+
 function AnimatedPress({
   children,
   style,
@@ -471,10 +476,20 @@ export function DemoTabBar({
       Promise.all([receivedQ.refetch(), sentQ.refetch()]);
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => {
-        void refetchInvites();
+        void refetchInvites().catch((refetchError) => {
+          if (!isIgnorableInviteRefetchError(refetchError)) {
+            console.warn("[DemoTabBar] deferred invite refetch failed", refetchError);
+          }
+        });
       });
     } else {
-      setTimeout(() => void refetchInvites(), 0);
+      setTimeout(() => {
+        void refetchInvites().catch((refetchError) => {
+          if (!isIgnorableInviteRefetchError(refetchError)) {
+            console.warn("[DemoTabBar] deferred invite refetch failed", refetchError);
+          }
+        });
+      }, 0);
     }
   };
 

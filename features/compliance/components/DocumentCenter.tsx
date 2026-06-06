@@ -53,14 +53,16 @@ import {
   useExpiringDocumentsQuery,
   useOrgComplianceDocumentsQuery,
 } from "@/lib/queries/useDocumentsQuery";
+import type {
+  ComplianceDocument,
+  DocumentCenterSection,
+  DocumentRow,
+} from "@/features/compliance/types/compliance.types";
 import {
   enrichDocuments,
   formatExpiryNarrative,
   getExpiryToneColors,
-  type ComplianceDocument,
-  type DocumentCenterSection,
-  type DocumentRow,
-} from "@/features/compliance";
+} from "@/features/compliance/utils/expiry.util";
 
 import { ComplianceDashboard } from "./ComplianceDashboard";
 

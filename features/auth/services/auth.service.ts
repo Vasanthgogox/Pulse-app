@@ -985,27 +985,65 @@ function flushAuthEventGate(maxEntries = 64) {
  * SDK can emit sign-out-ish events with a null session during token refresh races
  * (common on web HMR / cold restore). Confirm storage + refresh before clearing UI.
  */
+async function readStoredAuthSession(): Promise<{
+  user: AuthUser;
+  profile: AuthProfile;
+} | null> {
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase().auth.getSession();
+    if (error || !session?.user) return null;
+    return mapSupabaseUserToAuth(session.user);
+  } catch {
+    return null;
+  }
+}
+
 async function confirmSignOutOrRecover(
   runCallback: (payload: { user: AuthUser; profile: AuthProfile } | null) => void,
   event: string,
 ): Promise<void> {
   try {
-    const { data: { session: stored } } = await supabase().auth.getSession();
-    if (stored?.user) {
-      const { data: { session: refreshed }, error } = await supabase().auth.refreshSession();
-      if (refreshed?.user && !error) {
-        if (__DEV__) {
-          console.info(
-            `[auth] ${event} suppressed — session recovered via refresh`,
-          );
+    const stored = await readStoredAuthSession();
+    if (stored) {
+      try {
+        const { data: { session: refreshed }, error } =
+          await supabase().auth.refreshSession();
+        if (refreshed?.user && !error) {
+          if (__DEV__) {
+            console.info(
+              `[auth] ${event} suppressed — session recovered via refresh`,
+            );
+          }
+          runCallback(mapSupabaseUserToAuth(refreshed.user));
+          return;
         }
-        runCallback(mapSupabaseUserToAuth(refreshed.user));
-        return;
+      } catch {
+        // Refresh failed (network/CORS) — fall through to stored session.
       }
+      if (__DEV__) {
+        console.warn(
+          `[auth] ${event} refresh failed — keeping stored session`,
+        );
+      }
+      runCallback(stored);
+      return;
     }
     if (__DEV__) console.info(`[auth] ${event} confirmed — session unrecoverable`);
     runCallback(null);
   } catch {
+    const stored = await readStoredAuthSession();
+    if (stored) {
+      if (__DEV__) {
+        console.warn(
+          `[auth] ${event} verify failed (network?) — keeping stored session`,
+        );
+      }
+      runCallback(stored);
+      return;
+    }
     if (__DEV__) {
       console.warn(`[auth] ${event} verify failed (network?) — suppressing sign-out`);
     }

@@ -61,7 +61,8 @@ async function fetchWithTimeoutAndRetry(
         attempt < MAX_RETRIES &&
         (lastError.name === 'AbortError' ||
           lastError.message === 'Network request failed' ||
-          /timeout|network|failed/i.test(lastError.message));
+          lastError.message === 'Load failed' ||
+          /timeout|network|failed|access control checks/i.test(lastError.message));
       if (!isRetryable) throw lastError;
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
     }
