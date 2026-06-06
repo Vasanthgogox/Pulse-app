@@ -11,19 +11,24 @@ export type AddTripWizardProgressStep = {
 export interface AddTripWizardProgressProps {
   steps: readonly AddTripWizardProgressStep[];
   currentStepId: string;
+  /** Slate assignment shell uses white header chrome instead of pulse tabs. */
+  surface?: "pulse" | "slate";
 }
 
 export const AddTripWizardProgress = memo(function AddTripWizardProgress({
   steps,
   currentStepId,
+  surface = "pulse",
 }: AddTripWizardProgressProps) {
   const currentIndex = Math.max(
     0,
     steps.findIndex((s) => s.id === currentStepId),
   );
 
+  const isSlate = surface === "slate";
+
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, isSlate && styles.wrapSlate]}>
       <View style={styles.row}>
         {steps.map((step, i) => {
           const active = i === currentIndex;
@@ -57,12 +62,18 @@ export const AddTripWizardProgress = memo(function AddTripWizardProgress({
 
 const styles = StyleSheet.create({
   wrap: {
+    width: "100%",
+    alignSelf: "stretch",
     paddingHorizontal: 14,
     paddingBottom: 8,
     paddingTop: 4,
     backgroundColor: PULSE_TRIP.cardBg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_TRIP.border,
+  },
+  wrapSlate: {
+    backgroundColor: "#ffffff",
+    borderBottomColor: "#e2e8f0",
   },
   row: {
     flexDirection: "row",

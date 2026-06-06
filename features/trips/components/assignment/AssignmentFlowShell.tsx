@@ -125,10 +125,11 @@ export function AssignmentFlowShell({
       <View
         style={[
           assignmentShellStyles.modalHero,
+          styles.slateModalHero,
           { paddingTop: insets.top + 8, borderBottomWidth: 0 },
         ]}
       >
-        <View style={assignmentShellStyles.modalHeroText}>
+        <View style={[assignmentShellStyles.modalHeroText, styles.slateModalHeroText]}>
           {showBack && onBack ? (
             <TouchableOpacity
               style={assignmentShellStyles.wizardBackPill}
@@ -161,22 +162,21 @@ export function AssignmentFlowShell({
     styles.bodyContent,
     fullScreen && styles.bodyContentFullScreen,
     isPulse ? styles.bodyContentPulse : styles.bodyContentSlate,
-    webDesktopContent,
+    fullScreen ? styles.bodyContentStretch : webDesktopContent,
     fillBody && styles.bodyContentFill,
     !footer && !fillBody && { paddingBottom: Math.max(24, insets.bottom) },
+    Platform.OS === "web" && fullScreen && styles.bodyContentWebFullScreen,
   ];
 
-  return (
-    <KeyboardAvoidingView
-      style={[
-        styles.root,
-        isPulse ? styles.rootPulse : styles.rootSlate,
-        fullScreen ? styles.rootFullScreen : { flex: Platform.OS === "web" ? 0 : 1 },
-      ]}
-      behavior={fillBody ? undefined : Platform.OS === "ios" ? "padding" : "padding"}
-      keyboardVerticalOffset={fillBody ? 0 : insets.top}
-    >
-      {header}
+  const rootStyle = [
+    styles.root,
+    isPulse ? styles.rootPulse : styles.rootSlate,
+    fullScreen ? styles.rootFullScreen : { flex: Platform.OS === "web" ? 0 : 1 },
+  ];
+
+  const shellBody = (
+    <>
+      <View style={styles.headerShell}>{header}</View>
       {fillBody ? (
         <View style={[styles.body, styles.bodyFill, bodyContentStyle]}>{children}</View>
       ) : (
@@ -199,6 +199,20 @@ export function AssignmentFlowShell({
           {footer}
         </View>
       ) : null}
+    </>
+  );
+
+  if (Platform.OS === "web" && fullScreen) {
+    return <View style={rootStyle}>{shellBody}</View>;
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={rootStyle}
+      behavior={fillBody ? undefined : Platform.OS === "ios" ? "padding" : "padding"}
+      keyboardVerticalOffset={fillBody ? 0 : insets.top}
+    >
+      {shellBody}
     </KeyboardAvoidingView>
   );
 }
@@ -279,17 +293,57 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(255,255,255,0.12)",
   },
-  slateHeaderStack: {
+  headerShell: {
     width: "100%",
+    alignSelf: "stretch",
+    flexShrink: 0,
+    ...Platform.select({
+      web: { maxWidth: "100%" } as object,
+      default: {},
+    }),
+  },
+  slateHeaderStack: {
+    flexDirection: "column",
+    width: "100%",
+    alignSelf: "stretch",
+    flexShrink: 0,
     backgroundColor: assignmentShellColors.cardWhite,
     borderBottomWidth: 1,
     borderBottomColor: assignmentShellColors.borderSlate,
+    ...Platform.select({
+      web: { maxWidth: "100%" } as object,
+      default: {},
+    }),
+  },
+  slateModalHero: {
+    width: "100%",
+    alignSelf: "stretch",
+    flexShrink: 0,
+    flexWrap: "nowrap",
+  },
+  slateModalHeroText: {
+    flexGrow: 1,
+    flexShrink: 1,
   },
   progressWrapSlate: {
     width: "100%",
+    alignSelf: "stretch",
+    flexShrink: 0,
     marginTop: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: assignmentShellColors.borderSlate,
+    ...Platform.select({
+      web: { maxWidth: "100%" } as object,
+      default: {},
+    }),
+  },
+  bodyContentStretch: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  bodyContentWebFullScreen: {
+    flexGrow: 1,
   },
   body: { flex: 1, minHeight: 0 },
   bodyContent: {

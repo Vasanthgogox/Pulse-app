@@ -81,8 +81,12 @@ export const assignmentShellStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: assignmentShellColors.borderSlate,
     gap: 12,
+    width: "100%",
+    alignSelf: "stretch",
+    flexShrink: 0,
+    flexWrap: "nowrap",
   },
-  modalHeroText: { flex: 1, minWidth: 0 },
+  modalHeroText: { flex: 1, flexGrow: 1, minWidth: 0 },
   modalTitle: {
     fontSize: 20,
     fontWeight: "700",

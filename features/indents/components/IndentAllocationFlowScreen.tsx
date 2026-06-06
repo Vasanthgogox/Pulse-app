@@ -2,7 +2,7 @@
  * Full-screen indent deploy — asset and aggregate allocation wizards.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text } from "react-native";
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
@@ -49,6 +49,7 @@ export function IndentAllocationFlowScreen({
   onBack,
 }: IndentAllocationFlowScreenProps) {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const invalidateIndents = useInvalidateIndents();
@@ -119,19 +120,20 @@ export function IndentAllocationFlowScreen({
   const stepIndex = flowSteps.findIndex((s) => s.id === step);
   const isLastStep = stepIndex >= 0 && stepIndex === flowSteps.length - 1;
 
-  const openedIndentIdRef = useRef<string | null>(null);
+  const openedIndentKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!indent) return;
-    if (openedIndentIdRef.current === indent.id) return;
-    openedIndentIdRef.current = indent.id;
+    const openKey = `${indent.id}:${initialFocus}`;
+    if (openedIndentKeyRef.current === openKey) return;
+    openedIndentKeyRef.current = openKey;
     open(indent);
     setStep(initialFocus === "vehicle" ? "vehicle" : "driver");
   }, [indent, open, initialFocus]);
 
   useEffect(() => {
     return () => {
-      openedIndentIdRef.current = null;
+      openedIndentKeyRef.current = null;
       close();
     };
   }, [close]);
@@ -333,7 +335,11 @@ export function IndentAllocationFlowScreen({
       showBack={showBack}
       progress={
         !deployOtpCode ? (
-          <AddTripWizardProgress steps={flowSteps} currentStepId={step} />
+          <AddTripWizardProgress
+            steps={flowSteps}
+            currentStepId={step}
+            surface="slate"
+          />
         ) : null
       }
       footer={
@@ -360,7 +366,7 @@ export function IndentAllocationFlowScreen({
           }}
         />
       ) : (
-        <>
+        <View style={styles.flowBody}>
           {showModeBar ? (
             <SupplyAllocationModeBar
               mode={useAdHocDriver ? "aggregate" : "asset"}
@@ -443,7 +449,7 @@ export function IndentAllocationFlowScreen({
             <AssetRosterPickers
               isFlow
               assetFlowStep={step === "vehicle" ? "vehicle" : "driver"}
-              width={0}
+              width={windowWidth}
               orgId={orgId}
               activeDrivers={activeDrivers}
               vehicles={vehicles}
@@ -485,13 +491,19 @@ export function IndentAllocationFlowScreen({
               indentLoadType={currentLoad.load_type}
             />
           ) : null}
-        </>
+        </View>
       )}
     </AssignmentFlowShell>
   );
 }
 
 const styles = StyleSheet.create({
+  flowBody: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    flexGrow: 1,
+  },
   assignLaterHint: {
     fontSize: 12,
     fontWeight: "600",
