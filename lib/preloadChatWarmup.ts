@@ -2,6 +2,22 @@
  * Warm chat route: prefetch the lazy screen chunk + provider modules before navigation.
  * Call from tab bar (onPressIn), trips/network tabs, or when chat routes become active.
  */
+import type { ComponentType, ReactNode } from 'react';
+
+type TripChatProviderType = ComponentType<{ children: ReactNode; isActive?: boolean }>;
+type IntegratedChatProviderType = ComponentType<{ children: ReactNode; isActive?: boolean }>;
+
+/** Synchronously resolved providers — set once, never cleared. Used by LazyChatProviders
+ *  to skip the "Loading chat…" spinner on any re-open after the first load. */
+export interface ResolvedChatProviders {
+  TripChatProvider: TripChatProviderType;
+  IntegratedChatProvider: IntegratedChatProviderType;
+}
+let resolvedChatProvidersCache: ResolvedChatProviders | null = null;
+
+export function getResolvedChatProviders(): ResolvedChatProviders | null {
+  return resolvedChatProvidersCache;
+}
 
 let chatScreenModule: Promise<typeof import("@/features/chat/components/ChatScreen")> | null =
   null;
@@ -31,7 +47,20 @@ export function preloadChatProviderModules(): Promise<
     chatProvidersModule = Promise.all([
       import("@/features/chat/contexts/TripChatContext"),
       import("@/features/chat/contexts/IntegratedChatContext"),
-    ]);
+    ]).then((result) => {
+      // Cache the resolved components so LazyChatProviders can initialise without
+      // an async tick — eliminates the "Loading chat…" spinner on re-opens.
+      resolvedChatProvidersCache = {
+        TripChatProvider:     result[0].TripChatProvider as unknown as TripChatProviderType,
+        IntegratedChatProvider: result[1].IntegratedChatProvider as unknown as IntegratedChatProviderType,
+      };
+      return result;
+    }).catch((err) => {
+      // Clear the cache so the next call can retry instead of returning a
+      // permanently-rejected promise that silently hangs "Loading chat…" forever.
+      chatProvidersModule = null;
+      throw err;
+    });
   }
   return chatProvidersModule;
 }

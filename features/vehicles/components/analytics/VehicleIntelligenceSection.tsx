@@ -145,38 +145,6 @@ export default function VehicleIntelligenceSection({
           iconName: "tachometer",
         },
         {
-          id: "v-revenue",
-          label: "Revenue",
-          value: formatINR(kpis.revenue),
-          subtext: `${kpis.tripsTotal} trips`,
-          valueColor: Theme.primary,
-          iconName: "money",
-        },
-        {
-          id: "v-profit",
-          label: "Profit",
-          value: formatINR(kpis.profit),
-          subtext: `${kpis.marginPct.toFixed(1)}% margin`,
-          valueColor: kpis.profit >= 0 ? Theme.positive : Theme.negative,
-          iconName: "line-chart",
-        },
-        {
-          id: "v-expense",
-          label: "Expense",
-          value: formatINR(kpis.expense),
-          subtext:
-            kpis.revenue > 0
-              ? `${((kpis.expense / kpis.revenue) * 100).toFixed(0)}% of revenue`
-              : "—",
-          valueColor:
-            kpis.revenue > 0 && kpis.expense / kpis.revenue >= 0.8
-              ? Theme.negative
-              : Theme.warning,
-          iconName: "credit-card",
-        },
-      ],
-      [
-        {
           id: "v-utilization",
           label: "Utilization",
           value: `${kpis.utilizationPct}%`,
@@ -207,14 +175,6 @@ export default function VehicleIntelligenceSection({
           subtext: "Last window",
           valueColor: Theme.textBody,
           iconName: "road",
-        },
-        {
-          id: "v-trips",
-          label: "Trips",
-          value: `${kpis.tripsTotal}`,
-          subtext: "Total in window",
-          valueColor: Theme.textBody,
-          iconName: "truck",
         },
       ],
     ],

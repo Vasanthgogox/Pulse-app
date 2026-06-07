@@ -58,6 +58,11 @@ import {
 } from "@/features/business-pulse/lib/pulseExecutionScope.util";
 import { PulseScopeTabRow } from "@/features/business-pulse/components/PulseScopeTabRow";
 import { PulseBranchCityWidget } from "@/features/business-pulse/components/PulseBranchCityWidget";
+import {
+  PulseWidgetCol,
+  PulseWidgetRow,
+  usePulseDesktopLayout,
+} from "@/features/business-pulse/components/PulseWidgetBoard";
 import type { FinanceAgingKind } from "@/features/business-pulse/selectors/pulseAgingSelectors";
 import { PulseAgingReport } from "@/features/business-pulse/components/PulseAgingReport";
 import { PulseContributionFilters } from "@/features/business-pulse/components/PulseContributionFilters";
@@ -187,6 +192,7 @@ function MetricCard({
   state,
   density,
   compareActive,
+  desktopQuarter,
 }: {
   title: string;
   value: string;
@@ -195,12 +201,15 @@ function MetricCard({
   state: "healthy" | "warning" | "critical";
   density: WidgetDensity;
   compareActive: boolean;
+  /** Four-across KPI strip on wide desktop. */
+  desktopQuarter?: boolean;
 }) {
   const up = deltaPct >= 0;
   return (
     <View
       style={[
         styles.metricCard,
+        desktopQuarter && styles.metricCardQuarter,
         state === "healthy" ? styles.stateHealthy : state === "warning" ? styles.stateWarning : styles.stateCritical,
         density === "tiny" ? styles.metricTiny : density === "compact" ? styles.metricCompact : styles.metricStandard,
       ]}
@@ -269,9 +278,11 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const insets = useSafeAreaInsets();
   const resolvedTopInset = topInset ?? (embedded ? 0 : insets.top + 8);
   const { width } = useWindowDimensions();
+  const { isDesktop, isWideDesktop } = usePulseDesktopLayout();
   const wide = width >= 720;
   const twoCol = width >= 1080;
   const halfCardStyle = wide ? styles.halfCardWide : styles.halfCardNarrow;
+  const kpiQuarter = isWideDesktop;
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const { filters, toggleFilterValue, setDateRange, setFilters } = usePulseFilters();
@@ -696,7 +707,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   }
 
   const renderOverview = () => (
-    <View style={styles.sectionBlock}>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
       {compareActive && compareOverview ? (
         <View style={styles.compareBanner}>
           <Text style={styles.compareBannerText}>{compareCaption}</Text>
@@ -706,7 +717,13 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           </Text>
         </View>
       ) : null}
-      <View style={[styles.executiveGrid, styles.widgetGroup]}>
+      <View
+        style={[
+          styles.executiveGrid,
+          styles.widgetGroup,
+          kpiQuarter && styles.executiveGridQuarter,
+        ]}
+      >
         <MetricCard
           title="Revenue"
           value={inr(overview.revenue)}
@@ -721,6 +738,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           state={deltas.revenue < -5 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
+          desktopQuarter={kpiQuarter}
         />
         <MetricCard
           title="Net Margin"
@@ -736,6 +754,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           state={deltas.margin < -3 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
+          desktopQuarter={kpiQuarter}
         />
         <MetricCard
           title="Cashflow Exposure"
@@ -751,6 +770,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           state={overview.cashExposure > 0 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
+          desktopQuarter={kpiQuarter}
         />
         <MetricCard
           title="Compliance Risk"
@@ -760,91 +780,106 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           state={docExposure.vehiclesAtRisk + docExposure.driversAtRisk > 0 ? "critical" : "healthy"}
           density={density}
           compareActive={false}
+          desktopQuarter={kpiQuarter}
         />
       </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <BarChart2 size={13} color={Theme.primary} />
-            <Text style={styles.cardTitle}>Revenue Trend</Text>
+      <PulseWidgetRow>
+        <PulseWidgetCol flex={isDesktop ? 1.55 : 1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <BarChart2 size={13} color={Theme.primary} />
+                <Text style={styles.cardTitle}>Revenue Trend</Text>
+              </View>
+              <Text style={styles.cardSubTitle}>Tap month for cross-filter drilldown</Text>
+            </View>
+            <LineChart
+              points={revenueTrend.map((item) => ({ month: item.month, value: item.revenue }))}
+              selectedMonth={selectedMonth}
+              onSelectMonth={(month) => {
+                setSelectedMonth(month);
+                if (!month) {
+                  const range = getPresetDateRange(timePreset);
+                  setDateRange(range.start, range.end);
+                  return;
+                }
+                setDateRange(`${month}-01`, `${month}-31`);
+              }}
+            />
           </View>
-          <Text style={styles.cardSubTitle}>Tap month for cross-filter drilldown</Text>
-        </View>
-        <LineChart
-          points={revenueTrend.map((item) => ({ month: item.month, value: item.revenue }))}
-          selectedMonth={selectedMonth}
-          onSelectMonth={(month) => {
-            setSelectedMonth(month);
-            if (!month) {
-              const range = getPresetDateRange(timePreset);
-              setDateRange(range.start, range.end);
-              return;
-            }
-            setDateRange(`${month}-01`, `${month}-31`);
-          }}
-        />
-      </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseBranchCityWidget
-          slices={branchCitySlices}
-          subtitle="Pickup cities across all trips in scope"
-        />
-      </View>
+        </PulseWidgetCol>
+        <PulseWidgetCol flex={1} minWidth={isDesktop ? 300 : undefined}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <PulseBranchCityWidget
+              slices={branchCitySlices}
+              subtitle="Pickup cities across all trips in scope"
+              layout={isDesktop ? "grid" : "scroll"}
+            />
+          </View>
+        </PulseWidgetCol>
+      </PulseWidgetRow>
     </View>
   );
 
   const renderSales = () => (
-    <View style={styles.sectionBlock}>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseTableSection
-          title="Client Comparison Matrix"
-          icon={<Target size={13} color={Theme.primary} />}
-        >
-          <PulseRankingTable
-            columns={PULSE_CLIENT_COLUMNS}
-            rows={clientProfitability.slice(0, 10).map((client) => ({
-              id: client.id,
-              selected: filters.clientIds.includes(client.id),
-              cells: {
-                name: client.name,
-                trips: String(client.tripCount),
-                revenue: inr(client.revenue),
-                margin: inr(client.margin),
-                marginTone: client.margin >= 0 ? "positive" : "negative",
-              },
-            }))}
-            onRowPress={(id) => toggleFilterValue("clientIds", id)}
-            emptyMessage="No clients in current scope."
-          />
-        </PulseTableSection>
-      </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseTableSection
-          title="Lane Profitability"
-          icon={<Route size={13} color={Theme.primary} />}
-        >
-          <PulseRankingTable
-            columns={PULSE_ROUTE_COLUMNS}
-            rows={routePerf.map((row) => ({
-              id: row.route,
-              selected: filters.routes.includes(row.route),
-              cells: {
-                name: row.route,
-                trips: String(row.trips),
-                revenue: inr(row.revenue),
-                margin: inr(row.margin),
-                marginTone: row.margin >= 0 ? "positive" : "negative",
-              },
-            }))}
-            onRowPress={(id) => toggleFilterValue("routes", id)}
-            emptyMessage="No lanes in current scope."
-          />
-        </PulseTableSection>
-      </View>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
+      <PulseWidgetRow>
+        <PulseWidgetCol flex={1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <PulseTableSection
+              title="Client Comparison Matrix"
+              icon={<Target size={13} color={Theme.primary} />}
+            >
+              <PulseRankingTable
+                columns={PULSE_CLIENT_COLUMNS}
+                rows={clientProfitability.slice(0, 10).map((client) => ({
+                  id: client.id,
+                  selected: filters.clientIds.includes(client.id),
+                  cells: {
+                    name: client.name,
+                    trips: String(client.tripCount),
+                    revenue: inr(client.revenue),
+                    margin: inr(client.margin),
+                    marginTone: client.margin >= 0 ? "positive" : "negative",
+                  },
+                }))}
+                onRowPress={(id) => toggleFilterValue("clientIds", id)}
+                emptyMessage="No clients in current scope."
+              />
+            </PulseTableSection>
+          </View>
+        </PulseWidgetCol>
+        <PulseWidgetCol flex={1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <PulseTableSection
+              title="Lane Profitability"
+              icon={<Route size={13} color={Theme.primary} />}
+            >
+              <PulseRankingTable
+                columns={PULSE_ROUTE_COLUMNS}
+                rows={routePerf.map((row) => ({
+                  id: row.route,
+                  selected: filters.routes.includes(row.route),
+                  cells: {
+                    name: row.route,
+                    trips: String(row.trips),
+                    revenue: inr(row.revenue),
+                    margin: inr(row.margin),
+                    marginTone: row.margin >= 0 ? "positive" : "negative",
+                  },
+                }))}
+                onRowPress={(id) => toggleFilterValue("routes", id)}
+                emptyMessage="No lanes in current scope."
+              />
+            </PulseTableSection>
+          </View>
+        </PulseWidgetCol>
+      </PulseWidgetRow>
       <View style={[styles.card, styles.widgetCard]}>
         <PulseBranchCityWidget
           slices={branchCitySlices}
           subtitle="Revenue concentration by pickup city"
+          layout={isDesktop ? "grid" : "scroll"}
         />
       </View>
     </View>
@@ -889,7 +924,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   );
 
   const renderFleet = () => (
-    <View style={styles.sectionBlock}>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
       <View style={[styles.sectionBlock, twoCol && styles.sectionRow]}>
         <View style={[styles.card, twoCol ? halfCardStyle : styles.fullCard]}>
           <MetricCard
@@ -914,35 +949,42 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           />
         </View>
       </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <Truck size={13} color={Theme.primary} />
-            <Text style={styles.cardTitle}>Asset expense summary</Text>
+      <PulseWidgetRow>
+        <PulseWidgetCol flex={1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <Truck size={13} color={Theme.primary} />
+                <Text style={styles.cardTitle}>Asset expense summary</Text>
+              </View>
+              <Text style={styles.cardSubTitle}>Own-fleet trips only</Text>
+            </View>
+            <View style={styles.opsRow}>
+              <View style={styles.opsBadge}>
+                <Text style={styles.opsBadgeText}>Ops {inr(assetFleetSummary.totalOperationalCost)}</Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <Text style={styles.opsBadgeText}>Ownership {inr(assetFleetSummary.totalOwnershipCost)}</Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <Text style={styles.opsBadgeText}>Maint {inr(assetFleetSummary.totalMaintenanceCost)}</Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <Text style={styles.opsBadgeText}>Settlement {inr(assetFleetSummary.totalSettlementExposure)}</Text>
+              </View>
+            </View>
           </View>
-          <Text style={styles.cardSubTitle}>Own-fleet trips only</Text>
-        </View>
-        <View style={styles.opsRow}>
-          <View style={styles.opsBadge}>
-            <Text style={styles.opsBadgeText}>Ops {inr(assetFleetSummary.totalOperationalCost)}</Text>
+        </PulseWidgetCol>
+        <PulseWidgetCol flex={1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <PulseBranchCityWidget
+              slices={assetBranchCitySlices}
+              subtitle="Asset trip pickup cities"
+              layout={isDesktop ? "grid" : "scroll"}
+            />
           </View>
-          <View style={styles.opsBadge}>
-            <Text style={styles.opsBadgeText}>Ownership {inr(assetFleetSummary.totalOwnershipCost)}</Text>
-          </View>
-          <View style={styles.opsBadge}>
-            <Text style={styles.opsBadgeText}>Maint {inr(assetFleetSummary.totalMaintenanceCost)}</Text>
-          </View>
-          <View style={styles.opsBadge}>
-            <Text style={styles.opsBadgeText}>Settlement {inr(assetFleetSummary.totalSettlementExposure)}</Text>
-          </View>
-        </View>
-      </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseBranchCityWidget
-          slices={assetBranchCitySlices}
-          subtitle="Asset trip pickup cities"
-        />
-      </View>
+        </PulseWidgetCol>
+      </PulseWidgetRow>
       <View style={[styles.card, styles.widgetCard]}>
         <PulseTableSection
           title="Asset vehicles & operators"
@@ -1037,7 +1079,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   );
 
   const renderFinance = () => (
-    <View style={styles.sectionBlock}>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
       <View style={[styles.executiveGrid, styles.widgetGroup]}>
         <View style={[styles.card, styles.metricCardShell, twoCol ? halfCardStyle : styles.fullCard]}>
           <View style={styles.cardHeader}>
@@ -1084,35 +1126,42 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           />
         </View>
       </View>
-      <View style={[styles.card, styles.fullCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <IndianRupee size={13} color={Theme.primary} />
-            <Text style={styles.cardTitle}>Receivable Aging</Text>
+      <PulseWidgetRow>
+        <PulseWidgetCol flex={1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <IndianRupee size={13} color={Theme.primary} />
+                <Text style={styles.cardTitle}>Receivable Aging</Text>
+              </View>
+            </View>
+            <PulseAgingReport
+              report={receivableAgingReport}
+              reportTitle={`Business Pulse Receivable — ${currentOrganization?.name ?? "Workspace"}`}
+              companyName={currentOrganization?.name ?? "Workspace"}
+            />
           </View>
-        </View>
-        <PulseAgingReport
-          report={receivableAgingReport}
-          reportTitle={`Business Pulse Receivable — ${currentOrganization?.name ?? "Workspace"}`}
-          companyName={currentOrganization?.name ?? "Workspace"}
-        />
-      </View>
-      <View style={[styles.card, styles.fullCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <ListChecks size={13} color={Theme.primary} />
-            <Text style={styles.cardTitle}>Payable Aging</Text>
+        </PulseWidgetCol>
+        <PulseWidgetCol flex={1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <ListChecks size={13} color={Theme.primary} />
+                <Text style={styles.cardTitle}>Payable Aging</Text>
+              </View>
+              <Text style={styles.cardSubTitle}>
+                Fleet payables {inr(overview.outstandingPayables)} · Driver settlement{" "}
+                {inr(cash.payableExposure)}
+              </Text>
+            </View>
+            <PulseAgingReport
+              report={payableAgingReport}
+              reportTitle={`Business Pulse Payable — ${currentOrganization?.name ?? "Workspace"}`}
+              companyName={currentOrganization?.name ?? "Workspace"}
+            />
           </View>
-          <Text style={styles.cardSubTitle}>
-            Fleet payables {inr(overview.outstandingPayables)} · Driver settlement {inr(cash.payableExposure)}
-          </Text>
-        </View>
-        <PulseAgingReport
-          report={payableAgingReport}
-          reportTitle={`Business Pulse Payable — ${currentOrganization?.name ?? "Workspace"}`}
-          companyName={currentOrganization?.name ?? "Workspace"}
-        />
-      </View>
+        </PulseWidgetCol>
+      </PulseWidgetRow>
     </View>
   );
 
@@ -1149,35 +1198,42 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   );
 
   const renderOperations = () => (
-    <View style={styles.sectionBlock}>
-      <View style={[styles.card, styles.widgetCard]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <Activity size={13} color={Theme.primary} />
-            <Text style={styles.cardTitle}>Operational Health Telemetry</Text>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
+      <PulseWidgetRow>
+        <PulseWidgetCol flex={isDesktop ? 0.9 : 1} minWidth={isDesktop ? 320 : undefined}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <Activity size={13} color={Theme.primary} />
+                <Text style={styles.cardTitle}>Operational Health Telemetry</Text>
+              </View>
+            </View>
+            <View style={styles.opsRow}>
+              <View style={styles.opsBadge}>
+                <AlertTriangle size={11} color="#b45309" />
+                <Text style={styles.opsBadgeText}>Delayed Trips: {operations.delayedTrips}</Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <ListChecks size={11} color={Theme.primary} />
+                <Text style={styles.opsBadgeText}>Pending Approvals: {operations.pendingApprovals}</Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <CheckCircle2 size={11} color="#047857" />
+                <Text style={styles.opsBadgeText}>State: {String(operations.state).toUpperCase()}</Text>
+              </View>
+            </View>
           </View>
-        </View>
-        <View style={styles.opsRow}>
-          <View style={styles.opsBadge}>
-            <AlertTriangle size={11} color="#b45309" />
-            <Text style={styles.opsBadgeText}>Delayed Trips: {operations.delayedTrips}</Text>
+        </PulseWidgetCol>
+        <PulseWidgetCol flex={1.1}>
+          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
+            <PulseBranchCityWidget
+              slices={branchCitySlices}
+              subtitle="Operational spread by pickup city"
+              layout={isDesktop ? "grid" : "scroll"}
+            />
           </View>
-          <View style={styles.opsBadge}>
-            <ListChecks size={11} color={Theme.primary} />
-            <Text style={styles.opsBadgeText}>Pending Approvals: {operations.pendingApprovals}</Text>
-          </View>
-          <View style={styles.opsBadge}>
-            <CheckCircle2 size={11} color="#047857" />
-            <Text style={styles.opsBadgeText}>State: {String(operations.state).toUpperCase()}</Text>
-          </View>
-        </View>
-      </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseBranchCityWidget
-          slices={branchCitySlices}
-          subtitle="Operational spread by pickup city"
-        />
-      </View>
+        </PulseWidgetCol>
+      </PulseWidgetRow>
     </View>
   );
 
@@ -1274,7 +1330,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
 
         {loading ? <Text style={styles.mutedText}>Loading intelligence workspace...</Text> : null}
 
-        <View style={styles.widgetZone}>
+        <View style={[styles.widgetZone, isDesktop && styles.widgetZoneDesktop]}>
           <Text style={styles.widgetZoneTitle}>
             {activeDomain.charAt(0).toUpperCase() + activeDomain.slice(1)}
           </Text>
@@ -1513,8 +1569,20 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingBottom: 4,
   },
+  sectionBlockDesktop: {
+    gap: 16,
+  },
   widgetGroup: {
     marginBottom: 4,
+  },
+  widgetZoneDesktop: {
+    maxWidth: 1440,
+    alignSelf: "center",
+    width: "100%",
+  },
+  widgetCardFill: {
+    flex: 1,
+    height: "100%",
   },
   widgetCard: {
     marginBottom: 0,
@@ -1538,6 +1606,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     alignItems: "stretch",
+  },
+  executiveGridQuarter: {
+    flexWrap: "nowrap",
+    gap: 12,
   },
   metricCardShell: {
     marginBottom: 0,
@@ -1626,6 +1698,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     maxWidth: "100%",
     minWidth: 140,
+  },
+  metricCardQuarter: {
+    flex: 1,
+    width: undefined,
+    minWidth: 0,
+    maxWidth: undefined,
   },
   metricTiny: {
     paddingHorizontal: 8,

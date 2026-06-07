@@ -35,7 +35,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -77,9 +77,22 @@ import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { ReassignSheet } from "../reassign/ReassignSheet";
 import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
-import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
-import { ProvisionDeductionConfirmModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionDeductionConfirmModal";
-import { ProvisionNotePdfModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionNotePdfModal";
+// ── Lazy-loaded modals: only imported when first rendered (not on page load) ──
+const ProvisionAdjustmentModal = lazy(() =>
+  import("@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal").then(
+    (m) => ({ default: m.ProvisionAdjustmentModal }),
+  ),
+);
+const ProvisionDeductionConfirmModal = lazy(() =>
+  import("@/features/trips/components/trip-detail/adjustment/ProvisionDeductionConfirmModal").then(
+    (m) => ({ default: m.ProvisionDeductionConfirmModal }),
+  ),
+);
+const ProvisionNotePdfModal = lazy(() =>
+  import("@/features/trips/components/trip-detail/adjustment/ProvisionNotePdfModal").then(
+    (m) => ({ default: m.ProvisionNotePdfModal }),
+  ),
+);
 import { TripFinanceAdjustmentsPanel } from "@/features/trips/components/trip-detail/adjustment/TripFinanceAdjustmentsPanel";
 import type { ProvisionNotePdfContext } from "@/features/trips/components/trip-detail/adjustment/tripProvisionNotePdf.util";
 import {
@@ -87,14 +100,18 @@ import {
   type ClientPassThroughRecommendation,
 } from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 import { TripOdometerPreviewCard } from "@/features/trips/components/trip-detail/TripOdometerPreviewCard";
-import { TripAdjustmentModal } from "./TripAdjustmentModal";
-import { TripDetailFinanceView } from "./TripDetailFinanceView";
+const TripAdjustmentModal = lazy(() =>
+  import("./TripAdjustmentModal").then((m) => ({ default: m.TripAdjustmentModal })),
+);
+// TripDetailFinanceView is currently unused (inside dead {false && ...} block) — not imported.
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripMap } from "./TripMap";
 import { ManifestDriverPingList } from "./ManifestDriverPingList";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { useTrackingState } from "@/features/tracking/hooks/useTrackingState";
-import { LiveTrackingModal } from "./modals/LiveTrackingModal";
+const LiveTrackingModal = lazy(() =>
+  import("./modals/LiveTrackingModal").then((m) => ({ default: m.LiveTrackingModal })),
+);
 import {
   defaultTrackingState,
   isTripTrackingActive,
@@ -129,7 +146,11 @@ import {
 import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
 import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSummary, useTripOperationsSync } from "@/features/trips/operations";
-import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
+const TripExpensesScreen = lazy(() =>
+  import("@/features/trips/operations/hub/TripExpensesScreen").then(
+    (m) => ({ default: m.TripExpensesScreen }),
+  ),
+);
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import {
   shouldShowManifestHeroDriverParty,
@@ -143,7 +164,9 @@ import {
 } from "@/features/finance";
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import { type ExpenseRow } from "./sections/ExpensesTable";
-import { LRDocumentsSection } from "./sections/LRDocumentsSection";
+const LRDocumentsSection = lazy(() =>
+  import("./sections/LRDocumentsSection").then((m) => ({ default: m.LRDocumentsSection })),
+);
 import {
     TripStatusTimeline,
     type TripStageTimestamp,
@@ -2975,6 +2998,7 @@ export default function TripDetailScreen({
               <PersistentTabPanel active={activeTab === "expenses"}>
               <View style={styles.refFinanceWrap}>
                 {odometerPreviewEl}
+                <Suspense fallback={<ActivityIndicator style={{ margin: 24 }} color="#818cf8" />}>
                 <TripExpensesScreen
                   trip={trip}
                   embedded
@@ -3012,6 +3036,7 @@ export default function TripDetailScreen({
                       : undefined
                   }
                 />
+                </Suspense>
               </View>
               </PersistentTabPanel>
             ) : null}
@@ -4130,6 +4155,7 @@ export default function TripDetailScreen({
                 ) : activeTab === "expenses" ? (
                   <View style={neoStyles.financeStack}>
                     {odometerPreviewEl}
+                    <Suspense fallback={<ActivityIndicator style={{ margin: 24 }} color="#818cf8" />}>
                     <TripExpensesScreen
                       trip={trip}
                       embedded
@@ -4167,6 +4193,7 @@ export default function TripDetailScreen({
                           : undefined
                       }
                     />
+                    </Suspense>
                   </View>
                 ) : (
                   <View style={neoStyles.vaultGrid}>
@@ -4896,6 +4923,7 @@ export default function TripDetailScreen({
                   ) : null}
 
                   <View style={styles.lrGrow}>
+                    <Suspense fallback={<ActivityIndicator style={{ margin: 12 }} color="#818cf8" />}>
                     <LRDocumentsSection
                       presentation="gallery"
                       docs={detail.computedTripDocs.map((d) => {
@@ -4917,6 +4945,7 @@ export default function TripDetailScreen({
                       onUpdateLR={openTripDocumentsFlow}
                       onAddDocument={openTripDocumentsFlow}
                     />
+                    </Suspense>
                   </View>
                 </View>
 
@@ -5095,91 +5124,13 @@ export default function TripDetailScreen({
           </>
         )}
 
-        {/* ════════════════════ FINANCE TAB ════════════════════ */}
-        {false && isDesktop && desktopTab === "finance" && (
-          <TripDetailFinanceView
-            trip={trip}
-            tripDetailTab="finance"
-            onTripDetailTabChange={(tab) => setActiveTab(tab)}
-            hideInternalTabBar
-            tripLedgerEntries={detail.tripLedgerEntries}
-            adjustments={detail.adjustments}
-            viewerOrgId={currentOrganization?.id ?? null}
-            viewerOrganizationName={currentOrganization?.name ?? null}
-            clientName={detail.displayClientName ?? trip.client_name ?? null}
-            subcontractRate={detail.subcontractRate}
-            assignmentAuditRows={detail.assignmentAuditRows}
-            assignmentDriverNames={detail.assignmentDriverNames}
-            assignmentVehicleLabels={detail.assignmentVehicleLabels}
-            tripOtp={detail.tripOtp}
-            partnerName={detail.partnerName}
-            driverName={detail.driverName}
-            driverRating={detail.driverRatingAvg}
-            vehicleLabel={
-              isAggregate
-                ? ((detail.displayVehicleFromInput.trim() ||
-                    detail.vehicleLabel) ??
-                  null)
-                : detail.vehicleLabel
-            }
-            onSaveAdjustment={detail.handleSaveAdjustment}
-            onRemoveAdjustment={detail.handleVoidAdjustment}
-            currentUserId={detail.currentUserId}
-            tripDocs={detail.computedTripDocs}
-            onOpenDoc={handleDocOpen}
-            assignmentBlock={
-              trip.organization_id ? (
-                <TripAssignmentBlock
-                  trip={trip}
-                  organizationId={currentOrganization?.id ?? ""}
-                  canAssign={detail.canAssign}
-                  onUpdated={detail.handleAssignmentUpdated}
-                  partnerName={detail.partnerName}
-                  driverName={detail.driverName}
-                  vehicleLabel={
-                    isAggregate
-                      ? detail.displayVehicleFromInput.trim() ||
-                        detail.vehicleLabel ||
-                        null
-                      : detail.vehicleLabel
-                  }
-                  driverAvatarUri={detail.driverAvatarUri}
-                  showAssignByPhone={detail.showAssignByPhone}
-                  assignmentSource={detail.assignmentSource}
-                  currentUserId={detail.currentUserId}
-                  previousDriverName={detail.previousDriverName}
-                  latestReassignmentSummary={detail.latestReassignmentSummary}
-                  driverAssignOrgId={
-                    isAggregate ? (currentOrganization?.id ?? null) : null
-                  }
-                  onVehicleDisplayChange={(value) => {
-                    const normalized = formatIndianVehicleNumber(value ?? "");
-                    detail.setDisplayVehicleFromInput(normalized);
-                  }}
-                  inlineSection={
-                    (isAggregate || driverIsUnlinked) ? (
-                      <AggregateTripOtpPanel
-                        variant="sheet"
-                        tripNumber={getTripDisplayNumber(trip, currentOrganization?.id)}
-                        aggregateOtpState={aggregateOtpState}
-                        canGenerateAggregateOtp={canGenerateAggregateOtp}
-                        otpLockedByTripProgress={otpLockedByTripProgress}
-                        tripOtp={detail.tripOtp}
-                        onResendOtp={handleResendOtp}
-                        otpResending={otpResending}
-                      />
-                    ) : null
-                  }
-                />
-              ) : null
-            }
-          />
-        )}
+        {/* TripDetailFinanceView removed — was dead code ({false && …}) */}
 
         <View style={{ height: !isDesktop ? 120 : 48 }} />
       </ScrollView>
 
-      {/* ── Modals ────────────────────────────────────────────────────────────── */}
+      {/* ── Modals (lazy-loaded: imported only when first rendered) ──────────── */}
+      <Suspense fallback={null}>
       <ProvisionAdjustmentModal
         visible={!!showFinanceProvisionPanel}
         side={showFinanceProvisionPanel}
@@ -5261,6 +5212,7 @@ export default function TripDetailScreen({
           }
         />
       ) : null}
+      </Suspense>
 
       <Modal
         visible={provisionConfirm !== null}
@@ -5689,44 +5641,46 @@ export default function TripDetailScreen({
         </View>
       </Modal>
 
-      <LiveTrackingModal
-        visible={detail.showTrackingModal ?? false}
-        onClose={() => detail.setShowTrackingModal(false)}
-        trip={trip}
-        isDriverOffline={showDriverTrackingOfflineOverlay}
-        onSendLoginReminder={detail.requestDriverPing}
-        onReassignDriver={() => {
-          detail.setShowTrackingModal(false);
-          setShowReassignSheet(true);
-        }}
-        isClientIndentView={entryContext === "client"}
-        trackingState={trackingState ?? defaultTrackingState}
-        vehicleLabel={detail.vehicleLabel}
-        locationLabels={detail.trackingMapLocationLabels}
-        originCoordinate={detail.trackingMapOriginCoordinate}
-        destinationCoordinate={detail.trackingMapDestinationCoordinate}
-        tripLocationPoints={mapDbLocationTrail}
-        mapTruckLocation={mapTruckLocation ?? null}
-        mapDbLocationTrail={mapDbLocationTrail}
-        mapTruckStatus={mapTruckStatus}
-        trackingBroadcastActive={trackingState?.broadcastActive ?? false}
-        lastPingRecordedAt={driverLastPingRecordedAt}
-        locationAddress={detail.driverLocationAddress}
-        driverActivityTimelineRows={detail.driverActivityTimelineRows}
-        expandedTimelineEntryIds={detail.expandedTimelineEntryIds}
-        onToggleTimelineItem={detail.toggleTimelineItemExpanded}
-        assignmentDriverNames={detail.assignmentDriverNames}
-        assignmentVehicleLabels={detail.assignmentVehicleLabels}
-        driverName={detail.driverName}
-        driverPhone={detail.driverPhone}
-        currentUserId={detail.currentUserId}
-        routeEtaSeconds={manifestRouteEtaSeconds}
-        mapRouteDistanceKm={mapRouteDistanceKm}
-        deliveryPlan={liveTrackingDeliveryPlan}
-        displayClientName={
-          detail.displayClientName ?? trip.client_name ?? null
-        }
-      />
+      <Suspense fallback={null}>
+        <LiveTrackingModal
+          visible={detail.showTrackingModal ?? false}
+          onClose={() => detail.setShowTrackingModal(false)}
+          trip={trip}
+          isDriverOffline={showDriverTrackingOfflineOverlay}
+          onSendLoginReminder={detail.requestDriverPing}
+          onReassignDriver={() => {
+            detail.setShowTrackingModal(false);
+            setShowReassignSheet(true);
+          }}
+          isClientIndentView={entryContext === "client"}
+          trackingState={trackingState ?? defaultTrackingState}
+          vehicleLabel={detail.vehicleLabel}
+          locationLabels={detail.trackingMapLocationLabels}
+          originCoordinate={detail.trackingMapOriginCoordinate}
+          destinationCoordinate={detail.trackingMapDestinationCoordinate}
+          tripLocationPoints={mapDbLocationTrail}
+          mapTruckLocation={mapTruckLocation ?? null}
+          mapDbLocationTrail={mapDbLocationTrail}
+          mapTruckStatus={mapTruckStatus}
+          trackingBroadcastActive={trackingState?.broadcastActive ?? false}
+          lastPingRecordedAt={driverLastPingRecordedAt}
+          locationAddress={detail.driverLocationAddress}
+          driverActivityTimelineRows={detail.driverActivityTimelineRows}
+          expandedTimelineEntryIds={detail.expandedTimelineEntryIds}
+          onToggleTimelineItem={detail.toggleTimelineItemExpanded}
+          assignmentDriverNames={detail.assignmentDriverNames}
+          assignmentVehicleLabels={detail.assignmentVehicleLabels}
+          driverName={detail.driverName}
+          driverPhone={detail.driverPhone}
+          currentUserId={detail.currentUserId}
+          routeEtaSeconds={manifestRouteEtaSeconds}
+          mapRouteDistanceKm={mapRouteDistanceKm}
+          deliveryPlan={liveTrackingDeliveryPlan}
+          displayClientName={
+            detail.displayClientName ?? trip.client_name ?? null
+          }
+        />
+      </Suspense>
     </View>
   );
 }

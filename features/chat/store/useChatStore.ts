@@ -1341,11 +1341,9 @@ export const useChatStore = create<ChatState>()(
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
-        if (seededFromDisk) {
-          set({ bootstrappedOrg: orgId, isLoading: false });
-        } else {
-          set({ isLoading: false });
-        }
+        // Always mark as bootstrapped so bootstrapDone=true and the spinner
+        // never stays stuck even when the network is unavailable.
+        set({ bootstrappedOrg: orgId, isLoading: false });
       } finally {
         chatBootstrapInFlightFor = null;
       }

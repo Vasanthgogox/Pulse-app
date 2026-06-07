@@ -14,7 +14,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 const STALE_MS = 30_000;
-const POLL_MS = 60_000;
+const POLL_MS = 120_000;
 const EMPTY_DRIVERS: DriverRow[] = [];
 
 export function driverHomeLinkedDriversQueryKey(userId: string) {

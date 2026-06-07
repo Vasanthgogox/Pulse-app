@@ -8,6 +8,10 @@ export type LoadCardSpecsRowProps = {
   vehicle: string;
   weight: string;
   loadType: string;
+  /** `route` aligns with LoadCardRouteRow chevron gap; `equal` uses three balanced columns. */
+  layout?: "route" | "equal";
+  /** `md` for sheets / detail panels with slightly larger type. */
+  density?: "sm" | "md";
 };
 
 /**
@@ -17,25 +21,50 @@ export function LoadCardSpecsRow({
   vehicle,
   weight,
   loadType,
+  layout = "route",
+  density = "sm",
 }: LoadCardSpecsRowProps) {
+  const md = density === "md";
+  const equal = layout === "equal";
+  const labelStyle = [styles.label, md && styles.labelMd];
+  const valueStyle = [styles.value, md && styles.valueMd];
+
   return (
     <View style={styles.grid}>
-      <View style={styles.row}>
-        <View style={styles.colLeft}>
-          <Text style={styles.label}>Vehicle</Text>
-          <Text style={[styles.value, styles.valueLeft]} numberOfLines={2}>
+      <View style={[styles.row, equal && styles.rowEqual]}>
+        <View style={[styles.colLeft, equal && styles.colEqual]}>
+          <Text style={labelStyle}>Vehicle</Text>
+          <Text
+            style={[...valueStyle, styles.valueLeft]}
+            numberOfLines={equal ? 3 : 2}
+          >
             {vehicle}
           </Text>
         </View>
-        <View style={styles.colMid}>
-          <Text style={[styles.label, styles.labelCenter]}>Load</Text>
-          <Text style={[styles.value, styles.valueCenter]} numberOfLines={2}>
-            {loadType}
-          </Text>
-        </View>
-        <View style={styles.colRight}>
-          <Text style={[styles.label, styles.labelRight]}>Weight</Text>
-          <Text style={[styles.value, styles.valueRight]} numberOfLines={2}>
+        {equal ? (
+          <View style={[styles.colEqual, styles.colEqualCenter]}>
+            <Text style={[...labelStyle, styles.labelCenter]}>Load</Text>
+            <Text
+              style={[...valueStyle, styles.valueCenter]}
+              numberOfLines={3}
+            >
+              {loadType}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.colMid}>
+            <Text style={[...labelStyle, styles.labelCenter]}>Load</Text>
+            <Text style={[...valueStyle, styles.valueCenter]} numberOfLines={2}>
+              {loadType}
+            </Text>
+          </View>
+        )}
+        <View style={[styles.colRight, equal && styles.colEqual, equal && styles.colEqualEnd]}>
+          <Text style={[...labelStyle, styles.labelRight]}>Weight</Text>
+          <Text
+            style={[...valueStyle, styles.valueRight]}
+            numberOfLines={equal ? 2 : 2}
+          >
             {weight}
           </Text>
         </View>
@@ -52,6 +81,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 4,
+  },
+  rowEqual: {
+    gap: 10,
+  },
+  colEqual: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+  },
+  colEqualCenter: {
+    alignItems: "center",
+  },
+  colEqualEnd: {
+    alignItems: "flex-end",
   },
   colLeft: {
     flex: 1,
@@ -79,6 +122,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
+  labelMd: {
+    fontSize: 10,
+    letterSpacing: 0.6,
+    marginBottom: 5,
+  },
   labelCenter: {
     textAlign: "center",
     alignSelf: "stretch",
@@ -96,6 +144,12 @@ const styles = StyleSheet.create({
       android: { includeFontPadding: false as const },
       default: {},
     }),
+  },
+  valueMd: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    lineHeight: 16,
   },
   valueLeft: {
     textAlign: "left",

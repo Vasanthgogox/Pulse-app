@@ -25,7 +25,7 @@
 import { useMemo } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
-import { partyAnalyticsLayout } from "@/components/analytics/partyAnalyticsLayout";
+import { usePartyAnalyticsInsetStyle } from "@/components/analytics/partyAnalyticsLayout";
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
 
@@ -38,6 +38,7 @@ import {
   PulseInsightsPanel,
   PulseKpiGrid,
   PulseLaneBar,
+  PulsePanelGrid,
   PulseSection,
   TrendBarChart,
   TrendLineChart,
@@ -121,8 +122,10 @@ export default function SupplierAnalyticsTab({
   orgId,
 }: Props) {
   const { width } = useWindowDimensions();
-  const chartWidth = usePulseChartWidth();
-  const chartH = pulseChartHeight(width);
+  const insetStyle = usePartyAnalyticsInsetStyle();
+  const chartWidth = usePulseChartWidth({ embedded: true });
+  const chartWidthHalf = usePulseChartWidth({ embedded: true, columns: 2 });
+  const chartH = pulseChartHeight(width, true);
   const supplierId = supplier?.id ?? null;
 
   // ── Server score ──
@@ -194,30 +197,6 @@ export default function SupplierAnalyticsTab({
     (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
       [
         {
-          id: "payable",
-          label: "Total payable",
-          value: formatINR(financial.payable),
-          subtext: "Contract cost · 12 mo",
-          valueColor: Theme.primary,
-          iconName: "credit-card",
-        },
-        {
-          id: "paid",
-          label: "Paid out",
-          value: formatINR(financial.paid),
-          subtext: `${settlementPct}% settled`,
-          valueColor: Theme.positive,
-          iconName: "money",
-        },
-        {
-          id: "due",
-          label: "Payable due",
-          value: formatINR(financial.outstanding),
-          subtext: `Avg ${financial.avgSettlementDays}d to settle`,
-          valueColor: financial.outstanding > 0 ? Theme.negative : Theme.positive,
-          iconName: "exclamation-circle",
-        },
-        {
           id: "trips",
           label: "Trips executed",
           value: `${kpis.tripsExecuted}`,
@@ -225,8 +204,6 @@ export default function SupplierAnalyticsTab({
           valueColor: Theme.textBody,
           iconName: "truck",
         },
-      ],
-      [
         {
           id: "ontime",
           label: "On-time availability",
@@ -262,23 +239,10 @@ export default function SupplierAnalyticsTab({
             kpis.cancellationRatePct >= 10 ? Theme.negative : Theme.warning,
           iconName: "times-circle",
         },
-        {
-          id: "reliability",
-          label: "Reliability score",
-          value: `${kpis.reliabilityScore}`,
-          subtext: score ? "Composite 0-100" : "Insufficient data",
-          valueColor:
-            kpis.reliabilityScore >= 80
-              ? Theme.positive
-              : kpis.reliabilityScore >= 60
-                ? Theme.warning
-                : Theme.negative,
-          iconName: "shield",
-        },
       ],
     ],
-    [financial, kpis, operations, score, settlementPct],
-  )
+    [kpis, operations, score],
+  );
 
   const opsKpiRows = useMemo(
     (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
@@ -511,6 +475,16 @@ export default function SupplierAnalyticsTab({
 
   const primaryBadge = badges[0] ? badgeLabel(badges[0]) : undefined
 
+  const financialOverview = {
+    primaryMetricLabel: "TOTAL COST",
+    primaryValue: formatINR(financial.payable),
+    leftLabel: "PAID",
+    leftValue: formatINR(financial.paid),
+    rightLabel: "DUE",
+    rightValue: formatINR(Math.max(financial.payable - financial.paid, 0)),
+    decorIcon: "industry" as const,
+  }
+
   return (
     <PulseAnalyticsShell
       title="Supplier finance analytics"
@@ -520,8 +494,9 @@ export default function SupplierAnalyticsTab({
           : "Payable, settlement, and trip performance"
       }
       embedded
+      financialOverview={financialOverview}
     >
-      <View style={partyAnalyticsLayout.inset}>
+      <View style={insetStyle}>
       <PulseKpiGrid rows={headerKpiRows} />
 
       <PulseSection
@@ -589,25 +564,31 @@ export default function SupplierAnalyticsTab({
         subtitle="What you owe this supplier and how fast you pay"
       >
         <PulseKpiGrid rows={financialKpiRows} />
-        <PulseChartPanel
-          title="Payable trend"
-          subtitle="Total supplier payable per month"
-        >
-          <TrendLineChart
-            data={toPayableLine(monthly)}
-            width={chartWidth}
-            height={chartH}
-            field="revenue"
-            color={Theme.chartSeries4}
-            gradientId="supplierPayableTrend"
-          />
-        </PulseChartPanel>
-        <PulseChartPanel
-          title="Paid vs outstanding"
-          subtitle="Settled vs still payable each month"
-        >
-          <TrendBarChart data={toPaidVsOutstanding(monthly)} width={chartWidth} height={chartH} />
-        </PulseChartPanel>
+        <PulsePanelGrid minColumnWidth={380}>
+          <PulseChartPanel
+            title="Payable trend"
+            subtitle="Total supplier payable per month"
+          >
+            <TrendLineChart
+              data={toPayableLine(monthly)}
+              width={chartWidthHalf}
+              height={chartH}
+              field="revenue"
+              color={Theme.chartSeries4}
+              gradientId="supplierPayableTrend"
+            />
+          </PulseChartPanel>
+          <PulseChartPanel
+            title="Paid vs outstanding"
+            subtitle="Settled vs still payable each month"
+          >
+            <TrendBarChart
+              data={toPaidVsOutstanding(monthly)}
+              width={chartWidthHalf}
+              height={chartH}
+            />
+          </PulseChartPanel>
+        </PulsePanelGrid>
       </PulseSection>
 
       <PulseSection

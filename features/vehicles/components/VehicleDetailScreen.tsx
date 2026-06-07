@@ -38,6 +38,8 @@ import { canAccessFinance, getCapabilitiesFromProfile } from "@/lib/capabilities
 import { pickAndUploadVehicleAvatar } from "@/lib/avatarUpload";
 import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { useInvalidateVehicles } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
@@ -105,6 +107,7 @@ export default function VehicleDetailScreen({
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
   const [vehiclePhotoUploading, setVehiclePhotoUploading] = useState(false);
   const invalidateVehicles = useInvalidateVehicles();
+  const queryClient = useQueryClient();
   const openAddEntryHandledRef = useRef(false);
   const cashLedgerBackfillAttemptRef = useRef(0);
 
@@ -148,9 +151,13 @@ export default function VehicleDetailScreen({
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
+    const ownerTripsPromise = cachedTrips !== undefined
+      ? Promise.resolve({ error: null, trips: cachedTrips })
+      : getTripsByOrganization(orgId);
     Promise.all([
       getVehicleById(orgId, vehicleId),
-      getTripsByOrganization(orgId),
+      ownerTripsPromise,
       getTripsWhereOrgIsSupplier(orgId),
       getDriversByOrganization(orgId),
       getTransactionsByOrganization(orgId),
@@ -178,7 +185,7 @@ export default function VehicleDetailScreen({
       isRefreshingRef.current = false;
       setRefreshing(false);
     });
-  }, [vehicleId, currentOrganization?.id]);
+  }, [vehicleId, currentOrganization?.id, queryClient]);
 
   useEffect(() => load(), [load]);
   useFocusEffect(useCallback(() => { load(); }, [load]));

@@ -204,9 +204,9 @@ export function DriverEarningsAnalyticsTab({
   driverOffer,
 }: Props) {
   const { width } = useWindowDimensions();
-  const chartW = usePulseChartWidth();
-  const chartWHalf = usePulseChartWidth({ columns: 2 });
-  const chartH = pulseChartHeight(width);
+  const chartW = usePulseChartWidth({ embedded: true });
+  const chartWHalf = usePulseChartWidth({ embedded: true, columns: 2 });
+  const chartH = pulseChartHeight(width, true);
 
   const kpis = useMemo(
     () => computeDriverEarningsKpis(trips, driverTransactions, driverRequests, driverOffer),

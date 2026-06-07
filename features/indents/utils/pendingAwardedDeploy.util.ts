@@ -38,10 +38,13 @@ export function buildPendingAwardedDeployQueue(
   }
 
   const items: PendingAwardedDeployItem[] = [];
+  const seenIndentIds = new Set<string>();
   for (const indent of marketIndents) {
+    if (seenIndentIds.has(indent.id)) continue;
     if (!awardedToMeIndentIds.has(indent.id)) continue;
     if (indentIdsWithTrip.has(indent.id)) continue;
     if ((indent.status || "").toLowerCase() === "completed") continue;
+    seenIndentIds.add(indent.id);
 
     const quote = quoteByIndent.get(indent.id);
     const awardAmountInr =

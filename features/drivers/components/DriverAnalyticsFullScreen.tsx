@@ -7,9 +7,11 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { isPulseDesktop } from "@/components/analytics/pulse/pulseStyles";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { DriverAnalyticsTab } from "./analytics/DriverAnalyticsTab";
@@ -18,6 +20,8 @@ import { useDriverAnalyticsData } from "../hooks/useDriverAnalyticsData";
 export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const desktop = isPulseDesktop(width);
   const {
     t,
     driver,
@@ -75,6 +79,7 @@ export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
+          desktop && styles.scrollContentDesktop,
           { paddingBottom: insets.bottom + Layout.screenPaddingHorizontal },
         ]}
         showsVerticalScrollIndicator={false}
@@ -143,6 +148,10 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingTop: 16,
+  },
+  scrollContentDesktop: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   errorWrap: { padding: 16 },
   errorText: { fontSize: 15, color: Theme.textSecondary },

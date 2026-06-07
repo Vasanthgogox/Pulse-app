@@ -89,6 +89,7 @@ import {
     getDriverOffersByOrganization,
     getDriverProfileDisplay,
     getDriverSignupMatchStatus,
+    getDriverTenures,
     getLatestDriverInviteTermsByUser,
     inviteDriver,
     resetDriverSignupInvite,
@@ -96,6 +97,7 @@ import {
     updateDriver,
     type DriverRow,
     type DriverSignupMatchStatus,
+    type DriverTenureRow,
 } from "../services/drivers.service";
 import {
   DriverFleetInviteSalaryModal,
@@ -328,6 +330,7 @@ export default function DriverDetailScreen({
     commissionPercent: number | null;
     commissionPerKm: number | null;
   } | null>(null);
+  const [driverTenures, setDriverTenures] = useState<DriverTenureRow[]>([]);
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
   const [driverRequests, setDriverRequests] = useState<SalaryRequestRow[]>([]);
   const [driverOffer, setDriverOffer] = useState<{
@@ -415,6 +418,8 @@ export default function DriverDetailScreen({
         : getTripsForOrg(orgId),
       getDriverOffersByOrganization(orgId),
       getDriverSignupMatchStatus(driverId),
+      // Tenure history: connect/disconnect periods
+      getDriverTenures(orgId, driverId),
     ])
       .then(
         ([
@@ -422,6 +427,7 @@ export default function DriverDetailScreen({
           tripsRes,
           offersRes,
           signupMatchRes,
+          tenuresRes,
         ]) => {
           const driverRow = bundleRes.error ? null : (bundleRes.driver ?? null);
           if (bundleRes.error) {
@@ -464,6 +470,7 @@ export default function DriverDetailScreen({
             return nameMatch || phoneMatch;
           };
           setTrips(allTrips.filter(tripMatchesDriver));
+          setDriverTenures(tenuresRes.tenures ?? []);
           setDriverRatings(bundleRes.ratings ?? []);
           setDriverRequests(
             (bundleRes.salaryRequests as SalaryRequestRow[]).filter((r) => r.status === "pending"),
@@ -1699,6 +1706,8 @@ export default function DriverDetailScreen({
           </View>
         ) : null}
       </View>
+
+      <TenureHistorySection tenures={driverTenures} driverName={driver.name ?? ''} />
 
       <View style={styles.tabRow}>
         <TouchableOpacity
@@ -3926,4 +3935,204 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     marginLeft: 48,
   },
+  tenureSection: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  tenureHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  tenureHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  tenureHeaderTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textSection,
+    letterSpacing: 0.8,
+  },
+  tenureCountBadge: {
+    backgroundColor: Theme.surfaceGray,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  tenureCountText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  tenureChevron: { opacity: 0.5 },
+  tenureDivider: { height: 1, backgroundColor: Theme.borderLight },
+  tenureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  tenureTimeline: {
+    width: 28,
+    alignItems: "center",
+  },
+  tenureTimelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.textMuted,
+  },
+  tenureTimelineDotActive: { backgroundColor: Theme.darkGreen },
+  tenureTimelineLine: {
+    width: 1,
+    flex: 1,
+    backgroundColor: Theme.borderLight,
+    marginTop: 4,
+    minHeight: 12,
+  },
+  tenureRowContent: { flex: 1, minWidth: 0 },
+  tenureRowLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimary,
+    marginBottom: 2,
+  },
+  tenureRowSub: {
+    fontSize: 11,
+    color: Theme.textMuted,
+  },
+  tenureRowStatus: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
+  },
+  tenureRowStatusActive: { backgroundColor: "#dcfce7" },
+  tenureStatusText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.5,
+  },
+  tenureStatusTextActive: { color: "#15803d" },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tenure History Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatTenureDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+function TenureHistorySection({
+  tenures,
+  driverName,
+}: {
+  tenures: DriverTenureRow[];
+  driverName: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Show section only when there are closed tenures (history to display)
+  const closedTenures = tenures.filter((t) => t.left_at != null);
+  const currentTenure = tenures.find((t) => t.left_at == null);
+
+  // If there's only one tenure and it's open, nothing to show
+  if (closedTenures.length === 0) return null;
+
+  const allTenures = [
+    ...(currentTenure ? [currentTenure] : []),
+    ...closedTenures,
+  ];
+
+  return (
+    <View style={styles.tenureSection}>
+      <TouchableOpacity
+        style={styles.tenureHeader}
+        onPress={() => setExpanded((v) => !v)}
+        activeOpacity={0.75}
+      >
+        <View style={styles.tenureHeaderLeft}>
+          <FontAwesome name="history" size={12} color={Theme.textSection} />
+          <Text style={styles.tenureHeaderTitle}>TENURE HISTORY</Text>
+          <View style={styles.tenureCountBadge}>
+            <Text style={styles.tenureCountText}>{allTenures.length}</Text>
+          </View>
+        </View>
+        <FontAwesome
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={10}
+          color={Theme.textMuted}
+          style={styles.tenureChevron}
+        />
+      </TouchableOpacity>
+
+      {expanded && (
+        <>
+          <View style={styles.tenureDivider} />
+          {allTenures.map((tenure, idx) => {
+            const isActive = tenure.left_at == null;
+            const joinedLabel = formatTenureDate(tenure.joined_at);
+            const leftLabel = isActive ? 'Present' : formatTenureDate(tenure.left_at);
+            const durationLabel = `${joinedLabel} – ${leftLabel}`;
+            const isLast = idx === allTenures.length - 1;
+            return (
+              <View key={tenure.id}>
+                <View style={styles.tenureRow}>
+                  <View style={styles.tenureTimeline}>
+                    <View
+                      style={[
+                        styles.tenureTimelineDot,
+                        isActive && styles.tenureTimelineDotActive,
+                      ]}
+                    />
+                    {!isLast && <View style={styles.tenureTimelineLine} />}
+                  </View>
+                  <View style={styles.tenureRowContent}>
+                    <Text style={styles.tenureRowLabel} numberOfLines={1}>
+                      {isActive
+                        ? `Current tenure · ${(driverName || 'Driver').trim()}`
+                        : `Previous tenure`}
+                    </Text>
+                    <Text style={styles.tenureRowSub}>{durationLabel}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.tenureRowStatus,
+                      isActive && styles.tenureRowStatusActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.tenureStatusText,
+                        isActive && styles.tenureStatusTextActive,
+                      ]}
+                    >
+                      {isActive ? 'ACTIVE' : 'ENDED'}
+                    </Text>
+                  </View>
+                </View>
+                {!isLast && <View style={styles.tenureDivider} />}
+              </View>
+            );
+          })}
+        </>
+      )}
+    </View>
+  );
+}

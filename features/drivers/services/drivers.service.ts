@@ -80,6 +80,37 @@ function excludeTrackingOnly(drivers: DriverRow[]): DriverRow[] {
   return drivers.filter((d) => d.tracking_only !== true);
 }
 
+/**
+ * Deduplicates drivers by identity (user_id or normalized phone).
+ * When the same physical driver has an active row (left_at = null) AND an old
+ * disconnected row, only the active row is kept for the list.  The disconnected
+ * row's history is surfaced via the Tenure History section in the detail screen.
+ */
+function deduplicateDriversByIdentity(drivers: DriverRow[]): DriverRow[] {
+  const normalizePhone = (p: string | null | undefined) =>
+    (p ?? '').replace(/[^0-9]/g, '').slice(-10);
+
+  // Build sets of identities that have an active row
+  const activeUserIds = new Set<string>();
+  const activePhones = new Set<string>();
+  for (const d of drivers) {
+    if (d.left_at) continue;
+    if (d.user_id) activeUserIds.add(d.user_id);
+    const ph = normalizePhone(d.phone);
+    if (ph.length >= 10) activePhones.add(ph);
+  }
+
+  return drivers.filter((d) => {
+    // Active rows are always kept
+    if (!d.left_at) return true;
+    // Disconnected row: suppress if an active row for same identity already shown
+    if (d.user_id && activeUserIds.has(d.user_id)) return false;
+    const ph = normalizePhone(d.phone);
+    if (ph.length >= 10 && activePhones.has(ph)) return false;
+    return true;
+  });
+}
+
 /** Ensure display name is set (DB may use name or full_name). */
 function normalizeDriverRow<T extends { name?: string | null; full_name?: string | null }>(row: T): T {
   const name = (row.name ?? (row as { full_name?: string | null }).full_name ?? "").trim() || "—";
@@ -98,7 +129,9 @@ export async function getDriversByOrganization(
         { p_org_id: orgId },
       );
       if (!rpcError && data) {
-        const raw = excludeTrackingOnly((data ?? []) as DriverRow[]);
+        const raw = deduplicateDriversByIdentity(
+          excludeTrackingOnly((data ?? []) as DriverRow[]),
+        );
         return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
       }
     } catch {
@@ -128,8 +161,39 @@ export async function getDriversByOrganization(
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), drivers: [] };
-  const raw = excludeTrackingOnly((data ?? []) as unknown as DriverRow[]);
+  const raw = deduplicateDriversByIdentity(
+    excludeTrackingOnly((data ?? []) as unknown as DriverRow[]),
+  );
   return { error: null, drivers: raw.map((d) => normalizeDriverRow(d)) };
+}
+
+// ─── Tenure History ──────────────────────────────────────────────────────────
+
+export interface DriverTenureRow {
+  id: string;
+  driver_id: string;
+  organization_id: string;
+  joined_at: string;
+  left_at: string | null;
+  trip_count: number;
+  created_at: string;
+}
+
+/**
+ * Returns the tenure history for a driver — all connect/disconnect periods
+ * ordered most-recent first.  Used by the "Tenure History" section in the
+ * driver detail screen.
+ */
+export async function getDriverTenures(
+  orgId: string,
+  driverId: string,
+): Promise<{ error: Error | null; tenures: DriverTenureRow[] }> {
+  const { data, error } = await supabase().rpc('get_driver_tenures', {
+    p_org_id: orgId,
+    p_driver_id: driverId,
+  });
+  if (error) return { error: new Error(error.message), tenures: [] };
+  return { error: null, tenures: (data ?? []) as DriverTenureRow[] };
 }
 
 export async function getDriversDelta(

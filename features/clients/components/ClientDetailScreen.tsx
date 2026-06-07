@@ -73,6 +73,8 @@ import {
 } from "@/lib/entityIdentity";
 import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
@@ -251,6 +253,7 @@ export default function ClientDetailScreen({
   const { t } = useLanguage();
   const { profile } = useAuth();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
+  const queryClient = useQueryClient();
   const capabilities = getCapabilitiesFromProfile(
     profile
       ? {
@@ -434,9 +437,14 @@ export default function ClientDetailScreen({
     setError(null);
     const orgId = currentOrganization.id;
 
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
+    const tripsPromise = cachedTrips !== undefined
+      ? Promise.resolve({ error: null, trips: cachedTrips })
+      : getTripsByOrganization(orgId);
+
     Promise.all([
       getClientDetailBundle(orgId, clientId),
-      getTripsByOrganization(orgId),
+      tripsPromise,
       getClientsByOrganization(orgId),
       getTransactionsByOrganization(orgId),
       getSuppliersByOrganization(orgId),
@@ -533,7 +541,7 @@ export default function ClientDetailScreen({
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [clientId, currentOrganization?.id, orgLoading]);
+  }, [clientId, currentOrganization?.id, orgLoading, queryClient]);
 
   useEffect(() => {
     fetchedPartnerOrgIdsRef.current = new Set();

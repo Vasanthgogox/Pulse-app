@@ -71,6 +71,8 @@ import {
 } from "@/lib/entityIdentity";
 import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
@@ -158,6 +160,7 @@ export default function SupplierDetailScreen({
   const { t } = useLanguage();
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
+  const queryClient = useQueryClient();
   const capabilities = getCapabilitiesFromProfile(
     profile
       ? {
@@ -398,7 +401,10 @@ export default function SupplierDetailScreen({
     setError(null);
     const orgId = currentOrganization.id;
     const supplierPromise = getSupplierDetails(supplierId);
-    const tripsPromise = getTripsByOrganization(orgId);
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
+    const tripsPromise = cachedTrips !== undefined
+      ? Promise.resolve({ error: null, trips: cachedTrips })
+      : getTripsByOrganization(orgId);
     const txPromise = getTransactionsByOrganization(orgId);
     const suppliersPromise = getSuppliersByOrganization(orgId);
     const shipperNamesPromise = getShipperDisplayNamesForSupplierTrips(orgId);
@@ -558,7 +564,7 @@ export default function SupplierDetailScreen({
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [supplierId, currentOrganization?.id]);
+  }, [supplierId, currentOrganization?.id, queryClient]);
 
   const resolveClientDisplayName = useCallback(
     (trip: TripRow): string => {

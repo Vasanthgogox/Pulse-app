@@ -805,7 +805,7 @@ export const FleetClientAnalyticsTab = memo(function FleetClientAnalyticsTab({
     <View
       style={[
         styles.root,
-        isDesktop && { maxWidth: 860, alignSelf: "center" as const, width: "100%" as const },
+        isDesktop && { alignSelf: "stretch" as const, width: "100%" as const },
       ]}
     >
       {/* ── Context note ──────────────────────────────────────────────────── */}

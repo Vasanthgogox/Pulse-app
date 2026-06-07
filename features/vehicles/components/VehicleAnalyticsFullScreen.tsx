@@ -7,9 +7,11 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { isPulseDesktop } from "@/components/analytics/pulse/pulseStyles";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { VehicleAnalyticsTab } from "./analytics/VehicleAnalyticsTab";
@@ -18,6 +20,8 @@ import { useVehicleAnalyticsData } from "../hooks/useVehicleAnalyticsData";
 export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const desktop = isPulseDesktop(width);
   const {
     t,
     vehicle,
@@ -73,6 +77,7 @@ export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string })
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
+          desktop && styles.scrollContentDesktop,
           { paddingBottom: insets.bottom + Layout.screenPaddingHorizontal },
         ]}
         showsVerticalScrollIndicator={false}
@@ -145,6 +150,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
+  },
+  scrollContentDesktop: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   errorWrap: { padding: 16 },
   errorText: { fontSize: 15, color: Theme.textSecondary },

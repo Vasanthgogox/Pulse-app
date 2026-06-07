@@ -31,7 +31,6 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
-import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     BidReceivedHammer,
@@ -99,7 +98,6 @@ import {
     Package,
     Plus,
     Share2,
-    Users,
     Zap,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1254,18 +1252,6 @@ export function LoadCenterView({
               })}
             </View>
           </View>
-          {onMyNetworkPress ? (
-            <TouchableOpacity
-              style={styles.loadMyNetworkBtn}
-              onPress={onMyNetworkPress}
-              activeOpacity={0.85}
-              accessibilityLabel="My network"
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            >
-              <Users size={18} color={Theme.textOnDark} strokeWidth={2.1} />
-              <Text style={styles.loadMyNetworkBtnLabel}>Network</Text>
-            </TouchableOpacity>
-          ) : null}
           {isSingleRowHeader ? (
             <>
               <View
@@ -2059,29 +2045,6 @@ const styles = StyleSheet.create({
   },
   loadMainTabBadgeTextActive: {
     color: Theme.textOnDark,
-  },
-  loadMyNetworkBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    flexShrink: 0,
-    marginBottom: 2,
-  },
-  loadMyNetworkBtnLabel: {
-    ...Typography.networkDarkHeaderNav,
-    color: Theme.textPrimaryDark,
-    ...Platform.select({
-      android: { includeFontPadding: false as const },
-      default: {},
-    }),
   },
   /** Inline "Add Load" pill that sits next to the Live chip on the
    *  "Your active indents" section header. Matches Add Trip / Add Indent. */

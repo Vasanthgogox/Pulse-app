@@ -700,7 +700,7 @@ export const FleetDriverAnalyticsTab = memo(function FleetDriverAnalyticsTab({
     <View
       style={[
         styles.root,
-        isDesktop && { maxWidth: 860, alignSelf: "center", width: "100%" },
+        isDesktop && { alignSelf: "stretch", width: "100%" },
       ]}
     >
       {/* ── Context note ──────────────────────────────────────────────────── */}

@@ -24,12 +24,12 @@ type RegistryEntry = {
 };
 
 const registry = new Map<string, RegistryEntry>();
-const MAX_SHARED_CHANNELS = 20;
+const MAX_SHARED_CHANNELS = 50;
 const STALE_SHARED_CHANNEL_MS = 10 * 60 * 1000;
 const DEV_DIAGNOSTICS_LOG_INTERVAL_MS = 30 * 1000;
 /** Grace period before destroying a channel whose refs hit 0.
- * Prevents websocket churn when React effects unmount/remount on tab switches. */
-const TEARDOWN_GRACE_MS = 5_000;
+ * Longer window prevents churn on StrictMode double-mounts and rapid tab switches. */
+const TEARDOWN_GRACE_MS = 15_000;
 
 type RealtimeRegistryTelemetry = {
   opens: number;

@@ -93,16 +93,19 @@ export {
   PulseHealthRow,
   PulseLaneBar,
   PulseInsightsPanel,
+  PulseFinancialOverviewCard,
   usePulseChartWidth,
   pulseStyles,
   pulseColumnCount,
   pulseChartHeight,
   isPulseCompact,
+  isPulseDesktop,
 } from "./pulse";
-export { partyAnalyticsLayout } from "./partyAnalyticsLayout";
+export { partyAnalyticsLayout, usePartyAnalyticsInsetStyle, partyAnalyticsColumnCount, chunkPartyKpiRows } from "./partyAnalyticsLayout";
 export type {
   PulseKpiItem,
   PulseHealthBarItem,
   PulseLaneBarItem,
   PulseInsightProps,
+  PulseFinancialOverviewProps,
 } from "./pulse";

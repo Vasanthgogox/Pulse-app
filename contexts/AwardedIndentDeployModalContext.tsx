@@ -78,11 +78,16 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   );
 
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
+  /** Indents the user collapsed — stay on peek until they expand (survives spurious AppState). */
+  const [sessionCollapsedIndentIds, setSessionCollapsedIndentIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [queueViewIndex, setQueueViewIndex] = useState(0);
   const [dismissedForSession, setDismissedForSession] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [inviteDeferralActive, setInviteDeferralActive] = useState(false);
   const inviteDeferralTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   /** Set when user taps Assign — keeps deploy cards hidden until allocation route ends. */
   const [deployFlowIndentId, setDeployFlowIndentId] = useState<string | null>(null);
 
@@ -139,9 +144,13 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
 
   const deployFlowActive = onDeployFlowScreen || deployFlowIndentId != null;
 
+  const activeIndentCollapsed =
+    activeItem != null && sessionCollapsedIndentIds.has(activeItem.indent.id);
+
   const hasPendingDeploy = Boolean(activeItem) && !deployFlowActive;
-  const showExpandedDeployModal = hasPendingDeploy && !minimized;
-  const showMinimizedPeek = hasPendingDeploy && minimized;
+  const showExpandedDeployModal =
+    hasPendingDeploy && !minimized && !activeIndentCollapsed;
+  const showMinimizedPeek = hasPendingDeploy && (minimized || activeIndentCollapsed);
 
   const blocksConnectionInvitations = showExpandedDeployModal;
   const deferConnectionInvitations = inviteDeferralActive;
@@ -149,14 +158,18 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   useEffect(() => {
     if (!orgId) return;
     const onAppStateChange = (next: AppStateStatus) => {
-      if (next === "active") {
-        clearInviteDeferral();
-        setSessionSnoozedIds(new Set());
-        setQueueViewIndex(0);
-        setDismissedForSession(false);
-        setDeployFlowIndentId(null);
-        setMinimized(false);
-      }
+      const prev = appStateRef.current;
+      appStateRef.current = next;
+      const becameActive =
+        next === "active" && (prev === "background" || prev === "inactive");
+      if (!becameActive) return;
+      clearInviteDeferral();
+      setSessionSnoozedIds(new Set());
+      setSessionCollapsedIndentIds(new Set());
+      setQueueViewIndex(0);
+      setDismissedForSession(false);
+      setDeployFlowIndentId(null);
+      setMinimized(false);
     };
     const sub = AppState.addEventListener("change", onAppStateChange);
     return () => sub.remove();
@@ -175,18 +188,38 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
   }, [dismissedForSession, pendingQueue, sessionSnoozedIds, visibleQueue.length]);
 
   const handleMinimize = useCallback(() => {
+    if (activeItem) {
+      const indentId = activeItem.indent.id;
+      setSessionCollapsedIndentIds((prev) => new Set(prev).add(indentId));
+    }
     setMinimized(true);
     startInviteDeferral();
-  }, [startInviteDeferral]);
+  }, [activeItem, startInviteDeferral]);
 
   const handleExpand = useCallback(() => {
+    if (activeItem) {
+      const indentId = activeItem.indent.id;
+      setSessionCollapsedIndentIds((prev) => {
+        if (!prev.has(indentId)) return prev;
+        const next = new Set(prev);
+        next.delete(indentId);
+        return next;
+      });
+    }
     setMinimized(false);
     clearInviteDeferral();
-  }, [clearInviteDeferral]);
+  }, [activeItem, clearInviteDeferral]);
 
   const handleLater = useCallback(() => {
     if (!activeItem) return;
     const snoozedId = activeItem.indent.id;
+    setSessionCollapsedIndentIds((prev) => {
+      if (!prev.has(snoozedId)) return prev;
+      const next = new Set(prev);
+      next.delete(snoozedId);
+      return next;
+    });
+    setMinimized(false);
     setSessionSnoozedIds((prev) => {
       const next = new Set(prev).add(snoozedId);
       const remaining = pendingQueue.filter((item) => !next.has(item.indent.id));
@@ -216,6 +249,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     clearInviteDeferral();
     setDismissedForSession(false);
     setSessionSnoozedIds(new Set());
+    setSessionCollapsedIndentIds(new Set());
     setQueueViewIndex(0);
     setDeployFlowIndentId(null);
     setMinimized(false);
