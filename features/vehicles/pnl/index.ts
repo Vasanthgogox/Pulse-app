@@ -3,6 +3,8 @@ export {
   tripInPeriod,
   formatPeriodLabel,
   getAvailablePeriodOptions,
+  countVehicleMatchedTripsInPeriod,
+  pickDefaultGaragePeriod,
   resolveVehicleIdForTrip,
   buildTripPnL,
   buildTripPnLListForPeriod,

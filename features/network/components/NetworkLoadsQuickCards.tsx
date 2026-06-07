@@ -2,6 +2,7 @@
  * Give / Get loads — Network home quick actions (Apple-style frosted glass).
  */
 import Theme from "@/constants/Theme";
+import { NETWORK_HUB_GRID_ROW_PADDING_H } from "@/features/network/constants/networkHubGrid";
 import { ROUTES } from "@/lib/routes";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -210,7 +211,7 @@ export function NetworkLoadsQuickCards({
   }
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, compact && styles.wrapCompact]}>
       <SectionHeader />
       <View style={[styles.rail, compact && styles.railCompact]}>
         {ACTIONS.map((action) => renderCard(action, "tile"))}
@@ -238,6 +239,13 @@ const styles = StyleSheet.create({
   wrap: {
     width: "100%",
     gap: 10,
+    marginTop: 8,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingBottom: 12,
+  },
+  wrapCompact: {
+    marginTop: 6,
+    paddingBottom: 10,
   },
   wrapSidebar: {
     width: "100%",

@@ -311,6 +311,77 @@ export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUpload
 
 export { updateOrganizationLogo } from '@/features/organization/services/organization.service';
 
+/**
+ * Pick and upload a vehicle profile photo.
+ * Stores at {userId}/vehicle-{vehicleId}-{timestamp}.jpg (same bucket RLS as user avatars).
+ */
+export async function pickAndUploadVehicleAvatar(
+  vehicleId: string,
+): Promise<PickAndUploadAvatarResult> {
+  try {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        return { path: null, previewUri: null, error: new Error('Permission to access photos is required') };
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) {
+      return { path: null, previewUri: null, error: null };
+    }
+    const asset = result.assets[0];
+    let uri = asset.uri;
+    let manipulatedBase64: string | null = null;
+    try {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: MAX_SIZE, height: MAX_SIZE } }],
+        { compress: QUALITY, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      uri = manipulated.uri;
+      if (manipulated.base64) manipulatedBase64 = manipulated.base64;
+    } catch {
+      // keep original
+    }
+    const base64Source =
+      manipulatedBase64 ?? (typeof asset.base64 === 'string' ? asset.base64.trim() : '');
+    const uploadBytes = base64Source
+      ? base64ToUint8Array(base64Source)
+      : await readUploadBytes(uri, asset.base64);
+    if (!uploadBytes || uploadBytes.byteLength === 0) {
+      return { path: null, previewUri: null, error: new Error('Could not read image data') };
+    }
+    const {
+      data: { session },
+    } = await supabase().auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) {
+      return { path: null, previewUri: null, error: new Error('Not signed in') };
+    }
+    const path = `${userId}/vehicle-${vehicleId}-${Date.now()}.jpg`;
+    const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    if (error) {
+      return { path: null, previewUri: null, error: new Error(error.message || 'Upload failed') };
+    }
+    return { path, previewUri: uri, error: null };
+  } catch (e) {
+    return {
+      path: null,
+      previewUri: null,
+      error: e instanceof Error ? e : new Error('Failed to upload vehicle photo'),
+    };
+  }
+}
+
 /** Image file extensions supported for avatar object discovery. */
 const AVATAR_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 

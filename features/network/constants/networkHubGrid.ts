@@ -1,6 +1,6 @@
 /** Shared hub layout for Network tab (connections + discover). */
 export const NETWORK_HUB_GRID_COLUMNS = 3;
-export const NETWORK_HUB_GRID_GAP_PX = 8;
+export const NETWORK_HUB_GRID_GAP_PX = 10;
 /** Vertical gap between native full-width hub cards (page shows through gap). */
 export const NETWORK_HUB_NATIVE_LIST_GAP_PX = 10;
 export const NETWORK_HUB_GRID_ROW_PADDING_H = 22;

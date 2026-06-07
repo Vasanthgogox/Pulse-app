@@ -6,6 +6,11 @@ import { LedgerFlowGuardAlert } from "@/components/LedgerFlowGuardAlert";
 import type { TripLedgerSmartTag } from "@/components/TripLedgerFinancialSummary";
 import { LedgerEntrySuccessView } from "@/components/ledger/LedgerEntrySuccessView";
 import { LedgerMobileWizard, type LedgerPaymentTypeItem } from "@/components/ledger/LedgerMobileWizard";
+import {
+  LedgerPaymentTypeIcon,
+  LedgerProtocolStripModeTile,
+  LedgerProtocolStripTypeTile,
+} from "@/components/ledger/ledgerPaymentVisuals";
 import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
@@ -3347,10 +3352,10 @@ export function AddTransactionModal({
 
     /** Protocol strips: desktop = one row each; mobile = horizontal scroll in side-by-side columns. */
     const mob = stackTripFinancialBand;
-    const LEDGER_PROTOCOL_TILE_GAP = mob ? 4 : 6;
+    const LEDGER_PROTOCOL_TILE_GAP = mob ? 6 : 8;
     /** Mobile column: ~6 tiles visible in horizontal scroll (unchanged from original). */
     const LEDGER_PROTOCOL_TILES_ACROSS_MOBILE = 6;
-    const LEDGER_PROTOCOL_ICON_SM = mob ? 8 : 9;
+    const LEDGER_PROTOCOL_STRIP_VARIANT = mob ? "compact" : "desktop";
     /** Stack synchronization + date vertically on very narrow widths. */
     const LEDGER_MOBILE_STACK_BREAKPOINT = 430;
     /** Stacked trip band only: allow side-by-side sync cards on wider phones/tablets. */
@@ -3362,6 +3367,8 @@ export function AddTransactionModal({
 
     /** Full-page ledger on desktop split layout. */
     const ledgerTripDesktopSplit = fullPage && !stackTripFinancialBand;
+    const LEDGER_PROTOCOL_SUMMARY_LOGO = ledgerTripDesktopSplit ? 28 : mob ? 22 : 24;
+    const LEDGER_PROTOCOL_SUMMARY_TYPE_ICON = ledgerTripDesktopSplit ? 16 : 14;
     /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
     const missionListMaxHeight = stackTripFinancialBand
       ? Math.min(240, Math.max(140, Math.floor(Dimensions.get("window").height * 0.26)))
@@ -3471,35 +3478,27 @@ export function AddTransactionModal({
       ),
     );
     const syncModeCount = PAYMENT_MODES.length;
-    const ledgerProtocolTileWidthDesktopMode = Math.max(
-      36,
+    const paymentTypeCount = paymentTypeItems.length;
+    /** Desktop split: one tile width for both rows so SYNC MODE / PAYMENT TYPE columns align. */
+    const protocolDesktopTileCount = Math.max(syncModeCount, paymentTypeCount);
+    const protocolDesktopUnifiedTileWidth = Math.max(
+      56,
       Math.floor(
         (desktopRightPaneInnerW -
-          LEDGER_PROTOCOL_TILE_GAP * (syncModeCount - 1)) /
-          syncModeCount,
+          LEDGER_PROTOCOL_TILE_GAP * (protocolDesktopTileCount - 1)) /
+          protocolDesktopTileCount,
       ),
     );
-    const paymentTypeCount = paymentTypeItems.length;
-    const LEDGER_DESKTOP_TYPE_TILE_MIN = 68;
+    const LEDGER_DESKTOP_TYPE_TILE_MIN = protocolDesktopUnifiedTileWidth;
     const paymentTypeFitsDesktopRow =
       paymentTypeCount * LEDGER_DESKTOP_TYPE_TILE_MIN +
         (paymentTypeCount - 1) * LEDGER_PROTOCOL_TILE_GAP <=
       desktopRightPaneInnerW;
-    const ledgerProtocolTileWidthDesktopType = paymentTypeFitsDesktopRow
-      ? Math.max(
-          36,
-          Math.floor(
-            (desktopRightPaneInnerW -
-              LEDGER_PROTOCOL_TILE_GAP * (paymentTypeCount - 1)) /
-              paymentTypeCount,
-          ),
-        )
-      : LEDGER_DESKTOP_TYPE_TILE_MIN;
     const protocolModeTileWidth = ledgerTripDesktopSplit
-      ? ledgerProtocolTileWidthDesktopMode
+      ? protocolDesktopUnifiedTileWidth
       : ledgerProtocolTileWidthMobile;
     const protocolTypeTileWidth = ledgerTripDesktopSplit
-      ? ledgerProtocolTileWidthDesktopType
+      ? protocolDesktopUnifiedTileWidth
       : ledgerProtocolTileWidthMobile;
     const protocolModeStripUsesScroll = mob || !ledgerTripDesktopSplit;
     const protocolTypeStripUsesScroll =
@@ -3572,7 +3571,7 @@ export function AddTransactionModal({
             >
               <View style={styles.selectorSummaryMain}>
                 <View style={[styles.selectorSummaryIconSm, mob && styles.ledgerMobSelectorIcon]}>
-                  {ledgerPaymentModeLogo(paymentModeId, LEDGER_PROTOCOL_ICON_SM)}
+                  <PaymentModeLogo modeId={paymentModeId} size={LEDGER_PROTOCOL_SUMMARY_LOGO} />
                 </View>
                 <Text
                   style={[styles.selectorSummaryText, mob && styles.ledgerMobSelectorText]}
@@ -3598,34 +3597,18 @@ export function AddTransactionModal({
               {PAYMENT_MODES.map((opt) => {
                 const selected = paymentModeId === opt.id;
                 return (
-                  <TouchableOpacity
+                  <LedgerProtocolStripModeTile
                     key={opt.id}
-                    style={[
-                      styles.protocolTile,
-                      styles.protocolTileSplit,
-                      mob && styles.ledgerMobProtocolTile,
-                      { width: protocolModeTileWidth },
-                      selected && styles.protocolTileSplitSelected,
-                    ]}
+                    modeId={opt.id}
+                    label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
+                    selected={selected}
+                    variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                    width={protocolModeTileWidth}
                     onPress={() => {
                       setPaymentModeId(opt.id);
                       setPaymentModeExpanded(false);
                     }}
-                    activeOpacity={0.85}
-                  >
-                    {ledgerPaymentModeLogo(opt.id, LEDGER_PROTOCOL_ICON_SM)}
-                    <Text
-                      style={[
-                        styles.protocolTileText,
-                        styles.protocolTileTextSplit,
-                        mob && styles.ledgerMobProtocolTileText,
-                        selected && styles.protocolTileTextSelected,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 );
               })}
             </ScrollView>
@@ -3641,32 +3624,18 @@ export function AddTransactionModal({
                 {PAYMENT_MODES.map((opt) => {
                   const selected = paymentModeId === opt.id;
                   return (
-                    <TouchableOpacity
+                    <LedgerProtocolStripModeTile
                       key={opt.id}
-                      style={[
-                        styles.protocolTile,
-                        styles.protocolTileSplit,
-                        { width: protocolModeTileWidth },
-                        selected && styles.protocolTileSplitSelected,
-                      ]}
+                      modeId={opt.id}
+                      label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
+                      selected={selected}
+                      variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                      width={protocolModeTileWidth}
                       onPress={() => {
                         setPaymentModeId(opt.id);
                         setPaymentModeExpanded(false);
                       }}
-                      activeOpacity={0.85}
-                    >
-                      {ledgerPaymentModeLogo(opt.id, LEDGER_PROTOCOL_ICON_SM)}
-                      <Text
-                        style={[
-                          styles.protocolTileText,
-                          styles.protocolTileTextSplit,
-                          selected && styles.protocolTileTextSelected,
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
-                      </Text>
-                    </TouchableOpacity>
+                    />
                   );
                 })}
               </View>
@@ -3726,10 +3695,10 @@ export function AddTransactionModal({
             >
               <View style={styles.selectorSummaryMain}>
                 <View style={[styles.selectorSummaryIconSm, mob && styles.ledgerMobSelectorIcon]}>
-                  {ledgerPaymentTypeLucide(
-                    String(isDriverPayment ? driverPaymentType ?? "" : category ?? ""),
-                    LEDGER_PROTOCOL_ICON_SM,
-                  )}
+                  <LedgerPaymentTypeIcon
+                    kind={selectedPaymentTypeLabel ?? ""}
+                    size={LEDGER_PROTOCOL_SUMMARY_TYPE_ICON}
+                  />
                 </View>
                 <Text
                   style={[styles.selectorSummaryText, mob && styles.ledgerMobSelectorText]}
@@ -3753,31 +3722,15 @@ export function AddTransactionModal({
               ]}
             >
               {paymentTypeItems.map((item) => (
-                <TouchableOpacity
+                <LedgerProtocolStripTypeTile
                   key={String(item.key)}
-                  style={[
-                    styles.protocolTile,
-                    styles.protocolTileSplit,
-                    mob && styles.ledgerMobProtocolTile,
-                    { width: protocolTypeTileWidth },
-                    item.selected && styles.protocolTileSplitSelected,
-                  ]}
+                  kind={item.label}
+                  label={item.label}
+                  selected={item.selected}
+                  variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                  width={protocolTypeTileWidth}
                   onPress={item.onPress}
-                  activeOpacity={0.85}
-                >
-                  {ledgerPaymentTypeLucide(String(item.key), LEDGER_PROTOCOL_ICON_SM)}
-                  <Text
-                    style={[
-                      styles.protocolTileText,
-                      styles.protocolTileTextSplit,
-                      mob && styles.ledgerMobProtocolTileText,
-                      item.selected && styles.protocolTileTextSelected,
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
+                />
               ))}
             </ScrollView>
           ) : (
@@ -3790,29 +3743,15 @@ export function AddTransactionModal({
                 ]}
               >
                 {paymentTypeItems.map((item) => (
-                  <TouchableOpacity
+                  <LedgerProtocolStripTypeTile
                     key={String(item.key)}
-                    style={[
-                      styles.protocolTile,
-                      styles.protocolTileSplit,
-                      { width: protocolTypeTileWidth },
-                      item.selected && styles.protocolTileSplitSelected,
-                    ]}
+                    kind={item.label}
+                    label={item.label}
+                    selected={item.selected}
+                    variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                    width={protocolTypeTileWidth}
                     onPress={item.onPress}
-                    activeOpacity={0.85}
-                  >
-                    {ledgerPaymentTypeLucide(String(item.key), LEDGER_PROTOCOL_ICON_SM)}
-                    <Text
-                      style={[
-                        styles.protocolTileText,
-                        styles.protocolTileTextSplit,
-                        item.selected && styles.protocolTileTextSelected,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </View>
@@ -6990,7 +6929,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     alignSelf: "stretch",
     flexGrow: 0,
-    gap: 0,
+    gap: 12,
   },
   ledgerProtocolSplitWrapTopBand: {
     alignSelf: "stretch",

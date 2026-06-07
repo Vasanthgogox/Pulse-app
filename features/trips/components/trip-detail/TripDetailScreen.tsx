@@ -1900,9 +1900,11 @@ export default function TripDetailScreen({
     partnerName: detail.partnerName ?? null,
     driverDisplayName: detail.driverName ?? null,
   };
+  const financeLayout = isDesktop ? "desktop" : "mobile";
   const financeCapturePaymentSlot = (
     <View style={neoStyles.capturePaymentSlot}>
       <TripPayableReceivableSummaryCard
+        layout={financeLayout}
         showReceivable={hasLinkedClient || adjSales > 0}
         clientName={clientNameForParty}
         clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
@@ -1995,6 +1997,7 @@ export default function TripDetailScreen({
 
   const financeAdjustmentSummaryWrappedEl = (
     <TripFinanceAdjustmentsPanel
+      layout={financeLayout}
       adjustments={detail.adjustments}
       sales={sales}
       adjSales={adjSales}
@@ -2039,22 +2042,37 @@ export default function TripDetailScreen({
       style={[
         styles.refSettleCard,
         styles.refFinanceManifestHero,
+        isDesktop && styles.refFinanceManifestHeroDesktop,
         marginIsNegative && styles.refFinanceManifestHeroLoss,
       ]}
     >
-      <Text style={styles.refFinanceMarginLabel}>
+      <Text
+        style={[
+          styles.refFinanceMarginLabel,
+          isDesktop && styles.refFinanceMarginLabelDesktop,
+        ]}
+      >
         {marginIsNegative ? "Margin · loss" : "Margin"}
       </Text>
       <Text
         style={[
           styles.refFinanceMarginValue,
+          isDesktop && styles.refFinanceMarginValueDesktop,
           marginIsNegative && styles.refFinanceMarginValueLoss,
+          isDesktop && marginIsNegative && styles.refFinanceMarginValueLossDesktop,
           !marginIsNegative && netManifestYield > 0 && styles.refFinanceMarginValueGain,
         ]}
       >
         {formatINR(netManifestYield)}
       </Text>
-      <Text style={styles.refFinanceMarginHint}>{marginBasisLabel}</Text>
+      <Text
+        style={[
+          styles.refFinanceMarginHint,
+          isDesktop && styles.refFinanceMarginHintDesktop,
+        ]}
+      >
+        {marginBasisLabel}
+      </Text>
     </View>
   );
 
@@ -3719,6 +3737,7 @@ export default function TripDetailScreen({
                             <Text
                               style={[
                                 neoStyles.financeSubTabText,
+                                isDesktop && neoStyles.financeSubTabTextDesktop,
                                 active && neoStyles.financeSubTabTextActive,
                               ]}
                             >
@@ -3733,18 +3752,46 @@ export default function TripDetailScreen({
                     </View>
                     {financeSubTab === "summary" ? (
                       <>
-                        <View style={neoStyles.financeSummaryTwoPane}>
-                          <View style={neoStyles.financeSummaryPaneLeft}>
-                            <View style={neoStyles.financeManifestInPane}>
+                        <View
+                          style={[
+                            neoStyles.financeSummaryTwoPane,
+                            isDesktop && neoStyles.financeSummaryTwoPaneDesktop,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              neoStyles.financeSummaryPaneLeft,
+                              isDesktop && neoStyles.financeSummaryPaneLeftDesktop,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                neoStyles.financeManifestInPane,
+                                isDesktop && neoStyles.financeManifestInPaneDesktop,
+                              ]}
+                            >
                               {financeManifestSummaryBlock}
                               {financeAdjustmentSummaryWrappedEl}
                             </View>
                           </View>
-                          <View style={neoStyles.financeSummaryPaneRight}>
-                            <View style={neoStyles.financeLedgerPreviewCard}>
+                          <View
+                            style={[
+                              neoStyles.financeSummaryPaneRight,
+                              isDesktop && neoStyles.financeSummaryPaneRightDesktop,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                neoStyles.financeLedgerPreviewCard,
+                                isDesktop && neoStyles.financeLedgerPreviewCardDesktop,
+                              ]}
+                            >
                               <View style={neoStyles.financeLedgerPreviewHead}>
                                 <Text
-                                  style={neoStyles.financeLedgerPreviewTitle}
+                                  style={[
+                                    neoStyles.financeLedgerPreviewTitle,
+                                    isDesktop && neoStyles.financeLedgerPreviewTitleDesktop,
+                                  ]}
                                 >
                                   Ledger snapshot
                                 </Text>
@@ -3771,7 +3818,12 @@ export default function TripDetailScreen({
                                   />
                                 </TouchableOpacity>
                               </View>
-                              <Text style={neoStyles.financeLedgerPreviewSub}>
+                              <Text
+                                style={[
+                                  neoStyles.financeLedgerPreviewSub,
+                                  isDesktop && neoStyles.financeLedgerPreviewSubDesktop,
+                                ]}
+                              >
                                 {financeHistoryRows.length === 0
                                   ? "No cash movements on this trip yet"
                                   : `${financeHistoryRows.length} movement${
@@ -3797,11 +3849,15 @@ export default function TripDetailScreen({
                                   financeHistoryRows.slice(0, 8).map((row) => (
                                     <View
                                       key={row.key}
-                                      style={neoStyles.financePreviewTxnRow}
+                                      style={[
+                                        neoStyles.financePreviewTxnRow,
+                                        isDesktop && neoStyles.financePreviewTxnRowDesktop,
+                                      ]}
                                     >
                                       <View
                                         style={[
                                           neoStyles.financePreviewTxnIcon,
+                                          isDesktop && neoStyles.financePreviewTxnIconDesktop,
                                           row.isIn
                                             ? neoStyles.financePreviewTxnIconIn
                                             : neoStyles.financePreviewTxnIconOut,
@@ -3813,7 +3869,7 @@ export default function TripDetailScreen({
                                               ? "arrow-down-left"
                                               : "arrow-up-right"
                                           }
-                                          size={14}
+                                          size={isDesktop ? 16 : 14}
                                           color={
                                             row.isIn ? "#10b981" : "#f43f5e"
                                           }
@@ -3823,17 +3879,21 @@ export default function TripDetailScreen({
                                         style={neoStyles.financePreviewTxnMid}
                                       >
                                         <Text
-                                          style={
-                                            neoStyles.financePreviewTxnTitle
-                                          }
+                                          style={[
+                                            neoStyles.financePreviewTxnTitle,
+                                            isDesktop &&
+                                              neoStyles.financePreviewTxnTitleDesktop,
+                                          ]}
                                           numberOfLines={1}
                                         >
                                           {ledgerHistoryTitle(row.tx, row.isIn)}
                                         </Text>
                                         <Text
-                                          style={
-                                            neoStyles.financePreviewTxnMeta
-                                          }
+                                          style={[
+                                            neoStyles.financePreviewTxnMeta,
+                                            isDesktop &&
+                                              neoStyles.financePreviewTxnMetaDesktop,
+                                          ]}
                                           numberOfLines={1}
                                         >
                                           {formatLedgerDate(
@@ -3845,6 +3905,8 @@ export default function TripDetailScreen({
                                       <Text
                                         style={[
                                           neoStyles.financePreviewTxnAmt,
+                                          isDesktop &&
+                                            neoStyles.financePreviewTxnAmtDesktop,
                                           row.isIn
                                             ? neoStyles.financePreviewTxnAmtIn
                                             : neoStyles.financePreviewTxnAmtOut,
@@ -7602,20 +7664,36 @@ const neoStyles = StyleSheet.create({
     width: "100%" as const,
     gap: 0,
   },
+  financeManifestInPaneDesktop: {
+    gap: 10,
+  },
   financeSummaryTwoPane: {
     flexDirection: "row",
     gap: 18,
     alignItems: "flex-start",
     width: "100%" as const,
   },
+  financeSummaryTwoPaneDesktop: {
+    gap: 22,
+    alignItems: "stretch",
+  },
   financeSummaryPaneLeft: {
     flex: 1.28,
     minWidth: 0,
+  },
+  financeSummaryPaneLeftDesktop: {
+    flex: 1.35,
   },
   financeSummaryPaneRight: {
     flex: 0.85,
     minWidth: 268,
     maxWidth: 400,
+  },
+  financeSummaryPaneRightDesktop: {
+    flex: 0.72,
+    minWidth: 300,
+    maxWidth: 380,
+    alignSelf: "stretch",
   },
   financeLedgerPreviewCard: {
     width: "100%",
@@ -7630,6 +7708,12 @@ const neoStyles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 18,
     elevation: 2,
+  },
+  financeLedgerPreviewCardDesktop: {
+    flex: 1,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   financeLedgerPreviewHead: {
     flexDirection: "row",
@@ -7646,6 +7730,10 @@ const neoStyles = StyleSheet.create({
     color: "#64748b",
     letterSpacing: 1.8,
     textTransform: "uppercase",
+  },
+  financeLedgerPreviewTitleDesktop: {
+    fontSize: 11,
+    letterSpacing: 1.4,
   },
   financeLedgerPreviewLink: {
     flexDirection: "row",
@@ -7664,6 +7752,11 @@ const neoStyles = StyleSheet.create({
     color: "#94a3b8",
     marginBottom: 10,
     lineHeight: 15,
+  },
+  financeLedgerPreviewSubDesktop: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   financeLedgerPreviewScroll: {
     maxHeight: 420,
@@ -7690,6 +7783,12 @@ const neoStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
+  financePreviewTxnRowDesktop: {
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    gap: 12,
+    borderRadius: 12,
+  },
   financePreviewTxnIcon: {
     width: 32,
     height: 32,
@@ -7697,6 +7796,11 @@ const neoStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  financePreviewTxnIconDesktop: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
   },
   financePreviewTxnIconIn: {
     backgroundColor: "#ecfdf5",
@@ -7713,6 +7817,10 @@ const neoStyles = StyleSheet.create({
     fontWeight: "800",
     color: "#0f172a",
   },
+  financePreviewTxnTitleDesktop: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
   financePreviewTxnMeta: {
     marginTop: 2,
     fontSize: 9,
@@ -7721,11 +7829,19 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
+  financePreviewTxnMetaDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.45,
+    lineHeight: 13,
+  },
   financePreviewTxnAmt: {
     fontSize: 13,
     fontWeight: "900",
     fontStyle: "italic",
     flexShrink: 0,
+  },
+  financePreviewTxnAmtDesktop: {
+    fontSize: 14,
   },
   financePreviewTxnAmtIn: {
     color: "#059669",
@@ -7780,6 +7896,10 @@ const neoStyles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 2.5,
+  },
+  financeSubTabTextDesktop: {
+    fontSize: 13,
+    letterSpacing: 2,
   },
   financeSubTabTextActive: {
     color: "#171a20",
@@ -10366,6 +10486,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderColor: "#e6edf5",
   },
+  refFinanceManifestHeroDesktop: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    marginBottom: 4,
+  },
   refFinanceManifestHeroLoss: {
     borderColor: "rgba(220,38,38,0.25)",
     backgroundColor: Theme.negativeMuted,
@@ -10378,6 +10504,10 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     textAlign: "center",
   },
+  refFinanceMarginLabelDesktop: {
+    fontSize: 10,
+    letterSpacing: 1,
+  },
   refFinanceMarginValue: {
     marginTop: 3,
     fontSize: 18,
@@ -10388,6 +10518,10 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     lineHeight: 22,
   },
+  refFinanceMarginValueDesktop: {
+    fontSize: 22,
+    lineHeight: 26,
+  },
   refFinanceMarginValueLoss: {
     marginTop: 4,
     fontSize: 26,
@@ -10395,6 +10529,11 @@ const styles = StyleSheet.create({
     color: Theme.negative,
     letterSpacing: -0.5,
     lineHeight: 30,
+  },
+  refFinanceMarginValueLossDesktop: {
+    fontSize: 32,
+    lineHeight: 36,
+    letterSpacing: -0.6,
   },
   refFinanceMarginValueGain: {
     color: Theme.positive,
@@ -10406,6 +10545,11 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 11,
+  },
+  refFinanceMarginHintDesktop: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 4,
   },
   refManifestNetHuge: {
     marginTop: 4,

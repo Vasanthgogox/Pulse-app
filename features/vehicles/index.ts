@@ -7,6 +7,7 @@ export {
   type TripOption as VehicleEntryTripOption,
   type DriverOption as VehicleEntryDriverOption,
 } from './components/AddVehicleEntryModal';
+export { VehicleAvatar } from './components/VehicleAvatar';
 export { default as VehicleDetailScreen } from './components/VehicleDetailScreen';
 export { VehicleAnalyticsFullScreen } from './components/VehicleAnalyticsFullScreen';
 export { GarrageTab, type GarrageTabProps, type GarrageViewTab } from './components/GarrageTab';

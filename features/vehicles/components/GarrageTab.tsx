@@ -36,12 +36,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     buildTripPnLListForPeriod,
     buildVehiclePnLList,
+    countVehicleMatchedTripsInPeriod,
+    formatPeriodLabel,
     resolveVehicleIdForTrip,
     tripInPeriod,
     type VehicleLedgerExpenseRow,
     type GarragePeriodValue,
     type VehiclePnLRow,
 } from "../pnl";
+import { VehicleAvatar } from "./VehicleAvatar";
 import { FleetAnalyticsTab } from "./analytics/FleetAnalyticsTab";
 import type { VehicleRow } from "../services/vehicles.service";
 import { supabase } from "@/lib/supabase";
@@ -211,6 +214,12 @@ export function GarrageTab({
     return map;
   }, [drivers]);
 
+  const vehicleById = useMemo(() => {
+    const map = new Map<string, VehicleRow>();
+    for (const v of vehicles) map.set(v.id, v);
+    return map;
+  }, [vehicles]);
+
   const vehiclesList = useMemo(() => {
     return buildVehiclePnLList(
       vehicles,
@@ -261,6 +270,13 @@ export function GarrageTab({
     () => vehiclesList.filter((r) => !r.isUnassigned),
     [vehiclesList],
   );
+  const fleetMatchedTripsInPeriod = useMemo(
+    () => countVehicleMatchedTripsInPeriod(trips, vehicles, period),
+    [trips, vehicles, period],
+  );
+  const fleetHasVehicleRows = vehicles.length > 0;
+  const showPeriodEmptyHint =
+    fleetHasVehicleRows && fleetMatchedTripsInPeriod === 0 && viewTab !== "analytics";
   const totalRevenue = useMemo(
     () => assignedOnly.reduce((s, r) => s + r.sales, 0),
     [assignedOnly],
@@ -466,6 +482,15 @@ export function GarrageTab({
             </View>
           </View>
         ) : null}
+        {showPeriodEmptyHint ? (
+          <View style={styles.periodEmptyHint}>
+            <Text style={styles.periodEmptyHintText}>
+              No fleet-matched trips in {formatPeriodLabel(period)}. Trips need a
+              linked vehicle or a registration number that matches your garage.
+              Try YTD or an earlier month from the period filter.
+            </Text>
+          </View>
+        ) : null}
         {viewTab !== "analytics" ? (
         <View style={styles.listCard}>
           {viewTab === "trips" ? (
@@ -525,7 +550,9 @@ export function GarrageTab({
               </Text>
             </View>
           ) : (
-            visibleVehicleRows.map((row) => (
+            visibleVehicleRows.map((row) => {
+              const vehicleRow = vehicleById.get(row.id);
+              return (
               <TouchableOpacity
                 key={row.id}
                 style={styles.listRow}
@@ -534,9 +561,13 @@ export function GarrageTab({
               >
                 <View style={[styles.listCell, styles.ctEntity]}>
                   <View style={styles.listEntityMainRow}>
-                    <View style={styles.listEntityIconWrap}>
-                      <FontAwesome name="truck" size={12} color={Theme.textMuted} />
-                    </View>
+                    <VehicleAvatar
+                      vehicleId={row.id}
+                      vehicleNumber={row.name}
+                      avatarUrl={vehicleRow?.avatar_url}
+                      avatarSeed={vehicleRow?.avatar_seed}
+                      size={28}
+                    />
                     <Text style={styles.listEntityName} numberOfLines={1} ellipsizeMode="tail">
                       {formatIndianVehicleNumber(row.name) || row.name}
                     </Text>
@@ -575,7 +606,8 @@ export function GarrageTab({
                   </Text>
                 </View>
               </TouchableOpacity>
-            ))
+            );
+            })
           )}
         </View>
         ) : null}
@@ -649,6 +681,22 @@ const styles = StyleSheet.create({
   /** List layout — same as Customers (Client Entity | Trips | Outstanding). */
   listScroll: { flex: 1 },
   listScrollContent: { paddingHorizontal: 0, paddingTop: 12 },
+  periodEmptyHint: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  periodEmptyHintText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    lineHeight: 16,
+  },
   listCard: {
     backgroundColor: "rgba(255,255,255,0.8)",
     borderBottomLeftRadius: 20,
@@ -718,12 +766,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minWidth: 0,
-  },
-  listEntityIconWrap: {
-    width: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 6,
+    gap: 8,
   },
   listTripsPill: {
     alignSelf: "center",

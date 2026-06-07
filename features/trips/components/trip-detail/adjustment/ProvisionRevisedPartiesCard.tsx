@@ -148,7 +148,9 @@ function PartyLaneCard({
   active,
   onPress,
   breakdownLines,
-}: ProvisionPartyLaneProps) {
+  layout = "mobile",
+}: ProvisionPartyLaneProps & { layout?: ProvisionFinanceLayout }) {
+  const isDesktop = layout === "desktop";
   const content = (
     <>
       <View style={styles.cardHead}>
@@ -157,35 +159,70 @@ function PartyLaneCard({
           avatarUrl={avatarUrl}
           avatarSeed={avatarSeed}
           entityType={entityType}
-          size={28}
+          size={isDesktop ? 32 : 28}
           showIntegrationBadge={false}
         />
         <View style={styles.cardHeadText}>
-          <Text style={styles.laneLabel}>{laneLabel}</Text>
-          <Text style={styles.partyName} numberOfLines={2}>
+          <Text style={[styles.laneLabel, isDesktop && styles.laneLabelDesktop]}>
+            {laneLabel}
+          </Text>
+          <Text
+            style={[styles.partyName, isDesktop && styles.partyNameDesktop]}
+            numberOfLines={2}
+          >
             {partyName}
           </Text>
         </View>
       </View>
-      <View style={styles.metricsBar}>
-        <View style={styles.metricCell}>
-          <Text style={styles.metricLabel}>Base</Text>
-          <Text style={styles.metricValueMuted}>{formatINR(baseAmount)}</Text>
+      <View style={[styles.metricsBar, isDesktop && styles.metricsBarDesktop]}>
+        <View style={[styles.metricCell, isDesktop && styles.metricCellDesktop]}>
+          <Text style={[styles.metricLabel, isDesktop && styles.metricLabelDesktop]}>
+            Base
+          </Text>
+          <Text
+            style={[
+              styles.metricValueMuted,
+              isDesktop && styles.metricValueMutedDesktop,
+            ]}
+          >
+            {formatINR(baseAmount)}
+          </Text>
         </View>
         <Feather
           name="arrow-right"
-          size={14}
+          size={isDesktop ? 16 : 14}
           color={Theme.textMuted}
-          style={styles.metricArrow}
+          style={[styles.metricArrow, isDesktop && styles.metricArrowDesktop]}
         />
-        <View style={[styles.metricCell, styles.metricCellEnd]}>
-          <Text style={[styles.metricLabel, styles.metricLabelEnd]}>Revised</Text>
-          <Text style={[styles.metricValueHero, { color: accentColor }]}>
+        <View
+          style={[
+            styles.metricCell,
+            styles.metricCellEnd,
+            isDesktop && styles.metricCellEndDesktop,
+          ]}
+        >
+          <Text
+            style={[
+              styles.metricLabel,
+              styles.metricLabelEnd,
+              isDesktop && styles.metricLabelDesktop,
+            ]}
+          >
+            Revised
+          </Text>
+          <Text
+            style={[
+              styles.metricValueHero,
+              isDesktop && styles.metricValueHeroDesktop,
+              { color: accentColor },
+            ]}
+          >
             {formatINR(revisedAmount)}
           </Text>
           <Text
             style={[
               styles.metricDeltaHero,
+              isDesktop && styles.metricDeltaHeroDesktop,
               {
                 color:
                   delta < 0 && entityType === "client"
@@ -221,6 +258,7 @@ function PartyLaneCard({
         onPress={onPress}
         style={[
           styles.card,
+          isDesktop && styles.cardDesktop,
           active && { borderColor: accentColor, backgroundColor: `${accentColor}0c` },
         ]}
       >
@@ -229,8 +267,12 @@ function PartyLaneCard({
     );
   }
 
-  return <View style={styles.card}>{content}</View>;
+  return (
+    <View style={[styles.card, isDesktop && styles.cardDesktop]}>{content}</View>
+  );
 }
+
+export type ProvisionFinanceLayout = "mobile" | "desktop";
 
 export interface ProvisionRevisedPartiesCardProps {
   clientName: string;
@@ -252,6 +294,7 @@ export interface ProvisionRevisedPartiesCardProps {
   activeSide?: "client" | "supplier" | null;
   onSelectSide?: (side: "client" | "supplier") => void;
   compact?: boolean;
+  layout?: ProvisionFinanceLayout;
 }
 
 export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedPartiesCard(
@@ -259,9 +302,17 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
 ) {
   const showClient = props.activeSide !== "supplier";
   const showSupplier = props.activeSide !== "client";
+  const layout = props.layout ?? "mobile";
+  const isDesktop = layout === "desktop";
 
   return (
-    <View style={[styles.wrap, props.compact && styles.wrapCompact]}>
+    <View
+      style={[
+        styles.wrap,
+        props.compact && styles.wrapCompact,
+        isDesktop && styles.wrapDesktop,
+      ]}
+    >
       {showClient ? (
         <PartyLaneCard
           partyName={props.clientName}
@@ -275,6 +326,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           accentColor={Theme.primary}
           active={props.activeSide === "client"}
           onPress={props.onSelectSide ? () => props.onSelectSide!("client") : undefined}
+          layout={layout}
         />
       ) : null}
       {showSupplier ? (
@@ -291,6 +343,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           active={props.activeSide === "supplier"}
           onPress={props.onSelectSide ? () => props.onSelectSide!("supplier") : undefined}
           breakdownLines={props.costBreakdownLines}
+          layout={layout}
         />
       ) : null}
     </View>
@@ -300,6 +353,11 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
 const styles = StyleSheet.create({
   wrap: { gap: 6 },
   wrapCompact: { gap: 6 },
+  wrapDesktop: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 14,
+  },
   card: {
     borderWidth: 1,
     borderColor: "#e6edf5",
@@ -307,6 +365,13 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: "#fff",
     gap: 6,
+  },
+  cardDesktop: {
+    flex: 1,
+    minWidth: 0,
+    padding: 12,
+    borderRadius: 14,
+    gap: 8,
   },
   cardHead: {
     flexDirection: "row",
@@ -322,6 +387,11 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 10,
   },
+  laneLabelDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.7,
+    lineHeight: 12,
+  },
   partyName: {
     fontSize: 11,
     fontWeight: "600",
@@ -329,19 +399,31 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: -0.1,
   },
+  partyNameDesktop: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
   metricsBar: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
     paddingTop: 8,
     paddingBottom: 4,
     paddingHorizontal: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#eef2f7",
   },
-  metricCell: { flex: 1, minWidth: 0, gap: 3 },
+  metricsBarDesktop: {
+    gap: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  metricCell: { flex: 1, minWidth: 0, maxWidth: 148, gap: 3 },
+  metricCellDesktop: { maxWidth: 168 },
   metricCellEnd: { alignItems: "flex-end" },
-  metricArrow: { flexShrink: 0, marginTop: 20 },
+  metricCellEndDesktop: { marginLeft: "auto" as const },
+  metricArrow: { flexShrink: 0 },
+  metricArrowDesktop: { marginHorizontal: 2 },
   metricLabel: {
     fontSize: 8,
     fontWeight: "800",
@@ -349,6 +431,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
     lineHeight: 10,
+  },
+  metricLabelDesktop: {
+    fontSize: 10,
+    lineHeight: 12,
   },
   metricLabelEnd: {
     textAlign: "right",
@@ -361,12 +447,20 @@ const styles = StyleSheet.create({
     letterSpacing: -0.25,
     lineHeight: 17,
   },
+  metricValueMutedDesktop: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
   metricValueHero: {
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.45,
     fontVariant: ["tabular-nums"],
     lineHeight: 26,
+  },
+  metricValueHeroDesktop: {
+    fontSize: 24,
+    lineHeight: 28,
   },
   metricDeltaHero: {
     marginTop: 1,
@@ -375,6 +469,10 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     letterSpacing: -0.15,
     lineHeight: 15,
+  },
+  metricDeltaHeroDesktop: {
+    fontSize: 13,
+    lineHeight: 16,
   },
   breakdownTable: {
     borderWidth: 1,

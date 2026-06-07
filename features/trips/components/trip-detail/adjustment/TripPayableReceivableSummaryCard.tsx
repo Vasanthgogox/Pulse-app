@@ -5,6 +5,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
+import type { ProvisionFinanceLayout } from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
 
 export interface SettlementLaneProps {
   partyName: string;
@@ -28,52 +29,100 @@ function SettlementLaneCard({
   settledAmount,
   dueAmount,
   accentColor,
-}: SettlementLaneProps) {
+  layout = "mobile",
+}: SettlementLaneProps & { layout?: ProvisionFinanceLayout }) {
+  const isDesktop = layout === "desktop";
   const isSettled = dueAmount <= 0;
   const dueColor = isSettled ? Theme.textMuted : accentColor;
   const settledDeltaColor =
     entityType === "client" ? Theme.positive : accentColor;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isDesktop && styles.cardDesktop]}>
       <View style={styles.cardHead}>
         <EntityAvatar
           name={partyName}
           avatarUrl={avatarUrl}
           avatarSeed={avatarSeed}
           entityType={entityType}
-          size={28}
+          size={isDesktop ? 32 : 28}
           showIntegrationBadge={false}
         />
         <View style={styles.cardHeadText}>
-          <Text style={styles.laneLabel}>{laneLabel}</Text>
-          <Text style={styles.partyName} numberOfLines={2}>
+          <Text style={[styles.laneLabel, isDesktop && styles.laneLabelDesktop]}>
+            {laneLabel}
+          </Text>
+          <Text
+            style={[styles.partyName, isDesktop && styles.partyNameDesktop]}
+            numberOfLines={2}
+          >
             {partyName}
           </Text>
         </View>
       </View>
-      <View style={styles.metricsBar}>
-        <View style={styles.metricCell}>
-          <Text style={styles.metricLabel}>Revised</Text>
-          <Text style={styles.metricValueMuted}>{formatINR(revisedAmount)}</Text>
+      <View style={[styles.metricsBar, isDesktop && styles.metricsBarDesktop]}>
+        <View style={[styles.metricCell, isDesktop && styles.metricCellDesktop]}>
+          <Text style={[styles.metricLabel, isDesktop && styles.metricLabelDesktop]}>
+            Revised
+          </Text>
+          <Text
+            style={[
+              styles.metricValueMuted,
+              isDesktop && styles.metricValueMutedDesktop,
+            ]}
+          >
+            {formatINR(revisedAmount)}
+          </Text>
         </View>
         <Feather
           name="arrow-right"
-          size={14}
+          size={isDesktop ? 16 : 14}
           color={Theme.textMuted}
-          style={styles.metricArrow}
+          style={[styles.metricArrow, isDesktop && styles.metricArrowDesktop]}
         />
-        <View style={[styles.metricCell, styles.metricCellEnd]}>
-          <Text style={[styles.metricLabel, styles.metricLabelEnd]}>Due</Text>
-          <Text style={[styles.metricValueHero, { color: dueColor }]}>
+        <View
+          style={[
+            styles.metricCell,
+            styles.metricCellEnd,
+            isDesktop && styles.metricCellEndDesktop,
+          ]}
+        >
+          <Text
+            style={[
+              styles.metricLabel,
+              styles.metricLabelEnd,
+              isDesktop && styles.metricLabelDesktop,
+            ]}
+          >
+            Due
+          </Text>
+          <Text
+            style={[
+              styles.metricValueHero,
+              isDesktop && styles.metricValueHeroDesktop,
+              { color: dueColor },
+            ]}
+          >
             {isSettled ? "Settled" : formatINR(dueAmount)}
           </Text>
-          <Text style={[styles.metricDeltaHero, { color: settledDeltaColor }]}>
+          <Text
+            style={[
+              styles.metricDeltaHero,
+              isDesktop && styles.metricDeltaHeroDesktop,
+              { color: settledDeltaColor },
+            ]}
+          >
             {settledAmount > 0 ? "−" : ""}
             {settledAmount > 0 ? formatINR(settledAmount) : "Nothing recorded"}
           </Text>
           {settledAmount > 0 ? (
-            <Text style={[styles.metricSettledHint, styles.metricLabelEnd]}>
+            <Text
+              style={[
+                styles.metricSettledHint,
+                styles.metricLabelEnd,
+                isDesktop && styles.metricSettledHintDesktop,
+              ]}
+            >
               {entityType === "client" ? "Collected" : "Paid"}
             </Text>
           ) : null}
@@ -100,16 +149,19 @@ export interface TripPayableReceivableSummaryCardProps {
   revisedPayable: number;
   paidAmount: number;
   payableDue: number;
+  layout?: ProvisionFinanceLayout;
 }
 
 export const TripPayableReceivableSummaryCard = memo(
   function TripPayableReceivableSummaryCard(props: TripPayableReceivableSummaryCardProps) {
     const showReceivable = props.showReceivable !== false;
     const showPayable = Boolean(props.showPayable);
+    const layout = props.layout ?? "mobile";
+    const isDesktop = layout === "desktop";
     if (!showReceivable && !showPayable) return null;
 
     return (
-      <View style={styles.wrap}>
+      <View style={[styles.wrap, isDesktop && styles.wrapDesktop]}>
         {showReceivable ? (
           <SettlementLaneCard
             partyName={props.clientName}
@@ -121,6 +173,7 @@ export const TripPayableReceivableSummaryCard = memo(
             settledAmount={props.collectedAmount}
             dueAmount={props.receivableDue}
             accentColor={Theme.primary}
+            layout={layout}
           />
         ) : null}
         {showPayable ? (
@@ -134,6 +187,7 @@ export const TripPayableReceivableSummaryCard = memo(
             settledAmount={props.paidAmount}
             dueAmount={props.payableDue}
             accentColor="#0f766e"
+            layout={layout}
           />
         ) : null}
       </View>
@@ -143,6 +197,12 @@ export const TripPayableReceivableSummaryCard = memo(
 
 const styles = StyleSheet.create({
   wrap: { gap: 6, marginBottom: 4 },
+  wrapDesktop: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 14,
+    marginBottom: 6,
+  },
   card: {
     borderWidth: 1,
     borderColor: "#e6edf5",
@@ -150,6 +210,13 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: "#fff",
     gap: 6,
+  },
+  cardDesktop: {
+    flex: 1,
+    minWidth: 0,
+    padding: 12,
+    borderRadius: 14,
+    gap: 8,
   },
   cardHead: {
     flexDirection: "row",
@@ -165,6 +232,11 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 10,
   },
+  laneLabelDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.7,
+    lineHeight: 12,
+  },
   partyName: {
     fontSize: 11,
     fontWeight: "600",
@@ -172,19 +244,31 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: -0.1,
   },
+  partyNameDesktop: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
   metricsBar: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
     paddingTop: 8,
     paddingBottom: 4,
     paddingHorizontal: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#eef2f7",
   },
-  metricCell: { flex: 1, minWidth: 0, gap: 3 },
+  metricsBarDesktop: {
+    gap: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  metricCell: { flex: 1, minWidth: 0, maxWidth: 148, gap: 3 },
+  metricCellDesktop: { maxWidth: 168 },
   metricCellEnd: { alignItems: "flex-end" },
-  metricArrow: { flexShrink: 0, marginTop: 20 },
+  metricCellEndDesktop: { marginLeft: "auto" as const },
+  metricArrow: { flexShrink: 0 },
+  metricArrowDesktop: { marginHorizontal: 2 },
   metricLabel: {
     fontSize: 8,
     fontWeight: "800",
@@ -192,6 +276,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
     lineHeight: 10,
+  },
+  metricLabelDesktop: {
+    fontSize: 10,
+    lineHeight: 12,
   },
   metricLabelEnd: {
     textAlign: "right",
@@ -204,12 +292,20 @@ const styles = StyleSheet.create({
     letterSpacing: -0.25,
     lineHeight: 17,
   },
+  metricValueMutedDesktop: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
   metricValueHero: {
     fontSize: 22,
     fontWeight: "900",
     letterSpacing: -0.45,
     fontVariant: ["tabular-nums"],
     lineHeight: 26,
+  },
+  metricValueHeroDesktop: {
+    fontSize: 24,
+    lineHeight: 28,
   },
   metricDeltaHero: {
     marginTop: 1,
@@ -219,6 +315,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.15,
     lineHeight: 15,
   },
+  metricDeltaHeroDesktop: {
+    fontSize: 13,
+    lineHeight: 16,
+  },
   metricSettledHint: {
     marginTop: 1,
     fontSize: 7,
@@ -227,5 +327,9 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
     lineHeight: 9,
+  },
+  metricSettledHintDesktop: {
+    fontSize: 8,
+    lineHeight: 10,
   },
 });

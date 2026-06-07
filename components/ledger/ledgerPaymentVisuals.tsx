@@ -30,9 +30,11 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import { memo } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import Theme from "@/constants/Theme";
 
 const STROKE = 2.2;
 
@@ -213,6 +215,169 @@ export const LedgerPaymentTypeIcon = memo(function LedgerPaymentTypeIcon({
 export function ledgerPaymentModeLabel(modeId: string): string {
   return ledgerPaymentModeVisual(modeId).label;
 }
+
+export type LedgerProtocolStripVariant = "desktop" | "compact";
+
+type LedgerProtocolStripTileBaseProps = {
+  label: string;
+  selected?: boolean;
+  onPress: () => void;
+  width?: number;
+  variant?: LedgerProtocolStripVariant;
+};
+
+/** Desktop / web ledger strip — brand logo + tinted selection (matches mobile wizard). */
+export const LedgerProtocolStripModeTile = memo(function LedgerProtocolStripModeTile({
+  modeId,
+  label,
+  selected,
+  onPress,
+  width,
+  variant = "desktop",
+}: LedgerProtocolStripTileBaseProps & { modeId: string }) {
+  const mode = ledgerPaymentModeVisual(modeId);
+  const logoSize = variant === "compact" ? 26 : 32;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!selected }}
+      style={({ pressed }) => [
+        stripStyles.tile,
+        width != null && { width },
+        variant === "compact" && stripStyles.tileCompact,
+        selected && { borderColor: mode.color, backgroundColor: mode.tint },
+        pressed && stripStyles.tilePressed,
+      ]}
+    >
+      <View style={stripStyles.modeLogoWrap}>
+        <PaymentModeLogo modeId={modeId} size={logoSize} />
+      </View>
+      <Text
+        style={[
+          stripStyles.label,
+          variant === "compact" && stripStyles.labelCompact,
+          selected && { color: mode.color },
+        ]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+});
+
+/** Desktop / web ledger strip — coloured icon orb + label. */
+export const LedgerProtocolStripTypeTile = memo(function LedgerProtocolStripTypeTile({
+  kind,
+  label,
+  selected,
+  onPress,
+  width,
+  variant = "desktop",
+}: LedgerProtocolStripTileBaseProps & { kind: string }) {
+  const iconSize = variant === "compact" ? 16 : 18;
+  const wrapSize = variant === "compact" ? 32 : 36;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!selected }}
+      style={({ pressed }) => [
+        stripStyles.tile,
+        width != null && { width },
+        variant === "compact" && stripStyles.tileCompact,
+        selected && stripStyles.typeTileSelected,
+        pressed && stripStyles.tilePressed,
+      ]}
+    >
+      <View
+        style={[
+          stripStyles.typeIconWrap,
+          { width: wrapSize, height: wrapSize, borderRadius: Math.round(wrapSize * 0.32) },
+          selected && stripStyles.typeIconWrapSelected,
+        ]}
+      >
+        <LedgerPaymentTypeIcon kind={kind} size={iconSize} />
+      </View>
+      <Text
+        style={[
+          stripStyles.label,
+          variant === "compact" && stripStyles.labelCompact,
+          selected && stripStyles.typeLabelSelected,
+        ]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+});
+
+const stripStyles = StyleSheet.create({
+  tile: {
+    minHeight: 76,
+    flexShrink: 0,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  tileCompact: {
+    minHeight: 64,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+  },
+  tilePressed: {
+    opacity: 0.92,
+  },
+  modeLogoWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 34,
+  },
+  typeIconWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  typeIconWrapSelected: {
+    backgroundColor: "rgba(99,102,241,0.12)",
+    borderColor: "rgba(99,102,241,0.22)",
+  },
+  typeTileSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: "rgba(99,102,241,0.08)",
+  },
+  label: {
+    ...FinanceTxnTypography.chipLabel,
+    fontSize: 9,
+    lineHeight: 11,
+    textAlign: "center",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+  labelCompact: {
+    fontSize: 8,
+    lineHeight: 10,
+    letterSpacing: 0.25,
+  },
+  typeLabelSelected: {
+    color: Theme.primary,
+  },
+});
 
 const styles = StyleSheet.create({
   tileOuter: {

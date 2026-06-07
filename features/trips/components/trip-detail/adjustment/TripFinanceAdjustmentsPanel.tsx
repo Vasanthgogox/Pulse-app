@@ -6,6 +6,7 @@ import { EntityAvatar } from "@/components/EntityAvatar";
 import {
   ProvisionRevisedPartiesCard,
   type ProvisionCostBreakdownLine,
+  type ProvisionFinanceLayout,
 } from "@/features/trips/components/trip-detail/adjustment/ProvisionRevisedPartiesCard";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
@@ -42,6 +43,7 @@ export interface TripFinanceAdjustmentsPanelProps {
   onViewNotePdf?: (adj: TripAdjustment) => void;
   onEditAdjustment?: (adj: TripAdjustment) => void;
   capturePaymentSlot?: ReactNode;
+  layout?: ProvisionFinanceLayout;
 }
 
 function cnDnLabel(impact: TripAdjustment["impact"]): string {
@@ -70,6 +72,9 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
 
   const activeCount = rows.filter((a) => !isAdjustmentVoided(a)).length;
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const layout = props.layout ?? "mobile";
+  const isDesktop = layout === "desktop";
+  const colAmt = isDesktop ? 92 : COL_AMT;
 
   const passThroughRecommendations = useMemo(
     () =>
@@ -82,18 +87,22 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
   );
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isDesktop && styles.cardDesktop]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Provision adjustments</Text>
-          <Text style={styles.hint}>
+          <Text style={[styles.title, isDesktop && styles.titleDesktop]}>
+            Provision adjustments
+          </Text>
+          <Text style={[styles.hint, isDesktop && styles.hintDesktop]}>
             {props.isAssetExecution
               ? "Customer sale vs driver cost & posted expenses"
               : "Revised sale & cost after CN/DN lines"}
           </Text>
         </View>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{activeCount}</Text>
+        <View style={[styles.badge, isDesktop && styles.badgeDesktop]}>
+          <Text style={[styles.badgeText, isDesktop && styles.badgeTextDesktop]}>
+            {activeCount}
+          </Text>
         </View>
       </View>
 
@@ -114,6 +123,7 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
         costBreakdownLines={props.costBreakdownLines}
         onSelectSide={props.onOpenProvision}
+        layout={layout}
       />
 
       {props.onRequestDeduction && passThroughRecommendations.length > 0 ? (
@@ -125,53 +135,59 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
       ) : null}
 
       <View style={styles.tableToolbar}>
-        <Text style={styles.tableTitle}>Adjustment lines</Text>
+        <Text style={[styles.tableTitle, isDesktop && styles.tableTitleDesktop]}>
+          Adjustment lines
+        </Text>
         <View style={styles.toolbarActions}>
           <Pressable
-            style={styles.addBtnSale}
+            style={[styles.addBtnSale, isDesktop && styles.addBtnDesktop]}
             onPress={() => props.onOpenProvision("client")}
           >
-            <Feather name="plus" size={12} color={Theme.primary} />
-            <Text style={styles.addBtnSaleText}>Sale</Text>
+            <Feather name="plus" size={isDesktop ? 13 : 12} color={Theme.primary} />
+            <Text style={[styles.addBtnSaleText, isDesktop && styles.addBtnTextDesktop]}>
+              Sale
+            </Text>
           </Pressable>
           <Pressable
-            style={styles.addBtnCost}
+            style={[styles.addBtnCost, isDesktop && styles.addBtnDesktop]}
             onPress={() => props.onOpenProvision("supplier")}
           >
-            <Feather name="plus" size={12} color="#0f766e" />
-            <Text style={styles.addBtnCostText}>
+            <Feather name="plus" size={isDesktop ? 13 : 12} color="#0f766e" />
+            <Text style={[styles.addBtnCostText, isDesktop && styles.addBtnTextDesktop]}>
               {props.isAssetExecution ? "Driver" : "Cost"}
             </Text>
           </Pressable>
         </View>
       </View>
 
-      <View style={styles.table}>
-        <View style={styles.tableHead}>
-          <View style={styles.colPartyLane}>
-            <Text style={styles.th} numberOfLines={1}>
+      <View style={[styles.table, isDesktop && styles.tableDesktop]}>
+        <View style={[styles.tableHead, isDesktop && styles.tableHeadDesktop]}>
+          <View style={[styles.colPartyLane, isDesktop && styles.colPartyLaneDesktop]}>
+            <Text style={[styles.th, isDesktop && styles.thDesktop]} numberOfLines={1}>
               Party
             </Text>
           </View>
           <View style={styles.colNote}>
-            <Text style={styles.th} numberOfLines={1}>
+            <Text style={[styles.th, isDesktop && styles.thDesktop]} numberOfLines={1}>
               Note
             </Text>
           </View>
           <View style={styles.colReason}>
-            <Text style={styles.th} numberOfLines={1}>
+            <Text style={[styles.th, isDesktop && styles.thDesktop]} numberOfLines={1}>
               Reason
             </Text>
           </View>
-          <View style={styles.colAmt}>
-            <Text style={[styles.th, styles.thAmt]} numberOfLines={1}>
+          <View style={[styles.colAmt, { width: colAmt }]}>
+            <Text style={[styles.th, styles.thAmt, isDesktop && styles.thDesktop]} numberOfLines={1}>
               Amount
             </Text>
           </View>
         </View>
 
         {rows.length === 0 ? (
-          <Text style={styles.empty}>No provisions yet — tap Sale or Cost to add a CN/DN.</Text>
+          <Text style={[styles.empty, isDesktop && styles.emptyDesktop]}>
+            No provisions yet — tap Sale or Cost to add a CN/DN.
+          </Text>
         ) : (
           rows.map((adj) => {
             const voided = isAdjustmentVoided(adj);
@@ -183,23 +199,32 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
             return (
               <View key={adj.id} style={styles.trWrap}>
               <Pressable
-                style={[styles.tr, voided && styles.trVoided, isSelected && styles.trSelected]}
+                style={[
+                  styles.tr,
+                  isDesktop && styles.trDesktop,
+                  voided && styles.trVoided,
+                  isSelected && styles.trSelected,
+                ]}
                 onPress={() =>
                   setSelectedRowId((prev) => (prev === adj.id ? null : adj.id))
                 }
               >
-                <View style={styles.colPartyLane}>
+                <View style={[styles.colPartyLane, isDesktop && styles.colPartyLaneDesktop]}>
                   <EntityAvatar
                     name={partyName}
                     avatarUrl={isSale ? props.clientAvatarUrl : props.supplierAvatarUrl}
                     avatarSeed={isSale ? props.clientAvatarSeed : props.supplierAvatarSeed}
                     entityType={isSale ? "client" : costEntityType}
-                    size={20}
+                    size={isDesktop ? 24 : 20}
                     showIntegrationBadge={false}
                   />
                   <View style={styles.partyLaneBody}>
                     <Text
-                      style={[styles.partyCell, voided && styles.struck]}
+                      style={[
+                        styles.partyCell,
+                        isDesktop && styles.partyCellDesktop,
+                        voided && styles.struck,
+                      ]}
                       numberOfLines={2}
                     >
                       {partyName}
@@ -261,17 +286,23 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
                 </View>
                 <View style={styles.colReason}>
                   <Text
-                    style={[styles.td, styles.tdReason, voided && styles.struck]}
+                    style={[
+                      styles.td,
+                      styles.tdReason,
+                      isDesktop && styles.tdDesktop,
+                      voided && styles.struck,
+                    ]}
                     numberOfLines={3}
                   >
                     {(adj.reason ?? "").trim() || "—"}
                   </Text>
                 </View>
-                <View style={styles.colAmt}>
+                <View style={[styles.colAmt, { width: colAmt }]}>
                   <Text
                     style={[
                       styles.td,
                       styles.tdAmt,
+                      isDesktop && styles.tdAmtDesktop,
                       isSale ? styles.amtSale : styles.amtCost,
                       voided && styles.struck,
                     ]}
@@ -343,6 +374,12 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 8,
   },
+  cardDesktop: {
+    marginTop: 10,
+    padding: 14,
+    gap: 12,
+    borderRadius: 16,
+  },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -357,12 +394,22 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     lineHeight: 12,
   },
+  titleDesktop: {
+    fontSize: 11,
+    letterSpacing: 0.8,
+    lineHeight: 14,
+  },
   hint: {
     marginTop: 2,
     fontSize: 9,
     fontWeight: "500",
     lineHeight: 12,
     color: Theme.textMuted,
+  },
+  hintDesktop: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 3,
   },
   badge: {
     minWidth: 22,
@@ -374,11 +421,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     flexShrink: 0,
   },
+  badgeDesktop: {
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+  },
   badgeText: {
     fontSize: 9,
     fontWeight: "700",
     color: "#64748b",
     fontVariant: ["tabular-nums"],
+  },
+  badgeTextDesktop: {
+    fontSize: 11,
   },
   tableToolbar: {
     flexDirection: "row",
@@ -395,7 +450,18 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 10,
   },
+  tableTitleDesktop: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
   toolbarActions: { flexDirection: "row", gap: 6 },
+  addBtnDesktop: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  addBtnTextDesktop: {
+    fontSize: 10,
+  },
   addBtnSale: {
     flexDirection: "row",
     alignItems: "center",
@@ -439,6 +505,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#fafbfc",
   },
+  tableDesktop: {
+    borderRadius: 12,
+  },
   tableHead: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -448,10 +517,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#e8ecf4",
   },
+  tableHeadDesktop: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
   th: {
     ...FinanceTxnTypography.fieldLabel,
     fontSize: 8,
     lineHeight: 11,
+  },
+  thDesktop: {
+    fontSize: 10,
+    lineHeight: 13,
   },
   thAmt: {
     textAlign: "right",
@@ -465,6 +542,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 5,
     paddingRight: 4,
+  },
+  colPartyLaneDesktop: {
+    minWidth: 140,
+    maxWidth: 220,
+    gap: 8,
+    paddingRight: 8,
   },
   partyLaneBody: {
     flex: 1,
@@ -501,6 +584,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 14,
   },
+  emptyDesktop: {
+    padding: 16,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   tr: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -508,6 +596,11 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 8,
     backgroundColor: "#fff",
+  },
+  trDesktop: {
+    minHeight: 44,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
   },
   trWrap: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -570,6 +663,10 @@ const styles = StyleSheet.create({
     color: "#475569",
     lineHeight: 13,
   },
+  tdDesktop: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
   partyCell: {
     ...FinanceTxnTypography.partyTitle,
     fontStyle: "normal",
@@ -578,6 +675,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     color: Theme.textPrimaryDark,
     minWidth: 0,
+  },
+  partyCellDesktop: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   laneChip: {
     alignSelf: "flex-start",
@@ -650,6 +751,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
     lineHeight: 13,
+  },
+  tdAmtDesktop: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   amtSale: { color: "#059669" },
   amtCost: { color: "#dc2626" },
