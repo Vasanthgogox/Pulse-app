@@ -2679,7 +2679,7 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginHorizontal: -4,
+    marginHorizontal: -6,
     alignItems: "stretch",
   },
   /** Desktop trips grid — 4 cards per row (25% each). */
@@ -2687,8 +2687,8 @@ const styles = StyleSheet.create({
     width: "25%",
     maxWidth: "25%",
     flexBasis: "25%",
-    paddingHorizontal: 4,
-    marginBottom: 12,
+    paddingHorizontal: 6,
+    marginBottom: 14,
     alignSelf: "stretch",
   },
   tripsTableHScrollContent: {

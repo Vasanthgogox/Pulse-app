@@ -55,6 +55,8 @@ export interface ExpenseCat {
 
 export interface KpiSummary {
   totalRevenue: number;
+  totalExpense: number;
+  totalProfit: number;
   netMargin: number; // %
   tripsCompleted: number;
   totalKm: number;
@@ -217,6 +219,8 @@ export function computeKpiSummary(
 
   return {
     totalRevenue,
+    totalExpense,
+    totalProfit,
     netMargin,
     tripsCompleted,
     totalKm,

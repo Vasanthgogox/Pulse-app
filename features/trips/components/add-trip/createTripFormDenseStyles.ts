@@ -27,8 +27,8 @@ export const createTripFormDenseStyles = StyleSheet.create({
     borderRadius: 6,
   },
   cardTitleDense: {
-    fontSize: 8,
-    letterSpacing: 0.4,
+    fontSize: 9,
+    letterSpacing: 0.75,
   },
   gridRowDense: { gap: 6 },
   labelDense: {

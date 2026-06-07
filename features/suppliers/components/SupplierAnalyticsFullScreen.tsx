@@ -8,10 +8,12 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { isPulseDesktop } from "@/components/analytics/pulse/pulseStyles";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useSupplierAnalyticsData } from "../hooks/useSupplierAnalyticsData";
@@ -23,6 +25,8 @@ const SupplierAnalyticsTab = lazy(() =>
 export function SupplierAnalyticsFullScreen({ supplierId }: { supplierId: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const desktop = isPulseDesktop(width);
   const {
     t,
     supplier,
@@ -78,6 +82,7 @@ export function SupplierAnalyticsFullScreen({ supplierId }: { supplierId: string
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
+          desktop && styles.scrollContentDesktop,
           { paddingBottom: insets.bottom + Layout.screenPaddingHorizontal },
         ]}
         showsVerticalScrollIndicator={false}
@@ -147,6 +152,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
+  },
+  scrollContentDesktop: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   errorWrap: { padding: 16 },
   errorText: { fontSize: 15, color: Theme.textSecondary },

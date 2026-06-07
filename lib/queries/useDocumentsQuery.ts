@@ -145,7 +145,7 @@ export function useComplianceBlockingQuery(input: {
         driverId: input.driverId,
       }),
     enabled,
-    staleTime: 0,
+    staleTime: 30_000,
     gcTime: 60_000,
     select: (data) => data.result,
   });

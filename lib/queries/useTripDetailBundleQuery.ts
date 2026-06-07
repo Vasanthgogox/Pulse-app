@@ -13,9 +13,8 @@ import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
 
 // ── Feature flag ─────────────────────────────────────────────────────────────
-// Global kill switch — keep false until 48h soak passes cleanly.
-// Per-org staged rollout is controlled via BUNDLE_ENABLED_ORG_IDS below.
-export const ENABLE_TRIP_DETAIL_BUNDLE = false;
+// Globally enabled: replaces 18-24 serial DB round-trips with one RPC call.
+export const ENABLE_TRIP_DETAIL_BUNDLE = true;
 
 // Orgs enabled for staged bundle rollout before global flip.
 // Add internal/test org IDs here; remove after global flag is on.

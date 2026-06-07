@@ -332,8 +332,8 @@ export default function ProfileScreen() {
       };
     },
     enabled: !!orgId && clientIds.length > 0,
-    staleTime: 0,
-    refetchOnMount: true,
+    staleTime: 60_000,
+    refetchOnMount: false,
   });
 
   /** Partner orgs rated your linked customer identity (integrated client row → your org). */
@@ -351,8 +351,8 @@ export default function ProfileScreen() {
       };
     },
     enabled: !!orgId,
-    staleTime: 0,
-    refetchOnMount: true,
+    staleTime: 60_000,
+    refetchOnMount: false,
   });
 
   const completedTrips = useMemo(

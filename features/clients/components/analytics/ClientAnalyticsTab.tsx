@@ -8,7 +8,7 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { Theme } from "@/constants/Theme";
 import { formatINR, formatINRChip } from "@/lib/format";
 
-import { partyAnalyticsLayout } from "@/components/analytics/partyAnalyticsLayout";
+import { usePartyAnalyticsInsetStyle } from "@/components/analytics/partyAnalyticsLayout";
 import {
   Heatmap,
   TrendBarChart,
@@ -108,8 +108,10 @@ export default function ClientAnalyticsTab({
   orgId,
 }: Props) {
   const { width } = useWindowDimensions();
-  const chartWidth = usePulseChartWidth();
-  const chartH = pulseChartHeight(width);
+  const insetStyle = usePartyAnalyticsInsetStyle();
+  const chartWidth = usePulseChartWidth({ embedded: true });
+  const chartWidthHalf = usePulseChartWidth({ embedded: true, columns: 2 });
+  const chartH = pulseChartHeight(width, true);
   const clientId = client?.id ?? null;
 
   const kpis = useMemo(
@@ -219,14 +221,6 @@ export default function ClientAnalyticsTab({
     (): ReadonlyArray<ReadonlyArray<PulseKpiItem | null>> => [
       [
         {
-          id: "billed",
-          label: "Total billed",
-          value: formatINRChip(kpis.totalRevenue),
-          subtext: `${kpis.tripCount} trips · 12 mo`,
-          valueColor: Theme.primary,
-          iconName: "money",
-        },
-        {
           id: "pnl",
           label: "Trip P&L",
           value: formatINRChip(kpis.netMargin),
@@ -249,16 +243,6 @@ export default function ClientAnalyticsTab({
           iconName: "percent",
         },
         {
-          id: "receivable",
-          label: "Receivable due",
-          value: formatINRChip(kpis.outstanding),
-          subtext: `Avg delay ${kpis.avgPaymentDelayDays}d`,
-          valueColor: Theme.negative,
-          iconName: "exclamation-circle",
-        },
-      ],
-      [
-        {
           id: "trips",
           label: "Trips completed",
           value: `${operations.tripsCompleted}`,
@@ -279,15 +263,6 @@ export default function ClientAnalyticsTab({
                 : Theme.negative,
           iconName: "clock-o",
         },
-        {
-          id: "routes",
-          label: "Active lanes",
-          value: `${kpis.activeRoutes}`,
-          subtext: "Unique routes",
-          valueColor: Theme.textBody,
-          iconName: "map",
-        },
-        null,
       ],
     ],
     [collectionPct, kpis, operations],
@@ -498,6 +473,18 @@ export default function ClientAnalyticsTab({
 
   const primaryBadge = badges[0] ? badgeLabel(badges[0]) : undefined;
 
+  const collectedAmount = Math.max(0, kpis.totalRevenue - kpis.outstanding);
+
+  const financialOverview = {
+    primaryMetricLabel: "TOTAL SALES",
+    primaryValue: formatINR(kpis.totalRevenue),
+    leftLabel: "RECEIVED",
+    leftValue: formatINR(collectedAmount),
+    rightLabel: "DUE",
+    rightValue: formatINR(kpis.outstanding),
+    decorIcon: "building" as const,
+  };
+
   return (
     <PulseAnalyticsShell
       title="Client finance analytics"
@@ -507,8 +494,9 @@ export default function ClientAnalyticsTab({
           : "Billing, P&L, and receivables for this client"
       }
       embedded
+      financialOverview={financialOverview}
     >
-      <View style={partyAnalyticsLayout.inset}>
+      <View style={insetStyle}>
       <PulseKpiGrid rows={headerKpiRows} />
 
       <PulseSection
@@ -650,7 +638,7 @@ export default function ClientAnalyticsTab({
         >
           <TrendBarChart
             data={toCollectionBars(monthly)}
-            width={chartWidth}
+            width={chartWidthHalf}
             height={chartH}
             primaryField="revenue"
             secondaryField="expense"

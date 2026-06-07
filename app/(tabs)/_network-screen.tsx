@@ -906,14 +906,7 @@ function NetworkScreenInner() {
               </View>
         </View>
         {!showStoryLoadsSplit ? (
-          <View
-            style={[
-              styles.loadsMarketplaceSection,
-              isCompactPhone && styles.loadsMarketplaceSectionCompact,
-            ]}
-          >
-            <NetworkLoadsQuickCards compact={isCompactPhone} />
-          </View>
+          <NetworkLoadsQuickCards compact={isCompactPhone} />
         ) : null}
         {ENABLE_UNLINKED_COUNTERPARTIES && orgId ? (
           <UnlinkedCounterpartiesSection orgId={orgId} />
@@ -1540,21 +1533,6 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     paddingVertical: 8,
     backgroundColor: Theme.screenBackground,
-  },
-  loadsMarketplaceSection: {
-    alignSelf: "stretch",
-    width: "100%",
-    minWidth: 0,
-    marginTop: 8,
-    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
-    paddingTop: 12,
-    paddingBottom: 14,
-    backgroundColor: Theme.screenBackground,
-  },
-  loadsMarketplaceSectionCompact: {
-    marginTop: 6,
-    paddingTop: 10,
-    paddingBottom: 12,
   },
   commandMainCard: {
     flex: 1,

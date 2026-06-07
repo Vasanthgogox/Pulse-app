@@ -21,6 +21,7 @@ import {
   preloadTabScreen,
   scheduleDispatcherTabPreloads,
 } from '@/lib/preloadRoutes';
+import { preloadChatRoute } from '@/lib/preloadChatWarmup';
 import { ROUTES } from '@/lib/routes';
 import {
   hydrateSignupFlowFlags,
@@ -168,6 +169,16 @@ export default function TabLayout() {
       scheduleDispatcherTabPreloads(route, { queryClient, orgId });
     });
   }, [loading, orgId, queryClient]);
+
+  // Pre-warm chat providers + bootstrap as soon as auth + org are ready.
+  // This runs immediately (not idle), so provider modules and the bootstrap RPC
+  // are in flight well before the user taps the chat button.
+  // Skipped in dev to avoid Metro parallel-import OOM.
+  useEffect(() => {
+    if (loading || !orgId || profile?.role === 'driver') return;
+    if (__DEV__) return;
+    preloadChatRoute(orgId);
+  }, [loading, orgId, profile?.role]);
 
   /** Warm trips first (default tab), then fiscal + network — staggered to avoid Metro OOM. */
   useEffect(() => {

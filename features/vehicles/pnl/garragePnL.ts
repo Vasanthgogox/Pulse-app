@@ -182,6 +182,39 @@ export function getAvailablePeriodOptions(
   return options;
 }
 
+/** Trips in period that resolve to a registered fleet vehicle (by id or display number). */
+export function countVehicleMatchedTripsInPeriod(
+  trips: TripRow[],
+  vehicles: VehicleRow[],
+  period: GarragePeriodValue,
+): number {
+  const resolutionContext = buildVehicleResolutionContext(vehicles);
+  let count = 0;
+  for (const trip of trips) {
+    if (!tripInPeriod(trip, period)) continue;
+    if (resolveVehicleIdForTripWithContext(trip, resolutionContext) != null) count++;
+  }
+  return count;
+}
+
+/**
+ * Pick the first period (YTD → this month → recent months) that has fleet-matched trips.
+ * Falls back to YTD when no trips match any registered vehicle.
+ */
+export function pickDefaultGaragePeriod(
+  trips: TripRow[],
+  vehicles: VehicleRow[],
+  currentDate: Date = new Date(),
+): GarragePeriodValue {
+  const options = getAvailablePeriodOptions(trips, currentDate);
+  for (const opt of options) {
+    if (countVehicleMatchedTripsInPeriod(trips, vehicles, opt.value) > 0) {
+      return opt.value;
+    }
+  }
+  return `ytd-${currentDate.getFullYear()}`;
+}
+
 /** Single ledger line for expense breakdown */
 export interface ExpenseLineItem {
   id: string;

@@ -41,6 +41,10 @@ import {
 } from "@/features/trips/visibility/tripVisibility";
 import type { DriversViewTab } from "@/features/drivers/components/DriversTab";
 import type { GarrageViewTab } from "@/features/vehicles/components/GarrageTab";
+import {
+  countVehicleMatchedTripsInPeriod,
+  pickDefaultGaragePeriod,
+} from "@/features/vehicles/pnl";
 import type { CustomersViewTab } from "@/features/clients/components/CustomersTab";
 import type { SuppliersViewTab } from "@/features/suppliers/components/SuppliersTab";
 import {
@@ -167,7 +171,43 @@ export function FinanceScreen() {
     setPendingDriverSalaryRequests,
   } = entities;
 
+  const [garagePeriod, setGaragePeriod] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+  });
+  const garagePeriodAutoSetOrgRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    garagePeriodAutoSetOrgRef.current = null;
+  }, [currentOrganization?.id]);
+
   const linkedOrgDisplayMap = useLinkedOrgProfileMap(clientRows, supplierRows);
+
+  useEffect(() => {
+    const orgId = currentOrganization?.id ?? null;
+    if (!orgId || entitiesLoading) return;
+    if (garagePeriodAutoSetOrgRef.current === orgId) return;
+    if (tripRows.length === 0 || vehicleRows.length === 0) return;
+
+    const matchedInCurrent = countVehicleMatchedTripsInPeriod(
+      tripRows,
+      vehicleRows,
+      garagePeriod,
+    );
+    if (matchedInCurrent === 0) {
+      const preferred = pickDefaultGaragePeriod(tripRows, vehicleRows);
+      if (preferred !== garagePeriod) {
+        setGaragePeriod(preferred);
+      }
+    }
+    garagePeriodAutoSetOrgRef.current = orgId;
+  }, [
+    currentOrganization?.id,
+    entitiesLoading,
+    tripRows,
+    vehicleRows,
+    garagePeriod,
+  ]);
 
   const {
     ledgerTransactions,
@@ -303,10 +343,6 @@ export function FinanceScreen() {
   } | null>(null);
   const [selectedDriverLedgerEntries, setSelectedDriverLedgerEntries] =
     useState<DriverLedgerRow[] | null>(null);
-  const [garagePeriod, setGaragePeriod] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
-  });
   const [garageTripIdForPnL, setGarageTripIdForPnL] = useState<string | null>(
     null,
   );

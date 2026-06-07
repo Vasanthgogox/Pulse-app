@@ -566,19 +566,19 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   body: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
   bodyDense: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 14,
   },
   bodyGrid: {
     flex: 1,
     flexDirection: "column",
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   actionsSlot: {
     marginTop: "auto",

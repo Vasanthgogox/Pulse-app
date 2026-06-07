@@ -22,19 +22,9 @@ import {
   type ViewStyle,
 } from "react-native";
 
-const GRID_COLUMNS = 3;
-const AVATAR_SIZE = 52;
-
-export type AssignmentAvatarGridItem = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  avatarUrl?: string | null;
-  avatarSeed?: string | null;
-  entityType?: PartyEntityType;
-  disabled?: boolean;
-  statusLabel?: string;
-};
+const DEFAULT_COLUMNS = 3;
+const DEFAULT_AVATAR_SIZE = 52;
+const COMPACT_AVATAR_SIZE = 42;
 
 export type AssignmentEntityAvatarGridProps = {
   title: string;
@@ -51,6 +41,10 @@ export type AssignmentEntityAvatarGridProps = {
   footerHint?: string;
   /** Cap internal grid scroll height (mobile allocation steps). */
   scrollMaxHeight?: number;
+  /** Smaller tiles for dense forms (Create Trip desktop). */
+  compact?: boolean;
+  /** Override grid column count (default 3). */
+  columns?: number;
 };
 
 function chunkRows<T>(items: T[], columns: number): T[][] {
@@ -60,6 +54,17 @@ function chunkRows<T>(items: T[], columns: number): T[][] {
   }
   return rows;
 }
+
+export type AssignmentAvatarGridItem = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  entityType?: PartyEntityType;
+  disabled?: boolean;
+  statusLabel?: string;
+};
 
 export function AssignmentEntityAvatarGrid({
   title,
@@ -75,11 +80,15 @@ export function AssignmentEntityAvatarGrid({
   errorOutline = false,
   footerHint,
   scrollMaxHeight = 360,
+  compact = false,
+  columns: columnsProp,
 }: AssignmentEntityAvatarGridProps) {
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
 
-  const rows = chunkRows(items, GRID_COLUMNS);
+  const columns = columnsProp ?? DEFAULT_COLUMNS;
+  const avatarSize = compact ? COMPACT_AVATAR_SIZE : DEFAULT_AVATAR_SIZE;
+  const rows = chunkRows(items, columns);
 
   return (
     <View
@@ -182,15 +191,15 @@ export function AssignmentEntityAvatarGrid({
                           disabled && styles.tileDisabled,
                         ]}
                       >
-                        <View style={[styles.avatarWrap, disabled && styles.avatarWrapDisabled]}>
-                          <PartyEntityAvatarGlow accent={accent} size={AVATAR_SIZE}>
+                        <View style={[styles.avatarWrap, disabled && styles.avatarWrapDisabled, { width: avatarSize + 8, height: avatarSize + 8 }]}>
+                          <PartyEntityAvatarGlow accent={accent} size={avatarSize}>
                             <PartyAvatar
                               name={displayName}
                               initialsColorSeed={item.id}
                               avatarUrl={item.avatarUrl}
                               avatarSeed={item.avatarSeed}
                               entityType={entityType}
-                              size={AVATAR_SIZE}
+                              size={avatarSize}
                             />
                           </PartyEntityAvatarGlow>
                           {selected && !disabled ? (
@@ -204,7 +213,7 @@ export function AssignmentEntityAvatarGrid({
                           ) : null}
                         </View>
                         <Text
-                          style={[styles.name, disabled && styles.nameDisabled]}
+                          style={[styles.name, compact && styles.nameCompact, disabled && styles.nameDisabled]}
                           numberOfLines={2}
                         >
                           {displayName}
@@ -214,7 +223,7 @@ export function AssignmentEntityAvatarGrid({
                             {item.statusLabel ?? "On trip"}
                           </Text>
                         ) : item.subtitle ? (
-                          <Text style={styles.subtitle} numberOfLines={2}>
+                          <Text style={[styles.subtitle, compact && styles.subtitleCompact]} numberOfLines={2}>
                             {item.subtitle}
                           </Text>
                         ) : null}
@@ -222,8 +231,8 @@ export function AssignmentEntityAvatarGrid({
                     </Pressable>
                   );
                 })}
-                {row.length < GRID_COLUMNS
-                  ? Array.from({ length: GRID_COLUMNS - row.length }).map((_, i) => (
+                {row.length < columns
+                  ? Array.from({ length: columns - row.length }).map((_, i) => (
                       <View
                         key={`assign-grid-pad-${rowIndex}-${i}`}
                         style={styles.cell}
@@ -286,8 +295,6 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   avatarWrap: {
-    width: AVATAR_SIZE + 8,
-    height: AVATAR_SIZE + 8,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -316,6 +323,11 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: 2,
   },
+  nameCompact: {
+    marginTop: 4,
+    fontSize: 9,
+    lineHeight: 12,
+  },
   nameDisabled: {
     color: Theme.textMuted,
   },
@@ -339,5 +351,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     width: "100%",
     paddingHorizontal: 2,
+  },
+  subtitleCompact: {
+    fontSize: 7,
+    lineHeight: 10,
   },
 });

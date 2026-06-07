@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   wrapCompact: {
-    marginTop: 8,
+    marginTop: 6,
     gap: 6,
   },
   gridAside: {
@@ -249,7 +249,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   emptyWrapCompact: {
-    padding: 10,
+    padding: 8,
+    marginTop: 6,
   },
   emptyTitleCompact: {
     fontSize: 12,

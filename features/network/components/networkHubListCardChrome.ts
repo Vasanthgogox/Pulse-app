@@ -57,18 +57,7 @@ const nativeListCardShadow = Platform.select({
 });
 
 export const networkHubListCardChromeStyles = StyleSheet.create({
-  /** Card paddings trimmed ~15 % across the board (16→14 h, 13→11 v)
-   *  to match the now-smaller avatar (48), role chip (12 px tall),
-   *  and INTEGRATED badge. The prior 16/13 felt airy relative to the
-   *  shrunken pills — 14/11 keeps the content rhythm tight without
-   *  the card looking cramped.
-   *
-   *  `alignSelf: stretch` lets the card grow to match the tallest
-   *  sibling in a grid row, and `minHeight` pins a baseline so cards
-   *  with sparse content (no phone line, no extra meta) don't
-   *  collapse shorter than cards with full content — combined with
-   *  the row's `flex: 1`, this lands the metrics at the bottom-right
-   *  at a consistent Y across every card in the grid. */
+  /** Card paddings — 16/13 default, 14/12 compact for dense desktop grids. */
   card: {
     width: "100%",
     alignSelf: "stretch",
@@ -77,15 +66,15 @@ export const networkHubListCardChromeStyles = StyleSheet.create({
     borderRadius: NETWORK_HUB_RADIUS.card,
     borderWidth: 1,
     borderColor: Theme.networkHubListCardBorder,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     overflow: "hidden",
     position: "relative",
     ...cardShadow,
   },
   cardCompact: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   /** Phone / narrow web — 3-up connection tiles (transparent, avatar + name). */
   cardMobileGrid: {
@@ -94,8 +83,8 @@ export const networkHubListCardChromeStyles = StyleSheet.create({
     backgroundColor: "transparent",
     borderWidth: 0,
     borderRadius: 0,
-    paddingHorizontal: 2,
-    paddingVertical: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 10,
     minHeight: 0,
     alignItems: "center",
     overflow: "visible",

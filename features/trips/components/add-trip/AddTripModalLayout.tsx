@@ -80,7 +80,8 @@ export function AddTripModalLayout({
       ? KEYBOARD_ACCESSORY_BAR_HEIGHT
       : 0;
   const isCompactMobile = winW < 480;
-  const isDenseForm = Platform.OS !== "web" || winW < 600;
+  const isDesktopWeb = Platform.OS === "web" && winW >= 1080;
+  const isDenseForm = Platform.OS !== "web" || winW < 600 || isDesktopWeb;
   const footerBottomPad = dockPaddingBottom(
     insets.bottom,
     keyboardVisible,
@@ -110,9 +111,13 @@ export function AddTripModalLayout({
               <FontAwesome name="chevron-left" size={16} color={PULSE_TRIP.text} />
             </TouchableOpacity>
             <View style={styles.topBarTextWrap}>
-              <Text style={styles.topBarTitle}>{title}</Text>
-              {subtitle && !isDenseForm ? (
-                <Text style={styles.topBarSubtitle}>{subtitle}</Text>
+              <Text style={[styles.topBarTitle, isDesktopWeb && styles.topBarTitleDesktop]}>
+                {title}
+              </Text>
+              {subtitle ? (
+                <Text style={[styles.topBarSubtitle, isDesktopWeb && styles.topBarSubtitleDesktop]}>
+                  {subtitle}
+                </Text>
               ) : null}
             </View>
           </View>
@@ -153,7 +158,7 @@ export function AddTripModalLayout({
           style={[
             styles.body,
             isCompactMobile && styles.bodyCompact,
-            isDenseForm && styles.bodyDense,
+            isDenseForm && !isDesktopWeb && styles.bodyDense,
             {
               paddingBottom:
                 (isDenseForm ? 8 : Layout.sectionSpacing) +
@@ -169,7 +174,7 @@ export function AddTripModalLayout({
           <View
             style={[
               styles.footer,
-              isDenseForm && styles.footerDense,
+              isDenseForm && !isDesktopWeb && styles.footerDense,
               {
                 paddingBottom: footerBottomPad,
                 paddingTop: isDenseForm ? 6 : 8,
@@ -232,16 +237,16 @@ const styles = StyleSheet.create({
   },
   topBar: {
     width: "100%",
-    paddingBottom: 12,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     backgroundColor: PULSE_TRIP.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: PULSE_TRIP.border,
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
   },
   topBarCompact: {
     paddingHorizontal: 10,
@@ -285,14 +290,26 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     color: PULSE_TRIP.text,
   },
+  topBarTitleDesktop: {
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
   topBarSubtitle: {
     fontSize: 10,
     fontWeight: "700",
     fontStyle: "normal",
-    marginTop: 4,
-    letterSpacing: 0.8,
+    marginTop: 3,
+    letterSpacing: 0.7,
     textTransform: "uppercase",
     color: PULSE_TRIP.indigo,
+  },
+  topBarSubtitleDesktop: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.55,
+    marginTop: 2,
+    color: Theme.textMuted,
   },
   topBarActions: {
     flexDirection: "row",
@@ -352,7 +369,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     ...Platform.select({
-      web: { paddingHorizontal: 0, paddingTop: 6 },
+      web: { paddingHorizontal: 0, paddingTop: 4 },
       default: {
         paddingHorizontal: Layout.screenPaddingHorizontal,
         paddingTop: 12,

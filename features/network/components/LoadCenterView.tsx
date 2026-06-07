@@ -3,6 +3,7 @@
  * Header "Load Center" / "Find or Hire Work", three sub-tabs, cards, modals.
  */
 import { ContentErrorState } from '@/components/ContentErrorState';
+import { Typography } from "@/constants/Typography";
 import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
 import { useHubGridPagination } from "@/components/hub/useHubGridPagination";
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
@@ -31,7 +32,6 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
-import Typography from "@/constants/Typography";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     BidReceivedHammer,
@@ -2061,7 +2061,8 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  /** Give Load — create indent CTA (desktop header, mobile hub, empty state). */
+  /** Inline "Add Load" pill that sits next to the Live chip on the
+   *  "Your active indents" section header. Matches Add Trip / Add Indent. */
   addLoadBtn: {
     flexDirection: "row",
     alignItems: "center",

@@ -694,20 +694,36 @@ function isInvalidSessionError(e: unknown): boolean {
   return isSessionExpiredError(e);
 }
 
+function isTransientAuthNetworkError(e: unknown): boolean {
+  const msg =
+    e instanceof Error
+      ? e.message
+      : typeof (e as { message?: string })?.message === "string"
+        ? (e as { message: string }).message
+        : String(e ?? "");
+  return (
+    msg === "Network request failed" ||
+    msg === "Failed to fetch" ||
+    msg === "Load failed" ||
+    /access control checks|timeout|network|failed to fetch|fetch failed/i.test(
+      msg,
+    )
+  );
+}
+
 /** Clear local session when the server says the user/session is invalid (e.g. after a DB reset or refresh token not found). */
-async function clearLocalSessionIfInvalid(error: unknown): Promise<void> {
-  if (error == null || isInvalidSessionError(error)) {
-    try {
-      await supabase().auth.signOut({ scope: "local" });
-      // Log once so initial "Invalid Refresh Token" from the library is clearly handled (no stale session).
-      if (__DEV__) {
-        console.info(
-          "[Auth] Session invalid or expired; cleared local session. Please sign in again.",
-        );
-      }
-    } catch {
-      // Ignore sign-out errors so we don't mask the original session error
+export async function clearLocalSessionIfInvalid(error: unknown): Promise<boolean> {
+  if (error == null || !isInvalidSessionError(error)) return false;
+  try {
+    await supabase().auth.signOut({ scope: "local" });
+    if (__DEV__) {
+      console.info(
+        "[Auth] Session invalid or expired; cleared local session. Please sign in again.",
+      );
     }
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -919,7 +935,10 @@ export async function refreshSession(): Promise<{
   refreshSessionInFlight = (async () => {
     try {
       const { data: { user }, error } = await supabase().auth.getUser();
-      if (error || !user) return null;
+      if (error || !user) {
+        await clearLocalSessionIfInvalid(error);
+        return null;
+      }
 
       // Base profile from auth metadata (immediate source after avatar/profile updates).
       const base = mapSupabaseUserToAuth(user);
@@ -951,7 +970,8 @@ export async function refreshSession(): Promise<{
       }
 
       return base;
-    } catch {
+    } catch (e) {
+      await clearLocalSessionIfInvalid(e);
       return null;
     }
   })();
@@ -1007,35 +1027,63 @@ async function confirmSignOutOrRecover(
 ): Promise<void> {
   try {
     const stored = await readStoredAuthSession();
-    if (stored) {
-      try {
-        const { data: { session: refreshed }, error } =
-          await supabase().auth.refreshSession();
-        if (refreshed?.user && !error) {
-          if (__DEV__) {
-            console.info(
-              `[auth] ${event} suppressed — session recovered via refresh`,
-            );
-          }
-          runCallback(mapSupabaseUserToAuth(refreshed.user));
-          return;
-        }
-      } catch {
-        // Refresh failed (network/CORS) — fall through to stored session.
-      }
-      if (__DEV__) {
-        console.warn(
-          `[auth] ${event} refresh failed — keeping stored session`,
-        );
-      }
-      runCallback(stored);
+    if (!stored) {
+      if (__DEV__) console.info(`[auth] ${event} confirmed — session unrecoverable`);
+      runCallback(null);
       return;
     }
-    if (__DEV__) console.info(`[auth] ${event} confirmed — session unrecoverable`);
-    runCallback(null);
-  } catch {
+
+    try {
+      const { data: { session: refreshed }, error } =
+        await supabase().auth.refreshSession();
+      if (refreshed?.user && !error) {
+        if (__DEV__) {
+          console.info(
+            `[auth] ${event} suppressed — session recovered via refresh`,
+          );
+        }
+        runCallback(mapSupabaseUserToAuth(refreshed.user));
+        return;
+      }
+      if (error && (await clearLocalSessionIfInvalid(error))) {
+        runCallback(null);
+        return;
+      }
+    } catch (e) {
+      if (await clearLocalSessionIfInvalid(e)) {
+        runCallback(null);
+        return;
+      }
+      if (isTransientAuthNetworkError(e)) {
+        if (__DEV__) {
+          console.warn(
+            `[auth] ${event} refresh failed (network) — keeping stored session`,
+          );
+        }
+        runCallback(stored);
+        return;
+      }
+    }
+
+    const stillStored = await readStoredAuthSession();
+    if (!stillStored) {
+      runCallback(null);
+      return;
+    }
+
+    if (__DEV__) {
+      console.warn(
+        `[auth] ${event} refresh failed — keeping stored session`,
+      );
+    }
+    runCallback(stored);
+  } catch (e) {
+    if (await clearLocalSessionIfInvalid(e)) {
+      runCallback(null);
+      return;
+    }
     const stored = await readStoredAuthSession();
-    if (stored) {
+    if (stored && isTransientAuthNetworkError(e)) {
       if (__DEV__) {
         console.warn(
           `[auth] ${event} verify failed (network?) — keeping stored session`,
@@ -1045,7 +1093,7 @@ async function confirmSignOutOrRecover(
       return;
     }
     if (__DEV__) {
-      console.warn(`[auth] ${event} verify failed (network?) — suppressing sign-out`);
+      console.warn(`[auth] ${event} verify failed — suppressing sign-out`);
     }
   }
 }

@@ -52,6 +52,7 @@ import {
 import { adjustedRevenue } from "@/features/trips/services/tripAdjustments";
 import {
     getTripDisplayNumber,
+    getTripsByOrganization,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import {
@@ -72,11 +73,9 @@ import {
 } from "@/lib/entityIdentity";
 import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
-import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
-import { STALE } from "@/lib/queryClient";
-import { supabase } from "@/lib/supabase";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -253,7 +252,8 @@ export default function ClientDetailScreen({
   const router = useRouter();
   const { t } = useLanguage();
   const { profile } = useAuth();
-  const { currentOrganization } = useOrganization();
+  const { currentOrganization, isLoading: orgLoading } = useOrganization();
+  const queryClient = useQueryClient();
   const capabilities = getCapabilitiesFromProfile(
     profile
       ? {
@@ -316,7 +316,6 @@ export default function ClientDetailScreen({
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const lastFocusRefreshRef = useRef<number>(0);
-  const queryClient = useQueryClient();
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
   const [tripDatePeriod, setTripDatePeriod] =
@@ -355,6 +354,10 @@ export default function ClientDetailScreen({
   useEffect(() => {
     setIsLinked(false);
     setClientRatingAvg(null);
+    initialLoadDoneRef.current = false;
+    setLoading(true);
+    setError(null);
+    setClient(null);
   }, [clientId]);
 
 
@@ -417,7 +420,15 @@ export default function ClientDetailScreen({
   }, [heroDecorProgress, isWebDesktop]);
 
   const load = useCallback(() => {
-    if (!clientId || !currentOrganization?.id) {
+    if (!clientId) {
+      setLoading(false);
+      return;
+    }
+    if (orgLoading) {
+      setLoading(true);
+      return;
+    }
+    if (!currentOrganization?.id) {
       setLoading(false);
       return;
     }
@@ -426,75 +437,35 @@ export default function ClientDetailScreen({
     setError(null);
     const orgId = currentOrganization.id;
 
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
+    const tripsPromise = cachedTrips !== undefined
+      ? Promise.resolve({ error: null, trips: cachedTrips })
+      : getTripsByOrganization(orgId);
+
     Promise.all([
       getClientDetailBundle(orgId, clientId),
-      queryClient
-        .ensureQueryData({
-          queryKey: queryKeys.trips.all(orgId),
-          queryFn: async () => {
-            const { data, error } = await supabase().rpc("get_trips_for_org", {
-              p_org_id: orgId,
-            });
-            if (error) throw new Error(error.message);
-            return (data ?? []) as TripRow[];
-          },
-          staleTime: STALE.realtime,
-        })
-        .catch(() => [] as TripRow[]),
-      queryClient
-        .ensureQueryData({
-          queryKey: queryKeys.clients.all(orgId),
-          queryFn: async () => {
-            const res = await getClientsByOrganization(orgId);
-            if (res.error) throw res.error;
-            return res.clients;
-          },
-          staleTime: STALE.moderate,
-        })
-        .catch(() => [] as ClientRow[]),
-      queryClient
-        .ensureQueryData({
-          queryKey: queryKeys.transactions.all(orgId),
-          queryFn: async () => {
-            const res = await getTransactionsByOrganization(orgId);
-            if (res.error) throw res.error;
-            return res.transactions;
-          },
-          staleTime: STALE.realtime,
-        })
-        .catch(() => [] as LedgerRow[]),
-      queryClient
-        .ensureQueryData({
-          queryKey: queryKeys.suppliers.all(orgId),
-          queryFn: async () => {
-            const res = await getSuppliersByOrganization(orgId);
-            if (res.error) throw res.error;
-            return res.suppliers;
-          },
-          staleTime: STALE.moderate,
-        })
-        .catch(() => [] as SupplierRow[]),
-      queryClient
-        .ensureQueryData({
-          queryKey: queryKeys.drivers.all(orgId),
-          queryFn: async () => {
-            const res = await getDriversByOrganization(orgId);
-            if (res.error) throw res.error;
-            return res.drivers;
-          },
-          staleTime: STALE.slow,
-        })
-        .catch(() => [] as DriverRow[]),
+      tripsPromise,
+      getClientsByOrganization(orgId),
+      getTransactionsByOrganization(orgId),
+      getSuppliersByOrganization(orgId),
+      getDriversByOrganization(orgId),
     ])
       .then(
         ([
           bundleRes,
-          allTrips,
-          allClients,
-          allTx,
-          allSuppliers,
-          allDrivers,
+          tripsRes,
+          clientsRes,
+          txRes,
+          suppliersRes,
+          driversRes,
         ]) => {
+          const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
+          const allClients = clientsRes.error ? [] : (clientsRes.clients ?? []);
+          const allTx = txRes.error ? [] : (txRes.transactions ?? []);
+          const allSuppliers = suppliersRes.error
+            ? []
+            : (suppliersRes.suppliers ?? []);
+          const allDrivers = driversRes.error ? [] : (driversRes.drivers ?? []);
           if (bundleRes.error) {
             setError(bundleRes.error.message);
             setClient(null);
@@ -570,7 +541,7 @@ export default function ClientDetailScreen({
         isRefreshingRef.current = false;
         setRefreshing(false);
       });
-  }, [clientId, currentOrganization?.id, queryClient]);
+  }, [clientId, currentOrganization?.id, orgLoading, queryClient]);
 
   useEffect(() => {
     fetchedPartnerOrgIdsRef.current = new Set();

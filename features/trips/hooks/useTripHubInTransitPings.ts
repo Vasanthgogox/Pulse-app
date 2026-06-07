@@ -108,8 +108,8 @@ export function useTripHubInTransitPings(
       inTransitIds,
     ),
     enabled: !!organizationId && inTransitIds.length > 0,
-    staleTime: 45_000,
-    refetchInterval: 60_000,
+    staleTime: 90_000,
+    refetchInterval: 120_000,
     queryFn: () => fetchInTransitPings(trips.filter(shouldFetchHubPing)),
   });
 }

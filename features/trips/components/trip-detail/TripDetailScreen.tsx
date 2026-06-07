@@ -35,7 +35,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -77,9 +77,22 @@ import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { ReassignSheet } from "../reassign/ReassignSheet";
 import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
-import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
-import { ProvisionDeductionConfirmModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionDeductionConfirmModal";
-import { ProvisionNotePdfModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionNotePdfModal";
+// ── Lazy-loaded modals: only imported when first rendered (not on page load) ──
+const ProvisionAdjustmentModal = lazy(() =>
+  import("@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal").then(
+    (m) => ({ default: m.ProvisionAdjustmentModal }),
+  ),
+);
+const ProvisionDeductionConfirmModal = lazy(() =>
+  import("@/features/trips/components/trip-detail/adjustment/ProvisionDeductionConfirmModal").then(
+    (m) => ({ default: m.ProvisionDeductionConfirmModal }),
+  ),
+);
+const ProvisionNotePdfModal = lazy(() =>
+  import("@/features/trips/components/trip-detail/adjustment/ProvisionNotePdfModal").then(
+    (m) => ({ default: m.ProvisionNotePdfModal }),
+  ),
+);
 import { TripFinanceAdjustmentsPanel } from "@/features/trips/components/trip-detail/adjustment/TripFinanceAdjustmentsPanel";
 import type { ProvisionNotePdfContext } from "@/features/trips/components/trip-detail/adjustment/tripProvisionNotePdf.util";
 import {
@@ -87,14 +100,18 @@ import {
   type ClientPassThroughRecommendation,
 } from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 import { TripOdometerPreviewCard } from "@/features/trips/components/trip-detail/TripOdometerPreviewCard";
-import { TripAdjustmentModal } from "./TripAdjustmentModal";
-import { TripDetailFinanceView } from "./TripDetailFinanceView";
+const TripAdjustmentModal = lazy(() =>
+  import("./TripAdjustmentModal").then((m) => ({ default: m.TripAdjustmentModal })),
+);
+// TripDetailFinanceView is currently unused (inside dead {false && ...} block) — not imported.
 import type { TripDetailScreenProps } from "./TripDetailScreen.types";
 import { TripMap } from "./TripMap";
 import { ManifestDriverPingList } from "./ManifestDriverPingList";
 import { useTripDetail } from "./hooks/useTripDetail";
 import { useTrackingState } from "@/features/tracking/hooks/useTrackingState";
-import { LiveTrackingModal } from "./modals/LiveTrackingModal";
+const LiveTrackingModal = lazy(() =>
+  import("./modals/LiveTrackingModal").then((m) => ({ default: m.LiveTrackingModal })),
+);
 import {
   defaultTrackingState,
   isTripTrackingActive,
@@ -129,7 +146,11 @@ import {
 import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
 import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSummary, useTripOperationsSync } from "@/features/trips/operations";
-import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
+const TripExpensesScreen = lazy(() =>
+  import("@/features/trips/operations/hub/TripExpensesScreen").then(
+    (m) => ({ default: m.TripExpensesScreen }),
+  ),
+);
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import {
   shouldShowManifestHeroDriverParty,
@@ -143,7 +164,9 @@ import {
 } from "@/features/finance";
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import { type ExpenseRow } from "./sections/ExpensesTable";
-import { LRDocumentsSection } from "./sections/LRDocumentsSection";
+const LRDocumentsSection = lazy(() =>
+  import("./sections/LRDocumentsSection").then((m) => ({ default: m.LRDocumentsSection })),
+);
 import {
     TripStatusTimeline,
     type TripStageTimestamp,
@@ -1900,9 +1923,11 @@ export default function TripDetailScreen({
     partnerName: detail.partnerName ?? null,
     driverDisplayName: detail.driverName ?? null,
   };
+  const financeLayout = isDesktop ? "desktop" : "mobile";
   const financeCapturePaymentSlot = (
     <View style={neoStyles.capturePaymentSlot}>
       <TripPayableReceivableSummaryCard
+        layout={financeLayout}
         showReceivable={hasLinkedClient || adjSales > 0}
         clientName={clientNameForParty}
         clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
@@ -1995,6 +2020,7 @@ export default function TripDetailScreen({
 
   const financeAdjustmentSummaryWrappedEl = (
     <TripFinanceAdjustmentsPanel
+      layout={financeLayout}
       adjustments={detail.adjustments}
       sales={sales}
       adjSales={adjSales}
@@ -2039,22 +2065,37 @@ export default function TripDetailScreen({
       style={[
         styles.refSettleCard,
         styles.refFinanceManifestHero,
+        isDesktop && styles.refFinanceManifestHeroDesktop,
         marginIsNegative && styles.refFinanceManifestHeroLoss,
       ]}
     >
-      <Text style={styles.refFinanceMarginLabel}>
+      <Text
+        style={[
+          styles.refFinanceMarginLabel,
+          isDesktop && styles.refFinanceMarginLabelDesktop,
+        ]}
+      >
         {marginIsNegative ? "Margin · loss" : "Margin"}
       </Text>
       <Text
         style={[
           styles.refFinanceMarginValue,
+          isDesktop && styles.refFinanceMarginValueDesktop,
           marginIsNegative && styles.refFinanceMarginValueLoss,
+          isDesktop && marginIsNegative && styles.refFinanceMarginValueLossDesktop,
           !marginIsNegative && netManifestYield > 0 && styles.refFinanceMarginValueGain,
         ]}
       >
         {formatINR(netManifestYield)}
       </Text>
-      <Text style={styles.refFinanceMarginHint}>{marginBasisLabel}</Text>
+      <Text
+        style={[
+          styles.refFinanceMarginHint,
+          isDesktop && styles.refFinanceMarginHintDesktop,
+        ]}
+      >
+        {marginBasisLabel}
+      </Text>
     </View>
   );
 
@@ -2957,6 +2998,7 @@ export default function TripDetailScreen({
               <PersistentTabPanel active={activeTab === "expenses"}>
               <View style={styles.refFinanceWrap}>
                 {odometerPreviewEl}
+                <Suspense fallback={<ActivityIndicator style={{ margin: 24 }} color="#818cf8" />}>
                 <TripExpensesScreen
                   trip={trip}
                   embedded
@@ -2994,6 +3036,7 @@ export default function TripDetailScreen({
                       : undefined
                   }
                 />
+                </Suspense>
               </View>
               </PersistentTabPanel>
             ) : null}
@@ -3719,6 +3762,7 @@ export default function TripDetailScreen({
                             <Text
                               style={[
                                 neoStyles.financeSubTabText,
+                                isDesktop && neoStyles.financeSubTabTextDesktop,
                                 active && neoStyles.financeSubTabTextActive,
                               ]}
                             >
@@ -3733,18 +3777,46 @@ export default function TripDetailScreen({
                     </View>
                     {financeSubTab === "summary" ? (
                       <>
-                        <View style={neoStyles.financeSummaryTwoPane}>
-                          <View style={neoStyles.financeSummaryPaneLeft}>
-                            <View style={neoStyles.financeManifestInPane}>
+                        <View
+                          style={[
+                            neoStyles.financeSummaryTwoPane,
+                            isDesktop && neoStyles.financeSummaryTwoPaneDesktop,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              neoStyles.financeSummaryPaneLeft,
+                              isDesktop && neoStyles.financeSummaryPaneLeftDesktop,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                neoStyles.financeManifestInPane,
+                                isDesktop && neoStyles.financeManifestInPaneDesktop,
+                              ]}
+                            >
                               {financeManifestSummaryBlock}
                               {financeAdjustmentSummaryWrappedEl}
                             </View>
                           </View>
-                          <View style={neoStyles.financeSummaryPaneRight}>
-                            <View style={neoStyles.financeLedgerPreviewCard}>
+                          <View
+                            style={[
+                              neoStyles.financeSummaryPaneRight,
+                              isDesktop && neoStyles.financeSummaryPaneRightDesktop,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                neoStyles.financeLedgerPreviewCard,
+                                isDesktop && neoStyles.financeLedgerPreviewCardDesktop,
+                              ]}
+                            >
                               <View style={neoStyles.financeLedgerPreviewHead}>
                                 <Text
-                                  style={neoStyles.financeLedgerPreviewTitle}
+                                  style={[
+                                    neoStyles.financeLedgerPreviewTitle,
+                                    isDesktop && neoStyles.financeLedgerPreviewTitleDesktop,
+                                  ]}
                                 >
                                   Ledger snapshot
                                 </Text>
@@ -3771,7 +3843,12 @@ export default function TripDetailScreen({
                                   />
                                 </TouchableOpacity>
                               </View>
-                              <Text style={neoStyles.financeLedgerPreviewSub}>
+                              <Text
+                                style={[
+                                  neoStyles.financeLedgerPreviewSub,
+                                  isDesktop && neoStyles.financeLedgerPreviewSubDesktop,
+                                ]}
+                              >
                                 {financeHistoryRows.length === 0
                                   ? "No cash movements on this trip yet"
                                   : `${financeHistoryRows.length} movement${
@@ -3797,11 +3874,15 @@ export default function TripDetailScreen({
                                   financeHistoryRows.slice(0, 8).map((row) => (
                                     <View
                                       key={row.key}
-                                      style={neoStyles.financePreviewTxnRow}
+                                      style={[
+                                        neoStyles.financePreviewTxnRow,
+                                        isDesktop && neoStyles.financePreviewTxnRowDesktop,
+                                      ]}
                                     >
                                       <View
                                         style={[
                                           neoStyles.financePreviewTxnIcon,
+                                          isDesktop && neoStyles.financePreviewTxnIconDesktop,
                                           row.isIn
                                             ? neoStyles.financePreviewTxnIconIn
                                             : neoStyles.financePreviewTxnIconOut,
@@ -3813,7 +3894,7 @@ export default function TripDetailScreen({
                                               ? "arrow-down-left"
                                               : "arrow-up-right"
                                           }
-                                          size={14}
+                                          size={isDesktop ? 16 : 14}
                                           color={
                                             row.isIn ? "#10b981" : "#f43f5e"
                                           }
@@ -3823,17 +3904,21 @@ export default function TripDetailScreen({
                                         style={neoStyles.financePreviewTxnMid}
                                       >
                                         <Text
-                                          style={
-                                            neoStyles.financePreviewTxnTitle
-                                          }
+                                          style={[
+                                            neoStyles.financePreviewTxnTitle,
+                                            isDesktop &&
+                                              neoStyles.financePreviewTxnTitleDesktop,
+                                          ]}
                                           numberOfLines={1}
                                         >
                                           {ledgerHistoryTitle(row.tx, row.isIn)}
                                         </Text>
                                         <Text
-                                          style={
-                                            neoStyles.financePreviewTxnMeta
-                                          }
+                                          style={[
+                                            neoStyles.financePreviewTxnMeta,
+                                            isDesktop &&
+                                              neoStyles.financePreviewTxnMetaDesktop,
+                                          ]}
                                           numberOfLines={1}
                                         >
                                           {formatLedgerDate(
@@ -3845,6 +3930,8 @@ export default function TripDetailScreen({
                                       <Text
                                         style={[
                                           neoStyles.financePreviewTxnAmt,
+                                          isDesktop &&
+                                            neoStyles.financePreviewTxnAmtDesktop,
                                           row.isIn
                                             ? neoStyles.financePreviewTxnAmtIn
                                             : neoStyles.financePreviewTxnAmtOut,
@@ -4068,6 +4155,7 @@ export default function TripDetailScreen({
                 ) : activeTab === "expenses" ? (
                   <View style={neoStyles.financeStack}>
                     {odometerPreviewEl}
+                    <Suspense fallback={<ActivityIndicator style={{ margin: 24 }} color="#818cf8" />}>
                     <TripExpensesScreen
                       trip={trip}
                       embedded
@@ -4105,6 +4193,7 @@ export default function TripDetailScreen({
                           : undefined
                       }
                     />
+                    </Suspense>
                   </View>
                 ) : (
                   <View style={neoStyles.vaultGrid}>
@@ -4834,6 +4923,7 @@ export default function TripDetailScreen({
                   ) : null}
 
                   <View style={styles.lrGrow}>
+                    <Suspense fallback={<ActivityIndicator style={{ margin: 12 }} color="#818cf8" />}>
                     <LRDocumentsSection
                       presentation="gallery"
                       docs={detail.computedTripDocs.map((d) => {
@@ -4855,6 +4945,7 @@ export default function TripDetailScreen({
                       onUpdateLR={openTripDocumentsFlow}
                       onAddDocument={openTripDocumentsFlow}
                     />
+                    </Suspense>
                   </View>
                 </View>
 
@@ -5033,91 +5124,13 @@ export default function TripDetailScreen({
           </>
         )}
 
-        {/* ════════════════════ FINANCE TAB ════════════════════ */}
-        {false && isDesktop && desktopTab === "finance" && (
-          <TripDetailFinanceView
-            trip={trip}
-            tripDetailTab="finance"
-            onTripDetailTabChange={(tab) => setActiveTab(tab)}
-            hideInternalTabBar
-            tripLedgerEntries={detail.tripLedgerEntries}
-            adjustments={detail.adjustments}
-            viewerOrgId={currentOrganization?.id ?? null}
-            viewerOrganizationName={currentOrganization?.name ?? null}
-            clientName={detail.displayClientName ?? trip.client_name ?? null}
-            subcontractRate={detail.subcontractRate}
-            assignmentAuditRows={detail.assignmentAuditRows}
-            assignmentDriverNames={detail.assignmentDriverNames}
-            assignmentVehicleLabels={detail.assignmentVehicleLabels}
-            tripOtp={detail.tripOtp}
-            partnerName={detail.partnerName}
-            driverName={detail.driverName}
-            driverRating={detail.driverRatingAvg}
-            vehicleLabel={
-              isAggregate
-                ? ((detail.displayVehicleFromInput.trim() ||
-                    detail.vehicleLabel) ??
-                  null)
-                : detail.vehicleLabel
-            }
-            onSaveAdjustment={detail.handleSaveAdjustment}
-            onRemoveAdjustment={detail.handleVoidAdjustment}
-            currentUserId={detail.currentUserId}
-            tripDocs={detail.computedTripDocs}
-            onOpenDoc={handleDocOpen}
-            assignmentBlock={
-              trip.organization_id ? (
-                <TripAssignmentBlock
-                  trip={trip}
-                  organizationId={currentOrganization?.id ?? ""}
-                  canAssign={detail.canAssign}
-                  onUpdated={detail.handleAssignmentUpdated}
-                  partnerName={detail.partnerName}
-                  driverName={detail.driverName}
-                  vehicleLabel={
-                    isAggregate
-                      ? detail.displayVehicleFromInput.trim() ||
-                        detail.vehicleLabel ||
-                        null
-                      : detail.vehicleLabel
-                  }
-                  driverAvatarUri={detail.driverAvatarUri}
-                  showAssignByPhone={detail.showAssignByPhone}
-                  assignmentSource={detail.assignmentSource}
-                  currentUserId={detail.currentUserId}
-                  previousDriverName={detail.previousDriverName}
-                  latestReassignmentSummary={detail.latestReassignmentSummary}
-                  driverAssignOrgId={
-                    isAggregate ? (currentOrganization?.id ?? null) : null
-                  }
-                  onVehicleDisplayChange={(value) => {
-                    const normalized = formatIndianVehicleNumber(value ?? "");
-                    detail.setDisplayVehicleFromInput(normalized);
-                  }}
-                  inlineSection={
-                    (isAggregate || driverIsUnlinked) ? (
-                      <AggregateTripOtpPanel
-                        variant="sheet"
-                        tripNumber={getTripDisplayNumber(trip, currentOrganization?.id)}
-                        aggregateOtpState={aggregateOtpState}
-                        canGenerateAggregateOtp={canGenerateAggregateOtp}
-                        otpLockedByTripProgress={otpLockedByTripProgress}
-                        tripOtp={detail.tripOtp}
-                        onResendOtp={handleResendOtp}
-                        otpResending={otpResending}
-                      />
-                    ) : null
-                  }
-                />
-              ) : null
-            }
-          />
-        )}
+        {/* TripDetailFinanceView removed — was dead code ({false && …}) */}
 
         <View style={{ height: !isDesktop ? 120 : 48 }} />
       </ScrollView>
 
-      {/* ── Modals ────────────────────────────────────────────────────────────── */}
+      {/* ── Modals (lazy-loaded: imported only when first rendered) ──────────── */}
+      <Suspense fallback={null}>
       <ProvisionAdjustmentModal
         visible={!!showFinanceProvisionPanel}
         side={showFinanceProvisionPanel}
@@ -5199,6 +5212,7 @@ export default function TripDetailScreen({
           }
         />
       ) : null}
+      </Suspense>
 
       <Modal
         visible={provisionConfirm !== null}
@@ -5627,44 +5641,46 @@ export default function TripDetailScreen({
         </View>
       </Modal>
 
-      <LiveTrackingModal
-        visible={detail.showTrackingModal ?? false}
-        onClose={() => detail.setShowTrackingModal(false)}
-        trip={trip}
-        isDriverOffline={showDriverTrackingOfflineOverlay}
-        onSendLoginReminder={detail.requestDriverPing}
-        onReassignDriver={() => {
-          detail.setShowTrackingModal(false);
-          setShowReassignSheet(true);
-        }}
-        isClientIndentView={entryContext === "client"}
-        trackingState={trackingState ?? defaultTrackingState}
-        vehicleLabel={detail.vehicleLabel}
-        locationLabels={detail.trackingMapLocationLabels}
-        originCoordinate={detail.trackingMapOriginCoordinate}
-        destinationCoordinate={detail.trackingMapDestinationCoordinate}
-        tripLocationPoints={mapDbLocationTrail}
-        mapTruckLocation={mapTruckLocation ?? null}
-        mapDbLocationTrail={mapDbLocationTrail}
-        mapTruckStatus={mapTruckStatus}
-        trackingBroadcastActive={trackingState?.broadcastActive ?? false}
-        lastPingRecordedAt={driverLastPingRecordedAt}
-        locationAddress={detail.driverLocationAddress}
-        driverActivityTimelineRows={detail.driverActivityTimelineRows}
-        expandedTimelineEntryIds={detail.expandedTimelineEntryIds}
-        onToggleTimelineItem={detail.toggleTimelineItemExpanded}
-        assignmentDriverNames={detail.assignmentDriverNames}
-        assignmentVehicleLabels={detail.assignmentVehicleLabels}
-        driverName={detail.driverName}
-        driverPhone={detail.driverPhone}
-        currentUserId={detail.currentUserId}
-        routeEtaSeconds={manifestRouteEtaSeconds}
-        mapRouteDistanceKm={mapRouteDistanceKm}
-        deliveryPlan={liveTrackingDeliveryPlan}
-        displayClientName={
-          detail.displayClientName ?? trip.client_name ?? null
-        }
-      />
+      <Suspense fallback={null}>
+        <LiveTrackingModal
+          visible={detail.showTrackingModal ?? false}
+          onClose={() => detail.setShowTrackingModal(false)}
+          trip={trip}
+          isDriverOffline={showDriverTrackingOfflineOverlay}
+          onSendLoginReminder={detail.requestDriverPing}
+          onReassignDriver={() => {
+            detail.setShowTrackingModal(false);
+            setShowReassignSheet(true);
+          }}
+          isClientIndentView={entryContext === "client"}
+          trackingState={trackingState ?? defaultTrackingState}
+          vehicleLabel={detail.vehicleLabel}
+          locationLabels={detail.trackingMapLocationLabels}
+          originCoordinate={detail.trackingMapOriginCoordinate}
+          destinationCoordinate={detail.trackingMapDestinationCoordinate}
+          tripLocationPoints={mapDbLocationTrail}
+          mapTruckLocation={mapTruckLocation ?? null}
+          mapDbLocationTrail={mapDbLocationTrail}
+          mapTruckStatus={mapTruckStatus}
+          trackingBroadcastActive={trackingState?.broadcastActive ?? false}
+          lastPingRecordedAt={driverLastPingRecordedAt}
+          locationAddress={detail.driverLocationAddress}
+          driverActivityTimelineRows={detail.driverActivityTimelineRows}
+          expandedTimelineEntryIds={detail.expandedTimelineEntryIds}
+          onToggleTimelineItem={detail.toggleTimelineItemExpanded}
+          assignmentDriverNames={detail.assignmentDriverNames}
+          assignmentVehicleLabels={detail.assignmentVehicleLabels}
+          driverName={detail.driverName}
+          driverPhone={detail.driverPhone}
+          currentUserId={detail.currentUserId}
+          routeEtaSeconds={manifestRouteEtaSeconds}
+          mapRouteDistanceKm={mapRouteDistanceKm}
+          deliveryPlan={liveTrackingDeliveryPlan}
+          displayClientName={
+            detail.displayClientName ?? trip.client_name ?? null
+          }
+        />
+      </Suspense>
     </View>
   );
 }
@@ -7602,20 +7618,36 @@ const neoStyles = StyleSheet.create({
     width: "100%" as const,
     gap: 0,
   },
+  financeManifestInPaneDesktop: {
+    gap: 10,
+  },
   financeSummaryTwoPane: {
     flexDirection: "row",
     gap: 18,
     alignItems: "flex-start",
     width: "100%" as const,
   },
+  financeSummaryTwoPaneDesktop: {
+    gap: 22,
+    alignItems: "stretch",
+  },
   financeSummaryPaneLeft: {
     flex: 1.28,
     minWidth: 0,
+  },
+  financeSummaryPaneLeftDesktop: {
+    flex: 1.35,
   },
   financeSummaryPaneRight: {
     flex: 0.85,
     minWidth: 268,
     maxWidth: 400,
+  },
+  financeSummaryPaneRightDesktop: {
+    flex: 0.72,
+    minWidth: 300,
+    maxWidth: 380,
+    alignSelf: "stretch",
   },
   financeLedgerPreviewCard: {
     width: "100%",
@@ -7630,6 +7662,12 @@ const neoStyles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 18,
     elevation: 2,
+  },
+  financeLedgerPreviewCardDesktop: {
+    flex: 1,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   financeLedgerPreviewHead: {
     flexDirection: "row",
@@ -7646,6 +7684,10 @@ const neoStyles = StyleSheet.create({
     color: "#64748b",
     letterSpacing: 1.8,
     textTransform: "uppercase",
+  },
+  financeLedgerPreviewTitleDesktop: {
+    fontSize: 11,
+    letterSpacing: 1.4,
   },
   financeLedgerPreviewLink: {
     flexDirection: "row",
@@ -7664,6 +7706,11 @@ const neoStyles = StyleSheet.create({
     color: "#94a3b8",
     marginBottom: 10,
     lineHeight: 15,
+  },
+  financeLedgerPreviewSubDesktop: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 12,
   },
   financeLedgerPreviewScroll: {
     maxHeight: 420,
@@ -7690,6 +7737,12 @@ const neoStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f1f5f9",
   },
+  financePreviewTxnRowDesktop: {
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    gap: 12,
+    borderRadius: 12,
+  },
   financePreviewTxnIcon: {
     width: 32,
     height: 32,
@@ -7697,6 +7750,11 @@ const neoStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  financePreviewTxnIconDesktop: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
   },
   financePreviewTxnIconIn: {
     backgroundColor: "#ecfdf5",
@@ -7713,6 +7771,10 @@ const neoStyles = StyleSheet.create({
     fontWeight: "800",
     color: "#0f172a",
   },
+  financePreviewTxnTitleDesktop: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
   financePreviewTxnMeta: {
     marginTop: 2,
     fontSize: 9,
@@ -7721,11 +7783,19 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
+  financePreviewTxnMetaDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.45,
+    lineHeight: 13,
+  },
   financePreviewTxnAmt: {
     fontSize: 13,
     fontWeight: "900",
     fontStyle: "italic",
     flexShrink: 0,
+  },
+  financePreviewTxnAmtDesktop: {
+    fontSize: 14,
   },
   financePreviewTxnAmtIn: {
     color: "#059669",
@@ -7780,6 +7850,10 @@ const neoStyles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 2.5,
+  },
+  financeSubTabTextDesktop: {
+    fontSize: 13,
+    letterSpacing: 2,
   },
   financeSubTabTextActive: {
     color: "#171a20",
@@ -10366,6 +10440,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderColor: "#e6edf5",
   },
+  refFinanceManifestHeroDesktop: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    marginBottom: 4,
+  },
   refFinanceManifestHeroLoss: {
     borderColor: "rgba(220,38,38,0.25)",
     backgroundColor: Theme.negativeMuted,
@@ -10378,6 +10458,10 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     textAlign: "center",
   },
+  refFinanceMarginLabelDesktop: {
+    fontSize: 10,
+    letterSpacing: 1,
+  },
   refFinanceMarginValue: {
     marginTop: 3,
     fontSize: 18,
@@ -10388,6 +10472,10 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     lineHeight: 22,
   },
+  refFinanceMarginValueDesktop: {
+    fontSize: 22,
+    lineHeight: 26,
+  },
   refFinanceMarginValueLoss: {
     marginTop: 4,
     fontSize: 26,
@@ -10395,6 +10483,11 @@ const styles = StyleSheet.create({
     color: Theme.negative,
     letterSpacing: -0.5,
     lineHeight: 30,
+  },
+  refFinanceMarginValueLossDesktop: {
+    fontSize: 32,
+    lineHeight: 36,
+    letterSpacing: -0.6,
   },
   refFinanceMarginValueGain: {
     color: Theme.positive,
@@ -10406,6 +10499,11 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 11,
+  },
+  refFinanceMarginHintDesktop: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 4,
   },
   refManifestNetHuge: {
     marginTop: 4,

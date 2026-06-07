@@ -1,7 +1,16 @@
 /**
  * Pulse analytics layout primitives — matches fleet desktop reference UI.
  */
-import React, { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import React, {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Animated,
   Easing,
@@ -17,8 +26,10 @@ import type { ScoreLevel } from "@/features/analytics";
 
 import { RiskMeter } from "../RiskMeter";
 import {
+  expandKpiRowsToGrid,
   isPulseCompact,
-  packKpiItems,
+  isPulseDense,
+  isPulseDesktop,
   pulseBodyPadding,
   pulseBodySpacing,
   pulseColumnCount,
@@ -26,6 +37,30 @@ import {
   pulseKpiGap,
   pulseStyles,
 } from "./pulseStyles";
+import {
+  PulseFinancialOverviewCard,
+  type PulseFinancialOverviewProps,
+} from "./PulseFinancialOverviewCard";
+
+export type { PulseFinancialOverviewProps };
+
+type PulseVisualMode = {
+  dense: boolean;
+  desktop: boolean;
+  compact: boolean;
+  embedded: boolean;
+};
+
+const PulseVisualModeContext = createContext<PulseVisualMode>({
+  dense: false,
+  desktop: false,
+  compact: false,
+  embedded: false,
+});
+
+export function usePulseVisualMode(): PulseVisualMode {
+  return useContext(PulseVisualModeContext);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shell + section
@@ -37,6 +72,8 @@ export interface PulseAnalyticsShellProps {
   children: ReactNode;
   /** When nested inside party detail scroll (Client/Supplier detail). */
   embedded?: boolean;
+  /** Slate financial hero — matches entity detail scorecard theme. */
+  financialOverview?: PulseFinancialOverviewProps;
 }
 
 export const PulseAnalyticsShell = memo(function PulseAnalyticsShell({
@@ -44,50 +81,94 @@ export const PulseAnalyticsShell = memo(function PulseAnalyticsShell({
   subtitle,
   children,
   embedded = false,
+  financialOverview,
 }: PulseAnalyticsShellProps) {
   const { width } = useWindowDimensions();
   const compact = isPulseCompact(width);
+  const desktop = isPulseDesktop(width);
+  const dense = isPulseDense(width, embedded);
   const pad = pulseBodyPadding(width, embedded);
-  const heroPad = pulseHeroPadding(width);
-  const bodySpace = pulseBodySpacing(width);
+  const heroPad = pulseHeroPadding(width, embedded);
+  const bodySpace = pulseBodySpacing(width, embedded);
+  const visualMode = useMemo(
+    (): PulseVisualMode => ({ dense, desktop, compact, embedded }),
+    [dense, desktop, compact, embedded],
+  );
+
+  const useFinanceHero = Boolean(financialOverview);
 
   return (
+    <PulseVisualModeContext.Provider value={visualMode}>
     <View style={pulseStyles.canvas}>
-      <View
-        style={[
-          pulseStyles.hero,
-          heroPad,
-          { paddingHorizontal: pad },
-        ]}
-      >
-        <View style={pulseStyles.heroGlow} pointerEvents="none" />
-        <Text
+      {useFinanceHero ? (
+        <View
           style={[
-            pulseStyles.heroTitle,
-            compact && pulseStyles.heroTitleCompact,
+            pulseStyles.financeHeroBand,
+            heroPad,
+            { paddingHorizontal: pad },
           ]}
         >
-          {title}
-        </Text>
-        <Text
+          <Text
+            style={[
+              pulseStyles.financeHeroTitle,
+              dense && pulseStyles.financeHeroTitleDense,
+            ]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          <Text
+            style={[
+              pulseStyles.financeHeroSubtitle,
+              dense && pulseStyles.financeHeroSubtitleDense,
+            ]}
+            numberOfLines={2}
+          >
+            {subtitle}
+          </Text>
+          <PulseFinancialOverviewCard {...financialOverview!} />
+        </View>
+      ) : (
+        <View
           style={[
-            pulseStyles.heroSubtitle,
-            compact && pulseStyles.heroSubtitleCompact,
+            pulseStyles.hero,
+            heroPad,
+            { paddingHorizontal: pad },
           ]}
         >
-          {subtitle}
-        </Text>
-      </View>
+          <View style={pulseStyles.heroGlow} pointerEvents="none" />
+          <Text
+            style={[
+              pulseStyles.heroTitle,
+              dense && pulseStyles.heroTitleCompact,
+            ]}
+          >
+            {title}
+          </Text>
+          <Text
+            style={[
+              pulseStyles.heroSubtitle,
+              dense && pulseStyles.heroSubtitleCompact,
+            ]}
+          >
+            {subtitle}
+          </Text>
+        </View>
+      )}
       <View
         style={[
           pulseStyles.body,
           bodySpace,
           { paddingHorizontal: pad },
+          desktop && pulseStyles.bodyDesktop,
+          dense && pulseStyles.bodyDense,
+          useFinanceHero && pulseStyles.bodyAfterFinanceHero,
         ]}
       >
         {children}
       </View>
     </View>
+    </PulseVisualModeContext.Provider>
   );
 });
 
@@ -102,20 +183,19 @@ export const PulseSection = memo(function PulseSection({
   subtitle,
   children,
 }: PulseSectionProps) {
-  const { width } = useWindowDimensions();
-  const compact = isPulseCompact(width);
+  const { dense } = usePulseVisualMode();
 
   return (
     <View
       style={[
         pulseStyles.sectionBlock,
-        compact && pulseStyles.sectionBlockCompact,
+        dense && pulseStyles.sectionBlockDense,
       ]}
     >
       <Text
         style={[
           pulseStyles.sectionTitle,
-          compact && pulseStyles.sectionTitleCompact,
+          dense && pulseStyles.sectionTitleDense,
         ]}
       >
         {title}
@@ -124,7 +204,7 @@ export const PulseSection = memo(function PulseSection({
         <Text
           style={[
             pulseStyles.sectionSubtitle,
-            compact && pulseStyles.sectionSubtitleCompact,
+            dense && pulseStyles.sectionSubtitleCompact,
           ]}
         >
           {subtitle}
@@ -150,22 +230,22 @@ export const PulseChartPanel = memo(function PulseChartPanel({
   children,
   bodyStyle,
 }: PulseChartPanelProps) {
-  const { width } = useWindowDimensions();
-  const compact = isPulseCompact(width);
+  const { dense, embedded } = usePulseVisualMode();
 
   return (
-    <View style={[pulseStyles.panel, compact && pulseStyles.panelCompact]}>
+    <View style={[pulseStyles.panel, dense && pulseStyles.panelCompact]}>
       <View
         style={[
           pulseStyles.panelHeader,
-          compact && pulseStyles.panelHeaderCompact,
+          dense && pulseStyles.panelHeaderCompact,
+          embedded && dense && pulseStyles.panelHeaderFinance,
         ]}
       >
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text
             style={[
               pulseStyles.panelTitle,
-              compact && pulseStyles.panelTitleCompact,
+              dense && pulseStyles.panelTitleCompact,
             ]}
           >
             {title}
@@ -174,7 +254,7 @@ export const PulseChartPanel = memo(function PulseChartPanel({
             <Text
               style={[
                 pulseStyles.panelSubtitle,
-                compact && pulseStyles.panelSubtitleCompact,
+                dense && pulseStyles.panelSubtitleCompact,
               ]}
             >
               {subtitle}
@@ -184,7 +264,7 @@ export const PulseChartPanel = memo(function PulseChartPanel({
         {rightIcon ?? (
           <FontAwesome
             name="bar-chart"
-            size={compact ? 14 : 16}
+            size={dense ? 12 : 16}
             color={Theme.textMuted}
           />
         )}
@@ -192,7 +272,7 @@ export const PulseChartPanel = memo(function PulseChartPanel({
       <View
         style={[
           pulseStyles.panelBody,
-          compact && pulseStyles.panelBodyCompact,
+          dense && pulseStyles.panelBodyCompact,
           bodyStyle,
         ]}
       >
@@ -223,32 +303,41 @@ export interface PulseKpiGridProps {
 
 export const PulseKpiGrid = memo(function PulseKpiGrid({ rows }: PulseKpiGridProps) {
   const { width } = useWindowDimensions();
-  const compact = isPulseCompact(width);
+  const { dense, embedded } = usePulseVisualMode();
   const cols = pulseColumnCount(width);
-  const gap = pulseKpiGap(width);
+  const gap = pulseKpiGap(width, embedded);
 
   const packedRows = useMemo(
-    () => packKpiItems(rows, cols) as PulseKpiItem[][],
+    () => expandKpiRowsToGrid(rows, cols),
     [rows, cols],
   );
 
   return (
-    <View style={[pulseStyles.kpiGrid, compact && pulseStyles.kpiGridCompact]}>
+    <View style={[pulseStyles.kpiGrid, dense && pulseStyles.kpiGridCompact]}>
       {packedRows.map((row, ri) => (
         <View
           key={`kpi-row-${ri}`}
           style={[
             pulseStyles.kpiRow,
-            compact && pulseStyles.kpiRowCompact,
+            dense && pulseStyles.kpiRowCompact,
             { gap },
           ]}
         >
-          {row.map((cell) => (
+          {row.map((cell, ci) => (
             <View
-              key={cell.id}
-              style={[pulseStyles.kpiCell, compact && pulseStyles.kpiCellCompact]}
+              key={cell?.id ?? `kpi-spacer-${ri}-${ci}`}
+              style={[pulseStyles.kpiCell, dense && pulseStyles.kpiCellCompact]}
             >
-              <PulseKpiCard {...cell} />
+              {cell ? (
+                <PulseKpiCard {...cell} />
+              ) : (
+                <View
+                  style={[
+                    pulseStyles.kpiSpacer,
+                    dense && pulseStyles.kpiSpacerDense,
+                  ]}
+                />
+              )}
             </View>
           ))}
         </View>
@@ -266,9 +355,11 @@ export const PulsePanelGrid = memo(function PulsePanelGrid({
   minColumnWidth?: number;
 }) {
   const { width } = useWindowDimensions();
-  const pad = pulseBodyPadding(width) * 2;
+  const { embedded, dense } = usePulseVisualMode();
+  const pad = pulseBodyPadding(width, embedded) * 2;
   const usable = Math.max(280, width - pad);
   const compact = isPulseCompact(width);
+  const desktop = isPulseDesktop(width);
   const columns = compact
     ? 1
     : Math.max(1, Math.min(2, Math.floor(usable / minColumnWidth)));
@@ -277,15 +368,21 @@ export const PulsePanelGrid = memo(function PulsePanelGrid({
     return <View style={pulseStyles.panelGridStack}>{children}</View>;
   }
 
-  const itemWidth = (usable - 12 * (columns - 1)) / columns;
-
   return (
-    <View style={pulseStyles.panelGridRow}>
+    <View
+      style={[
+        pulseStyles.panelGridRow,
+        desktop && { gap: dense ? 12 : 16 },
+      ]}
+    >
       {React.Children.map(children, (child, i) =>
         child ? (
           <View
             key={`panel-${i}`}
-            style={[pulseStyles.panelGridItem, { width: itemWidth }]}
+            style={[
+              pulseStyles.panelGridItem,
+              { minWidth: desktop ? minColumnWidth : minColumnWidth * 0.85 },
+            ]}
           >
             {child}
           </View>
@@ -300,51 +397,51 @@ const PulseKpiCard = memo(function PulseKpiCard({
   value,
   subtext,
   valueColor = Theme.primary,
-  iconName = "line-chart",
   trend,
   badge,
 }: PulseKpiItem) {
-  const { width } = useWindowDimensions();
-  const compact = isPulseCompact(width);
+  const { dense, compact } = usePulseVisualMode();
   const trendUp = trend !== undefined && trend >= 0;
 
   return (
-    <View style={[pulseStyles.kpiCard, compact && pulseStyles.kpiCardCompact]}>
+    <View
+      style={[
+        pulseStyles.kpiCard,
+        dense && !compact && pulseStyles.kpiCardDense,
+        compact && pulseStyles.kpiCardCompact,
+      ]}
+    >
       <View
         style={[
           pulseStyles.kpiCardHeader,
-          compact && pulseStyles.kpiCardHeaderCompact,
+          dense && pulseStyles.kpiCardHeaderCompact,
         ]}
       >
         <Text
-          style={[pulseStyles.kpiLabel, compact && pulseStyles.kpiLabelCompact]}
-          numberOfLines={compact ? 2 : 1}
+          style={[pulseStyles.kpiLabel, dense && pulseStyles.kpiLabelCompact]}
+          numberOfLines={2}
         >
           {label}
         </Text>
-        {!compact ? (
-          <View style={pulseStyles.kpiIconWrap}>
-            <FontAwesome name={iconName} size={16} color={Theme.textMuted} />
-          </View>
-        ) : null}
       </View>
       <View>
         <Text
           style={[
             pulseStyles.kpiValue,
+            dense && pulseStyles.kpiValueDense,
             compact && pulseStyles.kpiValueCompact,
             { color: valueColor },
           ]}
           numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.8}
+          minimumFontScale={0.75}
         >
           {value}
         </Text>
         <View
           style={[
             pulseStyles.kpiFooter,
-            compact && pulseStyles.kpiFooterCompact,
+            dense && pulseStyles.kpiFooterCompact,
           ]}
         >
           {trend !== undefined ? (
@@ -370,7 +467,7 @@ const PulseKpiCard = memo(function PulseKpiCard({
             </View>
           ) : null}
           <Text
-            style={[pulseStyles.kpiSub, compact && pulseStyles.kpiSubCompact]}
+            style={[pulseStyles.kpiSub, dense && pulseStyles.kpiSubCompact]}
             numberOfLines={1}
           >
             {subtext}
@@ -451,15 +548,14 @@ export const PulseHealthScorePanel = memo(function PulseHealthScorePanel({
 }: PulseHealthScorePanelProps) {
   const palette = LEVEL_CHIP[level];
   const displayScore = useCountUp(score);
-
-  const { width } = useWindowDimensions();
-  const compact = isPulseCompact(width);
+  const { dense, compact } = usePulseVisualMode();
 
   return (
     <View
       style={[
         pulseStyles.panel,
         pulseStyles.healthCard,
+        dense && !compact && pulseStyles.healthCardDense,
         compact && pulseStyles.healthCardCompact,
       ]}
     >
@@ -479,6 +575,7 @@ export const PulseHealthScorePanel = memo(function PulseHealthScorePanel({
         <Text
           style={[
             pulseStyles.healthScoreValue,
+            dense && pulseStyles.healthScoreValueDense,
             compact && pulseStyles.healthScoreValueCompact,
             { color: palette.fg },
           ]}
@@ -522,25 +619,29 @@ export const PulseGaugePanel = memo(function PulseGaugePanel({
   label,
   caption,
 }: PulseGaugePanelProps) {
-  const { width } = useWindowDimensions();
-  const compact = isPulseCompact(width);
+  const { dense, compact, desktop } = usePulseVisualMode();
+  const ringSize = compact ? 112 : dense ? 132 : desktop ? 168 : 152;
 
   return (
     <View
       style={[
         pulseStyles.panel,
         pulseStyles.gaugeCard,
+        dense && !compact && pulseStyles.gaugeCardDense,
         compact && pulseStyles.gaugeCardCompact,
+        { overflow: "visible" as const },
       ]}
     >
-      <RiskMeter
-        value={value}
-        level={level}
-        label={label}
-        caption={caption}
-        size={compact ? 120 : 160}
-        stroke={compact ? 10 : 12}
-      />
+      <View style={pulseStyles.gaugeCardInner}>
+        <RiskMeter
+          value={value}
+          level={level}
+          label={label}
+          caption={caption}
+          size={ringSize}
+          stroke={compact ? 9 : dense ? 10 : 12}
+        />
+      </View>
     </View>
   );
 });
@@ -553,11 +654,9 @@ export const PulseHealthRow = memo(function PulseHealthRow({
   gauge: ReactNode;
 }) {
   const { width } = useWindowDimensions();
-  const stacked = isPulseCompact(width) || width < 1024;
+  const stacked = width < 1024;
 
-  const compact = isPulseCompact(width);
-
-  if (stacked || compact) {
+  if (stacked) {
     return (
       <View style={[pulseStyles.scoreGridCompact, { gap: 8 }]}>
         <View style={pulseStyles.scoreMainCompact}>{score}</View>
@@ -567,7 +666,7 @@ export const PulseHealthRow = memo(function PulseHealthRow({
   }
 
   return (
-    <View style={pulseStyles.scoreGrid}>
+    <View style={[pulseStyles.scoreGrid, !stacked && pulseStyles.scoreGridDesktop]}>
       <View style={pulseStyles.scoreMain}>{score}</View>
       <View style={pulseStyles.scoreSide}>{gauge}</View>
     </View>
@@ -653,6 +752,7 @@ export const PulseLaneBar = memo(function PulseLaneBar({
   percent,
   marginLabel,
 }: PulseLaneBarItem) {
+  const { dense } = usePulseVisualMode();
   const anim = useRef(new Animated.Value(0)).current;
   const clamped = Math.max(0, Math.min(100, percent));
 
@@ -696,7 +796,11 @@ export const PulseLaneBar = memo(function PulseLaneBar({
           ) : null}
         </Animated.View>
       </View>
-      <Text style={pulseStyles.laneValue}>{value}</Text>
+      <Text
+        style={[pulseStyles.laneValue, dense && pulseStyles.laneValueDense]}
+      >
+        {value}
+      </Text>
     </View>
   );
 });
@@ -755,6 +859,7 @@ const INSIGHT_STYLE: Record<
 };
 
 function PulseInsightRow({ message, tone }: PulseInsightProps) {
+  const { dense } = usePulseVisualMode();
   const s = INSIGHT_STYLE[tone];
   const parts = message.split(/(\*\*[^*]+\*\*)/g);
 
@@ -765,8 +870,8 @@ function PulseInsightRow({ message, tone }: PulseInsightProps) {
         { backgroundColor: s.bg, borderColor: s.border },
       ]}
     >
-      <FontAwesome name={s.icon as "check-circle"} size={22} color={s.color} />
-      <Text style={pulseStyles.insightText}>
+      <FontAwesome name={s.icon as "check-circle"} size={dense ? 18 : 22} color={s.color} />
+      <Text style={[pulseStyles.insightText, dense && pulseStyles.insightTextDense]}>
         {parts.map((part, i) => {
           if (part.startsWith("**") && part.endsWith("**")) {
             return (
@@ -787,16 +892,20 @@ export function usePulseChartWidth(options?: {
   /** Split usable width when charts sit in `PulsePanelGrid`. */
   columns?: number;
   extraPadding?: number;
+  /** Party detail analytics — tighter horizontal inset. */
+  embedded?: boolean;
 }): number {
   const { width } = useWindowDimensions();
-  const sidePad = pulseBodyPadding(width) * 2 + (options?.extraPadding ?? 48);
+  const sidePad =
+    pulseBodyPadding(width, options?.embedded ?? false) * 2 +
+    (options?.extraPadding ?? (options?.embedded ? 24 : 32));
   const usable = Math.max(280, width - sidePad);
   const wantCols = options?.columns ?? 1;
   const cols =
     wantCols > 1 && width >= 960
       ? Math.min(wantCols, Math.max(1, Math.floor(usable / 320)))
       : 1;
-  const gap = cols > 1 ? 12 * (cols - 1) : 0;
+  const gap = cols > 1 ? 16 * (cols - 1) : 0;
   const colW = (usable - gap) / cols;
-  return Math.max(260, Math.min(colW, 1200));
+  return Math.max(280, colW);
 }

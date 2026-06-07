@@ -247,8 +247,11 @@ export function AddTripFormFields({
   const isCompactMobile = winW < 480;
   const isWeb = Platform.OS === "web";
   const useWebCurrencyField = isWeb && winW >= 720;
-  /** Native app + narrow web: tighter fields and section padding. */
-  const isDenseForm = !isWeb || winW < 600;
+  /** Web only: CSS grid — row1 route|commodity; row2 client; row3 supply; row4 CTA. */
+  const desktopFormGrid =
+    Platform.OS === "web" && winW >= 1080 && !isCompactMobile;
+  /** Tighter typography and fields (desktop grid + mobile). */
+  const isDenseForm = !isWeb || desktopFormGrid || winW < 1280;
   const iconFieldInputStyle = [
     styles.iconInput,
     inputStyle,
@@ -265,11 +268,8 @@ export function AddTripFormFields({
    * Higher than `allocationWideLayout` so laptops ~1024–1100px don’t split those fields in half.
    */
   const driverVehicleSideBySide = winW >= 1100;
-  /** Web only: CSS grid — row1 route|commodity; row2 client; row3 supply; row4 CTA. */
-  const desktopFormGrid =
-    Platform.OS === "web" && winW >= 1080 && !isCompactMobile;
-  /** Desktop form shell: use viewport minus padding, capped so ultra-wide stays readable. */
-  const desktopFormMaxWidth = Math.min(winW - 28, 1680);
+  /** Desktop form shell: use viewport minus edge padding (aligned with Create Indent). */
+  const desktopFormMaxWidth = Math.min(winW - 32, 1680);
   const showRouteCard = wizardSection == null || wizardSection === "route";
   const showCommodityCard =
     wizardSection == null || wizardSection === "commodity";
@@ -282,9 +282,8 @@ export function AddTripFormFields({
   const isWizardSingleCard =
     wizardSection != null && wizardSection !== "allocation";
   const isWizardAllocationCard = wizardSection === "allocation";
-  /** Web desktop: phone + recommendations side-by-side in allocation card. */
-  const webPhoneRecsAside =
-    isWeb && winW >= 720 && winW >= 1080 && !mobileAllocWizard;
+  /** Compact currency / tracking fields in aggregate allocation pane. */
+  const aggregateFieldDensity = isDenseForm || allocationWideLayout ? "compact" : "default";
   const fieldLabelStyle = [
     styles.label,
     labelStyle,
@@ -855,6 +854,8 @@ export function AddTripFormFields({
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardDesktopGrid,
+                desktopFormGrid && styles.cardDesktopStretch,
                 isWizardRouteStep && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridRouteWeb,
               ]}
@@ -863,6 +864,7 @@ export function AddTripFormFields({
               style={[
                 styles.cardHead,
                 isDenseForm && styles.cardHeadDense,
+                desktopFormGrid && styles.cardHeadDesktop,
                 isWizardRouteStep && styles.cardHeadWizard,
               ]}
             >
@@ -1120,7 +1122,7 @@ export function AddTripFormFields({
                   style={[
                     styles.gridRow,
                     isDenseForm && styles.gridRowDense,
-                    isWide && styles.gridRowWide,
+                    (isWide || desktopFormGrid) && styles.gridRowWide,
                   ]}
                 >
                   <View style={styles.gridCol}>
@@ -1275,7 +1277,12 @@ export function AddTripFormFields({
                     )}
                   </View>
                   {!hideTonsOnRouteStep ? (
-                    <View style={styles.gridCol}>
+                    <View
+                      style={[
+                        styles.gridCol,
+                        desktopFormGrid && styles.gridColTonsDesktop,
+                      ]}
+                    >
                       <Text style={fieldLabelStyle}>Tons</Text>
                       <TextInput
                         style={[
@@ -1308,7 +1315,12 @@ export function AddTripFormFields({
             )}
 
             {state.pickupArea.trim() && state.dropLocation.trim() ? (
-              <View style={styles.routePreviewPanel}>
+              <View
+                style={[
+                  styles.routePreviewPanel,
+                  desktopFormGrid && styles.routePreviewPanelDesktop,
+                ]}
+              >
                 <View style={styles.routePreviewHero}>
                   <ArrowRight
                     size={16}
@@ -1357,6 +1369,8 @@ export function AddTripFormFields({
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardDesktopGrid,
+                desktopFormGrid && styles.cardDesktopStretch,
                 wizardSection === "commodity" && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridCommodityWeb,
               ]}
@@ -1365,6 +1379,7 @@ export function AddTripFormFields({
                 style={[
                   styles.cardHead,
                   isDenseForm && styles.cardHeadDense,
+                  desktopFormGrid && styles.cardHeadDesktop,
                   wizardSection === "commodity" && styles.cardHeadWizard,
                 ]}
               >
@@ -1416,6 +1431,7 @@ export function AddTripFormFields({
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardDesktopGrid,
                 wizardSection === "client" && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridClientWeb,
               ]}
@@ -1424,6 +1440,7 @@ export function AddTripFormFields({
               style={[
                 styles.cardHead,
                 isDenseForm && styles.cardHeadDense,
+                desktopFormGrid && styles.cardHeadDesktop,
                 wizardSection === "client" && styles.cardHeadWizard,
               ]}
             >
@@ -1449,11 +1466,20 @@ export function AddTripFormFields({
               </View>
             </View>
 
-            <View style={[styles.gridRow, isDenseForm && styles.gridRowDense, isWide && styles.gridRowWide]}>
+            <View
+              style={[
+                styles.gridRow,
+                isDenseForm && styles.gridRowDense,
+                isWide && styles.gridRowWide,
+                desktopFormGrid && styles.gridRowWideDesktop,
+                desktopFormGrid && styles.clientCommercialsRowDesktop,
+              ]}
+            >
               <View
                 style={[
                   styles.gridCol,
                   invalid("client") && styles.fieldGroupRing,
+                  desktopFormGrid && styles.clientCommercialsClientColDesktop,
                 ]}
               >
                 <View
@@ -1555,6 +1581,9 @@ export function AddTripFormFields({
                         totalCount={clients.length}
                         errorOutline={invalid("client")}
                         selectedId={state.clientId}
+                        compact={desktopFormGrid}
+                        columns={desktopFormGrid ? 4 : undefined}
+                        scrollMaxHeight={desktopFormGrid ? 260 : 360}
                         onSelect={(id) => {
                           const row = clients.find((c) => c.id === id);
                           if (!row) return;
@@ -1582,25 +1611,19 @@ export function AddTripFormFields({
                 )}
               </View>
 
-              <View style={styles.gridCol}>
-                {useWebCurrencyField ? (
-                  <AddTripWebCurrencyField
-                    label="Client sale price"
-                    value={state.clientPrice}
-                    onChange={setters.setClientPrice}
-                    required
-                    dense={isDenseForm}
-                    errorMessage={
-                      invalid("clientPrice") ? "Enter a sale price" : undefined
-                    }
-                  />
-                ) : (
+              <View
+                style={[
+                  styles.gridCol,
+                  desktopFormGrid && styles.clientCommercialsPriceColDesktop,
+                ]}
+              >
                 <SmartInput
                   type="currency"
                   label="Client sale price"
                   value={state.clientPrice}
                   onChange={(raw) => setters.setClientPrice(raw)}
                   variant="field"
+                  density={isDenseForm ? "compact" : "default"}
                   required
                   partyPreview={
                     selectedClientRow
@@ -1619,7 +1642,6 @@ export function AddTripFormFields({
                   }
                   errorMessage={invalid("clientPrice") ? "Enter a sale price" : undefined}
                 />
-                )}
                 {!isWide ? (
                   <View style={[styles.infoCallout, isDenseForm && styles.infoCalloutDense]}>
                     <Info size={isDenseForm ? 14 : 16} color={Theme.iconPrimary} />
@@ -2016,10 +2038,18 @@ export function AddTripFormFields({
               style={[
                 styles.card,
                 isDenseForm && styles.cardDense,
+                desktopFormGrid && styles.cardDesktopGrid,
                 desktopFormGrid && styles.cardGridSupplyWeb,
               ]}
             >
-            <View style={[styles.cardHead, styles.cardHeadWithTrailingAction, isDenseForm && styles.cardHeadDense]}>
+            <View
+              style={[
+                styles.cardHead,
+                styles.cardHeadWithTrailingAction,
+                isDenseForm && styles.cardHeadDense,
+                desktopFormGrid && styles.cardHeadDesktop,
+              ]}
+            >
               <View style={styles.cardHeadTitleCluster}>
                 <View style={[styles.stepBadge, isDenseForm && styles.stepBadgeDense]}>
                   <Text style={styles.stepBadgeText}>04</Text>
@@ -2058,6 +2088,7 @@ export function AddTripFormFields({
             <SupplyAllocationModeBar
               mode={supplyIsAsset ? "asset" : "aggregate"}
               compact={isCompactMobile}
+              layout={desktopFormGrid ? "inline" : "stack"}
               assignLater={state.assignLater}
               assignLaterDisabled={assignLaterSwitchDisabled}
               onModeChange={(mode) => setters.setSupplySource(mode)}
@@ -2110,6 +2141,7 @@ export function AddTripFormFields({
 
                 {!state.assignLater &&
                 (showAlloc("fleetDriver") || !mobileAllocWizard) ? (
+                  <>
                   <View
                     style={[
                       assignmentShellStyles.assignSelectionGrid,
@@ -2117,7 +2149,13 @@ export function AddTripFormFields({
                         assignmentShellStyles.assignSelectionGridDesktop,
                     ]}
                   >
-                    <View>
+                    <View
+                      style={
+                        driverVehicleSideBySide
+                          ? styles.fleetPickColumnWrap
+                          : undefined
+                      }
+                    >
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
                       ) : (
@@ -2187,7 +2225,13 @@ export function AddTripFormFields({
                       )}
                     </View>
                     {(showAlloc("fleetVehicle") || !mobileAllocWizard) ? (
-                    <View>
+                    <View
+                      style={
+                        driverVehicleSideBySide
+                          ? styles.fleetPickColumnWrap
+                          : undefined
+                      }
+                    >
                       {fleetLoading ? (
                         <ActivityIndicator color={Theme.iconPrimary} />
                       ) : (
@@ -2264,10 +2308,11 @@ export function AddTripFormFields({
                       )}
                     </View>
                     ) : null}
-                    <Text style={assignmentShellStyles.supplyFooterHint}>
-                      Select a driver and a vehicle from your org to continue.
-                    </Text>
                   </View>
+                  <Text style={assignmentShellStyles.supplyFooterHint}>
+                    Select a driver and a vehicle from your org to continue.
+                  </Text>
+                  </>
                 ) : null}
               </>
             ) : (
@@ -2283,13 +2328,24 @@ export function AddTripFormFields({
                   <View
                     style={[
                       styles.aggregateLeftPane,
-                      allocationWideLayout && styles.aggregatePaneWide,
+                      allocationWideLayout && styles.aggregateLeftPaneWide,
                     ]}
                   >
                     {suppliersLoading ? (
                       <ActivityIndicator color={Theme.iconPrimary} />
                     ) : (
                       <>
+                        {allocationWideLayout && showPartnerSummary ? (
+                          <Text
+                            style={[
+                              ...fieldLabelStyle,
+                              styles.sectionLabelTight,
+                              styles.aggregatePaneFieldLabel,
+                            ]}
+                          >
+                            Transport partner
+                          </Text>
+                        ) : null}
                         {showPartnerSummary ? (
                           <TouchableOpacity
                             style={[
@@ -2406,7 +2462,7 @@ export function AddTripFormFields({
                   <View
                     style={[
                       styles.aggregateRightPane,
-                      allocationWideLayout && styles.aggregatePaneWide,
+                      allocationWideLayout && styles.aggregateRightPaneWide,
                     ]}
                   >
                 <View
@@ -2418,23 +2474,15 @@ export function AddTripFormFields({
                     allocationWideLayout && styles.aggregateAssignSurfaceWide,
                   ]}
                 >
-                {allocationWideLayout ? (
-                  <>
-                    <View style={styles.clientCommercialsHeaderBand}>
-                      <View style={[styles.gridRow, styles.gridRowWide]}>
-                        <View style={styles.gridCol}>
-                          <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                            Partner rate (₹) *
-                          </Text>
-                        </View>
-                        <View style={styles.gridCol}>
-                          <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                            Advance paid (₹)
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={[styles.gridRow, styles.gridRowWide]}>
+                {!mobileAllocWizard ? (
+                  <View style={styles.aggregateFormBody}>
+                    <View
+                      style={[
+                        styles.gridRow,
+                        (allocationWideLayout || isWide) && styles.gridRowWide,
+                        styles.aggregateFormRow,
+                      ]}
+                    >
                       <View style={styles.gridCol}>
                         {useWebCurrencyField ? (
                           <AddTripWebCurrencyField
@@ -2456,8 +2504,16 @@ export function AddTripFormFields({
                           value={state.supplierRate}
                           onChange={(raw) => setters.setSupplierRate(raw)}
                           variant="field"
+                          density={aggregateFieldDensity}
                           required
-                          errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
+                          partyPreview={
+                            !allocationWideLayout && selectedSupplierRow
+                              ? supplierToNumericPartyPreview(selectedSupplierRow)
+                              : undefined
+                          }
+                          errorMessage={
+                            invalid("partnerRate") ? "Enter a partner rate" : undefined
+                          }
                         />
                         )}
                       </View>
@@ -2477,286 +2533,245 @@ export function AddTripFormFields({
                           value={state.advancePaid}
                           onChange={(raw) => setters.setAdvancePaid(raw)}
                           variant="field"
+                          density={aggregateFieldDensity}
                           placeholder="Optional"
                         />
                         )}
                       </View>
                     </View>
-                  </>
-                ) : !mobileAllocWizard ? (
-                <View
-                  style={[
-                    styles.gridRow,
-                    allocationWideLayout && styles.gridRowWide,
-                  ]}
-                >
-                  <View style={styles.gridCol}>
-                    {useWebCurrencyField ? (
-                      <AddTripWebCurrencyField
-                        label="Partner rate"
-                        value={state.supplierRate}
-                        onChange={setters.setSupplierRate}
-                        required
-                        dense={isDenseForm}
-                        errorMessage={
-                          invalid("partnerRate") ? "Enter a partner rate" : undefined
-                        }
-                      />
-                    ) : (
-                    <SmartInput
-                      type="currency"
-                      label="Partner rate"
-                      value={state.supplierRate}
-                      onChange={(raw) => setters.setSupplierRate(raw)}
-                      variant="field"
-                      required
-                      partyPreview={
-                        selectedSupplierRow
-                          ? supplierToNumericPartyPreview(selectedSupplierRow)
-                          : undefined
-                      }
-                      errorMessage={invalid("partnerRate") ? "Enter a partner rate" : undefined}
-                    />
-                    )}
-                  </View>
-                  <View style={styles.gridCol}>
-                    {useWebCurrencyField ? (
-                      <AddTripWebCurrencyField
-                        label="Advance paid"
-                        value={state.advancePaid}
-                        onChange={setters.setAdvancePaid}
-                        placeholder="Optional"
-                        dense={isDenseForm}
-                      />
-                    ) : (
-                    <SmartInput
-                      type="currency"
-                      label="Advance paid"
-                      value={state.advancePaid}
-                      onChange={(raw) => setters.setAdvancePaid(raw)}
-                      variant="field"
-                      placeholder="Optional"
-                    />
-                    )}
-                  </View>
-                </View>
-                ) : null}
 
                 {!state.assignLater &&
-                !mobileAllocWizard &&
                 (showDriverNameField ||
                   showDriverPhoneField ||
                   showVehicleField) ? (
-                  <>
-                    <View
-                      style={[
-                        styles.gridRow,
-                        styles.gridRowFleet,
-                        styles.aggregateTrackingFieldsGrid,
-                        driverVehicleSideBySide && styles.gridRowWide,
-                      ]}
-                    >
-                      {showDriverPhoneField ? (
-                      <View
-                        style={[
-                          webPhoneRecsAside ? styles.webAggregatePhoneRow : null,
-                          mobileAllocWizard && styles.allocWizardFieldCol,
-                          webPhoneRecsAside && styles.webAggregatePhoneRowCol,
-                        ]}
-                      >
+                  <View style={styles.aggregateTrackingSection}>
+                    {showDriverPhoneField ? (
+                      <View style={styles.aggregateFormField}>
+                        <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
+                          Driver phone (tracking) *
+                        </Text>
                         <View
                           style={[
-                            styles.gridCol,
-                            mobileAllocWizard && styles.allocWizardFieldCol,
-                            webPhoneRecsAside && styles.webAggregatePhoneFieldCol,
+                            styles.inPhoneOuter,
+                            isDenseForm && styles.inPhoneOuterDense,
+                            styles.aggregatePhoneInput,
+                            invalid("driverPhone") && styles.inputErrorOutline,
                           ]}
                         >
-                          <Text style={[styles.label, labelStyle, styles.sectionLabelTight]}>
-                            Driver phone (tracking) *
-                          </Text>
-                          <View
-                            style={[
-                              styles.inPhoneOuter,
-                              isDenseForm && styles.inPhoneOuterDense,
-                              invalid("driverPhone") && styles.inputErrorOutline,
-                            ]}
+                          <Text
+                            style={styles.inPhoneFlag}
+                            accessibilityLabel="India"
                           >
-                            <Text
-                              style={styles.inPhoneFlag}
-                              accessibilityLabel="India"
-                            >
-                              🇮🇳
-                            </Text>
-                            <Text style={styles.inPhoneCc}>+91</Text>
-                            <TextInput
-                              style={[
-                                styles.inPhoneInput,
-                                isDenseForm && styles.inPhoneInputDense,
-                                isCompactMobile &&
-                                  Platform.OS === "web" &&
-                                  styles.mobileWebNoZoomInput,
-                              ]}
-                              placeholder="98765 43210"
-                              placeholderTextColor={Theme.placeholder}
-                              value={state.driverPhone}
-                              onChangeText={(v) => {
-                                setters.setDriverPhone(formatMobileNumber(v));
-                              }}
-                              keyboardType="phone-pad"
-                              maxLength={10}
-                              ref={driverPhoneInputRef}
-                              inputAccessoryViewID={kbAccessoryId}
-                              onFocus={() => {
-                                focusPadField(
-                                  () => focusNextField(aggregateDriverNameInputRef),
-                                  state.driverPhone,
-                                );
-                              }}
-                              blurOnSubmit={false}
-                            />
-                          </View>
-                          {state.driverPhone.length > 0 &&
-                          state.driverPhone.length < 10 ? (
-                            <Text style={styles.phoneDigitHint}>
-                              {state.driverPhone.length}/10 digits
-                            </Text>
-                          ) : null}
-                          {state.driverPhone.trim() &&
-                          validatePhone(state.driverPhone.trim()) ? (
-                            <Text style={[styles.warningText, { marginTop: 4 }]}>
-                              {validatePhone(state.driverPhone.trim())}
-                            </Text>
-                          ) : null}
-                          {!mobileAllocWizard && !webPhoneRecsAside
-                            ? renderDriverPhoneRecommendations(
-                                state.driverPhone.length >= 10,
-                                "stack",
-                              )
-                            : null}
-                        </View>
-                        {webPhoneRecsAside ? (
-                          <View style={styles.webAggregateRecsCol}>
-                            {renderDriverPhoneRecommendations(
-                              state.driverPhone.length >= 10,
-                              "aside",
-                            )}
-                          </View>
-                        ) : null}
-                      </View>
-                      ) : null}
-                      {showDriverNameField ? (
-                      <View style={[styles.gridCol, mobileAllocWizard && styles.allocWizardFieldCol]}>
-                        <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                          Driver name (tracking) *
-                        </Text>
-                        {state.driverPhoneName?.trim() ? (
-                          <Text style={[styles.phoneDigitHint, { marginBottom: 6 }]}>
-                            From platform: {state.driverPhoneName.trim()}
+                            🇮🇳
                           </Text>
-                        ) : null}
-                        <View style={styles.iconField}>
-                          <User
-                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                            color={Theme.iconMuted}
-                            style={[styles.iconInField, isDenseForm && styles.iconInFieldDense]}
-                          />
+                          <Text style={styles.inPhoneCc}>+91</Text>
                           <TextInput
                             style={[
-                              ...iconFieldInputStyle,
-                              outlineErr("driverName"),
+                              styles.inPhoneInput,
+                              isDenseForm && styles.inPhoneInputDense,
                               isCompactMobile &&
                                 Platform.OS === "web" &&
                                 styles.mobileWebNoZoomInput,
                             ]}
-                            placeholder="e.g. Suresh Kumar"
+                            placeholder="98765 43210"
                             placeholderTextColor={Theme.placeholder}
-                            value={state.aggregateDriverName}
-                            onChangeText={(t) =>
-                              onPadValueChange(setters.setAggregateDriverName, t)
-                            }
-                            ref={aggregateDriverNameInputRef}
-                            autoCapitalize="words"
+                            value={state.driverPhone}
+                            onChangeText={(v) => {
+                              setters.setDriverPhone(formatMobileNumber(v));
+                            }}
+                            keyboardType="phone-pad"
+                            maxLength={10}
+                            ref={driverPhoneInputRef}
                             inputAccessoryViewID={kbAccessoryId}
                             onFocus={() => {
                               focusPadField(
-                                () => focusNextField(aggregateVehicleInputRef),
-                                state.aggregateDriverName,
+                                () => focusNextField(aggregateDriverNameInputRef),
+                                state.driverPhone,
                               );
                             }}
                             blurOnSubmit={false}
                           />
                         </View>
+                        {state.driverPhone.length > 0 &&
+                        state.driverPhone.length < 10 ? (
+                          <Text style={styles.phoneDigitHint}>
+                            {state.driverPhone.length}/10 digits
+                          </Text>
+                        ) : null}
+                        {state.driverPhone.trim() &&
+                        validatePhone(state.driverPhone.trim()) ? (
+                          <Text style={[styles.warningText, { marginTop: 4 }]}>
+                            {validatePhone(state.driverPhone.trim())}
+                          </Text>
+                        ) : null}
+                        {renderDriverPhoneRecommendations(
+                          state.driverPhone.length >= 10,
+                          "stack",
+                        )}
                       </View>
-                      ) : null}
-                      {showVehicleField ? (
+                    ) : null}
+
+                    {showDriverNameField || showVehicleField ? (
                       <View
                         style={[
-                          styles.gridCol,
-                          mobileAllocWizard && styles.allocWizardFieldCol,
-                          !driverVehicleSideBySide && styles.gridColFleetVehicle,
+                          styles.gridRow,
+                          (allocationWideLayout || isWide) && styles.gridRowWide,
+                          styles.aggregateFormRow,
                         ]}
                       >
-                        <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
-                          Vehicle number *
-                        </Text>
-                        <Text style={[styles.phoneDigitHint, { marginBottom: 6 }]}>
-                          {getIndianVehicleFormatHint(
-                            getIndianVehicleNormalizedLength(state.aggregateVehicleText),
-                          )}
-                        </Text>
-                        <View style={styles.iconField}>
-                          <Truck
-                            size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
-                            color={Theme.iconMuted}
-                            style={[styles.iconInField, isDenseForm && styles.iconInFieldDense]}
-                          />
-                          <TextInput
-                            key={getIndianVehicleKeyboardType(
-                              getIndianVehicleNormalizedLength(state.aggregateVehicleText),
-                            )}
+                        {showDriverNameField ? (
+                          <View
                             style={[
-                              ...iconFieldInputStyle,
-                              outlineErr("vehicleNumber"),
-                              styles.iconInputVehicleMono,
-                              isCompactMobile &&
-                                Platform.OS === "web" &&
-                                styles.mobileWebNoZoomInput,
+                              styles.gridCol,
+                              mobileAllocWizard && styles.allocWizardFieldCol,
                             ]}
-                            placeholder="e.g. TN 12 AB 3456"
-                            placeholderTextColor={Theme.placeholder}
-                            value={state.aggregateVehicleText}
-                            onChangeText={(v) => {
-                              setters.setAggregateVehicleText(applyIndianVehicleKeystroke(v));
-                            }}
-                            keyboardType={getIndianVehicleKeyboardType(
-                              getIndianVehicleNormalizedLength(state.aggregateVehicleText),
-                            )}
-                            autoCapitalize={
-                              getIndianVehicleKeyboardType(
-                                getIndianVehicleNormalizedLength(state.aggregateVehicleText),
-                              ) === "number-pad"
-                                ? "none"
-                                : "characters"
-                            }
-                            autoCorrect={false}
-                            ref={aggregateVehicleInputRef}
-                            inputAccessoryViewID={kbAccessoryId}
-                            onFocus={() => {
-                              focusPadField(
-                                finishPadFieldEntry,
-                                state.aggregateVehicleText,
-                                "Next",
-                              );
-                            }}
-                            blurOnSubmit={false}
-                          />
-                        </View>
+                          >
+                            <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
+                              Driver name (tracking) *
+                            </Text>
+                            {state.driverPhoneName?.trim() ? (
+                              <Text style={styles.phoneDigitHint}>
+                                From platform: {state.driverPhoneName.trim()}
+                              </Text>
+                            ) : null}
+                            <View
+                              style={[
+                                styles.iconField,
+                                isDenseForm && styles.iconFieldDense,
+                              ]}
+                            >
+                              <User
+                                size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
+                                color={Theme.iconMuted}
+                                style={[
+                                  styles.iconInField,
+                                  isDenseForm && styles.iconInFieldDense,
+                                ]}
+                              />
+                              <TextInput
+                                style={[
+                                  ...iconFieldInputStyle,
+                                  outlineErr("driverName"),
+                                  isCompactMobile &&
+                                    Platform.OS === "web" &&
+                                    styles.mobileWebNoZoomInput,
+                                ]}
+                                placeholder="e.g. Suresh Kumar"
+                                placeholderTextColor={Theme.placeholder}
+                                value={state.aggregateDriverName}
+                                onChangeText={(t) =>
+                                  onPadValueChange(setters.setAggregateDriverName, t)
+                                }
+                                ref={aggregateDriverNameInputRef}
+                                autoCapitalize="words"
+                                inputAccessoryViewID={kbAccessoryId}
+                                onFocus={() => {
+                                  focusPadField(
+                                    () => focusNextField(aggregateVehicleInputRef),
+                                    state.aggregateDriverName,
+                                  );
+                                }}
+                                blurOnSubmit={false}
+                              />
+                            </View>
+                          </View>
+                        ) : null}
+                        {showVehicleField ? (
+                          <View
+                            style={[
+                              styles.gridCol,
+                              mobileAllocWizard && styles.allocWizardFieldCol,
+                            ]}
+                          >
+                            <Text style={[...fieldLabelStyle, styles.sectionLabelTight]}>
+                              Vehicle number *
+                            </Text>
+                            <Text style={styles.phoneDigitHint}>
+                              {getIndianVehicleFormatHint(
+                                getIndianVehicleNormalizedLength(
+                                  state.aggregateVehicleText,
+                                ),
+                              )}
+                            </Text>
+                            <View
+                              style={[
+                                styles.iconField,
+                                isDenseForm && styles.iconFieldDense,
+                              ]}
+                            >
+                              <Truck
+                                size={isDenseForm ? ADD_TRIP_FORM.moneyIconSize : 16}
+                                color={Theme.iconMuted}
+                                style={[
+                                  styles.iconInField,
+                                  isDenseForm && styles.iconInFieldDense,
+                                ]}
+                              />
+                              <TextInput
+                                key={getIndianVehicleKeyboardType(
+                                  getIndianVehicleNormalizedLength(
+                                    state.aggregateVehicleText,
+                                  ),
+                                )}
+                                style={[
+                                  ...iconFieldInputStyle,
+                                  outlineErr("vehicleNumber"),
+                                  styles.iconInputVehicleMono,
+                                  isCompactMobile &&
+                                    Platform.OS === "web" &&
+                                    styles.mobileWebNoZoomInput,
+                                ]}
+                                placeholder="e.g. TN 12 AB 3456"
+                                placeholderTextColor={Theme.placeholder}
+                                value={state.aggregateVehicleText}
+                                onChangeText={(v) => {
+                                  setters.setAggregateVehicleText(
+                                    applyIndianVehicleKeystroke(v),
+                                  );
+                                }}
+                                keyboardType={getIndianVehicleKeyboardType(
+                                  getIndianVehicleNormalizedLength(
+                                    state.aggregateVehicleText,
+                                  ),
+                                )}
+                                autoCapitalize={
+                                  getIndianVehicleKeyboardType(
+                                    getIndianVehicleNormalizedLength(
+                                      state.aggregateVehicleText,
+                                    ),
+                                  ) === "number-pad"
+                                    ? "none"
+                                    : "characters"
+                                }
+                                autoCorrect={false}
+                                ref={aggregateVehicleInputRef}
+                                inputAccessoryViewID={kbAccessoryId}
+                                onFocus={() => {
+                                  focusPadField(
+                                    finishPadFieldEntry,
+                                    state.aggregateVehicleText,
+                                    "Next",
+                                  );
+                                }}
+                                blurOnSubmit={false}
+                              />
+                            </View>
+                          </View>
+                        ) : null}
                       </View>
-                      ) : null}
-                    </View>
-                    {showDriverPhoneField &&
-                    !mobileAllocWizard &&
-                    state.driverPhoneTripConflict ? (
+                    ) : null}
+                  </View>
+                ) : !state.assignLater ? (
+                  <View style={[styles.assignLaterPartnerHint, { marginTop: 4 }]}>
+                    <Info size={16} color={Theme.textMuted} />
+                    <Text style={styles.assignLaterPartnerHintText}>
+                      Driver phone and vehicle number are entered on the trip
+                      screen.
+                    </Text>
+                  </View>
+                ) : null}
+
+                    {showDriverPhoneField && state.driverPhoneTripConflict ? (
                       <View
                         style={[
                           styles.driverConfirmCard,
@@ -2788,16 +2803,8 @@ export function AddTripFormFields({
                         />
                       </View>
                     ) : null}
-                  </>
-                ) : (
-                  <View style={[styles.assignLaterPartnerHint, { marginTop: 4 }]}>
-                    <Info size={16} color={Theme.textMuted} />
-                    <Text style={styles.assignLaterPartnerHintText}>
-                      Driver phone and vehicle number are entered on the trip
-                      screen.
-                    </Text>
                   </View>
-                )}
+                ) : null}
                 </View>
                   </View>
                   ) : null}
@@ -2814,6 +2821,7 @@ export function AddTripFormFields({
               <Pressable
                 style={({ pressed }) => [
                   styles.primaryCta,
+                  desktopFormGrid && styles.primaryCtaDesktop,
                   primaryCtaDisabled && styles.primaryCtaDis,
                   Platform.OS === "web" && !primaryCtaDisabled
                     ? ({ cursor: "pointer" } as ViewStyle)
@@ -2933,7 +2941,7 @@ const styles = StyleSheet.create({
   },
   contentMax: {
     width: "100%",
-    maxWidth: 960,
+    maxWidth: 1680,
     alignSelf: "center",
   },
   contentMaxFill: {
@@ -2962,7 +2970,7 @@ const styles = StyleSheet.create({
       display: "grid",
       gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
       gap: 16,
-      alignItems: "start",
+      alignItems: "stretch",
       gridAutoRows: "min-content",
     } as unknown as ViewStyle,
     default: {},
@@ -2986,6 +2994,50 @@ const styles = StyleSheet.create({
   }),
   cardGridSupplyWeb: Platform.select<ViewStyle>({
     web: { gridColumn: "1 / -1", gridRow: 3 } as unknown as ViewStyle,
+    default: {},
+  }),
+  cardDesktopGrid: {
+    marginBottom: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+      } as ViewStyle,
+      default: {},
+    }),
+  },
+  /** Equal-height route / commodity cards in desktop grid row. */
+  cardDesktopStretch: Platform.select<ViewStyle>({
+    web: {
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      minHeight: 0,
+    } as unknown as ViewStyle,
+    default: {},
+  }),
+  cardHeadDesktop: {
+    paddingBottom: 6,
+    marginBottom: 8,
+  },
+  gridRowWideDesktop: {
+    gap: 16,
+  },
+  clientCommercialsRowDesktop: Platform.select<ViewStyle>({
+    web: {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1fr) minmax(240px, 300px)",
+      gap: 20,
+      alignItems: "start",
+      width: "100%",
+    } as unknown as ViewStyle,
+    default: {},
+  }),
+  clientCommercialsClientColDesktop: Platform.select<ViewStyle>({
+    web: { gridColumn: 1, minWidth: 0 } as unknown as ViewStyle,
+    default: {},
+  }),
+  clientCommercialsPriceColDesktop: Platform.select<ViewStyle>({
+    web: { gridColumn: 2, minWidth: 0 } as unknown as ViewStyle,
     default: {},
   }),
   cardHeadWithTrailingAction: {
@@ -3234,8 +3286,8 @@ const styles = StyleSheet.create({
     color: PULSE_TRIP.text,
   },
   cardTitleDense: {
-    fontSize: 10,
-    letterSpacing: 0.9,
+    fontSize: 9,
+    letterSpacing: 0.75,
   },
   gridRowDense: { gap: 6 },
   gridRow: { gap: 10 },
@@ -3243,8 +3295,17 @@ const styles = StyleSheet.create({
   gridRowFleet: {
     gap: 12,
   },
-  gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 16 },
+  gridRowWide: { flexDirection: "row", alignItems: "stretch", gap: 12 },
   gridCol: { flex: 1, minWidth: 0 },
+  gridColTonsDesktop: Platform.select<ViewStyle>({
+    web: {
+      flex: 0,
+      flexBasis: 132,
+      maxWidth: 148,
+      minWidth: 120,
+    },
+    default: {},
+  }),
   gridColFleetStack: {
     flexBasis: "auto",
     width: "100%",
@@ -3258,10 +3319,18 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
   },
   /** Driver / vehicle lists fill each grid column on desktop (avoid skinny centered rails). */
-  fleetPickColumnWrap: {
-    width: "100%",
-    minWidth: 0,
-  },
+  fleetPickColumnWrap: Platform.select<ViewStyle>({
+    web: {
+      flex: 1,
+      width: "100%",
+      minWidth: 0,
+      alignSelf: "stretch",
+    },
+    default: {
+      width: "100%",
+      minWidth: 0,
+    },
+  }),
   fleetPickColumnInner: {
     width: "100%",
     minWidth: 0,
@@ -3282,35 +3351,33 @@ const styles = StyleSheet.create({
     web: {
       flexDirection: "row",
       alignItems: "flex-start",
-      gap: 20,
+      gap: 16,
       width: "100%",
+      minWidth: 0,
     },
     default: {},
   }),
-  webAggregatePhoneRowCol: {
-    width: "100%",
-    minWidth: 0,
-  },
   webAggregatePhoneFieldCol: Platform.select<ViewStyle>({
     web: {
       flex: 0,
-      flexBasis: 280,
-      maxWidth: 320,
-      minWidth: 240,
+      flexBasis: 260,
+      maxWidth: 300,
+      minWidth: 220,
     },
     default: {},
   }),
   webAggregateRecsCol: Platform.select<ViewStyle>({
     web: {
       flex: 1,
-      minWidth: 260,
+      minWidth: 200,
+      maxWidth: 420,
     },
     default: {},
   }),
   aggregateSplitWide: {
     flexDirection: "row",
-    alignItems: "stretch",
-    gap: 16,
+    alignItems: "flex-start",
+    gap: 14,
   },
   aggregateLeftPane: {
     minWidth: 0,
@@ -3318,15 +3385,59 @@ const styles = StyleSheet.create({
   aggregateRightPane: {
     minWidth: 0,
   },
+  aggregateLeftPaneWide: {
+    flex: 0,
+    flexBasis: 280,
+    maxWidth: 300,
+    minWidth: 240,
+  },
+  aggregateRightPaneWide: {
+    flex: 1,
+    minWidth: 360,
+  },
   /** Only when partner + allocation sit in one row (wide); avoid flex:1 in a column or panes split viewport height. */
   aggregatePaneWide: {
     flex: 1,
   },
   aggregateTrackingFieldsGrid: {
-    marginTop: 10,
+    marginTop: 8,
     width: "100%",
     minWidth: 0,
     alignSelf: "stretch",
+    gap: 10,
+  },
+  aggregateFormBody: {
+    width: "100%",
+    minWidth: 0,
+    gap: 10,
+  },
+  aggregateFormRow: {
+    width: "100%",
+    minWidth: 0,
+    gap: 12,
+  },
+  aggregateFormField: {
+    width: "100%",
+    minWidth: 0,
+  },
+  aggregateTrackingSection: {
+    width: "100%",
+    minWidth: 0,
+    gap: 10,
+    paddingTop: 10,
+    marginTop: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  aggregatePaneFieldLabel: {
+    marginBottom: ADD_TRIP_FORM.labelSpacing,
+  },
+  aggregatePhoneInput: {
+    marginBottom: 0,
+  },
+  aggregateNameVehicleRow: {
+    width: "100%",
+    minWidth: 0,
   },
   aggregateSplitSurface: {
     padding: 11,
@@ -3412,8 +3523,8 @@ const styles = StyleSheet.create({
   /** Wide desktop: same vertical band for Select client actions vs price label. */
   clientCommercialsHeaderBand: {
     justifyContent: "center",
-    minHeight: 40,
-    marginBottom: 8,
+    minHeight: 32,
+    marginBottom: 6,
   },
   /** Inside header band; spacing comes from clientCommercialsHeaderBand. */
   sectionLabelRowFlush: {
@@ -3568,6 +3679,9 @@ const styles = StyleSheet.create({
       web: { width: "100%" as const },
       default: {},
     }),
+  },
+  iconFieldDense: {
+    marginBottom: ADD_TRIP_FORM.fieldGap,
   },
   iconInField: {
     position: "absolute",
@@ -3835,6 +3949,13 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  routePreviewPanelDesktop: Platform.select<ViewStyle>({
+    web: {
+      marginTop: "auto",
+      marginBottom: 0,
+    } as unknown as ViewStyle,
+    default: {},
+  }),
   routePreviewHero: {
     flexDirection: "row",
     alignItems: "center",
@@ -4167,21 +4288,21 @@ const styles = StyleSheet.create({
   },
   infoCalloutWideSpan: {
     flexDirection: "row",
-    gap: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 11,
-    borderRadius: 12,
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     backgroundColor: "rgba(0, 0, 0, 0.04)",
     borderWidth: 1,
     borderColor: Theme.borderLight,
     alignItems: "flex-start",
-    marginTop: 12,
+    marginTop: 8,
     width: "100%",
     alignSelf: "stretch",
   },
   infoCalloutText: {
     flex: 1,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
     lineHeight: 14,
@@ -4457,6 +4578,16 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  primaryCtaDesktop: {
+    maxWidth: 320,
+    minHeight: 44,
+    paddingVertical: 11,
+    borderRadius: 11,
+    ...Platform.select<ViewStyle>({
+      web: { boxShadow: "0 4px 12px rgba(79, 70, 229, 0.18)" },
+      default: {},
+    }),
+  },
   primaryCtaDis: {
     opacity: 0.45,
   },
@@ -4464,6 +4595,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     color: Theme.textOnPrimary,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   ctaHint: {
     marginTop: 12,

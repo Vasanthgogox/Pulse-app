@@ -15,7 +15,7 @@ import { useCallback } from 'react';
 const STALE_MS = 30_000;
 const EMPTY_PENDING_OTP: PendingOtpTripRow[] = [];
 const POLL_WITH_PENDING_MS = 30_000;
-const POLL_IDLE_MS = 60_000;
+const POLL_IDLE_MS = 120_000;
 
 export function pendingOtpTripsQueryKey(userId: string) {
   return queryKeys.driverApp.pendingOtpTrips(userId);

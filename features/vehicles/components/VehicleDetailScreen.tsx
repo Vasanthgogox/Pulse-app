@@ -35,10 +35,12 @@ import {
 } from "@/features/finance";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { canAccessFinance, getCapabilitiesFromProfile } from "@/lib/capabilities";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import { pickAndUploadVehicleAvatar } from "@/lib/avatarUpload";
 import { formatINR, formatLedgerDate, formatRelative, normalizeVehicleNumberForMatch } from "@/lib/format";
+import { useInvalidateVehicles } from "@/lib/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
-import { getAvatarUriForSeed } from "@/constants/DriverLevels";
 import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
   getTripsByOrganization,
@@ -49,7 +51,7 @@ import {
 import { VehicleHealthBadge } from "@/features/ai";
 import { buildTripPnL, getExpenseLinesForTripPnL } from "@/features/vehicles/pnl";
 import { getVehicleTypeImage } from "../utils/trucks.util";
-import { getVehicleById, type VehicleRow } from "../services/vehicles.service";
+import { getVehicleById, updateVehicle, type VehicleRow } from "../services/vehicles.service";
 import {
   AddVehicleEntryModal,
   type TripOption,
@@ -60,6 +62,8 @@ import { VehicleFleetRankingTab } from "./analytics/VehicleFleetRankingTab";
 import { backfillVehicleOperationalCashLedger } from "@/features/ledger/vehicle";
 import { ROUTES } from "@/lib/routes";
 import { VehicleOperationsHub } from "./VehicleOperationsHub";
+import { VehicleAvatar } from "./VehicleAvatar";
+import { VehiclePhotoPicker } from "./VehiclePhotoPicker";
 
 export interface VehicleDetailScreenProps {
   vehicleId: string;
@@ -101,7 +105,9 @@ export default function VehicleDetailScreen({
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
-  const [profileAvatarUri, setProfileAvatarUri] = useState<string | null>(null);
+  const [vehiclePhotoUploading, setVehiclePhotoUploading] = useState(false);
+  const invalidateVehicles = useInvalidateVehicles();
+  const queryClient = useQueryClient();
   const openAddEntryHandledRef = useRef(false);
   const cashLedgerBackfillAttemptRef = useRef(0);
 
@@ -145,9 +151,13 @@ export default function VehicleDetailScreen({
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
+    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
+    const ownerTripsPromise = cachedTrips !== undefined
+      ? Promise.resolve({ error: null, trips: cachedTrips })
+      : getTripsByOrganization(orgId);
     Promise.all([
       getVehicleById(orgId, vehicleId),
-      getTripsByOrganization(orgId),
+      ownerTripsPromise,
       getTripsWhereOrgIsSupplier(orgId),
       getDriversByOrganization(orgId),
       getTransactionsByOrganization(orgId),
@@ -175,7 +185,7 @@ export default function VehicleDetailScreen({
       isRefreshingRef.current = false;
       setRefreshing(false);
     });
-  }, [vehicleId, currentOrganization?.id]);
+  }, [vehicleId, currentOrganization?.id, queryClient]);
 
   useEffect(() => load(), [load]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -322,39 +332,36 @@ export default function VehicleDetailScreen({
     );
   }, [driverRowsForLedger, vehicle]);
 
-  useEffect(() => {
-    let mounted = true;
-    const resolveProfileAvatar = async () => {
-      if (!linkedDriver) {
-        if (mounted) setProfileAvatarUri(null);
-        return;
-      }
-
-      const avatarUrl = (linkedDriver.avatar_url ?? "").trim();
-      if (avatarUrl.length > 0) {
-        if (/^https?:\/\//i.test(avatarUrl)) {
-          if (mounted) setProfileAvatarUri(avatarUrl);
-          return;
-        }
-        const signed = await getSignedAvatarUrl(avatarUrl);
-        if (mounted) setProfileAvatarUri(signed);
-        return;
-      }
-
-      const avatarSeed = (linkedDriver.avatar_seed ?? "").trim();
-      if (avatarSeed.length > 0) {
-        if (mounted) setProfileAvatarUri(getAvatarUriForSeed(avatarSeed));
-        return;
-      }
-
-      if (mounted) setProfileAvatarUri(null);
-    };
-
-    void resolveProfileAvatar();
-    return () => {
-      mounted = false;
-    };
-  }, [linkedDriver]);
+  const handleChangeVehiclePhoto = async () => {
+    const orgId = currentOrganization?.id;
+    if (!orgId || !vehicle) return;
+    setVehiclePhotoUploading(true);
+    const { path, previewUri, error: pickErr } = await pickAndUploadVehicleAvatar(vehicle.id);
+    if (pickErr) {
+      setVehiclePhotoUploading(false);
+      Alert.alert("Photo upload failed", pickErr.message);
+      return;
+    }
+    if (!path) {
+      setVehiclePhotoUploading(false);
+      return;
+    }
+    const { error: updateErr, vehicle: updated } = await updateVehicle(orgId, vehicle.id, {
+      avatar_url: path,
+      avatar_seed: null,
+    });
+    setVehiclePhotoUploading(false);
+    if (updateErr) {
+      Alert.alert("Could not save photo", updateErr.message);
+      return;
+    }
+    if (updated) {
+      setVehicle(updated);
+    } else {
+      setVehicle((v) => (v ? { ...v, avatar_url: path, avatar_seed: null } : v));
+    }
+    invalidateVehicles(orgId);
+  };
 
   const contractValue = useMemo(
     () => missionRows.reduce((s, r) => s + r.sales, 0),
@@ -667,11 +674,13 @@ export default function VehicleDetailScreen({
                 accessibilityLabel="Open vehicle full profile"
               >
                 <View style={ecc.dossierAvatarWrap}>
-                  {profileAvatarUri ? (
-                    <Image source={{ uri: profileAvatarUri }} style={ecc.dossierAvatarImage} resizeMode="cover" />
-                  ) : (
-                    <Image source={truckImage} style={ecc.dossierAvatarImage} resizeMode="cover" />
-                  )}
+                  <VehicleAvatar
+                    vehicleId={vehicle.id}
+                    vehicleNumber={vehicle.vehicle_number}
+                    avatarUrl={vehicle.avatar_url}
+                    avatarSeed={vehicle.avatar_seed}
+                    size={56}
+                  />
                   <View style={ecc.dossierAvatarBadge}>
                     <FontAwesome name="truck" size={10} color={Theme.textOnPrimary} />
                   </View>
@@ -978,13 +987,14 @@ export default function VehicleDetailScreen({
           >
             <View style={styles.profileCard}>
               <View style={styles.profileCardTop}>
-                <View style={styles.profileAvatarWrap}>
-                  <Image
-                    source={truckImage}
-                    style={styles.truckImage}
-                    resizeMode="contain"
-                  />
-                </View>
+                <VehiclePhotoPicker
+                  vehicleNumber={vehicle.vehicle_number}
+                  avatarUrl={vehicle.avatar_url}
+                  size={88}
+                  uploading={vehiclePhotoUploading}
+                  onPress={handleChangeVehiclePhoto}
+                  style={styles.profilePhotoPicker}
+                />
                 <View style={styles.profileCardTopText}>
                   <Text style={styles.profileEntityName} numberOfLines={2}>
                     {vehicle.vehicle_number}
@@ -1359,9 +1369,13 @@ const styles = StyleSheet.create({
   },
   profileCardTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 16,
     marginBottom: 20,
+  },
+  profilePhotoPicker: {
+    flexShrink: 0,
+    marginBottom: 28,
   },
   profileAvatarWrap: {
     width: 64,
@@ -1373,8 +1387,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  truckImage: { width: 64, height: 36 },
-  profileCardTopText: { flex: 1, minWidth: 0 },
+  profileCardTopText: { flex: 1, minWidth: 0, paddingTop: 4 },
   profileEntityName: {
     fontSize: 18,
     fontWeight: "800",

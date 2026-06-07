@@ -368,7 +368,8 @@ export const assignmentShellStyles = StyleSheet.create({
   },
   assignSelectionGridDesktop: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "stretch",
+    gap: 16,
   },
   assignPickerCard: {
     flex: 1,

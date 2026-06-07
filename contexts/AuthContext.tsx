@@ -439,6 +439,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setRoleVerified(false);
                   }
                 } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
+                  const stillStored = await authService.getSession();
+                  if (!stillStored) {
+                    clearAuthState(true);
+                    logAuth("restore_refresh_invalid_session", {
+                      uid: session.user.uid,
+                    }, "warn");
+                    return;
+                  }
                   verifiedDbProfile = await getVerifiedDbProfile(
                     session.user.uid,
                   );
@@ -678,9 +686,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       } else {
         // refreshSession returned null — network failure or genuinely expired session.
-        // Check local storage before deciding to sign out: if a token is still stored,
-        // this is a transient failure (slow network, backend hiccup). The
-        // onAuthStateChange subscription handles genuine expiry via the SIGNED_OUT event.
         const stored = await authService.getSession();
         if (!isCurrentAuthAttempt(refreshAttemptId)) return;
         if (stored) {
@@ -691,9 +696,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           logAuth("refresh_degraded_session_preserved", { uid: stored.user.uid }, "warn");
         } else {
           clearAuthState(true);
+          logAuth("refresh_invalid_session_cleared", {}, "warn");
         }
       }
     } catch (e) {
+      if (await authService.clearLocalSessionIfInvalid(e)) {
+        if (isCurrentAuthAttempt(refreshAttemptId)) {
+          clearAuthState(true);
+          logAuth("refresh_invalid_session_cleared", {}, "warn");
+        }
+        return;
+      }
       if (e instanceof TimeoutError) {
         logAuthError("refresh_session_timeout", e);
       } else {

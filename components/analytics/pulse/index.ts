@@ -1,4 +1,8 @@
 export {
+  PulseFinancialOverviewCard,
+} from "./PulseFinancialOverviewCard";
+export type { PulseFinancialOverviewProps } from "./PulseFinancialOverviewCard";
+export {
   PulseAnalyticsShell,
   PulseSection,
   PulseChartPanel,
@@ -10,6 +14,7 @@ export {
   PulseLaneBar,
   PulseInsightsPanel,
   usePulseChartWidth,
+  usePulseVisualMode,
 } from "./PulseLayout";
 export type {
   PulseAnalyticsShellProps,
@@ -30,6 +35,9 @@ export {
   pulseChartHeight,
   pulseKpiGap,
   packKpiItems,
+  expandKpiRowsToGrid,
   isPulseCompact,
+  isPulseDense,
+  isPulseDesktop,
   PULSE_RADIUS,
 } from "./pulseStyles";

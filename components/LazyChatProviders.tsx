@@ -26,10 +26,21 @@
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useLayoutEffect, useState, type ComponentType, type ReactNode } from 'react';
 import {
+  getResolvedChatProviders,
   preloadChatProviderModules,
   preloadChatScreenModule,
 } from '@/lib/preloadChatWarmup';
 import { scheduleIdleWork } from '@/lib/scheduleIdleWork';
+
+const MAX_LOAD_RETRIES = 3;
+const RETRY_DELAY_MS   = 1_200;
+
+/** Sentinel: provider load failed after all retries. Renders a passthrough wrapper
+ *  so children can mount; ChatScreen's own error boundary surfaces the real error. */
+const FALLBACK_EMPTY = {
+  Trip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  Integrated: ({ children }: { children: ReactNode }) => <>{children}</>,
+} as const;
 
 type TripChatProviderShape = ComponentType<{ children: ReactNode; isActive?: boolean }>;
 type IntegratedChatProviderShape = ComponentType<{ children: ReactNode; isActive?: boolean }>;
@@ -58,21 +69,63 @@ export function LazyChatProviders({
   isActive,
   requireProviders = false,
 }: LazyChatProvidersProps) {
-  const [loaded, setLoaded] = useState<Loaded>(null);
+  const [loaded, setLoaded] = useState<Loaded>(() => {
+    // If providers were already resolved during an earlier preload (e.g. while
+    // the user was on the Trips tab), return them synchronously so the chat
+    // modal opens with zero loading delay.
+    const cached = getResolvedChatProviders();
+    if (!cached) return null;
+    return {
+      Trip: cached.TripChatProvider as TripChatProviderShape,
+      Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
+    };
+  });
 
   useLayoutEffect(() => {
     if (loaded) return;
     let cancelled = false;
-    const load = () => {
+
+    const attemptLoad = (attempt: number) => {
       if (cancelled) return;
-      void preloadChatProviderModules().then(([trip, integrated]) => {
-        if (cancelled) return;
-        setLoaded({
-          Trip: trip.TripChatProvider as unknown as TripChatProviderShape,
-          Integrated: integrated.IntegratedChatProvider as unknown as IntegratedChatProviderShape,
+
+      // Fast path: already resolved by an earlier preload call.
+      const cached = getResolvedChatProviders();
+      if (cached) {
+        if (!cancelled) setLoaded({
+          Trip: cached.TripChatProvider as TripChatProviderShape,
+          Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
         });
-      });
+        return;
+      }
+
+      preloadChatProviderModules()
+        .then(([trip, integrated]) => {
+          if (cancelled) return;
+          setLoaded({
+            Trip: trip.TripChatProvider as unknown as TripChatProviderShape,
+            Integrated: integrated.IntegratedChatProvider as unknown as IntegratedChatProviderShape,
+          });
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          if (attempt < MAX_LOAD_RETRIES) {
+            // Retry after a brief delay; chatProvidersModule cache was cleared on rejection.
+            const t = setTimeout(() => attemptLoad(attempt + 1), RETRY_DELAY_MS);
+            // Store timeout so cleanup can cancel it.
+            pendingRetry = t;
+          } else {
+            if (__DEV__) console.error('[LazyChatProviders] provider load failed after retries:', err);
+            // On final failure render children anyway so the app isn't permanently stuck.
+            // ChatScreen's error boundary will surface the actual issue.
+            setLoaded(FALLBACK_EMPTY as unknown as Loaded);
+          }
+        });
     };
+
+    let pendingRetry: ReturnType<typeof setTimeout> | null = null;
+
+    const load = () => attemptLoad(0);
+
     // Eager load on chat-adjacent routes or when the chat modal is opening.
     if (isActive || requireProviders) {
       void preloadChatScreenModule();
@@ -82,6 +135,7 @@ export function LazyChatProviders({
     }
     return () => {
       cancelled = true;
+      if (pendingRetry) clearTimeout(pendingRetry);
     };
   }, [isActive, requireProviders, loaded]);
 

@@ -22,6 +22,8 @@ export interface VehicleRow {
   status: string;
   type: string;
   documents: VehicleDocuments | null;
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -184,6 +186,8 @@ export interface UpdateVehicleData {
   vehicle_size?: string | null;
   vehicle_axle?: string | null;
   documents?: VehicleDocuments;
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
 }
 
 export async function updateVehicle(
@@ -199,6 +203,8 @@ export async function updateVehicle(
   if (patch.vehicle_axle !== undefined) updates.vehicle_axle = (patch.vehicle_axle ?? '').trim() || null;
   if (patch.vehicle_body_type !== undefined) updates.vehicle_type = (patch.vehicle_body_type ?? '').trim() || null;
   if (patch.documents !== undefined) updates.documents = patch.documents;
+  if (patch.avatar_url !== undefined) updates.avatar_url = patch.avatar_url;
+  if (patch.avatar_seed !== undefined) updates.avatar_seed = patch.avatar_seed;
   if (Object.keys(updates).length === 0) return { error: null, vehicle: null };
   const { data, error } = await supabase()
     .from('vehicles')
