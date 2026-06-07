@@ -1,18 +1,1 @@
-import { LazyRouteScreen } from '@/components/LazyRouteScreen';
-
-/**
- * Client detail — lazy bundle (ClientDetailScreen + finance/trips/ledger deps).
- */
-export default function ClientDetailRoute() {
-  return (
-    <LazyRouteScreen
-      fallback="inline"
-      loader={() =>
-        import('@/features/clients/components/ClientDetailRoute').then((m) => ({
-          default: m.default,
-        }))
-      }
-      message="Loading client…"
-    />
-  );
-}
+export { default } from '@/features/clients/components/ClientDetailRoute';

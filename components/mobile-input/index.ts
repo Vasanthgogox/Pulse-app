@@ -64,3 +64,5 @@ export type {
 
 // ─── Platform hook ───────────────────────────────────────────────────────────
 export { useInputPlatform } from './useInputPlatform';
+export { usePhysicalKeypadInput } from './usePhysicalKeypadInput';
+export type { UsePhysicalKeypadInputOptions } from './usePhysicalKeypadInput';

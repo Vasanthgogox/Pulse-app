@@ -28,6 +28,7 @@ import { NumericEntryRecipientHero } from './NumericEntryRecipientHero';
 import { applyKeypadPress, rawToSubmitValue, isKeypadValueSubmittable } from './keypad';
 import { triggerFeedback } from './feedback';
 import { useInputPlatform } from './useInputPlatform';
+import { usePhysicalKeypadInput } from './usePhysicalKeypadInput';
 import type { KeypadKey, KeypadOptions } from './keypad';
 import type { SmartInputType } from './types';
 
@@ -100,6 +101,14 @@ export function FullscreenNumericEntry({
     triggerFeedback('apply');
     onSubmit(rawToSubmitValue(raw));
   }, [raw, onSubmit]);
+
+  usePhysicalKeypadInput({
+    enabled: visible && (isDesktop || isTablet),
+    onKey: handleKey,
+    onSubmit: handleSubmit,
+    onClose,
+    allowDecimal,
+  });
 
   const hasValue = isKeypadValueSubmittable(raw);
 

@@ -222,14 +222,14 @@ export function NetworkPartyHubListCard({
   ) : null;
 
   if (mobileGrid) {
-    const avatarPressHandler = onOpenProfile ?? onPressCard;
+    const cardPressHandler = onOpenProfile ?? onPressCard;
     const gridAvatarSize = 52;
     const accent = partyAccentFromEntityType(entityType);
     return (
       <Pressable
-        onPress={onPressCard}
-        disabled={!onPressCard}
-        style={({ pressed }) => [pressed && onPressCard && { opacity: 0.94 }]}
+        onPress={cardPressHandler}
+        disabled={!cardPressHandler}
+        style={({ pressed }) => [pressed && cardPressHandler && { opacity: 0.94 }]}
         accessibilityRole="button"
         accessibilityLabel={displayName}
       >
@@ -239,17 +239,7 @@ export function NetworkPartyHubListCard({
             styles.cardGridTile,
           ]}
         >
-          <Pressable
-            onPress={avatarPressHandler}
-            disabled={!avatarPressHandler}
-            hitSlop={6}
-            style={({ pressed }) => [
-              styles.gridTileAvatarCol,
-              pressed && avatarPressHandler && { opacity: 0.88 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={displayName}
-          >
+          <View style={styles.gridTileAvatarCol}>
             <PartyEntityAvatarGlow accent={accent} size={gridAvatarSize}>
               <PartyAvatar
                 name={displayName}
@@ -263,7 +253,7 @@ export function NetworkPartyHubListCard({
             {showOnline ? (
               <View style={[styles.onlineDot, styles.gridTileOnlineDot]} />
             ) : null}
-          </Pressable>
+          </View>
           <Text
             style={styles.partyNameMobileGrid}
             numberOfLines={1}
@@ -371,168 +361,161 @@ export function NetworkPartyHubListCard({
   }
 
   return (
-    <Pressable
-      onPress={onPressCard}
-      disabled={!onPressCard}
-      style={({ pressed }) => [pressed && onPressCard && { opacity: 0.97 }]}
+    <View
+      style={[
+        styles.card,
+        compact && styles.cardCompact,
+        mobileGrid && networkHubListCardChromeStyles.cardMobileGrid,
+      ]}
     >
+      {integrationPill ? (
+        <View style={styles.integrationPillTopRight} pointerEvents="none">
+          {/* Always use the compact badge size so the corner pill peers
+           *  with the role chip (DRIVER / CLIENT / SUPPLIER), which we
+           *  matched to compact dimensions earlier. The default-size
+           *  badge was disproportionately large for the card's current
+           *  density. */}
+          <NetworkHubGlassBadge pill={integrationPill} size="compact" />
+        </View>
+      ) : null}
       <View
         style={[
-          styles.card,
-          compact && styles.cardCompact,
-          mobileGrid && networkHubListCardChromeStyles.cardMobileGrid,
+          styles.row,
+          compact && styles.rowCompact,
+          mobileGrid && styles.rowMobileGrid,
         ]}
       >
-        {integrationPill ? (
-          <View style={styles.integrationPillTopRight} pointerEvents="none">
-            {/* Always use the compact badge size so the corner pill peers
-             *  with the role chip (DRIVER / CLIENT / SUPPLIER), which we
-             *  matched to compact dimensions earlier. The default-size
-             *  badge was disproportionately large for the card's current
-             *  density. */}
-            <NetworkHubGlassBadge pill={integrationPill} size="compact" />
-          </View>
-        ) : null}
-        <View
-          style={[
-            styles.row,
-            compact && styles.rowCompact,
-            mobileGrid && styles.rowMobileGrid,
+        <Pressable
+          onPress={onPressCard}
+          disabled={!onPressCard}
+          style={({ pressed }) => [
+            styles.left,
+            compact && styles.leftCompact,
+            mobileGrid && styles.leftMobileGrid,
+            pressed && onPressCard && { opacity: 0.97 },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={displayName}
         >
           <View
             style={[
-              styles.left,
-              compact && styles.leftCompact,
-              mobileGrid && styles.leftMobileGrid,
+              styles.avatarCol,
+              mobileGrid && styles.avatarColMobileGrid,
             ]}
           >
-            <Pressable
-              onPress={onOpenProfile ?? onPressCard}
-              disabled={!onOpenProfile && !onPressCard}
-              hitSlop={4}
-              style={({ pressed }) => [
-                styles.avatarCol,
-                mobileGrid && styles.avatarColMobileGrid,
-                pressed && (onOpenProfile ?? onPressCard) && { opacity: 0.85 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={displayName}
-            >
-              <View style={styles.avatarWrap}>
-                <PartyAvatar
-                  name={displayName}
-                  initialsColorSeed={partyId}
-                  avatarSeed={avatarSeed}
-                  avatarUrl={avatarUrl}
-                  entityType={entityType}
-                  size={avatarSize}
-                />
-              </View>
-              {showOnline ? <View style={styles.onlineDot} /> : null}
-            </Pressable>
-
-            <View
-              style={[
-                styles.identity,
-                mobileGrid && styles.identityMobileGrid,
-                integrationOffsetGuard > 0 && { paddingRight: integrationOffsetGuard },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.partyName,
-                  compact && styles.partyNameCompact,
-                  mobileGrid && styles.partyNameMobileGrid,
-                ]}
-                numberOfLines={mobileGrid ? 2 : 1}
-              >
-                {displayName}
-              </Text>
-
-              {rolePill ? (
-                <View style={styles.rolePillRow}>
-                  <View
-                    style={[
-                      styles.rolePillChip,
-                      {
-                        backgroundColor: rolePill.backgroundColor,
-                        borderColor: rolePill.borderColor ?? "transparent",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.rolePillChipText, { color: rolePill.color }]}
-                      numberOfLines={1}
-                    >
-                      {rolePill.label}
-                    </Text>
-                  </View>
-                </View>
-              ) : !mobileGrid && partyType.trim().length > 0 ? (
-                <View style={styles.roleSubLine}>
-                  <Building2 size={9} color={Theme.textMuted} strokeWidth={2.2} />
-                  <Text style={styles.roleSubLineText} numberOfLines={1}>
-                    {partyType}
-                  </Text>
-                </View>
-              ) : null}
-
-              {showPhone ? (
-                <View style={styles.phoneRow}>
-                  <Phone size={mobileGrid ? 8 : 9} color={Theme.textMuted} strokeWidth={2.2} />
-                  <Text
-                    style={[styles.phoneText, mobileGrid && styles.phoneTextMobileGrid]}
-                    numberOfLines={1}
-                  >
-                    {phone}
-                  </Text>
-                </View>
-              ) : null}
+            <View style={styles.avatarWrap}>
+              <PartyAvatar
+                name={displayName}
+                initialsColorSeed={partyId}
+                avatarSeed={avatarSeed}
+                avatarUrl={avatarUrl}
+                entityType={entityType}
+                size={avatarSize}
+              />
             </View>
+            {showOnline ? <View style={styles.onlineDot} /> : null}
           </View>
 
-          <View style={[styles.right, compact && styles.rightCompact, mobileGrid && styles.rightMobileGrid]}>
-            <View
+          <View
+            style={[
+              styles.identity,
+              mobileGrid && styles.identityMobileGrid,
+              integrationOffsetGuard > 0 && { paddingRight: integrationOffsetGuard },
+            ]}
+          >
+            <Text
               style={[
-                styles.metricsRow,
-                metricsCompact && styles.metricsRowCompact,
-                mobileGrid && networkHubListCardChromeStyles.metricsRowMobileGrid,
+                styles.partyName,
+                compact && styles.partyNameCompact,
+                mobileGrid && styles.partyNameMobileGrid,
               ]}
+              numberOfLines={mobileGrid ? 2 : 1}
             >
-              {metricsTiles}
-            </View>
+              {displayName}
+            </Text>
 
-            {showConnectionAction ? (
-              <View style={[styles.actionCol, mobileGrid && styles.actionColMobileGrid]}>
-                {connectionIntegrated ? (
-                  <NetworkHubGlassButton
-                    variant="connected"
-                    label={actionLabel}
-                    size={mobileGrid ? "compact" : "default"}
-                  />
-                ) : (
-                  <NetworkHubGlassButton
-                    variant="primary"
-                    label={actionLabel}
-                    size={mobileGrid ? "compact" : "default"}
-                    onPress={onConnectionAction}
-                    disabled={connectionActionDisabled}
-                    loading={loading}
-                    leadingIcon={
-                      <Send
-                        size={mobileGrid ? 11 : 13}
-                        color={Theme.primary}
-                        strokeWidth={2.4}
-                      />
-                    }
-                  />
-                )}
+            {rolePill ? (
+              <View style={styles.rolePillRow}>
+                <View
+                  style={[
+                    styles.rolePillChip,
+                    {
+                      backgroundColor: rolePill.backgroundColor,
+                      borderColor: rolePill.borderColor ?? "transparent",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.rolePillChipText, { color: rolePill.color }]}
+                    numberOfLines={1}
+                  >
+                    {rolePill.label}
+                  </Text>
+                </View>
+              </View>
+            ) : !mobileGrid && partyType.trim().length > 0 ? (
+              <View style={styles.roleSubLine}>
+                <Building2 size={9} color={Theme.textMuted} strokeWidth={2.2} />
+                <Text style={styles.roleSubLineText} numberOfLines={1}>
+                  {partyType}
+                </Text>
+              </View>
+            ) : null}
+
+            {showPhone ? (
+              <View style={styles.phoneRow}>
+                <Phone size={mobileGrid ? 8 : 9} color={Theme.textMuted} strokeWidth={2.2} />
+                <Text
+                  style={[styles.phoneText, mobileGrid && styles.phoneTextMobileGrid]}
+                  numberOfLines={1}
+                >
+                  {phone}
+                </Text>
               </View>
             ) : null}
           </View>
+        </Pressable>
+
+        <View style={[styles.right, compact && styles.rightCompact, mobileGrid && styles.rightMobileGrid]}>
+          <View
+            style={[
+              styles.metricsRow,
+              metricsCompact && styles.metricsRowCompact,
+              mobileGrid && networkHubListCardChromeStyles.metricsRowMobileGrid,
+            ]}
+          >
+            {metricsTiles}
+          </View>
+
+          {showConnectionAction ? (
+            <View style={[styles.actionCol, mobileGrid && styles.actionColMobileGrid]}>
+              {connectionIntegrated ? (
+                <NetworkHubGlassButton
+                  variant="connected"
+                  label={actionLabel}
+                  size={mobileGrid ? "compact" : "default"}
+                />
+              ) : (
+                <NetworkHubGlassButton
+                  variant="primary"
+                  label={actionLabel}
+                  size={mobileGrid ? "compact" : "default"}
+                  onPress={onConnectionAction}
+                  disabled={connectionActionDisabled}
+                  loading={loading}
+                  leadingIcon={
+                    <Send
+                      size={mobileGrid ? 11 : 13}
+                      color={Theme.primary}
+                      strokeWidth={2.4}
+                    />
+                  }
+                />
+              )}
+            </View>
+          ) : null}
         </View>
       </View>
-    </Pressable>
+    </View>
   );
 }
