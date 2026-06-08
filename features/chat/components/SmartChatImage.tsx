@@ -251,7 +251,9 @@ export function SmartChatImage({
         accessibilityLabel="View full image"
       >
         <View style={s.thumbFrame}>
-          {showBlurMatte ? <View style={s.blurMatte} pointerEvents="none" /> : null}
+          {showBlurMatte ? (
+            <View style={[s.blurMatte, { pointerEvents: "none" }]} />
+          ) : null}
           {thumbState === "loading" || thumbState === "idle" ? (
             <View style={s.loaderOverlay}>
               <LoadingIndicator size="small" color={isOwn ? "#e0e7ff" : "#64748b"} />

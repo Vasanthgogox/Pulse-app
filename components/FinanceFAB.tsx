@@ -19,6 +19,7 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react-native";
+import { pe } from "@/lib/platformViewStyle.util";
 import React from "react";
 import {
   Animated as RNAnimated,
@@ -133,8 +134,7 @@ export function FinanceFAB({
 
   return (
     <Reanimated.View
-      style={[styles.container, { width: size, height: size }, style, shellStyle]}
-      pointerEvents="box-none"
+      style={[styles.container, { width: size, height: size }, style, shellStyle, pe("box-none")]}
     >
       <TouchableOpacity
         testID={testID}
@@ -157,7 +157,6 @@ export function FinanceFAB({
           ]}
         >
           <Reanimated.View
-            pointerEvents="none"
             style={[
               styles.innerRing,
               {
@@ -166,6 +165,7 @@ export function FinanceFAB({
                 borderRadius: (size - 10) / 2,
               },
               ringStyle,
+              pe("none"),
             ]}
           />
           <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />

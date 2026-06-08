@@ -109,11 +109,59 @@ export async function getVerifiedBalances(orgId: string): Promise<{
  * Get active shared-ledger connections for an org.
  * RPC get_shared_ledger_connections(org_id) or table shared_ledger_connection.
  */
+function isMissingSchemaObjectError(error: {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+} | null): boolean {
+  if (!error) return false;
+  const code = String(error.code ?? '');
+  if (code === 'PGRST202' || code === 'PGRST205' || code === '42P01') return true;
+  const joined = [error.message, error.details, error.hint].filter(Boolean).join(' ').toLowerCase();
+  return (
+    joined.includes('does not exist') ||
+    joined.includes('could not find') ||
+    joined.includes('not found') ||
+    joined.includes('schema cache')
+  );
+}
+
 export async function getSharedLedgerConnections(orgId: string): Promise<{
   error: Error | null;
   connections: SharedLedgerConnection[];
 }> {
-  // Feature not yet deployed — return empty until RPC/table exists
+  const { data: tableData, error: tableError } = await supabase()
+    .from('shared_ledger_connection')
+    .select('org_a_id, org_b_id')
+    .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
+    .eq('status', 'ACTIVE');
+  if (!tableError) {
+    const rows = (tableData ?? []) as Array<{ org_a_id: string; org_b_id: string }>;
+    const connections: SharedLedgerConnection[] = rows.map((row) => ({
+      partner_org_id: row.org_a_id === orgId ? row.org_b_id : row.org_a_id,
+    }));
+    return { error: null, connections };
+  }
+  if (!isMissingSchemaObjectError(tableError)) {
+    const { data, error } = await supabase().rpc('get_shared_ledger_connections', {
+      org_id: orgId,
+    });
+    if (!error) {
+      const rows = (Array.isArray(data) ? data : []) as Array<{
+        partner_org_id: string;
+        contact_id?: string;
+      }>;
+      const connections: SharedLedgerConnection[] = rows.map((r) => ({
+        partner_org_id: r.partner_org_id ?? '',
+        contact_id: r.contact_id,
+      }));
+      return { error: null, connections };
+    }
+    if (!isMissingSchemaObjectError(error)) {
+      return { error: new Error(error.message), connections: [] };
+    }
+  }
   return { error: null, connections: [] };
 }
 

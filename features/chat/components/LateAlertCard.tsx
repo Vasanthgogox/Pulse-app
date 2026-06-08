@@ -16,7 +16,7 @@ export interface LateAlertCardProps {
   liveHealthStatus?: string | null;
 }
 
-export function LateAlertCard({ message, liveRevisedEta, liveHealthStatus }: LateAlertCardProps) {
+export const LateAlertCard = React.memo(function LateAlertCard({ message, liveRevisedEta, liveHealthStatus }: LateAlertCardProps) {
   const fromMsg = readLongHaulMetaFromMessage(message);
   const newEta = liveRevisedEta ?? fromMsg.newEta;
   const health = liveHealthStatus ?? fromMsg.health;
@@ -56,7 +56,7 @@ export function LateAlertCard({ message, liveRevisedEta, liveHealthStatus }: Lat
       </View>
     </View>
   );
-}
+});
 
 const s = StyleSheet.create({
   card: {

@@ -84,6 +84,11 @@ export interface TripRatingsBlockProps {
    * Default keeps the compact layout used on native.
    */
   layoutVariant?: 'default' | 'workspace' | 'registry';
+  /**
+   * `modalOnly` — TripFeedbackModal auto-popup only (e.g. chat overlay).
+   * `inline` (default) — full ratings panel on trip detail + modals.
+   */
+  surface?: 'inline' | 'modalOnly';
 }
 
 type RateFlow = { type: 'client_supplier' } | { type: 'supplier_driver' } | null;
@@ -341,6 +346,7 @@ export function TripRatingsBlock({
   supplierPartyAvatarFields: supplierPartyAvatarFieldsProp,
   paymentCaptured = false,
   layoutVariant = 'default',
+  surface = 'inline',
 }: TripRatingsBlockProps) {
   const { width } = useWindowDimensions();
   const { currentOrganization } = useOrganization();
@@ -1407,7 +1413,11 @@ export function TripRatingsBlock({
     );
   };
 
+  const isModalOnly = surface === 'modalOnly';
+
   return (
+    <>
+      {!isModalOnly ? (
     <View style={[styles.wrapper, isWidePanel && styles.wsWrapper]}>
       {!isWidePanel ? (
         <View style={styles.sectionHeading}>
@@ -1664,6 +1674,8 @@ export function TripRatingsBlock({
           </>
         )}
       </View>
+    </View>
+      ) : null}
 
       <TripFeedbackModal
         visible={flow !== null}
@@ -2102,7 +2114,7 @@ export function TripRatingsBlock({
               </TouchableOpacity>
             </View>
       </TripFeedbackModal>
-    </View>
+    </>
   );
 }
 

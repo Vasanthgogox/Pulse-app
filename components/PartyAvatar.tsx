@@ -70,13 +70,17 @@ export function PartyAvatar({
     };
   }, [hasRawPhotoField, organizationImageUrl, avatarUrl]);
 
-  const syncUri = resolvePartyDisplayUri({
-    organizationImageUrl,
-    organizationAvatarSeed,
-    avatarUrl,
-    avatarSeed,
-    entityType,
-  });
+  const awaitingSignedPhoto =
+    hasRawPhotoField && resolvedPhotoUri == null;
+  const syncUri = awaitingSignedPhoto
+    ? null
+    : resolvePartyDisplayUri({
+        organizationImageUrl,
+        organizationAvatarSeed,
+        avatarUrl,
+        avatarSeed,
+        entityType,
+      });
   const uri = resolvedPhotoUri ?? syncUri;
   if (
     !partyAvatarHasRenderableOutput({

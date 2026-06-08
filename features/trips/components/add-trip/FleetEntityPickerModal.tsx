@@ -10,8 +10,8 @@ import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 import { formatIndianVehicleNumber } from "@/lib/format";
 import { Truck, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
-  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -162,10 +162,10 @@ export function FleetEntityPickerModal({
               }
             />
 
-            <FlatList<DriverRow | VehicleRow>
+            <FlashList<DriverRow | VehicleRow>
               data={listRows}
               keyExtractor={(item) => item.id}
-              style={styles.list}
+              estimatedItemSize={56}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={

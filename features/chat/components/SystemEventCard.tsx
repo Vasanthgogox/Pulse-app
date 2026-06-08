@@ -10,7 +10,7 @@
  *   status_change    → payment-style row (TripProgressEventCard; same shell as ledger)
  *   image            → ImageMessageCard  (Supabase Image Transformations thumbnail + full-size modal)
  *   document_share   → DocumentShareCard (delegated)
- *   feedback_request → ChatFeedbackCard (delegated)
+ *   feedback_request → hidden in chat (trip-detail TripFeedbackModal handles ratings)
  *   ledger_event     → ChatLedgerEventCard (delegated)
  *   system / update  → ChatSystemEventCard (content-based fallback)
  *   text / other     → null (rendered as a normal chat bubble)
@@ -245,7 +245,7 @@ interface SystemEventCardProps {
   onFeedbackSubmit?: (score: number, tags: string[]) => Promise<void>;
 }
 
-export function SystemEventCard({
+export const SystemEventCard = React.memo(function SystemEventCard({
   message,
   isOwn = false,
   currentOrgId,
@@ -303,7 +303,7 @@ export function SystemEventCard({
       // text, question, challenge, feedback_request — rendered as chat bubbles elsewhere
       return null;
   }
-}
+});
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 

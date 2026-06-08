@@ -5,6 +5,7 @@ import { useGlobalFabAnimation } from '@/lib/hooks/useGlobalFabAnimation';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Plus, type LucideIcon } from 'lucide-react-native';
 import type { ComponentProps } from 'react';
+import { pe } from '@/lib/platformViewStyle.util';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useLayoutInsets } from '@/lib/layoutInsets';
@@ -41,8 +42,8 @@ export function FAB({
         styles.fab,
         { bottom: layout.fabBottom() },
         shellStyle,
+        pe('box-none'),
       ]}
-      pointerEvents="box-none"
     >
       <TouchableOpacity
         style={StyleSheet.absoluteFillObject}
@@ -50,7 +51,7 @@ export function FAB({
         activeOpacity={0.9}
         accessibilityLabel={label}
       >
-        <Animated.View style={[styles.innerRing, ringStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.innerRing, ringStyle, pe('none')]} />
         <View style={styles.content}>
         {shouldRenderLucideIcon ? (
           shouldShowPlus ? (

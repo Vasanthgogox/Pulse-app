@@ -48,10 +48,10 @@ import {
     Zap,
 } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
     Alert,
     Animated,
-    FlatList,
     Platform,
     Pressable,
     RefreshControl,
@@ -1159,14 +1159,14 @@ export function ConnectionsView({
           </View>
         )
       ) : isGrid ? (
-        <FlatList
+        <FlashList
           key="grid"
           data={connections}
           keyExtractor={(item) => `grid-${item.role}-${item.id}`}
           numColumns={gridNumColumns}
+          estimatedItemSize={120}
           renderItem={({ item }) => <GridCard item={item} />}
           contentContainerStyle={styles.gridList}
-          columnWrapperStyle={gridNumColumns > 1 ? styles.gridRow : undefined}
           showsVerticalScrollIndicator={false}
           scrollEnabled
           nestedScrollEnabled
@@ -1180,10 +1180,11 @@ export function ConnectionsView({
           ListEmptyComponent={<EmptyState />}
         />
       ) : (
-        <FlatList
+        <FlashList
           key="list"
           data={connections}
           keyExtractor={(item) => `list-${item.role}-${item.id}`}
+          estimatedItemSize={72}
           renderItem={({ item }) => <ListCard item={item} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

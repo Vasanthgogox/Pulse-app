@@ -1,4 +1,6 @@
 import 'react-native-gesture-handler';
+// Shadow / pointerEvents RN Web compat — must run before any StyleSheet.create in the tree.
+import '@/lib/installWebRnCompatPatches';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
@@ -22,7 +24,7 @@ import { ROUTES } from '@/lib/routes';
 import {
   DemoTabBarAutoHideShell,
   DemoTabBarScrollProvider,
-  useDemoTabBarScroll,
+  useDemoTabBarScrollOptional,
 } from '@/contexts/DemoTabBarScrollContext';
 import * as authService from '@/features/auth/services/auth.service';
 import { isSessionExpiredError } from '@/features/auth/services/auth.service';
@@ -266,7 +268,7 @@ export default function RootLayout() {
       createAsyncStoragePersister({
         storage: AsyncStorage,
         key: 'q-cache-v1',
-        throttleTime: 3000,
+        throttleTime: 10_000,  // 10s: reduces UI-thread write pressure (was 3s)
       }),
     [],
   );
@@ -486,14 +488,14 @@ function RootOverlayTabBar() {
   const queryClient = useQueryClient();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
-  const { resetBarVisible } = useDemoTabBarScroll();
+  const scrollControls = useDemoTabBarScrollOptional();
   const layoutWidth = useWebLayoutWidth();
 
   const showOnRootScreens = pathnameHasRootTopNav(pathname);
 
   useEffect(() => {
-    if (showOnRootScreens) resetBarVisible();
-  }, [pathname, resetBarVisible, showOnRootScreens]);
+    if (showOnRootScreens) scrollControls?.resetBarVisible();
+  }, [pathname, scrollControls, showOnRootScreens]);
 
   useEffect(() => {
     if (!showOnRootScreens) return;

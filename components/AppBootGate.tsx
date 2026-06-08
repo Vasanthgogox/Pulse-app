@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { dumpStartupMetrics, markStartupPhase } from '@/lib/startupMetrics';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { pe } from '@/lib/platformViewStyle.util';
 import { Platform, StyleSheet, View } from 'react-native';
 import { usePathname } from 'expo-router';
 import { hydrateSignupFlowFlags } from '@/lib/onboarding/businessSignupBranding.util';
@@ -88,10 +89,9 @@ export function AppBootGate({ children }: AppBootGateProps) {
       {children}
       {!bootReady ? (
         <View
-          style={styles.overlay}
+          style={[styles.overlay, pe('auto')]}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          pointerEvents="auto"
         >
           <AppLoadingSplash variant={splashVariant} style={styles.splash} />
         </View>

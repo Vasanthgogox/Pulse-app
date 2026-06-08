@@ -104,6 +104,7 @@ export default function VehicleDetailScreen({
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  const lastFocusRefreshRef = useRef(0);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
   const [vehiclePhotoUploading, setVehiclePhotoUploading] = useState(false);
   const invalidateVehicles = useInvalidateVehicles();
@@ -187,8 +188,20 @@ export default function VehicleDetailScreen({
     });
   }, [vehicleId, currentOrganization?.id, queryClient]);
 
-  useEffect(() => load(), [load]);
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // useFocusEffect handles initial load + re-focus refreshes (throttled to 2 min).
+  // The separate useEffect is NOT needed — useFocusEffect fires on mount too.
+  useFocusEffect(
+    useCallback(() => {
+      if (initialLoadDoneRef.current && Date.now() - lastFocusRefreshRef.current < 2 * 60_000) return;
+      lastFocusRefreshRef.current = Date.now();
+      load();
+    }, [load]),
+  );
+  // Fallback: org context may not be ready when focus fires on cold start.
+  useEffect(() => {
+    if (!currentOrganization?.id || initialLoadDoneRef.current) return;
+    load();
+  }, [currentOrganization?.id, load]);
 
   /** Include trips by vehicle_id or by vehicle_display_number matching this vehicle (indent-based/own/supplier). */
   const tripMatchesVehicle = useCallback(

@@ -1,4 +1,5 @@
 import { memo, useEffect } from 'react';
+import { pe } from '@/lib/platformViewStyle.util';
 import {
   Pressable,
   StyleSheet,
@@ -85,7 +86,7 @@ export const PulseBottomTabSlot = memo(function PulseBottomTabSlot({
       accessibilityLabel={label}
     >
       <Animated.View style={[styles.iconWrap, contentStyle]}>
-        <Animated.View style={[styles.activePill, pillStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.activePill, pillStyle, pe('none')]} />
         <View style={styles.iconForeground}>{icon}</View>
         {showBadge ? (
           <View style={styles.badge}>

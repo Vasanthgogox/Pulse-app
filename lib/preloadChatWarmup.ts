@@ -32,7 +32,13 @@ export function preloadChatScreenModule(): Promise<
   typeof import("@/features/chat/components/ChatScreen")
 > {
   if (!chatScreenModule) {
-    chatScreenModule = import("@/features/chat/components/ChatScreen");
+    chatScreenModule = import("@/features/chat/components/ChatScreen").catch(
+      (err) => {
+        // Clear so a later navigation can retry after a transient Metro/syntax failure.
+        chatScreenModule = null;
+        throw err;
+      },
+    );
   }
   return chatScreenModule;
 }
@@ -76,7 +82,14 @@ function preloadChatBootstrap(orgId: string): void {
 
 /** Screen chunk + providers; optional org starts bootstrap on finger-down. */
 export function preloadChatRoute(orgId?: string | null): void {
-  void preloadChatScreenModule();
   void preloadChatProviderModules();
+  void preloadChatScreenModule();
   if (orgId) preloadChatBootstrap(orgId);
+}
+
+/** Clear cached dynamic-import promises (e.g. after a failed Metro bundle). */
+export function resetChatWarmupCache(): void {
+  chatScreenModule = null;
+  chatProvidersModule = null;
+  resolvedChatProvidersCache = null;
 }

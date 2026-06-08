@@ -35,9 +35,9 @@ import {
   XCircle,
 } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -245,9 +245,10 @@ export function DocumentCenter({ orgId: orgIdProp }: DocumentCenterProps) {
           <Text style={styles.emptyBody}>{t("complianceEmptyBody")}</Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={activeRows}
           keyExtractor={(d) => d.id}
+          estimatedItemSize={64}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <DocumentListRow

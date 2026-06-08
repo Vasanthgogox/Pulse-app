@@ -1,3 +1,4 @@
+// @refresh reset
 /**
  * Scroll-driven visibility for the demo tab bar (hide while scrolling, show after idle).
  * Native: hide on drag begin, show after drag/momentum end.
@@ -11,6 +12,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
+import { pe } from "@/lib/platformViewStyle.util";
 import {
   Platform,
   useWindowDimensions,
@@ -156,12 +158,15 @@ export function DemoTabBarScrollProvider({
   );
 }
 
+const NOOP_SCROLL_CONTROLS: ScrollControls = {
+  onScrollBeginDrag: () => {},
+  onScrollEnd: () => {},
+  onMomentumScrollEnd: () => {},
+  resetBarVisible: () => {},
+};
+
 export function useDemoTabBarScroll(): ScrollControls {
-  const v = useContext(ScrollCtx);
-  if (!v) {
-    throw new Error("useDemoTabBarScroll requires DemoTabBarScrollProvider");
-  }
-  return v;
+  return useContext(ScrollCtx) ?? NOOP_SCROLL_CONTROLS;
 }
 
 export function useDemoTabBarScrollOptional(): ScrollControls | null {
@@ -227,7 +232,7 @@ export function DemoTabBarAutoHideShell({
     };
   });
   return (
-    <Animated.View style={[style, animatedStyle]} pointerEvents="box-none">
+    <Animated.View style={[style, animatedStyle, pe("box-none")]}>
       {children}
     </Animated.View>
   );

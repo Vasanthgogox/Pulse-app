@@ -59,10 +59,10 @@ import {
     Sparkles,
     Wallet,
 } from "lucide-react-native";
+import { FlashList } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
     AppState,
-    FlatList,
     Image,
     Linking,
     Modal,
@@ -1263,14 +1263,16 @@ export default function DriverTripsScreen() {
           )}
         </View>
       </View>
-      <FlatList
+      <FlashList
         data={filteredTrips}
         keyExtractor={(item) => item.id}
+        estimatedItemSize={110}
         renderItem={renderItem}
-        contentContainerStyle={[
-          styles.listContent,
-          { backgroundColor: colors.background, paddingBottom: insets.bottom + 80 },
-        ]}
+        contentContainerStyle={{
+          ...styles.listContent,
+          backgroundColor: colors.background,
+          paddingBottom: insets.bottom + 80,
+        }}
         ListEmptyComponent={
           filteredTrips.length === 0 ? (
             tripView === "active" && searchQuery.trim().length === 0 ? (

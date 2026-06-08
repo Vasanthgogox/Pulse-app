@@ -8,6 +8,7 @@ import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
 import { ROUTES } from '@/lib/routes';
 import { usePathname, useSegments } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { pe } from '@/lib/platformViewStyle.util';
 import {
   InteractionManager,
   Platform,
@@ -109,8 +110,8 @@ function NativeNavigationLoadingOverlay() {
       style={[
         styles.overlay,
         reserveTopNav && { top: Layout.desktopTopNavOffset },
+        pe('auto'),
       ]}
-      pointerEvents="auto"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >

@@ -24,7 +24,7 @@
  * holding a stale reference.
  */
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
-import { useLayoutEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import {
   getResolvedChatProviders,
   preloadChatProviderModules,
@@ -33,7 +33,9 @@ import {
 import { scheduleIdleWork } from '@/lib/scheduleIdleWork';
 
 const MAX_LOAD_RETRIES = 3;
-const RETRY_DELAY_MS   = 1_200;
+const RETRY_DELAY_MS = 1_200;
+/** Never block chat route longer than this — render passthrough providers instead. */
+const PROVIDER_LOAD_TIMEOUT_MS = 15_000;
 
 /** Sentinel: provider load failed after all retries. Renders a passthrough wrapper
  *  so children can mount; ChatScreen's own error boundary surfaces the real error. */
@@ -69,6 +71,7 @@ export function LazyChatProviders({
   isActive,
   requireProviders = false,
 }: LazyChatProvidersProps) {
+  const loadedRef = useRef<Loaded>(null);
   const [loaded, setLoaded] = useState<Loaded>(() => {
     // If providers were already resolved during an earlier preload (e.g. while
     // the user was on the Trips tab), return them synchronously so the chat
@@ -80,10 +83,12 @@ export function LazyChatProviders({
       Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
     };
   });
+  loadedRef.current = loaded;
 
   useLayoutEffect(() => {
-    if (loaded) return;
+    if (loadedRef.current) return;
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const attemptLoad = (attempt: number) => {
       if (cancelled) return;
@@ -91,16 +96,22 @@ export function LazyChatProviders({
       // Fast path: already resolved by an earlier preload call.
       const cached = getResolvedChatProviders();
       if (cached) {
-        if (!cancelled) setLoaded({
-          Trip: cached.TripChatProvider as TripChatProviderShape,
-          Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
-        });
+        if (!cancelled) {
+          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+          setLoaded({
+            Trip: cached.TripChatProvider as TripChatProviderShape,
+            Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
+          });
+        }
         return;
       }
 
       preloadChatProviderModules()
         .then(([trip, integrated]) => {
           if (cancelled) return;
+          // Cancel the fallback timeout — providers loaded successfully,
+          // so we must NOT replace them with FALLBACK_EMPTY later.
+          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
           setLoaded({
             Trip: trip.TripChatProvider as unknown as TripChatProviderShape,
             Integrated: integrated.IntegratedChatProvider as unknown as IntegratedChatProviderShape,
@@ -133,11 +144,25 @@ export function LazyChatProviders({
     } else {
       scheduleIdleWork(load);
     }
+
+    if (requireProviders) {
+      timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        if (__DEV__) {
+          console.warn(
+            '[LazyChatProviders] provider load timed out — rendering chat without providers',
+          );
+        }
+        setLoaded(FALLBACK_EMPTY as unknown as Loaded);
+      }, PROVIDER_LOAD_TIMEOUT_MS);
+    }
+
     return () => {
       cancelled = true;
       if (pendingRetry) clearTimeout(pendingRetry);
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isActive, requireProviders, loaded]);
+  }, [isActive, requireProviders]);
 
   if (!loaded) {
     if (requireProviders) {
