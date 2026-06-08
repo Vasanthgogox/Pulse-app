@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { AlertRegistryFinanceHandlers } from "@/components/AlertRegistryPanel";
+import { alertDetailRoute } from "@/lib/alertRegistry/alertDetailRoute.util";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
@@ -25,6 +26,17 @@ export function useAlertRegistryFinanceHandlers(): {
     rejectSalaryRequest,
     markSharedLedgerRead,
   } = useAlertRegistryNotifications(orgId);
+
+  const openAlertDetail = useCallback(
+    (
+      kind: "salary" | "shared" | "ops",
+      id: string,
+      mode: "active" | "archive" = "active",
+    ) => {
+      router.push(alertDetailRoute(kind, id, mode));
+    },
+    [router],
+  );
 
   const handleSalaryReject = useCallback(
     async (requestId: string) => {
@@ -138,6 +150,7 @@ export function useAlertRegistryFinanceHandlers(): {
   );
 
   const finance: AlertRegistryFinanceHandlers = {
+    onOpenDetail: openAlertDetail,
     onRejectSalary: (id) => void handleSalaryReject(id),
     onPaySalary: openLedgerForSalaryPayment,
     onViewSalaryArchive: viewSalaryArchive,

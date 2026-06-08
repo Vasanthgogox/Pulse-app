@@ -2799,7 +2799,8 @@ export function TripsHubTableView({
  * Fleet Confidence / Export Ledger + optional pagination — single bottom bar row.
  *
  * Rendered outside the trips ScrollView by the parent screen so it stays
- * pinned to the bottom of the viewport. Web-only — mobile keeps its own list-bottom UI.
+ * pinned to the bottom of the viewport. Desktop web only — mobile web and
+ * native use list-level controls without this pinned bar.
  */
 export function TripsHubAuditFooter({
   onExportLedger,

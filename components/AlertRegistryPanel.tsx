@@ -104,10 +104,6 @@ function formatRelativeTime(iso: string | null | undefined): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function formatRegistryTabCount(count: number): string {
-  return count > 99 ? "99+" : String(count);
-}
-
 function formatSalaryAmount(amount: number | null | undefined): string {
   return `₹${Number(amount ?? 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -170,6 +166,11 @@ function paymentTag(item: SharedLedgerNotificationRow): string {
 }
 
 export type AlertRegistryFinanceHandlers = {
+  onOpenDetail: (
+    kind: "salary" | "shared" | "ops",
+    id: string,
+    mode?: "active" | "archive",
+  ) => void;
   onRejectSalary: (requestId: string) => void;
   onPaySalary: (req: SalaryRequestWithDriverRow) => void;
   onViewSalaryArchive: (req: SalaryRequestWithDriverRow) => void;
@@ -303,6 +304,7 @@ function RegistryFeedList({
             <AlertRegistrySignalCard
               key={entry.id}
               mode="active"
+              onPress={() => finance.onOpenDetail("ops", ops.id, "active")}
               avatar={presentation.avatar}
               actorName={presentation.actorName}
               actionText={presentation.actionText}
@@ -323,7 +325,7 @@ function RegistryFeedList({
                   />
                   <RegistryPrimaryButton
                     label={opsActionLabel(ops)}
-                    onPress={() => finance.onOpenOps(ops)}
+                    onPress={() => finance.onOpenDetail("ops", ops.id, "active")}
                   />
                 </RegistryCardActions>
               }
@@ -369,6 +371,13 @@ function RegistryFeedList({
             <AlertRegistrySignalCard
               key={entry.id}
               mode={isActiveView ? "active" : "completed"}
+              onPress={() =>
+                finance.onOpenDetail(
+                  "shared",
+                  item.id,
+                  isActiveView ? "active" : "archive",
+                )
+              }
               avatar={sharedAvatar}
               actorName={sharedAvatar.name}
               actionText={sharedActionText}
@@ -399,14 +408,22 @@ function RegistryFeedList({
                     />
                     <RegistryPrimaryButton
                       label={sharedLedgerActionLabel(item.event_type)}
-                      onPress={() => finance.onSharedAction(item)}
+                      onPress={() =>
+                        finance.onOpenDetail(
+                          "shared",
+                          item.id,
+                          isActiveView ? "active" : "archive",
+                        )
+                      }
                     />
                   </RegistryCardActions>
                 ) : (
                   <RegistryCardActions>
                     <RegistryGhostButton
                       label="View ledger"
-                      onPress={() => finance.onSharedAction(item)}
+                      onPress={() =>
+                        finance.onOpenDetail("shared", item.id, "archive")
+                      }
                     />
                   </RegistryCardActions>
                 )
@@ -442,6 +459,13 @@ function RegistryFeedList({
               ) : null}
               <AlertRegistrySignalCard
                 mode={isActiveView ? "active" : "completed"}
+                onPress={() =>
+                  finance.onOpenDetail(
+                    "salary",
+                    req.id,
+                    isActiveView ? "active" : "archive",
+                  )
+                }
                 avatar={resolveSalaryRegistryAvatar(req, driversById)}
                 actorName={driverName}
                 actionText={
@@ -477,14 +501,18 @@ function RegistryFeedList({
                       />
                       <RegistryPrimaryButton
                         label={isTripBasedAttribution ? "Accept" : "Pay now"}
-                        onPress={() => finance.onPaySalary(req)}
+                        onPress={() =>
+                          finance.onOpenDetail("salary", req.id, "active")
+                        }
                       />
                     </RegistryCardActions>
                   ) : (
                     <RegistryCardActions>
                       <RegistryGhostButton
                         label="View details"
-                        onPress={() => finance.onViewSalaryArchive(req)}
+                        onPress={() =>
+                          finance.onOpenDetail("salary", req.id, "archive")
+                        }
                       />
                     </RegistryCardActions>
                   )
@@ -662,23 +690,7 @@ export function AlertRegistryPanel({
                   <Text style={[styles.tabText, selected && styles.tabTextActive]}>
                     {t.label}
                   </Text>
-                  {showCount ? (
-                    <View
-                      style={[
-                        styles.tabCountBadge,
-                        selected && styles.tabCountBadgeActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.tabCountText,
-                          selected && styles.tabCountTextActive,
-                        ]}
-                      >
-                        {formatRegistryTabCount(count)}
-                      </Text>
-                    </View>
-                  ) : null}
+                  {showCount ? <View style={styles.tabUnreadDot} /> : null}
                 </View>
                 {selected ? <View style={styles.tabIndicator} /> : null}
               </Pressable>
@@ -797,10 +809,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   headerTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
-    letterSpacing: -0.15,
+    letterSpacing: -0.1,
   },
   closeBtn: {
     width: 28,
@@ -827,7 +839,7 @@ const styles = StyleSheet.create({
   tabScrollContent: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 16,
+    gap: 14,
     paddingRight: 6,
   },
   tabList: {
@@ -839,19 +851,20 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     position: "relative",
-    paddingBottom: 10,
+    paddingBottom: 8,
     alignItems: "center",
-    gap: 5,
-    minWidth: 36,
+    gap: 4,
+    minWidth: 32,
   },
   tabLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     position: "relative",
+    paddingRight: 2,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
   },
@@ -868,29 +881,17 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: Theme.primary,
   },
-  tabCountBadge: {
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 5,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.teslaRed,
+  /** Metronic tab unread — small green dot, no solid count pill. */
+  tabUnreadDot: {
+    position: "absolute",
+    top: -1,
+    right: -5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#50CD89",
     borderWidth: 1,
-    borderColor: Theme.teslaRed,
-  },
-  tabCountBadgeActive: {
-    backgroundColor: Theme.teslaRed,
-    borderColor: Theme.teslaRed,
-  },
-  tabCountText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textOnPrimary,
-    lineHeight: 12,
-  },
-  tabCountTextActive: {
-    color: Theme.textOnPrimary,
+    borderColor: Theme.cardWhite,
   },
   settingsBtn: {
     width: 28,
@@ -914,14 +915,14 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   emptyTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
     textAlign: "center",
   },
   emptyBody: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 10,
+    lineHeight: 15,
     fontWeight: "400",
     color: METRONIC.muted,
     textAlign: "center",
@@ -933,10 +934,10 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   groupHeaderText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "700",
     color: METRONIC.muted,
-    letterSpacing: 0.45,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   loadMoreBtn: {
@@ -954,7 +955,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   loadMoreText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: METRONIC.muted,
   },
@@ -970,18 +971,18 @@ const styles = StyleSheet.create({
   },
   footerBtn: {
     flex: 1,
-    minHeight: 34,
+    minHeight: 32,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 6,
     borderWidth: 1,
     borderColor: METRONIC.ghostBorder,
     backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   footerBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
   },

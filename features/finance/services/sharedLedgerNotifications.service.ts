@@ -513,6 +513,24 @@ async function getDerivedSharedLedgerNotifications(
   );
 }
 
+export async function getSharedLedgerNotificationById(
+  organizationId: string,
+  notificationId: string,
+): Promise<{
+  error: Error | null;
+  notification: SharedLedgerNotificationRow | null;
+}> {
+  const { data, error } = await supabase()
+    .from("shared_ledger_notifications")
+    .select(TABLE_SELECT)
+    .eq("organization_id", organizationId)
+    .eq("id", notificationId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), notification: null };
+  if (!data) return { error: null, notification: null };
+  return { error: null, notification: toRow(data) };
+}
+
 export async function getSharedLedgerNotifications(
   organizationId: string,
   statusFilter: "all" | "action_required" | "history" = "all",

@@ -75,14 +75,17 @@ function partnerAvatar(
   };
 }
 
-function salaryDriverProfile(req: SalaryRequestWithDriverRow) {
-  const nested = req.drivers as
-    | (SalaryRequestWithDriverRow["drivers"] & {
-        profiles?: { avatar_url?: string | null; avatar_seed?: string | null } | null;
-      })
-    | null
-    | undefined;
-  return nested?.profiles ?? null;
+function salaryDriverAvatarFields(
+  req: SalaryRequestWithDriverRow,
+): Pick<DriverRow, "avatar_url" | "avatar_seed"> | null {
+  const driver = req.drivers;
+  if (!driver) return null;
+  const avatar_url =
+    driver.avatar_url ?? driver.profiles?.avatar_url ?? null;
+  const avatar_seed =
+    driver.avatar_seed ?? driver.profiles?.avatar_seed ?? null;
+  if (!avatar_url && !avatar_seed) return null;
+  return { avatar_url, avatar_seed };
 }
 
 export function resolveSalaryRegistryAvatar(
@@ -91,10 +94,10 @@ export function resolveSalaryRegistryAvatar(
 ): RegistryNotificationAvatar {
   const name = req.drivers?.name?.trim() || "Driver";
   const cached = driversById.get(req.driver_id);
-  const profile = salaryDriverProfile(req);
-  const merged = cached ?? {
-    avatar_url: profile?.avatar_url ?? null,
-    avatar_seed: profile?.avatar_seed ?? null,
+  const fromJoin = salaryDriverAvatarFields(req);
+  const merged = cached ?? fromJoin ?? {
+    avatar_url: null,
+    avatar_seed: null,
   };
   return driverAvatarFromRow(merged, name, req.driver_id);
 }

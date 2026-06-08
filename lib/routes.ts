@@ -64,6 +64,16 @@ export const ROUTES = {
   /** Compliance & Document Intelligence hub — opened from header icons. */
   DOCUMENTS_CENTER: '/documents-center' as const,
 
+  /** Full-screen alert detail (registry → ledger-style detail + wizard CTAs). */
+  alertDetail: (
+    kind: "salary" | "shared" | "ops",
+    id: string,
+    mode: "active" | "archive" = "active",
+  ) => {
+    const q = new URLSearchParams({ kind, id, mode });
+    return `/alert-detail?${q.toString()}` as const;
+  },
+
   vehicleAnalytics: (vehicleId: string) =>
     `/vehicle/${encodeURIComponent(vehicleId)}/analytics` as const,
   clientAnalytics: (clientId: string) =>

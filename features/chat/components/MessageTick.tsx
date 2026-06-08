@@ -1,7 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Theme from "@/constants/Theme";
+import { CHAT_TEXT_MUTED, CHAT_TICK_READ } from "@/features/chat/chatTheme";
 import type { MessageDeliveryStatus } from "../types/chat.types";
 
 export interface MessageTickProps {
@@ -12,17 +12,16 @@ export interface MessageTickProps {
 }
 
 /**
- * WhatsApp-style delivery ticks for **outgoing** chat rows.
- * Maps `delivery_status` from `useChatStore` / Realtime ACKs.
+ * Metronic-style delivery ticks for outgoing chat rows.
  */
 export function MessageTick({ status, compact }: MessageTickProps) {
-  const size = compact ? 9 : 11;
-  const gap = compact ? 1 : 2;
+  const size = compact ? 8 : 9;
+  const gap = compact ? 0 : 1;
 
   if (!status || status === "sending") {
     return (
       <View style={styles.wrap} accessibilityLabel="Sending">
-        <FontAwesome name="clock-o" size={size} color={Theme.textMuted} />
+        <FontAwesome name="clock-o" size={size} color={CHAT_TEXT_MUTED} />
       </View>
     );
   }
@@ -30,7 +29,7 @@ export function MessageTick({ status, compact }: MessageTickProps) {
   if (status === "sent") {
     return (
       <Text
-        style={[styles.tick, { fontSize: size + 2, color: Theme.textMuted }]}
+        style={[styles.tick, { fontSize: size + 1, color: CHAT_TEXT_MUTED }]}
         accessibilityLabel="Sent"
       >
         ✓
@@ -43,7 +42,7 @@ export function MessageTick({ status, compact }: MessageTickProps) {
       <Text
         style={[
           styles.tick,
-          { fontSize: size + 2, color: Theme.textMuted, letterSpacing: gap },
+          { fontSize: size + 1, color: CHAT_TEXT_MUTED, letterSpacing: gap },
         ]}
         accessibilityLabel="Delivered"
       >
@@ -56,7 +55,7 @@ export function MessageTick({ status, compact }: MessageTickProps) {
     <Text
       style={[
         styles.tick,
-        { fontSize: size + 2, color: Theme.primary, letterSpacing: gap },
+        { fontSize: size + 1, color: CHAT_TICK_READ, letterSpacing: gap },
       ]}
       accessibilityLabel="Read"
     >
@@ -67,12 +66,12 @@ export function MessageTick({ status, compact }: MessageTickProps) {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginLeft: 4,
+    marginLeft: 3,
     justifyContent: "center",
     alignItems: "center",
   },
   tick: {
-    marginLeft: 4,
+    marginLeft: 3,
     fontWeight: "700",
   },
 });

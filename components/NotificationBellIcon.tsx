@@ -1,13 +1,16 @@
-import { StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { StyleSheet, View, type ViewStyle } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import Theme from "@/constants/Theme";
+
+/** Metronic success green — unread dot on bell + tabs. */
+const UNREAD_DOT = "#50CD89";
 
 type NotificationBellIconProps = {
   size?: number;
   color?: string;
   strokeWidth?: number;
-  /** Numeric unread count — preferred over `showBadge`. */
+  /** When > 0, shows a small green unread dot (no solid count pill). */
   badgeCount?: number;
   /** Legacy dot-only indicator when `badgeCount` is not set. */
   showBadge?: boolean;
@@ -15,22 +18,17 @@ type NotificationBellIconProps = {
   style?: ViewStyle;
 };
 
-function formatBadgeCount(count: number): string {
-  return count > 99 ? "99+" : String(count);
-}
-
-/** Minimal outline bell — Metronic-style utility icon with optional count badge. */
+/** Minimal outline bell — Metronic-style utility icon with optional unread dot. */
 export function NotificationBellIcon({
   size = 20,
   color = Theme.textSecondary,
   strokeWidth = 1.85,
   badgeCount = 0,
   showBadge = false,
-  badgeColor = Theme.teslaRed,
+  badgeColor = UNREAD_DOT,
   style,
 }: NotificationBellIconProps) {
-  const showNumericBadge = badgeCount > 0;
-  const showDotBadge = !showNumericBadge && showBadge;
+  const showUnreadDot = badgeCount > 0 || showBadge;
 
   return (
     <View style={[styles.wrap, { width: size, height: size }, style]}>
@@ -50,23 +48,10 @@ export function NotificationBellIcon({
           strokeLinejoin="round"
         />
       </Svg>
-      {showNumericBadge ? (
+      {showUnreadDot ? (
         <View
           style={[
-            styles.countBadge,
-            badgeCount > 9 && styles.countBadgeWide,
-            {
-              backgroundColor: badgeColor,
-              borderColor: Theme.cardWhite,
-            },
-          ]}
-        >
-          <Text style={styles.countBadgeText}>{formatBadgeCount(badgeCount)}</Text>
-        </View>
-      ) : showDotBadge ? (
-        <View
-          style={[
-            styles.dotBadge,
+            styles.unreadDot,
             {
               backgroundColor: badgeColor,
               borderColor: Theme.cardWhite,
@@ -84,32 +69,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  countBadge: {
+  unreadDot: {
     position: "absolute",
-    top: -4,
-    right: -6,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  countBadgeWide: {
-    minWidth: 22,
-    paddingHorizontal: 3,
-  },
-  countBadgeText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textOnPrimary,
-    lineHeight: 11,
-  },
-  dotBadge: {
-    position: "absolute",
-    top: 1,
-    right: 0,
+    top: 0,
+    right: -1,
     width: 7,
     height: 7,
     borderRadius: 4,

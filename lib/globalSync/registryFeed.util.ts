@@ -97,6 +97,7 @@ export function entryMatchesRegistryFilter(
   if (filter === 'driver') {
     if (entry.kind === 'salary') return true;
     if (entry.kind === 'ops' && entry.ops?.category === 'unassigned_trip') return true;
+    if (entry.kind === 'ops' && entry.ops?.category === 'salary') return true;
     return false;
   }
   if (filter === 'trip') {

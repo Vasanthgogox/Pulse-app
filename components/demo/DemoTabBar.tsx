@@ -34,6 +34,7 @@ import {
 } from "@/lib/chatUnreadSignal";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
+import { alertDetailRoute } from "@/lib/alertRegistry/alertDetailRoute.util";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
@@ -502,6 +503,18 @@ export function DemoTabBar({
     useDemoTabBarVisibilityProgressOptional() ?? fallbackDockVisibilityProgress;
   const scrollHideVersion = useDemoTabBarScrollHideVersion();
 
+  const openAlertDetail = useCallback(
+    (
+      kind: "salary" | "shared" | "ops",
+      id: string,
+      mode: "active" | "archive" = "active",
+    ) => {
+      setShowNotifications(false);
+      router.push(alertDetailRoute(kind, id, mode));
+    },
+    [router],
+  );
+
   const openLedgerForSalaryPayment = useCallback(
     (req: SalaryRequestWithDriverRow) => {
       const isTripBasedAttribution =
@@ -804,6 +817,7 @@ export function DemoTabBar({
                     onSync={refreshRegistry}
                     syncing={notifActionId != null}
                     finance={{
+                      onOpenDetail: openAlertDetail,
                       onRejectSalary: (id) => void handleSalaryReject(id),
                       onPaySalary: openLedgerForSalaryPayment,
                       onViewSalaryArchive: handleViewSalaryArchive,

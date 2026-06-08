@@ -1508,7 +1508,9 @@ export default function TripsScreen() {
   const tripsListPagination = webTripsPagination ?? mobileTripsPagination;
 
   const showTripsPaginationFooter =
-    Platform.OS === "web" && (hubToolbarMatchCount ?? filtered.length) > 0;
+    Platform.OS === "web" &&
+    !isMobileViewport &&
+    (hubToolbarMatchCount ?? filtered.length) > 0;
 
   if (!canAccess) {
     return (
@@ -2211,7 +2213,7 @@ export default function TripsScreen() {
             </View>
           )}
         </ScrollView>
-      {Platform.OS === "web" ? (
+      {Platform.OS === "web" && !isMobileViewport ? (
         <View style={styles.tripsBottomBar}>
           <TripsHubAuditFooter
             onExportLedger={() => setTripLedgerExportOpen(true)}

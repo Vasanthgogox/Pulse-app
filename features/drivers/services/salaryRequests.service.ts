@@ -92,12 +92,18 @@ export interface SalaryRequestWithDriverRow extends SalaryRequestRow {
   drivers?: {
     name: string | null;
     user_id?: string | null;
+    avatar_url?: string | null;
+    avatar_seed?: string | null;
+    /** @deprecated PostgREST has no drivers→profiles FK; use avatar_url on drivers. */
     profiles?: {
       avatar_url?: string | null;
       avatar_seed?: string | null;
     } | null;
   } | null;
 }
+
+const SALARY_REQUEST_ORG_SELECT =
+  "*, drivers(name, user_id, avatar_url, avatar_seed)";
 
 /**
  * List salary requests for an organization (fleet/dispatcher view). RLS: org members can read for their org.
@@ -120,7 +126,7 @@ export async function getSalaryRequestsByOrganization(
 
   let q = supabase()
     .from('driver_salary_requests')
-    .select("*, drivers(name, user_id, profiles(avatar_url, avatar_seed))")
+    .select(SALARY_REQUEST_ORG_SELECT)
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false });
   if (options.status) q = q.eq('status', options.status);
@@ -139,7 +145,7 @@ export async function getSalaryRequestByIdForOrganization(
 ): Promise<{ error: Error | null; request: SalaryRequestWithDriverRow | null }> {
   const { data, error } = await supabase()
     .from('driver_salary_requests')
-    .select("*, drivers(name, user_id, profiles(avatar_url, avatar_seed))")
+    .select(SALARY_REQUEST_ORG_SELECT)
     .eq('organization_id', organizationId)
     .eq('id', requestId)
     .maybeSingle();
