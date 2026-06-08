@@ -10,6 +10,7 @@ import {
   type PartyEntityType,
 } from "@/lib/partyAvatarDisplay";
 
+export type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 export type PartyAvatarShape = "circle" | "rounded" | "square";
 
 function partyAvatarRadius(size: number, shape: PartyAvatarShape): number {
