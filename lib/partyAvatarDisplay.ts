@@ -69,7 +69,8 @@ async function resolveOnePartyPhotoRaw(raw: string): Promise<string | null> {
   if (t.startsWith("http://") || t.startsWith("https://")) {
     const ref = extractPathFromStorageUrl(t);
     if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
-      return (await getSignedAvatarUrl(ref.path)) ?? t;
+      // Private bucket — MUST use a signed URL. Falling back to `t` (public URL) causes 400.
+      return (await getSignedAvatarUrl(ref.path)) ?? null;
     }
     return t;
   }
