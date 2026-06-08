@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "expo-router";
 import { Hash, MessageSquare, Plus, Users, X } from "lucide-react-native";
+import { pe } from "@/lib/platformViewStyle.util";
 import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -120,8 +121,7 @@ export function FloatingChatButton() {
 
   return (
     <View
-      style={[styles.wrap, { bottom }, networkDockExpanded && styles.wrapDockExpanded]}
-      pointerEvents="box-none"
+      style={[styles.wrap, { bottom }, networkDockExpanded && styles.wrapDockExpanded, pe("box-none")]}
     >
       {showPreview && (
         <View style={[styles.previewCard, { width: previewWidth }]}>
@@ -244,7 +244,7 @@ export function FloatingChatButton() {
         hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
       >
         <View style={styles.circle}>
-          <View style={styles.innerRing} pointerEvents="none" />
+          <View style={[styles.innerRing, pe("none")]} />
           {showPreview ? (
             <X size={21} color="#fff" strokeWidth={2.4} />
           ) : (

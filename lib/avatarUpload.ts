@@ -476,9 +476,15 @@ export function extractPathFromStorageUrl(
 export function resolveAvatarPublicUrl(path: string | null | undefined): string | null {
   const p = (path ?? '').trim();
   if (!p) return null;
-  if (p.startsWith('http://') || p.startsWith('https://')) return p;
-  const { data } = supabase().storage.from(AVATAR_BUCKET).getPublicUrl(p);
-  return data?.publicUrl ?? null;
+  if (p.startsWith('http://') || p.startsWith('https://')) {
+    const ref = extractPathFromStorageUrl(p);
+    if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
+      return null;
+    }
+    return p;
+  }
+  // `userprofiles` is private — public URLs 400; callers must use getSignedAvatarUrl.
+  return null;
 }
 
 /**

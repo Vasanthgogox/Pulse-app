@@ -11,6 +11,7 @@ import Animated, {
 import type { LucideIcon } from 'lucide-react-native';
 
 import Theme from '@/constants/Theme';
+import { pe } from '@/lib/platformViewStyle.util';
 import { TAB_PRESS_SCALE_ACTIVE, TAB_PRESS_SCALE_REST, TAB_PRESS_TIMING_MS } from '@/lib/mobileTabNav/constants';
 import {
   CLUSTER_PILL_INSET,
@@ -88,7 +89,7 @@ const ClusterSegment = memo(function ClusterSegment({
       accessibilityState={{ selected: active }}
       accessibilityLabel={label}
     >
-      <Animated.View style={[styles.segmentPill, pillStyle]} pointerEvents="none">
+      <Animated.View style={[styles.segmentPill, pillStyle, pe('none')]}>
         <LinearGradient
           colors={[
             Theme.pulseTabClusterThumbGlassTop,
@@ -100,7 +101,7 @@ const ClusterSegment = memo(function ClusterSegment({
           end={{ x: 0, y: 1 }}
           style={styles.segmentPillFill}
         />
-        <View style={styles.segmentPillRim} pointerEvents="none" />
+        <View style={[styles.segmentPillRim, pe('none')]} />
       </Animated.View>
       <Animated.View style={[styles.iconStack, iconStyle]}>
         <Icon
@@ -165,10 +166,9 @@ export const PulseBottomTabCluster = memo(function PulseBottomTabCluster({
         locations={[0, 0.45, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, pe('none')]}
       />
-      <View style={styles.trackRim} pointerEvents="none" />
+      <View style={[styles.trackRim, pe('none')]} />
       {tabs.map((tab, index) => (
         <ClusterSegment
           key={tab.id}

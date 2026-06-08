@@ -9,11 +9,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { DemoTabBar, type DemoTabId } from '@/components/demo';
-import {
-  DemoTabBarAutoHideShell,
-  DemoTabBarScrollProvider,
-  useDemoTabBarScroll,
-} from '@/contexts/DemoTabBarScrollContext';
+import { DemoTabBarAutoHideShell } from '@/contexts/DemoTabBarScrollContext';
 import { getLastTabRoute, saveLastTabRoute } from '@/lib/lastRoute';
 import { useLayoutInsets } from '@/lib/layoutInsets';
 import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
@@ -43,7 +39,6 @@ function DemoCustomTabBar(
   const queryClient = useQueryClient();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
-  useDemoTabBarScroll();
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
   const layout = useLayoutInsets();
@@ -231,9 +226,7 @@ export default function TabLayout() {
   return (
     <AwardedIndentDeployModalProvider>
       <BusinessConnectionRequestModalProvider>
-        <DemoTabBarScrollProvider>
-          <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
-        </DemoTabBarScrollProvider>
+        <TabsWithProfileDrawer isDesktopWeb={isDesktopWeb} />
       </BusinessConnectionRequestModalProvider>
     </AwardedIndentDeployModalProvider>
   );

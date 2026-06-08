@@ -241,6 +241,7 @@ export default function SupplierDetailScreen({
           : 16
       : Layout.screenPaddingHorizontal;
   const initialLoadDoneRef = useRef(false);
+  const lastFocusRefreshRef = useRef(0);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
   const clientById = useMemo(() => {
@@ -584,12 +585,17 @@ export default function SupplierDetailScreen({
     [shipperNameByTripId, clientById],
   );
 
-  useEffect(() => load(), [load]);
   useFocusEffect(
     useCallback(() => {
+      if (initialLoadDoneRef.current && Date.now() - lastFocusRefreshRef.current < 2 * 60_000) return;
+      lastFocusRefreshRef.current = Date.now();
       load();
     }, [load]),
   );
+  useEffect(() => {
+    if (!currentOrganization?.id || initialLoadDoneRef.current) return;
+    load();
+  }, [currentOrganization?.id, load]);
 
   useEffect(() => {
     let mounted = true;

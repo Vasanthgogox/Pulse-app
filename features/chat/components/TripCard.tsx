@@ -34,7 +34,7 @@ export type TripCardProps = {
 /**
  * All-trips hub row: multi-lane indicators + optional RUNNING_LATE preview override.
  */
-export function TripCard({
+export const TripCard = React.memo(function TripCard({
   tripActive,
   totalUnread,
   onPressHero,
@@ -162,7 +162,7 @@ export function TripCard({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   tripHubCard: {

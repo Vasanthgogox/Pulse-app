@@ -3,6 +3,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { registerAppAlertImplementation } from '@/lib/appAlert';
 import { Clock } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
+import { pe } from '@/lib/platformViewStyle.util';
 import {
   Modal,
   Pressable,
@@ -40,7 +41,7 @@ export function AppAlertHost() {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={hide}>
-      <View style={styles.backdrop} pointerEvents="box-none">
+      <View style={[styles.backdrop, pe('box-none')]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={hide} accessibilityRole="button" />
         <View
           style={[styles.card, isCompact && styles.cardCompact]}

@@ -55,17 +55,11 @@ import { mergeAssignmentAuditIntoTripMessages } from "@/features/chat/utils/assi
 import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
-import {
-  dedupeFeedbackRequestMessages,
-  mergeTripChatMessagesWithFeedbackRatings,
-} from "@/features/chat/utils/mergeTripFeedbackMessages.util";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import {
   isTerminalTripStatus,
   isTripFeedbackEligibleStatus,
 } from "@/features/chat/utils/tripConversationSort";
-import { createRating, getRatingsForTrip } from "@/features/ratings/services/ratings.service";
-import type { RatingRow } from "@/features/ratings/types";
 import {
   getTripDisplayNumber,
   type TripRow,
@@ -95,7 +89,6 @@ import {
   Search,
   Send,
   Smile,
-  Star,
   Truck,
   User,
   Users,
@@ -129,16 +122,11 @@ import type {
   TripMessageRow,
 } from "../types/chat.types";
 import { isMessageVisibleInTab } from "../types/chat.types";
+import { pe } from "@/lib/platformViewStyle.util";
 import { commandPriorityScore } from "../utils/commandPriority.util";
-import { tripFeedbackRequestMatchesConversation } from "../utils/feedbackRequestMeta";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
-import {
-  indentAllowsInChatFeedbackDebrief,
-  tripMessageHistoryHasCompletedStatus,
-} from "../utils/tripFeedbackVisibility.util";
 import { ChatLedgerEventCard, ChatSystemEventCard } from "./ChatEventCard";
-import { ChatFeedbackCard } from "./ChatFeedbackCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isLongHaulLateChatMessage, LateAlertCard } from "./LateAlertCard";
@@ -824,6 +812,84 @@ export function ChatScreen() {
   // store — re-renders only when THIS conversation changes (not the full list).
   const selectedConv = useConversation(selectedConvId);
   const selectedNet = netChats.find((c) => c.id === selectedNetId) ?? null;
+  const feedbackComposeTrip = useMemo(
+    () =>
+      selectedConv
+        ? hubComposeTrips.find((t) => t.id === selectedConv.trip_id) ?? null
+        : null,
+    [hubComposeTrips, selectedConv?.trip_id],
+  );
+  const feedbackShownTripsRef = useRef(new Set<string>());
+  const [feedbackOverlayTripId, setFeedbackOverlayTripId] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!selectedConv || profile?.role === "driver") {
+      setFeedbackOverlayTripId(null);
+      return;
+    }
+    const tripId = selectedConv.trip_id;
+    const tripOrg = (
+      selectedConv.trip_organization_id ??
+      selectedConv.organization_id ??
+      ""
+    ).trim();
+    if (!tripOrg || tripOrg !== currentOrgId.trim()) {
+      setFeedbackOverlayTripId(null);
+      return;
+    }
+    const status =
+      selectedConv.trip_status ?? feedbackComposeTrip?.status ?? null;
+    if (!isTripFeedbackEligibleStatus(status)) {
+      setFeedbackOverlayTripId(null);
+      return;
+    }
+    if (feedbackShownTripsRef.current.has(tripId)) return;
+    feedbackShownTripsRef.current.add(tripId);
+    setFeedbackOverlayTripId(tripId);
+  }, [
+    selectedConv,
+    selectedConv?.id,
+    selectedConv?.trip_id,
+    selectedConv?.trip_status,
+    selectedConv?.trip_organization_id,
+    selectedConv?.organization_id,
+    feedbackComposeTrip?.status,
+    currentOrgId,
+    profile?.role,
+  ]);
+
+  const [FeedbackOverlay, setFeedbackOverlay] = useState<
+    React.ComponentType<import("./ChatTripFeedbackOverlay").ChatTripFeedbackOverlayProps> | null
+  >(null);
+
+  useEffect(() => {
+    if (!feedbackOverlayTripId) return;
+    let cancelled = false;
+    void import("./ChatTripFeedbackOverlay").then((mod) => {
+      if (!cancelled) setFeedbackOverlay(() => mod.ChatTripFeedbackOverlay);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [feedbackOverlayTripId]);
+
+  const tripFeedbackOverlay =
+    feedbackOverlayTripId && currentOrgId && FeedbackOverlay ? (
+      <FeedbackOverlay
+        tripId={feedbackOverlayTripId}
+        organizationId={currentOrgId}
+        partnerName={
+          feedbackComposeTrip?.supplier_name ??
+          (selectedConv?.party_type === "supplier"
+            ? selectedConv.party_name
+            : null)
+        }
+        driverName={feedbackComposeTrip?.driver_display_name ?? null}
+        clientName={feedbackComposeTrip?.client_name ?? null}
+      />
+    ) : null;
 
   useEffect(() => {
     if (!isTripStreamTab(activeTab)) {
@@ -1518,11 +1584,6 @@ export function ChatScreen() {
       tripListDisambiguatedLabels.get(item.trip_id) ?? getConversationTripLabel(item);
     const partyLine = formatChatPartyName(item.party_name);
     const isActiveTrip = !isTerminalTripStatus(item.trip_status);
-    const showPendingFeedbackIcon =
-      Platform.OS === "web" &&
-      isDesktop &&
-      item.trip_feedback_status === "pending" &&
-      item.organization_id === currentOrgId;
     const time = item.last_message_at
       ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
           hour: "2-digit",
@@ -1571,15 +1632,6 @@ export function ChatScreen() {
               >
                 {displayTripId}
               </Text>
-              {showPendingFeedbackIcon ? (
-                <Star
-                  size={14}
-                  color={CHAT_ACCENT}
-                  fill="rgba(79,70,229,0.12)"
-                  style={s.chatPendingFeedbackStar}
-                  accessibilityLabel="Pending trip feedback"
-                />
-              ) : null}
               {isActiveTrip ? <View style={[s.activeTripDot, active && s.activeTripDotActive]} /> : null}
             </View>
             <Text
@@ -1939,7 +1991,7 @@ export function ChatScreen() {
           ))}
 
         {isTripStreamTab(activeTab) && isWebAnchoredPanels && showCompose && (
-          <View style={s.composePopoverLayer} pointerEvents="box-none">
+          <View style={[s.composePopoverLayer, pe("box-none")]}>
             <TouchableOpacity
               style={s.tripFilterPopoverBackdrop}
               onPress={() => setShowCompose(false)}
@@ -1952,7 +2004,7 @@ export function ChatScreen() {
         )}
 
         {isTripStreamTab(activeTab) && isDesktop && showTripFilterModal && (
-          <View style={s.tripFilterPopoverLayer} pointerEvents="box-none">
+          <View style={[s.tripFilterPopoverLayer, pe("box-none")]}>
             <TouchableOpacity
               style={s.tripFilterPopoverBackdrop}
               onPress={() => setShowTripFilterModal(false)}
@@ -2597,8 +2649,7 @@ export function ChatScreen() {
                               style={[cm.partyRow, cm.partyRowDisabled]}
                             >
                               <View
-                                style={cm.partyRowDisabledOverlay}
-                                pointerEvents="none"
+                                style={[cm.partyRowDisabledOverlay, pe("none")]}
                               />
                               <View style={[cm.partyIconWrap, cm.partyIconWrapMuted]}>
                                 <PartyIcon partyType="driver" size={14} />
@@ -2692,10 +2743,6 @@ export function ChatScreen() {
         onDispute={handleDispute}
         onSelectConversation={setSelectedConvId}
         onOpenCompose={openCompose}
-        onFeedbackSubmitted={() => {
-          // Store is already patched optimistically in ChatFeedbackCard.
-          // No DB refresh needed — Realtime delivers the metadata UPDATE.
-        }}
       />
     ) : (
       <NetworkDetailPanel
@@ -2765,10 +2812,11 @@ export function ChatScreen() {
           onShare={handleDocShare}
         />
         {Platform.OS === "web" && isDesktop && ledgerWebToast ? (
-          <View style={s.ledgerWebToast} pointerEvents="none">
+          <View style={[s.ledgerWebToast, pe("none")]}>
             <Text style={s.ledgerWebToastText}>Added to Ledger</Text>
           </View>
         ) : null}
+        {tripFeedbackOverlay}
       </LinearGradient>
     );
   }
@@ -2809,6 +2857,7 @@ export function ChatScreen() {
         onClose={() => setShowDocShare(false)}
         onShare={handleDocShare}
       />
+      {tripFeedbackOverlay}
     </LinearGradient>
   );
 }
@@ -3629,7 +3678,6 @@ const s = StyleSheet.create({
     marginBottom: 2,
   },
   chatTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
-  chatPendingFeedbackStar: { marginLeft: 2 },
   chatTitle: { fontSize: 12, fontWeight: "900", color: "#0f172a", flex: 1, textTransform: "uppercase", fontStyle: "italic" },
   chatTitleActive: { color: "#fff" },
   activeTripDot: {
@@ -5144,7 +5192,6 @@ function TripConversationDetailPanel({
   onDispute,
   onSelectConversation,
   onOpenCompose,
-  onFeedbackSubmitted,
 }: {
   selectedConv: TripConversation | null;
   conversations: TripConversation[];
@@ -5166,7 +5213,6 @@ function TripConversationDetailPanel({
   onDispute: (message: TripMessageRow) => void;
   onSelectConversation: (id: string) => void;
   onOpenCompose: () => void | Promise<void>;
-  onFeedbackSubmitted: () => void;
 }) {
   if (!selectedConv) return <EmptyDetail />;
   return (
@@ -5191,7 +5237,6 @@ function TripConversationDetailPanel({
       onDispute={onDispute}
       onSelectConversation={onSelectConversation}
       onOpenCompose={onOpenCompose}
-      onFeedbackSubmitted={onFeedbackSubmitted}
     />
   );
 }
@@ -5217,7 +5262,6 @@ function TripConversationDetailLoaded({
   onDispute,
   onSelectConversation,
   onOpenCompose: _onOpenCompose,
-  onFeedbackSubmitted,
 }: {
   selectedConv: TripConversation;
   conversations: TripConversation[];
@@ -5239,7 +5283,6 @@ function TripConversationDetailLoaded({
   onDispute: (message: TripMessageRow) => void;
   onSelectConversation: (id: string) => void;
   onOpenCompose: () => void | Promise<void>;
-  onFeedbackSubmitted: () => void;
 }) {
   const router = useRouter();
   const { profile } = useAuth();
@@ -5399,36 +5442,11 @@ function TripConversationDetailLoaded({
     void runLatestHistoryPage();
   }, [liveConv.id, liveConv.messages.length, runLatestHistoryPage]);
 
-  const [tripRatings, setTripRatings] = useState<RatingRow[]>([]);
-
-  // Footer feedback state — bootstrap smiley picker for completed integrated trips.
-  const [footerFeedbackScore, setFooterFeedbackScore] = useState<number | null>(null);
-  const [footerFeedbackPhase, setFooterFeedbackPhase] = useState<"pick" | "submitting" | "done">("pick");
-
-  // Feedback submitted: store was already patched optimistically in
-  // ChatFeedbackCard — no DB refresh needed here.
-  const ratingsLoadedForKeyRef = useRef<string | null>(null);
-  const handleFeedbackSubmitted = useCallback(() => {
-    onFeedbackSubmitted();
-  }, [onFeedbackSubmitted]);
-
   // ── useMarkSeen: viewport-based per-message seen tracking ─────────────────
   const { onViewableItemsChanged, viewabilityConfig } = useMarkSeen({
     conversationId: liveConv.id,
     selfUid,
   });
-
-  const effectiveTripStatus = useMemo(() => {
-    const direct = liveConv.trip_status;
-    if (direct != null && String(direct).trim() !== "") return direct;
-    const fromCompose = composeTrips.find((t) => t.id === liveConv.trip_id)?.status ?? null;
-    if (fromCompose != null && String(fromCompose).trim() !== "") return fromCompose;
-    const fromStore = liveTripEntry?.status;
-    if (fromStore != null && String(fromStore).trim() !== "") return fromStore;
-    return null;
-  }, [composeTrips, liveConv.trip_id, liveConv.trip_status, liveTripEntry?.status]);
-
-  const tripEligibleForFeedback = isTripFeedbackEligibleStatus(effectiveTripStatus);
 
   const hasTripIndent =
     Boolean(String(liveConv.indent_id ?? "").trim()) ||
@@ -5454,35 +5472,6 @@ function TripConversationDetailLoaded({
     ],
   );
   const allowLedgerActions = allowFinancialCards && integratedIndentCommercialLane;
-  const showFeedbackCardOnEligibleLane =
-    liveConv.party_type === "client" || liveConv.party_type === "supplier";
-
-  // Snapshot messages in a ref — avoids adding to ratings effect deps.
-  const liveMessagesRef = useRef(liveConv.messages);
-  liveMessagesRef.current = liveConv.messages;
-
-  useEffect(() => {
-    if (!tripEligibleForFeedback) {
-      setTripRatings([]);
-      ratingsLoadedForKeyRef.current = null;
-      return;
-    }
-    const key = liveConv.trip_id;
-    if (ratingsLoadedForKeyRef.current === key) return;
-    ratingsLoadedForKeyRef.current = key;
-
-    let cancelled = false;
-    void (async () => {
-      const { ratings, error } = await getRatingsForTrip(key);
-      if (cancelled) return;
-      if (error && __DEV__) console.warn("[getRatingsForTrip]", error.message);
-      const rows = ratings ?? [];
-      setTripRatings(rows);
-      // Read-only merge: `mergeTripChatMessagesWithFeedbackRatings` shows trip-page ratings in-stream.
-      // Do not write metadata on open (avoids write-on-read / pool pressure); DB trigger + submit RPC own stamps.
-    })();
-    return () => { cancelled = true; };
-  }, [tripEligibleForFeedback, liveConv.trip_id, liveConv.id]);
 
   const tripCompose = useMemo(
     () => composeTrips.find((t) => t.id === liveConv.trip_id) ?? null,
@@ -5504,16 +5493,15 @@ function TripConversationDetailLoaded({
 
   const displayMessages = useMemo(
     () => {
-      const base = dedupeFeedbackRequestMessages(
-        dedupeTripStatusBroadcastsForLane(
-          mergeTripChatMessagesWithFeedbackRatings(
-            liveConv.trip_id,
-            liveConv.messages,
-            tripRatings,
-          ),
-          liveConv.id,
-        ),
-      ).filter((m) => String(m.conversation_id ?? "") === liveConv.id);
+      const base = dedupeTripStatusBroadcastsForLane(
+        liveConv.messages,
+        liveConv.id,
+      )
+        .filter(
+          (m) =>
+            m.message_type !== "feedback_request" && m.message_type !== "feedback",
+        )
+        .filter((m) => String(m.conversation_id ?? "") === liveConv.id);
       return mergeAssignmentAuditIntoTripMessages(
         base,
         assignmentAuditRows,
@@ -5532,7 +5520,6 @@ function TripConversationDetailLoaded({
       liveConv.id,
       liveConv.messages,
       liveConv.organization_id,
-      tripRatings,
       assignmentAuditRows,
       assignmentAuditMaps,
       tripCompose?.driver_display_name,
@@ -5612,29 +5599,6 @@ function TripConversationDetailLoaded({
     liveConv.trip_driver_id ??
     tripCompose?.driver_id ??
     null;
-
-  const onSubmitFooterFeedback = useCallback(async (score: number) => {
-    const laneType = liveConv.party_type;
-    if (laneType !== "supplier" && laneType !== "client") return;
-    const laneId = laneType === "supplier" ? supplierId : clientId;
-    if (!laneId || !currentOrgId || !liveConv.trip_id) return;
-    setFooterFeedbackPhase("submitting");
-    const { error } = await createRating(currentOrgId, {
-      trip_id: liveConv.trip_id,
-      rater_type: "organization",
-      rater_id: currentOrgId,
-      rated_type: laneType,
-      rated_id: laneId,
-      score,
-    });
-    if (!error) {
-      setFooterFeedbackScore(score);
-      setFooterFeedbackPhase("done");
-      onFeedbackSubmitted();
-    } else {
-      setFooterFeedbackPhase("pick");
-    }
-  }, [liveConv.party_type, liveConv.trip_id, supplierId, clientId, currentOrgId, onFeedbackSubmitted]);
 
   const detailVisiblePartyTypes = useMemo(
     () => {
@@ -6004,36 +5968,6 @@ function TripConversationDetailLoaded({
     if (m.message_type === "document_share") {
       return <DocumentShareCard message={m} isOwn={isMessageFromSelf(m)} />;
     }
-    if (m.message_type === "feedback_request" || m.message_type === "feedback") {
-      if (viewerIsDriver) return null;
-      if (!showFeedbackCardOnEligibleLane) return null;
-      if (
-        !tripFeedbackRequestMatchesConversation(m, liveConv, {
-          client_id: clientId,
-          supplier_id: supplierId,
-          driver_id: driverId,
-        })
-      ) {
-        return null;
-      }
-      const completionKnownInLane =
-        tripEligibleForFeedback ||
-        tripMessageHistoryHasCompletedStatus(liveConv.messages) ||
-        tripMessageHistoryHasCompletedStatus(displayMessages);
-      if (!completionKnownInLane) return null;
-      if (!indentAllowsInChatFeedbackDebrief(liveConv, tripEligibleForFeedback)) return null;
-      return (
-        <ChatFeedbackCard
-          message={m}
-          tripId={liveConv.trip_id}
-          ratingOrganizationId={
-            liveConv.trip_organization_id ?? liveConv.organization_id
-          }
-          currentOrgId={currentOrgId}
-          onSubmitted={handleFeedbackSubmitted}
-        />
-      );
-    }
     const own = isMessageFromSelf(m);
     const peerLabel =
       m.sender_name?.trim() ||
@@ -6077,11 +6011,8 @@ function TripConversationDetailLoaded({
     viewerIsDriver,
     allowFinancialCards,
     allowLedgerActions,
-    showFeedbackCardOnEligibleLane,
-    tripEligibleForFeedback,
     onAddToBook,
     onDispute,
-    handleFeedbackSubmitted,
     mountedAtMs,
     isMessageFromSelf,
     longHaulLiveEta,
@@ -6322,66 +6253,6 @@ function TripConversationDetailLoaded({
             )}
           </>
         }
-        ListFooterComponent={(() => {
-          const laneType = liveConv.party_type as "supplier" | "client" | "driver";
-          const laneId = laneType === "supplier" ? supplierId : laneType === "client" ? clientId : null;
-          const streamHasFeedbackCard = displayMessages.some(
-            (m) => m.message_type === "feedback_request" || m.message_type === "feedback",
-          );
-          const showFooterFeedback =
-            !streamHasFeedbackCard &&
-            !viewerIsDriver &&
-            tripIsIntegrated &&
-            showFeedbackCardOnEligibleLane &&
-            tripEligibleForFeedback &&
-            Boolean(laneId) &&
-            indentAllowsInChatFeedbackDebrief(liveConv, tripEligibleForFeedback);
-          if (!showFooterFeedback) return null;
-          const existingRating = tripRatings.find(
-            (r) => r.rated_type === laneType && String(r.rated_id) === String(laneId),
-          );
-          const alreadyRated = Boolean(existingRating) || footerFeedbackPhase === "done";
-          const partyLabel = laneType === "supplier" ? "supplier" : "client";
-          const SMILEYS = [
-            { emoji: "😠", score: 1 }, { emoji: "😟", score: 2 },
-            { emoji: "😐", score: 3 }, { emoji: "🙂", score: 4 }, { emoji: "🤩", score: 5 },
-          ];
-          return (
-            <View style={{ marginHorizontal: 12, marginBottom: 16, marginTop: 8, padding: 14, borderRadius: 16, backgroundColor: "#f8fafc", borderWidth: 1, borderColor: "#e2e8f0" }}>
-              {alreadyRated ? (
-                <View style={{ alignItems: "center", gap: 6 }}>
-                  <Text style={{ fontSize: 22 }}>
-                    {SMILEYS.find((s) => s.score === (existingRating?.score ?? footerFeedbackScore))?.emoji ?? "🙂"}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#1e293b" }}>Thanks for your feedback!</Text>
-                  <Text style={{ fontSize: 11, color: "#64748b" }}>Your {partyLabel} rating has been saved.</Text>
-                </View>
-              ) : footerFeedbackPhase === "submitting" ? (
-                <View style={{ alignItems: "center", paddingVertical: 8 }}>
-                  <LoadingIndicator size="small" color={CHAT_ACCENT} />
-                </View>
-              ) : (
-                <View style={{ gap: 10 }}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#1e293b", textAlign: "center" }}>
-                    How was your experience with this {partyLabel}?
-                  </Text>
-                  <View style={{ flexDirection: "row", justifyContent: "space-around" }}>
-                    {SMILEYS.map(({ emoji, score }) => (
-                      <TouchableOpacity
-                        key={score}
-                        onPress={() => { void onSubmitFooterFeedback(score); }}
-                        activeOpacity={0.75}
-                        style={{ alignItems: "center", padding: 6 }}
-                      >
-                        <Text style={{ fontSize: 26 }}>{emoji}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </View>
-          );
-        })()}
       />
       }
       inputBar={

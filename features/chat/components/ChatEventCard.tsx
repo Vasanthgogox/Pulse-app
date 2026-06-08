@@ -1248,7 +1248,7 @@ export function TripProgressEventCard({
                 {time}
               </Text>
             </View>
-            <View style={s.progressExpandHint} pointerEvents="none">
+            <View style={[s.progressExpandHint, { pointerEvents: "none" }]}>
               <ChevronRight size={8} color={Theme.textMuted} />
             </View>
           </>

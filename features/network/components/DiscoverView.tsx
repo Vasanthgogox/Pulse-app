@@ -50,10 +50,10 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlashList } from "@shopify/flash-list";
 import {
   Alert,
   Animated,
-  FlatList,
   Platform,
   Pressable,
   ScrollView,
@@ -878,8 +878,9 @@ export function DiscoverView({
           )}
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={listData}
+          estimatedItemSize={90}
           keyExtractor={(item, i) => (item._type === "header" ? `h-${i}` : item.org.id)}
           renderItem={({ item }) => {
             if (item._type === "header") {

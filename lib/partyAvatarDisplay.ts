@@ -10,7 +10,6 @@ import {
   getSignedAvatarUrl,
   LEGACY_AVATAR_BUCKET,
   extractPathFromStorageUrl,
-  resolveAvatarPublicUrl,
 } from "@/lib/avatarUpload";
 
 export type PartyEntityType = "client" | "supplier" | "driver";
@@ -45,22 +44,23 @@ function hasPartyPhotoStorageField(raw: string | null | undefined): boolean {
 }
 
 /**
- * Synchronous photo URI for public `userprofiles` paths (connection partner logos/avatars).
- * Returns null for private-only paths so async signing can run.
+ * Synchronous photo URI — only non-storage http(s) URLs. Storage paths return null
+ * so `resolvePartyPhotoUriAsync` can supply a signed URL (private `userprofiles` bucket).
  */
 function resolvePartyPhotoPathSync(raw: string | null | undefined): string | null {
   const u = (raw ?? "").trim();
   if (!u) return null;
   const http = firstDisplayableHttpUrl(u);
   if (http) return http;
+  // Private avatar buckets — never use getPublicUrl (returns 400 in browser).
   if (u.startsWith("http://") || u.startsWith("https://")) {
     const ref = extractPathFromStorageUrl(u);
     if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
-      return resolveAvatarPublicUrl(ref.path);
+      return null;
     }
     return null;
   }
-  return resolveAvatarPublicUrl(u);
+  return null;
 }
 
 async function resolveOnePartyPhotoRaw(raw: string): Promise<string | null> {

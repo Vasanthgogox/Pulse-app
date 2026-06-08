@@ -9,6 +9,7 @@ import { Home, Package, Route, Wallet } from 'lucide-react-native';
 import { AnimatedChatTabIcon } from '@/components/AnimatedChatTabIcon';
 import type { DemoTabId } from '@/components/demo/DemoTabBar';
 import Theme from '@/constants/Theme';
+import { pe } from '@/lib/platformViewStyle.util';
 import { preloadPulseLoadsRoute, preloadTabScreen } from '@/lib/preloadRoutes';
 import type { PreloadableTab } from '@/lib/preloadRoutes';
 
@@ -119,8 +120,7 @@ function PulseBottomTabBarInner({
 
   return (
     <View
-      style={[styles.footerWrap, shellSurface, { paddingBottom: footerPadBottom }]}
-      pointerEvents="box-none"
+      style={[styles.footerWrap, shellSurface, { paddingBottom: footerPadBottom }, pe('box-none')]}
     >
       <View style={[styles.bar, isCompactMobile && styles.barCompact]}>
         <PulseBottomTabSlot

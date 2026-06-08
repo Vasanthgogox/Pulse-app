@@ -25,9 +25,9 @@ import type {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
     Alert,
-    FlatList,
     Modal,
     Platform,
     Pressable,
@@ -1038,9 +1038,10 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
               value={supplierSearch}
               onChangeText={setSupplierSearch}
             />
-            <FlatList
+            <FlashList
               data={["", ...filteredSuppliers]}
               keyExtractor={(item) => item || "__all__"}
+              estimatedItemSize={48}
               {...tabBarScrollProps}
               renderItem={({ item }) => (
                 <Pressable

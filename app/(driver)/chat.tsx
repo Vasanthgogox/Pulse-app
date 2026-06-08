@@ -5,9 +5,9 @@
  */
 import { AppLoadingSplash } from "@/components/AppLoadingSplash";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
   ActivityIndicator,
-  FlatList,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -620,9 +620,10 @@ export default function DriverChatScreen() {
               </Text>
             </View>
           ) : (
-            <FlatList
+            <FlashList
               data={conversations}
               keyExtractor={(c) => c.id}
+              estimatedItemSize={68}
               contentContainerStyle={dr.convListContent}
               renderItem={({ item }) => (
                 <ConvListItem
