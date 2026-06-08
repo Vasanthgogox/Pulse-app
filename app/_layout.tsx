@@ -461,10 +461,10 @@ function RootLayoutNav() {
               <Stack.Screen
                 name="workspace"
                 options={{
-                  presentation: 'card',
-                  animation: 'slide_from_right',
+                  presentation: "transparentModal",
+                  animation: "fade",
                   headerShown: false,
-                  contentStyle: { flex: 1, backgroundColor: '#f4f6fb' },
+                  contentStyle: { flex: 1, backgroundColor: "transparent" },
                 }}
               />
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />

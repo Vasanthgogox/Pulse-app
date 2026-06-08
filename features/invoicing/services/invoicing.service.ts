@@ -339,7 +339,7 @@ export async function executeInvoiceCreation(
 
     const { data: candidates, error: candidateError } = await supabase()
       .from("trips")
-      .select("id, trip_number, display_trip_id, pod_status, invoice_status_1, invoice_no")
+      .select("id, organization_id, trip_number, display_trip_id, pod_status, invoice_status_1, invoice_no")
       .in("id", sanitizedIds);
 
     if (candidateError) throw candidateError;
@@ -367,11 +367,25 @@ export async function executeInvoiceCreation(
       );
     }
 
+    // Use atomic DB sequence for GST-compliant consecutive invoice numbering.
+    // Manual override allowed for credit notes / corrected invoices.
+    let invoiceNo: string;
     const candidateInvoiceNo =
       payload && typeof payload.invoiceNo === "string" ? payload.invoiceNo.trim() : "";
-    const invoiceNo =
-      candidateInvoiceNo ||
-      `#INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}${Math.floor(Math.random() * 90) + 10}`;
+    if (candidateInvoiceNo) {
+      invoiceNo = candidateInvoiceNo;
+    } else {
+      const { data: seqData, error: seqError } = await supabase().rpc("allocate_invoice_number", {
+        p_org_id: (rows[0] as { organization_id?: string }).organization_id ?? null,
+      });
+      if (seqError || !seqData) {
+        // Fallback: timestamp-based with high uniqueness (not sequential — will show warning)
+        invoiceNo = `INV-${Date.now()}`;
+        console.warn("[invoicing] allocate_invoice_number RPC failed, using fallback:", seqError?.message);
+      } else {
+        invoiceNo = String(seqData);
+      }
+    }
 
     // Note: Due to Q-mobile standards preventing schema changes in this repo,
     // the full payload (taxes, fuel surcharge, additional charges) is securely persisted

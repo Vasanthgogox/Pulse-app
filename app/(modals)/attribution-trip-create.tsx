@@ -1,10 +1,16 @@
 import { Avatar } from "@/components/Avatar";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
-import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
-import { NumericDisplay } from "@/components/mobile-input/NumericDisplay";
-import { applyKeypadPress, type KeypadKey } from "@/components/mobile-input/keypad";
-import { WizardPartyContextRow } from "@/components/full-page-wizard";
+import {
+  FullPageWizardFooter,
+  FullPageWizardShell,
+  fullPageWizardStyles,
+  WizardClientPicker,
+  WizardContextSummary,
+  WizardNumericKeypadFlow,
+  WizardPartyContextRow,
+} from "@/components/full-page-wizard";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -24,7 +30,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -57,6 +62,7 @@ export default function AttributionTripCreateModal() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const isWideLayout = width >= Layout.wizardSteppedMaxWidth;
   const { currentOrganization } = useOrganization();
   const { user, profile } = useAuth();
 
@@ -317,6 +323,14 @@ export default function AttributionTripCreateModal() {
     clientMode === "shipper" ? !!matchedShipperClient : !!selectedClientId;
   const canContinueFromSaleStep = Number(saleValue) > 0;
 
+  const filteredClients = useMemo(() => {
+    const q = clientName.trim().toLowerCase();
+    const list = q
+      ? clients.filter((c) => String(c.name ?? "").toLowerCase().includes(q))
+      : clients;
+    return list.slice(0, 40);
+  }, [clients, clientName]);
+
   const goBackInWizard = useCallback(() => {
     if (wizardStep === "review") {
       setWizardStep("sale");
@@ -328,10 +342,6 @@ export default function AttributionTripCreateModal() {
     }
     router.back();
   }, [wizardStep, router]);
-
-  const handleSaleKey = useCallback((key: KeypadKey) => {
-    setSaleValue((prev) => applyKeypadPress(prev, key, { maxDecimalPlaces: 2 }));
-  }, []);
 
   if (loading) {
     return (
@@ -401,78 +411,6 @@ export default function AttributionTripCreateModal() {
     avatarSeed: selectedClient?.avatar_seed ?? null,
   };
 
-  if (wizardStep === "sale") {
-    return (
-      <View style={styles.root}>
-        <View
-          style={[
-            styles.salePageRoot,
-            {
-              paddingTop: insets.top + 6,
-              paddingBottom: Math.max(insets.bottom, 10),
-            },
-          ]}
-        >
-          <View style={styles.headerBar}>
-            <Pressable
-              style={styles.headerBackBtn}
-              onPress={goBackInWizard}
-              accessibilityLabel="Back"
-            >
-              <Text style={styles.headerBackBtnText}>← Back</Text>
-            </Pressable>
-            <Text style={styles.headerStepText}>Step 2 of 3</Text>
-          </View>
-
-          <View style={styles.saleHeaderBlock}>
-            <Text style={styles.title}>Sale Value</Text>
-            <Text style={styles.subtitle}>
-              Enter the billed sale value for this attributed trip.
-            </Text>
-          </View>
-
-          <WizardPartyContextRow left={driverPartyCell} right={clientPartyCell} />
-
-          <View style={styles.saleDisplayCard}>
-            <Text style={styles.saleDisplayLabel}>Sale value (INR)</Text>
-            <NumericDisplay
-              rawValue={saleValue}
-              type="currency"
-              prefix="₹"
-              placeholder="0"
-              variant="hero"
-            />
-          </View>
-
-          <View style={styles.salePageActions}>
-            <Pressable style={styles.cancelBtn} onPress={goBackInWizard}>
-              <Text style={styles.cancelBtnText}>Back</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.submitBtn,
-                !canContinueFromSaleStep && styles.submitBtnDisabled,
-              ]}
-              disabled={!canContinueFromSaleStep}
-              onPress={() => setWizardStep("review")}
-            >
-              <Text style={styles.submitBtnText}>Review</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.salePageKeypadDock}>
-            <DecimalKeypad
-              onKey={handleSaleKey}
-              showDecimal
-              variant="pay"
-              size="compact"
-            />
-          </View>
-        </View>
-      </View>
-    );
-  }
-
   const stepProgress = (
     <View style={styles.wizardStepRow}>
       {[
@@ -493,7 +431,12 @@ export default function AttributionTripCreateModal() {
                 done && styles.wizardStepCircleDone,
               ]}
             >
-              <Text style={[styles.wizardStepCircleText, (active || done) && styles.wizardStepCircleTextActive]}>
+              <Text
+                style={[
+                  styles.wizardStepCircleText,
+                  (active || done) && styles.wizardStepCircleTextActive,
+                ]}
+              >
                 {idx + 1}
               </Text>
             </View>
@@ -506,252 +449,250 @@ export default function AttributionTripCreateModal() {
     </View>
   );
 
-  if (wizardStep === "client") {
-    return (
-      <View style={styles.root}>
-        <View
-          style={[
-            styles.pageRoot,
-            { paddingTop: insets.top + 6, paddingBottom: Math.max(insets.bottom, 12) },
-          ]}
+  const contextPanel = (
+    <WizardContextSummary
+      eyebrow="This request"
+      title={`${source.pickup_area} → ${source.drop_location}`}
+      lines={[
+        `Driver · ${driverName}`,
+        `Vehicle · ${vehicleLabel}`,
+        `Date · ${formatTripDate(source.pickup_date ?? source.created_at)}`,
+        wizardStep === "client"
+          ? `Shipper · ${shipperName}`
+          : `Sale · ₹${Math.max(0, Number(saleValue) || 0).toLocaleString("en-IN")}`,
+      ]}
+    />
+  );
+
+  const routeDetailsBlock = (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>Route details</Text>
+      <Text style={styles.blockLine}>
+        {source.pickup_area} → {source.drop_location}
+      </Text>
+      <Text style={styles.blockMeta}>
+        Date: {formatTripDate(source.pickup_date ?? source.created_at)} · Vehicle:{" "}
+        {vehicleLabel}
+      </Text>
+    </View>
+  );
+
+  const selectClientBlock = (
+    <View style={[styles.block, isWideLayout && styles.selectClientBlockWide]}>
+      <Text style={styles.blockTitle}>Select client</Text>
+      <View style={styles.modeRow}>
+        <Pressable
+          style={[styles.modeChip, clientMode === "shipper" && styles.modeChipActive]}
+          onPress={() => {
+            setClientMode("shipper");
+            setClientName(shipperName);
+          }}
         >
-          <View style={styles.headerBar}>
-            <Pressable style={styles.headerBackBtn} onPress={goBackInWizard} accessibilityLabel="Back">
-              <Text style={styles.headerBackBtnText}>← Back</Text>
-            </Pressable>
-            <Text style={styles.headerStepText}>Step 1 of 3</Text>
-          </View>
-
-          <View style={styles.pageHeaderBlock}>
-            <Text style={styles.title}>Accept Attribution</Text>
-            <Text style={styles.subtitle}>
-              Select how this shipper maps to your client record.
-            </Text>
-          </View>
-
-          {stepProgress}
-
-          <ScrollView
-            style={styles.stepScroll}
-            contentContainerStyle={[styles.stepScrollContent, width >= 920 && styles.scrollBodyWide]}
-            showsVerticalScrollIndicator={false}
+          <Text
+            style={[
+              styles.modeChipText,
+              clientMode === "shipper" && styles.modeChipTextActive,
+            ]}
           >
-            <WizardPartyContextRow left={driverPartyCell} right={shipperPartyCell} />
+            Mark as shipper
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.modeChip, clientMode === "existing" && styles.modeChipActive]}
+          onPress={() => setClientMode("existing")}
+        >
+          <Text
+            style={[
+              styles.modeChipText,
+              clientMode === "existing" && styles.modeChipTextActive,
+            ]}
+          >
+            Select existing client
+          </Text>
+        </Pressable>
+      </View>
 
-            <View style={styles.block}>
-              <Text style={styles.blockTitle}>Route details</Text>
-              <Text style={styles.blockLine}>{source.pickup_area} → {source.drop_location}</Text>
-              <Text style={styles.blockMeta}>
-                Date: {formatTripDate(source.pickup_date ?? source.created_at)} · Vehicle: {vehicleLabel}
+      {clientMode === "shipper" ? (
+        <>
+          <View style={styles.shipperMarkCard}>
+            <PartyAvatar
+              name={shipperName}
+              avatarUrl={shipperAvatarUri}
+              entityType="client"
+              size={30}
+              shape="rounded"
+            />
+            <View style={styles.partyTextWrap}>
+              <Text style={styles.partyLabel}>Shipper</Text>
+              <Text style={styles.partyName} numberOfLines={1}>
+                {shipperName}
               </Text>
-            </View>
-
-            <View style={styles.block}>
-              <Text style={styles.blockTitle}>Select client</Text>
-              <View style={styles.modeRow}>
-                <Pressable
-                  style={[styles.modeChip, clientMode === "shipper" && styles.modeChipActive]}
-                  onPress={() => {
-                    setClientMode("shipper");
-                    setClientName(shipperName);
-                  }}
-                >
-                  <Text style={[styles.modeChipText, clientMode === "shipper" && styles.modeChipTextActive]}>
-                    Mark as shipper
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.modeChip, clientMode === "existing" && styles.modeChipActive]}
-                  onPress={() => setClientMode("existing")}
-                >
-                  <Text style={[styles.modeChipText, clientMode === "existing" && styles.modeChipTextActive]}>
-                    Select existing client
-                  </Text>
-                </Pressable>
-              </View>
-
-              {clientMode === "shipper" ? (
-                <>
-                  <View style={styles.shipperMarkCard}>
-                    <PartyAvatar name={shipperName} avatarUrl={shipperAvatarUri} entityType="client" size={30} shape="rounded" />
-                    <View style={styles.partyTextWrap}>
-                      <Text style={styles.partyLabel}>Shipper</Text>
-                      <Text style={styles.partyName} numberOfLines={1}>{shipperName}</Text>
-                      {matchedShipperClient == null ? (
-                        <View style={styles.shipperNewBadge}>
-                          <Text style={styles.shipperNewBadgeText}>CLIENT FROM SHIPPER (NEW)</Text>
-                        </View>
-                      ) : (
-                        <View style={styles.shipperMappedBadge}>
-                          <Text style={styles.shipperMappedBadgeText}>MAPPED TO EXISTING CLIENT</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  {matchedShipperClient == null ? (
-                    <View style={styles.shipperWarningCard}>
-                      <Text style={styles.shipperWarningText}>
-                        This shipper is not in your clients. Add it with contact details to continue.
-                      </Text>
-                      <Pressable style={styles.addClientBtn} onPress={openAddClientFlow}>
-                        <Text style={styles.addClientBtnText}>+ Add shipper as client</Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <Text style={styles.hint}>
-                      Existing client matched automatically. Continue to sale value.
-                    </Text>
-                  )}
-                </>
+              {matchedShipperClient == null ? (
+                <View style={styles.shipperNewBadge}>
+                  <Text style={styles.shipperNewBadgeText}>CLIENT FROM SHIPPER (NEW)</Text>
+                </View>
               ) : (
-                <>
-                  <TextInput
-                    value={clientName}
-                    onChangeText={setClientName}
-                    placeholder="Search client"
-                    placeholderTextColor={Theme.textMuted}
-                    style={styles.input}
-                  />
-                  <View style={styles.clientListWrap}>
-                    {clientsLoading ? (
-                      <View style={styles.clientLoadingWrap}>
-                        <LoadingIndicator size="small" color={Theme.primary} />
-                      </View>
-                    ) : (
-                      clients
-                        .filter((c) =>
-                          String(c.name ?? "").toLowerCase().includes(clientName.trim().toLowerCase()),
-                        )
-                        .slice(0, 20)
-                        .map((client) => {
-                          const selected = selectedClientId === client.id;
-                          return (
-                            <Pressable
-                              key={client.id}
-                              style={[styles.clientRow, selected && styles.clientRowSelected]}
-                              onPress={() => {
-                                setSelectedClientId(client.id);
-                                setClientName(client.name ?? "");
-                              }}
-                            >
-                              <PartyAvatar
-                                name={client.name ?? "Client"}
-                                avatarUrl={client.avatar_url ?? null}
-                                avatarSeed={client.avatar_seed ?? null}
-                                entityType="client"
-                                size={30}
-                                shape="rounded"
-                              />
-                              <View style={styles.partyTextWrap}>
-                                <Text style={styles.partyName} numberOfLines={1}>{client.name ?? "Client"}</Text>
-                                <Text style={styles.blockMeta} numberOfLines={1}>{client.phone ?? "—"}</Text>
-                              </View>
-                            </Pressable>
-                          );
-                        })
-                    )}
-                  </View>
-                  <Pressable style={styles.addClientBtn} onPress={openAddClientFlow}>
-                    <Text style={styles.addClientBtnText}>+ Add new client</Text>
-                  </Pressable>
-                </>
+                <View style={styles.shipperMappedBadge}>
+                  <Text style={styles.shipperMappedBadgeText}>MAPPED TO EXISTING CLIENT</Text>
+                </View>
               )}
             </View>
-          </ScrollView>
-
-          <View style={styles.footerBar}>
-            <Pressable style={styles.cancelBtn} onPress={goBackInWizard}>
-              <Text style={styles.cancelBtnText}>Close</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.submitBtn, !canContinueFromClientStep && styles.submitBtnDisabled]}
-              disabled={!canContinueFromClientStep}
-              onPress={() => setWizardStep("sale")}
-            >
-              <Text style={styles.submitBtnText}>Continue</Text>
-            </Pressable>
           </View>
-        </View>
-      </View>
-    );
-  }
-
-  if (wizardStep === "review") {
-    return (
-      <View style={styles.root}>
-        <View
-          style={[
-            styles.pageRoot,
-            { paddingTop: insets.top + 6, paddingBottom: Math.max(insets.bottom, 12) },
-          ]}
-        >
-          <View style={styles.headerBar}>
-            <Pressable style={styles.headerBackBtn} onPress={goBackInWizard} accessibilityLabel="Back">
-              <Text style={styles.headerBackBtnText}>← Back</Text>
-            </Pressable>
-            <Text style={styles.headerStepText}>Step 3 of 3</Text>
-          </View>
-
-          <View style={styles.pageHeaderBlock}>
-            <Text style={styles.title}>Review & Create</Text>
-            <Text style={styles.subtitle}>Confirm details before creating attributed fleet trip.</Text>
-          </View>
-
-          {stepProgress}
-
-          <WizardPartyContextRow left={driverPartyCell} right={clientPartyCell} />
-
-          <View style={styles.reviewSummaryCard}>
-            <Text style={styles.blockTitle}>Trip summary</Text>
-            <Text style={styles.reviewLine}>Sale value: ₹{Math.max(0, Number(saleValue) || 0).toLocaleString("en-IN")}</Text>
-            <Text style={styles.reviewLine}>Route: {source.pickup_area} → {source.drop_location}</Text>
-            <Text style={styles.reviewLine}>Vehicle: {vehicleLabel}</Text>
-            <Text style={styles.reviewLine}>Date: {formatTripDate(source.pickup_date ?? source.created_at)}</Text>
-          </View>
-
-          <View style={styles.footerBar}>
-            <Pressable style={styles.cancelBtn} onPress={goBackInWizard}>
-              <Text style={styles.cancelBtnText}>Back</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
-            >
-              <Text style={styles.submitBtnText}>
-                {submitting ? "Creating..." : "Create trip & accept"}
+          {matchedShipperClient == null ? (
+            <View style={styles.shipperWarningCard}>
+              <Text style={styles.shipperWarningText}>
+                This shipper is not in your clients. Add it with contact details to continue.
               </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    );
-  }
+              <Pressable style={styles.addClientBtn} onPress={openAddClientFlow}>
+                <Text style={styles.addClientBtnText}>+ Add shipper as client</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={styles.hint}>
+              Existing client matched automatically. Continue to sale value.
+            </Text>
+          )}
+        </>
+      ) : (
+        <>
+          <TextInput
+            value={clientName}
+            onChangeText={setClientName}
+            placeholder="Search client"
+            placeholderTextColor={Theme.textMuted}
+            style={styles.input}
+          />
+          <WizardClientPicker
+            clients={filteredClients}
+            loading={clientsLoading}
+            selectedClientId={selectedClientId}
+            onSelect={(client) => {
+              setSelectedClientId(client.id);
+              setClientName(client.name ?? "");
+            }}
+            onAddClient={openAddClientFlow}
+            listMaxHeight={isWideLayout ? 340 : 260}
+          />
+        </>
+      )}
+    </View>
+  );
 
-  return null;
+  const stepTitle =
+    wizardStep === "client"
+      ? "Accept Attribution"
+      : wizardStep === "sale"
+        ? "Sale Value"
+        : "Review & Create";
+
+  const stepSubtitle =
+    wizardStep === "client"
+      ? "Select how this shipper maps to your client record."
+      : wizardStep === "sale"
+        ? "Enter the billed sale value for this attributed trip."
+        : "Confirm details before creating attributed fleet trip.";
+
+  const stepIndex = wizardStep === "client" ? 1 : wizardStep === "sale" ? 2 : 3;
+
+  const stepContent =
+    wizardStep === "client" ? (
+      <>
+        <WizardPartyContextRow left={driverPartyCell} right={shipperPartyCell} />
+        {isWideLayout ? (
+          <View style={styles.desktopStepGrid}>
+            <View style={styles.desktopStepCol}>{routeDetailsBlock}</View>
+            <View style={styles.desktopStepCol}>{selectClientBlock}</View>
+          </View>
+        ) : (
+          <>
+            {routeDetailsBlock}
+            {selectClientBlock}
+          </>
+        )}
+      </>
+    ) : wizardStep === "sale" ? (
+      <>
+        <WizardPartyContextRow left={driverPartyCell} right={clientPartyCell} />
+        <View style={styles.saleKeypadWrap}>
+          <WizardNumericKeypadFlow
+            fields={[
+              {
+                id: "sale",
+                label: "Sale value (INR)",
+                rawValue: saleValue,
+                onRawValueChange: setSaleValue,
+              },
+            ]}
+          />
+        </View>
+      </>
+    ) : (
+      <>
+        <WizardPartyContextRow left={driverPartyCell} right={clientPartyCell} />
+        <View style={styles.reviewSummaryCard}>
+          <Text style={styles.blockTitle}>Trip summary</Text>
+          <Text style={styles.reviewLine}>
+            Sale value: ₹{Math.max(0, Number(saleValue) || 0).toLocaleString("en-IN")}
+          </Text>
+          <Text style={styles.reviewLine}>
+            Route: {source.pickup_area} → {source.drop_location}
+          </Text>
+          <Text style={styles.reviewLine}>Vehicle: {vehicleLabel}</Text>
+          <Text style={styles.reviewLine}>
+            Date: {formatTripDate(source.pickup_date ?? source.created_at)}
+          </Text>
+        </View>
+      </>
+    );
+
+  const footer =
+    wizardStep === "client" ? (
+      <FullPageWizardFooter
+        secondaryLabel="Close"
+        onSecondaryPress={goBackInWizard}
+        primaryLabel="Continue"
+        onPrimaryPress={() => setWizardStep("sale")}
+        primaryDisabled={!canContinueFromClientStep}
+      />
+    ) : wizardStep === "sale" ? (
+      <FullPageWizardFooter
+        secondaryLabel="Back"
+        onSecondaryPress={goBackInWizard}
+        primaryLabel="Review"
+        onPrimaryPress={() => setWizardStep("review")}
+        primaryDisabled={!canContinueFromSaleStep}
+      />
+    ) : (
+      <FullPageWizardFooter
+        secondaryLabel="Back"
+        onSecondaryPress={goBackInWizard}
+        primaryLabel={submitting ? "Creating…" : "Create trip & accept"}
+        onPrimaryPress={handleSubmit}
+        primaryDisabled={submitting}
+        loading={submitting}
+      />
+    );
+
+  return (
+    <FullPageWizardShell
+      title={stepTitle}
+      subtitle={stepSubtitle}
+      stepIndex={stepIndex}
+      stepTotal={3}
+      onBack={goBackInWizard}
+      progress={stepProgress}
+      fillBody={wizardStep === "sale"}
+      scrollBody={wizardStep !== "sale"}
+      insightPreset="attribution"
+      contextPanel={contextPanel}
+      footer={footer}
+    >
+      {stepContent}
+    </FullPageWizardShell>
+  );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
-  },
-  pageRoot: {
-    flex: 1,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  pageHeaderBlock: {
-    gap: 4,
-  },
-  salePageRoot: {
-    flex: 1,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  saleHeaderBlock: {
-    gap: 6,
-  },
   loadingWrap: {
     flex: 1,
     alignItems: "center",
@@ -769,120 +710,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-  scrollBody: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  scrollBodyWide: {
-    width: "100%",
-    maxWidth: 860,
-    alignSelf: "center",
-  },
-  headerBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: 28,
-  },
-  headerBackBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  headerBackBtnText: {
-    color: Theme.textPrimaryDark,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  headerStepText: {
-    color: Theme.textMuted,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  title: {
-    color: Theme.textPrimaryDark,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  subtitle: {
-    color: Theme.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-  },
   wizardStepRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    ...fullPageWizardStyles.wizardStepRow,
   },
   wizardStepItem: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
+    ...fullPageWizardStyles.wizardStepItem,
   },
   wizardStepCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    alignItems: "center",
-    justifyContent: "center",
+    ...fullPageWizardStyles.wizardStepCircle,
   },
   wizardStepCircleActive: {
-    borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    ...fullPageWizardStyles.wizardStepCircleActive,
   },
   wizardStepCircleDone: {
-    borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    ...fullPageWizardStyles.wizardStepCircleDone,
   },
   wizardStepCircleText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMuted,
+    ...fullPageWizardStyles.wizardStepCircleText,
   },
   wizardStepCircleTextActive: {
-    color: Theme.textOnPrimary,
+    ...fullPageWizardStyles.wizardStepCircleTextActive,
   },
   wizardStepText: {
-    fontSize: 10,
-    color: Theme.textMuted,
-    fontWeight: "600",
+    ...fullPageWizardStyles.wizardStepText,
   },
   wizardStepTextActive: {
-    color: Theme.textPrimaryDark,
+    ...fullPageWizardStyles.wizardStepTextActive,
   },
-  stepScroll: {
-    flex: 1,
-    minHeight: 0,
-  },
-  stepScrollContent: {
-    gap: 12,
-    paddingBottom: 6,
-  },
-  partyRow: {
+  desktopStepGrid: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "flex-start",
+    gap: 12,
+    width: "100%",
   },
-  partyRowStack: {
-    flexDirection: "column",
-  },
-  partyCard: {
+  desktopStepCol: {
     flex: 1,
     minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    padding: 10,
+  },
+  selectClientBlockWide: {
+    minHeight: 360,
   },
   partyTextWrap: {
     flex: 1,
@@ -923,31 +789,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   modeRow: {
-    flexDirection: "row",
-    gap: 8,
+    ...fullPageWizardStyles.modeRow,
   },
   modeChip: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    alignItems: "center",
+    ...fullPageWizardStyles.modeChip,
   },
   modeChipActive: {
-    borderColor: Theme.primary,
-    backgroundColor: "rgba(79, 70, 229, 0.08)",
+    ...fullPageWizardStyles.modeChipActive,
   },
   modeChipText: {
-    fontSize: 11,
-    color: Theme.textSecondary,
-    fontWeight: "700",
+    ...fullPageWizardStyles.modeChipText,
   },
   modeChipTextActive: {
-    color: Theme.primary,
+    ...fullPageWizardStyles.modeChipTextActive,
   },
   shipperMarkCard: {
     marginTop: 2,
@@ -1006,49 +860,10 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "600",
   },
-  inputLabel: {
-    color: Theme.textSecondary,
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  saleDisplayCard: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 12,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  saleDisplayLabel: {
-    color: Theme.textMuted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
   saleKeypadWrap: {
-    marginTop: 2,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-  },
-  salePageActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 2,
-  },
-  salePageKeypadDock: {
-    marginTop: "auto",
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
   },
   reviewSummaryCard: {
     borderRadius: 12,
@@ -1058,10 +873,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 8,
-  },
-  reviewPartyCard: {
-    borderColor: "rgba(15,23,42,0.12)",
-    backgroundColor: "rgba(15,23,42,0.03)",
   },
   reviewLine: {
     color: Theme.textPrimaryDark,
@@ -1078,33 +889,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
-  },
-  clientListWrap: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
-    maxHeight: 280,
-    overflow: "hidden",
-  },
-  clientLoadingWrap: {
-    paddingVertical: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  clientRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-  },
-  clientRowSelected: {
-    backgroundColor: "rgba(79, 70, 229, 0.08)",
-    borderLeftWidth: 2,
-    borderLeftColor: Theme.primary,
   },
   addClientBtn: {
     alignSelf: "flex-start",
@@ -1125,21 +909,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  actionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  },
-  footerBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    paddingTop: 10,
-  },
   cancelBtn: {
     borderRadius: 10,
     borderWidth: 1,
@@ -1152,21 +921,5 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     fontSize: 12,
     fontWeight: "700",
-  },
-  submitBtn: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  submitBtnDisabled: {
-    opacity: 0.6,
-  },
-  submitBtnText: {
-    color: Theme.textOnPrimary,
-    fontSize: 12,
-    fontWeight: "800",
   },
 });

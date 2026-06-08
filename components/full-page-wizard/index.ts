@@ -9,6 +9,13 @@ export {
   type FullPageWizardProgressStep,
 } from "./FullPageWizardProgress";
 export { FullPageWizardShell } from "./FullPageWizardShell";
+export { WizardContextSummary } from "./WizardContextSummary";
+export { WizardDesktopFrame } from "./WizardDesktopFrame";
+export { WizardInsightRail, type WizardInsightCard } from "./WizardInsightRail";
+export {
+  wizardInsightCardsForPreset,
+  type WizardInsightPreset,
+} from "./wizardDesktopInsights";
 export {
   fullPageWizardStyles,
   WIZARD_ACCENT,
@@ -37,6 +44,11 @@ export {
   WizardPriorSelections,
   type WizardPriorSelectionItem,
 } from "./WizardPriorSelections";
+export {
+  WizardNumericKeypadFlow,
+  type WizardNumericKeypadField,
+  type WizardNumericKeypadFlowProps,
+} from "./WizardNumericKeypadFlow";
 export {
   WizardSelectionGrid,
   type WizardSelectionGridItem,

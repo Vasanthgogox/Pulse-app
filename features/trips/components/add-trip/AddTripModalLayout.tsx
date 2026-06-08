@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import {
   FullPageWizardFooter,
   FullPageWizardShell,
+  type WizardInsightPreset,
 } from "@/components/full-page-wizard";
 
 export interface AddTripModalLayoutProps {
@@ -28,6 +29,11 @@ export interface AddTripModalLayoutProps {
   fillBody?: boolean;
   /** Shell ScrollView for step content (avoids nested scroll on mobile wizards). */
   scrollBody?: boolean;
+  insightPreset?: WizardInsightPreset;
+  contextPanel?: ReactNode;
+  tertiaryLabel?: string;
+  onTertiaryPress?: () => void;
+  tertiaryDisabled?: boolean;
 }
 
 export function AddTripModalLayout({
@@ -48,6 +54,11 @@ export function AddTripModalLayout({
   progress,
   fillBody = false,
   scrollBody = false,
+  insightPreset = "trip",
+  contextPanel,
+  tertiaryLabel,
+  onTertiaryPress,
+  tertiaryDisabled = false,
 }: AddTripModalLayoutProps) {
   const shouldShowFooter =
     primaryActionMode === "footer"
@@ -72,6 +83,8 @@ export function AddTripModalLayout({
       progress={progress}
       fillBody={fillBody}
       scrollBody={scrollBody}
+      insightPreset={insightPreset}
+      contextPanel={contextPanel}
       footer={
         shouldShowFooter ? (
           <FullPageWizardFooter
@@ -79,6 +92,9 @@ export function AddTripModalLayout({
               stepIndex != null && stepIndex > 1 ? "Back" : "Close"
             }
             onSecondaryPress={onClose}
+            tertiaryLabel={tertiaryLabel}
+            onTertiaryPress={onTertiaryPress}
+            tertiaryDisabled={tertiaryDisabled || submitting}
             primaryLabel={submitting ? "Saving…" : submitLabel}
             onPrimaryPress={onSubmit}
             primaryDisabled={submitDisabled}

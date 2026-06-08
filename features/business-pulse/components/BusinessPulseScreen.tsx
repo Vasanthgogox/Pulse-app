@@ -1,26 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import Svg, { Circle, Path, Polyline } from "react-native-svg";
 import {
   Activity,
   AlertTriangle,
-  BarChart2,
-  Building2,
   CheckCircle2,
+  Calendar,
   IndianRupee,
   ListChecks,
-  Route,
   ShieldAlert,
-  Target,
   TrendingDown,
   TrendingUp,
   Truck,
   Users,
 } from "lucide-react-native";
 import Theme from "@/constants/Theme";
-import Layout from "@/constants/Layout";
+import {
+  PULSE_PAGE_BG,
+  pulseEnterpriseStyles as ent,
+} from "@/features/business-pulse/components/pulseEnterpriseStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
@@ -56,10 +55,22 @@ import {
   executionScopeFromFilters,
   type ExecutionScope,
 } from "@/features/business-pulse/lib/pulseExecutionScope.util";
+import { PulseIntelligenceChart } from "@/features/business-pulse/components/PulseIntelligenceChart";
+import { PulseDashboardCard } from "@/features/business-pulse/components/PulseDashboardCard";
+import { PulseSegmentDonut } from "@/features/business-pulse/components/PulseSegmentDonut";
+import { PulseTopContributorsList } from "@/features/business-pulse/components/PulseTopContributorsList";
 import { PulseScopeTabRow } from "@/features/business-pulse/components/PulseScopeTabRow";
+import { PulseScopeRibbon } from "@/features/business-pulse/components/PulseScopeRibbon";
 import { PulseBranchCityWidget } from "@/features/business-pulse/components/PulseBranchCityWidget";
+import { PulseScopeIntelCard } from "@/features/business-pulse/components/PulseScopeIntelCard";
+import {
+  PulseDomainTabLayout,
+  PulseDomainKpiStrip,
+} from "@/features/business-pulse/components/PulseDomainTabLayout";
+import { PulseEntityFilterPanel } from "@/features/business-pulse/components/PulseEntityFilterPanel";
 import {
   PulseWidgetCol,
+  PulseOverviewDesktopLayout,
   PulseWidgetRow,
   usePulseDesktopLayout,
 } from "@/features/business-pulse/components/PulseWidgetBoard";
@@ -70,16 +81,28 @@ import { PulseDateRangeTabBar } from "@/features/business-pulse/components/Pulse
 import { PulseDrilldownTable } from "@/features/business-pulse/components/PulseDrilldownTable";
 import {
   PulseRankingTable,
-  PulseTableSection,
+  type PulseTableRow,
 } from "@/features/business-pulse/components/PulseRankingTable";
 import {
   PULSE_CLIENT_COLUMNS,
+  PULSE_CLIENT_MINI_COLUMNS,
   PULSE_COMPLIANCE_COLUMNS,
+  PULSE_COMPLIANCE_MINI_COLUMNS,
+  PULSE_DRIVER_MINI_COLUMNS,
   PULSE_DRIVER_PAYROLL_COLUMNS,
   PULSE_FLEET_VEHICLE_COLUMNS,
+  PULSE_FLEET_VEHICLE_MINI_COLUMNS,
   PULSE_ROUTE_COLUMNS,
+  PULSE_ROUTE_MINI_COLUMNS,
   PULSE_SUPPLIER_COLUMNS,
+  PULSE_SUPPLIER_MINI_COLUMNS,
 } from "@/features/business-pulse/lib/pulseTableColumns";
+import {
+  buildPulsePartyMaps,
+  pulsePartyForName,
+  pulsePartyForRoute,
+  resolvePulseParty,
+} from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 import { buildPulseDrilldownView } from "@/features/business-pulse/lib/pulseDrilldownContext.util";
 import {
   buildVehicleLabelMap,
@@ -117,72 +140,6 @@ function toYmd(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function monthLabel(month: string): string {
-  const [, mm] = month.split("-");
-  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const idx = Number(mm) - 1;
-  return names[idx] ?? month;
-}
-
-function LineChart({
-  points,
-  selectedMonth,
-  onSelectMonth,
-}: {
-  points: Array<{ month: string; value: number }>;
-  selectedMonth: string | null;
-  onSelectMonth: (month: string | null) => void;
-}) {
-  if (points.length === 0) return <Text style={styles.mutedText}>No data in current filter scope.</Text>;
-  const max = Math.max(...points.map((item) => item.value), 1);
-  const plot = points
-    .map((item, i) => {
-      const x = points.length <= 1 ? 0 : (i / (points.length - 1)) * 100;
-      const y = 100 - (item.value / max) * 100;
-      return `${x},${y}`;
-    })
-    .join(" ");
-  return (
-    <View style={styles.chartWrap}>
-      <Svg width="100%" height={160} viewBox="0 0 100 100" preserveAspectRatio="none">
-        <Path d="M0 100 L100 100" stroke={Theme.borderLight} strokeWidth={1} />
-        <Polyline points={plot} fill="none" stroke={Theme.primary} strokeWidth={2.6} strokeLinecap="round" />
-        {points.map((item, i) => {
-          const x = points.length <= 1 ? 0 : (i / (points.length - 1)) * 100;
-          const y = 100 - (item.value / max) * 100;
-          const active = selectedMonth === item.month;
-          return (
-            <Circle
-              key={item.month}
-              cx={x}
-              cy={y}
-              r={active ? 2.7 : 1.8}
-              fill={active ? Theme.teslaRed : Theme.surface}
-              stroke={active ? Theme.teslaRed : Theme.primary}
-              strokeWidth={1.7}
-            />
-          );
-        })}
-      </Svg>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.axisRow}>
-        {points.map((item) => {
-          const active = selectedMonth === item.month;
-          return (
-            <Pressable
-              key={item.month}
-              onPress={() => onSelectMonth(active ? null : item.month)}
-              style={[styles.axisChip, active && styles.axisChipActive]}
-            >
-              <Text style={[styles.axisChipText, active && styles.axisChipTextActive]}>
-                {monthLabel(item.month)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
 
 function MetricCard({
   title,
@@ -193,6 +150,7 @@ function MetricCard({
   density,
   compareActive,
   desktopQuarter,
+  icon,
 }: {
   title: string;
   value: string;
@@ -201,31 +159,41 @@ function MetricCard({
   state: "healthy" | "warning" | "critical";
   density: WidgetDensity;
   compareActive: boolean;
-  /** Four-across KPI strip on wide desktop. */
   desktopQuarter?: boolean;
+  icon?: ReactNode;
 }) {
   const up = deltaPct >= 0;
+  const accentStyle =
+    state === "healthy"
+      ? ent.kpiAccentHealthy
+      : state === "warning"
+        ? ent.kpiAccentWarning
+        : ent.kpiAccentCritical;
   return (
     <View
       style={[
+        ent.kpiCard,
         styles.metricCard,
         desktopQuarter && styles.metricCardQuarter,
-        state === "healthy" ? styles.stateHealthy : state === "warning" ? styles.stateWarning : styles.stateCritical,
+        accentStyle,
         density === "tiny" ? styles.metricTiny : density === "compact" ? styles.metricCompact : styles.metricStandard,
       ]}
     >
-      <Text style={styles.metricTitle}>{title}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
+      <View style={styles.kpiTopRow}>
+        {icon ? <View style={styles.kpiIconChip}>{icon}</View> : null}
+        <Text style={[ent.kpiTitle, icon ? styles.kpiTitleWithIcon : null]}>{title}</Text>
+      </View>
+      <Text style={ent.kpiValue}>{value}</Text>
       {compareActive ? (
         <View style={styles.metricDeltaRow}>
-          {up ? <TrendingUp size={10} color="#047857" /> : <TrendingDown size={10} color={Theme.teslaRed} />}
+          {up ? <TrendingUp size={10} color={Theme.primary} /> : <TrendingDown size={10} color={Theme.textMuted} />}
           <Text style={[styles.metricDeltaText, up ? styles.positive : styles.negative]}>
             {up ? "+" : "−"}
             {Math.abs(deltaPct).toFixed(1)}% vs prior
           </Text>
         </View>
       ) : null}
-      <Text style={styles.metricInsight}>{insight}</Text>
+      <Text style={ent.kpiInsight}>{insight}</Text>
     </View>
   );
 }
@@ -242,28 +210,30 @@ function DomainTabBar({ active, onChange }: { active: DomainTab; onChange: (tab:
     { key: "operations", label: "Operations" },
   ];
   return (
-    <View style={styles.labeledTabShell}>
-      <Text style={styles.labeledTabLabel}>Domain</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.labeledTabScroll}
-        contentContainerStyle={styles.tabBar}
-        keyboardShouldPersistTaps="handled"
-      >
-        {tabs.map((tab) => (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={ent.filterTabRow}
+      keyboardShouldPersistTaps="handled"
+    >
+      {tabs.map((tab) => {
+        const selected = active === tab.key;
+        return (
           <Pressable
             key={tab.key}
             onPress={() => onChange(tab.key)}
-            style={[styles.tabChip, active === tab.key && styles.tabChipActive]}
+            style={ent.filterTab}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
           >
-            <Text style={[styles.tabChipText, active === tab.key && styles.tabChipTextActive]}>
+            <Text style={[ent.filterTabText, selected && ent.filterTabTextActive]}>
               {tab.label}
             </Text>
+            {selected ? <View style={ent.filterTabIndicator} /> : null}
           </Pressable>
-        ))}
-      </ScrollView>
-    </View>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -278,14 +248,14 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const insets = useSafeAreaInsets();
   const resolvedTopInset = topInset ?? (embedded ? 0 : insets.top + 8);
   const { width } = useWindowDimensions();
-  const { isDesktop, isWideDesktop } = usePulseDesktopLayout();
+  const { isDesktop } = usePulseDesktopLayout();
   const wide = width >= 720;
   const twoCol = width >= 1080;
   const halfCardStyle = wide ? styles.halfCardWide : styles.halfCardNarrow;
-  const kpiQuarter = isWideDesktop;
+  const kpiQuarter = isDesktop;
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
-  const { filters, toggleFilterValue, setDateRange, setFilters } = usePulseFilters();
+  const { filters, toggleFilterValue, setDateRange, setFilters, resetFilters } = usePulseFilters();
 
   const [activeDomain, setActiveDomain] = useState<DomainTab>("overview");
   const density: WidgetDensity = "compact";
@@ -293,6 +263,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   const [comparePreset, setComparePreset] = useState<ComparePreset>("none");
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [financeLedger, setFinanceLedger] = useState<FinanceAgingKind>("receivable");
+  const scrollRef = useRef<ScrollView>(null);
 
   const clientsQuery = useClientsQuery(orgId);
   const suppliersQuery = useSuppliersQuery(orgId);
@@ -375,6 +346,8 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     ],
   );
 
+  const partyMaps = useMemo(() => buildPulsePartyMaps(dataset), [dataset]);
+
   const effectiveRange = useMemo(
     () => getEffectiveDateRange(timePreset, filters.dateRange, comparePreset),
     [comparePreset, filters.dateRange, timePreset],
@@ -456,6 +429,35 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     () => selectClientProfitability(dataset, activeFilters),
     [activeFilters, dataset],
   );
+  const contributorRows = useMemo(
+    () =>
+      clientProfitability.slice(0, 6).map((client) => ({
+        id: client.id,
+        name: client.name,
+        meta: `${client.tripCount} trips · ${inr(client.revenue)} revenue`,
+        selected: filters.clientIds.includes(client.id),
+        party: resolvePulseParty(partyMaps.clients, client.id, client.name, "client"),
+      })),
+    [clientProfitability, filters.clientIds, partyMaps.clients],
+  );
+
+  const revenueSegmentSlices = useMemo(() => {
+    const palette = ["#4F46E5", "#3B82F6", "#6366F1", "#71717A", "#A1A1AA"];
+    const top = clientProfitability.slice(0, 4);
+    const otherRevenue = clientProfitability
+      .slice(4)
+      .reduce((sum, client) => sum + client.revenue, 0);
+    const slices = top.map((client, index) => ({
+      label: client.name,
+      value: client.revenue,
+      color: palette[index] ?? palette[4]!,
+    }));
+    if (otherRevenue > 0) {
+      slices.push({ label: "Other clients", value: otherRevenue, color: palette[4]! });
+    }
+    return slices.filter((slice) => slice.value > 0);
+  }, [clientProfitability]);
+
   const supplierProfitability = useMemo(
     () => selectSupplierProfitability(dataset, activeFilters),
     [activeFilters, dataset],
@@ -464,10 +466,85 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     () => selectSupplierReliability(dataset, activeFilters),
     [activeFilters, dataset],
   );
+
+  const supplierContributorRows = useMemo(
+    () =>
+      supplierProfitability.slice(0, 5).map((supplier) => ({
+        id: supplier.id,
+        name: supplier.name,
+        meta: `${inr(supplier.contributionMargin)} margin · ${supplierReliability.find((r) => r.id === supplier.id)?.reliabilityScore.toFixed(0) ?? "0"}% reliability`,
+        selected: filters.supplierIds.includes(supplier.id),
+        party: resolvePulseParty(partyMaps.suppliers, supplier.id, supplier.name, "supplier"),
+      })),
+    [supplierProfitability, supplierReliability, filters.supplierIds, partyMaps.suppliers],
+  );
+
+  const clientRankingRows = useMemo(
+    () =>
+      clientProfitability.map((client) => ({
+        id: client.id,
+        selected: filters.clientIds.includes(client.id),
+        party: resolvePulseParty(partyMaps.clients, client.id, client.name, "client"),
+        cells: {
+          name: client.name,
+          trips: String(client.tripCount),
+          revenue: inr(client.revenue),
+          margin: inr(client.margin),
+          marginTone: client.margin >= 0 ? "positive" : "negative",
+        },
+      })),
+    [clientProfitability, filters.clientIds, partyMaps.clients],
+  );
+
   const supplierSettlement = useMemo(
     () => selectSupplierSettlementExposure(dataset, activeFilters),
     [activeFilters, dataset],
   );
+
+  const supplierRankingRows = useMemo(
+    () =>
+      supplierProfitability.map((supplier) => {
+        const rel = supplierReliability.find((r) => r.id === supplier.id);
+        const settle = supplierSettlement.find((s) => s.id === supplier.id);
+        const tone: PulseTableRow["tone"] =
+          rel?.risk === "critical"
+            ? "critical"
+            : rel?.risk === "warning"
+              ? "warning"
+              : "healthy";
+        return {
+          id: supplier.id,
+          selected: filters.supplierIds.includes(supplier.id),
+          tone,
+          party: resolvePulseParty(partyMaps.suppliers, supplier.id, supplier.name, "supplier"),
+          cells: {
+            name: supplier.name,
+            reliability: rel?.reliabilityScore.toFixed(0) ?? "0",
+            margin: inr(supplier.contributionMargin),
+            settlement: inr(settle?.settlementExposure ?? 0),
+          },
+        };
+      }),
+    [
+      supplierProfitability,
+      supplierReliability,
+      supplierSettlement,
+      filters.supplierIds,
+      partyMaps.suppliers,
+    ],
+  );
+
+  const supplierSettlementSlices = useMemo(() => {
+    const palette = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
+    return supplierProfitability
+      .slice(0, 5)
+      .map((supplier, index) => ({
+        label: supplier.name,
+        value: supplierSettlement.find((x) => x.id === supplier.id)?.settlementExposure ?? 0,
+        color: palette[index % palette.length]!,
+      }))
+      .filter((slice) => slice.value > 0);
+  }, [supplierProfitability, supplierSettlement]);
   const driverSettlement = useMemo(
     () => selectDriverSettlementRisk(dataset, activeFilters),
     [activeFilters, dataset],
@@ -524,6 +601,23 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 8);
   }, [scoped.trips]);
+
+  const routeRankingRows = useMemo(
+    () =>
+      routePerf.map((row) => ({
+        id: row.route,
+        selected: filters.routes.includes(row.route),
+        party: pulsePartyForRoute(row.route),
+        cells: {
+          name: row.route,
+          trips: String(row.trips),
+          revenue: inr(row.revenue),
+          margin: inr(row.margin),
+          marginTone: row.margin >= 0 ? "positive" : "negative",
+        },
+      })),
+    [routePerf, filters.routes],
+  );
 
   const vehicleLabels = useMemo(
     () => buildVehicleLabelMap(dataset.vehicles),
@@ -630,6 +724,261 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     return "All time";
   }, [effectiveRange?.end, effectiveRange?.start, filters.dateRange.end, filters.dateRange.start]);
 
+  const scopeIntelRows = useMemo(
+    () => [
+      { label: "Workspace", value: currentOrganization?.name ?? "Workspace" },
+      { label: "Period", value: drilldownDateLabel },
+      {
+        label: "Execution",
+        value:
+          executionScope === "all"
+            ? "All models"
+            : executionScope === "asset"
+              ? "Asset fleet"
+              : "Aggregate supply",
+      },
+      { label: "Trips", value: String(scoped.trips.length) },
+      { label: "Revenue", value: inr(overview.revenue) },
+      { label: "Net margin", value: inr(overview.margin) },
+      { label: "Cash exposure", value: inr(overview.cashExposure) },
+      { label: "Fleet utilization", value: `${overview.fleetUtilization.toFixed(0)}%` },
+    ],
+    [
+      currentOrganization?.name,
+      drilldownDateLabel,
+      executionScope,
+      scoped.trips.length,
+      overview.revenue,
+      overview.margin,
+      overview.cashExposure,
+      overview.fleetUtilization,
+    ],
+  );
+
+  const executionFilterLabel =
+    executionScope === "all"
+      ? undefined
+      : executionScope === "asset"
+        ? "Asset fleet"
+        : "Aggregate supply";
+
+  const salesScopeIntelRows = useMemo(
+    () => [
+      { label: "Clients", value: String(clientProfitability.length) },
+      { label: "Client revenue", value: inr(overview.revenue) },
+      {
+        label: "Top client",
+        value: clientProfitability[0]?.name ?? "—",
+      },
+      { label: "Lanes tracked", value: String(routePerf.length) },
+    ],
+    [clientProfitability, overview.revenue, routePerf.length],
+  );
+
+  const supplyScopeIntelRows = useMemo(
+    () => [
+      { label: "Suppliers", value: String(supplierProfitability.length) },
+      {
+        label: "Settlement due",
+        value: inr(
+          supplierSettlement.reduce((sum, row) => sum + row.settlementExposure, 0),
+        ),
+      },
+      {
+        label: "Avg reliability",
+        value:
+          supplierReliability.length > 0
+            ? `${(
+                supplierReliability.reduce((s, r) => s + r.reliabilityScore, 0) /
+                supplierReliability.length
+              ).toFixed(0)}%`
+            : "—",
+      },
+      { label: "Margin pool", value: inr(supplierProfitability.reduce((s, r) => s + r.contributionMargin, 0)) },
+    ],
+    [supplierProfitability, supplierReliability, supplierSettlement],
+  );
+
+  const fleetScopeIntelRows = useMemo(
+    () => [
+      { label: "Asset trips", value: String(assetFleetSummary.assetTripCount) },
+      { label: "Active vehicles", value: String(assetFleetSummary.activeVehicles) },
+      { label: "Fleet P&L", value: inr(assetFleetSummary.netFleetPnL) },
+      { label: "Settlement", value: inr(assetFleetSummary.totalSettlementExposure) },
+    ],
+    [assetFleetSummary],
+  );
+
+  const driversScopeIntelRows = useMemo(
+    () => [
+      { label: "Asset drivers", value: String(assetDriverPayroll.length) },
+      {
+        label: "Payable queue",
+        value: inr(assetDriverPayroll.reduce((sum, row) => sum + row.payableTotal, 0)),
+      },
+      {
+        label: "License gaps",
+        value: String(driverCompliance.filter((d) => !d.hasLicense).length),
+      },
+      {
+        label: "Settlement risk",
+        value: String(driverSettlement.filter((d) => d.settlementExposure > 0).length),
+      },
+    ],
+    [assetDriverPayroll, driverCompliance, driverSettlement],
+  );
+
+  const complianceScopeIntelRows = useMemo(
+    () => [
+      { label: "Vehicles at risk", value: String(docExposure.vehiclesAtRisk) },
+      { label: "Drivers at risk", value: String(docExposure.driversAtRisk) },
+      {
+        label: "Critical items",
+        value: String(complianceRisk.filter((r) => r.state === "critical" || r.state === "missing").length),
+      },
+      { label: "Expiring soon", value: String(complianceRisk.filter((r) => r.state === "expiring_soon").length) },
+    ],
+    [complianceRisk, docExposure.driversAtRisk, docExposure.vehiclesAtRisk],
+  );
+
+  const operationsScopeIntelRows = useMemo(
+    () => [
+      { label: "Delayed trips", value: String(operations.delayedTrips) },
+      { label: "Pending approvals", value: String(operations.pendingApprovals) },
+      { label: "Ops state", value: String(operations.state) },
+      { label: "Branches active", value: String(branchCitySlices.length) },
+    ],
+    [branchCitySlices.length, operations.delayedTrips, operations.pendingApprovals, operations.state],
+  );
+
+  const driverContributorRows = useMemo(
+    () =>
+      assetDriverPayroll.slice(0, 6).map((driver) => ({
+        id: driver.driverId,
+        name: driver.driverName,
+        meta: `${driver.tripCount} trips · ${inr(driver.payableTotal)} payable`,
+        selected: filters.driverIds.includes(driver.driverId),
+        party: resolvePulseParty(partyMaps.drivers, driver.driverId, driver.driverName, "driver"),
+      })),
+    [assetDriverPayroll, filters.driverIds, partyMaps.drivers],
+  );
+
+  const fleetContributorRows = useMemo(
+    () =>
+      assetFleetVehicles.slice(0, 6).map((vehicle) => ({
+        id: vehicle.vehicleId,
+        name: vehicleDisplayLabel(vehicleLabels, vehicle.vehicleId),
+        meta: `${vehicle.tripCount} trips · P&L ${inr(vehicle.netProfitability)}`,
+        selected: filters.vehicleIds.includes(vehicle.vehicleId),
+        party: resolvePulseParty(
+          partyMaps.vehicles,
+          vehicle.vehicleId,
+          vehicleDisplayLabel(vehicleLabels, vehicle.vehicleId),
+          "vehicle",
+        ),
+      })),
+    [assetFleetVehicles, filters.vehicleIds, partyMaps.vehicles, vehicleLabels],
+  );
+
+  const complianceContributorRows = useMemo(
+    () =>
+      complianceRisk.slice(0, 6).map((row) => ({
+        id: row.vehicleId,
+        name: formatIndianVehicleNumber(row.vehicleNumber) || row.vehicleNumber || "Vehicle",
+        meta: `${row.state.replaceAll("_", " ")} · ${row.riskCount} docs`,
+        selected: filters.vehicleIds.includes(row.vehicleId),
+        party: resolvePulseParty(
+          partyMaps.vehicles,
+          row.vehicleId,
+          formatIndianVehicleNumber(row.vehicleNumber) || row.vehicleNumber || "Vehicle",
+          "vehicle",
+        ),
+      })),
+    [complianceRisk, filters.vehicleIds, partyMaps.vehicles],
+  );
+
+  const financePayableContributorRows = useMemo(
+    () => [...supplierContributorRows.slice(0, 3), ...driverContributorRows.slice(0, 3)],
+    [driverContributorRows, supplierContributorRows],
+  );
+
+  const fleetVehicleRows = useMemo(
+    () =>
+      assetFleetVehicles.map((vehicle) => ({
+        id: vehicle.vehicleId,
+        selected: filters.vehicleIds.includes(vehicle.vehicleId),
+        party: resolvePulseParty(
+          partyMaps.vehicles,
+          vehicle.vehicleId,
+          vehicleDisplayLabel(vehicleLabels, vehicle.vehicleId),
+          "vehicle",
+        ),
+        cells: {
+          name: vehicleDisplayLabel(vehicleLabels, vehicle.vehicleId),
+          trips: String(vehicle.tripCount),
+          operators:
+            vehicle.operatorNames.length > 0 ? vehicle.operatorNames.join(", ") : "—",
+          expenses: inr(
+            vehicle.operationalCost + vehicle.ownershipCost + vehicle.maintenanceCost,
+          ),
+          pnl: inr(vehicle.netProfitability),
+          pnlTone: vehicle.netProfitability >= 0 ? "positive" : "negative",
+        },
+      })),
+    [assetFleetVehicles, filters.vehicleIds, partyMaps.vehicles, vehicleLabels],
+  );
+
+  const driverPayrollRows = useMemo(
+    () =>
+      assetDriverPayroll.map((driver) => {
+        const compliance = driverCompliance.find((d) => d.driverId === driver.driverId);
+        const tone: PulseTableRow["tone"] =
+          !compliance?.hasLicense || driver.settlementExposure > 0 ? "warning" : null;
+        return {
+          id: driver.driverId,
+          selected: filters.driverIds.includes(driver.driverId),
+          tone,
+          party: resolvePulseParty(partyMaps.drivers, driver.driverId, driver.driverName, "driver"),
+          cells: {
+            name: driver.driverName,
+            trips: String(driver.tripCount),
+            vehicles: driver.vehicleLabels.join(", ") || "—",
+            commission: inr(driver.commissionDue),
+            salary: driver.monthlySalary != null ? inr(driver.monthlySalary) : "Comm",
+            payable: inr(driver.payableTotal),
+            payableTone: driver.payableTotal > 0 ? "negative" : "positive",
+          },
+        };
+      }),
+    [assetDriverPayroll, driverCompliance, filters.driverIds, partyMaps.drivers],
+  );
+
+  const complianceRankingRows = useMemo(
+    () =>
+      complianceRisk.map((row) => ({
+        id: row.vehicleId,
+        selected: filters.vehicleIds.includes(row.vehicleId),
+        tone:
+          row.state === "critical" || row.state === "missing"
+            ? ("critical" as const)
+            : row.state === "expiring_soon"
+              ? ("warning" as const)
+              : ("healthy" as const),
+        party: resolvePulseParty(
+          partyMaps.vehicles,
+          row.vehicleId,
+          formatIndianVehicleNumber(row.vehicleNumber) || row.vehicleNumber || "Vehicle",
+          "vehicle",
+        ),
+        cells: {
+          name: formatIndianVehicleNumber(row.vehicleNumber) || row.vehicleNumber || "—",
+          state: row.state.replaceAll("_", " ").toUpperCase(),
+          docs: String(row.riskCount),
+        },
+      })),
+    [complianceRisk, filters.vehicleIds, partyMaps.vehicles],
+  );
+
   const drilldownView = useMemo(
     () =>
       buildPulseDrilldownView({
@@ -661,13 +1010,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     ],
   );
 
-  const drilldownDisplayView = useMemo(
-    () => ({
-      ...drilldownView,
-      rows: drilldownView.rows.slice(0, wide ? 80 : 40),
-    }),
-    [drilldownView, wide],
-  );
+  const drilldownDisplayView = drilldownView;
 
   useEffect(() => {
     if (activeDomain !== "finance") return;
@@ -688,6 +1031,16 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     [activeFilters, dataset, nameLabels],
   );
 
+  const financeScopeIntelRows = useMemo(
+    () => [
+      { label: "Receivable", value: inr(receivableAgingReport.totalOutstanding) },
+      { label: "Payable", value: inr(payableAgingReport.totalOutstanding) },
+      { label: "Open receivables", value: String(receivableAgingReport.lines.length) },
+      { label: "Open payables", value: String(payableAgingReport.lines.length) },
+    ],
+    [payableAgingReport, receivableAgingReport],
+  );
+
   const handleTimePresetChange = useCallback(
     (preset: TimePreset) => {
       setTimePreset(preset);
@@ -698,6 +1051,52 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     [setDateRange],
   );
 
+  const scrollToDrilldown = useCallback(() => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  const renderEntityFilterPanel = () => (
+    <PulseEntityFilterPanel
+      filters={filters}
+      partyMaps={partyMaps}
+      clientNames={nameLabels.clientNames}
+      supplierNames={nameLabels.supplierNames}
+      driverNames={nameLabels.driverNames}
+      vehicleLabels={nameLabels.vehicleLabels}
+      executionLabel={executionFilterLabel}
+      onToggle={toggleFilterValue}
+      onClearAll={resetFilters}
+    />
+  );
+
+  const renderScopeLeftRail = (
+    domainTitle: string,
+    domainRows: typeof scopeIntelRows,
+    extra?: ReactNode,
+  ) => (
+    <>
+      <PulseDashboardCard title={domainTitle} subtitle="Workspace scope · tap tables to filter">
+        <PulseScopeIntelCard rows={[...scopeIntelRows.slice(0, 2), ...domainRows]} />
+      </PulseDashboardCard>
+      <PulseDashboardCard title="Cross-filters" subtitle="Pinned entities · tap to remove">
+        {renderEntityFilterPanel()}
+      </PulseDashboardCard>
+      {extra}
+    </>
+  );
+
+  const cityWidgetCard = (title: string, subtitle: string, slices: typeof branchCitySlices) => (
+    <PulseDashboardCard title={title} subtitle={subtitle} noPadding>
+      <View style={styles.cityWidgetInset}>
+        <PulseBranchCityWidget
+          slices={slices}
+          layout={isDesktop ? "grid" : "scroll"}
+          hideHeader
+        />
+      </View>
+    </PulseDashboardCard>
+  );
+
   if (!orgId) {
     return (
       <View style={[styles.center, { paddingTop: insets.top + 24 }]}>
@@ -706,9 +1105,9 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
     );
   }
 
-  const renderOverview = () => (
-    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
-      {compareActive && compareOverview ? (
+  const renderOverview = () => {
+    const compareBanner =
+      compareActive && compareOverview ? (
         <View style={styles.compareBanner}>
           <Text style={styles.compareBannerText}>{compareCaption}</Text>
           <Text style={styles.compareBannerMeta}>
@@ -716,7 +1115,9 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
             {inr(compareOverview.margin)}
           </Text>
         </View>
-      ) : null}
+      ) : null;
+
+    const kpiStrip = (
       <View
         style={[
           styles.executiveGrid,
@@ -731,14 +1132,13 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           insight={
             compareActive
               ? `Current window vs prior ${inr(compareOverview?.revenue ?? 0)}`
-              : deltas.revenue < 0
-                ? "Revenue below prior period"
-                : "Revenue expansion continues"
+              : `${scoped.trips.length} trips in scope`
           }
           state={deltas.revenue < -5 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          icon={<IndianRupee size={12} color={Theme.primary} strokeWidth={2.2} />}
         />
         <MetricCard
           title="Net Margin"
@@ -747,493 +1147,1079 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           insight={
             compareActive
               ? `Prior margin ${inr(compareOverview?.margin ?? 0)}`
-              : deltas.margin < 0
-                ? "Fuel/Maintenance pressure"
-                : "Margin quality stable"
+              : overview.margin >= 0
+                ? "Margin quality stable"
+                : "Cost pressure in scope"
           }
           state={deltas.margin < -3 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          icon={<TrendingUp size={12} color={Theme.primary} strokeWidth={2.2} />}
         />
         <MetricCard
-          title="Cashflow Exposure"
+          title="Cash Exposure"
           value={inr(overview.cashExposure)}
           deltaPct={deltas.cashExposure}
           insight={
             compareActive
               ? `Prior exposure ${inr(compareOverview?.cashExposure ?? 0)}`
               : overview.cashExposure > 0
-                ? "Working capital blocked in settlements"
+                ? "Settlement queue active"
                 : "Healthy cash movement"
           }
           state={overview.cashExposure > 0 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          icon={<Activity size={12} color={Theme.primary} strokeWidth={2.2} />}
         />
         <MetricCard
-          title="Compliance Risk"
-          value={`${docExposure.vehiclesAtRisk + docExposure.driversAtRisk}`}
-          deltaPct={0}
-          insight="Insurance/Permit/DL backlog concentration"
-          state={docExposure.vehiclesAtRisk + docExposure.driversAtRisk > 0 ? "critical" : "healthy"}
+          title="Fleet Utilization"
+          value={`${overview.fleetUtilization.toFixed(0)}%`}
+          deltaPct={deltas.utilization}
+          insight={`Compliance ${overview.complianceRisk} · Ops ${overview.operationalHealth}`}
+          state={overview.fleetUtilization < 50 ? "warning" : "healthy"}
           density={density}
-          compareActive={false}
+          compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          icon={<Truck size={12} color={Theme.textPrimaryDark} strokeWidth={2.2} />}
         />
       </View>
+    );
+
+    const opsSignals = (
+      <View style={styles.opsRow}>
+        <View style={styles.opsBadge}>
+          <AlertTriangle size={12} color={Theme.textMuted} />
+          <Text style={styles.opsBadgeText}>Delayed: {operations.delayedTrips}</Text>
+        </View>
+        <View style={styles.opsBadge}>
+          <ListChecks size={12} color={Theme.primary} />
+          <Text style={styles.opsBadgeText}>Pending: {operations.pendingApprovals}</Text>
+        </View>
+        <View style={styles.opsBadge}>
+          <ShieldAlert size={12} color={Theme.textPrimaryDark} />
+          <Text style={styles.opsBadgeText}>
+            Docs at risk: {docExposure.vehiclesAtRisk + docExposure.driversAtRisk}
+          </Text>
+        </View>
+        <View style={styles.opsBadge}>
+          <CheckCircle2 size={12} color={Theme.primary} />
+          <Text style={styles.opsBadgeText}>State: {String(operations.state)}</Text>
+        </View>
+      </View>
+    );
+
+    const revenueChart = (
+      <PulseDashboardCard
+        title="Revenue intelligence"
+        subtitle="Monthly revenue trend · tap a month to filter"
+        footerLabel="View trip drilldown"
+        onFooterPress={scrollToDrilldown}
+      >
+        <PulseIntelligenceChart
+          points={revenueTrend.map((item) => ({ month: item.month, value: item.revenue }))}
+          selectedMonth={selectedMonth}
+          onSelectMonth={(month) => {
+            setSelectedMonth(month);
+            if (!month) {
+              const range = getPresetDateRange(timePreset);
+              setDateRange(range.start, range.end);
+              return;
+            }
+            setDateRange(`${month}-01`, `${month}-31`);
+          }}
+        />
+      </PulseDashboardCard>
+    );
+
+    const contributorsAndMix = (
       <PulseWidgetRow>
-        <PulseWidgetCol flex={isDesktop ? 1.55 : 1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <BarChart2 size={13} color={Theme.primary} />
-                <Text style={styles.cardTitle}>Revenue Trend</Text>
-              </View>
-              <Text style={styles.cardSubTitle}>Tap month for cross-filter drilldown</Text>
-            </View>
-            <LineChart
-              points={revenueTrend.map((item) => ({ month: item.month, value: item.revenue }))}
-              selectedMonth={selectedMonth}
-              onSelectMonth={(month) => {
-                setSelectedMonth(month);
-                if (!month) {
-                  const range = getPresetDateRange(timePreset);
-                  setDateRange(range.start, range.end);
-                  return;
-                }
-                setDateRange(`${month}-01`, `${month}-31`);
-              }}
+        <PulseWidgetCol flex={1}>
+          <PulseDashboardCard
+            title="Top clients"
+            subtitle="Revenue contributors in current scope"
+            footerLabel="All clients"
+            onFooterPress={() => setActiveDomain("sales")}
+          >
+            <PulseTopContributorsList
+              rows={contributorRows}
+              onRowPress={(id) => toggleFilterValue("clientIds", id)}
+              emptyMessage="No clients in current scope."
             />
-          </View>
+          </PulseDashboardCard>
         </PulseWidgetCol>
-        <PulseWidgetCol flex={1} minWidth={isDesktop ? 300 : undefined}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <PulseBranchCityWidget
-              slices={branchCitySlices}
-              subtitle="Pickup cities across all trips in scope"
-              layout={isDesktop ? "grid" : "scroll"}
-            />
-          </View>
+        <PulseWidgetCol flex={1}>
+          <PulseDashboardCard title="Revenue mix" subtitle="Client contribution breakdown">
+            <PulseSegmentDonut slices={revenueSegmentSlices} emptyMessage="No revenue data in scope." />
+          </PulseDashboardCard>
         </PulseWidgetCol>
       </PulseWidgetRow>
-    </View>
-  );
+    );
+
+    const clientTable = (
+      <PulseDashboardCard
+        title="Client performance"
+        subtitle="Member-level revenue and margin"
+        noPadding
+      >
+        <PulseRankingTable
+          columns={PULSE_CLIENT_COLUMNS}
+          rows={clientRankingRows}
+          onRowPress={(id) => toggleFilterValue("clientIds", id)}
+          emptyMessage="No clients in current scope."
+        />
+      </PulseDashboardCard>
+    );
+
+    const laneTable = (
+      <PulseDashboardCard title="Lane profitability" subtitle="Route corridors in scope" noPadding>
+        <PulseRankingTable
+          columns={PULSE_ROUTE_COLUMNS}
+          rows={routeRankingRows}
+          onRowPress={(id) => toggleFilterValue("routes", id)}
+          emptyMessage="No lanes in current scope."
+        />
+      </PulseDashboardCard>
+    );
+
+    const supplierSection = (
+      <PulseWidgetRow>
+        <PulseWidgetCol flex={1}>
+          <PulseDashboardCard
+            title="Top suppliers"
+            subtitle="Reliability and settlement exposure"
+            footerLabel="All suppliers"
+            onFooterPress={() => setActiveDomain("supply")}
+          >
+            <PulseTopContributorsList
+              rows={supplierContributorRows}
+              onRowPress={(id) => toggleFilterValue("supplierIds", id)}
+              emptyMessage="No suppliers in current scope."
+            />
+          </PulseDashboardCard>
+        </PulseWidgetCol>
+        <PulseWidgetCol flex={1}>
+          <PulseDashboardCard title="Settlement exposure" subtitle="Supplier payable concentration">
+            <PulseSegmentDonut
+              slices={supplierSettlementSlices}
+              emptyMessage="No settlement exposure in scope."
+            />
+          </PulseDashboardCard>
+        </PulseWidgetCol>
+      </PulseWidgetRow>
+    );
+
+    const branchCityCard = (
+      <PulseDashboardCard
+        title="Branch / city concentration"
+        subtitle="Pickup cities ranked by revenue share"
+        noPadding
+      >
+        <View style={styles.cityWidgetInset}>
+          <PulseBranchCityWidget
+            slices={branchCitySlices}
+            layout={isDesktop ? "grid" : "scroll"}
+            hideHeader
+          />
+        </View>
+      </PulseDashboardCard>
+    );
+
+    const scopeIntelCard = (
+      <PulseDashboardCard title="Scope intelligence" subtitle="Active filter context">
+        <PulseScopeIntelCard rows={scopeIntelRows} />
+      </PulseDashboardCard>
+    );
+
+    const filterCard = (
+      <PulseDashboardCard title="Cross-filters" subtitle="Pinned entities · tap to remove">
+        {renderEntityFilterPanel()}
+      </PulseDashboardCard>
+    );
+
+    const opsSignalsCard = (
+      <PulseDashboardCard title="Operational signals" subtitle="Live health telemetry">
+        {opsSignals}
+      </PulseDashboardCard>
+    );
+
+    return (
+      <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
+        {compareBanner}
+        {kpiStrip}
+        {isDesktop ? (
+          <PulseOverviewDesktopLayout
+            left={
+              <>
+                {scopeIntelCard}
+                {filterCard}
+                {branchCityCard}
+                {opsSignalsCard}
+              </>
+            }
+            main={
+              <>
+                {revenueChart}
+                {contributorsAndMix}
+                {clientTable}
+                {laneTable}
+                {supplierSection}
+              </>
+            }
+          />
+        ) : (
+          <>
+            {scopeIntelCard}
+            {filterCard}
+            {revenueChart}
+            {contributorsAndMix}
+            {branchCityCard}
+            {clientTable}
+            {laneTable}
+            {supplierSection}
+            {opsSignalsCard}
+          </>
+        )}
+      </View>
+    );
+  };
 
   const renderSales = () => (
     <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
-      <PulseWidgetRow>
-        <PulseWidgetCol flex={1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <PulseTableSection
-              title="Client Comparison Matrix"
-              icon={<Target size={13} color={Theme.primary} />}
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
             >
+              <MetricCard
+                title="Client revenue"
+                value={inr(overview.revenue)}
+                deltaPct={deltas.revenue}
+                insight={`${clientProfitability.length} clients in scope`}
+                state="healthy"
+                density={density}
+                compareActive={compareActive}
+                desktopQuarter={kpiQuarter}
+                icon={<IndianRupee size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Net margin"
+                value={inr(overview.margin)}
+                deltaPct={deltas.margin}
+                insight={clientProfitability[0]?.name ?? "No clients"}
+                state={overview.margin >= 0 ? "healthy" : "warning"}
+                density={density}
+                compareActive={compareActive}
+                desktopQuarter={kpiQuarter}
+                icon={<TrendingUp size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Lanes"
+                value={String(routePerf.length)}
+                deltaPct={0}
+                insight="Profitable corridors tracked"
+                state="healthy"
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<Activity size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+            </View>
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail(
+          "Sales intelligence",
+          salesScopeIntelRows,
+          cityWidgetCard("Branch concentration", "Pickup cities by revenue", branchCitySlices),
+        )}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard
+                  title="Top clients"
+                  subtitle="Revenue contributors · tap to filter"
+                  footerLabel="All clients"
+                >
+                  <PulseTopContributorsList
+                    rows={contributorRows}
+                    onRowPress={(id) => toggleFilterValue("clientIds", id)}
+                    emptyMessage="No clients in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Revenue mix" subtitle="Client share breakdown">
+                  <PulseSegmentDonut
+                    slices={revenueSegmentSlices}
+                    emptyMessage="No revenue data in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Client snapshot" subtitle="Top 5 by revenue" noPadding>
+                  <PulseRankingTable
+                    columns={PULSE_CLIENT_MINI_COLUMNS}
+                    rows={clientRankingRows}
+                    onRowPress={(id) => toggleFilterValue("clientIds", id)}
+                    pageSize={5}
+                    showPagination={clientRankingRows.length > 5}
+                    emptyMessage="No clients in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Lane snapshot" subtitle="Top 5 corridors" noPadding>
+                  <PulseRankingTable
+                    columns={PULSE_ROUTE_MINI_COLUMNS}
+                    rows={routeRankingRows}
+                    onRowPress={(id) => toggleFilterValue("routes", id)}
+                    pageSize={5}
+                    showPagination={routeRankingRows.length > 5}
+                    emptyMessage="No lanes in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseDashboardCard title="Client performance" subtitle="Full comparison matrix" noPadding>
               <PulseRankingTable
                 columns={PULSE_CLIENT_COLUMNS}
-                rows={clientProfitability.slice(0, 10).map((client) => ({
-                  id: client.id,
-                  selected: filters.clientIds.includes(client.id),
-                  cells: {
-                    name: client.name,
-                    trips: String(client.tripCount),
-                    revenue: inr(client.revenue),
-                    margin: inr(client.margin),
-                    marginTone: client.margin >= 0 ? "positive" : "negative",
-                  },
-                }))}
+                rows={clientRankingRows}
                 onRowPress={(id) => toggleFilterValue("clientIds", id)}
                 emptyMessage="No clients in current scope."
               />
-            </PulseTableSection>
-          </View>
-        </PulseWidgetCol>
-        <PulseWidgetCol flex={1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <PulseTableSection
-              title="Lane Profitability"
-              icon={<Route size={13} color={Theme.primary} />}
-            >
+            </PulseDashboardCard>
+            <PulseDashboardCard title="Lane profitability" subtitle="Route-level P&L" noPadding>
               <PulseRankingTable
                 columns={PULSE_ROUTE_COLUMNS}
-                rows={routePerf.map((row) => ({
-                  id: row.route,
-                  selected: filters.routes.includes(row.route),
-                  cells: {
-                    name: row.route,
-                    trips: String(row.trips),
-                    revenue: inr(row.revenue),
-                    margin: inr(row.margin),
-                    marginTone: row.margin >= 0 ? "positive" : "negative",
-                  },
-                }))}
+                rows={routeRankingRows}
                 onRowPress={(id) => toggleFilterValue("routes", id)}
                 emptyMessage="No lanes in current scope."
               />
-            </PulseTableSection>
-          </View>
-        </PulseWidgetCol>
-      </PulseWidgetRow>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseBranchCityWidget
-          slices={branchCitySlices}
-          subtitle="Revenue concentration by pickup city"
-          layout={isDesktop ? "grid" : "scroll"}
-        />
-      </View>
+            </PulseDashboardCard>
+          </>
+        }
+      />
     </View>
   );
 
   const renderSupply = () => (
-    <View style={styles.sectionBlock}>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseTableSection
-          title="Supplier Performance Heatmap"
-          icon={<Building2 size={13} color={Theme.primary} />}
-        >
-          <PulseRankingTable
-            columns={PULSE_SUPPLIER_COLUMNS}
-            rows={supplierProfitability.slice(0, 10).map((supplier) => {
-              const rel = supplierReliability.find((r) => r.id === supplier.id);
-              const settle = supplierSettlement.find((s) => s.id === supplier.id);
-              const tone =
-                rel?.risk === "critical"
-                  ? "critical"
-                  : rel?.risk === "warning"
-                    ? "warning"
-                    : "healthy";
-              return {
-                id: supplier.id,
-                selected: filters.supplierIds.includes(supplier.id),
-                tone,
-                cells: {
-                  name: supplier.name,
-                  reliability: rel?.reliabilityScore.toFixed(0) ?? "0",
-                  margin: inr(supplier.contributionMargin),
-                  settlement: inr(settle?.settlementExposure ?? 0),
-                },
-              };
-            })}
-            onRowPress={(id) => toggleFilterValue("supplierIds", id)}
-            emptyMessage="No suppliers in current scope."
-          />
-        </PulseTableSection>
-      </View>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
+            >
+              <MetricCard
+                title="Suppliers"
+                value={String(supplierProfitability.length)}
+                deltaPct={0}
+                insight="Active supply parties"
+                state="healthy"
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<Users size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Settlement due"
+                value={inr(supplierSettlement.reduce((s, r) => s + r.settlementExposure, 0))}
+                deltaPct={deltas.cashExposure}
+                insight="Supplier payable concentration"
+                state={
+                  supplierSettlement.some((r) => r.settlementExposure > 0) ? "warning" : "healthy"
+                }
+                density={density}
+                compareActive={compareActive}
+                desktopQuarter={kpiQuarter}
+                icon={<ListChecks size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Margin pool"
+                value={inr(supplierProfitability.reduce((s, r) => s + r.contributionMargin, 0))}
+                deltaPct={0}
+                insight="Contribution across suppliers"
+                state="healthy"
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<IndianRupee size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+            </View>
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail("Supply intelligence", supplyScopeIntelRows)}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard
+                  title="Top suppliers"
+                  subtitle="Reliability & margin · tap to filter"
+                >
+                  <PulseTopContributorsList
+                    rows={supplierContributorRows}
+                    onRowPress={(id) => toggleFilterValue("supplierIds", id)}
+                    emptyMessage="No suppliers in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Settlement mix" subtitle="Payable concentration">
+                  <PulseSegmentDonut
+                    slices={supplierSettlementSlices}
+                    emptyMessage="No settlement exposure in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseDashboardCard title="Supplier snapshot" subtitle="Top 5 by settlement exposure" noPadding>
+              <PulseRankingTable
+                columns={PULSE_SUPPLIER_MINI_COLUMNS}
+                rows={supplierRankingRows}
+                onRowPress={(id) => toggleFilterValue("supplierIds", id)}
+                pageSize={5}
+                showPagination={supplierRankingRows.length > 5}
+                emptyMessage="No suppliers in current scope."
+              />
+            </PulseDashboardCard>
+            <PulseDashboardCard
+              title="Supplier performance"
+              subtitle="Reliability, margin & settlement"
+              noPadding
+            >
+              <PulseRankingTable
+                columns={PULSE_SUPPLIER_COLUMNS}
+                rows={supplierRankingRows}
+                onRowPress={(id) => toggleFilterValue("supplierIds", id)}
+                emptyMessage="No suppliers in current scope."
+              />
+            </PulseDashboardCard>
+          </>
+        }
+      />
     </View>
   );
 
   const renderFleet = () => (
     <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
-      <View style={[styles.sectionBlock, twoCol && styles.sectionRow]}>
-        <View style={[styles.card, twoCol ? halfCardStyle : styles.fullCard]}>
-          <MetricCard
-            title="Asset trips"
-            value={String(assetFleetSummary.assetTripCount)}
-            deltaPct={0}
-            insight={`${assetFleetSummary.activeVehicles} vehicles · ${assetFleetSummary.activeDrivers} drivers`}
-            state="healthy"
-            density={density}
-            compareActive={false}
-          />
-        </View>
-        <View style={[styles.card, twoCol ? halfCardStyle : styles.fullCard]}>
-          <MetricCard
-            title="Fleet P&L"
-            value={inr(assetFleetSummary.netFleetPnL)}
-            deltaPct={0}
-            insight={`Revenue ${inr(assetFleetSummary.totalRevenue)}`}
-            state={assetFleetSummary.netFleetPnL >= 0 ? "healthy" : "warning"}
-            density={density}
-            compareActive={false}
-          />
-        </View>
-      </View>
-      <PulseWidgetRow>
-        <PulseWidgetCol flex={1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <Truck size={13} color={Theme.primary} />
-                <Text style={styles.cardTitle}>Asset expense summary</Text>
-              </View>
-              <Text style={styles.cardSubTitle}>Own-fleet trips only</Text>
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
+            >
+              <MetricCard
+                title="Asset trips"
+                value={String(assetFleetSummary.assetTripCount)}
+                deltaPct={0}
+                insight={`${assetFleetSummary.activeVehicles} vehicles · ${assetFleetSummary.activeDrivers} drivers`}
+                state="healthy"
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<Truck size={14} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Fleet P&L"
+                value={inr(assetFleetSummary.netFleetPnL)}
+                deltaPct={0}
+                insight={`Revenue ${inr(assetFleetSummary.totalRevenue)}`}
+                state={assetFleetSummary.netFleetPnL >= 0 ? "healthy" : "warning"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<IndianRupee size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
             </View>
-            <View style={styles.opsRow}>
-              <View style={styles.opsBadge}>
-                <Text style={styles.opsBadgeText}>Ops {inr(assetFleetSummary.totalOperationalCost)}</Text>
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail(
+          "Fleet intelligence",
+          fleetScopeIntelRows,
+          <>
+            <PulseDashboardCard title="Expense breakdown" subtitle="Own-fleet cost stack">
+              <View style={styles.opsRow}>
+                <View style={styles.opsBadge}>
+                  <Text style={styles.opsBadgeText}>Ops {inr(assetFleetSummary.totalOperationalCost)}</Text>
+                </View>
+                <View style={styles.opsBadge}>
+                  <Text style={styles.opsBadgeText}>
+                    Ownership {inr(assetFleetSummary.totalOwnershipCost)}
+                  </Text>
+                </View>
+                <View style={styles.opsBadge}>
+                  <Text style={styles.opsBadgeText}>
+                    Maint {inr(assetFleetSummary.totalMaintenanceCost)}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.opsBadge}>
-                <Text style={styles.opsBadgeText}>Ownership {inr(assetFleetSummary.totalOwnershipCost)}</Text>
-              </View>
-              <View style={styles.opsBadge}>
-                <Text style={styles.opsBadgeText}>Maint {inr(assetFleetSummary.totalMaintenanceCost)}</Text>
-              </View>
-              <View style={styles.opsBadge}>
-                <Text style={styles.opsBadgeText}>Settlement {inr(assetFleetSummary.totalSettlementExposure)}</Text>
-              </View>
-            </View>
-          </View>
-        </PulseWidgetCol>
-        <PulseWidgetCol flex={1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <PulseBranchCityWidget
-              slices={assetBranchCitySlices}
-              subtitle="Asset trip pickup cities"
-              layout={isDesktop ? "grid" : "scroll"}
-            />
-          </View>
-        </PulseWidgetCol>
-      </PulseWidgetRow>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseTableSection
-          title="Asset vehicles & operators"
-          icon={<Truck size={13} color={Theme.primary} />}
-        >
-          <PulseRankingTable
-            columns={PULSE_FLEET_VEHICLE_COLUMNS}
-            rows={assetFleetVehicles.slice(0, 12).map((vehicle) => ({
-              id: vehicle.vehicleId,
-              selected: filters.vehicleIds.includes(vehicle.vehicleId),
-              cells: {
-                name: vehicleDisplayLabel(vehicleLabels, vehicle.vehicleId),
-                trips: String(vehicle.tripCount),
-                operators:
-                  vehicle.operatorNames.length > 0 ? vehicle.operatorNames.join(", ") : "—",
-                expenses: inr(
-                  vehicle.operationalCost + vehicle.ownershipCost + vehicle.maintenanceCost,
-                ),
-                pnl: inr(vehicle.netProfitability),
-                pnlTone: vehicle.netProfitability >= 0 ? "positive" : "negative",
-              },
-            }))}
-            onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
-            emptyMessage="No asset vehicles in current scope."
-          />
-        </PulseTableSection>
-      </View>
+            </PulseDashboardCard>
+            {cityWidgetCard("Asset cities", "Pickup concentration · own fleet", assetBranchCitySlices)}
+          </>,
+        )}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Top vehicles" subtitle="P&L leaders · tap to filter">
+                  <PulseTopContributorsList
+                    rows={fleetContributorRows}
+                    onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
+                    emptyMessage="No asset vehicles in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Fleet economics" subtitle="Cost vs revenue">
+                  <PulseSegmentDonut
+                    slices={[
+                      { label: "Operational", value: assetFleetSummary.totalOperationalCost, color: "#3b82f6" },
+                      { label: "Ownership", value: assetFleetSummary.totalOwnershipCost, color: "#8b5cf6" },
+                      { label: "Maintenance", value: assetFleetSummary.totalMaintenanceCost, color: "#f59e0b" },
+                    ].filter((s) => s.value > 0)}
+                    emptyMessage="No fleet costs in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseDashboardCard title="Vehicle snapshot" subtitle="Top 5 by trip volume" noPadding>
+              <PulseRankingTable
+                columns={PULSE_FLEET_VEHICLE_MINI_COLUMNS}
+                rows={fleetVehicleRows}
+                onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
+                pageSize={5}
+                showPagination={fleetVehicleRows.length > 5}
+                emptyMessage="No asset vehicles in current scope."
+              />
+            </PulseDashboardCard>
+            <PulseDashboardCard
+              title="Asset vehicles & operators"
+              subtitle="Trip count, expenses & P&L by vehicle"
+              noPadding
+            >
+              <PulseRankingTable
+                columns={PULSE_FLEET_VEHICLE_COLUMNS}
+                rows={fleetVehicleRows}
+                onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
+                emptyMessage="No asset vehicles in current scope."
+              />
+            </PulseDashboardCard>
+          </>
+        }
+      />
     </View>
   );
 
   const renderDrivers = () => (
-    <View style={styles.sectionBlock}>
-      <View style={[styles.sectionBlock, twoCol && styles.sectionRow]}>
-        <View style={[styles.card, twoCol ? halfCardStyle : styles.fullCard]}>
-          <MetricCard
-            title="Asset drivers"
-            value={String(assetDriverPayroll.length)}
-            deltaPct={0}
-            insight="Fleet payroll party · own trips only"
-            state="healthy"
-            density={density}
-            compareActive={false}
-          />
-        </View>
-        <View style={[styles.card, twoCol ? halfCardStyle : styles.fullCard]}>
-          <MetricCard
-            title="Payable queue"
-            value={inr(assetDriverPayroll.reduce((sum, row) => sum + row.payableTotal, 0))}
-            deltaPct={0}
-            insight="Commission + reimbursement due"
-            state={
-              assetDriverPayroll.some((row) => row.payableTotal > 0) ? "warning" : "healthy"
-            }
-            density={density}
-            compareActive={false}
-          />
-        </View>
-      </View>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseTableSection
-          title="Asset driver payroll"
-          subtitle="Commission, salary terms & settlement exposure"
-          icon={<Users size={13} color={Theme.primary} />}
-        >
-          <PulseRankingTable
-            columns={PULSE_DRIVER_PAYROLL_COLUMNS}
-            rows={assetDriverPayroll.slice(0, 12).map((driver) => {
-              const compliance = driverCompliance.find((d) => d.driverId === driver.driverId);
-              const tone =
-                !compliance?.hasLicense || driver.settlementExposure > 0 ? "warning" : null;
-              return {
-                id: driver.driverId,
-                selected: filters.driverIds.includes(driver.driverId),
-                tone,
-                cells: {
-                  name: driver.driverName,
-                  trips: String(driver.tripCount),
-                  vehicles: driver.vehicleLabels.join(", ") || "—",
-                  commission: inr(driver.commissionDue),
-                  salary: driver.monthlySalary != null ? inr(driver.monthlySalary) : "Comm",
-                  payable: inr(driver.payableTotal),
-                  payableTone: driver.payableTotal > 0 ? "negative" : "positive",
-                },
-              };
-            })}
-            onRowPress={(id) => toggleFilterValue("driverIds", id)}
-            emptyMessage="No asset drivers in current scope."
-          />
-        </PulseTableSection>
-      </View>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
+            >
+              <MetricCard
+                title="Asset drivers"
+                value={String(assetDriverPayroll.length)}
+                deltaPct={0}
+                insight="Fleet payroll parties"
+                state="healthy"
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<Users size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Payable queue"
+                value={inr(assetDriverPayroll.reduce((sum, row) => sum + row.payableTotal, 0))}
+                deltaPct={0}
+                insight="Commission + reimbursement due"
+                state={assetDriverPayroll.some((row) => row.payableTotal > 0) ? "warning" : "healthy"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<ListChecks size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+            </View>
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail(
+          "Driver intelligence",
+          driversScopeIntelRows,
+          <PulseDashboardCard title="Compliance signals" subtitle="License & settlement">
+            <View style={styles.opsRow}>
+              <View style={styles.opsBadge}>
+                <ShieldAlert size={12} color={Theme.textPrimaryDark} />
+                <Text style={styles.opsBadgeText}>
+                  License gaps: {driverCompliance.filter((d) => !d.hasLicense).length}
+                </Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <AlertTriangle size={12} color={Theme.textMuted} />
+                <Text style={styles.opsBadgeText}>
+                  Settlement: {driverSettlement.filter((d) => d.settlementExposure > 0).length}
+                </Text>
+              </View>
+            </View>
+          </PulseDashboardCard>,
+        )}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Top drivers" subtitle="Payroll parties · tap to filter">
+                  <PulseTopContributorsList
+                    rows={driverContributorRows}
+                    onRowPress={(id) => toggleFilterValue("driverIds", id)}
+                    emptyMessage="No asset drivers in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Payable mix" subtitle="Commission vs salary">
+                  <PulseSegmentDonut
+                    slices={[
+                      {
+                        label: "Commission",
+                        value: assetDriverPayroll.reduce((s, r) => s + r.commissionDue, 0),
+                        color: "#3b82f6",
+                      },
+                      {
+                        label: "Salary",
+                        value: assetDriverPayroll.reduce(
+                          (s, r) => s + (r.monthlySalary ?? 0),
+                          0,
+                        ),
+                        color: "#10b981",
+                      },
+                    ].filter((s) => s.value > 0)}
+                    emptyMessage="No driver payables in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseDashboardCard title="Driver snapshot" subtitle="Top 5 by payable queue" noPadding>
+              <PulseRankingTable
+                columns={PULSE_DRIVER_MINI_COLUMNS}
+                rows={driverPayrollRows}
+                onRowPress={(id) => toggleFilterValue("driverIds", id)}
+                pageSize={5}
+                showPagination={driverPayrollRows.length > 5}
+                emptyMessage="No asset drivers in current scope."
+              />
+            </PulseDashboardCard>
+            <PulseDashboardCard
+              title="Asset driver payroll"
+              subtitle="Commission, salary terms & settlement exposure"
+              noPadding
+            >
+              <PulseRankingTable
+                columns={PULSE_DRIVER_PAYROLL_COLUMNS}
+                rows={driverPayrollRows}
+                onRowPress={(id) => toggleFilterValue("driverIds", id)}
+                emptyMessage="No asset drivers in current scope."
+              />
+            </PulseDashboardCard>
+          </>
+        }
+      />
     </View>
   );
 
   const renderFinance = () => (
     <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
-      <View style={[styles.executiveGrid, styles.widgetGroup]}>
-        <View style={[styles.card, styles.metricCardShell, twoCol ? halfCardStyle : styles.fullCard]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <IndianRupee size={13} color={Theme.primary} />
-              <Text style={styles.cardTitle}>Accounts Receivable</Text>
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
+            >
+              <MetricCard
+                title="Receivable"
+                value={inr(receivableAgingReport.totalOutstanding)}
+                deltaPct={0}
+                insight={`${receivableAgingReport.lines.length} open client items`}
+                state={receivableAgingReport.totalOutstanding > 0 ? "warning" : "healthy"}
+                density={density}
+                compareActive={compareActive}
+                desktopQuarter={kpiQuarter}
+                icon={<IndianRupee size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Payable"
+                value={inr(payableAgingReport.totalOutstanding)}
+                deltaPct={deltas.cashExposure}
+                insight="Supplier + driver settlement queue"
+                state={payableAgingReport.totalOutstanding > 0 ? "warning" : "healthy"}
+                density={density}
+                compareActive={compareActive}
+                desktopQuarter={kpiQuarter}
+                icon={<ListChecks size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
             </View>
-          </View>
-          <Text style={styles.cardSubTitleBlock}>Client billing · 7+ days outstanding</Text>
-          <MetricCard
-            title="Receivable"
-            value={inr(receivableAgingReport.totalOutstanding)}
-            deltaPct={0}
-            insight={`${receivableAgingReport.lines.length} open client items`}
-            state={receivableAgingReport.totalOutstanding > 0 ? "warning" : "healthy"}
-            density={density}
-            compareActive={compareActive}
-          />
-        </View>
-        <View style={[styles.card, styles.metricCardShell, twoCol ? halfCardStyle : styles.fullCard]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <ListChecks size={13} color={Theme.primary} />
-              <Text style={styles.cardTitle}>Accounts Payable</Text>
-            </View>
-          </View>
-          <Text style={styles.cardSubTitleBlock}>
-            Suppliers{" "}
-            {inr(
-              payableAgingReport.lines
-                .filter((l) => l.category === "Supplier payable")
-                .reduce((s, l) => s + l.amount, 0),
-            )}{" "}
-            · Settlement {inr(cash.payableExposure)}
-          </Text>
-          <MetricCard
-            title="Payable"
-            value={inr(payableAgingReport.totalOutstanding)}
-            deltaPct={deltas.cashExposure}
-            insight="Supplier dues + driver reimbursement queue"
-            state={payableAgingReport.totalOutstanding > 0 ? "warning" : "healthy"}
-            density={density}
-            compareActive={compareActive}
-          />
-        </View>
-      </View>
-      <PulseWidgetRow>
-        <PulseWidgetCol flex={1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <IndianRupee size={13} color={Theme.primary} />
-                <Text style={styles.cardTitle}>Receivable Aging</Text>
-              </View>
-            </View>
-            <PulseAgingReport
-              report={receivableAgingReport}
-              reportTitle={`Business Pulse Receivable — ${currentOrganization?.name ?? "Workspace"}`}
-              companyName={currentOrganization?.name ?? "Workspace"}
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail(
+          "Finance intelligence",
+          financeScopeIntelRows,
+          <PulseDashboardCard title="Ledger scope" subtitle="Drilldown filter">
+            <PulseContributionFilters
+              financeLedger={financeLedger}
+              onFinanceLedger={setFinanceLedger}
             />
-          </View>
-        </PulseWidgetCol>
-        <PulseWidgetCol flex={1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <ListChecks size={13} color={Theme.primary} />
-                <Text style={styles.cardTitle}>Payable Aging</Text>
-              </View>
-              <Text style={styles.cardSubTitle}>
-                Fleet payables {inr(overview.outstandingPayables)} · Driver settlement{" "}
-                {inr(cash.payableExposure)}
-              </Text>
-            </View>
-            <PulseAgingReport
-              report={payableAgingReport}
-              reportTitle={`Business Pulse Payable — ${currentOrganization?.name ?? "Workspace"}`}
-              companyName={currentOrganization?.name ?? "Workspace"}
-            />
-          </View>
-        </PulseWidgetCol>
-      </PulseWidgetRow>
+          </PulseDashboardCard>,
+        )}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard
+                  title="Top receivable parties"
+                  subtitle="Clients with open billing"
+                >
+                  <PulseTopContributorsList
+                    rows={contributorRows.filter((r) =>
+                      receivableAgingReport.lines.some((line) => line.partyEntityId === r.id),
+                    ).slice(0, 5)}
+                    onRowPress={(id) => toggleFilterValue("clientIds", id)}
+                    emptyMessage="No receivable clients in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Top payable parties" subtitle="Suppliers & drivers">
+                  <PulseTopContributorsList
+                    rows={financePayableContributorRows}
+                    onRowPress={(id) => {
+                      if (partyMaps.suppliers.has(id)) toggleFilterValue("supplierIds", id);
+                      else toggleFilterValue("driverIds", id);
+                    }}
+                    emptyMessage="No payable parties in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard
+                  title="Receivable aging"
+                  subtitle="Client billing · open invoices"
+                  noPadding
+                >
+                  <PulseAgingReport
+                    report={receivableAgingReport}
+                    reportTitle={`Business Pulse Receivable — ${currentOrganization?.name ?? "Workspace"}`}
+                    companyName={currentOrganization?.name ?? "Workspace"}
+                    partyMaps={partyMaps}
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard
+                  title="Payable aging"
+                  subtitle={`Fleet payables ${inr(overview.outstandingPayables)} · Driver ${inr(cash.payableExposure)}`}
+                  noPadding
+                >
+                  <PulseAgingReport
+                    report={payableAgingReport}
+                    reportTitle={`Business Pulse Payable — ${currentOrganization?.name ?? "Workspace"}`}
+                    companyName={currentOrganization?.name ?? "Workspace"}
+                    partyMaps={partyMaps}
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+          </>
+        }
+      />
     </View>
   );
 
   const renderCompliance = () => (
-    <View style={styles.sectionBlock}>
-      <View style={[styles.card, styles.widgetCard]}>
-        <PulseTableSection
-          title="Risk Severity Matrix"
-          icon={<ShieldAlert size={13} color={Theme.primary} />}
-        >
-          <PulseRankingTable
-            columns={PULSE_COMPLIANCE_COLUMNS}
-            rows={complianceRisk.slice(0, 12).map((row) => ({
-              id: row.vehicleId,
-              selected: filters.vehicleIds.includes(row.vehicleId),
-              tone:
-                row.state === "critical" || row.state === "missing"
-                  ? "critical"
-                  : row.state === "expiring_soon"
-                    ? "warning"
-                    : "healthy",
-              cells: {
-                name: formatIndianVehicleNumber(row.vehicleNumber) || row.vehicleNumber || "—",
-                state: row.state.replaceAll("_", " ").toUpperCase(),
-                docs: String(row.riskCount),
-              },
-            }))}
-            onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
-            emptyMessage="No compliance risks in current scope."
-          />
-        </PulseTableSection>
-      </View>
+    <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
+            >
+              <MetricCard
+                title="Vehicles at risk"
+                value={String(docExposure.vehiclesAtRisk)}
+                deltaPct={0}
+                insight="Document verification exposure"
+                state={docExposure.vehiclesAtRisk > 0 ? "warning" : "healthy"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<ShieldAlert size={12} color={Theme.textPrimaryDark} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Drivers at risk"
+                value={String(docExposure.driversAtRisk)}
+                deltaPct={0}
+                insight="License & compliance gaps"
+                state={docExposure.driversAtRisk > 0 ? "warning" : "healthy"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<Users size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+            </View>
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail(
+          "Compliance intelligence",
+          complianceScopeIntelRows,
+          <PulseDashboardCard title="Document exposure" subtitle="Verification queue">
+            <View style={styles.opsRow}>
+              <View style={styles.opsBadge}>
+                <Text style={styles.opsBadgeText}>Vehicles {docExposure.vehiclesAtRisk}</Text>
+              </View>
+              <View style={styles.opsBadge}>
+                <Text style={styles.opsBadgeText}>Drivers {docExposure.driversAtRisk}</Text>
+              </View>
+            </View>
+          </PulseDashboardCard>,
+        )}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="At-risk vehicles" subtitle="Tap to filter fleet">
+                  <PulseTopContributorsList
+                    rows={complianceContributorRows}
+                    onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
+                    emptyMessage="No compliance risks in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Risk mix" subtitle="Severity breakdown">
+                  <PulseSegmentDonut
+                    slices={[
+                      {
+                        label: "Critical",
+                        value: complianceRisk.filter((r) => r.state === "critical" || r.state === "missing").length,
+                        color: "#ef4444",
+                      },
+                      {
+                        label: "Expiring",
+                        value: complianceRisk.filter((r) => r.state === "expiring_soon").length,
+                        color: "#f59e0b",
+                      },
+                      {
+                        label: "Healthy",
+                        value: complianceRisk.filter((r) => r.state === "healthy").length,
+                        color: "#10b981",
+                      },
+                    ].filter((s) => s.value > 0)}
+                    emptyMessage="No compliance data in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Risk snapshot" subtitle="Top 5 vehicles by severity" noPadding>
+                  <PulseRankingTable
+                    columns={PULSE_COMPLIANCE_MINI_COLUMNS}
+                    rows={complianceRankingRows}
+                    onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
+                    pageSize={5}
+                    showPagination={complianceRankingRows.length > 5}
+                    emptyMessage="No compliance risks in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Risk severity matrix" subtitle="Full compliance register" noPadding>
+                  <PulseRankingTable
+                    columns={PULSE_COMPLIANCE_COLUMNS}
+                    rows={complianceRankingRows}
+                    onRowPress={(id) => toggleFilterValue("vehicleIds", id)}
+                    emptyMessage="No compliance risks in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+          </>
+        }
+      />
     </View>
   );
 
   const renderOperations = () => (
     <View style={[styles.sectionBlock, isDesktop && styles.sectionBlockDesktop]}>
-      <PulseWidgetRow>
-        <PulseWidgetCol flex={isDesktop ? 0.9 : 1} minWidth={isDesktop ? 320 : undefined}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <Activity size={13} color={Theme.primary} />
-                <Text style={styles.cardTitle}>Operational Health Telemetry</Text>
-              </View>
+      <PulseDomainTabLayout
+        isDesktop={isDesktop}
+        kpis={
+          <PulseDomainKpiStrip>
+            <View
+              style={[
+                styles.executiveGrid,
+                styles.widgetGroup,
+                kpiQuarter && styles.executiveGridQuarter,
+              ]}
+            >
+              <MetricCard
+                title="Delayed"
+                value={String(operations.delayedTrips)}
+                deltaPct={0}
+                insight="Trips behind schedule"
+                state={operations.delayedTrips > 0 ? "warning" : "healthy"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<AlertTriangle size={12} color={Theme.textMuted} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Pending"
+                value={String(operations.pendingApprovals)}
+                deltaPct={0}
+                insight="Awaiting approval"
+                state={operations.pendingApprovals > 0 ? "warning" : "healthy"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<ListChecks size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
+              <MetricCard
+                title="Health"
+                value={String(operations.state)}
+                deltaPct={0}
+                insight={`Docs at risk ${docExposure.vehiclesAtRisk + docExposure.driversAtRisk}`}
+                state={operations.state === "healthy" ? "healthy" : "warning"}
+                density={density}
+                compareActive={false}
+                desktopQuarter={kpiQuarter}
+                icon={<CheckCircle2 size={12} color={Theme.primary} strokeWidth={2.2} />}
+              />
             </View>
-            <View style={styles.opsRow}>
-              <View style={styles.opsBadge}>
-                <AlertTriangle size={11} color="#b45309" />
-                <Text style={styles.opsBadgeText}>Delayed Trips: {operations.delayedTrips}</Text>
+          </PulseDomainKpiStrip>
+        }
+        left={renderScopeLeftRail(
+          "Operations intelligence",
+          operationsScopeIntelRows,
+          <>
+            <PulseDashboardCard title="Live telemetry" subtitle="Active trip signals">
+              <View style={styles.opsRow}>
+                <View style={styles.opsBadge}>
+                  <AlertTriangle size={12} color={Theme.textMuted} />
+                  <Text style={styles.opsBadgeText}>Delayed: {operations.delayedTrips}</Text>
+                </View>
+                <View style={styles.opsBadge}>
+                  <ListChecks size={12} color={Theme.primary} />
+                  <Text style={styles.opsBadgeText}>Pending: {operations.pendingApprovals}</Text>
+                </View>
+                <View style={styles.opsBadge}>
+                  <CheckCircle2 size={12} color={Theme.primary} />
+                  <Text style={styles.opsBadgeText}>State: {String(operations.state)}</Text>
+                </View>
               </View>
-              <View style={styles.opsBadge}>
-                <ListChecks size={11} color={Theme.primary} />
-                <Text style={styles.opsBadgeText}>Pending Approvals: {operations.pendingApprovals}</Text>
-              </View>
-              <View style={styles.opsBadge}>
-                <CheckCircle2 size={11} color="#047857" />
-                <Text style={styles.opsBadgeText}>State: {String(operations.state).toUpperCase()}</Text>
-              </View>
-            </View>
-          </View>
-        </PulseWidgetCol>
-        <PulseWidgetCol flex={1.1}>
-          <View style={[styles.card, styles.widgetCard, styles.widgetCardFill]}>
-            <PulseBranchCityWidget
-              slices={branchCitySlices}
-              subtitle="Operational spread by pickup city"
-              layout={isDesktop ? "grid" : "scroll"}
-            />
-          </View>
-        </PulseWidgetCol>
-      </PulseWidgetRow>
+            </PulseDashboardCard>
+            {cityWidgetCard("Branch spread", "Pickup cities in scope", branchCitySlices)}
+          </>,
+        )}
+        main={
+          <>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Active clients" subtitle="Ops volume leaders">
+                  <PulseTopContributorsList
+                    rows={contributorRows.slice(0, 5)}
+                    onRowPress={(id) => toggleFilterValue("clientIds", id)}
+                    emptyMessage="No clients in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Lane activity" subtitle="Corridor distribution">
+                  <PulseSegmentDonut
+                    slices={routePerf.slice(0, 5).map((row, index) => ({
+                      label: row.route.length > 24 ? `${row.route.slice(0, 22)}…` : row.route,
+                      value: row.trips,
+                      color: ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#6366f1"][index % 5]!,
+                    }))}
+                    emptyMessage="No lane activity in scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseWidgetRow>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Lane snapshot" subtitle="Top 5 corridors" noPadding>
+                  <PulseRankingTable
+                    columns={PULSE_ROUTE_MINI_COLUMNS}
+                    rows={routeRankingRows}
+                    onRowPress={(id) => toggleFilterValue("routes", id)}
+                    pageSize={5}
+                    showPagination={routeRankingRows.length > 5}
+                    emptyMessage="No lanes in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+              <PulseWidgetCol flex={1}>
+                <PulseDashboardCard title="Supplier snapshot" subtitle="Active supply parties" noPadding>
+                  <PulseRankingTable
+                    columns={PULSE_SUPPLIER_MINI_COLUMNS}
+                    rows={supplierRankingRows}
+                    onRowPress={(id) => toggleFilterValue("supplierIds", id)}
+                    pageSize={5}
+                    showPagination={supplierRankingRows.length > 5}
+                    emptyMessage="No suppliers in current scope."
+                  />
+                </PulseDashboardCard>
+              </PulseWidgetCol>
+            </PulseWidgetRow>
+            <PulseDashboardCard title="Lane profitability" subtitle="Full operations register" noPadding>
+              <PulseRankingTable
+                columns={PULSE_ROUTE_COLUMNS}
+                rows={routeRankingRows}
+                onRowPress={(id) => toggleFilterValue("routes", id)}
+                emptyMessage="No lanes in current scope."
+              />
+            </PulseDashboardCard>
+          </>
+        }
+      />
     </View>
   );
 
@@ -1249,111 +2235,102 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   };
 
   const activeFilterCount =
+    filters.clientIds.length +
+    filters.supplierIds.length +
+    filters.driverIds.length +
+    filters.vehicleIds.length +
     filters.routes.length +
     (timePreset !== "all" ? 1 : 0) +
     (executionScope !== "all" ? 1 : 0);
 
-  const heroStripLayout = wide
-    ? { flexDirection: "row" as const, alignItems: "center" as const }
-    : { flexDirection: "column" as const, alignItems: "stretch" as const };
 
   return (
     <View style={[styles.container, { paddingTop: resolvedTopInset }]}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
+          ent.contentColumn,
+          isDesktop && ent.contentColumnDesktop,
           styles.scrollContent,
-          { paddingBottom: insets.bottom + 24, paddingTop: embedded ? 6 : 4 },
+          { paddingBottom: insets.bottom + 24, paddingTop: embedded ? 10 : 6 },
         ]}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.contextRibbon, embedded ? styles.contextRibbonEmbedded : null, heroStripLayout]}>
-          <View style={styles.heroLeft}>
-            {!embedded ? (
-              <View style={styles.heroBadge}>
-                <Target size={12} color={Theme.primary} />
-                <Text style={styles.heroBadgeText}>Pulse Intelligence</Text>
-              </View>
-            ) : null}
-            <Text style={embedded ? styles.contextTitle : styles.heroTitle}>
-              {embedded ? "Live scope" : "Executive operating cockpit"}
-            </Text>
-            <Text style={embedded ? styles.contextSubtitle : styles.heroSubtitle}>
-              {scoped.trips.length} trips · {activeFilterCount} filters
-            </Text>
-          </View>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStatBox}>
-              <Text style={styles.heroStatValue}>{scoped.trips.length}</Text>
-              <Text style={styles.heroStatLabel}>Trips</Text>
-            </View>
-            <View style={styles.heroStatBox}>
-              <Text style={styles.heroStatValue}>{activeFilterCount}</Text>
-              <Text style={styles.heroStatLabel}>Filters</Text>
-            </View>
-            <View style={styles.heroStatBox}>
-              <Text style={[styles.heroStatValue, styles.heroStatValueAccent]}>
-                {activeDomain.slice(0, 3).toUpperCase()}
+        {!embedded ? (
+          <PulseScopeRibbon
+            orgName={currentOrganization?.name ?? "Workspace"}
+            orgId={orgId}
+            orgLogoUrl={currentOrganization?.logo_url}
+            tripCount={scoped.trips.length}
+            filterCount={activeFilterCount}
+            domainLabel={activeDomain}
+            wide={wide}
+          />
+        ) : null}
+
+        {!embedded ? (
+          <View style={ent.pageToolbar}>
+            <View>
+              <Text style={ent.pageTitle}>Business Pulse</Text>
+              <Text style={ent.pageBreadcrumb}>
+                Workspace · Intelligence · {scoped.trips.length} trips in scope
               </Text>
-              <Text style={styles.heroStatLabel}>Domain</Text>
+            </View>
+            <View style={ent.datePill}>
+              <Calendar size={12} color={Theme.textMuted} strokeWidth={2} />
+              <Text style={ent.datePillText}>{drilldownDateLabel}</Text>
             </View>
           </View>
-        </View>
+        ) : null}
 
-        <View
-          style={[
-            styles.header,
-            styles.stickyFilterHeader,
-            embedded && styles.headerEmbedded,
-          ]}
-        >
+        <View style={[ent.filterCard, styles.stickyFilterHeader]}>
+          {embedded ? (
+            <View style={styles.filterPanelHead}>
+              <View style={styles.filterPanelHeadLeft}>
+                <Text style={ent.dashboardCardTitle}>Intelligence scope</Text>
+                <Text style={ent.dashboardCardSubtitle}>
+                  {scoped.trips.length} trips · {activeDomain} domain
+                </Text>
+              </View>
+              <View style={ent.datePill}>
+                <Calendar size={12} color={Theme.textMuted} strokeWidth={2} />
+                <Text style={ent.datePillText}>{drilldownDateLabel}</Text>
+              </View>
+            </View>
+          ) : null}
           <DomainTabBar active={activeDomain} onChange={setActiveDomain} />
-
           <PulseDateRangeTabBar active={timePreset} onChange={handleTimePresetChange} />
-
           <PulseScopeTabRow
             executionScope={executionScope}
             onExecutionScope={setExecutionScope}
           />
-
           {activeDomain === "finance" ? (
-            <View style={styles.globalFilterStrip}>
-              <PulseContributionFilters
-                financeLedger={financeLedger}
-                onFinanceLedger={setFinanceLedger}
-              />
-            </View>
+            <PulseContributionFilters
+              financeLedger={financeLedger}
+              onFinanceLedger={setFinanceLedger}
+            />
           ) : null}
         </View>
 
         {loading ? <Text style={styles.mutedText}>Loading intelligence workspace...</Text> : null}
 
-        <View style={[styles.widgetZone, isDesktop && styles.widgetZoneDesktop]}>
-          <Text style={styles.widgetZoneTitle}>
-            {activeDomain.charAt(0).toUpperCase() + activeDomain.slice(1)}
-          </Text>
-          {renderActiveDomain()}
-        </View>
+        <View style={styles.widgetZone}>{renderActiveDomain()}</View>
 
-        <View style={[styles.card, styles.widgetCard, styles.drilldownCard]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <ListChecks size={13} color={Theme.primary} />
-              <Text style={styles.cardTitle}>Cross-filter Drilldown</Text>
-            </View>
-            <Text style={styles.cardSubTitle}>
-              {drilldownView.lensLabel} · {scoped.trips.length} trips
-            </Text>
-          </View>
+        <PulseDashboardCard
+          title="Trip drilldown"
+          subtitle={`${drilldownView.lensLabel} · ${drilldownDateLabel}`}
+          noPadding
+        >
           <PulseDrilldownTable
             view={drilldownDisplayView}
             exportView={drilldownView}
             reportTitle={`Business Pulse — ${currentOrganization?.name ?? "Workspace"}`}
             companyName={currentOrganization?.name ?? "Workspace"}
+            partyMaps={partyMaps}
           />
-        </View>
+        </PulseDashboardCard>
       </ScrollView>
     </View>
   );
@@ -1362,58 +2339,79 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    backgroundColor: PULSE_PAGE_BG,
   },
   scroll: { flex: 1 },
   scrollContent: {
-    gap: 0,
+    gap: 12,
   },
-  contextRibbon: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
-    padding: 10,
-    marginBottom: 8,
+  filterPanelHead: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    marginBottom: 2,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
-  contextRibbonEmbedded: {
-    marginBottom: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: "#f8faff",
-    borderColor: "#c7d2fe",
+  filterPanelHeadLeft: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  contextTitle: {
+  filterPanelTitle: {
     fontSize: 12,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
+    letterSpacing: -0.15,
   },
-  contextSubtitle: {
+  filterPanelMeta: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textTransform: "capitalize",
+  },
+  cardHint: {
     fontSize: 9,
-    color: Theme.textSecondary,
-    marginTop: 2,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    textAlign: "right",
+    lineHeight: 13,
+  },
+  kpiTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  kpiIconChip: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: "#f4f6fb",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kpiTitleWithIcon: {
+    flex: 1,
   },
   header: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
-    padding: 12,
-    gap: 10,
-    marginBottom: 12,
+    padding: 16,
+    gap: 12,
+    marginBottom: 0,
   },
   headerEmbedded: {
-    padding: 8,
-    gap: 6,
-    marginBottom: 6,
+    padding: 14,
+    gap: 10,
   },
   stickyFilterHeader: {
     zIndex: 20,
-    backgroundColor: Theme.screenBackground,
-    marginBottom: 12,
+  },
+  cityWidgetInset: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
   },
   executionScopeWrap: {
     gap: 4,
@@ -1434,53 +2432,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 2,
   },
-  labeledTabLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    width: 48,
-    flexShrink: 0,
-  },
   labeledTabScroll: {
     flex: 1,
     minWidth: 0,
-  },
-  tabBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 3,
-    paddingRight: 8,
-  },
-  tabChip: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: Theme.surface,
-    minHeight: 34,
-    justifyContent: "center",
-  },
-  tabChipActive: {
-    backgroundColor: "#eef2ff",
-    borderColor: Theme.primary,
-    shadowColor: Theme.primary,
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  tabChipText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.text,
-  },
-  tabChipTextActive: {
-    color: Theme.primary,
   },
   globalFilterStrip: {
     gap: 8,
@@ -1510,23 +2464,9 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   widgetZone: {
-    marginTop: 4,
-    marginBottom: 14,
-    paddingTop: 12,
-    paddingBottom: 4,
-    paddingHorizontal: 2,
-    borderTopWidth: 1,
-    borderTopColor: Theme.border,
+    marginTop: 2,
+    marginBottom: 10,
     gap: 12,
-  },
-  widgetZoneTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    paddingHorizontal: 4,
-    marginBottom: 4,
   },
   stripTitle: {
     fontSize: 9,
@@ -1565,20 +2505,15 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   sectionBlock: {
-    gap: 12,
-    marginBottom: 14,
-    paddingBottom: 4,
+    gap: 10,
+    marginBottom: 12,
+    paddingBottom: 2,
   },
   sectionBlockDesktop: {
-    gap: 16,
+    gap: 12,
   },
   widgetGroup: {
     marginBottom: 4,
-  },
-  widgetZoneDesktop: {
-    maxWidth: 1440,
-    alignSelf: "center",
-    width: "100%",
   },
   widgetCardFill: {
     flex: 1,
@@ -1604,12 +2539,13 @@ const styles = StyleSheet.create({
   executiveGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
     alignItems: "stretch",
+    width: "100%",
   },
   executiveGridQuarter: {
     flexWrap: "nowrap",
-    gap: 12,
+    gap: 10,
   },
   metricCardShell: {
     marginBottom: 0,
@@ -1661,39 +2597,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "stretch",
-  },
-  heroStatBox: {
-    minWidth: 56,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
-    backgroundColor: Theme.whiteMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    alignItems: "center",
-  },
-  heroStatValue: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    flexWrap: "wrap",
   },
   heroStatValueAccent: {
     color: Theme.primary,
     fontSize: 13,
     letterSpacing: 0.6,
   },
-  heroStatLabel: {
-    fontSize: 8,
-    color: Theme.textMuted,
-    marginTop: 2,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
   metricCard: {
-    borderWidth: 1,
-    borderRadius: 10,
-    backgroundColor: Theme.surface,
     width: "48%",
     flexGrow: 1,
     maxWidth: "100%",
@@ -1706,20 +2617,17 @@ const styles = StyleSheet.create({
     maxWidth: undefined,
   },
   metricTiny: {
-    paddingHorizontal: 8,
-    paddingVertical: 7,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   metricCompact: {
-    paddingHorizontal: 9,
-    paddingVertical: 8,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   metricStandard: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
-  stateHealthy: { borderColor: "#a7f3d0" },
-  stateWarning: { borderColor: "#fcd34d" },
-  stateCritical: { borderColor: "#fecdd3" },
   metricTitle: {
     fontSize: 9,
     fontWeight: "800",
@@ -1749,11 +2657,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   card: {
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
-    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    backgroundColor: Theme.cardWhite,
+    padding: 16,
     marginBottom: 12,
     overflow: "hidden",
   },
@@ -1791,12 +2699,12 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   chartWrap: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.whiteMuted,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    backgroundColor: Theme.surface,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   axisRow: {
     flexDirection: "row",
@@ -1951,14 +2859,15 @@ const styles = StyleSheet.create({
     minWidth: 75,
   },
   positive: {
-    color: "#047857",
+    color: Theme.primary,
   },
   negative: {
-    color: Theme.teslaRed,
+    color: Theme.textMuted,
   },
   mutedText: {
-    fontSize: 9,
-    color: Theme.textMuted,
+    fontSize: 12,
+    color: "#A1A5B7",
+    paddingVertical: 6,
   },
   center: {
     flex: 1,

@@ -138,7 +138,7 @@ import { commandPriorityScore } from "../utils/commandPriority.util";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
 import { isLocationPingMessage } from "../utils/locationPingChatDisplay.util";
-import { ChatLedgerEventCard, ChatSystemEventCard } from "./ChatEventCard";
+import { ChatLedgerEventCard, ChatSystemEventCard, buildChatRouteContextLabel } from "./ChatEventCard";
 import { ChatLocationSystemCard } from "./ChatLocationSystemCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
@@ -3750,6 +3750,32 @@ const s = StyleSheet.create({
     backgroundColor: "#ffffff",
     flexShrink: 0,
   },
+  detailHeaderMiddle: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    minWidth: 0,
+  },
+  detailHeaderTripCol: {
+    flexShrink: 1,
+    flexGrow: 0,
+    minWidth: 72,
+    maxWidth: 240,
+  },
+  detailHeaderTripColMobile: {
+    flexShrink: 1,
+    flexGrow: 0,
+    minWidth: 64,
+    maxWidth: 148,
+  },
+  detailHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: 4,
+  },
   listHeaderMobile: {
     paddingHorizontal: 12,
     paddingTop: 10,
@@ -3867,8 +3893,8 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   detailMissionBarMobile: {
-    flexDirection: "column",
-    alignItems: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -3907,22 +3933,23 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
   detailMissionDate: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: "#94a3b8",
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
     flexShrink: 0,
   },
   detailMissionTabsScroller: {
-    flexShrink: 0,
-    flexGrow: 0,
-    maxWidth: "58%",
-    minHeight: 44,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 420,
+    minHeight: 36,
   },
   detailMissionTabsScrollerMobile: {
-    maxWidth: "100%",
-    width: "100%",
-    minHeight: 40,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 280,
+    minHeight: 34,
   },
   detailMissionUnread: {
     paddingHorizontal: 8,
@@ -3978,22 +4005,23 @@ const s = StyleSheet.create({
     justifyContent: "flex-end",
     flexGrow: 1,
     gap: 6,
-    paddingLeft: 8,
-    paddingRight: 0,
-    minHeight: 44,
+    paddingLeft: 4,
+    paddingRight: 2,
+    minHeight: 36,
   },
   detailPartyTab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#e8ecf1",
     backgroundColor: "#ffffff",
-    maxWidth: 200,
-    minHeight: 44,
+    maxWidth: 136,
+    minHeight: 34,
+    flexShrink: 0,
   },
   detailPartyTabOn: {
     borderColor: "#0f172a",
@@ -4035,9 +4063,9 @@ const s = StyleSheet.create({
   },
   /** Mission bar party chips: role glyph (briefcase / truck / user), not initials. */
   detailPartyTabIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -4775,6 +4803,7 @@ function ChatDetailHeader({
   counterpartyType,
   isDesktop,
   onCloseDetail,
+  middleContent,
 }: {
   title: string;
   subtitle?: string;
@@ -4783,6 +4812,8 @@ function ChatDetailHeader({
   counterpartyType?: "client" | "supplier" | null;
   isDesktop: boolean;
   onCloseDetail: () => void;
+  /** Route, date, party tabs — rendered inline between title and actions (trip detail). */
+  middleContent?: React.ReactNode;
 }) {
   const nativeMobile = isChatNativeMobile(isDesktop);
   const dualLane = Boolean(partyType && counterpartyType);
@@ -4810,7 +4841,12 @@ function ChatDetailHeader({
           <MessageSquare size={nativeMobile ? 16 : 18} color="#fff" />
         )}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View
+        style={[
+          middleContent ? s.detailHeaderTripCol : { flex: 1, minWidth: 0 },
+          middleContent && nativeMobile && s.detailHeaderTripColMobile,
+        ]}
+      >
         <Text
           style={[s.detailTitle, nativeMobile && s.detailTitleMobile]}
           numberOfLines={1}
@@ -4826,15 +4862,18 @@ function ChatDetailHeader({
           </Text>
         ) : null}
       </View>
+      {middleContent ? (
+        <View style={s.detailHeaderMiddle}>{middleContent}</View>
+      ) : null}
       {!nativeMobile ? (
-        <>
+        <View style={s.detailHeaderActions}>
           <TouchableOpacity hitSlop={10}>
             <Search size={17} color="#64748b" />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ marginLeft: 8 }}>
+          <TouchableOpacity hitSlop={10}>
             <MoreVertical size={17} color="#64748b" />
           </TouchableOpacity>
-        </>
+        </View>
       ) : null}
     </View>
   );
@@ -5920,6 +5959,12 @@ function TripConversationDetailLoaded({
     // Ledger events only appear in Client/Supplier tabs; tracking in Driver tab.
     if (!isMessageVisibleInTab(m.message_type, liveConv.party_type)) return null;
 
+    const routeContext = buildChatRouteContextLabel(
+      liveConv.pickup_area,
+      liveConv.drop_location,
+      m.created_at,
+    );
+
     if (m.message_type === "tracking") {
       const trackLoc = parseMessageLocationData(m);
       if (trackLoc) {
@@ -5949,11 +5994,20 @@ function TripConversationDetailLoaded({
           financialViewerBlocked={!allowFinancialCards}
           hideLedgerActions={!allowLedgerActions}
           isMobile={!isDesktop}
+          routeContext={routeContext}
+          composeTrip={tripCompose}
         />
       );
     }
     if (m.message_type === "assignment_update") {
-      return <ChatSystemEventCard message={m} isMobile={!isDesktop} />;
+      return (
+        <ChatSystemEventCard
+          message={m}
+          isMobile={!isDesktop}
+          routeContext={routeContext}
+          composeTrip={tripCompose}
+        />
+      );
     }
     if (
       m.message_type === "system" ||
@@ -5996,10 +6050,18 @@ function TripConversationDetailLoaded({
               dropLocation: liveConv.drop_location,
               status: liveConv.trip_status,
             }}
+            composeTrip={tripCompose}
           />
         );
       }
-      return <ChatSystemEventCard message={m} isMobile={!isDesktop} />;
+      return (
+        <ChatSystemEventCard
+          message={m}
+          isMobile={!isDesktop}
+          routeContext={routeContext}
+          composeTrip={tripCompose}
+        />
+      );
     }
     if (
       m.message_type === "ledger_event" ||
@@ -6126,7 +6188,7 @@ function TripConversationDetailLoaded({
       <PartyIcon
         partyType={partyType}
         active={selected}
-        size={18}
+        size={16}
         tone={selected ? "list" : "hub"}
       />
     </View>
@@ -6149,113 +6211,101 @@ function TripConversationDetailLoaded({
     return () => clearTimeout(t);
   }, [isDesktop, keyboardOpen, messagesRef]);
 
-  const missionBar = (
-      <View style={[s.detailMissionBar, !isDesktop && s.detailMissionBarMobile]}>
-        <View style={s.detailMissionRoute}>
-          <MapPin size={13} color={CHAT_ACCENT} />
-          <View style={s.detailMissionRouteTextBlock}>
-            <View style={s.detailMissionRouteLine}>
-              <View style={s.detailMissionRouteTextWrap}>
-                <Text style={s.detailMissionRouteText} numberOfLines={1} ellipsizeMode="tail">
-                  {liveConv.pickup_area} {"→"} {liveConv.drop_location}
-                </Text>
-              </View>
-              {missionDateLabel ? (
-                <Text style={s.detailMissionDate} numberOfLines={1}>
-                  {missionDateLabel}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+  const tripHeaderMiddle = (
+    <>
+      {missionDateLabel ? (
+        <Text style={s.detailMissionDate} numberOfLines={1}>
+          {missionDateLabel}
+        </Text>
+      ) : null}
+      {allowFinancialCards &&
+      paymentBalance != null &&
+      (liveConv.party_type === "client" || liveConv.party_type === "supplier") ? (
+        <View style={s.detailMissionUnread}>
+          <Text style={s.detailMissionUnreadText}>
+            {paymentBalance >= 0 ? "+" : "−"}₹{Math.abs(paymentBalance).toLocaleString("en-IN")}
+          </Text>
         </View>
-        {allowFinancialCards &&
-          paymentBalance != null &&
-          (liveConv.party_type === 'client' || liveConv.party_type === 'supplier') ? (
-          <View style={s.detailMissionUnread}>
-            <Text style={s.detailMissionUnreadText}>
-              {paymentBalance >= 0 ? '+' : '−'}₹{Math.abs(paymentBalance).toLocaleString('en-IN')}
-            </Text>
-          </View>
-        ) : null}
-        {missionBarPartyTypes.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[
-              s.detailMissionTabsScroller,
-              !isDesktop && s.detailMissionTabsScrollerMobile,
-            ]}
-            contentContainerStyle={s.detailPartyTabs}
-          >
-            {missionBarPartyTypes.map((tab) => {
-              const on = liveConv.party_type === tab.rowType;
-              const hasConversation = Boolean(partyConversationMap[tab.rowType]);
-              const relabeledClientTab = tab.displayType !== tab.rowType;
-              const partyLine = relabeledClientTab
-                ? formatChatPartyName(
-                    indentShipperDisplayName || liveConv.trip_organization_name || null,
-                  )
-                : tab.rowType === "client" &&
-                    supplierFleetOwnsTrip &&
-                    indentShipperDisplayName
-                  ? formatChatPartyName(indentShipperDisplayName)
-                  : formatChatPartyName(displayPartyName(tab.rowType));
-              return (
-                <TouchableOpacity
-                  key={tab.displayType}
-                  style={[
-                    s.detailPartyTab,
-                    on && s.detailPartyTabOn,
-                    !hasConversation && s.detailPartyTabOff,
-                  ]}
-                  onPress={() => { void switchConversation(tab.rowType); }}
-                  activeOpacity={0.82}
-                >
-                  {partyTabIcon(tab.displayType, on)}
-                  <View style={s.detailPartyTabTextCol}>
-                    {partyLine ? (
-                      <Text
-                        style={[s.detailPartyTabName, on && s.detailPartyTabNameOn]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {partyLine}
-                      </Text>
-                    ) : null}
+      ) : null}
+      {missionBarPartyTypes.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[
+            s.detailMissionTabsScroller,
+            !isDesktop && s.detailMissionTabsScrollerMobile,
+          ]}
+          contentContainerStyle={s.detailPartyTabs}
+        >
+          {missionBarPartyTypes.map((tab) => {
+            const on = liveConv.party_type === tab.rowType;
+            const hasConversation = Boolean(partyConversationMap[tab.rowType]);
+            const relabeledClientTab = tab.displayType !== tab.rowType;
+            const partyLine = relabeledClientTab
+              ? formatChatPartyName(
+                  indentShipperDisplayName || liveConv.trip_organization_name || null,
+                )
+              : tab.rowType === "client" &&
+                  supplierFleetOwnsTrip &&
+                  indentShipperDisplayName
+                ? formatChatPartyName(indentShipperDisplayName)
+                : formatChatPartyName(displayPartyName(tab.rowType));
+            return (
+              <TouchableOpacity
+                key={tab.displayType}
+                style={[
+                  s.detailPartyTab,
+                  on && s.detailPartyTabOn,
+                  !hasConversation && s.detailPartyTabOff,
+                ]}
+                onPress={() => {
+                  void switchConversation(tab.rowType);
+                }}
+                activeOpacity={0.82}
+              >
+                {partyTabIcon(tab.displayType, on)}
+                <View style={s.detailPartyTabTextCol}>
+                  {partyLine ? (
                     <Text
-                      style={[
-                        s.detailPartyTabText,
-                        on && s.detailPartyTabTextOn,
-                        !hasConversation && s.detailPartyTabTextOff,
-                      ]}
+                      style={[s.detailPartyTabName, on && s.detailPartyTabNameOn]}
                       numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
-                      {partyLabel(tab.displayType)}
+                      {partyLine}
                     </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-      </View>
+                  ) : null}
+                  <Text
+                    style={[
+                      s.detailPartyTabText,
+                      on && s.detailPartyTabTextOn,
+                      !hasConversation && s.detailPartyTabTextOff,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {partyLabel(tab.displayType)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+    </>
   );
 
   return (
     <ChatConversationLayout
       isDesktop={isDesktop}
       header={
-        <>
-          <ChatDetailHeader
-            title={`${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`}
-            subtitle={chatDetailSubtitle}
-            partyType={liveConv.party_type}
-            counterpartyType={headerCounterparty}
-            isDesktop={isDesktop}
-            onCloseDetail={onCloseDetail}
-          />
-          {missionBar}
-        </>
+        <ChatDetailHeader
+          title={`${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`}
+          subtitle={chatDetailSubtitle}
+          partyType={liveConv.party_type}
+          counterpartyType={headerCounterparty}
+          isDesktop={isDesktop}
+          onCloseDetail={onCloseDetail}
+          middleContent={tripHeaderMiddle}
+        />
       }
       messages={
       <FlatList

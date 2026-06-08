@@ -1,16 +1,25 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
+  type ViewStyle,
 } from "react-native";
-import { Download, FileSpreadsheet } from "lucide-react-native";
+import { Download, FileSpreadsheet, Search } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { PulsePartyCell } from "@/features/business-pulse/components/PulsePartyCell";
+import { PulseTablePagination } from "@/features/business-pulse/components/PulseTablePagination";
+import { pulseTableStyles as tbl } from "@/features/business-pulse/components/pulseTableStyles";
+import {
+  pulsePartyForDrilldownColumn,
+  pulsePartyForName,
+  type DrilldownRowPartyIds,
+  type PulsePartyMaps,
+} from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 import {
   exportPulseDrilldownExcel,
   exportPulseDrilldownPdf,
@@ -60,22 +69,102 @@ function visibleMetaColumnsForRow(
 
 type Props = {
   view: PulseDrilldownView;
-  /** Full filtered set for PDF/Excel export */
   exportView?: PulseDrilldownView;
   reportTitle: string;
   companyName?: string;
+  partyMaps?: PulsePartyMaps;
 };
 
-export function PulseDrilldownTable({ view, exportView, reportTitle, companyName }: Props) {
+const PARTY_COLUMNS = new Set(["client", "supplier", "driver", "vehicle"]);
+
+function drilldownColumnStyle(column: DrilldownColumnDef, stretch: boolean): ViewStyle {
+  if (stretch) {
+    return {
+      flex: column.flex ?? 1,
+      minWidth: Math.max(56, Math.round(column.width * 0.7)),
+    };
+  }
+  return { width: column.width, flexShrink: 0 };
+}
+
+function columnAlignWrap(column: DrilldownColumnDef): ViewStyle {
+  return column.align === "right" ? { alignItems: "flex-end" } : { alignItems: "flex-start" };
+}
+
+function partyEntityTypeForColumn(columnKey: string) {
+  return columnKey === "vehicle"
+    ? "vehicle"
+    : columnKey === "driver"
+      ? "driver"
+      : columnKey === "supplier"
+        ? "supplier"
+        : "client";
+}
+
+function DrilldownCell({
+  column,
+  row,
+  partyIds,
+  partyMaps,
+  stretch,
+}: {
+  column: DrilldownColumnDef;
+  row: DrilldownDataRow;
+  partyIds?: DrilldownRowPartyIds;
+  partyMaps?: PulsePartyMaps;
+  stretch: boolean;
+}) {
+  const text = formatCell(row, column);
+  const containerStyle = [drilldownColumnStyle(column, stretch), columnAlignWrap(column)];
+
+  if (PARTY_COLUMNS.has(column.key)) {
+    const entityType = partyEntityTypeForColumn(column.key);
+    const party =
+      (partyMaps
+        ? pulsePartyForDrilldownColumn(column.key, text, partyIds, partyMaps)
+        : null) ??
+      (text && text !== "—" ? pulsePartyForName(text, entityType) : null);
+
+    if (party) {
+      return (
+        <View style={containerStyle}>
+          <PulsePartyCell party={party} avatarSize={32} />
+        </View>
+      );
+    }
+  }
+
+  return (
+    <View style={containerStyle}>
+      <Text
+        style={[
+          column.key === "trip" ? tbl.primaryName : tbl.cellText,
+          column.align === "right" ? tbl.cellTextRight : null,
+          column.isMoney && tbl.cellMoney,
+          isNegativeMoney(row, column) ? tbl.negative : null,
+        ]}
+        numberOfLines={column.key === "route" ? 2 : 1}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+export function PulseDrilldownTable({ view, exportView, reportTitle, companyName, partyMaps }: Props) {
   const dataForExport = exportView ?? view;
   const { width } = useWindowDimensions();
   const compact = width < 720;
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
+  const [page, setPage] = useState(0);
 
-  const tableMinWidth = useMemo(
-    () => view.columns.reduce((sum, col) => sum + col.width, 0) + view.columns.length * 8 + 16,
-    [view.columns],
-  );
+  useEffect(() => {
+    setPage(0);
+  }, [view.rows.length, view.lensLabel]);
+
+  const stretchColumns = !compact;
 
   const moneyColumns = useMemo(
     () => view.columns.filter((c) => c.isMoney),
@@ -86,6 +175,11 @@ export function PulseDrilldownTable({ view, exportView, reportTitle, companyName
     () => view.columns.filter((c) => !c.isMoney && c.key !== "trip" && c.key !== "date"),
     [view.columns],
   );
+
+  const pagedRows = useMemo(() => {
+    const start = page * PAGE_SIZE;
+    return view.rows.slice(start, start + PAGE_SIZE);
+  }, [page, view.rows]);
 
   const runExport = async (format: "pdf" | "excel") => {
     if (dataForExport.rows.length === 0) {
@@ -112,54 +206,53 @@ export function PulseDrilldownTable({ view, exportView, reportTitle, companyName
   };
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.toolbar}>
-        <View style={styles.toolbarText}>
-          <Text style={styles.lensText}>{view.lensLabel}</Text>
-          <Text style={styles.countText} numberOfLines={2}>
-            Showing {view.rows.length} of {dataForExport.rows.length} trips
-          </Text>
-          <Text style={styles.filterCaption} numberOfLines={3}>
-            {view.filterCaption}
+    <View style={tbl.shell}>
+      <View style={tbl.toolbar}>
+        <View style={tbl.toolbarLeft}>
+          <Search size={14} color={Theme.textMuted} strokeWidth={2} />
+          <Text style={tbl.toolbarSearchText} numberOfLines={1}>
+            {view.filterCaption || "Search trips in scope"}
           </Text>
         </View>
-        <View style={styles.exportRow}>
+        <View style={tbl.toolbarMeta}>
+          <Text style={tbl.toolbarMetaTitle}>{view.lensLabel}</Text>
+          <Text style={tbl.toolbarMetaSub}>
+            {view.rows.length} of {dataForExport.rows.length} trips
+          </Text>
+        </View>
+        <View style={tbl.toolbarActions}>
           <Pressable
-            style={[styles.exportBtn, exporting === "pdf" && styles.exportBtnBusy]}
+            style={[tbl.toolbarBtn, exporting === "pdf" && { opacity: 0.7 }]}
             onPress={() => void runExport("pdf")}
             disabled={!!exporting}
-            accessibilityRole="button"
-            accessibilityLabel="Download PDF report"
           >
             {exporting === "pdf" ? (
               <ActivityIndicator size="small" color={Theme.primary} />
             ) : (
-              <Download size={12} color={Theme.primary} />
+              <Download size={14} color={Theme.textSecondary} strokeWidth={2} />
             )}
-            <Text style={styles.exportBtnText}>PDF</Text>
+            <Text style={tbl.toolbarBtnText}>PDF</Text>
           </Pressable>
           <Pressable
-            style={[styles.exportBtn, exporting === "excel" && styles.exportBtnBusy]}
+            style={[tbl.toolbarBtn, exporting === "excel" && { opacity: 0.7 }]}
             onPress={() => void runExport("excel")}
             disabled={!!exporting}
-            accessibilityRole="button"
-            accessibilityLabel="Download Excel report"
           >
             {exporting === "excel" ? (
               <ActivityIndicator size="small" color={Theme.primary} />
             ) : (
-              <FileSpreadsheet size={12} color={Theme.primary} />
+              <FileSpreadsheet size={14} color={Theme.textSecondary} strokeWidth={2} />
             )}
-            <Text style={styles.exportBtnText}>Excel</Text>
+            <Text style={tbl.toolbarBtnText}>Excel</Text>
           </Pressable>
         </View>
       </View>
 
       {view.rows.length === 0 ? (
-        <Text style={styles.empty}>No rows match current filter context.</Text>
+        <Text style={tbl.empty}>No rows match current filter context.</Text>
       ) : compact ? (
         <View style={styles.cardList}>
-          {view.rows.map((row, index) => {
+          {pagedRows.map((row, index) => {
             const routeText =
               row.route && !isEmptyMetaValue(row.route) ? String(row.route) : null;
             const rowMeta = visibleMetaColumnsForRow(row, metaColumns, {
@@ -184,13 +277,7 @@ export function PulseDrilldownTable({ view, exportView, reportTitle, companyName
                 {rowMeta.length > 0 ? (
                   <View style={styles.mobileMetaGrid}>
                     {rowMeta.map((col) => (
-                      <View
-                        key={col.key}
-                        style={[
-                          styles.mobileMetaCell,
-                          rowMeta.length === 1 && styles.mobileMetaCellFull,
-                        ]}
-                      >
+                      <View key={col.key} style={styles.mobileMetaCell}>
                         <Text style={styles.mobileMetaLabel}>{col.label}</Text>
                         <Text style={styles.mobileMetaValue} numberOfLines={2}>
                           {formatCell(row, col)}
@@ -210,11 +297,11 @@ export function PulseDrilldownTable({ view, exportView, reportTitle, companyName
                           moneyIndex > 0 && styles.mobileMoneyCellDivider,
                         ]}
                       >
-                        <Text style={styles.mobileMoneyLabel}>{col.label}</Text>
+                        <Text style={styles.mobileMetaLabel}>{col.label}</Text>
                         <Text
                           style={[
                             styles.mobileMoneyValue,
-                            isNegativeMoney(row, col) ? styles.negative : styles.positive,
+                            isNegativeMoney(row, col) ? tbl.negative : tbl.positive,
                           ]}
                           numberOfLines={1}
                         >
@@ -227,255 +314,145 @@ export function PulseDrilldownTable({ view, exportView, reportTitle, companyName
               </View>
             );
           })}
+          {view.rows.length > PAGE_SIZE ? (
+            <PulseTablePagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={view.rows.length}
+              onPageChange={setPage}
+            />
+          ) : null}
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={[styles.table, { minWidth: tableMinWidth }]}>
-            <View style={styles.tableHeader}>
+        <>
+          <View style={styles.flexTable}>
+            <View style={tbl.headerRow}>
               {view.columns.map((col) => (
-                <Text
+                <View
                   key={col.key}
                   style={[
-                    styles.th,
-                    { width: col.width },
-                    col.align === "right" ? styles.thRight : null,
+                    drilldownColumnStyle(col, stretchColumns),
+                    columnAlignWrap(col),
+                    tbl.headerCell,
                   ]}
                 >
-                  {col.label}
-                </Text>
+                  <Text
+                    style={[
+                      tbl.headerText,
+                      col.align === "right" ? tbl.headerTextRight : null,
+                    ]}
+                  >
+                    {col.label}
+                  </Text>
+                </View>
               ))}
             </View>
-            {view.rows.map((row, index) => (
-              <View key={`${row.trip}-${index}`} style={styles.tableRow}>
+            {pagedRows.map((row, index) => (
+              <View key={`${row.trip}-${index}`} style={tbl.dataRow}>
                 {view.columns.map((col) => (
-                  <Text
+                  <DrilldownCell
                     key={col.key}
-                    style={[
-                      styles.td,
-                      { width: col.width },
-                      col.align === "right" ? styles.tdRight : null,
-                      isNegativeMoney(row, col) ? styles.negative : null,
-                    ]}
-                    numberOfLines={col.key === "route" ? 2 : 1}
-                  >
-                    {formatCell(row, col)}
-                  </Text>
+                    column={col}
+                    row={row}
+                    partyIds={view.rowPartyIds[page * PAGE_SIZE + index]}
+                    partyMaps={partyMaps}
+                    stretch={stretchColumns}
+                  />
                 ))}
               </View>
             ))}
           </View>
-        </ScrollView>
+          {view.rows.length > PAGE_SIZE ? (
+            <PulseTablePagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={view.rows.length}
+              onPageChange={setPage}
+            />
+          ) : null}
+        </>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: 8,
-  },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  toolbarText: {
-    flex: 1,
-    minWidth: 120,
-    gap: 2,
-  },
-  lensText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  countText: {
-    fontSize: 9,
-    color: Theme.textMuted,
-    fontWeight: "600",
-  },
-  filterCaption: {
-    fontSize: 9,
-    color: Theme.textSecondary,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  exportRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  exportBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderColor: Theme.primary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#eef2ff",
-    minHeight: 32,
-  },
-  exportBtnBusy: {
-    opacity: 0.7,
-  },
-  exportBtnText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.primary,
-  },
-  empty: {
-    fontSize: 9,
-    color: Theme.textMuted,
+  flexTable: {
+    width: "100%",
   },
   cardList: {
-    gap: 8,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   mobileCard: {
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 14,
-    backgroundColor: "#fff",
-    padding: 12,
-    gap: 10,
+    borderColor: "#eff2f5",
+    borderRadius: 10,
+    backgroundColor: Theme.cardWhite,
+    padding: 10,
+    gap: 8,
   },
   mobileCardHeader: {
     gap: 3,
   },
   mobileTrip: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#181C32",
   },
   mobileDate: {
     fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
+    fontWeight: "500",
+    color: "#A1A5B7",
   },
   mobileRoute: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 14,
+    color: Theme.textSecondary,
+    lineHeight: 15,
   },
   mobileMetaGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    paddingTop: 2,
   },
   mobileMetaCell: {
     flexBasis: "47%",
     flexGrow: 1,
     minWidth: 120,
     gap: 2,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: Theme.whiteMuted,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  mobileMetaCellFull: {
-    flexBasis: "100%",
   },
   mobileMetaLabel: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   mobileMetaValue: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    lineHeight: 15,
   },
   mobileMoneyRow: {
     flexDirection: "row",
-    alignItems: "stretch",
-    marginTop: 2,
-    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: "#eff2f5",
+    paddingTop: 10,
+    gap: 8,
   },
   mobileMoneyCell: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
-    paddingHorizontal: 4,
+    gap: 2,
   },
   mobileMoneyCellDivider: {
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: Theme.borderLight,
+    borderLeftColor: "#eff2f5",
     paddingLeft: 10,
-    marginLeft: 6,
-  },
-  mobileMoneyLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   mobileMoneyValue: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    fontSize: 12,
+    fontWeight: "700",
     fontVariant: ["tabular-nums"],
-  },
-  table: {
-    gap: 0,
-  },
-  tableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 8,
-    backgroundColor: Theme.whiteMuted,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    gap: 8,
-    marginBottom: 4,
-  },
-  tableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    gap: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    minHeight: 36,
-  },
-  th: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-  },
-  thRight: {
-    textAlign: "right",
-  },
-  td: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.text,
-  },
-  tdRight: {
-    textAlign: "right",
-  },
-  positive: {
-    color: "#047857",
-  },
-  negative: {
-    color: Theme.teslaRed,
   },
 });

@@ -16,6 +16,11 @@ export function useSteppedWizardLayout(width: number): boolean {
   return WIZARD_FULL_PAGE_STEPPED || isNarrowSteppedViewport(width);
 }
 
+/** Desktop enterprise form — multi-card grid + field inputs (no stepped keypad flow). */
+export function isDesktopWizardForm(width: number): boolean {
+  return width >= Layout.wizardDesktopGridMinWidth;
+}
+
 /** Centered wizard body column (matches FullPageWizardShell). */
 export function wizardBodyMaxWidth(width: number): number {
   return Math.min(width, Layout.wizardBodyMaxWidth);

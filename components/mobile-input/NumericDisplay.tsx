@@ -15,7 +15,7 @@ interface NumericDisplayProps {
   suffix?: string;
   placeholder?: string;
   /** Larger centered amount (mobile pay-style sheet). */
-  variant?: "default" | "hero";
+  variant?: "default" | "hero" | "wizard";
 }
 
 export function NumericDisplay({
@@ -27,6 +27,8 @@ export function NumericDisplay({
   variant = 'default',
 }: NumericDisplayProps) {
   const isHero = variant === 'hero';
+  const isWizard = variant === 'wizard';
+  const isLarge = isHero || isWizard;
   const blink = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -46,13 +48,20 @@ export function NumericDisplay({
   const display = isEmpty ? placeholder : formatDisplayValue(rawValue, type);
 
   return (
-    <View style={[styles.root, isHero && styles.rootHero]}>
+    <View
+      style={[
+        styles.root,
+        isHero && styles.rootHero,
+        isWizard && styles.rootWizard,
+      ]}
+    >
       <View style={styles.row}>
         {resolvedPrefix ? (
           <Text
             style={[
               styles.prefix,
               isHero && styles.prefixHero,
+              isWizard && styles.prefixWizard,
               isEmpty && styles.dim,
             ]}
             allowFontScaling={false}
@@ -65,12 +74,13 @@ export function NumericDisplay({
           style={[
             styles.amount,
             isHero && styles.amountHero,
+            isWizard && styles.amountWizard,
             isEmpty && styles.amountPlaceholder,
-            isEmpty && isHero && styles.amountPlaceholderHero,
+            isEmpty && isLarge && styles.amountPlaceholderHero,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit={!isHero && !isEmpty}
-          minimumFontScale={isHero ? 0.72 : 0.85}
+          adjustsFontSizeToFit={!isLarge && !isEmpty}
+          minimumFontScale={isLarge ? 0.72 : 0.85}
           allowFontScaling={false}
         >
           {display}
@@ -78,7 +88,12 @@ export function NumericDisplay({
 
         {resolvedSuffix ? (
           <Text
-            style={[styles.suffix, isHero && styles.suffixHero, isEmpty && styles.dim]}
+            style={[
+              styles.suffix,
+              isHero && styles.suffixHero,
+              isWizard && styles.suffixWizard,
+              isEmpty && styles.dim,
+            ]}
             allowFontScaling={false}
           >
             {resolvedSuffix}
@@ -89,6 +104,7 @@ export function NumericDisplay({
           style={[
             styles.cursor,
             isHero && styles.cursorHero,
+            isWizard && styles.cursorWizard,
             { opacity: blink },
           ]}
         />
@@ -111,6 +127,12 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     minHeight: 112,
   },
+  rootWizard: {
+    flex: 0,
+    flexGrow: 0,
+    paddingVertical: 10,
+    minHeight: 84,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -126,6 +148,11 @@ const styles = StyleSheet.create({
   prefixHero: {
     fontSize: 48,
     fontWeight: '400',
+    letterSpacing: 0,
+  },
+  prefixWizard: {
+    fontSize: 34,
+    fontWeight: '500',
     letterSpacing: 0,
   },
   amount: {
@@ -144,6 +171,12 @@ const styles = StyleSheet.create({
     lineHeight: 76,
     letterSpacing: -1.2,
   },
+  amountWizard: {
+    fontSize: 52,
+    fontWeight: '600',
+    lineHeight: 56,
+    letterSpacing: -0.8,
+  },
   amountPlaceholder: {
     color: Theme.textMuted,
     fontWeight: '400',
@@ -160,6 +193,9 @@ const styles = StyleSheet.create({
   suffixHero: {
     fontSize: 38,
   },
+  suffixWizard: {
+    fontSize: 28,
+  },
   dim: {
     color: Theme.textMuted,
   },
@@ -173,5 +209,9 @@ const styles = StyleSheet.create({
   cursorHero: {
     height: 54,
     width: 3,
+  },
+  cursorWizard: {
+    height: 42,
+    width: 2,
   },
 });

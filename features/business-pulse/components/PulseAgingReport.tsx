@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,6 +10,13 @@ import {
 } from "react-native";
 import { Download, FileSpreadsheet } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { PulsePartyCell } from "@/features/business-pulse/components/PulsePartyCell";
+import { PulseTablePagination } from "@/features/business-pulse/components/PulseTablePagination";
+import { pulseTableStyles as tbl } from "@/features/business-pulse/components/pulseTableStyles";
+import {
+  type PulsePartyMaps,
+  pulsePartyForName,
+} from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 import { exportPulseAgingExcel, exportPulseAgingPdf } from "@/features/business-pulse/lib/pulseAgingExport.util";
 import type { PulseAgingReport as PulseAgingReportData } from "@/features/business-pulse/selectors/pulseAgingSelectors";
 
@@ -22,14 +28,48 @@ type Props = {
   report: PulseAgingReportData;
   reportTitle: string;
   companyName?: string;
+  partyMaps?: PulsePartyMaps;
 };
 
-export function PulseAgingReport({ report, reportTitle, companyName }: Props) {
+const AGING_COLUMNS = [
+  { key: "trip", label: "Trip", flex: 1.05, minWidth: 88 },
+  { key: "party", label: "Member", flex: 1.75, minWidth: 148 },
+  { key: "category", label: "Category", flex: 1.25, minWidth: 108 },
+  { key: "date", label: "Date", flex: 0.95, minWidth: 72 },
+  { key: "days", label: "Days", flex: 0.65, minWidth: 48, align: "right" as const },
+  { key: "amt", label: "Amount", flex: 1, minWidth: 80, align: "right" as const },
+];
+
+function resolveAgingParty(
+  line: PulseAgingReportData["lines"][number],
+  partyMaps?: PulsePartyMaps,
+) {
+  if (partyMaps && line.partyEntityId && line.partyEntityType) {
+    const mapKey =
+      line.partyEntityType === "client"
+        ? "clients"
+        : line.partyEntityType === "supplier"
+          ? "suppliers"
+          : line.partyEntityType === "driver"
+            ? "drivers"
+            : "vehicles";
+    const profile = partyMaps[mapKey].get(line.partyEntityId);
+    if (profile) return profile;
+  }
+  return pulsePartyForName(line.party, line.partyEntityType ?? "client");
+}
+
+export function PulseAgingReport({ report, reportTitle, companyName, partyMaps }: Props) {
   const { width } = useWindowDimensions();
   const compact = width < 720;
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
+  const [page, setPage] = useState(0);
+  const pageSize = compact ? 30 : 10;
   const maxBucket = Math.max(...report.buckets.map((b) => b.amount), 1);
-  const displayLines = report.lines.slice(0, compact ? 30 : 60);
+  const pagedLines = useMemo(() => {
+    const start = page * pageSize;
+    return report.lines.slice(start, start + pageSize);
+  }, [page, pageSize, report.lines]);
   const kindLabel = report.kind === "receivable" ? "Receivable" : "Payable";
   const emptyMessage =
     report.kind === "receivable"
@@ -53,38 +93,30 @@ export function PulseAgingReport({ report, reportTitle, companyName }: Props) {
   };
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.toolbar}>
-        <View style={styles.toolbarText}>
-          <Text style={styles.kindBadge}>{kindLabel} aging</Text>
-          <Text style={styles.totalLabel}>
+    <View style={tbl.shell}>
+      <View style={tbl.toolbar}>
+        <View style={tbl.toolbarMeta}>
+          <Text style={tbl.toolbarMetaTitle}>{kindLabel} aging</Text>
+          <Text style={tbl.toolbarMetaSub}>
             Outstanding {inr(report.totalOutstanding)} · {report.lines.length} items
           </Text>
         </View>
-        <View style={styles.exportRow}>
-          <Pressable
-            style={styles.exportBtn}
-            onPress={() => void runExport("pdf")}
-            disabled={!!exporting}
-          >
+        <View style={tbl.toolbarActions}>
+          <Pressable style={tbl.toolbarBtn} onPress={() => void runExport("pdf")} disabled={!!exporting}>
             {exporting === "pdf" ? (
               <ActivityIndicator size="small" color={Theme.primary} />
             ) : (
-              <Download size={12} color={Theme.primary} />
+              <Download size={14} color={Theme.textSecondary} strokeWidth={2} />
             )}
-            <Text style={styles.exportBtnText}>PDF</Text>
+            <Text style={tbl.toolbarBtnText}>PDF</Text>
           </Pressable>
-          <Pressable
-            style={styles.exportBtn}
-            onPress={() => void runExport("excel")}
-            disabled={!!exporting}
-          >
+          <Pressable style={tbl.toolbarBtn} onPress={() => void runExport("excel")} disabled={!!exporting}>
             {exporting === "excel" ? (
               <ActivityIndicator size="small" color={Theme.primary} />
             ) : (
-              <FileSpreadsheet size={12} color={Theme.primary} />
+              <FileSpreadsheet size={14} color={Theme.textSecondary} strokeWidth={2} />
             )}
-            <Text style={styles.exportBtnText}>Excel</Text>
+            <Text style={tbl.toolbarBtnText}>Excel</Text>
           </Pressable>
         </View>
       </View>
@@ -113,19 +145,20 @@ export function PulseAgingReport({ report, reportTitle, companyName }: Props) {
         })}
       </View>
 
-      {displayLines.length === 0 ? (
-        <Text style={styles.empty}>{emptyMessage}</Text>
+      {pagedLines.length === 0 ? (
+        <Text style={tbl.empty}>{emptyMessage}</Text>
       ) : compact ? (
         <View style={styles.cardList}>
-          {displayLines.map((line) => (
+          {pagedLines.map((line) => (
             <View key={line.id} style={styles.lineCard}>
               <Text style={styles.lineTrip} numberOfLines={1}>
                 {line.tripRef}
               </Text>
-              <Text style={styles.lineParty} numberOfLines={1}>
-                {line.party}
-              </Text>
-              <Text style={styles.lineCategory}>{line.category}</Text>
+              <PulsePartyCell
+                party={resolveAgingParty(line, partyMaps)}
+                meta={line.category}
+                avatarSize={36}
+              />
               <View style={styles.lineFooter}>
                 <Text style={styles.lineDate}>{line.anchorDate}</Text>
                 <Text style={styles.lineDays}>{line.daysOutstanding}d</Text>
@@ -135,115 +168,113 @@ export function PulseAgingReport({ report, reportTitle, companyName }: Props) {
           ))}
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              {[
-                { key: "trip", label: "Trip", width: 88 },
-                { key: "party", label: "Party", width: 120 },
-                { key: "category", label: "Category", width: 110 },
-                { key: "date", label: "Date", width: 72 },
-                { key: "days", label: "Days", width: 40, align: "right" as const },
-                { key: "amt", label: "Amount", width: 72, align: "right" as const },
-              ].map((col) => (
-                <View
-                  key={col.key}
+        <View style={styles.flexTable}>
+          <View style={tbl.headerRow}>
+            {AGING_COLUMNS.map((col) => (
+              <View
+                key={col.key}
+                style={[
+                  styles.agingCol,
+                  { flex: col.flex, minWidth: col.minWidth },
+                  col.align === "right" ? styles.colRight : null,
+                ]}
+              >
+                <Text
                   style={[
-                    styles.colCell,
-                    { width: col.width },
-                    "align" in col && col.align === "right" ? styles.colAlignRight : null,
+                    tbl.headerText,
+                    col.align === "right" ? tbl.headerTextRight : null,
                   ]}
                 >
-                  <Text style={[styles.th, "align" in col && col.align === "right" && styles.thRight]}>
-                    {col.label}
-                  </Text>
-                </View>
-              ))}
-            </View>
-            {displayLines.map((line) => (
-              <View key={line.id} style={styles.tableRow}>
-                <View style={[styles.colCell, styles.colTrip]}>
-                  <Text style={styles.td} numberOfLines={1}>
-                    {line.tripRef}
-                  </Text>
-                </View>
-                <View style={[styles.colCell, styles.colParty]}>
-                  <Text style={styles.td} numberOfLines={1}>
-                    {line.party}
-                  </Text>
-                </View>
-                <View style={[styles.colCell, styles.colCategory]}>
-                  <Text style={styles.td} numberOfLines={1}>
-                    {line.category}
-                  </Text>
-                </View>
-                <View style={[styles.colCell, styles.colDate]}>
-                  <Text style={styles.td}>{line.anchorDate}</Text>
-                </View>
-                <View style={[styles.colCell, styles.colDays, styles.colAlignRight]}>
-                  <Text style={[styles.td, styles.tdRight]}>{line.daysOutstanding}</Text>
-                </View>
-                <View style={[styles.colCell, styles.colAmt, styles.colAlignRight]}>
-                  <Text style={[styles.td, styles.tdRight, styles.tdMoney]}>{inr(line.amount)}</Text>
-                </View>
+                  {col.label}
+                </Text>
               </View>
             ))}
           </View>
-        </ScrollView>
+          {pagedLines.map((line) => (
+            <View key={line.id} style={tbl.dataRow}>
+              <View style={[styles.agingCol, { flex: AGING_COLUMNS[0]!.flex, minWidth: AGING_COLUMNS[0]!.minWidth }]}>
+                <Text style={tbl.primaryName} numberOfLines={1}>
+                  {line.tripRef}
+                </Text>
+              </View>
+              <View style={[styles.agingCol, { flex: AGING_COLUMNS[1]!.flex, minWidth: AGING_COLUMNS[1]!.minWidth }]}>
+                <PulsePartyCell party={resolveAgingParty(line, partyMaps)} avatarSize={36} />
+              </View>
+              <View style={[styles.agingCol, { flex: AGING_COLUMNS[2]!.flex, minWidth: AGING_COLUMNS[2]!.minWidth }]}>
+                <Text style={tbl.cellText} numberOfLines={1}>
+                  {line.category}
+                </Text>
+              </View>
+              <View style={[styles.agingCol, { flex: AGING_COLUMNS[3]!.flex, minWidth: AGING_COLUMNS[3]!.minWidth }]}>
+                <Text style={tbl.cellText}>{line.anchorDate}</Text>
+              </View>
+              <View
+                style={[
+                  styles.agingCol,
+                  styles.colRight,
+                  { flex: AGING_COLUMNS[4]!.flex, minWidth: AGING_COLUMNS[4]!.minWidth },
+                ]}
+              >
+                <Text style={[tbl.cellText, tbl.cellTextRight]}>{line.daysOutstanding}</Text>
+              </View>
+              <View
+                style={[
+                  styles.agingCol,
+                  styles.colRight,
+                  { flex: AGING_COLUMNS[5]!.flex, minWidth: AGING_COLUMNS[5]!.minWidth },
+                ]}
+              >
+                <Text style={[tbl.cellMoney, tbl.cellTextRight]}>{inr(line.amount)}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
       )}
-      {report.lines.length > displayLines.length ? (
-        <Text style={styles.moreHint}>
-          Showing {displayLines.length} of {report.lines.length} — export for full list
-        </Text>
+      {report.lines.length > pageSize ? (
+        <PulseTablePagination
+          page={page}
+          pageSize={pageSize}
+          total={report.lines.length}
+          onPageChange={setPage}
+        />
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 10 },
-  toolbar: {
+  flexTable: {
+    width: "100%",
+  },
+  agingCol: {
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  colRight: {
+    alignItems: "flex-end",
+  },
+  bucketGrid: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
     flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: "100%",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eff2f5",
   },
-  toolbarText: { flex: 1, minWidth: 120, gap: 2 },
-  kindBadge: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  totalLabel: { fontSize: 10, fontWeight: "700", color: Theme.textSecondary },
-  exportRow: { flexDirection: "row", gap: 6 },
-  exportBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderColor: Theme.primary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#eef2ff",
-  },
-  exportBtnText: { fontSize: 10, fontWeight: "800", color: Theme.primary },
-  bucketGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   bucketCard: {
     flex: 1,
-    minWidth: "46%",
+    minWidth: 120,
     borderWidth: 1,
     borderRadius: 10,
-    padding: 8,
-    gap: 4,
+    padding: 10,
+    gap: 5,
   },
   bucketHealthy: { borderColor: "#a7f3d0", backgroundColor: "#f0fdf4" },
   bucketWarning: { borderColor: "#fcd34d", backgroundColor: "#fffbeb" },
   bucketCritical: { borderColor: "#fecdd3", backgroundColor: "#fff1f2" },
-  bucketLabel: { fontSize: 9, fontWeight: "800", color: Theme.textPrimaryDark },
+  bucketLabel: { fontSize: 11, fontWeight: "600", color: Theme.textPrimaryDark },
   bucketBarTrack: {
     height: 6,
     borderRadius: 999,
@@ -251,10 +282,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   bucketBarFill: { height: "100%", backgroundColor: Theme.primary, borderRadius: 999 },
-  bucketAmount: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
-  bucketMeta: { fontSize: 8, color: Theme.textMuted },
-  empty: { fontSize: 9, color: Theme.textMuted },
-  cardList: { gap: 8 },
+  bucketAmount: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
+  bucketMeta: { fontSize: 11, color: Theme.textMuted },
+  cardList: { gap: 6, paddingHorizontal: 14, paddingVertical: 10 },
   lineCard: {
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -269,46 +299,5 @@ const styles = StyleSheet.create({
   lineFooter: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   lineDate: { fontSize: 9, color: Theme.textMuted, flex: 1 },
   lineDays: { fontSize: 9, fontWeight: "800", color: Theme.primary },
-  lineAmount: { fontSize: 10, fontWeight: "800", color: Theme.textPrimaryDark },
-  table: { minWidth: 640 },
-  tableHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: Theme.whiteMuted,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    marginBottom: 4,
-  },
-  tableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-  },
-  colCell: {
-    flexShrink: 0,
-    justifyContent: "center",
-  },
-  colAlignRight: {
-    alignItems: "flex-end",
-  },
-  th: { fontSize: 8, fontWeight: "800", color: Theme.textMuted, textTransform: "uppercase" },
-  thRight: { textAlign: "right" },
-  td: { fontSize: 10, fontWeight: "600", color: Theme.text },
-  tdRight: { textAlign: "right" },
-  tdMoney: { fontWeight: "800", color: Theme.textPrimaryDark },
-  colTrip: { width: 88 },
-  colParty: { width: 120 },
-  colCategory: { width: 110 },
-  colDate: { width: 72 },
-  colDays: { width: 40 },
-  colAmt: { width: 72 },
-  moreHint: { fontSize: 8, color: Theme.textMuted, fontStyle: "italic" },
+  lineAmount: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
 });

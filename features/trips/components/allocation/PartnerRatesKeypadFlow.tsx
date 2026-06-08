@@ -2,13 +2,10 @@
  * GPay-style partner rate + optional advance (custom keypad, no system keyboard).
  * Shared by Create Trip allocation and indent aggregate deploy.
  */
-import { memo, useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import {
-  fullPageWizardStyles,
-  WizardEntitySummaryCard,
-} from "@/components/full-page-wizard";
+import { WizardNumericKeypadFlow } from "@/components/full-page-wizard/WizardNumericKeypadFlow";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
@@ -67,7 +64,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
-      if (wizardShell || active === "rate") {
+      if (active === "rate") {
         onPartnerRateChange(applyKeypadPress(rateRaw, key, { maxDecimalPlaces: 2 }));
         return;
       }
@@ -75,63 +72,30 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
         applyKeypadPress(advanceRaw, key, { maxDecimalPlaces: 2 }),
       );
     },
-    [
-      active,
-      advanceRaw,
-      onAdvancePaidChange,
-      onPartnerRateChange,
-      rateRaw,
-      wizardShell,
-    ],
+    [active, advanceRaw, onAdvancePaidChange, onPartnerRateChange, rateRaw],
   );
 
   const useInset = keypadInset || wizardShell;
 
+  const wizardFields = useMemo(
+    () => [
+      {
+        id: "rate",
+        label: "Partner rate",
+        rawValue: rateRaw,
+        onRawValueChange: onPartnerRateChange,
+      },
+    ],
+    [onPartnerRateChange, rateRaw],
+  );
+
   if (wizardShell) {
     return (
-      <View style={[flow.root, styles.rootWizard]}>
-        <ScrollView
-          style={styles.mainScroll}
-          contentContainerStyle={styles.mainWizard}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {partyPreview && !suppressPartyPreview ? (
-            <WizardEntitySummaryCard
-              label="Transport partner"
-              name={partyPreview.name}
-              subtitle={partyPreview.subtitle}
-              entityType={partyPreview.entityType ?? "supplier"}
-              avatarUrl={partyPreview.avatarUrl}
-              avatarSeed={partyPreview.avatarSeed}
-              organizationImageUrl={partyPreview.organizationImageUrl}
-              organizationAvatarSeed={partyPreview.organizationAvatarSeed}
-            />
-          ) : null}
-
-          <View style={fullPageWizardStyles.wizardFieldBlock}>
-            <Text style={fullPageWizardStyles.wizardFieldLabel}>
-              Partner rate (₹) *
-            </Text>
-            <NumericDisplay
-              rawValue={rateRaw}
-              type="currency"
-              prefix="₹"
-              placeholder="0"
-              variant="hero"
-            />
-          </View>
-        </ScrollView>
-
-        <View style={flow.keypadDockWizard}>
-          <DecimalKeypad
-            onKey={handleKey}
-            showDecimal
-            variant="pay"
-            size="compact"
-          />
-        </View>
-      </View>
+      <WizardNumericKeypadFlow
+        fields={wizardFields}
+        partyPreview={suppressPartyPreview ? undefined : partyPreview}
+        hint={hint}
+      />
     );
   }
 
@@ -207,23 +171,10 @@ const styles = StyleSheet.create({
   root: {
     width: "100%",
   },
-  rootWizard: {
-    flex: 1,
-    minHeight: 0,
-  },
-  mainScroll: {
-    flex: 1,
-    minHeight: 0,
-  },
   main: {
     gap: 8,
     paddingTop: 2,
     paddingBottom: 4,
-  },
-  mainWizard: {
-    gap: 12,
-    paddingTop: 2,
-    paddingBottom: 8,
   },
   fieldBlock: {
     gap: 6,

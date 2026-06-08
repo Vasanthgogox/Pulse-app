@@ -89,6 +89,131 @@ export function resolveTripConversationAvatar(
   };
 }
 
+function driverFallbackSeed(driverId: string): string {
+  const value = (driverId ?? "").trim() || "driver";
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash + value.charCodeAt(i)) % 10;
+  }
+  return `driver-${hash + 1}`;
+}
+
+function cleanSystemUpdateDriverName(name: string): string | null {
+  const n = name.trim().replace(/\.$/, "");
+  if (!n || /^(the driver|driver|assigned|tbd)$/i.test(n)) return null;
+  return n;
+}
+
+/** Parse driver name from assignment / status broadcast copy in trip chat. */
+export function extractDriverNameFromSystemUpdateContent(
+  content: string,
+): string | null {
+  const c = (content ?? "").trim();
+  if (!c) return null;
+
+  let m = c.match(
+    /assigned\.\s*(?:Driver\s+)?([A-Za-z][A-Za-z\s.'-]{0,40}?)\s+will report shortly/i,
+  );
+  if (m?.[1]) return cleanSystemUpdateDriverName(m[1]);
+
+  m = c.match(/^([A-Za-z][A-Za-z\s.'-]{0,40}?)\s+assigned as driver/i);
+  if (m?.[1]) return cleanSystemUpdateDriverName(m[1]);
+
+  m = c.match(/Driver changed from .+ to ([A-Za-z][A-Za-z\s.'-]+)/i);
+  if (m?.[1]) return cleanSystemUpdateDriverName(m[1]);
+
+  m = c.match(/Driver reassigned to ([A-Za-z][A-Za-z\s.'-]+)/i);
+  if (m?.[1]) return cleanSystemUpdateDriverName(m[1]);
+
+  m = c.match(/^Driver\s+([A-Za-z][A-Za-z\s.'-]+)\s+unassigned/i);
+  if (m?.[1]) return cleanSystemUpdateDriverName(m[1]);
+
+  m = c.match(
+    /([A-Za-z][A-Za-z\s.'-]{0,40}?)\s+has accepted the trip and is heading to pickup/i,
+  );
+  if (m?.[1]) return cleanSystemUpdateDriverName(m[1]);
+
+  return null;
+}
+
+function readAssignmentEventPayload(
+  meta: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const ep = meta?.event_payload;
+  if (ep && typeof ep === "object" && !Array.isArray(ep)) {
+    return ep as Record<string, unknown>;
+  }
+  return meta;
+}
+
+export type SystemUpdateDriverContext = {
+  composeTrip?: Pick<
+    TripForCompose,
+    "driver_id" | "driver_display_name"
+  > | null;
+};
+
+/** Driver avatar for SYSTEM UPDATE cards (assignment + assigned status broadcasts). */
+export function resolveSystemUpdateDriverAvatar(
+  message: Pick<TripMessageRow, "content" | "metadata">,
+  context?: SystemUpdateDriverContext,
+): ResolvedPartyAvatarIdentity | null {
+  const meta = (message.metadata ?? null) as Record<string, unknown> | null;
+  const ep = readAssignmentEventPayload(meta);
+
+  const driverId =
+    (typeof ep?.driver_id_new === "string" ? ep.driver_id_new : null) ||
+    (typeof meta?.driver_id_new === "string" ? meta.driver_id_new : null) ||
+    (context?.composeTrip?.driver_id ?? null);
+
+  const metaName =
+    (typeof ep?.driver_display_name === "string"
+      ? ep.driver_display_name
+      : null
+    )?.trim() || null;
+  const metaAvatarUrl =
+    (typeof ep?.driver_avatar_url === "string" ? ep.driver_avatar_url : null) ||
+    (typeof meta?.driver_avatar_url === "string" ? meta.driver_avatar_url : null);
+  const metaAvatarSeed =
+    (typeof ep?.driver_avatar_seed === "string"
+      ? ep.driver_avatar_seed
+      : null) ||
+    (typeof meta?.driver_avatar_seed === "string"
+      ? meta.driver_avatar_seed
+      : null);
+
+  const contentName = extractDriverNameFromSystemUpdateContent(
+    message.content ?? "",
+  );
+  const composeName =
+    (context?.composeTrip?.driver_display_name ?? "").trim() || null;
+
+  let displayName =
+    metaName ||
+    contentName ||
+    (driverId &&
+    composeName &&
+    context?.composeTrip?.driver_id === driverId
+      ? composeName
+      : null) ||
+    composeName;
+
+  if (displayName && /^(driver|assigned|the driver)$/i.test(displayName)) {
+    displayName = contentName;
+  }
+
+  if (!driverId && !displayName) return null;
+
+  return {
+    displayName: displayName ?? "Driver",
+    entityType: "driver",
+    avatarUrl: metaAvatarUrl,
+    avatarSeed:
+      metaAvatarSeed?.trim() ||
+      (driverId ? driverFallbackSeed(driverId) : null),
+  };
+}
+
 export function resolveTripMessagePeerAvatar(params: {
   message: Pick<TripMessageRow, "sender_role" | "sender_name" | "sender_avatar_seed">;
   conversationPartyType: ConversationPartyType;

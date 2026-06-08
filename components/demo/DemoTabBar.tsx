@@ -2,7 +2,8 @@
  * Unified shell footer + bottom nav (Q-unified-base aligned).
  */
 import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
-import { AlertRegistryPanel } from "@/components/AlertRegistryPanel";
+import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
+import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -32,7 +33,8 @@ import {
     subscribeChatUnreadSignal,
 } from "@/lib/chatUnreadSignal";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
+import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
+import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
@@ -272,7 +274,7 @@ export function DemoTabBar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
   const [isNetworkExpanded, setIsNetworkExpanded] = useState(false);
-  const [notifTab, setNotifTab] = useState<"active" | "history">("active");
+  const [notifTab, setNotifTab] = useState<RegistryFilterTab>("all");
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [notifActionId, setNotifActionId] = useState<string | null>(null);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
@@ -500,9 +502,18 @@ export function DemoTabBar({
     useDemoTabBarVisibilityProgressOptional() ?? fallbackDockVisibilityProgress;
   const scrollHideVersion = useDemoTabBarScrollHideVersion();
 
-  /** Pay now opens ledger-sync prefilled; salary row is marked paid only after successful submit (see ledger-sync). */
   const openLedgerForSalaryPayment = useCallback(
     (req: SalaryRequestWithDriverRow) => {
+      const isTripBasedAttribution =
+        req.request_type === "trip_based" &&
+        String(req.note ?? "").toLowerCase().includes("fleet trip");
+      setShowNotifications(false);
+      if (isTripBasedAttribution) {
+        router.push(
+          `/(modals)/attribution-trip-create?requestId=${encodeURIComponent(req.id)}` as const,
+        );
+        return;
+      }
       const driverName = req.drivers?.name?.trim() || t("driver");
       const isTripBased =
         req.request_type === "trip_based" &&
@@ -521,10 +532,41 @@ export function DemoTabBar({
       if (isTripBased && req.trip_ids[0]) {
         q.set("tripId", req.trip_ids[0]);
       }
-      setShowNotifications(false);
       router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
     },
     [router, t],
+  );
+
+  const handleViewSalaryArchive = useCallback(
+    (req: SalaryRequestWithDriverRow) => {
+      setShowNotifications(false);
+      const tripId = Array.isArray(req.trip_ids) ? req.trip_ids[0] : null;
+      if (tripId) {
+        router.push(`/trip-ledger/${tripId}` as const);
+        return;
+      }
+      router.push("/(tabs)/finance" as Parameters<typeof router.push>[0]);
+    },
+    [router],
+  );
+
+  const handleDismissOps = useCallback(
+    async (ops: GlobalOperationAlert) => {
+      if (!orgId) {
+        useGlobalSyncStore.getState().dismissOperationAlert(ops.id);
+        return;
+      }
+      await useGlobalSyncStore.getState().acknowledgeGlobalAlert(ops.id, orgId);
+    },
+    [orgId],
+  );
+
+  const handleOpenOps = useCallback(
+    (ops: GlobalOperationAlert) => {
+      setShowNotifications(false);
+      navigateToOpsAlert(router, ops);
+    },
+    [router],
   );
 
   const isWeb = isWebEarly;
@@ -747,28 +789,28 @@ export function DemoTabBar({
                   setShowInvitations(false);
                 }}
               >
-                <FontAwesome5
-                  name="bell"
-                  size={16}
-                  color={showNotifications ? "#ffffff" : "#64748b"}
+                <NotificationBellIcon
+                  size={18}
+                  color={showNotifications ? Theme.textOnDark : Theme.textSecondary}
+                  badgeCount={showNotifications ? 0 : notificationCount}
                 />
-                {notificationCount > 0 && !showNotifications ? (
-                  <View style={styles.webBellDot} />
-                ) : null}
               </AnimatedPress>
               {showNotifications ? (
                 <View style={styles.webAlertRegistryAnchor}>
                   <AlertRegistryPanel
-                    tab={notifTab}
-                    onTabChange={setNotifTab}
+                    filterTab={notifTab}
+                    onFilterTabChange={setNotifTab}
                     onClose={() => setShowNotifications(false)}
                     onSync={refreshRegistry}
                     syncing={notifActionId != null}
                     finance={{
                       onRejectSalary: (id) => void handleSalaryReject(id),
                       onPaySalary: openLedgerForSalaryPayment,
+                      onViewSalaryArchive: handleViewSalaryArchive,
                       onMarkSharedRead: (id) => void markSharedLedgerRead(id),
                       onSharedAction: (item) => void handleSharedAction(item),
+                      onDismissOps: (ops) => void handleDismissOps(ops),
+                      onOpenOps: handleOpenOps,
                       busySalaryId: notifActionId,
                     }}
                   />

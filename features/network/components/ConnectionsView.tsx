@@ -47,6 +47,7 @@ import {
     Users,
     Zap,
 } from "lucide-react-native";
+import { FeatureBanner } from "@/components/FeatureBanner";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlashList } from "@shopify/flash-list";
 import {
@@ -1204,16 +1205,19 @@ export function ConnectionsView({
 
 function EmptyState() {
   return (
-    <View style={styles.empty}>
-      <View style={styles.emptyIcon}>
-        <Users size={36} color={Theme.textSecondary} strokeWidth={1.5} />
-      </View>
-      <Text style={styles.emptyTitle}>No connections yet</Text>
-      <Text style={styles.emptySub}>
-        Use Discover to find clients and suppliers and invite them to your
-        network
-      </Text>
-    </View>
+    <FeatureBanner
+      title="Grow your network"
+      description="Connect with clients, suppliers, and fleet owners you already work with."
+      illustration="🤝"
+      accentColor="#4f46e5"
+      bullets={[
+        { label: "Real-time trip sharing" },
+        { label: "Shared invoicing" },
+        { label: "Discover partners" },
+        { label: "Instant messaging" },
+      ]}
+      style={styles.emptyBanner}
+    />
   );
 }
 
@@ -1526,33 +1530,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Empty state
-  empty: {
-    alignItems: "center",
-    paddingTop: 56,
-    paddingHorizontal: 40,
-    gap: 10,
-  },
-  emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: Theme.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: Theme.textPrimary,
-    letterSpacing: -0.3,
-    textAlign: "center",
-  },
-  emptySub: {
-    fontSize: 13,
-    color: Theme.textSecondary,
-    textAlign: "center",
-    lineHeight: 19,
+  emptyBanner: {
+    margin: 16,
+    marginTop: 24,
   },
 });

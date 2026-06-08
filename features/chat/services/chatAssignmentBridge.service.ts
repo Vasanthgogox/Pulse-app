@@ -94,6 +94,14 @@ export async function postAssignmentUpdateToTripChats(params: {
   });
   if (!content.trim()) return;
 
+  let driverAvatarUrl: string | null = null;
+  let driverAvatarSeed: string | null = null;
+  if (audit.driver_id_new) {
+    const driverRes = await getDriverById(orgId, audit.driver_id_new);
+    driverAvatarUrl = driverRes.driver?.avatar_url ?? null;
+    driverAvatarSeed = driverRes.driver?.avatar_seed ?? null;
+  }
+
   const metadata = {
     assignment_audit_id: audit.id,
     assignment_audit_key: `${audit.changed_at}|${audit.event_type}|${audit.driver_id_new ?? ""}|${audit.vehicle_id_new ?? ""}`,
@@ -106,6 +114,8 @@ export async function postAssignmentUpdateToTripChats(params: {
       vehicle_id_new: audit.vehicle_id_new,
       driver_display_name: trip.driver_display_name,
       vehicle_display_number: trip.vehicle_display_number,
+      driver_avatar_url: driverAvatarUrl,
+      driver_avatar_seed: driverAvatarSeed,
     },
   };
 
@@ -174,6 +184,12 @@ export async function postAggregateAssignmentMessage(
     ? `Driver reassigned to ${driverName}.`
     : `${driverName} assigned as driver.`;
 
+  let driverAvatarUrl: string | null = null;
+  let driverAvatarSeed: string | null = null;
+  const driverRes = await getDriverById(trip.organization_id, trip.driver_id);
+  driverAvatarUrl = driverRes.driver?.avatar_url ?? null;
+  driverAvatarSeed = driverRes.driver?.avatar_seed ?? null;
+
   const dedupeKey = `agg-assign|${trip.driver_id}|${trip.updated_at ?? new Date().toISOString()}`;
 
   const { data: conversations, error } = await supabase()
@@ -213,6 +229,13 @@ export async function postAggregateAssignmentMessage(
         agg_dedupe_key: dedupeKey,
         driver_id_new: trip.driver_id,
         driver_id_prev: previousDriverId,
+        event_payload: {
+          driver_id_new: trip.driver_id,
+          driver_id_prev: previousDriverId,
+          driver_display_name: driverName,
+          driver_avatar_url: driverAvatarUrl,
+          driver_avatar_seed: driverAvatarSeed,
+        },
       },
     });
 

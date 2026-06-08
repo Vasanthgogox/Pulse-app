@@ -1,178 +1,212 @@
 /**
- * Single alert signal row — Mission Radar registry card (reference design).
+ * Single notification row — Metronic-style feed item (avatar + rich text + actions).
  */
+import React from "react";
+import { alertRegistryActionStyles } from "@/components/AlertRegistryCardActions";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
-import { AlertTriangle, Clock } from "lucide-react-native";
-import { useEffect } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import type {
+  RegistryStatusTone,
+  RegistryTag,
+} from "@/lib/alertRegistry/registryAlertPresentation.util";
+import {
+  formatRegistryLabel,
+  formatRegistryStatusLabel,
+  registryStatusStyle,
+  registryTagStyle,
+} from "@/lib/alertRegistry/registryAlertPresentation.util";
+import type { RegistryNotificationAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-export type AlertSignalStatus = "WARNING" | "ACTION" | "INFO";
-
-const STATUS_ICON = {
-  WARNING: { icon: "#f59e0b", ring: "rgba(245,158,11,0.55)" },
-  ACTION: { icon: "#f43f5e", ring: "rgba(244,63,94,0.55)" },
-  INFO: { icon: Theme.primary, ring: "rgba(79,70,229,0.4)" },
+/** Metronic demo2 tokens — notifications dropdown + privacy-settings buttons. */
+const METRONIC = {
+  border: "#EFF2F5",
+  muted: "#A1A5B7",
+  quoteBg: "#F5F8FA",
+  primaryBtn: "#181C32",
+  ghostBorder: "#DBDFE9",
+  link: Theme.primary,
+  alertRed: Theme.teslaRed,
 } as const;
 
-/** Borderless icon with soft opacity pulse + expanding radar rings (no solid fill). */
-function SignalIconAnimated({ status }: { status: AlertSignalStatus }) {
-  const colors = STATUS_ICON[status];
-  const iconPulse = useSharedValue(0);
-  const ring = useSharedValue(0);
-  const urgent = status === "ACTION";
-  const showRings = status !== "INFO";
+const TAG = {
+  height: 20,
+  paddingHorizontal: 8,
+  borderRadius: 4,
+  borderWidth: 1,
+} as const;
 
-  useEffect(() => {
-    iconPulse.value = withRepeat(
-      withSequence(
-        withTiming(0.68, {
-          duration: urgent ? 900 : 1200,
-          easing: Easing.inOut(Easing.ease),
-        }),
-        withTiming(1, {
-          duration: urgent ? 900 : 1200,
-          easing: Easing.inOut(Easing.ease),
-        }),
-      ),
-      -1,
-      true,
-    );
-  }, [iconPulse, urgent]);
-
-  useEffect(() => {
-    if (!showRings) return;
-    const duration = urgent ? 1500 : 2200;
-    ring.value = withRepeat(
-      withTiming(1, { duration, easing: Easing.out(Easing.quad) }),
-      -1,
-      false,
-    );
-  }, [ring, showRings, urgent]);
-
-  const iconAnim = useAnimatedStyle(() => ({
-    opacity: iconPulse.value,
-    transform: [
-      {
-        scale: interpolate(iconPulse.value, [0.68, 1], [0.94, 1]),
-      },
-    ],
-  }));
-
-  const ringAnim = useAnimatedStyle(() => ({
-    opacity: interpolate(ring.value, [0, 0.15, 1], [0.5, 0.35, 0]),
-    transform: [{ scale: interpolate(ring.value, [0, 1], [0.75, 1.55]) }],
-  }));
-
-  const ringAnimDelayed = useAnimatedStyle(() => ({
-    opacity: interpolate(ring.value, [0, 0.5, 1], [0, 0.28, 0]),
-    transform: [{ scale: interpolate(ring.value, [0, 1], [0.6, 1.35]) }],
-  }));
-
-  return (
-    <View style={styles.iconSlot} accessibilityElementsHidden>
-      {showRings ? (
-        <>
-          <Animated.View
-            style={[
-              styles.pulseRing,
-              { borderColor: colors.ring },
-              ringAnim,
-            ]}
-            pointerEvents="none"
-          />
-          <Animated.View
-            style={[
-              styles.pulseRing,
-              { borderColor: colors.ring },
-              ringAnimDelayed,
-            ]}
-            pointerEvents="none"
-          />
-        </>
-      ) : null}
-      <Animated.View style={iconAnim}>
-        <AlertTriangle size={18} color={colors.icon} />
-      </Animated.View>
-    </View>
-  );
-}
+export type RegistryCardMode = "active" | "completed";
 
 export type AlertRegistrySignalCardProps = {
-  typeLabel: string;
-  title: string;
-  detail: string;
-  tripId?: string | null;
-  timeLabel?: string;
-  status?: AlertSignalStatus;
+  avatar: RegistryNotificationAvatar;
+  actorName: string;
+  actionText: string;
+  highlightText?: string;
+  trailingText?: string;
+  /** Plain detail line inside the gray card (legacy). */
+  detail?: string;
+  /** Bold primary line in the detail card — e.g. amount or trip ref. */
+  detailTitle?: string;
+  /** Secondary line in the detail card — e.g. category or note. */
+  detailSubtitle?: string;
+  timeLabel: string;
+  contextLabel?: string;
+  tags?: RegistryTag[];
+  statusPill?: { label: string; tone: RegistryStatusTone };
+  mode?: RegistryCardMode;
+  isUnread?: boolean;
   onPress?: () => void;
   footer?: React.ReactNode;
 };
 
+function NotificationAvatar({
+  avatar,
+  isUnread,
+  mode,
+}: {
+  avatar: RegistryNotificationAvatar;
+  isUnread?: boolean;
+  mode: RegistryCardMode;
+}) {
+  const showUnread = mode === "active" && isUnread;
+  return (
+    <View style={styles.avatarWrap}>
+      <PartyAvatar
+        name={avatar.name}
+        entityType={avatar.entityType ?? "client"}
+        avatarUrl={avatar.avatarUrl}
+        avatarSeed={avatar.avatarSeed}
+        organizationImageUrl={avatar.organizationImageUrl}
+        organizationAvatarSeed={avatar.organizationAvatarSeed}
+        initialsColorSeed={avatar.initialsColorSeed}
+        size={AVATAR_SIZE}
+        shape="circle"
+      />
+      <View
+        style={[
+          styles.statusDot,
+          showUnread ? styles.statusDotUnread : styles.statusDotRead,
+        ]}
+      />
+    </View>
+  );
+}
+
+export function RegistryStatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: RegistryStatusTone;
+}) {
+  const palette = registryStatusStyle(tone);
+  return (
+    <View
+      style={[
+        alertRegistryActionStyles.statusPill,
+        { backgroundColor: palette.bg, borderColor: palette.border },
+      ]}
+    >
+      <Text style={[alertRegistryActionStyles.statusPillText, { color: palette.text }]}>
+        {formatRegistryStatusLabel(label)}
+      </Text>
+    </View>
+  );
+}
+
+export function RegistryTagPill({ tag }: { tag: RegistryTag }) {
+  const palette = registryTagStyle(tag.variant ?? "default");
+  return (
+    <View
+      style={[
+        styles.tagPill,
+        { backgroundColor: palette.bg, borderColor: palette.border },
+      ]}
+    >
+      <Text style={[styles.tagText, { color: palette.text }]} numberOfLines={1}>
+        {formatRegistryLabel(tag.label)}
+      </Text>
+    </View>
+  );
+}
+
+const AVATAR_SIZE = 36;
+
 export function AlertRegistrySignalCard({
-  typeLabel,
-  title,
+  avatar,
+  actorName,
+  actionText,
+  highlightText,
+  trailingText,
   detail,
-  tripId,
+  detailTitle,
+  detailSubtitle,
   timeLabel,
-  status = "WARNING",
+  contextLabel,
+  tags,
+  statusPill,
+  mode = "active",
+  isUnread = false,
   onPress,
   footer,
 }: AlertRegistrySignalCardProps) {
-  const isWarning = status === "WARNING";
-  const isAction = status === "ACTION";
+  const showDetailCard = Boolean(detailTitle || detailSubtitle || detail);
 
   const content = (
-    <View style={styles.card}>
-      <SignalIconAnimated status={status} />
+    <View style={[styles.row, mode === "completed" && styles.rowCompleted]}>
+      <NotificationAvatar avatar={avatar} isUnread={isUnread} mode={mode} />
 
       <View style={styles.body}>
-        <View style={styles.topRow}>
-          <View style={styles.titleCol}>
-            <Text
-              style={[
-                styles.typeLabel,
-                isWarning && styles.typeWarning,
-                isAction && styles.typeAction,
-              ]}
-              numberOfLines={1}
-            >
-              {typeLabel}
-            </Text>
-            <Text style={styles.title} numberOfLines={1}>
-              {title}
-            </Text>
+        <Text style={styles.headline} numberOfLines={4}>
+          <Text style={styles.actorName}>{actorName}</Text>
+          <Text style={styles.actionText}> {actionText}</Text>
+          {highlightText ? (
+            <Text style={styles.highlightText}> {highlightText}</Text>
+          ) : null}
+          {trailingText ? (
+            <Text style={styles.actionText}> {trailingText}</Text>
+          ) : null}
+        </Text>
+
+        <Text style={styles.metaLine} numberOfLines={1}>
+          {timeLabel}
+          {contextLabel ? <Text style={styles.metaContext}> · {contextLabel}</Text> : null}
+        </Text>
+
+        {showDetailCard ? (
+          <View style={styles.detailCard}>
+            {detailTitle ? (
+              <Text style={styles.detailTitle} numberOfLines={2}>
+                {detailTitle}
+              </Text>
+            ) : null}
+            {detailSubtitle ? (
+              <Text style={styles.detailSubtitle} numberOfLines={3}>
+                {detailSubtitle}
+              </Text>
+            ) : null}
+            {!detailTitle && detail ? (
+              <Text style={styles.detailBody} numberOfLines={4}>
+                {detail}
+              </Text>
+            ) : null}
           </View>
-          {tripId || timeLabel ? (
-            <View style={styles.metaCol}>
-              {tripId ? (
-                <View style={styles.tripBadge}>
-                  <Text style={styles.tripBadgeText} numberOfLines={1}>
-                    {tripId}
-                  </Text>
-                </View>
-              ) : null}
-              {timeLabel ? (
-                <View style={styles.timeRow}>
-                  <Clock size={8} color={Theme.textMuted} />
-                  <Text style={styles.timeText}>{timeLabel}</Text>
-                </View>
+        ) : null}
+
+        {tags?.length || statusPill || footer ? (
+          <View style={styles.metaBlock}>
+            <View style={styles.metaLeft}>
+              {tags?.map((tag) => (
+                <RegistryTagPill key={tag.label} tag={tag} />
+              ))}
+              {statusPill ? (
+                <RegistryStatusPill label={statusPill.label} tone={statusPill.tone} />
               ) : null}
             </View>
-          ) : null}
-        </View>
-        <Text style={styles.detail} numberOfLines={3}>
-          {detail}
-        </Text>
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
+            {footer ? <View style={styles.metaActions}>{footer}</View> : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -181,7 +215,7 @@ export function AlertRegistrySignalCard({
     return (
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [pressed && styles.cardPressed]}
+        style={({ pressed }) => [styles.pressable, pressed && styles.pressablePressed]}
         accessibilityRole="button"
       >
         {content}
@@ -193,131 +227,137 @@ export function AlertRegistrySignalCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    overflow: "hidden",
-    ...Platform.select({
-      web: {
-        boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
-      },
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 1,
-      },
-    }),
+  pressable: {
+    width: "100%",
   },
-  cardPressed: {
+  pressablePressed: {
     opacity: 0.92,
   },
-  iconSlot: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 0,
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
   },
-  pulseRing: {
+  rowCompleted: {
+    backgroundColor: "#FCFCFD",
+  },
+  avatarWrap: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    flexShrink: 0,
+    position: "relative",
+  },
+  statusDot: {
     position: "absolute",
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1.5,
-    backgroundColor: "transparent",
+    right: -1,
+    bottom: 0,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: Theme.cardWhite,
+  },
+  statusDotUnread: {
+    backgroundColor: METRONIC.alertRed,
+  },
+  statusDotRead: {
+    backgroundColor: METRONIC.muted,
   },
   body: {
     flex: 1,
     minWidth: 0,
-    justifyContent: "center",
     gap: 4,
   },
-  topRow: {
+  headline: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: METRONIC.primaryBtn,
+  },
+  actorName: {
+    fontWeight: "600",
+    color: METRONIC.primaryBtn,
+  },
+  actionText: {
+    fontWeight: "400",
+    color: METRONIC.primaryBtn,
+  },
+  highlightText: {
+    fontWeight: "600",
+    color: METRONIC.link,
+  },
+  metaLine: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    color: METRONIC.muted,
+  },
+  metaContext: {
+    color: "#78829D",
+    fontWeight: "500",
+  },
+  detailCard: {
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: METRONIC.quoteBg,
+    gap: 2,
+  },
+  detailTitle: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+    color: METRONIC.primaryBtn,
+  },
+  detailSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    color: "#78829D",
+  },
+  detailBody: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    color: "#78829D",
+  },
+  tagPill: {
+    ...TAG,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  tagText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "600",
+  },
+  metaBlock: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 10,
+    marginTop: 4,
+    alignSelf: "stretch",
   },
-  titleCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 1,
-  },
-  typeLabel: {
-    fontSize: 7,
-    fontWeight: "500",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  typeWarning: {
-    color: "#d97706",
-  },
-  typeAction: {
-    color: "#e11d48",
-  },
-  title: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
-    lineHeight: 15,
-  },
-  metaCol: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 3,
-    flexShrink: 0,
-    alignSelf: "center",
-  },
-  tripBadge: {
-    backgroundColor: "#171A20",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    maxWidth: 80,
-  },
-  tripBadgeText: {
-    fontSize: 7,
-    fontWeight: "600",
-    color: Theme.textOnDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.25,
-  },
-  timeRow: {
+  metaLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    flexWrap: "wrap",
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
-  timeText: {
-    fontSize: 7,
-    fontWeight: "400",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-  detail: {
-    fontSize: 10,
-    fontWeight: "400",
-    fontStyle: "italic",
-    color: Theme.textRouteCard,
-    lineHeight: 14,
-    borderLeftWidth: 1.5,
-    borderLeftColor: Theme.borderLight,
-    paddingLeft: 8,
-    marginTop: 1,
-  },
-  footer: {
-    marginTop: 2,
-    alignSelf: "stretch",
+  metaActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexShrink: 0,
+    marginLeft: "auto",
   },
 });

@@ -20,6 +20,8 @@ export type HubListPaginationBarProps = {
   onNext: () => void;
   /** e.g. "trips" or "loads" */
   itemLabel?: string;
+  /** When true, removes outer margins for embedding in a parent bar row. */
+  embedded?: boolean;
 };
 
 export function HubListPaginationBar({
@@ -31,11 +33,12 @@ export function HubListPaginationBar({
   onPrev,
   onNext,
   itemLabel = "items",
+  embedded = false,
 }: HubListPaginationBarProps) {
   const atFirst = page <= 0;
   const atLast = page >= totalPages - 1;
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, embedded && styles.rowEmbedded]}>
       <Text style={styles.meta}>
         {`Page ${page + 1}/${totalPages} · ${totalItems} ${itemLabel}`}
       </Text>
@@ -95,6 +98,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 2,
     width: "100%",
+  },
+  rowEmbedded: {
+    marginTop: 0,
+    marginBottom: 0,
+    paddingHorizontal: 0,
   },
   meta: {
     fontSize: 9,

@@ -2796,18 +2796,20 @@ export function TripsHubTableView({
 }
 
 /**
- * Fleet Confidence / Export Ledger audit footer.
+ * Fleet Confidence / Export Ledger + optional pagination — single bottom bar row.
  *
  * Rendered outside the trips ScrollView by the parent screen so it stays
- * pinned to the bottom of the viewport instead of scrolling away with the
- * trip rows. Web-only — mobile keeps its own list-bottom UI.
+ * pinned to the bottom of the viewport. Web-only — mobile keeps its own list-bottom UI.
  */
 export function TripsHubAuditFooter({
   onExportLedger,
   tr,
+  paginationSlot,
 }: {
   onExportLedger?: () => void;
   tr: (key: string) => string;
+  /** Pagination controls rendered inline between Fleet Confidence and Export. */
+  paginationSlot?: ReactNode;
 }) {
   if (Platform.OS !== "web") return null;
   return (
@@ -2816,7 +2818,7 @@ export function TripsHubAuditFooter({
         <View style={styles.auditFooterIcon}>
           <FontAwesome name="line-chart" size={16} color={Theme.positive} />
         </View>
-        <View>
+        <View style={styles.auditFooterText}>
           <Text style={styles.auditFooterTitle}>
             {tr("tripsHubFleetConfidence")}
           </Text>
@@ -2825,6 +2827,9 @@ export function TripsHubAuditFooter({
           </Text>
         </View>
       </View>
+      {paginationSlot ? (
+        <View style={styles.auditFooterPagination}>{paginationSlot}</View>
+      ) : null}
       <TouchableOpacity
         style={[
           styles.auditExportBtn,
@@ -4716,25 +4721,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     backgroundColor: Theme.surface,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
     gap: 12,
+    width: "100%",
   },
   auditFooterLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
+    flexShrink: 0,
+    maxWidth: 220,
+  },
+  auditFooterText: {
     flex: 1,
+    minWidth: 0,
+  },
+  auditFooterPagination: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
   },
   auditFooterIcon: {
-    padding: 10,
-    borderRadius: 12,
+    padding: 8,
+    borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    flexShrink: 0,
   },
   auditFooterTitle: {
     fontSize: FS_BODY,
@@ -4756,9 +4773,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     backgroundColor: Theme.textPrimaryDark,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    flexShrink: 0,
   },
   auditExportBtnDisabled: { opacity: 0.45 },
   auditExportBtnText: {

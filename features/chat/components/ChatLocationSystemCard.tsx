@@ -7,9 +7,10 @@ import {
   resolveLocationCityLabel,
   type LocationPingTripHint,
 } from "../utils/locationPingChatDisplay.util";
-import { formatTripEventSheetDate, TripProgressEventCard } from "./ChatEventCard";
-
-const LOCATION_PILL_COLOR = "#047857";
+import { formatTripEventSheetDate, TripProgressEventCard, buildChatRouteContextLabel } from "./ChatEventCard";
+import { Theme } from "@/constants/Theme";
+import type { TripForCompose } from "../services/chat.service";
+import { resolveSystemUpdateDriverAvatar } from "../utils/chatAvatar.util";
 
 export interface ChatLocationSystemCardProps {
   message: TripMessageRow;
@@ -17,6 +18,7 @@ export interface ChatLocationSystemCardProps {
   isMobile?: boolean;
   consolidatedCount?: number;
   tripHint?: LocationPingTripHint;
+  composeTrip?: Pick<TripForCompose, "driver_id" | "driver_display_name"> | null;
 }
 
 /**
@@ -28,6 +30,7 @@ export function ChatLocationSystemCard({
   isMobile = false,
   consolidatedCount,
   tripHint,
+  composeTrip,
 }: ChatLocationSystemCardProps) {
   const simulated = isSimulatedLocationPing(message);
   const cityLabel = resolveLocationCityLabel(
@@ -49,18 +52,28 @@ export function ChatLocationSystemCard({
   }
 
   const dateUpper = formatTripEventSheetDate(message.created_at);
-  const metaLine = `System update · ${dateUpper} · ${simulated ? "Simulated location" : "Driver location"}`;
+  const statusLabel = simulated ? "SIMULATED LOCATION" : "DRIVER LOCATION";
+  const metaLine = `${dateUpper} · ${statusLabel}`;
+  const routeContext = buildChatRouteContextLabel(
+    tripHint?.pickupArea,
+    tripHint?.dropLocation,
+    message.created_at,
+  );
+  const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
 
   return (
     <TripProgressEventCard
       avatarSeed="Trip Update"
-      avatarDotColor={LOCATION_PILL_COLOR}
+      avatarIdentity={driverAvatar}
+      avatarDotColor={Theme.primary}
+      kicker="SYSTEM UPDATE"
       title={title}
       metaLine={metaLine}
       subLine={null}
-      rightPrimary="LOCATION"
-      rightPrimaryColor={LOCATION_PILL_COLOR}
+      rightPrimary="NEW"
+      rightPrimaryColor={Theme.primary}
       time={displayTime}
+      routeContext={routeContext}
       isMobile={isMobile}
     />
   );

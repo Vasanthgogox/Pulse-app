@@ -15,22 +15,26 @@ import {
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { WorkspaceHubProductGrid } from "@/features/organization/components/workspace/WorkspaceHubProductGrid";
+import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
+import type { ProductId } from "@/lib/productRegistry";
+import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
-import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { useRouter } from "expo-router";
+import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import {
-  Bell,
   Building2,
   ChevronRight,
   HelpCircle,
   LogOut,
   Settings2,
+  Sparkles,
   Users,
   X,
 } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -76,6 +80,18 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
   const { user, profile, signOut } = useAuth();
   const { currentOrganization } = useOrganization();
   const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
+  const { data: activations = [] } = useWorkspaceProductsQuery();
+
+  const activeProductIds = useMemo(() => {
+    const ids = new Set<ProductId>();
+    for (const row of activations) {
+      if (row.status === "active" || row.status === "trial") {
+        ids.add(row.product_id);
+      }
+    }
+    ids.add("pulse_core");
+    return ids;
+  }, [activations]);
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
@@ -158,7 +174,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
     {
       id: "business-pulse",
       label: "Business Pulse intelligence",
-      icon: <Bell size={14} color={NAVY} strokeWidth={2.2} />,
+      icon: <Sparkles size={14} color={NAVY} strokeWidth={2.2} />,
       route: ROUTES.BUSINESS_PULSE,
     },
   ];
@@ -255,11 +271,26 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
               accessibilityLabel="Alerts"
             >
               <View style={styles.quickCircle}>
-                <Bell size={18} color={Theme.teslaRed} strokeWidth={2.2} />
-                {notificationUnread > 0 ? <View style={styles.quickDot} /> : null}
+                <NotificationBellIcon
+                  size={20}
+                  color={Theme.textPrimaryDark}
+                  showBadge={notificationUnread > 0}
+                />
               </View>
               <Text style={styles.quickLabel}>Alerts</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.insightBanner}>
+            <View style={styles.insightIconWrap}>
+              <Sparkles size={14} color={NAVY} strokeWidth={2.2} />
+            </View>
+            <View style={styles.insightTextWrap}>
+              <Text style={styles.insightTitle}>Pulse Business OS</Text>
+              <Text style={styles.insightBody} numberOfLines={2}>
+                Activate finance, POD, fleet & AI modules — synced to your workspace.
+              </Text>
+            </View>
           </View>
 
           <View style={styles.sectionCard}>
@@ -305,6 +336,11 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
             })}
           </View>
         </ScrollView>
+
+        <WorkspaceHubProductGrid
+          activeProductIds={activeProductIds}
+          onOpenCatalogue={() => onSelectPanel("products")}
+        />
 
         <View style={[styles.footerWrap, { paddingBottom: insets.bottom + 10 }]}>
           <View style={styles.footerDivider} />
@@ -403,16 +439,11 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
 
 /**
  * Hub-menu styling deliberately tracks the rest of the app's compact
- * density (network cards, detail forms): typography drops roughly one
- * step (22 → 18 title, 14 → 12 row label, 10 → 9 eyebrow), interactive
- * surfaces shrink in lockstep (44 → 36 logo, 64 → 52 quick circle,
- * 40 → 34 row icon, 40 → 32 footer chips), and section gaps tighten
- * (22 → 16). The 380–480 px flex card width set in `app/workspace.tsx`
- * was making everything here read too sparse — this brings the hub
- * back to a comfortable density at that width.
+ * density (network cards, detail forms). Renders inside the workspace
+ * flex card (`WorkspaceFlexCardShell`) at ~420px on desktop.
  */
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Theme.screenBackground, minWidth: 0 },
+  root: { flex: 1, backgroundColor: "#f5f7fb", minWidth: 0 },
 
   // ── Navy band ───────────────────────────────────────────────────────────
   navyBand: {
@@ -487,15 +518,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 18,
     paddingBottom: 14,
-    gap: 16,
+    gap: 14,
+  },
+
+  insightBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: NAVY_BORDER_SOFT,
+    backgroundColor: NAVY_TINT,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  insightIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: NAVY_BORDER_SOFT,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  insightTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  insightTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  insightBody: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    color: Theme.textSecondary,
   },
 
   // Quick actions
   quickRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-around",
-    paddingHorizontal: 4,
+    justifyContent: "space-between",
+    gap: 8,
+    paddingHorizontal: 8,
+    width: "100%",
   },
   quickAction: { flex: 1, alignItems: "center", gap: 8, minWidth: 0 },
   quickCircle: {
@@ -523,7 +596,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.primary,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
   },
@@ -537,15 +610,15 @@ const styles = StyleSheet.create({
 
   // Workspace Management list card
   sectionCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.screenBackground,
+    borderColor: "#e4e7ef",
+    backgroundColor: Theme.cardWhite,
     overflow: "hidden",
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 1,
   },
   sectionHeader: {
@@ -604,7 +677,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Footer identity ────────────────────────────────────────────────────
-  footerWrap: { backgroundColor: Theme.screenBackground },
+  footerWrap: { backgroundColor: Theme.cardWhite },
   footerDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
@@ -679,7 +752,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.primary,
     alignItems: "center",
   },
   confirmCtaText: { fontSize: 14, fontWeight: "700", color: "#fff" },

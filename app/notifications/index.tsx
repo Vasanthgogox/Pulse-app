@@ -1,4 +1,4 @@
-import { AlertRegistryPanel } from "@/components/AlertRegistryPanel";
+import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import Theme from "@/constants/Theme";
 import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFinanceHandlers";
 import { useRouter } from "expo-router";
@@ -9,7 +9,7 @@ import { useLayoutInsets } from "@/lib/layoutInsets";
 export default function NotificationsScreen() {
   const router = useRouter();
   const layout = useLayoutInsets();
-  const [tab, setTab] = useState<"active" | "history">("active");
+  const [filterTab, setFilterTab] = useState<RegistryFilterTab>("all");
   const { finance, refreshRegistry } = useAlertRegistryFinanceHandlers();
 
   const close = () => {
@@ -23,8 +23,8 @@ export default function NotificationsScreen() {
         layout="fullscreen"
         topInset={layout.top}
         bottomInset={layout.scrollBottomPadding()}
-        tab={tab}
-        onTabChange={setTab}
+        filterTab={filterTab}
+        onFilterTabChange={setFilterTab}
         onClose={close}
         onSync={refreshRegistry}
         finance={finance}
@@ -36,6 +36,6 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
   },
 });

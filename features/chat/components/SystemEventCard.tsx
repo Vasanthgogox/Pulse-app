@@ -33,6 +33,8 @@ import {
   formatTripEventSheetDate,
   getStatusEventSheetVisuals,
 } from './ChatEventCard';
+import type { TripForCompose } from '../services/chat.service';
+import { resolveSystemUpdateDriverAvatar } from '../utils/chatAvatar.util';
 
 // ── StatusChangeCard ──────────────────────────────────────────────────────────
 
@@ -102,9 +104,13 @@ function statusChangeNarrative(message: TripMessageRow, statusKey: string): stri
 function StatusChangeCard({
   message,
   isMobile = false,
+  routeContext,
+  composeTrip,
 }: {
   message: TripMessageRow;
   isMobile?: boolean;
+  routeContext?: string | null;
+  composeTrip?: Pick<TripForCompose, "driver_id" | "driver_display_name"> | null;
 }) {
   const meta = message.metadata as StatusChangeMetadata | null;
 
@@ -126,7 +132,7 @@ function StatusChangeCard({
   }
 
   const dateUpper = formatTripEventSheetDate(message.created_at);
-  const metaLine = `Trip status · ${dateUpper} · ${statusLabel}`;
+  const metaLine = `${dateUpper} · ${statusLabel.toUpperCase()}`;
   const rawActor = meta?.changed_by_name?.trim();
   const subLine =
     rawActor && !isGenericStatusActor(rawActor)
@@ -134,17 +140,21 @@ function StatusChangeCard({
       : null;
   const seedMatch = bodyText.match(/\b(TRP[-A-Z0-9]+)\b/i);
   const seed = seedMatch?.[1]?.toUpperCase() ?? "Trip";
+  const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
 
   return (
     <TripProgressEventCard
       avatarSeed={seed}
+      avatarIdentity={driverAvatar}
       avatarDotColor={sheet.rightColor}
+      kicker="SYSTEM UPDATE"
       title={bodyText}
       metaLine={metaLine}
       subLine={subLine}
       rightPrimary={sheet.rightWord}
       rightPrimaryColor={sheet.rightColor}
       time={displayTime}
+      routeContext={routeContext}
       isMobile={isMobile}
     />
   );
@@ -171,9 +181,13 @@ function ImageMessageCard({ message, isOwn }: { message: TripMessageRow; isOwn: 
 function TrackingCard({
   message,
   isMobile = false,
+  routeContext,
+  composeTrip,
 }: {
   message: TripMessageRow;
   isMobile?: boolean;
+  routeContext?: string | null;
+  composeTrip?: Pick<TripForCompose, "driver_id" | "driver_display_name"> | null;
 }) {
   let rawMeta: unknown = message.metadata;
   if (typeof rawMeta === "string") {
@@ -203,19 +217,22 @@ function TrackingCard({
     meta?.eta_label ?? (meta?.eta_minutes != null ? `${meta.eta_minutes} min` : null);
   const dateUpper = formatTripEventSheetDate(message.created_at);
   const title = (meta?.address_hint ?? "Driver location update").trim();
-  const metaLine = `System update · ${dateUpper} · Driver location`;
-  const subLine = null;
+  const metaLine = `${dateUpper} · DRIVER LOCATION`;
+  const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
 
   return (
     <TripProgressEventCard
       avatarSeed="Location ping"
+      avatarIdentity={driverAvatar}
       avatarDotColor="#2563eb"
+      kicker="SYSTEM UPDATE"
       title={title}
       metaLine={metaLine}
-      subLine={subLine}
+      subLine={null}
       rightPrimary={(eta ?? "LOCATION").toUpperCase()}
-      rightPrimaryColor="#047857"
+      rightPrimaryColor="#2563eb"
       time={displayTime}
+      routeContext={routeContext}
       isMobile={isMobile}
     />
   );
@@ -240,6 +257,8 @@ interface SystemEventCardProps {
   hideLedgerActions?: boolean;
   /** Compact full-width layout for native / narrow chat threads. */
   isMobile?: boolean;
+  routeContext?: string | null;
+  composeTrip?: Pick<TripForCompose, "driver_id" | "driver_display_name"> | null;
   // Feedback card callback
   onFeedbackSubmit?: (score: number, tags: string[]) => Promise<void>;
 }
@@ -255,13 +274,30 @@ export const SystemEventCard = React.memo(function SystemEventCard({
   financialViewerBlocked,
   hideLedgerActions,
   isMobile = false,
+  routeContext,
+  composeTrip,
+  onFeedbackSubmit,
 }: SystemEventCardProps) {
   switch (message.message_type) {
     case 'status_change':
-      return <StatusChangeCard message={message} isMobile={isMobile} />;
+      return (
+        <StatusChangeCard
+          message={message}
+          isMobile={isMobile}
+          routeContext={routeContext}
+          composeTrip={composeTrip}
+        />
+      );
 
     case 'tracking':
-      return <TrackingCard message={message} isMobile={isMobile} />;
+      return (
+        <TrackingCard
+          message={message}
+          isMobile={isMobile}
+          routeContext={routeContext}
+          composeTrip={composeTrip}
+        />
+      );
 
     case 'image':
       return <ImageMessageCard message={message} isOwn={isOwn} />;
@@ -296,7 +332,14 @@ export const SystemEventCard = React.memo(function SystemEventCard({
 
     case 'system':
     case 'update':
-      return <ChatSystemEventCard message={message} isMobile={isMobile} />;
+      return (
+        <ChatSystemEventCard
+          message={message}
+          isMobile={isMobile}
+          routeContext={routeContext}
+          composeTrip={composeTrip}
+        />
+      );
 
     default:
       // text, question, challenge, feedback_request — rendered as chat bubbles elsewhere

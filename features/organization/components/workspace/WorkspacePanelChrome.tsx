@@ -3,6 +3,7 @@
  * Layout matches the reference: circular back chip + bold title + small
  * uppercase eyebrow subtitle + optional right slot for chips/actions.
  */
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { ArrowLeft } from "lucide-react-native";
 import React from "react";
@@ -76,7 +77,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 18,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 12,
     minHeight: 50,
   },
@@ -99,17 +100,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.3,
-    lineHeight: 22,
+    lineHeight: 21,
   },
   subtitle: {
     fontSize: 9,
     fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   rightSlot: {

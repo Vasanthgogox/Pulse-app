@@ -4,7 +4,6 @@ import Theme from "@/constants/Theme";
 import {
   partyAvatarBackgroundColor,
   partyAvatarInitialsTextColor,
-  partyAvatarHasRenderableOutput,
   partyInitialsFromName,
   resolvePartyDisplayUri,
   resolvePartyPhotoUriAsync,
@@ -94,20 +93,10 @@ export function PartyAvatar({
         entityType,
       });
   const uri = resolvedPhotoUri ?? syncUri;
-  if (
-    !partyAvatarHasRenderableOutput({
-      name,
-      organizationImageUrl,
-      organizationAvatarSeed,
-      avatarUrl,
-      avatarSeed,
-      entityType,
-    })
-  ) {
-    return null;
-  }
-  const initials = partyInitialsFromName(name);
-  const bg = partyAvatarBackgroundColor((initialsColorSeed ?? "").trim() || name);
+  const displayName = (name ?? "").trim() || "Party";
+  const colorSeed = (initialsColorSeed ?? avatarSeed ?? "").trim() || displayName;
+  const initials = partyInitialsFromName(displayName);
+  const bg = partyAvatarBackgroundColor(colorSeed);
   const initialsColor = partyAvatarInitialsTextColor(bg);
 
   if (uri && !imageFailed) {

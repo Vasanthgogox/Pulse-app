@@ -2,6 +2,7 @@
  * Treasury Financial Summary — Ledger tab. Table view (default) or Transaction view (GPay-style).
  * When transactions prop is provided, uses it (single read from parent); otherwise uses TanStack Query cache.
  */
+import { FeatureBanner } from "@/components/FeatureBanner";
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -211,22 +212,20 @@ export function LedgerTab({
   }
   if (rows.length === 0) {
     return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>
-          {isViewOnly
-            ? t("noLedgerEntriesAddFromDetail")
-            : t("noLedgerEntriesYet")}
-        </Text>
-        {!isViewOnly && onAddTransactionPress && (
-          <TouchableOpacity
-            style={styles.emptyStateAddBtn}
-            onPress={onAddTransactionPress}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.emptyStateAddBtnText}>{t("addEntry")}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <FeatureBanner
+        title={isViewOnly ? "No entries yet" : "Your ledger is empty"}
+        description={isViewOnly ? "Transactions for this party will appear here once recorded." : "Log your first transaction to start tracking income and expenses."}
+        illustration="💰"
+        accentColor="#7c3aed"
+        bullets={[
+          { label: "Income & expenses" },
+          { label: "Trip-linked entries" },
+          { label: "Party statements" },
+          { label: "GST-ready reports" },
+        ]}
+        cta={!isViewOnly && onAddTransactionPress ? { label: "Add first entry →", onPress: onAddTransactionPress } : undefined}
+        style={styles.emptyBanner}
+      />
     );
   }
 
@@ -595,6 +594,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textMutedDemo,
     letterSpacing: 0.5,
+  },
+  emptyBanner: {
+    margin: 16,
+    marginTop: 12,
   },
   emptyState: {
     paddingVertical: 32,

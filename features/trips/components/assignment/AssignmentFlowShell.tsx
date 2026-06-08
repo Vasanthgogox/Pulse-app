@@ -27,6 +27,7 @@ export interface AssignmentFlowShellProps {
   stepTotal?: number;
   /** Shell ScrollView for step content (mobile allocation wizards). */
   scrollBody?: boolean;
+  insightPreset?: "trip" | "load" | "attribution" | "allocation";
 }
 
 export function AssignmentFlowShell({
@@ -43,6 +44,7 @@ export function AssignmentFlowShell({
   stepIndex,
   stepTotal,
   scrollBody = false,
+  insightPreset = "allocation",
 }: AssignmentFlowShellProps) {
   return (
     <FullPageWizardShell
@@ -55,6 +57,7 @@ export function AssignmentFlowShell({
       progress={progress}
       fillBody={fillBody}
       scrollBody={scrollBody}
+      insightPreset={insightPreset}
       footer={footer}
     >
       {submitting ? children : children}

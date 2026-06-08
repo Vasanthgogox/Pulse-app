@@ -91,6 +91,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FeatureBanner } from "@/components/FeatureBanner";
 import {
     NativeScrollEvent,
     NativeSyntheticEvent,
@@ -1957,9 +1958,20 @@ export default function TripsScreen() {
                   partyMetaByTripId={tripHubPartyMetaByTripId}
                 />
                 {filtered.length === 0 ? (
-                  <Text style={styles.empty} accessibilityLiveRegion="polite">
-                    {showCompletedList ? tr("noCompletedTrips") : tr("noTripsYet")}
-                  </Text>
+                  <FeatureBanner
+                    title={showCompletedList ? "No completed trips yet" : "No active trips"}
+                    description={showCompletedList ? "Trips you mark as completed will appear here." : "Create your first trip to start tracking revenue, costs, and driver activity."}
+                    illustration={showCompletedList ? "✅" : "🚚"}
+                    accentColor="#4f46e5"
+                    bullets={[
+                      { label: "Live GPS tracking" },
+                      { label: "Driver coordination" },
+                      { label: "Auto-invoicing" },
+                      { label: "Trip P&L" },
+                    ]}
+                    cta={canAccess && !showCompletedList ? { label: "Create first trip →", onPress: () => router.push("/add-trip") } : undefined}
+                    style={styles.emptyBanner}
+                  />
                 ) : null}
               </View>
             </ScrollView>
@@ -1994,9 +2006,20 @@ export default function TripsScreen() {
                 partyMetaByTripId={tripHubPartyMetaByTripId}
                 renderBody={(rows) =>
                   rows.length === 0 ? (
-                    <Text style={styles.empty} accessibilityLiveRegion="polite">
-                      {showCompletedList ? tr("noCompletedTrips") : tr("noTripsYet")}
-                    </Text>
+                    <FeatureBanner
+                      title={showCompletedList ? "No completed trips yet" : "No active trips"}
+                      description={showCompletedList ? "Trips you mark as completed will appear here." : "Create your first trip to start tracking revenue, costs, and driver activity."}
+                      illustration={showCompletedList ? "✅" : "🚚"}
+                      accentColor="#4f46e5"
+                      bullets={[
+                        { label: "Live GPS tracking" },
+                        { label: "Driver coordination" },
+                        { label: "Auto-invoicing" },
+                        { label: "Trip P&L" },
+                      ]}
+                      cta={canAccess && !showCompletedList ? { label: "Create first trip →", onPress: () => router.push("/add-trip") } : undefined}
+                      style={styles.emptyBanner}
+                    />
                   ) : isLargeScreen ? (
                   <View style={styles.gridContainer}>
                     {rows.map((t) => {
@@ -2193,25 +2216,26 @@ export default function TripsScreen() {
           <TripsHubAuditFooter
             onExportLedger={() => setTripLedgerExportOpen(true)}
             tr={tr}
+            paginationSlot={
+              showTripsPaginationFooter ? (
+                <HubListPaginationBar
+                  embedded
+                  page={tripsTablePageSafe}
+                  totalPages={tripsTableTotalPages}
+                  totalItems={tripsHubPaginationTotal}
+                  pageSize={tripsTablePageSize}
+                  onPageSizeChange={setTripsTablePageSize}
+                  itemLabel="trips"
+                  onPrev={() => setTripsTablePage((p) => Math.max(0, p - 1))}
+                  onNext={() =>
+                    setTripsTablePage((p) =>
+                      Math.min(tripsTableTotalPages - 1, p + 1),
+                    )
+                  }
+                />
+              ) : null
+            }
           />
-          {showTripsPaginationFooter ? (
-            <View style={styles.tripsBottomBarPaginationWrap}>
-              <HubListPaginationBar
-                page={tripsTablePageSafe}
-                totalPages={tripsTableTotalPages}
-                totalItems={tripsHubPaginationTotal}
-                pageSize={tripsTablePageSize}
-                onPageSizeChange={setTripsTablePageSize}
-                itemLabel="trips"
-                onPrev={() => setTripsTablePage((p) => Math.max(0, p - 1))}
-                onNext={() =>
-                  setTripsTablePage((p) =>
-                    Math.min(tripsTableTotalPages - 1, p + 1),
-                  )
-                }
-              />
-            </View>
-          ) : null}
         </View>
       ) : null}
       <TripsLedgerExportModalGate
@@ -2229,19 +2253,10 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: TRIPS_PAGE_BG },
-  /** Web: pinned bottom bar that holds the Fleet Confidence audit row and
-   *  the pagination controls. Sits below the scroll as a flex sibling so
-   *  it stays at the bottom of the page regardless of scroll position. */
+  /** Web: pinned bottom bar — Fleet Confidence, pagination, and Export Ledger in one row. */
   tripsBottomBar: {
     flexShrink: 0,
-    backgroundColor: TRIPS_PAGE_BG,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-  },
-  tripsBottomBarPaginationWrap: {
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 10,
+    width: "100%",
   },
   centered: {
     flex: 1,
@@ -3922,6 +3937,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  emptyBanner: {
+    margin: 16,
+    marginTop: 12,
   },
   empty: {
     padding: 24,

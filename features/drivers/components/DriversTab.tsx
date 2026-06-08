@@ -2,6 +2,7 @@
  * Treasury Financial Summary — Drivers tab. O(n): due = trips (commission), paid = ledger only (no trip.amount_paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
+import { FeatureBanner } from '@/components/FeatureBanner';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -231,9 +232,20 @@ export function DriversTab({
   }
   if (filteredRows.length === 0 && viewTab !== "analytics") {
     return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>No drivers. Add drivers from Resources.</Text>
-      </View>
+      <FeatureBanner
+        title="No drivers yet"
+        description="Add drivers from Resources, then track their earnings, advances, and trip activity here."
+        illustration="🧑‍✈️"
+        accentColor="#0891b2"
+        bullets={[
+          { label: "Trip-based earnings" },
+          { label: "Advance tracking" },
+          { label: "Settlement view" },
+          { label: "Performance scores" },
+        ]}
+        cta={{ label: "Go to Resources →", onPress: () => router.push("/(tabs)/resources") }}
+        style={styles.emptyBanner}
+      />
     );
   }
 
@@ -547,6 +559,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'right',
   },
+  emptyBanner: { margin: 16, marginTop: 12 },
   emptyState: { paddingVertical: 24, alignItems: 'center' },
   emptyText: { fontSize: 10, fontWeight: '700', color: Theme.textMutedDemo, textTransform: 'uppercase' },
 });

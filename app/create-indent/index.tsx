@@ -8,8 +8,13 @@ import {
   WizardClientPicker,
   WizardClientSummaryCard,
   WizardFormBody,
+  WizardNumericKeypadFlow,
   WizardPartyContextRow,
 } from "@/components/full-page-wizard";
+import {
+  parseRawToNumber,
+  toRawString,
+} from "@/components/mobile-input/keypad";
 import { resolveWizardClientPhone } from "@/features/clients/utils/clientContactDisplay.util";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
@@ -19,7 +24,7 @@ import {
   type IndentShareTicketFields,
 } from "@/features/indents/components/IndentShareTicketModal";
 import Layout from "@/constants/Layout";
-import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
+import { isDesktopWizardForm, WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { useAuth } from "@/contexts/AuthContext";
@@ -234,6 +239,14 @@ const initialFormState: FormState = {
   pickup_date: getToday(),
 };
 
+function currencyFieldToRaw(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const n = parseRawToNumber(trimmed.replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(n) || n < 0) return "";
+  return toRawString(n);
+}
+
 function isUuid(value: string | null | undefined): value is string {
   if (!value) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -340,7 +353,7 @@ export default function CreateIndentScreen() {
   const isWide = windowWidth >= 720;
   const isCompactMobile = windowWidth < 480;
   /** Stepped wizard — no multi-card desktop grid. */
-  const desktopFormGrid = false;
+  const desktopFormGrid = isDesktopEnterprise;
   const desktopFormMaxWidth = Math.min(windowWidth - 28, 1680);
 
   const webCursor =
@@ -395,10 +408,15 @@ export default function CreateIndentScreen() {
     : params.draftId;
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
-  /** Full-page Create Load — stepped wizard on native + web (matches Create Trip). */
-  const isMobileWizard = WIZARD_FULL_PAGE_STEPPED;
-  const isDenseForm = isMobileWizard || windowWidth < Layout.wizardSteppedMaxWidth;
+  /** Stepped wizard below desktop grid width; wide screens use enterprise multi-card form. */
+  const isDesktopEnterprise = isDesktopWizardForm(windowWidth);
+  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
+  const isDenseForm =
+    isMobileWizard || windowWidth < Layout.wizardSteppedMaxWidth;
   const [wizardStep, setWizardStep] = useState<IndentWizardStep>("route");
+  const [wizardPriceField, setWizardPriceField] = useState<"client" | "supplier">(
+    "client",
+  );
 
   useEffect(() => {
     if (!isMobileWizard) return;
@@ -1122,6 +1140,7 @@ export default function CreateIndentScreen() {
       <StatusBar style="dark" />
       <AddTripModalLayout
         title="Create Load"
+        insightPreset="load"
         subtitle={wizardSubtitle}
         stepIndex={isMobileWizard ? wizardStepIndex + 1 : undefined}
         stepTotal={isMobileWizard ? INDENT_WIZARD_STEPS.length : undefined}
@@ -1131,7 +1150,10 @@ export default function CreateIndentScreen() {
         validationMessage="Fill route, client, commercials, and load details to share"
         onClose={handleBackPress}
         onSubmit={handleWizardPrimary}
-        scrollBody={isMobileWizard}
+        scrollBody={isMobileWizard || isDesktopEnterprise}
+        tertiaryLabel={isDesktopEnterprise ? "Save draft" : undefined}
+        onTertiaryPress={isDesktopEnterprise ? persistDraft : undefined}
+        tertiaryDisabled={!canSaveDraft}
         progress={
           isMobileWizard ? (
             <AddTripWizardProgress
@@ -1143,17 +1165,21 @@ export default function CreateIndentScreen() {
       >
         <View style={styles.pageWrap}>
           <WizardFormBody
-            shellScroll={isMobileWizard}
+            shellScroll={isMobileWizard || isDesktopEnterprise}
             contentContainerStyle={[
               styles.scrollContent,
-              isMobileWizard && fullPageWizardStyles.wizardStepBody,
+              (isMobileWizard || isDesktopEnterprise) &&
+                fullPageWizardStyles.wizardStepBody,
               isMobileWizard && { paddingTop: 0 },
+              isDesktopEnterprise && styles.scrollContentDesktop,
               {
                 paddingBottom: isMobileWizard
                   ? 8
-                  : Layout.sectionSpacing +
-                    insets.bottom +
-                    (desktopFormGrid ? 52 : isWide ? 68 : 108),
+                  : isDesktopEnterprise
+                    ? 16
+                    : Layout.sectionSpacing +
+                      insets.bottom +
+                      (desktopFormGrid ? 52 : isWide ? 68 : 108),
               },
             ]}
             scrollViewProps={{
@@ -1212,15 +1238,20 @@ export default function CreateIndentScreen() {
                       ? fullPageWizardStyles.wizardStepContentFlat
                       : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridRouteWeb,
+                    desktopFormGrid && styles.cardDesktopEnterprise,
                   ]}
                 >
                 {!isMobileWizard ? (
-                <View style={styles.cardHead}>
+                <View style={[styles.cardHead, desktopFormGrid && styles.cardHeadDesktopEnterprise]}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>01</Text>
                   </View>
                   <Text
-                    style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                    style={[
+                      styles.cardTitle,
+                      isCompactMobile && styles.cardTitleCompact,
+                      desktopFormGrid && styles.cardTitleDesktopEnterprise,
+                    ]}
                   >
                     Route Details
                   </Text>
@@ -1529,15 +1560,20 @@ export default function CreateIndentScreen() {
                       ? fullPageWizardStyles.wizardStepContentFlat
                       : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridClientWeb,
+                    desktopFormGrid && styles.cardDesktopEnterprise,
                   ]}
                 >
                 {!isMobileWizard ? (
-                <View style={styles.cardHead}>
+                <View style={[styles.cardHead, desktopFormGrid && styles.cardHeadDesktopEnterprise]}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>02</Text>
                   </View>
                   <Text
-                    style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                    style={[
+                      styles.cardTitle,
+                      isCompactMobile && styles.cardTitleCompact,
+                      desktopFormGrid && styles.cardTitleDesktopEnterprise,
+                    ]}
                   >
                     Client & Commercials
                   </Text>
@@ -1816,37 +1852,30 @@ export default function CreateIndentScreen() {
               {/* 02b Commercials (mobile wizard) */}
               {isMobileWizard && showWizardStep("prices") ? (
                 <View style={fullPageWizardStyles.wizardStepContentFlat}>
-                  <SmartInput
-                    type="currency"
-                    label="Client sale price"
-                    value={form.client_price}
-                    onChange={(raw) => update({ client_price: raw })}
-                    variant="field"
-                    required
-                    errorMessage={errors.client_price}
+                  <WizardNumericKeypadFlow
+                    fields={[
+                      {
+                        id: "client",
+                        label: "Client sale price",
+                        rawValue: currencyFieldToRaw(form.client_price),
+                        onRawValueChange: (raw) => update({ client_price: raw }),
+                        errorMessage: errors.client_price,
+                      },
+                      {
+                        id: "supplier",
+                        label: "Supplier target",
+                        rawValue: currencyFieldToRaw(form.supplier_target),
+                        onRawValueChange: (raw) => update({ supplier_target: raw }),
+                        optional: true,
+                        errorMessage: errors.supplier_target,
+                      },
+                    ]}
+                    activeFieldId={wizardPriceField}
+                    onActiveFieldChange={(id) =>
+                      setWizardPriceField(id as "client" | "supplier")
+                    }
+                    hint="Revenue should match what you bill this client for this lane."
                   />
-                  <View style={[styles.infoCallout, { marginTop: 8 }]}>
-                    <Info size={14} color={Theme.iconPrimary} />
-                    <Text style={styles.infoCalloutText}>
-                      Revenue should match what you bill this client for this lane.
-                    </Text>
-                  </View>
-                  <View style={[styles.supplierSection, { marginTop: 16, paddingTop: 0, borderTopWidth: 0 }]}>
-                    <View style={styles.supplierLabelRow}>
-                      <Text style={fieldLabelStyle}>Supplier target (₹)</Text>
-                      <View style={styles.estBadge}>
-                        <Text style={styles.estBadgeText}>Est. target</Text>
-                      </View>
-                    </View>
-                    <SmartInput
-                      type="currency"
-                      label="Supplier target"
-                      value={form.supplier_target}
-                      onChange={(raw) => update({ supplier_target: raw })}
-                      variant="field"
-                      errorMessage={errors.supplier_target}
-                    />
-                  </View>
                 </View>
               ) : null}
 
@@ -1926,14 +1955,19 @@ export default function CreateIndentScreen() {
                     styles.card,
                     isCompactMobile && styles.cardCompact,
                     desktopFormGrid && styles.cardGridLoadWeb,
+                    desktopFormGrid && styles.cardDesktopEnterprise,
                   ]}
                 >
-                <View style={styles.cardHead}>
+                <View style={[styles.cardHead, desktopFormGrid && styles.cardHeadDesktopEnterprise]}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>03</Text>
                   </View>
                   <Text
-                    style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
+                    style={[
+                      styles.cardTitle,
+                      isCompactMobile && styles.cardTitleCompact,
+                      desktopFormGrid && styles.cardTitleDesktopEnterprise,
+                    ]}
                   >
                     Load Specifics
                   </Text>
@@ -2038,6 +2072,7 @@ export default function CreateIndentScreen() {
                 </View>
               ) : null}
 
+              {!isDesktopEnterprise ? (
               <View style={styles.actionFooterBar}>
                 <View
                   ref={indentActionsHostRef}
@@ -2120,6 +2155,7 @@ export default function CreateIndentScreen() {
                   </View>
                 </View>
               </View>
+              ) : null}
                 </View>
 
               </View>
@@ -2557,6 +2593,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingTop: 12,
+  },
+  scrollContentDesktop: {
+    paddingTop: 4,
+    width: "100%",
   },
   sheet: {
     gap: 12,
@@ -3171,7 +3211,7 @@ const styles = StyleSheet.create({
     web: {
       display: "grid",
       gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-      gap: 16,
+      gap: 20,
       alignItems: "start",
       gridAutoRows: "min-content",
     } as unknown as ViewStyle,
@@ -3192,6 +3232,22 @@ const styles = StyleSheet.create({
     web: { gridColumn: "1 / -1", gridRow: 2 } as unknown as ViewStyle,
     default: {},
   }),
+  cardDesktopEnterprise: Platform.select<ViewStyle>({
+    web: {
+      padding: 18,
+      borderRadius: 12,
+      marginBottom: 0,
+    } as ViewStyle,
+    default: {},
+  }),
+  cardHeadDesktopEnterprise: {
+    paddingBottom: 10,
+    marginBottom: 12,
+  },
+  cardTitleDesktopEnterprise: {
+    fontSize: 11,
+    letterSpacing: 0.6,
+  },
   card: {
     backgroundColor: Theme.cardWhite,
     borderRadius: 14,

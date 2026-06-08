@@ -5,6 +5,9 @@ import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 export interface FullPageWizardFooterProps {
   secondaryLabel?: string;
   onSecondaryPress?: () => void;
+  tertiaryLabel?: string;
+  onTertiaryPress?: () => void;
+  tertiaryDisabled?: boolean;
   primaryLabel: string;
   onPrimaryPress: () => void;
   primaryDisabled?: boolean;
@@ -16,6 +19,9 @@ export interface FullPageWizardFooterProps {
 export function FullPageWizardFooter({
   secondaryLabel = "Back",
   onSecondaryPress,
+  tertiaryLabel,
+  onTertiaryPress,
+  tertiaryDisabled = false,
   primaryLabel,
   onPrimaryPress,
   primaryDisabled = false,
@@ -36,6 +42,18 @@ export function FullPageWizardFooter({
         {onSecondaryPress ? (
           <Pressable style={styles.cancelBtn} onPress={onSecondaryPress}>
             <Text style={styles.cancelBtnText}>{secondaryLabel}</Text>
+          </Pressable>
+        ) : null}
+        {tertiaryLabel && onTertiaryPress ? (
+          <Pressable
+            style={[
+              styles.tertiaryBtn,
+              tertiaryDisabled && styles.tertiaryBtnDisabled,
+            ]}
+            onPress={onTertiaryPress}
+            disabled={tertiaryDisabled}
+          >
+            <Text style={styles.tertiaryBtnText}>{tertiaryLabel}</Text>
           </Pressable>
         ) : null}
         <Pressable
