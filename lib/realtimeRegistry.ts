@@ -26,7 +26,7 @@ type RegistryEntry = {
 const registry = new Map<string, RegistryEntry>();
 const MAX_SHARED_CHANNELS = 50;
 const STALE_SHARED_CHANNEL_MS = 10 * 60 * 1000;
-const DEV_DIAGNOSTICS_LOG_INTERVAL_MS = 30 * 1000;
+const DEV_DIAGNOSTICS_LOG_INTERVAL_MS = 120 * 1000;
 /** Grace period before destroying a channel whose refs hit 0.
  * Longer window prevents churn on StrictMode double-mounts and rapid tab switches. */
 const TEARDOWN_GRACE_MS = 15_000;
@@ -53,15 +53,27 @@ const telemetry: RealtimeRegistryTelemetry = {
 };
 let diagnosticsInterval: ReturnType<typeof setInterval> | null = null;
 
-/** Dev-only: log current active channels to console. */
+/** Dev-only: log channel lifecycle. Set REALTIME_VERBOSE=1 for attach/detach spam. */
 function logRegistryState(action: string, key: string) {
   if (!__DEV__) return;
+  const verbose =
+    typeof process !== 'undefined' &&
+    process.env?.REALTIME_VERBOSE === '1';
+  const isLifecycle =
+    action.startsWith('OPEN') ||
+    action.startsWith('CLOSE') ||
+    action.startsWith('GRACE');
+  if (!verbose && !isLifecycle) return;
   const total = registry.size;
-  const lines: string[] = [];
-  registry.forEach((e, k) => {
-    lines.push(`  [${k}] refs=${e.refs}`);
-  });
-  console.log(`[realtime] ${action}: "${key}" | total=${total}\n${lines.join('\n')}`);
+  if (verbose) {
+    const lines: string[] = [];
+    registry.forEach((e, k) => {
+      lines.push(`  [${k}] refs=${e.refs}`);
+    });
+    console.log(`[realtime] ${action}: "${key}" | total=${total}\n${lines.join('\n')}`);
+    return;
+  }
+  console.log(`[realtime] ${action}: "${key}" | total=${total}`);
 }
 
 function specsSignature(specs: PostgresChangeSpec[]): string {

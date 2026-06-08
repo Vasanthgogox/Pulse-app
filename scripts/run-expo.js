@@ -9,24 +9,12 @@ const path = require('path');
 
 const projectRoot = path.join(__dirname, '..');
 
+require('./expo-env');
+
 require('dotenv').config({
   path: path.join(projectRoot, '.env'),
   quiet: true,
 });
-
-const nodeOpts = String(process.env.NODE_OPTIONS ?? '');
-if (!nodeOpts.includes('max-old-space-size')) {
-  process.env.NODE_OPTIONS = [nodeOpts, '--max-old-space-size=8192']
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-}
-
-if (!process.env.METRO_MAX_WORKERS) {
-  process.env.METRO_MAX_WORKERS = '4';
-}
-
-process.env.DOTENV_CONFIG_QUIET = process.env.DOTENV_CONFIG_QUIET ?? 'true';
 
 const expoBin = path.join(projectRoot, 'node_modules/expo/bin/cli');
 const args = process.argv.slice(2);
@@ -42,5 +30,12 @@ const child = spawn(
 );
 
 child.on('exit', (code, signal) => {
+  if (code === 134 || signal === 'SIGABRT') {
+    console.error(
+      '\n[expo] Process aborted (OOM or native crash). Try:\n' +
+        '  npm run start:clean\n' +
+        '  NODE_OPTIONS=--max-old-space-size=8192 METRO_MAX_WORKERS=4 npm start\n',
+    );
+  }
   process.exit(code ?? (signal ? 1 : 0));
 });

@@ -1,5 +1,6 @@
 const path = require('path');
 const os = require('os');
+require('./scripts/expo-env');
 const { FileStore } = require('metro-cache');
 const { getDefaultConfig } = require('expo/metro-config');
 
