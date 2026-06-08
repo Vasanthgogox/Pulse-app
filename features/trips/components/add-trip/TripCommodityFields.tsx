@@ -16,7 +16,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { ChevronRight, Plus, X } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
-import { partyMobileWizardStyles as wizard } from "@/components/party/partyMobileWizardStyles";
+import { fullPageWizardStyles as wizardChrome } from "@/components/full-page-wizard";
 import { useUserCommodityTypes } from "@/features/trips/hooks/useUserCommodityTypes";
 import type { CommodityTypeKind } from "@/features/trips/services/userCommodityTypes.storage";
 import { ROUTES } from "@/lib/routes";
@@ -116,9 +116,11 @@ export const TripCommodityFields = memo(function TripCommodityFields({
   );
 
   const useWebSelect = preferWebSelect && Platform.OS === "web";
-  const labelStyle = fieldLabelStyle ?? (useFormChrome ? styles.formLabel : wizard.fieldLabel);
-  const blockStyle = useFormChrome ? styles.fieldBlockForm : wizard.fieldBlock;
-  const inputMinHeight = useFormChrome ? 44 : 48;
+  const labelStyle =
+    fieldLabelStyle ??
+    (useFormChrome ? styles.formLabel : wizardChrome.wizardFieldLabel);
+  const blockStyle = useFormChrome ? styles.fieldBlockForm : wizardChrome.wizardFieldBlock;
+  const inputMinHeight = 44;
 
   const applyPendingPick = useCallback(async () => {
     const pick = await consumePendingPick();
@@ -183,8 +185,8 @@ export const TripCommodityFields = memo(function TripCommodityFields({
       ) : (
         <Pressable
           style={[
-            styles.pickerBtn,
-            useFormChrome && fieldInputStyle,
+            useFormChrome ? styles.pickerBtn : wizardChrome.wizardPickerBtn,
+            fieldInputStyle,
             useFormChrome && styles.pickerBtnForm,
             vehicleTypeError && styles.pickerBtnError,
           ]}
@@ -193,15 +195,18 @@ export const TripCommodityFields = memo(function TripCommodityFields({
         >
           <Text
             style={[
-              styles.pickerBtnText,
+              useFormChrome ? styles.pickerBtnText : wizardChrome.wizardPickerBtnText,
               useFormChrome && styles.pickerBtnTextForm,
-              !vehicleType.trim() && styles.pickerBtnPlaceholder,
+              !vehicleType.trim() &&
+                (useFormChrome
+                  ? styles.pickerBtnPlaceholder
+                  : wizardChrome.wizardPickerBtnPlaceholder),
             ]}
             numberOfLines={2}
           >
             {vehicleType.trim() || "Select vehicle type (optional)"}
           </Text>
-          <ChevronRight size={20} color={Theme.iconPrimary} />
+          <ChevronRight size={18} color={Theme.iconPrimary} />
         </Pressable>
       )}
     </View>
@@ -222,8 +227,8 @@ export const TripCommodityFields = memo(function TripCommodityFields({
       ) : (
         <Pressable
           style={[
-            styles.pickerBtn,
-            useFormChrome && fieldInputStyle,
+            useFormChrome ? styles.pickerBtn : wizardChrome.wizardPickerBtn,
+            fieldInputStyle,
             useFormChrome && styles.pickerBtnForm,
             loadTypeError && styles.pickerBtnError,
           ]}
@@ -232,15 +237,18 @@ export const TripCommodityFields = memo(function TripCommodityFields({
         >
           <Text
             style={[
-              styles.pickerBtnText,
+              useFormChrome ? styles.pickerBtnText : wizardChrome.wizardPickerBtnText,
               useFormChrome && styles.pickerBtnTextForm,
-              !loadType.trim() && styles.pickerBtnPlaceholder,
+              !loadType.trim() &&
+                (useFormChrome
+                  ? styles.pickerBtnPlaceholder
+                  : wizardChrome.wizardPickerBtnPlaceholder),
             ]}
             numberOfLines={2}
           >
             {loadType.trim() || "Select product type (optional)"}
           </Text>
-          <ChevronRight size={20} color={Theme.iconPrimary} />
+          <ChevronRight size={18} color={Theme.iconPrimary} />
         </Pressable>
       )}
     </View>
@@ -252,7 +260,7 @@ export const TripCommodityFields = memo(function TripCommodityFields({
         <Text style={labelStyle}>Tons (optional)</Text>
         <TextInput
           style={[
-            useFormChrome ? fieldInputStyle : wizard.input,
+            useFormChrome ? fieldInputStyle : wizardChrome.wizardFieldInput,
             tonsError && styles.inputError,
           ]}
           value={tons}

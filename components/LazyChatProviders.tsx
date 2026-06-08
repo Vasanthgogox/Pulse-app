@@ -13,17 +13,8 @@
  *   2. After idle, dynamic-imports the real providers and re-renders the
  *      tree wrapped in them.
  *
- * Why this is safe:
- *   - Optional consumers (`useOptionalTripChat` / `useOptionalIntegratedChat`)
- *     already tolerate the missing provider — they return `undefined`.
- *   - Required consumers live inside chat routes, which are themselves lazy
- *     route chunks — the provider chunk is already in flight by the time
- *     those screens mount.
- *
- * No module-level cache: HMR can hot-swap either provider module without us
- * holding a stale reference.
+ * The `/chat` route mounts its own providers (`app/chat.tsx`) with `skipWrap`.
  */
-import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import {
   getResolvedChatProviders,
@@ -34,11 +25,8 @@ import { scheduleIdleWork } from '@/lib/scheduleIdleWork';
 
 const MAX_LOAD_RETRIES = 3;
 const RETRY_DELAY_MS = 1_200;
-/** Never block chat route longer than this — render passthrough providers instead. */
-const PROVIDER_LOAD_TIMEOUT_MS = 15_000;
 
-/** Sentinel: provider load failed after all retries. Renders a passthrough wrapper
- *  so children can mount; ChatScreen's own error boundary surfaces the real error. */
+/** Sentinel: provider load failed after all retries — passthrough without context. */
 const FALLBACK_EMPTY = {
   Trip: ({ children }: { children: ReactNode }) => <>{children}</>,
   Integrated: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -60,22 +48,19 @@ export interface LazyChatProvidersProps {
    */
   isActive: boolean;
   /**
-   * When true, children are not rendered until providers are loaded (chat modal).
-   * Prevents `useTripChat` errors and lets bootstrap start before ChatScreen mounts.
+   * When true (e.g. `/chat`), preload provider modules but do not wrap the tree.
+   * `app/chat.tsx` mounts providers for that route.
    */
-  requireProviders?: boolean;
+  skipWrap?: boolean;
 }
 
 export function LazyChatProviders({
   children,
   isActive,
-  requireProviders = false,
+  skipWrap = false,
 }: LazyChatProvidersProps) {
   const loadedRef = useRef<Loaded>(null);
   const [loaded, setLoaded] = useState<Loaded>(() => {
-    // If providers were already resolved during an earlier preload (e.g. while
-    // the user was on the Trips tab), return them synchronously so the chat
-    // modal opens with zero loading delay.
     const cached = getResolvedChatProviders();
     if (!cached) return null;
     return {
@@ -86,33 +71,37 @@ export function LazyChatProviders({
   loadedRef.current = loaded;
 
   useLayoutEffect(() => {
+    if (skipWrap) {
+      void preloadChatProviderModules();
+      void preloadChatScreenModule();
+      return;
+    }
     if (loadedRef.current) return;
+
     let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let pendingRetry: ReturnType<typeof setTimeout> | null = null;
+
+    const commitLoaded = (next: Loaded) => {
+      if (cancelled || !next) return;
+      setLoaded(next);
+    };
 
     const attemptLoad = (attempt: number) => {
       if (cancelled) return;
 
-      // Fast path: already resolved by an earlier preload call.
       const cached = getResolvedChatProviders();
       if (cached) {
-        if (!cancelled) {
-          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-          setLoaded({
-            Trip: cached.TripChatProvider as TripChatProviderShape,
-            Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
-          });
-        }
+        commitLoaded({
+          Trip: cached.TripChatProvider as TripChatProviderShape,
+          Integrated: cached.IntegratedChatProvider as IntegratedChatProviderShape,
+        });
         return;
       }
 
       preloadChatProviderModules()
         .then(([trip, integrated]) => {
           if (cancelled) return;
-          // Cancel the fallback timeout — providers loaded successfully,
-          // so we must NOT replace them with FALLBACK_EMPTY later.
-          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-          setLoaded({
+          commitLoaded({
             Trip: trip.TripChatProvider as unknown as TripChatProviderShape,
             Integrated: integrated.IntegratedChatProvider as unknown as IntegratedChatProviderShape,
           });
@@ -120,56 +109,33 @@ export function LazyChatProviders({
         .catch((err) => {
           if (cancelled) return;
           if (attempt < MAX_LOAD_RETRIES) {
-            // Retry after a brief delay; chatProvidersModule cache was cleared on rejection.
-            const t = setTimeout(() => attemptLoad(attempt + 1), RETRY_DELAY_MS);
-            // Store timeout so cleanup can cancel it.
-            pendingRetry = t;
+            pendingRetry = setTimeout(() => attemptLoad(attempt + 1), RETRY_DELAY_MS);
           } else {
             if (__DEV__) console.error('[LazyChatProviders] provider load failed after retries:', err);
-            // On final failure render children anyway so the app isn't permanently stuck.
-            // ChatScreen's error boundary will surface the actual issue.
-            setLoaded(FALLBACK_EMPTY as unknown as Loaded);
+            commitLoaded(FALLBACK_EMPTY as unknown as Loaded);
           }
         });
     };
 
-    let pendingRetry: ReturnType<typeof setTimeout> | null = null;
-
     const load = () => attemptLoad(0);
 
-    // Eager load on chat-adjacent routes or when the chat modal is opening.
-    if (isActive || requireProviders) {
+    if (isActive) {
       void preloadChatScreenModule();
       load();
     } else {
       scheduleIdleWork(load);
     }
 
-    if (requireProviders) {
-      timeoutId = setTimeout(() => {
-        if (cancelled) return;
-        if (__DEV__) {
-          console.warn(
-            '[LazyChatProviders] provider load timed out — rendering chat without providers',
-          );
-        }
-        setLoaded(FALLBACK_EMPTY as unknown as Loaded);
-      }, PROVIDER_LOAD_TIMEOUT_MS);
-    }
-
     return () => {
       cancelled = true;
       if (pendingRetry) clearTimeout(pendingRetry);
-      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [isActive, requireProviders]);
+  }, [isActive, skipWrap]);
 
-  if (!loaded) {
-    if (requireProviders) {
-      return <CenteredLoadingView message="Loading chat…" />;
-    }
+  if (skipWrap || !loaded) {
     return <>{children}</>;
   }
+
   const { Trip, Integrated } = loaded;
   return (
     <Trip isActive={isActive}>

@@ -8,6 +8,7 @@ import { User } from "lucide-react-native";
 import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
 import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/PartnerRatesKeypadFlow";
+import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import Theme from "@/constants/Theme";
 import { formatMobileNumber } from "@/lib/format";
@@ -16,7 +17,6 @@ import type { StaffHandshakeResult } from "@/features/network/hooks/useStaffHand
 import { AssignmentEntityAvatarGrid } from "@/features/trips/components/AssignmentEntityAvatarGrid";
 import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip/DriverPhoneRecommendations";
 import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
-import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { IndentAggregateStep } from "@/features/indents/components/indentAllocationWizardSteps";
 
@@ -95,6 +95,8 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
       <>
         <AssignmentEntityAvatarGrid
           title="Select Transport Partner"
+          variant="wizard"
+          embedded
           totalCount={suppliers.length}
           selectedId={subcontractSupplierId}
           onSelect={(id) =>
@@ -123,6 +125,7 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
         partyPreview={
           selectedPartner ? supplierToNumericPartyPreview(selectedPartner) : undefined
         }
+        wizardShell
       />
     );
   }
@@ -130,12 +133,13 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
   if (step === "driverPhone") {
     return (
       <PhoneNumberKeypadFlow
-        label="DRIVER PHONE (TRACKING) *"
+        label="Driver phone (tracking) *"
         placeholder="10-digit number"
         value={aggregateDriverPhone}
         onChangeText={handlePhoneChange}
         footerExtras={phoneFooterExtras}
         testID="indent-allocation-driver-phone"
+        wizardShell
       />
     );
   }
@@ -182,9 +186,9 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
           />
         ) : null}
 
-        <Text style={styles.label}>Driver name (tracking) *</Text>
+        <Text style={fullPageWizardStyles.wizardFieldLabel}>Driver name (tracking) *</Text>
         <TextInput
-          style={[styles.input, assignmentShellStyles.inputWell]}
+          style={fullPageWizardStyles.wizardFieldInput}
           placeholder="e.g. Suresh Kumar"
           placeholderTextColor={Theme.textMuted}
           value={aggregateDriverTrackingName}
@@ -205,6 +209,7 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
         value={assignVehicleRegistration}
         onChangeText={set.assignVehicleRegistration}
         testID="indent-allocation-vehicle-keypad"
+        wizardShell
       />
     );
   }

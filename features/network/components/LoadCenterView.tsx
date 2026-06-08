@@ -91,7 +91,7 @@ import {
     useVehiclesQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import {
@@ -152,7 +152,7 @@ export function LoadCenterView({
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
 
-  const scrollRef = useRef<FlashList<IndentRow>>(null);
+  const scrollRef = useRef<FlashListRef<IndentRow>>(null);
 
   const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
   const [loadTabsWrapWidth, setLoadTabsWrapWidth] = useState(0);

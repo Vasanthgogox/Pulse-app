@@ -13,8 +13,8 @@ import {
 } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { TripCommodityFields } from "@/features/trips/components/add-trip/TripCommodityFields";
-import { partyMobileWizardStyles as wizard } from "@/components/party/partyMobileWizardStyles";
 import {
   formatIsoDateForDisplay,
   getDayAfterTomorrowIso,
@@ -65,10 +65,10 @@ export const IndentAllocationTripDetailsStep = memo(
     const preferWebSelect = Platform.OS === "web";
 
     return (
-      <View style={[styles.root, isWide && styles.rootWebWide]}>
-        <View style={wizard.fieldBlock}>
-          <Text style={wizard.fieldLabel}>TRIP START DATE</Text>
-          <View style={styles.quickDateRow}>
+      <View style={[fullPageWizardStyles.formSectionCard, styles.root, isWide && styles.rootWebWide]}>
+        <View style={fullPageWizardStyles.wizardFieldBlock}>
+          <Text style={fullPageWizardStyles.wizardFieldLabel}>Trip start date</Text>
+          <View style={fullPageWizardStyles.quickDateRow}>
             {(
               [
                 { label: "Today", iso: getTodayIso() },
@@ -80,13 +80,16 @@ export const IndentAllocationTripDetailsStep = memo(
               return (
                 <Pressable
                   key={label}
-                  style={[styles.quickDateChip, isActive && styles.quickDateChipActive]}
+                  style={[
+                    fullPageWizardStyles.quickDateChip,
+                    isActive && fullPageWizardStyles.quickDateChipActive,
+                  ]}
                   onPress={() => onPickupDateChange(iso)}
                 >
                   <Text
                     style={[
-                      styles.quickDateChipText,
-                      isActive && styles.quickDateChipTextActive,
+                      fullPageWizardStyles.quickDateChipText,
+                      isActive && fullPageWizardStyles.quickDateChipTextActive,
                     ]}
                   >
                     {label}
@@ -106,13 +109,18 @@ export const IndentAllocationTripDetailsStep = memo(
           ) : (
             <>
               <TouchableOpacity
-                style={[styles.dateTouchable, pickupDateError ? styles.inputError : null]}
+                style={[
+                  fullPageWizardStyles.wizardDateTouchable,
+                  pickupDateError ? styles.inputError : null,
+                ]}
                 onPress={() => setShowDatePicker(true)}
                 activeOpacity={0.85}
               >
                 <Text
                   style={
-                    pickupDate ? styles.dateTouchableText : styles.dateTouchablePlaceholder
+                    pickupDate
+                      ? fullPageWizardStyles.wizardDateText
+                      : fullPageWizardStyles.wizardDatePlaceholder
                   }
                 >
                   {pickupDate
@@ -193,6 +201,8 @@ export const IndentAllocationTripDetailsStep = memo(
           isWide={isWide}
           useFormChrome={preferWebSelect}
           preferWebSelect={preferWebSelect}
+          fieldLabelStyle={fullPageWizardStyles.wizardFieldLabel}
+          fieldInputStyle={fullPageWizardStyles.wizardFieldInput}
         />
         {weightError ? <Text style={styles.errorText}>{weightError}</Text> : null}
       </View>
@@ -201,49 +211,14 @@ export const IndentAllocationTripDetailsStep = memo(
 );
 
 const styles = StyleSheet.create({
-  root: { gap: 16, paddingTop: 4 },
+  root: { gap: 12 },
   rootWebWide: {
     width: "100%",
     maxWidth: 720,
     alignSelf: "center",
   },
-  quickDateRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
-  quickDateChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-  },
-  quickDateChipActive: {
-    borderColor: Theme.iconPrimary,
-    backgroundColor: Theme.surfaceLight,
-  },
-  quickDateChipText: { fontSize: 12, fontWeight: "600", color: Theme.textMuted },
-  quickDateChipTextActive: { color: Theme.iconPrimary },
   input: {
-    ...wizard.input,
-    minHeight: 48,
-  },
-  dateTouchable: {
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 14,
-    justifyContent: "center",
-  },
-  dateTouchableText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-  },
-  dateTouchablePlaceholder: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: Theme.placeholder,
+    ...fullPageWizardStyles.wizardFieldInput,
   },
   inputError: { borderColor: Theme.negative },
   errorText: {

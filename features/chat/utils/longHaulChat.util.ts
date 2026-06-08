@@ -16,6 +16,7 @@ export function isLongHaulLateChatMessage(message: Partial<TripMessageRow>): boo
 
 export function readLongHaulMetaFromMessage(message: Partial<TripMessageRow>): {
   newEta: string | null;
+  originalEta: string | null;
   health: string | null;
 } {
   const m = message.metadata as Record<string, unknown> | null | undefined;
@@ -24,8 +25,14 @@ export function readLongHaulMetaFromMessage(message: Partial<TripMessageRow>): {
       ? (m.event_payload as Record<string, unknown>)
       : null;
   const newEta = typeof ep?.new_eta === "string" ? ep.new_eta.trim() : null;
+  const originalEta =
+    typeof ep?.original_eta === "string" ? ep.original_eta.trim() : null;
   const health = typeof ep?.health_status === "string" ? ep.health_status.trim() : null;
-  return { newEta: newEta || null, health: health || null };
+  return {
+    newEta: newEta || null,
+    originalEta: originalEta || null,
+    health: health || null,
+  };
 }
 
 function readOptionalEtaHealthFromRow(row: StreamRow): { eta?: string; health?: string } {

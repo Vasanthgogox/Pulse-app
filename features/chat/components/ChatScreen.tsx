@@ -1,5 +1,16 @@
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { useQuery } from "@tanstack/react-query";
+import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
+import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
+import {
+  resolveNetworkPartnerAvatar,
+  resolveTripConversationAvatar,
+  resolveTripMessagePeerAvatar,
+  type ChatOrgBranding,
+} from "@/features/chat/utils/chatAvatar.util";
+import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
+import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { chatFilterChromeStyles } from "@/constants/ChatFilterChrome";
 import Theme from "@/constants/Theme";
 import { ROUTES } from "@/lib/routes";
@@ -126,11 +137,12 @@ import { pe } from "@/lib/platformViewStyle.util";
 import { commandPriorityScore } from "../utils/commandPriority.util";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
+import { isLocationPingMessage } from "../utils/locationPingChatDisplay.util";
 import { ChatLedgerEventCard, ChatSystemEventCard } from "./ChatEventCard";
+import { ChatLocationSystemCard } from "./ChatLocationSystemCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isLongHaulLateChatMessage, LateAlertCard } from "./LateAlertCard";
-import { LocationEventCard } from "./LocationEventCard";
 import { TripCard } from "./TripCard";
 
 type TabId = "trips" | "indent" | "network";
@@ -756,6 +768,24 @@ export function ChatScreen() {
   /** Trips from fleet (incl. no driver) to merge into hub cards that have no conversation row yet. */
   const [hubComposeTrips, setHubComposeTrips] = useState<TripForCompose[]>([]);
   const hubComposeTripsLoadedAtRef = useRef<number>(0);
+
+  const tripLinkedOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of [...composeTrips, ...hubComposeTrips]) {
+      const clientOrg = (t.client_linked_organization_id ?? "").trim();
+      const supplierOrg = (t.supplier_linked_organization_id ?? "").trim();
+      if (clientOrg) ids.add(clientOrg);
+      if (supplierOrg) ids.add(supplierOrg);
+    }
+    return Array.from(ids).sort();
+  }, [composeTrips, hubComposeTrips]);
+
+  const { data: tripLinkedOrgBranding = {} } = useQuery({
+    queryKey: queryKeys.linkedOrgDisplay(tripLinkedOrgIds),
+    queryFn: () => getLinkedOrgProfilesBatch(tripLinkedOrgIds),
+    enabled: tripLinkedOrgIds.length > 0,
+    staleTime: STALE.moderate,
+  });
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
@@ -1592,10 +1622,16 @@ export function ChatScreen() {
         })
       : "";
 
-    const avatarName = partyLine || partyLabel(item.party_type);
+    const composeTrip = hubComposeTrips.find((t) => t.id === item.trip_id) ?? null;
     const lastMsgSeed = item.messages.length > 0
       ? (item.messages[item.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
       : null;
+    const laneAvatar = resolveTripConversationAvatar(
+      item,
+      composeTrip,
+      tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
+      lastMsgSeed,
+    );
     return (
       <TouchableOpacity
         style={[
@@ -1608,11 +1644,9 @@ export function ChatScreen() {
         activeOpacity={0.8}
       >
         <View style={s.chatAvatarWrap}>
-          <PartyAvatar
-            name={avatarName}
-            entityType={item.party_type}
+          <ChatPartyAvatar
+            identity={laneAvatar}
             size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
-            avatarSeed={lastMsgSeed}
           />
           {item.unread_dispatcher_count > 0 && !active && (
             <View style={s.chatAvatarUnreadDot} />
@@ -1681,9 +1715,12 @@ export function ChatScreen() {
     isNativeMobile,
     currentOrgId,
     tripListDisambiguatedLabels,
+    hubComposeTrips,
+    tripLinkedOrgBranding,
   ]);
 
   const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
+    const partnerAvatar = resolveNetworkPartnerAvatar(item);
     const last = item.messages[item.messages.length - 1];
     const active = selectedNetId === item.id;
     return (
@@ -1701,9 +1738,8 @@ export function ChatScreen() {
         }}
         activeOpacity={0.8}
       >
-        <PartyAvatar
-          name={item.partnerName}
-          entityType="client"
+        <ChatPartyAvatar
+          identity={partnerAvatar}
           size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
         />
         <View style={s.chatBody}>
@@ -2726,6 +2762,7 @@ export function ChatScreen() {
         selectedConv={selectedConv}
         conversations={conversations}
         composeTrips={hubComposeTrips}
+        linkedOrgBranding={tripLinkedOrgBranding as Record<string, ChatOrgBranding>}
         messagesRef={messagesRef}
         messageInput={messageInput}
         setMessageInput={setMessageInput}
@@ -4818,7 +4855,7 @@ function ChatBubble({
   content,
   timestamp,
   senderName,
-  avatarSeed,
+  peerAvatar,
   deliveryStatus,
   isNew,
   isMobile,
@@ -4828,7 +4865,7 @@ function ChatBubble({
   content: string;
   timestamp: string;
   senderName?: string;
-  avatarSeed?: string | null;
+  peerAvatar?: ResolvedPartyAvatarIdentity | null;
   /** WhatsApp-style ticks for outgoing rows (from `resolveOutgoingDeliveryStatus`). */
   deliveryStatus?: MessageDeliveryStatus;
   /** True only for messages that arrived via Realtime after this screen mounted.
@@ -4898,25 +4935,15 @@ function ChatBubble({
         },
       ]}
     >
-      {!isOwn && (
+      {!isOwn && peerAvatar ? (
         onAvatarPress ? (
           <Pressable onPress={onAvatarPress} hitSlop={6}>
-            <PartyAvatar
-              name={senderName ?? "?"}
-              entityType="client"
-              size={avatarSize}
-              avatarSeed={avatarSeed ?? null}
-            />
+            <ChatPartyAvatar identity={peerAvatar} size={avatarSize} />
           </Pressable>
         ) : (
-          <PartyAvatar
-            name={senderName ?? "?"}
-            entityType="client"
-            size={avatarSize}
-            avatarSeed={avatarSeed ?? null}
-          />
+          <ChatPartyAvatar identity={peerAvatar} size={avatarSize} />
         )
-      )}
+      ) : null}
       <View style={{ maxWidth: bubbleMaxWidth }}>
         <View
           style={[
@@ -4945,15 +4972,21 @@ function ChatBubble({
           {isOwn && <MessageTick status={deliveryStatus} />}
         </View>
       </View>
-      {isOwn && (
-        <PartyAvatar
-          name={profile?.full_name || profile?.displayName || "You"}
-          avatarUrl={profile?.avatar_url ?? null}
-          organizationImageUrl={currentOrganization?.logo_url ?? null}
-          entityType="client"
+      {isOwn ? (
+        <ChatPartyAvatar
+          identity={{
+            displayName: profile?.full_name || profile?.displayName || "You",
+            entityType: "client",
+          }}
+          isOwnUser
+          userName={profile?.full_name || profile?.displayName || "You"}
+          userAvatarUrl={profile?.avatar_url ?? null}
+          userAvatarSeed={profile?.avatar_seed ?? null}
+          userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+          userOrgOwnerAvatarSeed={profile?.avatar_seed ?? null}
           size={avatarSize}
         />
-      )}
+      ) : null}
     </Animated.View>
   );
 }
@@ -5175,6 +5208,7 @@ function TripConversationDetailPanel({
   selectedConv,
   conversations,
   composeTrips,
+  linkedOrgBranding,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -5196,6 +5230,7 @@ function TripConversationDetailPanel({
   selectedConv: TripConversation | null;
   conversations: TripConversation[];
   composeTrips: TripForCompose[];
+  linkedOrgBranding: Record<string, ChatOrgBranding>;
   messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -5220,6 +5255,7 @@ function TripConversationDetailPanel({
       selectedConv={selectedConv}
       conversations={conversations}
       composeTrips={composeTrips}
+      linkedOrgBranding={linkedOrgBranding}
       messagesRef={messagesRef}
       messageInput={messageInput}
       setMessageInput={setMessageInput}
@@ -5245,6 +5281,7 @@ function TripConversationDetailLoaded({
   selectedConv,
   conversations,
   composeTrips,
+  linkedOrgBranding,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -5266,6 +5303,7 @@ function TripConversationDetailLoaded({
   selectedConv: TripConversation;
   conversations: TripConversation[];
   composeTrips: TripForCompose[];
+  linkedOrgBranding: Record<string, ChatOrgBranding>;
   messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -5535,10 +5573,7 @@ function TripConversationDetailLoaded({
    */
   const locationPingRunInfo = useMemo(() => {
     const info = new Map<string, { isLast: boolean; runCount: number }>();
-    const isLocationPing = (m: TripMessageRow) =>
-      (m.message_type === 'system_log' || m.message_type === 'system' ||
-       m.message_type === 'update' || m.message_type === 'location_log') &&
-      parseMessageLocationData(m) !== null;
+    const isLocationPing = (m: TripMessageRow) => isLocationPingMessage(m);
 
     let runIds: string[] = [];
     const flushRun = () => {
@@ -5889,7 +5924,16 @@ function TripConversationDetailLoaded({
       const trackLoc = parseMessageLocationData(m);
       if (trackLoc) {
         return (
-          <LocationEventCard message={m} location={trackLoc} isMobile={!isDesktop} />
+          <ChatLocationSystemCard
+            message={m}
+            location={trackLoc}
+            isMobile={!isDesktop}
+            tripHint={{
+              pickupArea: liveConv.pickup_area,
+              dropLocation: liveConv.drop_location,
+              status: liveConv.trip_status,
+            }}
+          />
         );
       }
     }
@@ -5924,6 +5968,13 @@ function TripConversationDetailLoaded({
             message={m}
             liveRevisedEta={longHaulLiveEta}
             liveHealthStatus={longHaulLiveHealth}
+            tripPlan={{
+              distance: tripCompose?.distance ?? null,
+              startedAt: tripCompose?.started_at ?? null,
+              pickupAt: tripCompose?.pickup_date ?? null,
+              createdAt:
+                tripCompose?.created_at ?? liveConv.trip_created_at ?? null,
+            }}
           />
         );
       }
@@ -5935,11 +5986,16 @@ function TripConversationDetailLoaded({
         const pingInfo = locationPingRunInfo.get(m.id);
         if (pingInfo && !pingInfo.isLast) return null;
         return (
-          <LocationEventCard
+          <ChatLocationSystemCard
             message={m}
             location={locData}
             isMobile={!isDesktop}
             consolidatedCount={pingInfo?.runCount ?? 1}
+            tripHint={{
+              pickupArea: liveConv.pickup_area,
+              dropLocation: liveConv.drop_location,
+              status: liveConv.trip_status,
+            }}
           />
         );
       }
@@ -5990,13 +6046,23 @@ function TripConversationDetailLoaded({
         onAvatarPress = () => router.push(`/public-profile/driver/${driverId}`);
       }
     }
+    const peerAvatar = own
+      ? null
+      : resolveTripMessagePeerAvatar({
+          message: m,
+          conversationPartyType: liveConv.party_type,
+          composeTrip: tripCompose,
+          brandingMap: linkedOrgBranding,
+          fallbackName: peerLabel,
+        });
+
     return (
       <ChatBubble
         isOwn={own}
         content={m.content}
         timestamp={m.created_at}
         senderName={own ? undefined : peerLabel}
-        avatarSeed={own ? undefined : m.sender_avatar_seed}
+        peerAvatar={peerAvatar}
         deliveryStatus={own ? resolveOutgoingDeliveryStatus(m) : undefined}
         isNew={Date.parse(m.created_at) > mountedAtMs}
         isMobile={!isDesktop}
@@ -6023,6 +6089,8 @@ function TripConversationDetailLoaded({
     supplierId,
     driverId,
     locationPingRunInfo,
+    tripCompose,
+    linkedOrgBranding,
   ]);
 
   const indentShipperDisplayName = useMemo(() => {
@@ -6331,6 +6399,11 @@ function NetworkDetailPanel({
               content={m.content}
               timestamp={m.timestamp}
               senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
+              peerAvatar={
+                m.senderId !== "dispatcher-1"
+                  ? resolveNetworkPartnerAvatar(selectedNet)
+                  : null
+              }
               isMobile={!isDesktop}
             />
           )}

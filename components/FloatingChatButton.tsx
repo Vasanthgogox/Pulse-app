@@ -10,28 +10,14 @@ import { useOptionalIntegratedChat } from "@/features/chat/contexts/IntegratedCh
 import { useOptionalTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
+import { isFloatingChatHostRoute } from "@/lib/floatingChatHostRoute.util";
 import { ROUTES } from "@/lib/routes";
 
 type ChatTab = "trips" | "network";
 
 function useShouldShow(): boolean {
   const pathname = usePathname();
-  if (!pathname) return false;
-  if (pathname.includes("chat")) return false;
-  // Driver shell has its own trip chat entry points — avoid stacking this FAB over driver UI (web/native).
-  if (pathname.includes("(driver)")) return false;
-  const p = pathname.replace(/\/$/, "");
-  const ungrouped = p.replace("/(tabs)", "");
-  return (
-    p === ROUTES.TABS.FINANCE ||
-    p === ROUTES.TABS.TRIPS ||
-    p === ROUTES.TABS.NETWORK ||
-    p === ROUTES.PULSE_LOADS ||
-    ungrouped === "/finance" ||
-    ungrouped === "/trips" ||
-    ungrouped === "/network" ||
-    ungrouped === ROUTES.PULSE_LOADS
-  );
+  return isFloatingChatHostRoute(pathname);
 }
 
 function useFloatingChatSnapshot() {

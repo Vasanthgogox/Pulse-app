@@ -165,6 +165,14 @@ export interface PartyRegistrationPortalProps {
    * If no app account match, review still saves via `onAddDriver`.
    */
   onInviteDriver?: (data: DriverFormData) => Promise<void>;
+  /** Optional prefill for client form (used by attribution flow). */
+  initialClientPrefill?: {
+    organizationName?: string | null;
+    contactName?: string | null;
+    phone?: string | null;
+  };
+  /** Force full-page wizard layout (no desktop popup shell). */
+  forceFullPage?: boolean;
 }
 
 const DL_CLEAN = /[\s-]/g;
@@ -286,7 +294,10 @@ export function PartyRegistrationPortal(props: PartyRegistrationPortalProps) {
   if (!props.visible) return null;
 
   const { width } = useWindowDimensions();
-  const isWide = Platform.OS === "web" && width >= 720;
+  const isWide =
+    props.forceFullPage !== true &&
+    Platform.OS === "web" &&
+    width >= 720;
 
   return <PartyRegistrationPortalInner {...props} layoutWide={isWide} />;
 }
@@ -309,6 +320,7 @@ function PartyRegistrationPortalInner(
     onSendInvitation,
     onSendSupplierInvitation,
     onInviteDriver,
+    initialClientPrefill,
     layoutWide,
   } = props;
 
@@ -457,6 +469,14 @@ function PartyRegistrationPortalInner(
         setContactName(draft.contactName);
         setPhoneDigits(draft.phoneDigits);
       }
+      const prefillOrg = String(initialClientPrefill?.organizationName ?? "").trim();
+      const prefillContact = String(initialClientPrefill?.contactName ?? "").trim();
+      const prefillPhone = formatMobileNumber(
+        String(initialClientPrefill?.phone ?? "").trim(),
+      );
+      if (prefillOrg) setOrgOrCompanyName(prefillOrg);
+      if (prefillContact) setContactName(prefillContact);
+      if (prefillPhone) setPhoneDigits(prefillPhone);
     } else if (initialKind === "supplier") {
       const draft = readDraft<PartyContactDraftStorage>(SUPPLIER_DRAFT_STORAGE_KEY);
       if (draft && draft.organizationId === (organizationId ?? null)) {
@@ -489,7 +509,7 @@ function PartyRegistrationPortalInner(
         setVehicleAxle(draft.axle);
       }
     }
-  }, [visible, initialKind, organizationId]);
+  }, [visible, initialKind, organizationId, initialClientPrefill]);
 
   useEffect(() => {
     if (!visible || kind !== "client") return;

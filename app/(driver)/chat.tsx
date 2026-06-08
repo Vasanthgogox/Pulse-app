@@ -623,7 +623,6 @@ export default function DriverChatScreen() {
             <FlashList
               data={conversations}
               keyExtractor={(c) => c.id}
-              estimatedItemSize={68}
               contentContainerStyle={dr.convListContent}
               renderItem={({ item }) => (
                 <ConvListItem

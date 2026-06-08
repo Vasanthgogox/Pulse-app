@@ -488,11 +488,16 @@ export function TripAssignmentBlock({
     }
 
     if (driverAssignOrgId) {
+      // Pass the fleet vehicle ID directly to the RPC so driver + vehicle are assigned
+      // atomically in one SECURITY DEFINER call.  The previous pattern of calling
+      // assignAggregateTripDriverByPhone then updateTripAssignment separately failed
+      // when the supplier record lacked linked_organization_id (RLS gap on direct update).
       const { error: rpcErr, trip: assignedTrip } = await assignAggregateTripDriverByPhone(
         trip.id,
         orgForDriver,
         trimmed,
         matchedVehicle ? null : phoneVehicleInput.trim() || null,
+        matchedVehicle?.id ?? null,    // ← pass vehicle_id to RPC directly
       );
       if (rpcErr) {
         setPhoneSaving(false);
@@ -500,15 +505,6 @@ export function TripAssignmentBlock({
         return;
       }
       await applyPhoneDriverDisplayName(assignedTrip?.driver_id, orgForDriver);
-      if (matchedVehicle) {
-        const { error: vehicleErr } = await updateTripAssignment(
-          trip.id,
-          { vehicle_id: matchedVehicle.id },
-          auditOpts,
-        );
-        if (vehicleErr)
-          setPhoneError(humanizeTripIdInRpcError(vehicleErr.message, trip));
-      }
     } else {
       const { error, trip: assignedTrip } = await assignTripDriverByPhone(
         trip.id,

@@ -1164,7 +1164,6 @@ export function ConnectionsView({
           data={connections}
           keyExtractor={(item) => `grid-${item.role}-${item.id}`}
           numColumns={gridNumColumns}
-          estimatedItemSize={120}
           renderItem={({ item }) => <GridCard item={item} />}
           contentContainerStyle={styles.gridList}
           showsVerticalScrollIndicator={false}
@@ -1184,7 +1183,6 @@ export function ConnectionsView({
           key="list"
           data={connections}
           keyExtractor={(item) => `list-${item.role}-${item.id}`}
-          estimatedItemSize={72}
           renderItem={({ item }) => <ListCard item={item} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

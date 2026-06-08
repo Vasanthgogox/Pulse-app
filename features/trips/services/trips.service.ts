@@ -563,6 +563,15 @@ export interface CreateTripData {
   owner_user_id?: string | null;
   /** User who created this row. */
   created_by_user_id?: string | null;
+  /** When set, used instead of default `assigned` (e.g. completed historical attribution). */
+  status?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  /**
+   * Skip driver/vehicle single-active-trip preflight.
+   * Used when recording a past trip that should not block live assignments.
+   */
+  skipAssignmentConflictCheck?: boolean;
 }
 
 type PostgrestLikeError = {
@@ -1115,10 +1124,32 @@ function isMissingColumnError(
   );
 }
 
-function buildFallbackTripNumber(): string {
-  const stamp = Date.now().toString().slice(-10);
-  const rand = Math.floor(Math.random() * 900000 + 100000).toString();
-  return `TRP${stamp}${rand}`;
+/**
+ * DB-backed fallback: calls get_safe_fallback_trip_number() which uses a
+ * global Postgres SEQUENCE — zero collision probability.
+ *
+ * Falls back to a crypto-random local ID only when the DB call itself fails
+ * (e.g. completely offline).  The 'FTRP-' prefix distinguishes fallback IDs
+ * from canonical trip numbers so they are never confused in reports.
+ */
+async function buildFallbackTripNumber(): Promise<string> {
+  try {
+    const { data, error } = await supabase().rpc('get_safe_fallback_trip_number');
+    if (!error && data) return String(data);
+  } catch {
+    // DB unreachable — use crypto-safe local fallback below
+  }
+  // Crypto-safe local emergency fallback (offline / DB completely down)
+  const buf = new Uint32Array(2);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(buf);
+  } else {
+    // Node.js fallback
+    buf[0] = Math.floor(Math.random() * 0xFFFFFFFF);
+    buf[1] = Math.floor(Math.random() * 0xFFFFFFFF);
+  }
+  const hex = (buf[0] * 0x100000000 + buf[1]).toString(16).padStart(16, '0');
+  return `FTRP-${hex}`;
 }
 
 function isTripUserForeignKeyError(
@@ -1167,79 +1198,67 @@ function formatTripNumberFromSequence(seq: number): string {
   return `TRP${digits.padStart(Math.max(3, digits.length), "0")}`;
 }
 
+/**
+ * Returns the next trip sequence number for an org.
+ *
+ * Uses the authoritative DB counter (operational_sequences / organization_counters)
+ * via the get_next_trip_sequence_for_org() RPC — never limited to recent rows.
+ *
+ * The old 500-row client-side scan is kept only as a last resort when the RPC
+ * itself is unavailable (schema not yet migrated).
+ */
 async function getNextOrgTripSequence(orgId: string): Promise<number> {
-  const seqRes = await supabase()
-    .from("trips")
-    .select("sequence_number")
-    .eq("organization_id", orgId)
-    .not("sequence_number", "is", null)
-    .order("sequence_number", { ascending: false })
-    .limit(1);
-
-  if (
-    seqRes.error &&
-    !isMissingColumnError(seqRes.error.message, seqRes.error.code)
-  ) {
-    throw new Error(seqRes.error.message);
-  }
-
-  if (!seqRes.error) {
-    const seqRow =
-      (seqRes.data?.[0] as { sequence_number?: number | null } | undefined) ??
-      null;
-    const seq = Number(seqRow?.sequence_number ?? 0);
-    if (Number.isFinite(seq) && seq > 0) {
-      return Math.floor(seq) + 1;
+  // Primary: authoritative counter from DB (reads the actual sequence rows)
+  try {
+    const { data, error } = await supabase().rpc(
+      'get_next_trip_sequence_for_org',
+      { p_org_id: orgId },
+    );
+    if (!error && data != null) {
+      const next = Number(data);
+      if (Number.isFinite(next) && next > 0) return next;
     }
+  } catch {
+    // RPC not yet deployed — fall through to legacy path
   }
 
-  const tripResWithDisplay = await supabase()
-    .from("trips")
-    .select("trip_number, display_trip_id")
-    .eq("organization_id", orgId)
-    .order("created_at", { ascending: false })
+  // Legacy fallback: read the org counter table directly
+  try {
+    const { data: counterRow, error: counterErr } = await supabase()
+      .from('organization_counters')
+      .select('trip_seq')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    if (!counterErr && counterRow) {
+      const seq = Number((counterRow as { trip_seq?: number | null }).trip_seq ?? 0);
+      if (Number.isFinite(seq) && seq > 0) return seq + 1;
+    }
+  } catch {
+    // table not available
+  }
+
+  // Last resort: scan recent trips (bounded, only when counters unavailable)
+  const tripRes = await supabase()
+    .from('trips')
+    .select('trip_number, display_trip_id')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
     .limit(500);
 
-  let tripRows: {
-    trip_number?: string | null;
-    display_trip_id?: string | null;
-  }[] = [];
-  if (tripResWithDisplay.error) {
-    if (
-      !isMissingColumnError(
-        tripResWithDisplay.error.message,
-        tripResWithDisplay.error.code,
-      )
-    ) {
-      throw new Error(tripResWithDisplay.error.message);
-    }
-    const tripRes = await supabase()
-      .from("trips")
-      .select("trip_number")
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (tripRes.error) throw new Error(tripRes.error.message);
-    tripRows = (tripRes.data ?? []) as { trip_number?: string | null }[];
-  } else {
-    tripRows = (tripResWithDisplay.data ?? []) as {
-      trip_number?: string | null;
-      display_trip_id?: string | null;
-    }[];
-  }
-
   let maxSeq = 0;
-  for (const row of tripRows) {
-    const r = row as {
-      trip_number?: string | null;
-      display_trip_id?: string | null;
-    };
-    const fromDisplay = parseTripNumberSequence(r.display_trip_id);
-    const fromTrip = parseTripNumberSequence(r.trip_number);
-    const s = fromDisplay ?? fromTrip;
+  for (const row of ((tripRes.data ?? []) as { trip_number?: string | null; display_trip_id?: string | null }[])) {
+    const s =
+      parseTripNumberSequence(row.display_trip_id) ??
+      parseTripNumberSequence(row.trip_number);
     if (s != null && s > maxSeq) maxSeq = s;
   }
   return maxSeq + 1;
+}
+
+function isTerminalTripStatusForAssignment(status: string | null | undefined): boolean {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return (ONGOING_TRIP_TERMINAL_STATUSES as readonly string[]).includes(normalized);
 }
 
 export async function createTrip(
@@ -1247,7 +1266,12 @@ export async function createTrip(
   userId: string,
   data: CreateTripData,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
-  if (data.driver_id != null) {
+  const initialStatus = String(data.status ?? "assigned").trim() || "assigned";
+  const skipAssignmentConflictCheck =
+    data.skipAssignmentConflictCheck === true ||
+    isTerminalTripStatusForAssignment(initialStatus);
+
+  if (!skipAssignmentConflictCheck && data.driver_id != null) {
     const { error: conflictCheckError, trip: ongoingTrip } =
       await getDriverOngoingTrip(data.driver_id);
     if (conflictCheckError) return { error: conflictCheckError, trip: null };
@@ -1262,7 +1286,7 @@ export async function createTrip(
   }
 
   const createVehicleId = normalizeNullableUuid(data.vehicle_id);
-  if (createVehicleId != null) {
+  if (!skipAssignmentConflictCheck && createVehicleId != null) {
     const { error: vErr, trip: vehicleTrip } =
       await getVehicleOngoingTrip(createVehicleId);
     if (vErr) return { error: vErr, trip: null };
@@ -1351,7 +1375,9 @@ export async function createTrip(
     // - legacy DB allows: draft/assigned/in_progress/completed/cancelled
     // - newer DB allows: pending_acceptance/assigned/in_progress/... etc
     // "assigned" is accepted in both and hub metrics still bucket rows without driver as "unassigned".
-    status: "assigned",
+    status: initialStatus,
+    started_at: data.started_at ?? null,
+    completed_at: data.completed_at ?? null,
     notes: (data.notes ?? "").trim() || null,
     pickup_date: data.pickup_date ?? null,
     load_tons: loadTons,
@@ -1487,7 +1513,7 @@ export async function createTrip(
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const fallbackInsertData = {
         ...insertData,
-        trip_number: buildFallbackTripNumber(),
+        trip_number: await buildFallbackTripNumber(),
       };
       const { data: retryRow, error: retryError } = await supabase()
         .from("trips")
@@ -1730,6 +1756,24 @@ export async function updateTripSupplier(
   const { data: row, error } = await supabase()
     .from("trips")
     .update(updates)
+    .eq("id", tripId)
+    .select()
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: (row ?? null) as TripRow | null };
+}
+
+export async function updateTripDriverCommission(
+  tripId: string,
+  amount: number,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const normalizedAmount = Math.max(0, Math.round(Number(amount) || 0));
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update({
+      driver_commission: normalizedAmount,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", tripId)
     .select()
     .maybeSingle();
@@ -1984,6 +2028,8 @@ export interface UpdateTripStatusData {
   status: string;
   started_at?: string | null;
   completed_at?: string | null;
+  /** Ephemeral marker read by status→chat DB trigger (e.g. business_simulated). */
+  status_change_origin?: string | null;
 }
 
 const COMPLETED_STATUS_SET = new Set(["completed", "delivered", "done"]);
@@ -2197,6 +2243,8 @@ export async function updateTripStatus(
     updates.started_at = data.started_at ?? null;
   if (data.completed_at !== undefined)
     updates.completed_at = data.completed_at ?? null;
+  if (data.status_change_origin !== undefined)
+    updates.status_change_origin = data.status_change_origin ?? null;
   const { data: row, error } = await supabase()
     .from("trips")
     .update(updates)

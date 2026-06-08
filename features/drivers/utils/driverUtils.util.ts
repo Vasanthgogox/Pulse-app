@@ -11,6 +11,24 @@ export interface TripWithSupplier {
   driver_commission?: number | null;
   supplier_rate?: number | null;
   client_price?: number | null;
+  distance?: string | number | null;
+  odometer_distance_km?: number | null;
+  gps_distance_km?: number | null;
+}
+
+export interface DriverTripPayoutTerms {
+  commissionPercent?: number | null;
+  commissionPerKm?: number | null;
+}
+
+function pickTripDistanceKm(trip: TripWithSupplier): number {
+  const odometer = Number(trip.odometer_distance_km ?? 0);
+  if (Number.isFinite(odometer) && odometer > 0) return odometer;
+  const gps = Number(trip.gps_distance_km ?? 0);
+  if (Number.isFinite(gps) && gps > 0) return gps;
+  const fallback = Number(trip.distance ?? 0);
+  if (Number.isFinite(fallback) && fallback > 0) return fallback;
+  return 0;
 }
 
 /** Trip shape for roster detection (source + driver/vehicle from org). */
@@ -123,13 +141,36 @@ export function shouldShowIntegratedSubtypePillForHub(
 }
 
 /**
- * Trip earnings shown to driver. Returns 0 for aggregate trips (offline payment).
- * Otherwise: driver_commission, else 10% supplier_rate, else 10% client_price (matches finance aggregation).
+ * Trip earnings shown to driver.
+ * Priority:
+ * 1) explicit `driver_commission` on trip
+ * 2) accepted invite per-km payout (odometer distance first, then GPS, then trip distance)
+ * 3) accepted invite trip-level commission %
+ * 4) legacy fallback (10% supplier_rate, else 10% client_price)
  */
-export function tripEarningsForDriver(trip: TripWithSupplier | null | undefined): number {
+export function tripEarningsForDriver(
+  trip: TripWithSupplier | null | undefined,
+  payoutTerms?: DriverTripPayoutTerms | null,
+): number {
   if (!trip) return 0;
   const commission = Number(trip.driver_commission ?? 0) || 0;
-  if (commission > 0) return commission;
+  if (commission > 0) return Math.round(commission);
+
+  const perKm = Number(payoutTerms?.commissionPerKm ?? 0) || 0;
+  if (perKm > 0) {
+    const km = pickTripDistanceKm(trip);
+    if (km > 0) return Math.round(km * perKm);
+  }
+
+  const commissionPercent = Number(payoutTerms?.commissionPercent ?? 0) || 0;
+  if (commissionPercent > 0) {
+    const ratio = Math.min(100, commissionPercent) / 100;
+    const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
+    if (supplierRate > 0) return Math.round(supplierRate * ratio);
+    const clientPrice = Number(trip.client_price ?? 0) || 0;
+    if (clientPrice > 0) return Math.round(clientPrice * ratio);
+  }
+
   const supplierRate = Number(trip.supplier_rate ?? 0) || 0;
   if (supplierRate > 0) return Math.round(supplierRate * 0.1);
   const clientPrice = Number(trip.client_price ?? 0) || 0;

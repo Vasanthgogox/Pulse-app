@@ -33,7 +33,16 @@ export function useAlertRegistryFinanceHandlers(): {
   );
 
   const openLedgerForSalaryPayment = useCallback(
-    (req: SalaryRequestWithDriverRow) => {
+    async (req: SalaryRequestWithDriverRow) => {
+      const isTripBasedAttribution =
+        req.request_type === "trip_based" &&
+        String(req.note ?? "").toLowerCase().includes("fleet trip");
+      if (isTripBasedAttribution) {
+        router.push(
+          `/(modals)/attribution-trip-create?requestId=${encodeURIComponent(req.id)}` as const,
+        );
+        return;
+      }
       const driverName = req.drivers?.name?.trim() || t("driver");
       const isTripBased =
         req.request_type === "trip_based" &&
@@ -54,7 +63,7 @@ export function useAlertRegistryFinanceHandlers(): {
       }
       router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
     },
-    [router, t],
+    [router, t, refreshRegistry],
   );
 
   const handleSharedAction = useCallback(

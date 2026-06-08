@@ -14,6 +14,20 @@ export const FLOW_MINT = "rgba(167,243,208,0.92)";
 /** Matches `DriverInviteModal` sheet top curve. */
 export const TRIP_SHEET_TOP_RADIUS = 28;
 
+/** Shared sizing — assignment card + active flow stages (incl. POD). */
+export const TRIP_SHEET_BTN_HEIGHT = 44;
+export const TRIP_SHEET_HERO_PAD = {
+  top: 16,
+  horizontal: 18,
+  bottom: 14,
+} as const;
+export const TRIP_SHEET_BODY_PAD = {
+  horizontal: 18,
+  top: 12,
+  bottom: 12,
+  gap: 8,
+} as const;
+
 export function compactRoutePlace(raw: string): string {
   const t = (raw ?? "").trim();
   if (!t || t === "—") return "—";
@@ -92,7 +106,7 @@ export function HeroAssignerBlock({
             organizationAvatarSeed={assigner.orgAvatarSeed}
             avatarUrl={assigner.orgAvatarUrl}
             entityType="client"
-            size={28}
+            size={30}
             borderStyle={sheetStyles.heroAvatarBorder}
           />
           <View style={sheetStyles.heroAssignerTextCol}>
@@ -279,7 +293,7 @@ export const sheetStyles = StyleSheet.create({
     flexShrink: 0,
   },
   heroKindText: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: "800",
     letterSpacing: 0.4,
   },
@@ -303,24 +317,24 @@ export const sheetStyles = StyleSheet.create({
     justifyContent: "center",
   },
   heroAssignPrimary: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     color: "#fff",
-    lineHeight: 14,
+    lineHeight: 16,
     letterSpacing: -0.15,
   },
   heroAssignSecondary: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
     color: FLOW_MINT,
-    lineHeight: 13,
+    lineHeight: 14,
   },
   heroAvatarBorder: {
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.5)",
   },
   tripDetailsCard: {
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.border,
     backgroundColor: Theme.screenBackground,
@@ -329,9 +343,9 @@ export const sheetStyles = StyleSheet.create({
   statsInline: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 32,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    minHeight: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   statChip: {
     flex: 1,
@@ -342,7 +356,7 @@ export const sheetStyles = StyleSheet.create({
     minWidth: 0,
   },
   statValue: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
     letterSpacing: -0.2,
   },
@@ -351,9 +365,9 @@ export const sheetStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    minHeight: 30,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    minHeight: 34,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   locationSide: {
     flex: 1,
@@ -366,9 +380,9 @@ export const sheetStyles = StyleSheet.create({
   locationText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
-    lineHeight: 12,
+    lineHeight: 13,
   },
   statsEndGroup: {
     flexDirection: "row",
@@ -384,7 +398,7 @@ export const sheetStyles = StyleSheet.create({
     minWidth: 0,
   },
   statValueCompact: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     letterSpacing: -0.15,
     flexShrink: 1,
@@ -413,9 +427,9 @@ export const sheetStyles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
     minWidth: 0,
-    minHeight: 34,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    minHeight: 38,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
   },
   routeSide: {
     flex: 1,
@@ -443,22 +457,43 @@ export const sheetStyles = StyleSheet.create({
   routeCity: {
     flexShrink: 1,
     minWidth: 0,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "800",
-    lineHeight: 14,
+    lineHeight: 17,
     letterSpacing: -0.1,
   },
   routeArrow: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     flexShrink: 0,
     opacity: 0.72,
     paddingHorizontal: 2,
   },
   sectionLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
+  },
+  /** Inset content card (POD list, delivery docs) — matches tripDetailsCard chrome. */
+  insetCard: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
+    padding: 12,
+  },
+  bodyBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: -0.1,
+  },
+  bodyMetaText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  bodyLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

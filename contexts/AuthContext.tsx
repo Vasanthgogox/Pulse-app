@@ -73,6 +73,8 @@ interface AuthContextType {
   restoreError: AuthError | null;
   clearRestoreError: () => void;
   refreshSession: () => Promise<void>;
+  /** Optimistic profile patch after avatar/name edits (before refreshSession completes). */
+  patchProfile: (updates: Partial<UserProfile>) => void;
   signIn: (email: string, password: string, keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
   signInWithGoogle: (keepSignedIn?: boolean) => Promise<{ error: Error | null }>;
   signUp: (options: authService.SignUpOptions) => Promise<{ error: Error | null; emailVerificationRequired?: boolean }>;
@@ -207,6 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const unsubscribeRef = useRef<(() => void) | undefined>(undefined);
   /** True while cold-start restore runs — ignore spurious SDK sign-out events. */
   const restoringRef = useRef(true);
+  /** Coalesce concurrent DB profile lookups (restore + listener + zombie recovery). */
+  const profileVerifyInflightRef = useRef(
+    new Map<string, Promise<authService.AuthProfile | null>>(),
+  );
 
   // ---- sequence guards ----
 
@@ -257,23 +263,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getVerifiedDbProfile = useCallback(
     async (uid: string): Promise<authService.AuthProfile | null> => {
-      try {
-        return await withTimeout(
-          (async () => {
-            const dbProfile = await authService.getProfile(uid);
-            if (dbProfile) return dbProfile;
+      const inflight = profileVerifyInflightRef.current.get(uid);
+      if (inflight) return inflight;
 
-            const provision = await authService.ensureCurrentUserProfile();
-            if (provision.error) return null;
+      const promise = (async () => {
+        try {
+          return await withTimeout(
+            (async () => {
+              const dbProfile = await authService.getProfile(uid);
+              if (dbProfile) return dbProfile;
 
-            return await authService.getProfile(uid);
-          })(),
-          PROFILE_VERIFY_TIMEOUT_MS,
-        );
-      } catch (e) {
-        logAuthError("profile_verification_error", e, { uid });
-        return null;
-      }
+              const provision = await authService.ensureCurrentUserProfile();
+              if (provision.error) return null;
+
+              return await authService.getProfile(uid);
+            })(),
+            PROFILE_VERIFY_TIMEOUT_MS,
+          );
+        } catch (e) {
+          if (e instanceof TimeoutError) {
+            logAuth("profile_verification_timeout", { uid }, "warn");
+          } else {
+            logAuthError("profile_verification_error", e, { uid });
+          }
+          return null;
+        } finally {
+          profileVerifyInflightRef.current.delete(uid);
+        }
+      })();
+
+      profileVerifyInflightRef.current.set(uid, promise);
+      return promise;
     },
     [],
   );
@@ -282,11 +302,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyDegradedAuthSession = useCallback(
     (auth: { user: AuthUser; profile: authService.AuthProfile }) => {
       const nextProfile = freezeInDev(authProfileToUserProfile(auth.profile));
+      const trustSessionRole =
+        auth.profile.role === "driver" || auth.profile.role === "user";
       setUser(auth.user);
       setProfile(nextProfile);
-      setRoleVerified(false);
+      setRoleVerified(trustSessionRole);
       setStatus("authenticated");
-      logAuth("profile_verification_degraded", { uid: auth.user.uid }, "warn");
+      logAuth(
+        trustSessionRole
+          ? "profile_verification_metadata_fallback"
+          : "profile_verification_degraded",
+        { uid: auth.user.uid, role: auth.profile.role },
+        "warn",
+      );
     },
     [],
   );
@@ -492,11 +520,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
             setRestoreError(null);
             if (!verifiedDbProfile) {
+              const trustSessionRole =
+                nextProfile.role === "driver" || nextProfile.role === "user";
               setUser(nextUser);
               setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
-              setRoleVerified(false);
+              setRoleVerified(trustSessionRole);
               setStatus("authenticated");
-              logAuth("restore_profile_degraded", { uid: nextUser.uid }, "warn");
+              logAuth(
+                trustSessionRole
+                  ? "restore_profile_metadata_fallback"
+                  : "restore_profile_degraded",
+                { uid: nextUser.uid, role: nextProfile.role },
+                "warn",
+              );
               return;
             }
             const finalProfile = freezeInDev(authProfileToUserProfile(nextProfile));
@@ -570,6 +606,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (status === "restoring" || !user || roleVerified) return;
     const timer = setTimeout(async () => {
       if (!user) return;
+      if (profileVerifyInflightRef.current.has(user.uid)) {
+        logAuth("zombie_recovery_skipped_verify_inflight", { uid: user.uid });
+        return;
+      }
       logAuth("zombie_recovery_triggered", { uid: user.uid });
       try {
         const dbProfile = await getVerifiedDbProfile(user.uid);
@@ -599,7 +639,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       await forceSignOutOnAuthFailure("zombie_recovery_failed_no_session");
-    }, 10_000);
+    }, 12_000);
     return () => clearTimeout(timer);
   }, [status, user, roleVerified, getVerifiedDbProfile, forceSignOutOnAuthFailure]);
 
@@ -658,18 +698,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const session = await withTimeout(
         authService.refreshSession(),
-        AUTH_TIMEOUT_MS,
+        AUTH_RESTORE_REFRESH_TIMEOUT_MS,
       );
       if (!isCurrentAuthAttempt(refreshAttemptId)) return;
       if (session) {
         const dbProfile = await getVerifiedDbProfile(session.user.uid);
         if (!isCurrentAuthAttempt(refreshAttemptId)) return;
         if (!dbProfile) {
+          const trustSessionRole =
+            session.profile.role === "driver" || session.profile.role === "user";
           setUser(session.user);
           setProfile(freezeInDev(authProfileToUserProfile(session.profile)));
-          setRoleVerified(false);
+          setRoleVerified(trustSessionRole);
           setStatus("authenticated");
-          logAuth("refresh_profile_degraded", { uid: session.user.uid }, "warn");
+          logAuth(
+            trustSessionRole
+              ? "refresh_profile_metadata_fallback"
+              : "refresh_profile_degraded",
+            { uid: session.user.uid, role: session.profile.role },
+            "warn",
+          );
           return;
         }
         const merged = mergeAuthProfiles(session.profile, dbProfile);
@@ -708,7 +756,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (e instanceof TimeoutError) {
-        logAuthError("refresh_session_timeout", e);
+        logAuth("refresh_session_timeout", { message: e.message }, "warn");
       } else {
         logAuthError("refresh_session_error", e);
       }
@@ -747,6 +795,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = useCallback(refreshSessionInternal, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const patchProfile = useCallback((updates: Partial<UserProfile>) => {
+    setProfile((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...updates };
+      return areUserProfilesEqual(prev, next) ? prev : freezeInDev(next);
+    });
+  }, []);
+
   const signOut = useCallback(async () => {
     signOutRequestedRef.current = true;
     clearAllRealtimeChannels();
@@ -775,6 +831,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       restoreError,
       clearRestoreError,
       refreshSession,
+      patchProfile,
       signIn,
       signInWithGoogle,
       signUp,
@@ -790,6 +847,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       restoreError,
       clearRestoreError,
       refreshSession,
+      patchProfile,
       signIn,
       signInWithGoogle,
       signUp,

@@ -114,6 +114,16 @@ function RegistryFeedList({
   const { feed } = useRegistryFeed(tab, orgId);
 
   const visible = feed.slice(0, visibleCount);
+  const firstAttributionEntryId = useMemo(() => {
+    const first = visible.find(
+      (entry) =>
+        entry.kind === "salary" &&
+        !!entry.salary &&
+        entry.salary.request_type === "trip_based" &&
+        String(entry.salary.note ?? "").toLowerCase().includes("fleet trip"),
+    );
+    return first?.id ?? null;
+  }, [visible]);
 
   if (auth?.profile?.role === "driver" || !orgId || bootstrapStatus !== "ready") {
     return null;
@@ -192,45 +202,56 @@ function RegistryFeedList({
         }
         if (entry.kind === "salary" && entry.salary) {
           const req = entry.salary;
+          const isTripBasedAttribution =
+            req.request_type === "trip_based" &&
+            String(req.note ?? "").toLowerCase().includes("fleet trip");
           return (
-            <AlertRegistrySignalCard
-              key={entry.id}
-              typeLabel="SALARY REQUEST"
-              title={`${req.drivers?.name ?? "Driver"} requested payment`}
-              detail={`${req.request_type.replace("_", " ")} · ₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`}
-              status="ACTION"
-              timeLabel={new Date(req.created_at).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-              })}
-              footer={
-                tab === "active" ? (
-                  <View style={cardActionStyles.registryCardActions}>
-                    <TouchableOpacity
-                      style={cardActionStyles.registryGhostBtn}
-                      onPress={() => finance.onRejectSalary(req.id)}
-                      disabled={finance.busySalaryId === req.id}
-                    >
-                      <Text style={cardActionStyles.registryGhostBtnText}>
-                        Reject
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={cardActionStyles.registryPrimaryBtn}
-                      onPress={() => finance.onPaySalary(req)}
-                    >
-                      <Text style={cardActionStyles.registryPrimaryBtnText}>
-                        Pay now
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={cardActionStyles.registryStatusText}>
-                    {String(req.status ?? "").toUpperCase()}
-                  </Text>
-                )
-              }
-            />
+            <View key={entry.id} style={styles.feedItemWrap}>
+              {entry.id === firstAttributionEntryId ? (
+                <Text style={styles.feedGroupTitle}>Attribution requests</Text>
+              ) : null}
+              <AlertRegistrySignalCard
+                typeLabel={isTripBasedAttribution ? "FLEET ATTRIBUTION" : "SALARY REQUEST"}
+                title={
+                  isTripBasedAttribution
+                    ? `${req.drivers?.name ?? "Driver"} sent trip for review`
+                    : `${req.drivers?.name ?? "Driver"} requested payment`
+                }
+                detail={`${req.request_type.replace("_", " ")} · ₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`}
+                status="ACTION"
+                timeLabel={new Date(req.created_at).toLocaleDateString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                })}
+                footer={
+                  tab === "active" ? (
+                    <View style={cardActionStyles.registryCardActions}>
+                      <TouchableOpacity
+                        style={cardActionStyles.registryGhostBtn}
+                        onPress={() => finance.onRejectSalary(req.id)}
+                        disabled={finance.busySalaryId === req.id}
+                      >
+                        <Text style={cardActionStyles.registryGhostBtnText}>
+                          Reject
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={cardActionStyles.registryPrimaryBtn}
+                        onPress={() => finance.onPaySalary(req)}
+                      >
+                        <Text style={cardActionStyles.registryPrimaryBtnText}>
+                          {isTripBasedAttribution ? "Accept" : "Pay now"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Text style={cardActionStyles.registryStatusText}>
+                      {String(req.status ?? "").toUpperCase()}
+                    </Text>
+                  )
+                }
+              />
+            </View>
           );
         }
         return null;
@@ -619,6 +640,17 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     lineHeight: 16,
     paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  feedItemWrap: {
+    gap: 6,
+  },
+  feedGroupTitle: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: Theme.networkSectionLabel,
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
     paddingHorizontal: 2,
   },
   loadMoreBtn: {

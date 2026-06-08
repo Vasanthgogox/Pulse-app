@@ -1,6 +1,7 @@
 /**
  * Create Trip — sectioned form (route, client, allocation); Theme tokens only.
  */
+import { fullPageWizardStyles, WizardClientPicker, WizardClientSummaryCard, WizardEntitySummaryCard, WizardFormBody } from "@/components/full-page-wizard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -178,7 +179,7 @@ export interface AddTripFormFieldsProps {
    * Mobile wizard mode: show a single section card at a time.
    * When unset, renders the full 01/02/03 cards.
    */
-  wizardSection?: "route" | "commodity" | "client" | "allocation";
+  wizardSection?: "route" | "commodity" | "client" | "sale" | "allocation";
   sourceIndent?: AddTripSourceIndent | null;
   /** Mobile allocation sub-step (one screen at a time). */
   allocationSubStep?: AllocationSubStep;
@@ -273,7 +274,10 @@ export function AddTripFormFields({
   const showRouteCard = wizardSection == null || wizardSection === "route";
   const showCommodityCard =
     wizardSection == null || wizardSection === "commodity";
-  const showClientCard = wizardSection == null || wizardSection === "client";
+  const showClientCard = wizardSection == null || wizardSection === "client" || wizardSection === "sale";
+  const showClientPickerOnly = wizardSection === "client";
+  const showClientSaleOnly = wizardSection === "sale";
+  const hideWizardCardHead = wizardSection != null;
   const hideTonsOnRouteStep = wizardSection === "route";
   const showAllocationCard =
     wizardSection == null || wizardSection === "allocation";
@@ -284,18 +288,6 @@ export function AddTripFormFields({
   const isWizardAllocationCard = wizardSection === "allocation";
   /** Compact currency / tracking fields in aggregate allocation pane. */
   const aggregateFieldDensity = isDenseForm || allocationWideLayout ? "compact" : "default";
-  const fieldLabelStyle = [
-    styles.label,
-    labelStyle,
-    isDenseForm && styles.labelDense,
-    isWizardSingleCard && styles.labelWizard,
-  ];
-  const fieldInputStyle = [
-    styles.input,
-    inputStyle,
-    isDenseForm && styles.inputDense,
-    isWizardSingleCard && styles.inputWizardDense,
-  ];
   const showAlloc = useCallback(
     (step: AllocationSubStep) =>
       allocationSubStep == null || allocationSubStep === step,
@@ -327,7 +319,33 @@ export function AddTripFormFields({
   /** Keypad steps: flex column in modal body (footer stays below; no ScrollView overlap). */
   const allocationFillBody =
     mobileAllocWizard && allocKeypadFullscreen && isWizardAllocationCard;
-  const wizardFooterPad = isDenseForm ? 104 : 116;
+  /** Entity picker steps — transparent shell (no nested card clipping). */
+  const allocationEntityPickerStep =
+    mobileAllocWizard &&
+    isWizardAllocationCard &&
+    !allocationFillBody &&
+    (allocationSubStep === "supply" ||
+      allocationSubStep === "fleetDriver" ||
+      allocationSubStep === "fleetVehicle");
+  const allocationShellFill = allocationFillBody || allocationEntityPickerStep;
+  /** Shell owns scroll on mobile wizard steps (not nested ScrollView). */
+  const wizardShellScroll =
+    wizardSection != null && !allocationFillBody;
+  /** Unified attribution-style labels/inputs on all wizard steps except keypad fill. */
+  const isWizardTypography =
+    wizardSection != null && !allocationFillBody;
+  const fieldLabelStyle = [
+    isWizardTypography ? fullPageWizardStyles.wizardFieldLabel : styles.label,
+    !isWizardTypography && labelStyle,
+    isDenseForm && !isWizardTypography && styles.labelDense,
+  ];
+  const fieldInputStyle = [
+    isWizardTypography ? fullPageWizardStyles.wizardFieldInput : styles.input,
+    !isWizardTypography && inputStyle,
+    isDenseForm && !isWizardTypography && styles.inputDense,
+    isWizardTypography && styles.inputWizardDense,
+  ];
+  const wizardFooterPad = 24;
   const allocationWizardProgressSteps = useMemo(() => {
     if (!mobileAllocWizard || !isWizardAllocationCard) return [];
     return getAllocationSubSteps(state).map((id) => ({
@@ -533,6 +551,18 @@ export function AddTripFormFields({
   }, [state.vehicleId, vehicleIdsOnActiveTrip, setters]);
 
   useEffect(() => {
+    if (fleetLoading || !state.driverId) return;
+    const exists = drivers.some((d) => String(d.id) === String(state.driverId));
+    if (!exists) setters.setDriverId(null);
+  }, [fleetLoading, state.driverId, drivers, setters]);
+
+  useEffect(() => {
+    if (fleetLoading || !state.vehicleId) return;
+    const exists = vehicles.some((v) => String(v.id) === String(state.vehicleId));
+    if (!exists) setters.setVehicleId(null);
+  }, [fleetLoading, state.vehicleId, vehicles, setters]);
+
+  useEffect(() => {
     if (!organizationId || state.supplySource !== "aggregate") return;
     fetchSuppliers();
     if (!state.supplierId) setPartnerListExpanded(true);
@@ -712,15 +742,25 @@ export function AddTripFormFields({
     isBusy: vehicleIdsOnActiveTrip.includes(v.id),
   }));
   const selectedDriverRow =
-    driverOptions.find((d) => d.id === state.driverId) ?? null;
+    driverOptions.find((d) => String(d.id) === String(state.driverId)) ?? null;
   const selectedVehicleRow =
-    vehicleOptions.find((v) => v.id === state.vehicleId) ?? null;
-  const showDriverFleetList = !state.driverId || driverListExpanded;
-  const showVehicleFleetList = !state.vehicleId || vehicleListExpanded;
+    vehicleOptions.find((v) => String(v.id) === String(state.vehicleId)) ?? null;
+  const showDriverFleetList =
+    !state.driverId || driverListExpanded || !selectedDriverRow;
+  const showVehicleFleetList =
+    !state.vehicleId || vehicleListExpanded || !selectedVehicleRow;
   const showDriverFleetSummary =
     Boolean(state.driverId && !driverListExpanded && selectedDriverRow);
   const showVehicleFleetSummary =
     Boolean(state.vehicleId && !vehicleListExpanded && selectedVehicleRow);
+  useEffect(() => {
+    if (allocationSubStep !== "fleetDriver") return;
+    if (!state.driverId || !selectedDriverRow) setDriverListExpanded(true);
+  }, [allocationSubStep, state.driverId, selectedDriverRow]);
+  useEffect(() => {
+    if (allocationSubStep !== "fleetVehicle") return;
+    if (!state.vehicleId || !selectedVehicleRow) setVehicleListExpanded(true);
+  }, [allocationSubStep, state.vehicleId, selectedVehicleRow]);
   const driverAvatarGridItems = useMemo(
     () =>
       driverOptionsToAvatarGridItems(
@@ -784,41 +824,42 @@ export function AddTripFormFields({
     supplyIsAsset ? assetDriverVehicleBothSet : aggregateDriverVehicleBothSet;
 
   return (
-    <View style={styles.pageWrap}>
-      <ScrollView
-        style={styles.scroll}
-        scrollEnabled={
-          allocationFillBody
-            ? false
-            : Platform.OS === "web"
-              ? true
-              : isCompactMobile
-                ? true
-                : !scrollBlocked
-        }
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          allocationFillBody
-            ? false
-            : Platform.OS === "web" || isCompactMobile
-              ? true
-              : !scrollBlocked
-        }
+    <View style={[styles.pageWrap, allocationFillBody && styles.pageWrapFill]}>
+      <WizardFormBody
+        shellScroll={wizardShellScroll}
         contentContainerStyle={[
           styles.scrollContent,
-          isDenseForm && styles.scrollContentDense,
-          isWizardSingleCard && styles.scrollContentWizard,
+          isDenseForm && !wizardShellScroll && styles.scrollContentDense,
+          wizardShellScroll && styles.scrollContentWizard,
           allocationFillBody && styles.scrollContentFillBody,
           {
             paddingBottom: allocationFillBody
               ? 8
               : mobileAllocWizard && isWizardAllocationCard
                 ? wizardFooterPad + insets.bottom
-                : Layout.sectionSpacing +
-                  insets.bottom +
-                  (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
+                : wizardShellScroll
+                  ? 8
+                  : Layout.sectionSpacing +
+                    insets.bottom +
+                    (desktopFormGrid ? 52 : isDenseForm ? 88 : isWide ? 68 : 108),
           },
         ]}
+        scrollViewProps={{
+          style: styles.scroll,
+          scrollEnabled: allocationFillBody
+            ? false
+            : Platform.OS === "web"
+              ? true
+              : isCompactMobile
+                ? true
+                : !scrollBlocked,
+          keyboardShouldPersistTaps: "handled",
+          showsVerticalScrollIndicator: allocationFillBody
+            ? false
+            : Platform.OS === "web" || isCompactMobile
+              ? true
+              : !scrollBlocked,
+        }}
       >
         <View
           style={[
@@ -852,14 +893,14 @@ export function AddTripFormFields({
           {showRouteCard ? (
             <View
               style={[
-                styles.card,
-                isDenseForm && styles.cardDense,
+                isWizardTypography ? styles.cardWizardShell : styles.card,
+                !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopGrid,
                 desktopFormGrid && styles.cardDesktopStretch,
-                isWizardRouteStep && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridRouteWeb,
               ]}
             >
+            {!hideWizardCardHead ? (
             <View
               style={[
                 styles.cardHead,
@@ -889,6 +930,7 @@ export function AddTripFormFields({
                 </Text>
               </View>
             </View>
+            ) : null}
 
             {isWizardRouteStep ? (
               <View style={styles.routeWizardBody}>
@@ -1367,14 +1409,14 @@ export function AddTripFormFields({
           {showCommodityCard ? (
             <View
               style={[
-                styles.card,
-                isDenseForm && styles.cardDense,
+                isWizardTypography ? styles.cardWizardShell : styles.card,
+                !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopGrid,
                 desktopFormGrid && styles.cardDesktopStretch,
-                wizardSection === "commodity" && styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridCommodityWeb,
               ]}
             >
+              {!hideWizardCardHead ? (
               <View
                 style={[
                   styles.cardHead,
@@ -1404,6 +1446,7 @@ export function AddTripFormFields({
                   </Text>
                 </View>
               </View>
+              ) : null}
               <TripCommodityFields
                 vehicleType={state.vehicleType}
                 loadType={state.loadType}
@@ -1429,13 +1472,16 @@ export function AddTripFormFields({
           {showClientCard ? (
             <View
               style={[
-                styles.card,
-                isDenseForm && styles.cardDense,
+                isWizardTypography ? styles.cardWizardShell : styles.card,
+                !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopGrid,
-                wizardSection === "client" && styles.cardWizardStep,
+                (wizardSection === "client" || wizardSection === "sale") &&
+                  !isWizardTypography &&
+                  styles.cardWizardStep,
                 desktopFormGrid && styles.cardGridClientWeb,
               ]}
             >
+            {!hideWizardCardHead ? (
             <View
               style={[
                 styles.cardHead,
@@ -1465,6 +1511,7 @@ export function AddTripFormFields({
                 </Text>
               </View>
             </View>
+            ) : null}
 
             <View
               style={[
@@ -1473,8 +1520,10 @@ export function AddTripFormFields({
                 isWide && styles.gridRowWide,
                 desktopFormGrid && styles.gridRowWideDesktop,
                 desktopFormGrid && styles.clientCommercialsRowDesktop,
+                isWizardSingleCard && styles.gridRowWizard,
               ]}
             >
+              {!showClientSaleOnly ? (
               <View
                 style={[
                   styles.gridCol,
@@ -1482,6 +1531,7 @@ export function AddTripFormFields({
                   desktopFormGrid && styles.clientCommercialsClientColDesktop,
                 ]}
               >
+                {!isWizardSingleCard ? (
                 <View
                   style={isWide ? styles.clientCommercialsHeaderBand : undefined}
                 >
@@ -1526,7 +1576,32 @@ export function AddTripFormFields({
                     </View>
                   </View>
                 </View>
-                {clientsLoading ? (
+                ) : null}
+                {isWizardSingleCard && showClientPickerOnly ? (
+                  <>
+                    {showClientSummary && selectedClientRow ? (
+                      <WizardClientSummaryCard
+                        name={selectedClientRow.name ?? "Client"}
+                        subtitle={selectedClientRow.address}
+                        avatarUrl={selectedClientRow.avatar_url}
+                        avatarSeed={selectedClientRow.avatar_seed}
+                        onPress={() => setClientListExpanded(true)}
+                      />
+                    ) : null}
+                    {showClientList ? (
+                      <WizardClientPicker
+                        clients={clients}
+                        loading={clientsLoading}
+                        selectedClientId={state.clientId}
+                        onSelect={handleSelectClient}
+                        onAddClient={handleAddClientShortcut}
+                      />
+                    ) : null}
+                    {invalid("client") ? (
+                      <Text style={styles.errorText}>Select a client to continue</Text>
+                    ) : null}
+                  </>
+                ) : clientsLoading ? (
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : clients.length === 0 ? (
                   <Text style={styles.mutedSmall}>
@@ -1610,13 +1685,25 @@ export function AddTripFormFields({
                   </>
                 )}
               </View>
+              ) : null}
 
+              {!showClientPickerOnly ? (
               <View
                 style={[
                   styles.gridCol,
                   desktopFormGrid && styles.clientCommercialsPriceColDesktop,
                 ]}
               >
+                {showClientSaleOnly && selectedClientRow ? (
+                  <View style={{ marginBottom: 12 }}>
+                    <WizardClientSummaryCard
+                      name={selectedClientRow.name ?? "Client"}
+                      subtitle={selectedClientRow.address}
+                      avatarUrl={selectedClientRow.avatar_url}
+                      avatarSeed={selectedClientRow.avatar_seed}
+                    />
+                  </View>
+                ) : null}
                 <SmartInput
                   type="currency"
                   label="Client sale price"
@@ -1626,7 +1713,7 @@ export function AddTripFormFields({
                   density={isDenseForm ? "compact" : "default"}
                   required
                   partyPreview={
-                    selectedClientRow
+                    wizardSection == null && selectedClientRow
                       ? {
                           name: selectedClientRow.name ?? "Client",
                           subtitle: selectedClientRow.address ?? undefined,
@@ -1654,6 +1741,7 @@ export function AddTripFormFields({
                   </View>
                 ) : null}
               </View>
+              ) : null}
             </View>
             {isWide ? (
               <View style={styles.infoCalloutWideSpan}>
@@ -1673,17 +1761,22 @@ export function AddTripFormFields({
             <AllocationMobileWizardShell
               progressSteps={allocationWizardProgressSteps}
               currentStepId={allocationSubStep ?? "supply"}
-              fillBody={allocationFillBody}
+              fillBody={allocationShellFill}
             >
             <View
               style={
-                allocationFillBody ? styles.allocationKeypadBody : styles.allocationStepBody
+                allocationFillBody
+                  ? styles.allocationKeypadBody
+                  : allocationEntityPickerStep
+                    ? styles.allocationPickerBody
+                    : styles.allocationStepBody
               }
             >
             {showAlloc("supply") ? (
             <>
             <SupplyAllocationModeBar
               mode={supplyIsAsset ? "asset" : "aggregate"}
+              variant="wizard"
               compact={isCompactMobile}
               assignLater={state.assignLater}
               assignLaterDisabled={assignLaterSwitchDisabled}
@@ -1709,77 +1802,50 @@ export function AddTripFormFields({
                 <ActivityIndicator color={Theme.iconPrimary} />
               ) : (
                 <>
-                  {showPartnerSummary ? (
-                    <TouchableOpacity
-                      style={[
-                        styles.clientCard,
-                        isDenseForm && styles.clientCardDense,
-                        styles.selectionSummaryCard,
-                        { marginBottom: 10 },
-                      ]}
-                      onPress={() => setPartnerListExpanded(true)}
-                      activeOpacity={0.85}
-                    >
-                      <View style={styles.clientMain}>
-                        <PartyAvatar
-                          name={
-                            selectedSupplierRow!.company_name?.trim() ||
-                            selectedSupplierRow!.name?.trim() ||
-                            "—"
-                          }
-                          organizationImageUrl={
-                            (selectedSupplierRow as {
-                              organization_avatar_url?: string | null;
-                            }).organization_avatar_url ?? null
-                          }
-                          organizationAvatarSeed={
-                            (selectedSupplierRow as {
-                              organization_avatar_seed?: string | null;
-                            }).organization_avatar_seed ?? null
-                          }
-                          avatarUrl={
-                            (selectedSupplierRow as { avatar_url?: string | null })
-                              .avatar_url ?? null
-                          }
-                          avatarSeed={
-                            (selectedSupplierRow as { avatar_seed?: string | null })
-                              .avatar_seed ?? null
-                          }
-                          entityType="supplier"
-                          size={38}
-                          borderStyle={styles.clientAvatarOn}
-                        />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text
-                            style={styles.selectionSummaryTitle}
-                            numberOfLines={1}
-                          >
-                            {selectedSupplierRow!.company_name?.trim() ||
-                              selectedSupplierRow!.name?.trim() ||
-                              "—"}
-                          </Text>
-                          <Text
-                            style={styles.selectionSummarySub}
-                            numberOfLines={1}
-                          >
-                            {[
-                              selectedSupplierRow!.supplier_type,
-                              selectedSupplierRow!.phone,
-                              selectedSupplierRow!.email,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.selectionSummaryPill}>
-                        <Text style={styles.selectionSummaryPillText}>Change</Text>
-                      </View>
-                    </TouchableOpacity>
+                  {showPartnerSummary && selectedSupplierRow ? (
+                    <View style={{ marginBottom: 10 }}>
+                      <WizardEntitySummaryCard
+                        label="Partner"
+                        name={
+                          selectedSupplierRow.company_name?.trim() ||
+                          selectedSupplierRow.name?.trim() ||
+                          "—"
+                        }
+                        subtitle={[
+                          selectedSupplierRow.supplier_type,
+                          selectedSupplierRow.phone,
+                          selectedSupplierRow.email,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        entityType="supplier"
+                        organizationImageUrl={
+                          (selectedSupplierRow as {
+                            organization_avatar_url?: string | null;
+                          }).organization_avatar_url ?? null
+                        }
+                        organizationAvatarSeed={
+                          (selectedSupplierRow as {
+                            organization_avatar_seed?: string | null;
+                          }).organization_avatar_seed ?? null
+                        }
+                        avatarUrl={
+                          (selectedSupplierRow as { avatar_url?: string | null })
+                            .avatar_url ?? null
+                        }
+                        avatarSeed={
+                          (selectedSupplierRow as { avatar_seed?: string | null })
+                            .avatar_seed ?? null
+                        }
+                        onPress={() => setPartnerListExpanded(true)}
+                      />
+                    </View>
                   ) : null}
                   {showPartnerList ? (
                     <AssignmentEntityAvatarGrid
                       title="Select Transport Partner"
+                      variant="wizard"
+                      embedded
                       totalCount={suppliers.length}
                       errorOutline={invalid("partner")}
                       selectedId={state.supplierId}
@@ -1830,51 +1896,32 @@ export function AddTripFormFields({
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : (
                   <>
-                    {showDriverFleetSummary ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.clientCard,
-                          isDenseForm && styles.clientCardDense,
-                          styles.selectionSummaryCard,
-                          { marginBottom: 10 },
-                        ]}
-                        onPress={() => setDriverListExpanded(true)}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.clientMain}>
-                          <PartyAvatar
-                            name={selectedDriverRow!.name ?? "Driver"}
-                            avatarUrl={
-                              (selectedDriverRow as { avatar_url?: string | null })
-                                .avatar_url ?? null
-                            }
-                            avatarSeed={
-                              (selectedDriverRow as { avatar_seed?: string | null })
-                                .avatar_seed ?? null
-                            }
-                            entityType="driver"
-                            size={38}
-                            borderStyle={styles.clientAvatarOn}
-                          />
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
-                              {selectedDriverRow!.name || "—"}
-                            </Text>
-                            <Text style={styles.selectionSummarySub} numberOfLines={1}>
-                              {[selectedDriverRow!.phone, selectedDriverRow!.email]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.selectionSummaryPill}>
-                          <Text style={styles.selectionSummaryPillText}>Change</Text>
-                        </View>
-                      </TouchableOpacity>
+                    {showDriverFleetSummary && selectedDriverRow ? (
+                      <View style={{ marginBottom: 10 }}>
+                        <WizardEntitySummaryCard
+                          label="Driver"
+                          name={selectedDriverRow.name ?? "Driver"}
+                          subtitle={[selectedDriverRow.phone, selectedDriverRow.email]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          entityType="driver"
+                          avatarUrl={
+                            (selectedDriverRow as { avatar_url?: string | null })
+                              .avatar_url ?? null
+                          }
+                          avatarSeed={
+                            (selectedDriverRow as { avatar_seed?: string | null })
+                              .avatar_seed ?? null
+                          }
+                          onPress={() => setDriverListExpanded(true)}
+                        />
+                      </View>
                     ) : null}
                     {showDriverFleetList ? (
                       <AssignmentEntityAvatarGrid
                         title="Select Driver"
+                        variant="wizard"
+                        embedded
                         totalCount={driverOptions.length}
                         errorOutline={invalid("assetDriver")}
                         selectedId={state.driverId}
@@ -1919,52 +1966,37 @@ export function AddTripFormFields({
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : (
                   <>
-                    {showVehicleFleetSummary ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.clientCard,
-                          isDenseForm && styles.clientCardDense,
-                          styles.selectionSummaryCard,
-                          { marginBottom: 10 },
-                        ]}
-                        onPress={() => setVehicleListExpanded(true)}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.clientMain}>
-                          <View style={styles.vehicleCardIconSummary}>
-                            <Truck size={18} color={Theme.textOnDarkMuted} />
-                          </View>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
-                              {formatIndianVehicleNumber(
-                                selectedVehicleRow!.vehicle_number || "",
-                              ) || "—"}
-                            </Text>
-                            <Text style={styles.selectionSummarySub} numberOfLines={1}>
-                              {[
-                                selectedVehicleRow!.vehicle_body_type ||
-                                  selectedVehicleRow!.vehicle_type,
-                                [
-                                  selectedVehicleRow!.vehicle_size,
-                                  selectedVehicleRow!.vehicle_axle,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" "),
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")
-                                .toUpperCase()}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.selectionSummaryPill}>
-                          <Text style={styles.selectionSummaryPillText}>Change</Text>
-                        </View>
-                      </TouchableOpacity>
+                    {showVehicleFleetSummary && selectedVehicleRow ? (
+                      <View style={{ marginBottom: 10 }}>
+                        <WizardEntitySummaryCard
+                          label="Vehicle"
+                          name={
+                            formatIndianVehicleNumber(
+                              selectedVehicleRow.vehicle_number || "",
+                            ) || "—"
+                          }
+                          subtitle={[
+                            selectedVehicleRow.vehicle_body_type ||
+                              selectedVehicleRow.vehicle_type,
+                            [
+                              selectedVehicleRow.vehicle_size,
+                              selectedVehicleRow.vehicle_axle,
+                            ]
+                              .filter(Boolean)
+                              .join(" "),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          entityType="driver"
+                          onPress={() => setVehicleListExpanded(true)}
+                        />
+                      </View>
                     ) : null}
                     {showVehicleFleetList ? (
                       <AssignmentEntityAvatarGrid
                         title="Select Vehicle"
+                        variant="wizard"
+                        embedded
                         totalCount={vehicleOptions.length}
                         errorOutline={invalid("assetVehicle")}
                         selectedId={state.vehicleId}
@@ -2002,7 +2034,7 @@ export function AddTripFormFields({
                     ? supplierToNumericPartyPreview(selectedSupplierRow)
                     : undefined
                 }
-                keypadInset
+                wizardShell
               />
             ) : null}
 
@@ -2856,7 +2888,7 @@ export function AddTripFormFields({
           </View>
         </View>
         </View>
-      </ScrollView>
+      </WizardFormBody>
 
       <Modal
         visible={notesModalOpen}
@@ -2913,7 +2945,12 @@ export function AddTripFormFields({
 const styles = StyleSheet.create({
   pageWrap: {
     flex: 1,
-    backgroundColor: PULSE_TRIP.screenBg,
+    minHeight: 0,
+    backgroundColor: Theme.screenBackground,
+  },
+  pageWrapFill: {
+    flex: 1,
+    minHeight: 0,
   },
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: {
@@ -2924,7 +2961,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   scrollContentWizard: {
-    paddingTop: 8,
+    paddingTop: 0,
     paddingBottom: 8,
   },
   scrollContentFillBody: {
@@ -2938,6 +2975,12 @@ const styles = StyleSheet.create({
   allocationStepBody: {
     width: "100%",
     minHeight: 0,
+  },
+  allocationPickerBody: {
+    flexGrow: 1,
+    width: "100%",
+    minHeight: 0,
+    gap: 12,
   },
   contentMax: {
     width: "100%",
@@ -3183,11 +3226,20 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     marginBottom: 0,
   },
+  cardWizardShell: {
+    ...fullPageWizardStyles.formSectionCard,
+    marginBottom: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+    shadowColor: "transparent",
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+  },
   cardWizardStep: {
     marginBottom: 0,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: PULSE_TRIP_RADIUS.cardDense,
+    ...fullPageWizardStyles.formSectionCard,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   cardHeadDense: {
     paddingBottom: 4,
@@ -3290,6 +3342,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.75,
   },
   gridRowDense: { gap: 6 },
+  gridRowWizard: {
+    flexDirection: "column",
+    width: "100%",
+    gap: 8,
+  },
   gridRow: { gap: 10 },
   /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */
   gridRowFleet: {
@@ -4130,14 +4187,14 @@ const styles = StyleSheet.create({
     fontStyle: "normal",
     letterSpacing: 0,
   },
-  clientNameOn: { color: Theme.darkGreen },
+  clientNameOn: { color: Theme.primary },
   clientAvatar: {
     borderWidth: 1.5,
     borderColor: Theme.borderLight,
   },
   clientAvatarOn: {
     borderWidth: 2,
-    borderColor: Theme.darkGreen,
+    borderColor: Theme.primary,
   },
   vehicleCardIcon: {
     width: 38,

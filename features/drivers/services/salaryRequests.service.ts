@@ -129,6 +129,20 @@ export async function getSalaryRequestsByOrganization(
   return { error: null, requests: (data ?? []) as SalaryRequestWithDriverRow[] };
 }
 
+export async function getSalaryRequestByIdForOrganization(
+  organizationId: string,
+  requestId: string,
+): Promise<{ error: Error | null; request: SalaryRequestWithDriverRow | null }> {
+  const { data, error } = await supabase()
+    .from('driver_salary_requests')
+    .select('*, drivers(name, user_id)')
+    .eq('organization_id', organizationId)
+    .eq('id', requestId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), request: null };
+  return { error: null, request: (data as SalaryRequestWithDriverRow | null) ?? null };
+}
+
 /**
  * Update salary request status (org side: approve & pay or reject). RLS: org members can update for their org.
  */

@@ -11,6 +11,9 @@ const DEFAULT_SEED = 'driver-1';
 type DriverAvatarContextType = {
   avatarSeed: string;
   setAvatarSeed: (seed: string) => void;
+  /** Local preview after pick/upload — cleared when profile.avatar_url resolves. */
+  previewUri: string | null;
+  setPreviewUri: (uri: string | null) => void;
 };
 
 const DriverAvatarContext = createContext<DriverAvatarContextType | undefined>(undefined);
@@ -27,6 +30,7 @@ export function useOptionalDriverAvatar() {
 
 export function DriverAvatarProvider({ children }: { children: ReactNode }) {
   const [avatarSeed, setAvatarSeedState] = useState(DEFAULT_SEED);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -59,7 +63,14 @@ export function DriverAvatarProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <DriverAvatarContext.Provider value={{ avatarSeed: hydrated ? avatarSeed : DEFAULT_SEED, setAvatarSeed }}>
+    <DriverAvatarContext.Provider
+      value={{
+        avatarSeed: hydrated ? avatarSeed : DEFAULT_SEED,
+        setAvatarSeed,
+        previewUri,
+        setPreviewUri,
+      }}
+    >
       {children}
     </DriverAvatarContext.Provider>
   );

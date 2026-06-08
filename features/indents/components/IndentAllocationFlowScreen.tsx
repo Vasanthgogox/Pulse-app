@@ -6,7 +6,7 @@ import { Platform, StyleSheet, Text, useWindowDimensions, View } from "react-nat
 import { useRouter } from "expo-router";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import Theme from "@/constants/Theme";
+import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { IndentAggregateAllocationStep } from "@/features/indents/components/IndentAggregateAllocationStep";
 import { IndentAllocationTripDetailsStep } from "@/features/indents/components/IndentAllocationTripDetailsStep";
@@ -304,6 +304,7 @@ export function IndentAllocationFlowScreen({
   const showModeBar =
     !deployOtpCode &&
     (step === "driver" ||
+      step === "vehicle" ||
       step === "partner" ||
       (staffHandshakeAssignLater && step === "commodity"));
 
@@ -317,29 +318,32 @@ export function IndentAllocationFlowScreen({
     );
   }, [handleClose, router]);
 
+  const fillBodyStep =
+    step === "rates" || step === "driverPhone" || step === "vehicleReg";
+
   if (!currentLoad) {
     return <CenteredLoadingView message="Loading allocation…" />;
   }
 
   return (
     <AssignmentFlowShell
-      variant="slate"
       fullScreen
-      fillBody={
-        step === "rates" || step === "driverPhone" || step === "vehicleReg"
+      fillBody={fillBodyStep}
+      scrollBody={!fillBodyStep && !deployOtpCode}
+      title={deployOtpCode ? "Trip claim code" : "Deploy load"}
+      subtitle={
+        deployOtpCode
+          ? "Share this code with the driver to claim the trip."
+          : stepSubtitle
       }
-      title={deployOtpCode ? "Trip claim code" : "Driver & vehicle"}
-      subtitle={stepSubtitle}
+      stepIndex={deployOtpCode ? undefined : stepIndex + 1}
+      stepTotal={deployOtpCode ? undefined : flowSteps.length}
       onClose={() => (deployOtpCode ? backFromOtp() : handleClose())}
       onBack={showBack ? handleBack : undefined}
       showBack={showBack}
       progress={
         !deployOtpCode ? (
-          <AddTripWizardProgress
-            steps={flowSteps}
-            currentStepId={step}
-            surface="slate"
-          />
+          <AddTripWizardProgress steps={flowSteps} currentStepId={step} />
         ) : null
       }
       footer={
@@ -350,6 +354,8 @@ export function IndentAllocationFlowScreen({
             onPrimaryPress={handlePrimary}
             primaryDisabled={primaryDisabled}
             loading={isDeploying}
+            secondaryLabel={showBack ? "Back" : undefined}
+            onSecondaryPress={showBack ? handleBack : undefined}
           />
         )
       }
@@ -366,9 +372,10 @@ export function IndentAllocationFlowScreen({
           }}
         />
       ) : (
-        <View style={styles.flowBody}>
+        <View style={[styles.flowBody, fullPageWizardStyles.wizardStepBody]}>
           {showModeBar ? (
             <SupplyAllocationModeBar
+              variant="wizard"
               mode={useAdHocDriver ? "aggregate" : "asset"}
               assignLater={staffHandshakeAssignLater}
               onModeChange={(mode) => {
@@ -402,11 +409,13 @@ export function IndentAllocationFlowScreen({
           ) : null}
 
           {staffHandshakeAssignLater && step === "commodity" ? (
-            <Text style={styles.assignLaterHint}>
-              {useAdHocDriver
-                ? "Partner and rate are required now. Add driver and vehicle on the trip screen before the trip starts."
-                : "Assign vehicle and driver on the trip screen before the trip starts."}
-            </Text>
+            <View style={fullPageWizardStyles.shipperWarningCard}>
+              <Text style={fullPageWizardStyles.shipperWarningText}>
+                {useAdHocDriver
+                  ? "Partner and rate are required now. Add driver and vehicle on the trip screen before the trip starts."
+                  : "Assign vehicle and driver on the trip screen before the trip starts."}
+              </Text>
+            </View>
           ) : null}
 
           {useAdHocDriver &&
@@ -503,13 +512,5 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     minWidth: 0,
     flexGrow: 1,
-  },
-  assignLaterHint: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    lineHeight: 17,
-    marginTop: 8,
-    marginBottom: 12,
   },
 });

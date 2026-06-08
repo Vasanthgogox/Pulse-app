@@ -201,11 +201,10 @@ function TrackingCard({
 
   const eta =
     meta?.eta_label ?? (meta?.eta_minutes != null ? `${meta.eta_minutes} min` : null);
-  const coords = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   const dateUpper = formatTripEventSheetDate(message.created_at);
-  const title = (meta?.address_hint ?? coords).trim();
-  const metaLine = `Live location · ${dateUpper} · GPS`;
-  const subLine = meta?.address_hint ? coords : null;
+  const title = (meta?.address_hint ?? "Driver location update").trim();
+  const metaLine = `System update · ${dateUpper} · Driver location`;
+  const subLine = null;
 
   return (
     <TripProgressEventCard
@@ -214,7 +213,7 @@ function TrackingCard({
       title={title}
       metaLine={metaLine}
       subLine={subLine}
-      rightPrimary={(eta ?? "LIVE").toUpperCase()}
+      rightPrimary={(eta ?? "LOCATION").toUpperCase()}
       rightPrimaryColor="#047857"
       time={displayTime}
       isMobile={isMobile}

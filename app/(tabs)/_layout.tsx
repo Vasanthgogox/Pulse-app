@@ -254,7 +254,6 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
          */
         lazy: isDesktopWeb ? false : Platform.OS === 'web',
         freezeOnBlur: !isDesktopWeb,
-        detachInactiveScreens: Platform.OS === 'web',
         animation: 'none',
         sceneStyle: {
           flex: 1,

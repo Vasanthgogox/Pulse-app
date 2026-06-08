@@ -87,8 +87,8 @@ export default function DriverProfileScreen() {
   const { theme } = useDriverTheme();
   const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
-  const { user, profile, signOut, refreshSession } = useAuth();
-  const { avatarSeed, setAvatarSeed } = useDriverAvatar();
+  const { user, profile, signOut, refreshSession, patchProfile } = useAuth();
+  const { avatarSeed, setAvatarSeed, setPreviewUri } = useDriverAvatar();
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [profileView, setProfileView] = useState<ProfileView>('main');
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
@@ -108,7 +108,9 @@ export default function DriverProfileScreen() {
     type: 'driver',
     name: displayName,
     avatarUrl: profile?.avatar_url ?? null,
-    avatarSeed: profile?.avatar_seed?.trim() || avatarSeed,
+    avatarSeed: profile?.avatar_url?.trim()
+      ? null
+      : profile?.avatar_seed?.trim() || avatarSeed,
   });
 
   const loadTrips = useCallback(() => {
@@ -729,11 +731,25 @@ export default function DriverProfileScreen() {
         initialPhone={profile?.phone ?? ''}
         initialCompanyName={profile?.company_name ?? ''}
         email={user?.email ?? ''}
-        onPhotoUpdated={refreshSession}
-        initialAvatarSeed={avatarSeed}
+        onPhotoUpdated={async (payload) => {
+          if (payload?.avatarUri?.trim()) {
+            setPreviewUri(payload.avatarUri.trim());
+          } else {
+            setPreviewUri(null);
+          }
+          if (payload?.avatarPath) {
+            patchProfile({ avatar_url: payload.avatarPath, avatar_seed: undefined });
+          } else if (payload && payload.avatarPath === null) {
+            patchProfile({ avatar_url: undefined });
+          }
+          void refreshSession();
+        }}
+        initialAvatarSeed={profile?.avatar_seed?.trim() || avatarSeed}
         onPresetSelected={(seed) => {
           setAvatarSeed(seed);
-          refreshSession();
+          setPreviewUri(null);
+          patchProfile({ avatar_url: undefined, avatar_seed: seed });
+          void refreshSession();
         }}
         initialStatusText={profile?.status_text ?? ''}
       />

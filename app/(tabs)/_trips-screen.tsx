@@ -18,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
+import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFinanceHandlers";
+import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { TripsLedgerExportModalGate } from "@/features/trips/components/TripsLedgerExportModalGate";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -254,6 +256,8 @@ export default function TripsScreen() {
   );
   const { t: tr } = useLanguage();
   const orgCtx = useOptionalOrganization();
+  const { finance } = useAlertRegistryFinanceHandlers();
+  const salaryRequestRows = useGlobalSyncStore((s) => s.salaryRequestRows);
   const { profile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const lastFocusRefreshRef = useRef<number>(0);
@@ -319,6 +323,16 @@ export default function TripsScreen() {
       : null,
   );
   const canAccess = canAccessTrips(capabilities);
+  const attributionRequests = useMemo(
+    () =>
+      salaryRequestRows.filter(
+        (row) =>
+          String(row.status ?? "pending") === "pending" &&
+          row.request_type === "trip_based" &&
+          String(row.note ?? "").toLowerCase().includes("fleet trip"),
+      ),
+    [salaryRequestRows],
+  );
   const currentOrganization = orgCtx?.currentOrganization ?? null;
   const orgBootPending = !orgCtx || orgCtx.isLoading;
   const orgId = canAccess ? (currentOrganization?.id ?? null) : null;
@@ -1837,6 +1851,52 @@ export default function TripsScreen() {
               />
             )}
           </View>
+
+          {tripFilter === "Active" && attributionRequests.length > 0 ? (
+            <View style={styles.attributionSection}>
+              <Text style={styles.attributionSectionTitle}>Attribution requests</Text>
+              <Text style={styles.attributionSectionSubtitle}>
+                Review and accept driver trip attribution requests from fleet home.
+              </Text>
+              {attributionRequests.slice(0, 3).map((req) => (
+                <View key={req.id} style={styles.attributionCard}>
+                  <View style={styles.attributionCardHead}>
+                    <Text style={styles.attributionDriverName} numberOfLines={1}>
+                      {req.drivers?.name?.trim() || "Driver"}
+                    </Text>
+                    <Text style={styles.attributionAmount}>
+                      ₹{Number(req.amount ?? 0).toLocaleString("en-IN")}
+                    </Text>
+                  </View>
+                  <Text style={styles.attributionCardMeta}>
+                    {new Date(req.created_at).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                    })}{" "}
+                    · Trip review request
+                  </Text>
+                  <View style={styles.attributionActions}>
+                    <TouchableOpacity
+                      style={styles.attributionRejectBtn}
+                      onPress={() => finance.onRejectSalary(req.id)}
+                      disabled={finance.busySalaryId === req.id}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.attributionRejectBtnText}>Reject</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.attributionAcceptBtn}
+                      onPress={() => finance.onPaySalary(req)}
+                      disabled={finance.busySalaryId === req.id}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.attributionAcceptBtnText}>Accept</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {effectiveListLayout === "table" ? (
             <View>
@@ -3856,6 +3916,94 @@ const styles = StyleSheet.create({
     padding: 24,
     textAlign: "center",
     color: Theme.textSecondary,
+  },
+  attributionSection: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    gap: 8,
+  },
+  attributionSectionTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+  },
+  attributionSectionSubtitle: {
+    fontSize: 11,
+    color: Theme.textSecondary,
+    lineHeight: 16,
+  },
+  attributionCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    padding: 10,
+    gap: 6,
+  },
+  attributionCardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  attributionDriverName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  attributionAmount: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+  },
+  attributionCardMeta: {
+    fontSize: 10,
+    color: Theme.textMuted,
+  },
+  attributionActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 2,
+  },
+  attributionRejectBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  attributionRejectBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  attributionAcceptBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.darkBackground,
+    backgroundColor: Theme.darkBackground,
+  },
+  attributionAcceptBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
   fabWrap: {
     position: "absolute",

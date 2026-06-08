@@ -11,6 +11,14 @@ import {
   type PartyEntityType,
 } from "@/lib/partyAvatarDisplay";
 
+export type PartyAvatarShape = "circle" | "rounded" | "square";
+
+function partyAvatarRadius(size: number, shape: PartyAvatarShape): number {
+  if (shape === "circle") return size / 2;
+  if (shape === "rounded") return Math.round(size * 0.26);
+  return 4;
+}
+
 export type PartyAvatarProps = {
   name: string;
   /** When set, initials fallback background is hashed from this (e.g. org id) so renames do not change color. */
@@ -22,6 +30,8 @@ export type PartyAvatarProps = {
   avatarSeed?: string | null;
   entityType?: PartyEntityType;
   size: number;
+  /** `rounded` matches attribution / shipper picker tiles (not full circle). */
+  shape?: PartyAvatarShape;
   style?: StyleProp<ViewStyle>;
   borderStyle?: StyleProp<ImageStyle>;
 };
@@ -38,9 +48,11 @@ export function PartyAvatar({
   avatarSeed,
   entityType = "client",
   size,
+  shape = "circle",
   style,
   borderStyle,
 }: PartyAvatarProps) {
+  const radius = partyAvatarRadius(size, shape);
   const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const hasRawPhotoField = Boolean(
@@ -109,7 +121,7 @@ export function PartyAvatar({
           {
             width: size,
             height: size,
-            borderRadius: size / 2,
+            borderRadius: radius,
             backgroundColor: Theme.surface,
             borderWidth: 1,
             borderColor: Theme.border,
@@ -129,7 +141,7 @@ export function PartyAvatar({
         {
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: radius,
           backgroundColor: bg,
           borderWidth: 1,
           borderColor: Theme.border,

@@ -248,7 +248,6 @@ export function DocumentCenter({ orgId: orgIdProp }: DocumentCenterProps) {
         <FlashList
           data={activeRows}
           keyExtractor={(d) => d.id}
-          estimatedItemSize={64}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <DocumentListRow

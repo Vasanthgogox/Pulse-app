@@ -3,6 +3,12 @@
  * Layout aligned with Create Trip (AddTripModalLayout + section cards).
  */
 import { CreateTripSheetSearchInput } from "@/components/CreateTripSheetSearchInput";
+import {
+  fullPageWizardStyles,
+  WizardClientPicker,
+  WizardClientSummaryCard,
+  WizardFormBody,
+} from "@/components/full-page-wizard";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
@@ -34,6 +40,7 @@ import { IndentWizardMobileStep } from "@/features/indents/components/create-ind
 import { SmartInput } from "@/components/mobile-input";
 import { ADD_TRIP_FORM } from "@/features/trips/components/add-trip/addTripFormTokens";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
+import { AddTripWizardProgress } from "@/features/trips/components/add-trip/AddTripWizardProgress";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import {
     BODY_LENGTH_SELECT_OPTIONS,
@@ -926,7 +933,7 @@ export default function CreateIndentScreen() {
   if (!canCreate) {
     return (
       <View style={{ flex: 1 }}>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <AddTripModalLayout
           title="Create Indent"
           subtitle="Deploy New Load"
@@ -952,16 +959,41 @@ export default function CreateIndentScreen() {
     color: Theme.textPrimary,
     backgroundColor: Theme.surfaceForm,
   };
-  const fieldLabelStyle = [
-    styles.fieldLabel,
-    labelStyle,
-    isDenseForm && styles.fieldLabelDense,
-  ];
-  const denseInputStyle = [
-    styles.formFieldInput,
-    inputStyle,
-    isDenseForm && styles.formFieldInputDense,
-  ];
+  const fieldLabelStyle = isMobileWizard
+    ? [fullPageWizardStyles.wizardFieldLabel]
+    : [
+        styles.fieldLabel,
+        labelStyle,
+        isDenseForm && styles.fieldLabelDense,
+      ];
+  const denseInputStyle = isMobileWizard
+    ? [fullPageWizardStyles.wizardFieldInput, inputStyle]
+    : [
+        styles.formFieldInput,
+        inputStyle,
+        isDenseForm && styles.formFieldInputDense,
+      ];
+  const quickDateChipStyle = isMobileWizard
+    ? fullPageWizardStyles.quickDateChip
+    : [styles.quickDateChip, isDenseForm && styles.quickDateChipDense];
+  const quickDateChipActiveStyle = isMobileWizard
+    ? fullPageWizardStyles.quickDateChipActive
+    : styles.quickDateChipActive;
+  const quickDateChipTextStyle = isMobileWizard
+    ? fullPageWizardStyles.quickDateChipText
+    : [styles.quickDateChipText, isDenseForm && styles.quickDateChipTextDense];
+  const quickDateChipTextActiveStyle = isMobileWizard
+    ? fullPageWizardStyles.quickDateChipTextActive
+    : styles.quickDateChipTextActive;
+  const dateTouchableStyle = isMobileWizard
+    ? fullPageWizardStyles.wizardDateTouchable
+    : [styles.formFieldShell, styles.dateTouchable];
+  const dateTextStyle = isMobileWizard
+    ? fullPageWizardStyles.wizardDateText
+    : styles.dateTouchableText;
+  const datePlaceholderStyle = isMobileWizard
+    ? fullPageWizardStyles.wizardDatePlaceholder
+    : styles.dateTouchablePlaceholder;
 
   const canSubmit =
     !submitting &&
@@ -994,9 +1026,28 @@ export default function CreateIndentScreen() {
       : "Continue"
     : "Share to Network";
 
+  const indentWizardSteps = useMemo(
+    () =>
+      INDENT_WIZARD_STEPS.map((id) => ({
+        id,
+        label: indentWizardStepLabel(id),
+      })),
+    [],
+  );
+
   const wizardSubtitle = isMobileWizard
-    ? indentWizardStepLabel(wizardStep)
-    : "Deploy New Load";
+    ? wizardStep === "route"
+      ? "Pickup, drop and load date."
+      : wizardStep === "client"
+        ? "Select the shipper client."
+        : wizardStep === "prices"
+          ? "Client price and supplier target."
+          : wizardStep === "vehicle"
+            ? "Vehicle type for this load."
+            : wizardStep === "loadType"
+              ? "Commodity / load type."
+              : "Weight in tons."
+    : "Share load details to your network.";
 
   const handleWizardPrimary = () => {
     if (!isMobileWizard) {
@@ -1033,40 +1084,55 @@ export default function CreateIndentScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <AddTripModalLayout
-        title="Create Indent"
+        title="Create Load"
         subtitle={wizardSubtitle}
+        stepIndex={isMobileWizard ? wizardStepIndex + 1 : undefined}
+        stepTotal={isMobileWizard ? INDENT_WIZARD_STEPS.length : undefined}
         submitLabel={wizardSubmitLabel}
         canSubmit={stepCanAdvance}
         submitting={submitting}
         validationMessage="Fill route, client, commercials, and load details to share"
         onClose={handleBackPress}
         onSubmit={handleWizardPrimary}
+        scrollBody={isMobileWizard}
+        progress={
+          isMobileWizard ? (
+            <AddTripWizardProgress
+              steps={indentWizardSteps}
+              currentStepId={wizardStep}
+            />
+          ) : null
+        }
       >
         <View style={styles.pageWrap}>
-          <ScrollView
-            style={styles.scroll}
+          <WizardFormBody
+            shellScroll={isMobileWizard}
             contentContainerStyle={[
               styles.scrollContent,
+              isMobileWizard && fullPageWizardStyles.wizardStepBody,
+              isMobileWizard && { paddingTop: 0 },
               {
-                paddingBottom:
-                  Layout.sectionSpacing +
-                  insets.bottom +
-                  (desktopFormGrid ? 52 : isWide ? 68 : 108),
+                paddingBottom: isMobileWizard
+                  ? 8
+                  : Layout.sectionSpacing +
+                    insets.bottom +
+                    (desktopFormGrid ? 52 : isWide ? 68 : 108),
               },
             ]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={
-              Platform.OS === "ios" ? "interactive" : "on-drag"
-            }
-            showsVerticalScrollIndicator
-            scrollEnabled={
-              !pickupDropdownOpen &&
-              !dropDropdownOpen &&
-              !vehicleTypePickerOpen &&
-              !loadTypePickerOpen
-            }
+            scrollViewProps={{
+              style: styles.scroll,
+              keyboardShouldPersistTaps: "handled",
+              keyboardDismissMode:
+                Platform.OS === "ios" ? "interactive" : "on-drag",
+              showsVerticalScrollIndicator: true,
+              scrollEnabled:
+                !pickupDropdownOpen &&
+                !dropDropdownOpen &&
+                !vehicleTypePickerOpen &&
+                !loadTypePickerOpen,
+            }}
           >
             <View
               style={[
@@ -1084,6 +1150,7 @@ export default function CreateIndentScreen() {
                       : isCompactMobile
                         ? 0
                         : Layout.screenPaddingHorizontal,
+                  paddingTop: isMobileWizard ? 0 : undefined,
                 },
               ]}
             >
@@ -1099,12 +1166,13 @@ export default function CreateIndentScreen() {
               {showWizardStep("route") ? (
                 <View
                   style={[
-                    styles.card,
-                    isCompactMobile && styles.cardCompact,
-                    isMobileWizard && styles.cardWizardStep,
+                    isMobileWizard
+                      ? fullPageWizardStyles.formSectionCard
+                      : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridRouteWeb,
                   ]}
                 >
+                {!isMobileWizard ? (
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>01</Text>
@@ -1115,6 +1183,7 @@ export default function CreateIndentScreen() {
                     Route Details
                   </Text>
                 </View>
+                ) : null}
 
                 <View style={[styles.gridRow, isWide && styles.gridRowWide]}>
                   <View style={styles.gridCol}>
@@ -1191,10 +1260,11 @@ export default function CreateIndentScreen() {
                   <View style={styles.gridCol}>
                     <Text style={fieldLabelStyle}>Trip start date</Text>
                     <View
-                      style={[
-                        styles.quickDateRow,
-                        isDenseForm && styles.quickDateRowDense,
-                      ]}
+                      style={
+                        isMobileWizard
+                          ? fullPageWizardStyles.quickDateRow
+                          : [styles.quickDateRow, isDenseForm && styles.quickDateRowDense]
+                      }
                     >
                       {[
                         { label: "Today", get: getToday },
@@ -1207,18 +1277,16 @@ export default function CreateIndentScreen() {
                           <TouchableOpacity
                             key={label}
                             style={[
-                              styles.quickDateChip,
-                              isDenseForm && styles.quickDateChipDense,
-                              isActive && styles.quickDateChipActive,
+                              quickDateChipStyle,
+                              isActive && quickDateChipActiveStyle,
                             ]}
                             onPress={() => update({ pickup_date: iso })}
                             activeOpacity={0.8}
                           >
                             <Text
                               style={[
-                                styles.quickDateChipText,
-                                isDenseForm && styles.quickDateChipTextDense,
-                                isActive && styles.quickDateChipTextActive,
+                                quickDateChipTextStyle,
+                                isActive && quickDateChipTextActiveStyle,
                               ]}
                             >
                               {label}
@@ -1247,8 +1315,7 @@ export default function CreateIndentScreen() {
                         <>
                           <TouchableOpacity
                             style={[
-                              styles.formFieldShell,
-                              styles.dateTouchable,
+                              dateTouchableStyle,
                               errors.pickup_date && styles.inputError,
                             ]}
                             onPress={() => setShowDatePicker(true)}
@@ -1256,9 +1323,7 @@ export default function CreateIndentScreen() {
                           >
                             <Text
                               style={
-                                form.pickup_date
-                                  ? styles.dateTouchableText
-                                  : styles.dateTouchablePlaceholder
+                                form.pickup_date ? dateTextStyle : datePlaceholderStyle
                               }
                             >
                               {form.pickup_date
@@ -1415,15 +1480,16 @@ export default function CreateIndentScreen() {
               ) : null}
 
               {/* 02 Client */}
-              {(!isMobileWizard || showWizardStep("client")) ? (
+              {(isMobileWizard ? showWizardStep("client") : true) ? (
                 <View
                   style={[
-                    styles.card,
-                    isCompactMobile && styles.cardCompact,
-                    isMobileWizard && styles.cardWizardStep,
+                    isMobileWizard
+                      ? fullPageWizardStyles.formSectionCard
+                      : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridClientWeb,
                   ]}
                 >
+                {!isMobileWizard ? (
                 <View style={styles.cardHead}>
                   <View style={styles.stepBadge}>
                     <Text style={styles.stepBadgeText}>02</Text>
@@ -1431,11 +1497,16 @@ export default function CreateIndentScreen() {
                   <Text
                     style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
                   >
-                    {isMobileWizard ? "Select client" : "Client & Commercials"}
+                    Client & Commercials
                   </Text>
                 </View>
+                ) : null}
                 <View
-                  style={[styles.gridRow, isWide && styles.gridRowWide]}
+                  style={
+                    isMobileWizard
+                      ? { width: "100%", gap: 8 }
+                      : [styles.gridRow, isWide && styles.gridRowWide]
+                  }
                 >
                   <View
                     style={[
@@ -1443,6 +1514,31 @@ export default function CreateIndentScreen() {
                       errors.client_name ? styles.fieldGroupRing : null,
                     ]}
                   >
+                    {isMobileWizard ? (
+                      <>
+                        {form.client_id && !clientListExpanded && selectedClientRow ? (
+                          <WizardClientSummaryCard
+                            name={selectedClientRow.name ?? "Client"}
+                            subtitle={selectedClientRow.address}
+                            avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
+                            avatarSeed={(selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null}
+                            onPress={() => setClientListExpanded(true)}
+                          />
+                        ) : (
+                          <WizardClientPicker
+                            clients={clients}
+                            loading={clientsLoading}
+                            selectedClientId={form.client_id}
+                            onSelect={handleSelectClient}
+                            onAddClient={openAddClientFlow}
+                          />
+                        )}
+                        {errors.client_name ? (
+                          <Text style={styles.errorText}>{errors.client_name}</Text>
+                        ) : null}
+                      </>
+                    ) : (
+                    <>
                     <View style={styles.sectionLabelRow}>
                       <Text
                         style={[
@@ -1599,7 +1695,7 @@ export default function CreateIndentScreen() {
                                 {selected ? (
                                   <CheckCircle2
                                     size={16}
-                                    color={Theme.darkGreen}
+                                    color={Theme.primary}
                                   />
                                 ) : null}
                               </View>
@@ -1611,6 +1707,8 @@ export default function CreateIndentScreen() {
                     {errors.client_name ? (
                       <Text style={styles.errorText}>{errors.client_name}</Text>
                     ) : null}
+                    </>
+                    )}
                   </View>
 
                   {!isMobileWizard ? (
@@ -1675,41 +1773,15 @@ export default function CreateIndentScreen() {
 
               {/* 02b Commercials (mobile wizard) */}
               {isMobileWizard && showWizardStep("prices") ? (
-                <View
-                  style={[
-                    styles.card,
-                    isCompactMobile && styles.cardCompact,
-                    styles.cardWizardStep,
-                  ]}
-                >
-                  <View style={styles.cardHead}>
-                    <View style={styles.stepBadge}>
-                      <Text style={styles.stepBadgeText}>02</Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.cardTitle,
-                        isCompactMobile && styles.cardTitleCompact,
-                      ]}
-                    >
-                      Commercials
-                    </Text>
-                  </View>
+                <View style={fullPageWizardStyles.formSectionCard}>
                   {selectedClientRow ? (
-                    <View style={[styles.clientCard, styles.selectionSummaryCard, { marginBottom: 12 }]}>
-                      <View style={styles.clientMain}>
-                        <PartyAvatar
-                          name={selectedClientRow.name ?? "Client"}
-                          avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
-                          size={32}
-                          style={styles.clientAvatarOn}
-                        />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={styles.selectionSummaryTitle} numberOfLines={1}>
-                            {selectedClientRow.name}
-                          </Text>
-                        </View>
-                      </View>
+                    <View style={{ marginBottom: 12 }}>
+                      <WizardClientSummaryCard
+                        name={selectedClientRow.name ?? "Client"}
+                        subtitle={selectedClientRow.address}
+                        avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
+                        avatarSeed={(selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null}
+                      />
                     </View>
                   ) : null}
                   <SmartInput
@@ -1719,21 +1791,6 @@ export default function CreateIndentScreen() {
                     onChange={(raw) => update({ client_price: raw })}
                     variant="field"
                     required
-                    partyPreview={
-                      selectedClientRow
-                        ? {
-                            name: selectedClientRow.name ?? "Client",
-                            subtitle: selectedClientRow.address ?? undefined,
-                            entityType: "client",
-                            avatarUrl:
-                              (selectedClientRow as { avatar_url?: string | null })
-                                .avatar_url ?? null,
-                            avatarSeed:
-                              (selectedClientRow as { avatar_seed?: string | null })
-                                .avatar_seed ?? null,
-                          }
-                        : undefined
-                    }
                     errorMessage={errors.client_price}
                   />
                   <View style={[styles.infoCallout, { marginTop: 8 }]}>
@@ -1763,23 +1820,7 @@ export default function CreateIndentScreen() {
 
               {/* 03 Load — mobile wizard steps */}
               {isMobileWizard && showWizardStep("vehicle") ? (
-                <View
-                  style={[
-                    styles.card,
-                    isCompactMobile && styles.cardCompact,
-                    styles.cardWizardStep,
-                  ]}
-                >
-                  <View style={styles.cardHead}>
-                    <View style={styles.stepBadge}>
-                      <Text style={styles.stepBadgeText}>03</Text>
-                    </View>
-                    <Text
-                      style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
-                    >
-                      Load specifics
-                    </Text>
-                  </View>
+                <View style={fullPageWizardStyles.formSectionCard}>
                   <IndentWizardMobileStep
                     step="vehicle"
                     mode={vehicleTypeIsOther ? "text" : "picker"}
@@ -1811,23 +1852,7 @@ export default function CreateIndentScreen() {
               ) : null}
 
               {isMobileWizard && showWizardStep("loadType") ? (
-                <View
-                  style={[
-                    styles.card,
-                    isCompactMobile && styles.cardCompact,
-                    styles.cardWizardStep,
-                  ]}
-                >
-                  <View style={styles.cardHead}>
-                    <View style={styles.stepBadge}>
-                      <Text style={styles.stepBadgeText}>03</Text>
-                    </View>
-                    <Text
-                      style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
-                    >
-                      Load specifics
-                    </Text>
-                  </View>
+                <View style={fullPageWizardStyles.formSectionCard}>
                   <IndentWizardMobileStep
                     step="loadType"
                     mode="picker"
@@ -1843,23 +1868,7 @@ export default function CreateIndentScreen() {
               ) : null}
 
               {isMobileWizard && showWizardStep("weight") ? (
-                <View
-                  style={[
-                    styles.card,
-                    isCompactMobile && styles.cardCompact,
-                    styles.cardWizardStep,
-                  ]}
-                >
-                  <View style={styles.cardHead}>
-                    <View style={styles.stepBadge}>
-                      <Text style={styles.stepBadgeText}>03</Text>
-                    </View>
-                    <Text
-                      style={[styles.cardTitle, isCompactMobile && styles.cardTitleCompact]}
-                    >
-                      Load specifics
-                    </Text>
-                  </View>
+                <View style={fullPageWizardStyles.formSectionCard}>
                   <IndentWizardMobileStep
                     step="weight"
                     mode="text"
@@ -2084,7 +2093,7 @@ export default function CreateIndentScreen() {
               </View>
             </View>
             </View>
-          </ScrollView>
+          </WizardFormBody>
 
               {vehicleTypePickerOpen ? (
                 <Modal
@@ -2803,19 +2812,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   quickDateChipActive: {
-    borderColor: Theme.iconPrimary,
-    backgroundColor: Theme.surfaceLight,
+    borderColor: Theme.primary,
+    backgroundColor: "rgba(79, 70, 229, 0.08)",
   },
   quickDateChipText: {
-    ...FinanceTxnTypography.chatFilterPill,
-    fontSize: 8,
-    letterSpacing: 0.45,
+    fontSize: 11,
+    letterSpacing: 0.3,
     fontWeight: "600",
     color: Theme.textMuted,
-    fontStyle: "italic",
+    fontStyle: "normal",
   },
   quickDateChipTextActive: {
-    color: Theme.iconPrimary,
+    color: Theme.primary,
+    fontWeight: "800",
   },
   dateTouchable: {
     flexDirection: "row",
@@ -3258,8 +3267,7 @@ const styles = StyleSheet.create({
     marginBottom: ADD_TRIP_FORM.fieldGap,
   },
   cardWizardStep: {
-    flexGrow: 1,
-    minHeight: 320,
+    marginBottom: 0,
   },
   quickDateRowDense: {
     gap: 4,
@@ -3372,24 +3380,23 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   clientCardRowSelected: {
-    borderColor: Theme.darkGreen,
+    borderColor: Theme.primary,
     backgroundColor: Theme.cardWhite,
   },
   /** Minimized selected client — matches Create Trip summary chip. */
   selectionSummaryCard: {
-    backgroundColor: Theme.tripSelectionSurface,
-    borderColor: Theme.darkGreen,
+    backgroundColor: Theme.cardWhite,
+    borderColor: Theme.primary,
   },
   selectionSummaryTitle: {
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textOnDark,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
   selectionSummarySub: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
-    color: Theme.textOnDarkMuted,
+    color: Theme.textSecondary,
     marginTop: 2,
   },
   selectionSummaryPill: {
@@ -3420,14 +3427,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  clientNameOn: { color: Theme.darkGreen },
+  clientNameOn: { color: Theme.primary },
   clientAvatar: {
     borderWidth: 1.5,
     borderColor: Theme.borderLight,
   },
   clientAvatarOn: {
     borderWidth: 2,
-    borderColor: Theme.darkGreen,
+    borderColor: Theme.primary,
   },
   clientMetaRow: {
     flexDirection: "row",
@@ -3453,7 +3460,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceForm,
   },
   radioOuterOn: {
-    borderColor: Theme.darkGreen,
+    borderColor: Theme.primary,
     backgroundColor: Theme.cardWhite,
   },
   priceShell: {
@@ -3479,7 +3486,7 @@ const styles = StyleSheet.create({
     }),
   },
   priceShellSelected: {
-    borderColor: Theme.darkGreen,
+    borderColor: Theme.primary,
   },
   priceShellError: {
     borderColor: Theme.destructive,

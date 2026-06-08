@@ -3,7 +3,12 @@
  * Shared by Create Trip allocation and indent aggregate deploy.
  */
 import { memo, useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+
+import {
+  fullPageWizardStyles,
+  WizardEntitySummaryCard,
+} from "@/components/full-page-wizard";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
@@ -38,6 +43,8 @@ export interface PartnerRatesKeypadFlowProps {
   hint?: string;
   /** No negative horizontal bleed (use inside padded wizard shell). */
   keypadInset?: boolean;
+  /** Compact layout inside FullPageWizardShell fillBody (keypad stays above footer). */
+  wizardShell?: boolean;
 }
 
 export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
@@ -48,6 +55,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
   partyPreview,
   hint = "Enter the rate you will pay this partner.",
   keypadInset = false,
+  wizardShell = false,
 }: PartnerRatesKeypadFlowProps) {
   const [active, setActive] = useState<ActiveField>("rate");
 
@@ -73,59 +81,104 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
     ],
   );
 
-  return (
-    <View style={[flow.root, styles.root]}>
-      <View style={[flow.main, styles.main]}>
-        {partyPreview ? (
+  const useInset = keypadInset || wizardShell;
+  const heroVariant = wizardShell ? ("default" as const) : ("hero" as const);
+
+  const mainContent = (
+    <>
+      {partyPreview ? (
+        wizardShell ? (
+          <WizardEntitySummaryCard
+            label="Transport partner"
+            name={partyPreview.name}
+            subtitle={partyPreview.subtitle}
+            entityType={partyPreview.entityType ?? "supplier"}
+            avatarUrl={partyPreview.avatarUrl}
+            avatarSeed={partyPreview.avatarSeed}
+            organizationImageUrl={partyPreview.organizationImageUrl}
+            organizationAvatarSeed={partyPreview.organizationAvatarSeed}
+          />
+        ) : (
           <NumericEntryRecipientHero
             party={partyPreview}
             caption="Partner rate"
-            compact
+            compact={false}
           />
-        ) : null}
+        )
+      ) : null}
 
-        <Pressable
-          onPress={() => setActive("rate")}
-          style={[styles.fieldBlock, active === "rate" && styles.fieldBlockActive]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "rate" }}
+      <Pressable
+        onPress={() => setActive("rate")}
+        style={[styles.fieldBlock, active === "rate" && styles.fieldBlockActive]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active === "rate" }}
+      >
+        <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.fieldLabel}>
+          Partner rate (₹) *
+        </Text>
+        <NumericDisplay
+          rawValue={rateRaw}
+          type="currency"
+          prefix="₹"
+          placeholder="0"
+          variant={heroVariant}
+        />
+      </Pressable>
+
+      <Pressable
+        onPress={() => setActive("advance")}
+        style={[
+          styles.fieldBlock,
+          active === "advance" && styles.fieldBlockActive,
+        ]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active === "advance" }}
+      >
+        <View style={styles.advanceLabelRow}>
+          <Text
+            style={
+              wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.fieldLabelSecondary
+            }
+          >
+            Advance paid (₹)
+          </Text>
+          <Text style={styles.optionalPill}>Optional</Text>
+        </View>
+        <NumericDisplay
+          rawValue={advanceRaw}
+          type="currency"
+          prefix="₹"
+          placeholder="0"
+          variant={active === "advance" ? heroVariant : "default"}
+        />
+      </Pressable>
+
+      {!wizardShell && hint ? <Text style={styles.hint}>{hint}</Text> : null}
+    </>
+  );
+
+  return (
+    <View style={[flow.root, styles.root, wizardShell && styles.rootWizard]}>
+      {wizardShell ? (
+        <ScrollView
+          style={styles.mainScroll}
+          contentContainerStyle={styles.main}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.fieldLabel}>Partner rate (₹) *</Text>
-          <NumericDisplay
-            rawValue={rateRaw}
-            type="currency"
-            prefix="₹"
-            placeholder="0"
-            variant="hero"
-          />
-        </Pressable>
+          {mainContent}
+        </ScrollView>
+      ) : (
+        <View style={[flow.main, styles.main]}>{mainContent}</View>
+      )}
 
-        <Pressable
-          onPress={() => setActive("advance")}
-          style={[
-            styles.fieldBlock,
-            active === "advance" && styles.fieldBlockActive,
-          ]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "advance" }}
-        >
-          <View style={styles.advanceLabelRow}>
-            <Text style={styles.fieldLabelSecondary}>Advance paid (₹)</Text>
-            <Text style={styles.optionalPill}>Optional</Text>
-          </View>
-          <NumericDisplay
-            rawValue={advanceRaw}
-            type="currency"
-            prefix="₹"
-            placeholder="0"
-            variant={active === "advance" ? "hero" : "default"}
-          />
-        </Pressable>
-
-        <Text style={styles.hint}>{hint}</Text>
-      </View>
-
-      <View style={[flow.keypadDock, keypadInset && styles.keypadDockInset]}>
+      <View
+        style={
+          wizardShell
+            ? flow.keypadDockWizard
+            : [flow.keypadDock, useInset && styles.keypadDockInset]
+        }
+      >
         <DecimalKeypad
           onKey={handleKey}
           showDecimal
@@ -141,9 +194,18 @@ const styles = StyleSheet.create({
   root: {
     width: "100%",
   },
+  rootWizard: {
+    flex: 1,
+    minHeight: 0,
+  },
+  mainScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
   main: {
-    gap: 10,
+    gap: 8,
     paddingTop: 2,
+    paddingBottom: 4,
   },
   fieldBlock: {
     gap: 6,

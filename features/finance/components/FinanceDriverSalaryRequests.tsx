@@ -54,6 +54,9 @@ export function FinanceDriverSalaryRequests({
             : req.request_type === "advance"
               ? t("advance")
               : t("tripBased");
+        const isTripBased = req.request_type === "trip_based";
+        const isTripBasedAttribution =
+          isTripBased && String(req.note ?? "").toLowerCase().includes("fleet trip");
         const salaryMonthStr =
           req.request_type === "monthly" && req.salary_month
             ? (() => {
@@ -67,7 +70,6 @@ export function FinanceDriverSalaryRequests({
         const dateStr = req.created_at ? formatDate(req.created_at) : "";
 
         // For trip_based: resolve trip details from tripById lookup
-        const isTripBased = req.request_type === "trip_based";
         const linkedTripIds: string[] = Array.isArray(req.trip_ids) ? req.trip_ids : [];
         const linkedTrips = linkedTripIds.map((id) => tripById[id]).filter(Boolean) as TripRow[];
         const firstTrip = linkedTrips[0] ?? null;
@@ -165,7 +167,7 @@ export function FinanceDriverSalaryRequests({
                   color={Theme.textOnPrimary}
                 />
                 <Text style={styles.driverSalaryRequestBtnPayText}>
-                  {t("pay")}
+                  {isTripBasedAttribution ? "Accept" : t("pay")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity

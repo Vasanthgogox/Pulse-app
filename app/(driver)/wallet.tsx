@@ -60,6 +60,7 @@ import {
     Image,
     Linking,
     Platform,
+    Pressable,
     ScrollView,
     Share,
     StyleSheet,
@@ -94,6 +95,8 @@ function isActiveFleetMembership(
   d: driversService.DriverRow,
   acceptedInvites: driversService.DriverInviteRow[],
 ): boolean {
+  // tracking_only rows are phone-assignment stubs, NOT real fleet membership.
+  if (d.tracking_only === true) return false;
   if (!d.left_at) return true;
   const orgId = String(d.organization_id ?? '');
   const inv = acceptedInvites.find((i) => String(i.from_organization_id ?? '') === orgId);
@@ -237,7 +240,7 @@ export default function DriverWalletScreen() {
   const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'salary_requested' | 'fleet_trips' | 'open_trips' | 'fleet_marked' | 'fleet_attributed' | 'settled'>('all');
   const [leaveFleetLoading, setLeaveFleetLoading] = useState(false);
   const [markFleetTripLoadingId, setMarkFleetTripLoadingId] = useState<string | null>(null);
-  const [tripsSubTab, setTripsSubTab] = useState<'fleet' | 'open'>('fleet');
+  const [tripsSubTab, setTripsSubTab] = useState<'fleet' | 'open' | 'attributed'>('fleet');
   const [copiedTripId, setCopiedTripId] = useState<string | null>(null);
   const [markPaidConfirmState, setMarkPaidConfirmState] = useState<{
     trip: tripsService.TripRow;
@@ -1159,8 +1162,7 @@ export default function DriverWalletScreen() {
     return salaryRequestOrgOptions.map((fleet) => {
       const fleetTrips = completedTrips.filter(
         (trip) =>
-          (String(trip.organization_id ?? '') === String(fleet.orgId) ||
-            String(trip.supplier_id ?? '') === String(fleet.orgId)) &&
+          String(trip.organization_id ?? '') === String(fleet.orgId) &&
           String(trip.driver_id ?? '') === String(fleet.driverId),
       );
       const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
@@ -1199,91 +1201,138 @@ export default function DriverWalletScreen() {
    * When there are no accepted invites at all, fall back to pay-arrangement-only check.
    */
   const employerOrgIdSet = useMemo(() => {
-    const acceptedInviteOrgIds = new Set(
-      invites
-        .filter((i) => (i.status || '').toLowerCase() === 'accepted')
-        .map((i) => String(i.from_organization_id ?? ''))
-        .filter(Boolean),
+    // Same pay-arrangement gate as isEmployerOrgAtDate in tripJourneyItems.
+    const salaryOrgIds = new Set(
+      salaryRequests.map((r) => String(r.organization_id ?? '')).filter(Boolean),
     );
-    const hasAnyAcceptedInvite = acceptedInviteOrgIds.size > 0;
+    const hasPayArrangement = (orgId: string): boolean => {
+      if (salaryOrgIds.has(orgId)) return true;
+      if (linkedDrivers.some(
+        (d) =>
+          String(d.organization_id ?? '') === orgId &&
+          (
+            (d.payable_amount     != null && Number(d.payable_amount)     > 0) ||
+            (d.commission_percent != null && Number(d.commission_percent) > 0) ||
+            (d.commission_per_km  != null && Number(d.commission_per_km)  > 0)
+          ),
+      )) return true;
+      if (invites.some(
+        (i) =>
+          String(i.from_organization_id ?? '') === orgId &&
+          (i.status || '').toLowerCase() === 'accepted' &&
+          (
+            (i.payable_amount     != null && Number(i.payable_amount)     > 0) ||
+            (i.commission_percent != null && Number(i.commission_percent) > 0) ||
+            (i.commission_per_km  != null && Number(i.commission_per_km)  > 0)
+          ),
+      )) return true;
+      return false;
+    };
 
     const set = new Set<string>();
+    // Path 1: accepted fleet invite + pay arrangement
+    invites
+      .filter((i) => (i.status || '').toLowerCase() === 'accepted')
+      .forEach((i) => {
+        const orgId = String(i.from_organization_id ?? '');
+        if (orgId && hasPayArrangement(orgId)) set.add(orgId);
+      });
+    // Path 2: non-tracking-only active membership + pay arrangement
     linkedDrivers.forEach((d) => {
+      if (d.left_at) return;
+      if (d.tracking_only === true) return;
       const orgId = String(d.organization_id ?? '');
-      if (!orgId) return;
-      // A linkedDrivers row IS the fleet membership signal — pay rates are optional.
-      // When the driver has accepted invites, an org with no invite AND no pay arrangement
-      // is treated as a stray record (not an employer) to prevent client-org misclassification.
-      const hasPay =
-        (d.payable_amount != null && d.payable_amount > 0) ||
-        (d.commission_percent != null && d.commission_percent > 0) ||
-        (d.commission_per_km != null && d.commission_per_km > 0);
-      if (hasAnyAcceptedInvite && !hasPay && !acceptedInviteOrgIds.has(orgId)) return;
-      set.add(orgId);
+      if (orgId && hasPayArrangement(orgId)) set.add(orgId);
     });
     return set;
-  }, [linkedDrivers, invites]);
+  }, [linkedDrivers, invites, salaryRequests]);
 
   const tripJourneyItems = useMemo(() => {
+    // Orgs to which the driver has explicitly submitted salary requests.
+    // Salary requests are fleet-only (drivers don't submit salary requests to shippers),
+    // making this the strongest employer signal available.
+    const salaryHistoryOrgIds = new Set(
+      salaryRequests.map((r) => String(r.organization_id ?? '')).filter(Boolean),
+    );
+
     return completedTrips.map((trip) => {
-      // Fleet owner trip = trip dispatched by an org where the driver had a pay arrangement
-      // at the time the trip occurred. Uses a date-window check against linkedDrivers so that:
-      //   • Former-employer trips (left_at set) are still classified as fleet trips.
-      //   • The invite filter is applied relative to the trip date, not current state — preventing
-      //     the global hasAnyAcceptedInvite guard from wrongly excluding pre-invite employers.
       const tripOrgId = String(trip.organization_id ?? '');
       const tripDateRaw = trip.pickup_date ?? trip.started_at ?? trip.created_at ?? '';
       const tripTs = tripDateRaw ? new Date(tripDateRaw).getTime() : Date.now();
 
-      // Build the set of org IDs that had an accepted invite on or before the trip date.
-      const acceptedInviteOrgIdsAtDate = new Set(
-        invites
-          .filter((i) => {
-            if ((i.status || '').toLowerCase() !== 'accepted') return false;
-            // responded_at tells us when the invite was accepted; fall back to created_at.
-            const acceptedTs = i.responded_at
-              ? new Date(i.responded_at).getTime()
-              : i.created_at
-                ? new Date(i.created_at).getTime()
-                : 0;
-            return acceptedTs <= tripTs + 24 * 60 * 60 * 1000;
-          })
-          .map((i) => String(i.from_organization_id ?? ''))
-          .filter(Boolean),
-      );
-      const hadAnyInviteAtDate = acceptedInviteOrgIdsAtDate.size > 0;
+      // ── Employer classification ──────────────────────────────────────────────
+      //
+      // An org is a fleet EMPLOYER only when the driver has BOTH:
+      //   A) A formal connection signal (accepted invite or non-tracking membership row)
+      //   B) A pay-arrangement signal (salary/commission terms set OR salary request history)
+      //
+      // The pay-arrangement check is critical because shippers (Mohana) can also
+      // send fleet invites or create non-tracking rows for trip-tracking purposes,
+      // yet they never set pay terms and the driver never requests salary from them.
+      //
+      // Excluded explicitly:
+      //   • tracking_only = true  — phone-assignment stubs created by open trips
+      //   • accepted invite alone — shippers connect via invites too; need pay terms
+      //   • supplier_id field     — dispatcher (org_id) is what matters here
 
-      // Returns true when the given org ID is a fleet employer of this driver at the trip date.
-      // A linkedDrivers row for that org IS the membership signal — pay rates are optional
-      // (owner/admin drivers have no pay fields set but are still fleet members).
-      // The invite guard only applies when the driver has accepted partner invites: in that
-      // case an org without a matching invite is a partner, not an employer.
-      const isEmployerOrgAtDate = (orgId: string) =>
-        !!orgId &&
-        linkedDrivers.some((d) => {
+      // True when this org has any pay arrangement with the driver.
+      const hasPayArrangement = (orgId: string): boolean => {
+        // Strongest signal: driver explicitly sent a salary request to this org
+        if (salaryHistoryOrgIds.has(orgId)) return true;
+        // Pay amounts set in the driver row (salary/commission contract)
+        if (linkedDrivers.some(
+          (d) =>
+            String(d.organization_id ?? '') === orgId &&
+            (
+              (d.payable_amount     != null && Number(d.payable_amount)     > 0) ||
+              (d.commission_percent != null && Number(d.commission_percent) > 0) ||
+              (d.commission_per_km  != null && Number(d.commission_per_km)  > 0)
+            ),
+        )) return true;
+        // Pay amounts baked into the accepted invite
+        if (invites.some(
+          (i) =>
+            String(i.from_organization_id ?? '') === orgId &&
+            (i.status || '').toLowerCase() === 'accepted' &&
+            (
+              (i.payable_amount     != null && Number(i.payable_amount)     > 0) ||
+              (i.commission_percent != null && Number(i.commission_percent) > 0) ||
+              (i.commission_per_km  != null && Number(i.commission_per_km)  > 0)
+            ),
+        )) return true;
+        return false;
+      };
+
+      const isEmployerOrgAtDate = (orgId: string): boolean => {
+        if (!orgId) return false;
+        // Must have a pay arrangement — rules out shippers who invited for tracking
+        if (!hasPayArrangement(orgId)) return false;
+
+        // Path 1: accepted fleet invite (+ pay arrangement already confirmed above)
+        const hasAcceptedInvite = invites.some(
+          (i) =>
+            (i.status || '').toLowerCase() === 'accepted' &&
+            String(i.from_organization_id ?? '') === orgId,
+        );
+        if (hasAcceptedInvite) return true;
+
+        // Path 2: non-tracking membership row, active at trip time
+        return linkedDrivers.some((d) => {
           if (String(d.organization_id ?? '') !== orgId) return false;
-          const joinTs = d.created_at ? new Date(d.created_at).getTime() : 0;
-          if (joinTs > tripTs + 24 * 60 * 60 * 1000) return false;
+          if (d.tracking_only === true) return false;
           if (d.left_at) {
             const leftTs = new Date(d.left_at).getTime();
             if (leftTs < tripTs - 24 * 60 * 60 * 1000) return false;
           }
-          // When the driver has accepted invites from other orgs, an org that issued no
-          // invite AND has no pay arrangement is treated as a stray record, not an employer.
-          const hasPay =
-            (d.payable_amount != null && d.payable_amount > 0) ||
-            (d.commission_percent != null && d.commission_percent > 0) ||
-            (d.commission_per_km != null && d.commission_per_km > 0);
-          if (hadAnyInviteAtDate && !hasPay && !acceptedInviteOrgIdsAtDate.has(orgId)) return false;
           return true;
         });
+      };
 
-      const tripSupplierId = String(trip.supplier_id ?? '');
-      // Fleet trip: employer dispatched directly (org = employer) OR employer is the supplier
-      // for a client-owned cross-org trip (supplier_id = employer).
-      const isFleetOwnerTrip =
-        isEmployerOrgAtDate(tripOrgId) ||
-        (!!tripSupplierId && isEmployerOrgAtDate(tripSupplierId));
+      // Fleet trip = employer (Aiman Logs) dispatched this trip directly to the driver.
+      // Open trip  = any shipper/non-employer (Mohana) sent the trip — even if the employer
+      //              appears as supplier_id on that trip, the dispatcher is NOT the employer.
+      // Rule: check ONLY organization_id (the dispatcher). supplier_id is irrelevant here.
+      const isFleetOwnerTrip = isEmployerOrgAtDate(tripOrgId);
 
       const fleetOrgName =
         salaryRequestOrgOptions.find(
@@ -1341,7 +1390,7 @@ export default function DriverWalletScreen() {
         fleetPendingLedger: view.fleetPendingLedger,
       };
     });
-  }, [completedTrips, ledgerEntries, salaryRequestOrgOptions, orgNameById, driverTripNumberById, linkedDrivers, invites]);
+  }, [completedTrips, ledgerEntries, salaryRequestOrgOptions, orgNameById, driverTripNumberById, linkedDrivers, invites, salaryRequests]);
 
   const isFleetMarkedAwaitingVerify = useCallback(
     (item: (typeof tripJourneyItems)[number]) =>
@@ -1533,12 +1582,30 @@ export default function DriverWalletScreen() {
     return set;
   }, [salaryRequests, currentEmployer]);
 
+  const fleetAttributedApprovedTripIds = useMemo(() => {
+    const set = new Set<string>();
+    if (!currentEmployer) return set;
+    const employerOrgId = String(currentEmployer.orgId ?? '');
+    salaryRequests.forEach((r) => {
+      const status = String(r.status ?? '').toLowerCase();
+      if (
+        r.request_type === 'trip_based' &&
+        String(r.organization_id ?? '') === employerOrgId &&
+        (status === 'approved' || status === 'paid')
+      ) {
+        (r.trip_ids ?? []).forEach((id) => set.add(id));
+      }
+    });
+    return set;
+  }, [salaryRequests, currentEmployer]);
+
   const filteredTripJourneyItems = useMemo(() => {
     const search = journeySearch.trim().toLowerCase();
     return tripJourneyItems.filter((item) => {
       // Sub-tab primary gate
       if (tripsSubTab === 'fleet' && !item.isFleetOwnerTrip) return false;
       if (tripsSubTab === 'open' && item.isFleetOwnerTrip) return false;
+      if (tripsSubTab === 'attributed' && !fleetAttributedApprovedTripIds.has(item.trip.id)) return false;
 
       const matchesSearch =
         search.length === 0 ||
@@ -1552,7 +1619,9 @@ export default function DriverWalletScreen() {
         journeyFilter === 'all' ||
         (journeyFilter === 'settled' && item.status === 'Settled') ||
         (journeyFilter === 'fleet_marked' && fleetMarked && tripsSubTab === 'fleet') ||
-        (journeyFilter === 'fleet_attributed' && fleetAttributedTripIds.has(item.trip.id) && tripsSubTab === 'open') ||
+        (journeyFilter === 'fleet_attributed' &&
+          (tripsSubTab === 'open' || tripsSubTab === 'attributed') &&
+          fleetAttributedApprovedTripIds.has(item.trip.id)) ||
         (journeyFilter === 'pending' &&
           item.status !== 'Settled' &&
           !fleetMarked &&
@@ -1560,7 +1629,14 @@ export default function DriverWalletScreen() {
 
       return matchesSearch && matchesFilter;
     });
-  }, [tripJourneyItems, journeySearch, journeyFilter, tripsSubTab, isFleetMarkedAwaitingVerify, fleetAttributedTripIds]);
+  }, [
+    tripJourneyItems,
+    journeySearch,
+    journeyFilter,
+    tripsSubTab,
+    isFleetMarkedAwaitingVerify,
+    fleetAttributedApprovedTripIds,
+  ]);
 
   const pendingTripJourneyItems = useMemo(() => {
     return filteredTripJourneyItems.filter((i) => i.status === 'Action Required' || (i.status === 'Pending' && !i.fleetPendingLedger));
@@ -2193,7 +2269,11 @@ export default function DriverWalletScreen() {
                   ]}
                   onPress={() => {
                     setTripsSubTab('fleet');
-                    if (journeyFilter === 'open_trips' || journeyFilter === 'fleet_trips') setJourneyFilter('all');
+                    if (
+                      journeyFilter === 'open_trips' ||
+                      journeyFilter === 'fleet_trips' ||
+                      journeyFilter === 'fleet_attributed'
+                    ) setJourneyFilter('all');
                   }}
                   activeOpacity={0.8}
                 >
@@ -2215,13 +2295,51 @@ export default function DriverWalletScreen() {
                   ]}
                   onPress={() => {
                     setTripsSubTab('open');
-                    if (journeyFilter === 'fleet_trips' || journeyFilter === 'open_trips' || journeyFilter === 'salary_requested' || journeyFilter === 'fleet_marked') setJourneyFilter('all');
+                    if (
+                      journeyFilter === 'fleet_trips' ||
+                      journeyFilter === 'open_trips' ||
+                      journeyFilter === 'salary_requested' ||
+                      journeyFilter === 'fleet_marked'
+                    ) setJourneyFilter('all');
                   }}
                   activeOpacity={0.8}
                 >
                   <FontAwesome name="road" size={10} color={tripsSubTab === 'open' ? '#6366f1' : colors.textMuted} />
                   <Text style={[styles.tripsSubTabText, { color: tripsSubTab === 'open' ? '#6366f1' : colors.textMuted }]}>
                     Open trips
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.tripsSubTabBtn,
+                    tripsSubTab === 'attributed' && [
+                      styles.tripsSubTabBtnActive,
+                      {
+                        backgroundColor: isDark ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.10)',
+                        borderColor: isDark ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.24)',
+                      },
+                    ],
+                  ]}
+                  onPress={() => {
+                    setTripsSubTab('attributed');
+                    if (journeyFilter === 'fleet_trips' || journeyFilter === 'open_trips') {
+                      setJourneyFilter('fleet_attributed');
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome
+                    name="check-circle"
+                    size={10}
+                    color={tripsSubTab === 'attributed' ? '#d97706' : colors.textMuted}
+                  />
+                  <Text
+                    style={[
+                      styles.tripsSubTabText,
+                      { color: tripsSubTab === 'attributed' ? '#d97706' : colors.textMuted },
+                    ]}
+                  >
+                    Attributed
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2239,6 +2357,8 @@ export default function DriverWalletScreen() {
                     ...(tripsSubTab === 'fleet' ? [
                       { id: 'salary_requested', label: 'Salary req.' },
                       { id: 'fleet_marked', label: 'Fleet marked' },
+                    ] : tripsSubTab === 'attributed' && currentEmployer ? [
+                      { id: 'fleet_attributed', label: 'Accepted' },
                     ] : currentEmployer ? [
                       { id: 'fleet_attributed', label: 'Attributed' },
                     ] : []),
@@ -2986,31 +3106,25 @@ export default function DriverWalletScreen() {
                             avatarUrl: orgAvatar?.avatarUrl,
                             entityType: 'client',
                           }) ?? getFleetAvatarUriForOrg(orgId, providerShort);
+                        // Attribution state for this specific trip:
+                        //   pending  = driver sent it to fleet owner, awaiting approval
+                        //   approved = fleet owner approved it (counts as fleet trip)
+                        const isAttributionPending =
+                          fleetAttributedTripIds.has(item.trip.id) &&
+                          !fleetAttributedApprovedTripIds.has(item.trip.id);
+                        const isAttributionApproved = fleetAttributedApprovedTripIds.has(item.trip.id);
 
-                        return (
-                          <View
-                            key={tripId}
-                            style={[
-                              styles.tripsCard,
-                              {
-                                backgroundColor: tripsCardBg,
-                                borderColor: isExpanded
-                                  ? colors.emerald
-                                  : isActionRequired
-                                    ? 'rgba(249,115,22,0.65)'
-                                    : isDark
-                                      ? colors.borderSubtle
-                                      : 'rgba(226,232,240,0.9)',
-                                shadowColor: isActionRequired ? 'rgba(249,115,22,0.25)' : 'rgba(4,120,87,0.18)',
-                              },
-                              isExpanded && styles.tripsCardExpanded,
-                            ]}
-                          >
-                            <TouchableOpacity
-                              onPress={() => setExpandedTripId((prev) => (prev === tripId ? null : tripId))}
-                              activeOpacity={0.82}
-                              style={styles.tripsCardTouch}
-                            >
+                        // Only show attribution row on open trips — a trip already classified as
+                        // isFleetOwnerTrip was dispatched directly by the employer and needs no attribution label.
+                        const showAttributedAvatarRow =
+                          !item.isFleetOwnerTrip &&
+                          (isAttributionPending || isAttributionApproved) &&
+                          !!currentEmployer;
+                        // Only settled trips expose an expand panel with receipt actions; otherwise keep the card static.
+                        const hasCardExpandAction = isSettled;
+
+                        const tripCardHeader = (
+                            <>
                               <View style={styles.tripsCardTop}>
                                 <View style={styles.tripsCardTopLeft}>
                                   <View style={[styles.tripsIcon, styles.tripsIconStack, { overflow: 'visible' }]}>
@@ -3045,6 +3159,32 @@ export default function DriverWalletScreen() {
                                         {providerShort}
                                       </Text>
                                     </View>
+                                      {showAttributedAvatarRow ? (
+                                        <View style={styles.tripsAttributedAvatarRow}>
+                                          <View style={styles.tripsAttributedAvatarStack}>
+                                            <Image
+                                              source={{ uri: avatarUri }}
+                                              style={[styles.tripsAttributedAvatar, styles.tripsAttributedAvatarFront]}
+                                              resizeMode="cover"
+                                            />
+                                            <Image
+                                              source={{ uri: getFleetAvatarUriForOrg(
+                                                String(currentEmployer?.orgId ?? ''),
+                                                currentEmployer?.orgName ?? 'Fleet',
+                                              ) }}
+                                              style={[styles.tripsAttributedAvatar, styles.tripsAttributedAvatarBack]}
+                                              resizeMode="cover"
+                                            />
+                                          </View>
+                                          <Text style={[styles.tripsAttributedAvatarText, {
+                                            color: isAttributionApproved ? colors.emerald : '#d97706',
+                                          }]} numberOfLines={1}>
+                                            {isAttributionApproved
+                                              ? `Accepted by ${currentEmployer?.orgName ?? 'fleet'}`
+                                              : `Sent to ${currentEmployer?.orgName ?? 'fleet'} · Pending`}
+                                          </Text>
+                                        </View>
+                                      ) : null}
                                   </View>
                                 </View>
 
@@ -3122,23 +3262,35 @@ export default function DriverWalletScreen() {
                                     ]}
                                     numberOfLines={1}
                                   >
-                                    {hasFleetPending ? 'Awaiting confirmation' : item.subStatus || item.status}
+                                    {hasFleetPending
+                                      ? 'Awaiting confirmation'
+                                      : isSalaryTrip
+                                        ? 'Open trip'
+                                        : item.subStatus || item.status}
                                   </Text>
                                   {item.isFleetOwnerTrip ? (
+                                    // Fleet trip: assigned directly by the employer
                                     <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(4,120,87,0.15)' : 'rgba(4,120,87,0.08)', color: colors.emerald, borderColor: 'rgba(4,120,87,0.25)' }]}>
                                       FLEET TRIP
                                     </Text>
-                                  ) : fleetAttributedTripIds.has(item.trip.id) ? (
+                                  ) : isAttributionApproved ? (
+                                    // Open trip accepted by fleet owner → counts as fleet work
+                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(4,120,87,0.15)' : 'rgba(4,120,87,0.08)', color: colors.emerald, borderColor: 'rgba(4,120,87,0.25)' }]}>
+                                      ATTRIBUTED ✓
+                                    </Text>
+                                  ) : isAttributionPending ? (
+                                    // Sent to fleet owner, awaiting their approval
                                     <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.10)', color: '#d97706', borderColor: 'rgba(245,158,11,0.30)' }]}>
-                                      ATTRIBUTED
+                                      PENDING REVIEW
                                     </Text>
                                   ) : (
+                                    // Open/direct trip — not sent to fleet owner yet
                                     <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.10)', color: '#6366f1', borderColor: 'rgba(99,102,241,0.30)' }]}>
-                                      DIRECT TRIP
+                                      OPEN TRIP
                                     </Text>
                                   )}
                                 </View>
-                                {isSettled ? (
+                                {hasCardExpandAction ? (
                                   <FontAwesome
                                     name="chevron-down"
                                     size={12}
@@ -3147,7 +3299,47 @@ export default function DriverWalletScreen() {
                                   />
                                 ) : null}
                               </View>
-                            </TouchableOpacity>
+                            </>
+                        );
+
+                        return (
+                          <View
+                            key={tripId}
+                            style={[
+                              styles.tripsCard,
+                              {
+                                backgroundColor: tripsCardBg,
+                                borderColor:
+                                  hasCardExpandAction && isExpanded
+                                    ? colors.emerald
+                                    : isActionRequired
+                                      ? 'rgba(249,115,22,0.65)'
+                                      : isDark
+                                        ? colors.borderSubtle
+                                        : 'rgba(226,232,240,0.9)',
+                                shadowColor: isActionRequired ? 'rgba(249,115,22,0.25)' : 'rgba(4,120,87,0.18)',
+                              },
+                              hasCardExpandAction && isExpanded && styles.tripsCardExpanded,
+                            ]}
+                          >
+                            {hasCardExpandAction ? (
+                              <TouchableOpacity
+                                onPress={() => setExpandedTripId((prev) => (prev === tripId ? null : tripId))}
+                                activeOpacity={0.82}
+                                style={styles.tripsCardTouch}
+                              >
+                                {tripCardHeader}
+                              </TouchableOpacity>
+                            ) : (
+                              <Pressable
+                                style={styles.tripsCardTouch}
+                                onPress={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                {tripCardHeader}
+                              </Pressable>
+                            )}
 
                             {hasFleetPending && !isSettled ? (
                               <View
@@ -3337,24 +3529,52 @@ export default function DriverWalletScreen() {
                                 {!item.isFleetOwnerTrip ? (() => {
                                   const tripEmployer = findEmployerAtTripDate(item.trip);
                                   if (!tripEmployer) return null;
-                                  return fleetAttributedTripIds.has(item.trip.id) ? (
-                                    <View
-                                      style={[
-                                        styles.tripsPendingActionSecondary,
-                                        {
-                                          marginTop: 8,
-                                          backgroundColor: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(254,243,199,0.6)',
-                                          borderColor: 'rgba(245,158,11,0.30)',
-                                          opacity: 0.85,
-                                        },
-                                      ]}
-                                    >
-                                      <FontAwesome name="check-circle" size={12} color="#d97706" />
-                                      <Text style={[styles.tripsPendingActionSecondaryText, { color: '#d97706' }]} numberOfLines={1}>
-                                        Sent to {tripEmployer.orgName} for review
-                                      </Text>
-                                    </View>
-                                  ) : (
+
+                                  if (isAttributionApproved) {
+                                    // Fleet owner approved — show accepted state
+                                    return (
+                                      <View
+                                        style={[
+                                          styles.tripsPendingActionSecondary,
+                                          {
+                                            marginTop: 8,
+                                            backgroundColor: isDark ? 'rgba(4,120,87,0.10)' : 'rgba(220,252,231,0.6)',
+                                            borderColor: 'rgba(4,120,87,0.30)',
+                                          },
+                                        ]}
+                                      >
+                                        <FontAwesome name="check-circle" size={12} color="#059669" />
+                                        <Text style={[styles.tripsPendingActionSecondaryText, { color: '#059669' }]} numberOfLines={1}>
+                                          Accepted by {tripEmployer.orgName}
+                                        </Text>
+                                      </View>
+                                    );
+                                  }
+
+                                  if (isAttributionPending) {
+                                    // Sent to fleet owner, awaiting approval
+                                    return (
+                                      <View
+                                        style={[
+                                          styles.tripsPendingActionSecondary,
+                                          {
+                                            marginTop: 8,
+                                            backgroundColor: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(254,243,199,0.6)',
+                                            borderColor: 'rgba(245,158,11,0.30)',
+                                            opacity: 0.85,
+                                          },
+                                        ]}
+                                      >
+                                        <FontAwesome name="clock-o" size={12} color="#d97706" />
+                                        <Text style={[styles.tripsPendingActionSecondaryText, { color: '#d97706' }]} numberOfLines={1}>
+                                          Awaiting {tripEmployer.orgName} approval
+                                        </Text>
+                                      </View>
+                                    );
+                                  }
+
+                                  // Not yet sent — show the "Send to Fleet" button
+                                  return (
                                     <TouchableOpacity
                                       activeOpacity={0.88}
                                       onPress={() => handleMarkAsFleetTrip(item.trip, tripEmployer)}
@@ -3371,8 +3591,8 @@ export default function DriverWalletScreen() {
                                       <FontAwesome name="building" size={12} color="#d97706" />
                                       <Text style={[styles.tripsPendingActionSecondaryText, { color: '#d97706' }]} numberOfLines={1}>
                                         {markFleetTripLoadingId === item.trip.id
-                                          ? 'Attributing…'
-                                          : `Attribute to ${tripEmployer.orgName}`}
+                                          ? 'Sending…'
+                                          : `Send to ${tripEmployer.orgName}`}
                                       </Text>
                                     </TouchableOpacity>
                                   );
@@ -3380,7 +3600,7 @@ export default function DriverWalletScreen() {
                               </View>
                             ) : null}
 
-                            {isExpanded && (
+                            {hasCardExpandAction && isExpanded && (
                               <View style={styles.tripsExpanded}>
                                 {isActionRequired && (
                                   <View
@@ -4688,6 +4908,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  tripsAttributedAvatarRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tripsAttributedAvatarStack: {
+    width: 30,
+    height: 18,
+    position: 'relative',
+  },
+  tripsAttributedAvatar: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fff',
+    position: 'absolute',
+    top: 1,
+  },
+  tripsAttributedAvatarFront: {
+    left: 0,
+    zIndex: 2,
+  },
+  tripsAttributedAvatarBack: {
+    left: 12,
+    zIndex: 1,
+  },
+  tripsAttributedAvatarText: {
+    fontSize: 8,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   tripsMetaText: {
     fontSize: 8,

@@ -1774,8 +1774,10 @@ export default function TripDetailScreen({
         status: string;
         started_at?: string;
         completed_at?: string;
+        status_change_origin?: string;
       } = {
         status: simConfirmStep.targetStatus,
+        status_change_origin: "business_simulated",
       };
       if (simConfirmStep.started_at)
         updateData.started_at = simConfirmStep.started_at;
@@ -1791,6 +1793,7 @@ export default function TripDetailScreen({
             status: "completed",
             completed_at: simConfirmStep.completed_at ?? new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            status_change_origin: "business_simulated",
           };
           if (simConfirmStep.started_at) {
             fallbackUpdate.started_at = simConfirmStep.started_at;

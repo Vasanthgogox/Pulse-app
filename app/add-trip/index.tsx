@@ -234,7 +234,7 @@ export default function AddTripPage() {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <AddTripModal
         organizationId={orgId}
         sourceIndent={sourceIndent ?? null}

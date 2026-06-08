@@ -1,6 +1,11 @@
 import { buildDriverTripSettlementView } from '@/features/driver/tripSettlement/driverTripSettlement.util';
 import { buildDriverTripNumberMap } from '@/features/driver/utils/driverTripSequence.util';
 import { tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
+import {
+  buildCompensationSalaryLines,
+  buildDriverInviteSalaryLines,
+  type DriverInviteSalaryLine,
+} from '@/features/drivers/utils/driverInviteOffer.util';
 import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +28,15 @@ export type PendingEarningsTripItem = {
   expectedAmount: number;
   statusLabel: string;
   isFleetOwnerTrip: boolean;
+  organizationImageUrl: string | null;
+  organizationAvatarUrl: string | null;
+  organizationAvatarSeed: string | null;
+};
+
+export type PendingEarningsEmployerDetail = {
+  orgId: string;
+  orgName: string;
+  salaryLines: DriverInviteSalaryLine[];
 };
 
 export function useDriverPendingEarnings() {
@@ -120,7 +134,7 @@ export function useDriverPendingEarnings() {
   const salaryRequestOrgOptions = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
     return linkedDrivers
-      .filter((d) => !d.left_at)
+      .filter((d) => !d.left_at && d.tracking_only !== true)  // exclude phone stubs
       .map((d) => {
         const inv = accepted.find(
           (i) => String(i.from_organization_id || '') === String(d.organization_id || ''),
@@ -139,20 +153,47 @@ export function useDriverPendingEarnings() {
   }, [linkedDrivers, invites]);
 
   const employerOrgIdSet = useMemo(() => {
+    // Pay-arrangement gate: shippers can accept fleet invites for trip tracking
+    // but they don't set salary/commission terms.
+    const hasPayArrangement = (orgId: string): boolean => {
+      if (linkedDrivers.some(
+        (d) =>
+          String(d.organization_id ?? '') === orgId &&
+          (
+            (d.payable_amount     != null && Number(d.payable_amount)     > 0) ||
+            (d.commission_percent != null && Number(d.commission_percent) > 0) ||
+            (d.commission_per_km  != null && Number(d.commission_per_km)  > 0)
+          ),
+      )) return true;
+      return invites.some(
+        (i) =>
+          String(i.from_organization_id ?? '') === orgId &&
+          (i.status || '').toLowerCase() === 'accepted' &&
+          (
+            (i.payable_amount     != null && Number(i.payable_amount)     > 0) ||
+            (i.commission_percent != null && Number(i.commission_percent) > 0) ||
+            (i.commission_per_km  != null && Number(i.commission_per_km)  > 0)
+          ),
+      );
+    };
+
     const set = new Set<string>();
+    // Path 1: accepted invite + pay arrangement
+    invites
+      .filter((i) => (i.status || '').toLowerCase() === 'accepted')
+      .forEach((i) => {
+        const orgId = String(i.from_organization_id ?? '');
+        if (orgId && hasPayArrangement(orgId)) set.add(orgId);
+      });
+    // Path 2: non-tracking active row + pay arrangement
     linkedDrivers.forEach((d) => {
       if (d.left_at) return;
-      if (
-        (d.payable_amount != null && d.payable_amount > 0) ||
-        (d.commission_percent != null && d.commission_percent > 0) ||
-        (d.commission_per_km != null && d.commission_per_km > 0)
-      ) {
-        const orgId = String(d.organization_id ?? '');
-        if (orgId) set.add(orgId);
-      }
+      if (d.tracking_only === true) return;
+      const orgId = String(d.organization_id ?? '');
+      if (orgId && hasPayArrangement(orgId)) set.add(orgId);
     });
     return set;
-  }, [linkedDrivers]);
+  }, [linkedDrivers, invites]);
 
   const pendingItems = useMemo((): PendingEarningsTripItem[] => {
     const pendingTrips = completedTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
@@ -174,12 +215,40 @@ export function useDriverPendingEarnings() {
         ? (fleetOrgName ?? 'Fleet')
         : (fleetOrgName ?? (trip.client_name?.trim() || 'Direct trip'));
 
+      const acceptedInviteForTripOrg = invites.find(
+        (inv) =>
+          (inv.status || '').toLowerCase() === 'accepted' &&
+          String(inv.from_organization_id ?? '') === String(trip.organization_id ?? ''),
+      );
+      const inviteForTripOrg =
+        acceptedInviteForTripOrg ??
+        invites.find(
+          (inv) => String(inv.from_organization_id ?? '') === String(trip.organization_id ?? ''),
+        ) ??
+        null;
+      const linkedDriverForTrip = linkedDrivers.find(
+        (d) =>
+          String(d.organization_id ?? '') === String(trip.organization_id ?? '') &&
+          String(d.id ?? '') === String(trip.driver_id ?? ''),
+      );
+      const payoutTerms = {
+        commissionPercent:
+          acceptedInviteForTripOrg?.commission_percent ??
+          linkedDriverForTrip?.commission_percent ??
+          null,
+        commissionPerKm:
+          acceptedInviteForTripOrg?.commission_per_km ??
+          linkedDriverForTrip?.commission_per_km ??
+          null,
+      };
+
       const view = buildDriverTripSettlementView({
         trip,
         ledgerEntries,
         fleetOrgName: provider,
         driverTripNumberById,
         tripCompleted: true,
+        payoutTerms,
       });
 
       const rawDate = trip.completed_at ?? trip.updated_at ?? trip.created_at ?? '';
@@ -198,10 +267,13 @@ export function useDriverPendingEarnings() {
         from: view.from,
         to: view.to,
         provider,
-        amount: view.amount || tripEarningsForDriver(trip),
+        amount: view.amount || tripEarningsForDriver(trip, payoutTerms),
         expectedAmount: view.expectedAmount,
         statusLabel: view.statusLabel || 'To collect',
         isFleetOwnerTrip,
+        organizationImageUrl: inviteForTripOrg?.from_org_logo_url ?? null,
+        organizationAvatarUrl: inviteForTripOrg?.from_org_avatar_url ?? null,
+        organizationAvatarSeed: inviteForTripOrg?.from_org_avatar_seed ?? null,
       };
     });
   }, [
@@ -211,12 +283,50 @@ export function useDriverPendingEarnings() {
     salaryRequestOrgOptions,
     ledgerEntries,
     driverTripNumberById,
+    invites,
+    linkedDrivers,
   ]);
 
   const pendingTotal = useMemo(
     () => pendingItems.reduce((sum, item) => sum + item.amount, 0),
     [pendingItems],
   );
+
+  const employerDetails = useMemo((): PendingEarningsEmployerDetail[] => {
+    const acceptedByOrg = new Map<string, driversService.DriverInviteRow>();
+    invites.forEach((inv) => {
+      if ((inv.status || '').toLowerCase() !== 'accepted') return;
+      const orgId = String(inv.from_organization_id ?? '');
+      if (!orgId) return;
+      const prev = acceptedByOrg.get(orgId);
+      const prevTs = prev ? new Date(prev.responded_at ?? prev.created_at).getTime() : 0;
+      const nextTs = new Date(inv.responded_at ?? inv.created_at).getTime();
+      if (!prev || nextTs > prevTs) acceptedByOrg.set(orgId, inv);
+    });
+
+    return linkedDrivers
+      .filter((d) => !d.left_at)
+      .map((d) => {
+        const orgId = String(d.organization_id ?? '');
+        if (!orgId) return null;
+        const invite = acceptedByOrg.get(orgId) ?? null;
+        const salaryLines = invite
+          ? buildDriverInviteSalaryLines(invite)
+          : buildCompensationSalaryLines({
+              payableAmount: d.payable_amount ?? null,
+              commissionPercent: d.commission_percent ?? null,
+              commissionPerKm: d.commission_per_km ?? null,
+            });
+        if (salaryLines.length === 0) return null;
+        const orgName =
+          invite?.from_org_name?.trim() ||
+          (d.organizations as { name?: string } | null | undefined)?.name?.trim() ||
+          'Fleet';
+        return { orgId, orgName, salaryLines };
+      })
+      .filter((row): row is PendingEarningsEmployerDetail => !!row)
+      .sort((a, b) => a.orgName.localeCompare(b.orgName));
+  }, [invites, linkedDrivers]);
 
   return {
     loading,
@@ -225,5 +335,6 @@ export function useDriverPendingEarnings() {
     pendingItems,
     pendingTotal,
     tripCount: pendingItems.length,
+    employerDetails,
   };
 }

@@ -48,6 +48,12 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     flexShrink: 1,
     minHeight: 0,
   },
+  /** Inside FullPageWizardShell — shell already applies horizontal padding. */
+  mainPaddedWizard: {
+    flexShrink: 1,
+    minHeight: 0,
+    paddingHorizontal: 0,
+  },
   displayRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -114,6 +120,21 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     borderTopRightRadius: 20,
     marginHorizontal: -Layout.screenPaddingHorizontal,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+  },
+  /** Wizard shell — no negative bleed; keypad stays above footer. */
+  keypadDockWizard: {
+    flexShrink: 0,
+    alignSelf: "stretch",
+    width: "100%",
+    paddingTop: 10,
+    paddingBottom: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    marginHorizontal: 0,
+    paddingHorizontal: 0,
   },
   /** Full-bleed iOS-style dial pad (no side margins, system gray chrome). */
   keypadDockApple: {

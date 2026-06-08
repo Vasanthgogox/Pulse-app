@@ -168,6 +168,8 @@ export function AssetRosterPickers({
         isFlow ? (
           <AssignmentEntityAvatarGrid
             title="Select Driver"
+            variant="wizard"
+            embedded
             totalCount={activeDrivers.length}
             selectedId={assignDriverId}
             onSelect={(id) => {
@@ -217,6 +219,8 @@ export function AssetRosterPickers({
         isFlow ? (
           <AssignmentEntityAvatarGrid
             title="Select Vehicle"
+            variant="wizard"
+            embedded
             totalCount={vehicles.length}
             selectedId={
               typeof assignVehicleId === "string" ? assignVehicleId : null

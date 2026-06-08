@@ -36,6 +36,8 @@ export interface IntegratedChat {
   id: string;
   partnerId: string;
   partnerName: string;
+  partnerLogoUrl?: string | null;
+  partnerAvatarSeed?: string | null;
   partnerRole: "dispatcher" | "owner";
   organization: string;
   isOnline: boolean;
@@ -126,6 +128,8 @@ function toIntegratedChat(conv: NetworkConversation, currentOrgId: string): Inte
     id: conv.id,
     partnerId: conv.partner_org_id,
     partnerName: conv.partner_name,
+    partnerLogoUrl: conv.partner_logo_url ?? null,
+    partnerAvatarSeed: conv.partner_avatar_seed ?? null,
     partnerRole: "owner",
     organization: conv.partner_name,
     isOnline: false,
@@ -390,6 +394,8 @@ export function IntegratedChatProvider({
             ...conv,
             partner_org_id: partner.org_id === conv.org_a_id ? conv.org_b_id : conv.org_a_id,
             partner_name: partner.name,
+            partner_logo_url: partner.logo_url ?? null,
+            partner_avatar_seed: partner.avatar_seed ?? null,
             unread_count: 0,
             messages: [],
           };

@@ -142,6 +142,7 @@ export default function SalaryRequestScreen() {
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
+  const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
 
   const [salaryRequestOrg, setSalaryRequestOrg] = useState<{
     driverId: string;
@@ -201,12 +202,15 @@ export default function SalaryRequestScreen() {
         Promise.all([
           tripsService.getTripsByDriverIds(driverIds),
           driversService.getDriverLedgerByDriverIds(driverIds),
-        ]).then(([tRes, ledgerRes]) => {
+          salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
+        ]).then(([tRes, ledgerRes, salaryReqRes]) => {
           setTrips(tRes.trips ?? []);
           setLedgerEntries(ledgerRes.entries ?? []);
+          setSalaryRequests(salaryReqRes.requests ?? []);
           setLoading(false);
         });
       } else {
+        setSalaryRequests([]);
         setLoading(false);
       }
     }).catch(() => setLoading(false));
@@ -288,7 +292,7 @@ export default function SalaryRequestScreen() {
 
   const salaryRequestOrgOptions = useMemo(() => {
     const accepted = invites.filter((i) => (i.status || '').toLowerCase() === 'accepted');
-    return linkedDrivers
+    const options = linkedDrivers
       .filter((d) => accepted.some((i) => String(i.from_organization_id || '') === String(d.organization_id || '')))
       .map((d) => {
         const inv = accepted.find(
@@ -304,14 +308,71 @@ export default function SalaryRequestScreen() {
         const name = (rawName && String(rawName).trim()) ? String(rawName).trim() : null;
         return {
           driverId: d.id,
-          orgId: d.organization_id,
+          orgId: String(d.organization_id ?? ''),
           orgName: name || 'Fleet',
           logoUrl,
           ownerSeed,
           ownerUrl,
         };
       });
-  }, [linkedDrivers, invites]);
+    if (options.length <= 1) return options;
+
+    // Salary can be requested only from the effective employer (accepted + salary relationship).
+    const acceptedOrgIds = new Set(
+      accepted
+        .map((i) => String(i.from_organization_id ?? ''))
+        .filter(Boolean),
+    );
+    const withInviteAndPay = options.find((opt) => {
+      if (!acceptedOrgIds.has(String(opt.orgId))) return false;
+      const row = linkedDrivers.find((d) => String(d.organization_id ?? '') === String(opt.orgId));
+      if (!row) return false;
+      return (
+        (row.payable_amount != null && Number(row.payable_amount) > 0) ||
+        (row.commission_percent != null && Number(row.commission_percent) > 0) ||
+        (row.commission_per_km != null && Number(row.commission_per_km) > 0)
+      );
+    });
+    if (withInviteAndPay) return [withInviteAndPay];
+
+    const monthlySalaryOrgIds = new Set(
+      salaryRequests
+        .filter((r) => r.request_type === 'monthly')
+        .map((r) => String(r.organization_id ?? ''))
+        .filter(Boolean),
+    );
+    const withInviteAndMonthly = options.find(
+      (opt) =>
+        acceptedOrgIds.has(String(opt.orgId)) &&
+        monthlySalaryOrgIds.has(String(opt.orgId)),
+    );
+    if (withInviteAndMonthly) return [withInviteAndMonthly];
+
+    const anySalaryOrgIds = new Set(
+      salaryRequests
+        .map((r) => String(r.organization_id ?? ''))
+        .filter(Boolean),
+    );
+    const withInviteAndSalary = options.find(
+      (opt) =>
+        acceptedOrgIds.has(String(opt.orgId)) &&
+        anySalaryOrgIds.has(String(opt.orgId)),
+    );
+    if (withInviteAndSalary) return [withInviteAndSalary];
+
+    const acceptedSorted = [...accepted].sort(
+      (a, b) =>
+        new Date(b.responded_at ?? b.created_at).getTime() -
+        new Date(a.responded_at ?? a.created_at).getTime(),
+    );
+    for (const inv of acceptedSorted) {
+      const orgId = String(inv.from_organization_id ?? '');
+      const match = options.find((opt) => String(opt.orgId) === orgId);
+      if (match) return [match];
+    }
+
+    return [options[0]];
+  }, [linkedDrivers, invites, salaryRequests]);
 
   const effectiveSalaryOrg = salaryRequestOrg ?? (salaryRequestOrgOptions.length === 1 ? salaryRequestOrgOptions[0] : null);
 

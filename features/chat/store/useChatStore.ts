@@ -640,9 +640,15 @@ export function previewText(row: Partial<TripMessageRow>): string | null {
       return `📋 ${body || 'System update'}`;
     }
     case 'tracking':
-      return '📍 Location update';
-    case 'location_log':
-      return `📍 ${body || 'Location ping'}`;
+    case 'location_log': {
+      const em = mergeMessageMetadataForEventPayload(row);
+      const ld = (em?.event_payload as { location_data?: { address_name?: string } } | undefined)
+        ?.location_data?.address_name;
+      const city = typeof ld === 'string' && ld.trim() ? ld.trim() : null;
+      if (city) return `📍 Driver near ${city}`;
+      if (body && !body.includes('UTC')) return `📍 ${body}`;
+      return '📍 Driver location update';
+    }
     case 'document_share':
       return `📄 ${body || 'Document shared'}`;
     case 'feedback_request': case 'feedback':

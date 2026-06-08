@@ -7,6 +7,9 @@ import {
   HeroAssignerBlock,
   HeroKindBadge,
   sheetStyles,
+  TRIP_SHEET_BODY_PAD,
+  TRIP_SHEET_BTN_HEIGHT,
+  TRIP_SHEET_HERO_PAD,
   TRIP_SHEET_TOP_RADIUS,
   TripDetailsStrip,
 } from '@/components/driver/DriverTripSheetLayout';
@@ -959,24 +962,26 @@ export function DriverTripFlowCard({
 
       {step === 'reached' ? (
         <View style={styles.reachedBlock}>
-          <View style={[styles.podCard, { backgroundColor: Theme.screenBackground, borderColor: Theme.border }]}>
-            <View style={styles.podHeaderRow}>
-              <Text style={[styles.podTitle, { color: Theme.textPrimaryDark }]}>Proof of delivery (POD)</Text>
-              {podLoading ? (
-                <LoadingIndicator size="small" color={colors.emerald} />
-              ) : (
-                <Text style={[styles.podCount, { color: Theme.textMuted }]}>
-                  {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
-                </Text>
-              )}
-            </View>
+          <View style={styles.podSectionHeader}>
+            <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
+              PROOF OF DELIVERY
+            </Text>
+            {podLoading ? (
+              <LoadingIndicator size="small" color={colors.emerald} />
+            ) : (
+              <Text style={[sheetStyles.bodyMetaText, { color: Theme.textMuted }]}>
+                {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
+              </Text>
+            )}
+          </View>
+          <View style={[sheetStyles.insetCard, styles.podCard]}>
             <TouchableOpacity
               style={[styles.podUploadBtn, { backgroundColor: Theme.textPrimaryDark }, podUploading && styles.btnDisabled]}
               onPress={uploadPod}
               disabled={podUploading}
               activeOpacity={0.9}
             >
-              <FontAwesome name="cloud-upload" size={18} color={Theme.textOnPrimary} />
+              <FontAwesome name="cloud-upload" size={16} color={Theme.textOnPrimary} />
               <Text style={styles.podUploadText}>{podUploading ? 'Uploading…' : 'Upload POD'}</Text>
             </TouchableOpacity>
             {podUploading ? (
@@ -1018,7 +1023,7 @@ export function DriverTripFlowCard({
             >
               <View style={[styles.holdFill, { width: `${holdProgress}%`, backgroundColor: colors.emerald }]} />
               <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
-                <FontAwesome name="check-circle" size={18} color={holdProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
+                <FontAwesome name="check-circle" size={15} color={holdProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
                 <Text
                   style={[
                     styles.holdText,
@@ -1026,7 +1031,7 @@ export function DriverTripFlowCard({
                   ]}
                   numberOfLines={1}
                 >
-                  Hold to Complete Delivery
+                  Hold to complete delivery
                 </Text>
               </View>
             </HoldPressable>
@@ -1050,26 +1055,19 @@ export function DriverTripFlowCard({
             </View>
           </View>
 
-          <View
-            style={[
-              styles.podCard,
-              {
-                marginTop: 14,
-                backgroundColor: Theme.screenBackground,
-                borderColor: Theme.border,
-              },
-            ]}
-          >
-            <View style={styles.podHeaderRow}>
-              <Text style={[styles.podTitle, { color: Theme.textPrimaryDark }]}>Proof of delivery (POD)</Text>
-              {podLoading ? (
-                <LoadingIndicator size="small" color={colors.emerald} />
-              ) : (
-                <Text style={[styles.podCount, { color: Theme.textMuted }]}>
-                  {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
-                </Text>
-              )}
-            </View>
+          <View style={styles.podSectionHeader}>
+            <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
+              PROOF OF DELIVERY
+            </Text>
+            {podLoading ? (
+              <LoadingIndicator size="small" color={colors.emerald} />
+            ) : (
+              <Text style={[sheetStyles.bodyMetaText, { color: Theme.textMuted }]}>
+                {podDocuments.length} file{podDocuments.length === 1 ? '' : 's'}
+              </Text>
+            )}
+          </View>
+          <View style={[sheetStyles.insetCard, styles.podCard, { marginTop: 0 }]}>
             {podDocuments.length >= 1 ? (
               <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
                 {podDocuments.map((doc, index) => (
@@ -1201,10 +1199,10 @@ const styles = StyleSheet.create({
   handleWrap: { alignItems: 'center', paddingBottom: 8 },
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
   flowHero: {
-    paddingTop: 14,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
+    paddingTop: TRIP_SHEET_HERO_PAD.top,
+    paddingHorizontal: TRIP_SHEET_HERO_PAD.horizontal,
+    paddingBottom: TRIP_SHEET_HERO_PAD.bottom,
+    gap: 10,
   },
   progressSegmentsHero: {
     flexDirection: 'row',
@@ -1230,7 +1228,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroEyebrow: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.9,
     color: FLOW_MINT,
@@ -1260,9 +1258,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   heroIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1274,24 +1272,24 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   heroAmount: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: -0.25,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   heroAmountLabel: {
-    fontSize: 6,
+    fontSize: 7,
     fontWeight: '800',
     letterSpacing: 0.6,
     color: FLOW_MINT,
     textTransform: 'uppercase',
   },
   flowBody: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 6,
+    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
+    paddingTop: TRIP_SHEET_BODY_PAD.top,
+    paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
+    gap: TRIP_SHEET_BODY_PAD.gap,
     backgroundColor: Theme.surface,
   },
   actionIconsRow: { flexDirection: 'row', gap: 8 },
@@ -1310,29 +1308,30 @@ const styles = StyleSheet.create({
   messageBadgeText: { fontSize: 9, fontWeight: '900', color: '#fff' },
   actionIconBtn: {
     flex: 1,
-    height: 38,
+    height: TRIP_SHEET_BTN_HEIGHT,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 9,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryBtnWrap: {
-    borderRadius: 9,
+    borderRadius: 10,
     overflow: 'hidden',
   },
   primaryGradient: {
-    minHeight: 38,
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
   },
-  primaryBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.1, color: '#fff' },
+  primaryBtnText: { ...sheetStyles.bodyBtnText, letterSpacing: 0.1, color: '#fff' },
   primaryBtn: {
     marginTop: 6,
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
     paddingVertical: 12,
-    borderRadius: 9,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1341,22 +1340,35 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.7 },
 
   reachedBlock: {
-    paddingTop: 2,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingTop: 0,
+    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
+    paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
+    gap: TRIP_SHEET_BODY_PAD.gap,
     backgroundColor: Theme.surface,
   },
-  podCard: { borderWidth: 1, borderRadius: 18, padding: 12 },
-  podHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 },
-  podTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
-  podCount: { fontSize: 12, fontWeight: '800' },
-  podUploadBtn: { height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
-  podUploadText: { fontSize: 16, fontWeight: '900', color: Theme.textOnPrimary },
-  skipLink: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16 },
-  skipLinkText: { fontSize: 14, fontWeight: '800' },
-  podCancelLink: { alignSelf: 'center', paddingTop: 6, paddingBottom: 2 },
-  podCancelLinkText: { fontSize: 13, fontWeight: '800' },
-  podListWrap: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
+  podSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  podCard: {
+    gap: 8,
+  },
+  podUploadBtn: {
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  podUploadText: { ...sheetStyles.bodyBtnText, color: Theme.textOnPrimary },
+  skipLink: { alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
+  skipLinkText: { ...sheetStyles.bodyLinkText, fontWeight: '800' },
+  podCancelLink: { alignSelf: 'center', paddingTop: 2, paddingBottom: 0 },
+  podCancelLinkText: { ...sheetStyles.bodyLinkText, fontWeight: '700' },
+  podListWrap: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, overflow: 'hidden', marginTop: 4 },
   podListItem: {
     minHeight: 46,
     borderTopWidth: 1,
@@ -1367,7 +1379,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   podListItemFirst: { borderTopWidth: 0 },
-  podListFileName: { flex: 1, fontSize: 13, fontWeight: '700', minWidth: 0 },
+  podListFileName: { flex: 1, ...sheetStyles.bodyLinkText, minWidth: 0 },
   podListActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
   podViewIconBtn: {
     width: 34,
@@ -1436,12 +1448,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  podRequired: { marginTop: 8, fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  podRequired: { ...sheetStyles.bodyMetaText, textAlign: 'center' },
 
-  holdBtnWrap: { height: 58, borderRadius: 18, overflow: 'hidden', marginTop: 10, justifyContent: 'center' },
+  holdBtnWrap: {
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
+    borderRadius: 10,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
   holdFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
-  holdContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  holdText: { fontSize: 16, fontWeight: '900', letterSpacing: 0.2 },
+  holdContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12 },
+  holdText: { ...sheetStyles.bodyBtnText, letterSpacing: 0.1 },
   errorWrap: {
     marginTop: 12,
     borderWidth: 1,
@@ -1454,16 +1471,21 @@ const styles = StyleSheet.create({
   },
   errorText: { fontSize: 12, fontWeight: '700', flex: 1 },
   completedBlock: {
-    paddingTop: 2,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingTop: TRIP_SHEET_BODY_PAD.top,
+    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
+    paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
+    gap: TRIP_SHEET_BODY_PAD.gap,
     backgroundColor: Theme.surface,
   },
-  earningsCard: { borderWidth: 1, borderRadius: 18, padding: 14, alignItems: 'center' },
-  completedTitle: { marginTop: 8, fontSize: 17, fontWeight: '900' },
-  completedSubtitle: { marginTop: 4, fontSize: 12, fontWeight: '700' },
-  earningsPill: { marginTop: 10, borderWidth: 1, borderRadius: 14, padding: 10, width: '100%', alignItems: 'center' },
-  earningsLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
-  earningsValue: { marginTop: 4, fontSize: 24, fontWeight: '900' },
+  earningsCard: {
+    ...sheetStyles.insetCard,
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  completedTitle: { marginTop: 8, fontSize: 18, fontWeight: '900' },
+  completedSubtitle: { marginTop: 4, ...sheetStyles.bodyMetaText },
+  earningsPill: { marginTop: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, width: '100%', alignItems: 'center' },
+  earningsLabel: { ...sheetStyles.sectionLabel, color: Theme.textMuted },
+  earningsValue: { marginTop: 4, fontSize: 22, fontWeight: '900' },
 });
 

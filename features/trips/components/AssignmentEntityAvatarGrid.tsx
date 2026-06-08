@@ -4,6 +4,10 @@
  */
 import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import {
+  WizardEntityPicker,
+  type WizardEntityPickerItem,
+} from "@/components/full-page-wizard";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import { NETWORK_HUB_GRID_GAP_PX } from "@/features/network/constants/networkHubGrid";
 import { partyAccentFromEntityType } from "@/lib/partyEntityAccent";
@@ -45,6 +49,10 @@ export type AssignmentEntityAvatarGridProps = {
   compact?: boolean;
   /** Override grid column count (default 3). */
   columns?: number;
+  /** `wizard` — attribution-style list rows (mobile allocation flows). */
+  variant?: "grid" | "wizard";
+  /** Wizard list without outer card border (shell provides chrome). */
+  embedded?: boolean;
 };
 
 function chunkRows<T>(items: T[], columns: number): T[][] {
@@ -82,9 +90,42 @@ export function AssignmentEntityAvatarGrid({
   scrollMaxHeight = 360,
   compact = false,
   columns: columnsProp,
+  variant = "grid",
+  embedded = false,
 }: AssignmentEntityAvatarGridProps) {
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
+
+  if (variant === "wizard") {
+    const wizardItems: WizardEntityPickerItem[] = items.map((item) => ({
+      id: item.id,
+      name: item.title,
+      subtitle: item.subtitle ?? item.statusLabel ?? null,
+      avatarUrl: item.avatarUrl ?? null,
+      avatarSeed: item.avatarSeed ?? null,
+      entityType: item.entityType ?? "client",
+      initialsColorSeed: item.id,
+      disabled: item.disabled,
+      statusLabel: item.statusLabel,
+    }));
+
+    return (
+      <WizardEntityPicker
+        title={title}
+        totalCount={totalCount}
+        items={wizardItems}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        onAdd={onHeaderAction}
+        addLabel={headerActionLabel ? `+ ${headerActionLabel}` : undefined}
+        emptyMessage={emptyMessage}
+        footerHint={footerHint}
+        listMaxHeight={scrollMaxHeight}
+        errorOutline={errorOutline}
+        embedded={embedded}
+      />
+    );
+  }
 
   const columns = columnsProp ?? DEFAULT_COLUMNS;
   const avatarSize = compact ? COMPACT_AVATAR_SIZE : DEFAULT_AVATAR_SIZE;
