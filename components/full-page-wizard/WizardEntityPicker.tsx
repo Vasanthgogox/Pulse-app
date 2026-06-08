@@ -1,12 +1,9 @@
-import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import Theme from "@/constants/Theme";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
-
-const WIZARD_ENTITY_AVATAR_SIZE = 30;
+import { fullPageWizardStyles as styles, WIZARD_PARTY_AVATAR_SIZE, WIZARD_PARTY_GRID_COLUMNS } from "./fullPageWizardStyles";
+import { WizardEntityPartyCell } from "./WizardEntityPartyCell";
+import { WizardSelectionGrid } from "./WizardSelectionGrid";
 
 export type WizardEntityPickerItem = {
   id: string;
@@ -37,6 +34,8 @@ export interface WizardEntityPickerProps {
   errorOutline?: boolean;
   /** Flat — no outer card border (parent shell already provides chrome). */
   embedded?: boolean;
+  /** Grid column count (default 2 — attribution party row parity). */
+  columns?: number;
 }
 
 export function WizardEntityPicker({
@@ -50,9 +49,10 @@ export function WizardEntityPicker({
   addLabel = "+ Add",
   emptyMessage = "Nothing to select yet.",
   footerHint,
-  listMaxHeight = 320,
+  listMaxHeight = 420,
   errorOutline = false,
   embedded = false,
+  columns = WIZARD_PARTY_GRID_COLUMNS,
 }: WizardEntityPickerProps) {
   const count = totalCount ?? items.length;
 
@@ -66,111 +66,40 @@ export function WizardEntityPicker({
         },
       ]}
     >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
-        <Text style={styles.blockTitle} numberOfLines={2}>
+      <View style={styles.wizardPickerHeader}>
+        <Text style={styles.wizardPickerTitle} numberOfLines={2}>
           {title}
         </Text>
         {count > 0 ? (
-          <View
-            style={{
-              borderRadius: 8,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderWidth: 1,
-              borderColor: Theme.borderLight,
-              backgroundColor: Theme.screenBackground,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: "800",
-                color: Theme.primary,
-              }}
-            >
-              {count}
-            </Text>
+          <View style={styles.wizardPickerCountBadge} accessibilityLabel={`${count} items`}>
+            <Text style={styles.wizardPickerCountBadgeText}>{count}</Text>
           </View>
         ) : null}
       </View>
 
-      {loading ? (
-        <View style={styles.clientLoadingWrap}>
-          <LoadingIndicator size="small" color={Theme.primary} />
-        </View>
-      ) : items.length === 0 ? (
-        <View style={styles.shipperWarningCard}>
-          <Text style={styles.shipperWarningText}>{emptyMessage}</Text>
-        </View>
-      ) : (
-        <View style={styles.clientListWrap}>
-          <ScrollView
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: listMaxHeight }}
-          >
-            {items.map((item) => {
-              const selected = selectedId === item.id;
-              const disabled = item.disabled === true;
-              const displayName = item.name.trim() || "—";
-              const meta =
-                item.statusLabel ??
-                item.subtitle?.trim() ??
-                (disabled ? "Unavailable" : "—");
-              return (
-                <Pressable
-                  key={item.id}
-                  style={[
-                    styles.clientRow,
-                    selected && !disabled && styles.clientRowSelected,
-                    disabled && { opacity: 0.5 },
-                  ]}
-                  onPress={() => {
-                    if (disabled) return;
-                    onSelect(item.id);
-                  }}
-                  disabled={disabled}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected, disabled }}
-                >
-                  <PartyAvatar
-                    name={displayName}
-                    initialsColorSeed={item.initialsColorSeed ?? item.id}
-                    organizationImageUrl={item.organizationImageUrl ?? null}
-                    organizationAvatarSeed={item.organizationAvatarSeed ?? null}
-                    avatarUrl={item.avatarUrl ?? null}
-                    avatarSeed={item.avatarSeed ?? null}
-                    entityType={item.entityType ?? "client"}
-                    size={WIZARD_ENTITY_AVATAR_SIZE}
-                    shape="rounded"
-                  />
-                  <View style={styles.partyTextWrap}>
-                    <Text style={styles.partyName} numberOfLines={1}>
-                      {displayName}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.blockMeta,
-                        item.statusLabel ? { color: Theme.warning, fontWeight: "700" } : null,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {meta}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
+      <WizardSelectionGrid
+        items={items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          subtitle: item.subtitle,
+          avatarUrl: item.avatarUrl,
+          avatarSeed: item.avatarSeed,
+          entityType: item.entityType,
+          initialsColorSeed: item.initialsColorSeed,
+          organizationImageUrl: item.organizationImageUrl,
+          organizationAvatarSeed: item.organizationAvatarSeed,
+          disabled: item.disabled,
+          statusLabel: item.statusLabel,
+        }))}
+        selectedId={selectedId}
+        onSelect={onSelect}
+        loading={loading}
+        emptyMessage={emptyMessage}
+        listMaxHeight={listMaxHeight}
+        columns={columns}
+        variant="partyCard"
+        showListShell={!embedded}
+      />
 
       {onAdd ? (
         <Pressable style={styles.addClientBtn} onPress={onAdd}>
@@ -179,7 +108,7 @@ export function WizardEntityPicker({
       ) : null}
 
       {footerHint ? (
-        <Text style={[styles.blockMeta, { marginTop: 4 }]}>{footerHint}</Text>
+        <Text style={styles.wizardPickerFooterHint}>{footerHint}</Text>
       ) : null}
     </View>
   );
@@ -208,35 +137,18 @@ export function WizardEntitySummaryCard({
   organizationAvatarSeed?: string | null;
   onPress?: () => void;
 }) {
-  const content = (
-    <View style={styles.shipperMarkCard}>
-      <PartyAvatar
-        name={name}
-        initialsColorSeed={initialsColorSeed}
-        organizationImageUrl={organizationImageUrl ?? null}
-        organizationAvatarSeed={organizationAvatarSeed ?? null}
-        avatarUrl={avatarUrl ?? null}
-        avatarSeed={avatarSeed ?? null}
-        entityType={entityType}
-        size={WIZARD_ENTITY_AVATAR_SIZE}
-        shape="rounded"
-      />
-      <View style={styles.partyTextWrap}>
-        <Text style={styles.partyLabel}>{label}</Text>
-        <Text style={styles.partyName} numberOfLines={1}>
-          {name}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.blockMeta} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+  return (
+    <WizardEntityPartyCell
+      label={label}
+      name={name}
+      subtitle={subtitle}
+      entityType={entityType}
+      avatarUrl={avatarUrl}
+      avatarSeed={avatarSeed}
+      organizationImageUrl={organizationImageUrl}
+      organizationAvatarSeed={organizationAvatarSeed}
+      avatarSize={WIZARD_PARTY_AVATAR_SIZE}
+      onPress={onPress}
+    />
   );
-
-  if (onPress) {
-    return <Pressable onPress={onPress}>{content}</Pressable>;
-  }
-  return content;
 }

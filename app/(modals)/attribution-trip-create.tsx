@@ -15,6 +15,7 @@ import {
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
 import * as tripsService from "@/features/trips/services/trips.service";
+import { buildAttributedFleetTripNotes } from "@/features/trips/utils/attributedFleetTrip.util";
 import { getFleetAvatarUriForOrg } from "@/features/vehicles/utils/fleetAvatar.util";
 import { resolvePartyDisplayUri } from "@/lib/partyAvatarDisplay";
 import { useFocusEffect } from "@react-navigation/native";
@@ -258,7 +259,7 @@ export default function AttributionTripCreateModal() {
         started_at: historicalStartedAt,
         completed_at: historicalCompletedAt,
         skipAssignmentConflictCheck: true,
-        notes: `Attributed trip from ${source.trip_number ?? source.id}`,
+        notes: buildAttributedFleetTripNotes(source.trip_number ?? source.id),
         owner_user_id: userId,
         created_by_user_id: userId,
         trip_payout_mode: source.trip_payout_mode ?? "asset",

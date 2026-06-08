@@ -21,6 +21,7 @@ import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFinanceHandlers";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { TripsLedgerExportModalGate } from "@/features/trips/components/TripsLedgerExportModalGate";
+import { AttributionRequestsSection } from "@/features/trips/components/AttributionRequestsSection";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
     TripsHubBentoMetrics,
@@ -28,6 +29,7 @@ import {
     type HistoryTripMetricId,
 } from "@/features/trips/components/TripsHubBentoMetrics";
 import { TripsFilterBottomSheet } from "@/features/trips/components/TripsFilterBottomSheet";
+import { isAttributedFleetTrip } from "@/features/trips/utils/attributedFleetTrip.util";
 import {
   linkedOrgAvatarFields,
     summarizeTripLedgerForHub,
@@ -115,6 +117,7 @@ type SortBy =
   | "client_asc"
   | "client_desc";
 type PaymentFilter = "all" | "pending" | "partial" | "paid";
+type AttributionFilter = "all" | "attributed";
 type DateFilter = TripHubDateFilter;
 type ToolbarDateFilter = Exclude<DateFilter, "tomorrow">;
 
@@ -189,6 +192,14 @@ function tripMatchesSupplyFilter(
   });
   if (supplyFilter === "aggregated") return showAggregatePill;
   return !showAggregatePill;
+}
+
+function tripMatchesAttributionFilter(
+  trip: TripRow,
+  attributionFilter: AttributionFilter,
+): boolean {
+  if (attributionFilter === "all") return true;
+  return isAttributedFleetTrip(trip);
 }
 
 function supplierNameFallbackMapsEqual(
@@ -269,6 +280,8 @@ export default function TripsScreen() {
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("date_desc");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
+  const [attributionFilter, setAttributionFilter] =
+    useState<AttributionFilter>("all");
   const [loadTypeFilter, setLoadTypeFilter] = useState<string>("all");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateFilter>("all");
   const [customDateFrom, setCustomDateFrom] = useState<string | null>(null);
@@ -547,6 +560,9 @@ export default function TripsScreen() {
         currentOrganization?.id,
       ),
     );
+    if (attributionFilter !== "all") {
+      list = list.filter((t) => tripMatchesAttributionFilter(t, attributionFilter));
+    }
     if (dateRangeFilter !== "all") {
       list = list.filter((t) =>
         tripDayMatchesHubDateFilter(t, dateRangeFilter, {
@@ -559,12 +575,18 @@ export default function TripsScreen() {
   }, [
     tripsByStatus,
     supplyFilter,
+    attributionFilter,
     tripKindPillMetaByTripId,
     currentOrganization?.id,
     dateRangeFilter,
     customDateFrom,
     customDateTo,
   ]);
+
+  const attributedTripCount = useMemo(
+    () => trips.filter((t) => isAttributedFleetTrip(t)).length,
+    [trips],
+  );
 
   const metricCounts = useMemo(() => {
     const counts = countTripsByMetric(
@@ -591,6 +613,7 @@ export default function TripsScreen() {
     showCompletedList,
     trips,
     supplyFilter,
+    attributionFilter,
     tripKindPillMetaByTripId,
     currentOrganization?.id,
   ]);
@@ -637,6 +660,10 @@ export default function TripsScreen() {
           currentOrganization?.id,
         ),
       );
+    }
+
+    if (attributionFilter !== "all") {
+      list = list.filter((t) => tripMatchesAttributionFilter(t, attributionFilter));
     }
 
     if (paymentFilter !== "all") {
@@ -718,6 +745,7 @@ export default function TripsScreen() {
     activeMetricTab,
     tripIdsWithDocuments,
     supplyFilter,
+    attributionFilter,
     tripKindPillMetaByTripId,
     searchQuery,
     shipperNameByTripId,
@@ -779,6 +807,7 @@ export default function TripsScreen() {
         activeHistoryMetricTab ?? "",
         activeOpsTripIdsSorted.slice(0, 120),
         supplyFilter,
+        attributionFilter,
         sortBy,
         paymentFilter,
         loadTypeFilter,
@@ -795,6 +824,7 @@ export default function TripsScreen() {
       activeHistoryMetricTab,
       activeOpsTripIdsSorted,
       supplyFilter,
+      attributionFilter,
       sortBy,
       paymentFilter,
       loadTypeFilter,
@@ -1173,18 +1203,18 @@ export default function TripsScreen() {
   ]);
 
   const tripMainTabCounts = useMemo(() => {
-    const matchesSupply = (t: TripRow) =>
+    const matchesFilters = (t: TripRow) =>
       tripMatchesSupplyFilter(
         t,
         supplyFilter,
         tripKindPillMetaByTripId.get(t.id),
         currentOrganization?.id,
-      );
+      ) && tripMatchesAttributionFilter(t, attributionFilter);
 
     let active = 0;
     let history = 0;
     for (const t of trips) {
-      if (!matchesSupply(t)) continue;
+      if (!matchesFilters(t)) continue;
       if (isCompletedStatus(t.status)) {
         history += 1;
       } else if (!isTripCancelledForHub(t.status)) {
@@ -1195,6 +1225,7 @@ export default function TripsScreen() {
   }, [
     trips,
     supplyFilter,
+    attributionFilter,
     tripKindPillMetaByTripId,
     currentOrganization?.id,
   ]);
@@ -1378,6 +1409,7 @@ export default function TripsScreen() {
   const clearTripFilters = useCallback(() => {
     setSortBy("date_desc");
     setSupplyFilter("all");
+    setAttributionFilter("all");
     setDateRangeFilter("all");
     setPaymentFilter("all");
     setLoadTypeFilter("all");
@@ -1408,6 +1440,16 @@ export default function TripsScreen() {
   const paymentFilterOptionLabel = useCallback(
     (f: PaymentFilter) => (f === "all" ? tr("all") : tr(`${f}Payment`)),
     [tr],
+  );
+
+  const attributionFilterOptionLabel = useCallback(
+    (f: AttributionFilter) => {
+      if (f === "all") return tr("attributedTripsAll");
+      return attributedTripCount > 0
+        ? `${tr("attributedTripsOnly")} (${attributedTripCount})`
+        : tr("attributedTripsOnly");
+    },
+    [tr, attributedTripCount],
   );
 
   const sortOptions = useMemo(
@@ -1509,6 +1551,11 @@ export default function TripsScreen() {
         paymentFilter={paymentFilter}
         onPaymentFilterChange={setPaymentFilter}
         paymentFilterOptionLabel={paymentFilterOptionLabel}
+        attributionFilterLabel={tr("tripAttribution")}
+        attributionFilters={["all", "attributed"]}
+        attributionFilter={attributionFilter}
+        onAttributionFilterChange={setAttributionFilter}
+        attributionFilterOptionLabel={attributionFilterOptionLabel}
         loadTypeOptions={loadTypeOptions}
         loadTypeFilter={loadTypeFilter}
         onLoadTypeFilterChange={setLoadTypeFilter}
@@ -1853,49 +1900,13 @@ export default function TripsScreen() {
           </View>
 
           {tripFilter === "Active" && attributionRequests.length > 0 ? (
-            <View style={styles.attributionSection}>
-              <Text style={styles.attributionSectionTitle}>Attribution requests</Text>
-              <Text style={styles.attributionSectionSubtitle}>
-                Review and accept driver trip attribution requests from fleet home.
-              </Text>
-              {attributionRequests.slice(0, 3).map((req) => (
-                <View key={req.id} style={styles.attributionCard}>
-                  <View style={styles.attributionCardHead}>
-                    <Text style={styles.attributionDriverName} numberOfLines={1}>
-                      {req.drivers?.name?.trim() || "Driver"}
-                    </Text>
-                    <Text style={styles.attributionAmount}>
-                      ₹{Number(req.amount ?? 0).toLocaleString("en-IN")}
-                    </Text>
-                  </View>
-                  <Text style={styles.attributionCardMeta}>
-                    {new Date(req.created_at).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                    })}{" "}
-                    · Trip review request
-                  </Text>
-                  <View style={styles.attributionActions}>
-                    <TouchableOpacity
-                      style={styles.attributionRejectBtn}
-                      onPress={() => finance.onRejectSalary(req.id)}
-                      disabled={finance.busySalaryId === req.id}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.attributionRejectBtnText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.attributionAcceptBtn}
-                      onPress={() => finance.onPaySalary(req)}
-                      disabled={finance.busySalaryId === req.id}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.attributionAcceptBtnText}>Accept</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
+            <AttributionRequestsSection
+              requests={attributionRequests}
+              orgId={orgId}
+              busySalaryId={finance.busySalaryId}
+              onAccept={finance.onPaySalary}
+              onReject={finance.onRejectSalary}
+            />
           ) : null}
 
           {effectiveListLayout === "table" ? (
@@ -3916,94 +3927,6 @@ const styles = StyleSheet.create({
     padding: 24,
     textAlign: "center",
     color: Theme.textSecondary,
-  },
-  attributionSection: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    gap: 8,
-  },
-  attributionSectionTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.9,
-  },
-  attributionSectionSubtitle: {
-    fontSize: 11,
-    color: Theme.textSecondary,
-    lineHeight: 16,
-  },
-  attributionCard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    padding: 10,
-    gap: 6,
-  },
-  attributionCardHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  attributionDriverName: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
-  attributionAmount: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  attributionCardMeta: {
-    fontSize: 10,
-    color: Theme.textMuted,
-  },
-  attributionActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
-    marginTop: 2,
-  },
-  attributionRejectBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-  },
-  attributionRejectBtnText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  attributionAcceptBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.darkBackground,
-    backgroundColor: Theme.darkBackground,
-  },
-  attributionAcceptBtnText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
   },
   fabWrap: {
     position: "absolute",

@@ -7,6 +7,7 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import {
   WizardEntityPicker,
   type WizardEntityPickerItem,
+  WIZARD_PARTY_GRID_COLUMNS,
 } from "@/components/full-page-wizard";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import { NETWORK_HUB_GRID_GAP_PX } from "@/features/network/constants/networkHubGrid";
@@ -100,7 +101,7 @@ export function AssignmentEntityAvatarGrid({
     const wizardItems: WizardEntityPickerItem[] = items.map((item) => ({
       id: item.id,
       name: item.title,
-      subtitle: item.subtitle ?? item.statusLabel ?? null,
+      subtitle: item.subtitle ?? null,
       avatarUrl: item.avatarUrl ?? null,
       avatarSeed: item.avatarSeed ?? null,
       entityType: item.entityType ?? "client",
@@ -123,6 +124,7 @@ export function AssignmentEntityAvatarGrid({
         listMaxHeight={scrollMaxHeight}
         errorOutline={errorOutline}
         embedded={embedded}
+        columns={WIZARD_PARTY_GRID_COLUMNS}
       />
     );
   }

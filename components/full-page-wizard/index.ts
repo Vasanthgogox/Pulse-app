@@ -9,7 +9,12 @@ export {
   type FullPageWizardProgressStep,
 } from "./FullPageWizardProgress";
 export { FullPageWizardShell } from "./FullPageWizardShell";
-export { fullPageWizardStyles, WIZARD_ACCENT } from "./fullPageWizardStyles";
+export {
+  fullPageWizardStyles,
+  WIZARD_ACCENT,
+  WIZARD_PARTY_AVATAR_SIZE,
+  WIZARD_PARTY_GRID_COLUMNS,
+} from "./fullPageWizardStyles";
 export { WizardFormBody } from "./WizardFormBody";
 export {
   WizardEntityPicker,
@@ -32,3 +37,7 @@ export {
   WizardPriorSelections,
   type WizardPriorSelectionItem,
 } from "./WizardPriorSelections";
+export {
+  WizardSelectionGrid,
+  type WizardSelectionGridItem,
+} from "./WizardSelectionGrid";

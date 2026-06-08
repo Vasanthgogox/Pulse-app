@@ -41,7 +41,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
 }: PhoneNumberKeypadFlowProps) {
   const digits = formatMobileNumber(value);
   const showCursor = digits.length < maxLength;
-  const useAppleKeypad = keypadVariant === "apple";
+  const useAppleKeypad = !wizardShell && keypadVariant === "apple";
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
@@ -71,26 +71,31 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
       ) : null}
 
       <View style={wizardShell ? flow.mainPaddedWizard : flow.mainPadded}>
-        <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.label}>
-          {label}
-        </Text>
-
-        <View style={[flow.displayRow, error && flow.displayRowError]}>
-          <View style={styles.cc}>
-            <IndiaFlagIcon width={22} height={16} />
-            <Text style={styles.ccText}>+91</Text>
-          </View>
-          <Text
-            style={[
-              flow.displayValue,
-              !digits && flow.displayPlaceholder,
-            ]}
-            numberOfLines={1}
-            accessibilityLabel={digits || placeholder}
-          >
-            {digits || placeholder}
+        <View style={wizardShell ? fullPageWizardStyles.wizardFieldBlock : undefined}>
+          <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.label}>
+            {label}
           </Text>
-          {showCursor ? <View style={flow.cursor} /> : null}
+
+          <View style={[flow.displayRow, error && flow.displayRowError]}>
+            <View style={styles.cc}>
+              <IndiaFlagIcon width={22} height={16} />
+              <Text style={styles.ccText}>+91</Text>
+            </View>
+            <Text
+              style={[
+                flow.displayValue,
+                wizardShell && styles.displayValueWizard,
+                !digits && flow.displayPlaceholder,
+              ]}
+              numberOfLines={1}
+              accessibilityLabel={digits || placeholder}
+            >
+              {digits || placeholder}
+            </Text>
+            {showCursor ? (
+              <View style={[flow.cursor, wizardShell && styles.cursorWizard]} />
+            ) : null}
+          </View>
         </View>
 
         {footerExtras ? <View style={flow.extras}>{footerExtras}</View> : null}
@@ -109,8 +114,8 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
           onKey={handleKey}
           showDecimal={false}
           layout="phone"
-          variant={useAppleKeypad ? "apple" : "pay"}
-          size={useAppleKeypad ? "default" : "compact"}
+          variant={wizardShell ? "pay" : useAppleKeypad ? "apple" : "pay"}
+          size={wizardShell || !useAppleKeypad ? "compact" : "default"}
         />
       </View>
     </View>
@@ -140,5 +145,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.2,
+  },
+  displayValueWizard: {
+    fontSize: 26,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+  },
+  cursorWizard: {
+    height: 28,
+    backgroundColor: Theme.primary,
   },
 });

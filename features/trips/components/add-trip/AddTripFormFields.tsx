@@ -1,6 +1,7 @@
 /**
  * Create Trip — sectioned form (route, client, allocation); Theme tokens only.
  */
+import { resolveWizardClientPhone } from "@/features/clients/utils/clientContactDisplay.util";
 import { fullPageWizardStyles, WizardClientPicker, WizardClientSummaryCard, WizardEntitySummaryCard, WizardFormBody, WizardPartyContextRow, WizardPriorSelections, type WizardPriorSelectionItem } from "@/components/full-page-wizard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -30,7 +31,10 @@ import {
   driverOptionsToAvatarGridItems,
   vehicleOptionsToAvatarGridItems,
 } from "@/features/trips/utils/fleetAvatarGridItems.util";
-import { clientsToAvatarGridItems } from "@/features/clients/utils/clientAvatarGridItems.util";
+import {
+  clientsToAvatarGridItems,
+  clientsToWizardAvatarGridItems,
+} from "@/features/clients/utils/clientAvatarGridItems.util";
 import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
@@ -814,8 +818,11 @@ export function AddTripFormFields({
     state.clientId && !clientListExpanded && selectedClientRow,
   );
   const clientAvatarGridItems = useMemo(
-    () => clientsToAvatarGridItems(clients),
-    [clients],
+    () =>
+      isWizardTypography
+        ? clientsToWizardAvatarGridItems(clients)
+        : clientsToAvatarGridItems(clients),
+    [clients, isWizardTypography],
   );
   const showPartnerList = !state.supplierId || partnerListExpanded;
   const showPartnerSummary = Boolean(
@@ -855,7 +862,7 @@ export function AddTripFormFields({
     }
     const items: WizardPriorSelectionItem[] = [];
     const step = allocationSubStep;
-    const rateSteps = new Set(["driverPhone", "driverName", "vehicle"]);
+    const rateSteps = new Set(["driverName", "vehicle"]);
     const rateRaw = state.supplierRate.trim();
     if (rateSteps.has(step ?? "") && rateRaw) {
       items.push({
@@ -903,7 +910,7 @@ export function AddTripFormFields({
     const left = {
       label: "Client",
       name: selectedClientRow.name ?? "Client",
-      subtitle: selectedClientRow.address ?? null,
+      subtitle: resolveWizardClientPhone(selectedClientRow.phone) || null,
       entityType: "client" as const,
       avatarUrl: selectedClientRow.avatar_url ?? null,
       avatarSeed: selectedClientRow.avatar_seed ?? null,
@@ -911,7 +918,32 @@ export function AddTripFormFields({
 
     if (state.supplySource === "aggregate" && !state.assignLater) {
       const step = allocationSubStep;
-      const driverSteps = new Set(["driverPhone", "driverName", "vehicle"]);
+      const partnerCell = selectedSupplierRow
+        ? {
+            label: "Partner",
+            name:
+              selectedSupplierRow.company_name?.trim() ||
+              selectedSupplierRow.name?.trim() ||
+              "—",
+            subtitle: resolveWizardClientPhone(selectedSupplierRow.phone),
+            entityType: "supplier" as const,
+            avatarUrl:
+              (selectedSupplierRow as { avatar_url?: string | null })
+                .avatar_url ?? null,
+            avatarSeed:
+              (selectedSupplierRow as { avatar_seed?: string | null })
+                .avatar_seed ?? null,
+          }
+        : null;
+
+      if (step === "driverPhone") {
+        return {
+          left,
+          right: partnerCell,
+        };
+      }
+
+      const driverSteps = new Set(["driverName", "vehicle"]);
       if (driverSteps.has(step ?? "")) {
         const driverName =
           state.aggregateDriverName.trim() ||
@@ -935,27 +967,8 @@ export function AddTripFormFields({
       if (partnerSteps.has(step ?? "")) {
         return {
           left,
-          right: selectedSupplierRow
-            ? {
-                label: "Partner",
-                name:
-                  selectedSupplierRow.company_name?.trim() ||
-                  selectedSupplierRow.name?.trim() ||
-                  "—",
-                subtitle: [
-                  selectedSupplierRow.supplier_type,
-                  selectedSupplierRow.phone,
-                ]
-                  .filter(Boolean)
-                  .join(" · "),
-                entityType: "supplier" as const,
-                avatarUrl:
-                  (selectedSupplierRow as { avatar_url?: string | null })
-                    .avatar_url ?? null,
-                avatarSeed:
-                  (selectedSupplierRow as { avatar_seed?: string | null })
-                    .avatar_seed ?? null,
-              }
+          right: partnerCell
+            ? partnerCell
             : step === "supply"
               ? {
                   label: "Partner",
@@ -1668,7 +1681,7 @@ export function AddTripFormFields({
                   selectedClientRow
                     ? {
                         name: selectedClientRow.name ?? "Client",
-                        subtitle: selectedClientRow.address ?? undefined,
+                        subtitle: resolveWizardClientPhone(selectedClientRow.phone) ?? undefined,
                         entityType: "client",
                         avatarUrl: selectedClientRow.avatar_url ?? null,
                         avatarSeed: selectedClientRow.avatar_seed ?? null,
@@ -1737,6 +1750,7 @@ export function AddTripFormFields({
               <View
                 style={[
                   styles.gridCol,
+                  isWizardSingleCard && showClientPickerOnly && styles.gridColWizardFill,
                   invalid("client") && styles.fieldGroupRing,
                   desktopFormGrid && styles.clientCommercialsClientColDesktop,
                 ]}
@@ -1788,11 +1802,11 @@ export function AddTripFormFields({
                 </View>
                 ) : null}
                 {isWizardSingleCard && showClientPickerOnly ? (
-                  <>
+                  <View style={styles.wizardClientPickerBlock}>
                     {showClientSummary && selectedClientRow ? (
                       <WizardClientSummaryCard
                         name={selectedClientRow.name ?? "Client"}
-                        subtitle={selectedClientRow.address}
+                        subtitle={resolveWizardClientPhone(selectedClientRow.phone)}
                         avatarUrl={selectedClientRow.avatar_url}
                         avatarSeed={selectedClientRow.avatar_seed}
                         onPress={() => setClientListExpanded(true)}
@@ -1807,10 +1821,15 @@ export function AddTripFormFields({
                         onAddClient={handleAddClientShortcut}
                       />
                     ) : null}
-                    {invalid("client") ? (
-                      <Text style={styles.errorText}>Select a client to continue</Text>
-                    ) : null}
-                  </>
+                    <Text
+                      style={[
+                        styles.wizardClientPickerHint,
+                        invalid("client") && styles.errorText,
+                      ]}
+                    >
+                      Select a client to continue
+                    </Text>
+                  </View>
                 ) : clientsLoading ? (
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : clients.length === 0 ? (
@@ -1863,11 +1882,15 @@ export function AddTripFormFields({
                     {showClientList ? (
                       <AssignmentEntityAvatarGrid
                         title="Select Client"
+                        variant={isWizardTypography ? "wizard" : "grid"}
+                        embedded={isWizardTypography}
                         totalCount={clients.length}
                         errorOutline={invalid("client")}
                         selectedId={state.clientId}
-                        compact={desktopFormGrid}
-                        columns={desktopFormGrid ? 4 : undefined}
+                        compact={desktopFormGrid && !isWizardTypography}
+                        columns={
+                          isWizardTypography ? 2 : desktopFormGrid ? 4 : undefined
+                        }
                         scrollMaxHeight={desktopFormGrid ? 260 : 360}
                         onSelect={(id) => {
                           const row = clients.find((c) => c.id === id);
@@ -1908,7 +1931,7 @@ export function AddTripFormFields({
                   <View style={{ marginBottom: 12 }}>
                     <WizardClientSummaryCard
                       name={selectedClientRow.name ?? "Client"}
-                      subtitle={selectedClientRow.address}
+                      subtitle={resolveWizardClientPhone(selectedClientRow.phone)}
                       avatarUrl={selectedClientRow.avatar_url}
                       avatarSeed={selectedClientRow.avatar_seed}
                     />
@@ -1926,7 +1949,7 @@ export function AddTripFormFields({
                     wizardSection == null && selectedClientRow
                       ? {
                           name: selectedClientRow.name ?? "Client",
-                          subtitle: selectedClientRow.address ?? undefined,
+                          subtitle: resolveWizardClientPhone(selectedClientRow.phone) ?? undefined,
                           entityType: "client",
                           avatarUrl:
                             (selectedClientRow as { avatar_url?: string | null })
@@ -1996,29 +2019,6 @@ export function AddTripFormFields({
 
             {showAlloc("supply") ? (
             <>
-            <SupplyAllocationModeBar
-              mode={supplyIsAsset ? "asset" : "aggregate"}
-              variant="wizard"
-              compact={isCompactMobile}
-              assignLater={state.assignLater}
-              assignLaterDisabled={assignLaterSwitchDisabled}
-              onModeChange={(mode) => setters.setSupplySource(mode)}
-              onAssignLaterChange={setters.setAssignLater}
-            />
-            <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
-              {assignLaterSwitchDisabled ? (
-                <Text style={styles.assignLaterLockedHintBelow}>
-                  Remove driver or vehicle assignment to enable assign later.
-                </Text>
-              ) : null}
-            </View>
-            {state.assignLater ? (
-              <Text style={styles.warningText}>
-                {supplyIsAsset
-                  ? "Assign vehicle and driver on the trip screen before the trip starts."
-                  : "Add vehicle number and driver phone on the trip screen before the trip starts."}
-              </Text>
-            ) : null}
             {showAggregatePartnerInline ? (
               suppliersLoading ? (
                 <ActivityIndicator color={Theme.iconPrimary} />
@@ -2033,13 +2033,7 @@ export function AddTripFormFields({
                           selectedSupplierRow.name?.trim() ||
                           "—"
                         }
-                        subtitle={[
-                          selectedSupplierRow.supplier_type,
-                          selectedSupplierRow.phone,
-                          selectedSupplierRow.email,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
+                        subtitle={resolveWizardClientPhone(selectedSupplierRow.phone)}
                         entityType="supplier"
                         organizationImageUrl={
                           (selectedSupplierRow as {
@@ -2065,7 +2059,7 @@ export function AddTripFormFields({
                   ) : null}
                   {showPartnerList ? (
                     <AssignmentEntityAvatarGrid
-                      title="Select Transport Partner"
+                      title="Select partner"
                       variant="wizard"
                       embedded
                       totalCount={suppliers.length}
@@ -2093,11 +2087,34 @@ export function AddTripFormFields({
                       footerHint={
                         !state.supplierId ? "Select a transport partner" : undefined
                       }
-                      scrollMaxHeight={280}
+                      scrollMaxHeight={300}
                     />
                   ) : null}
                 </>
               )
+            ) : null}
+            <SupplyAllocationModeBar
+              mode={supplyIsAsset ? "asset" : "aggregate"}
+              variant="wizard"
+              compact={isCompactMobile}
+              assignLater={state.assignLater}
+              assignLaterDisabled={assignLaterSwitchDisabled}
+              onModeChange={(mode) => setters.setSupplySource(mode)}
+              onAssignLaterChange={setters.setAssignLater}
+            />
+            <View style={{ marginBottom: assignLaterSwitchDisabled ? 12 : 0 }}>
+              {assignLaterSwitchDisabled ? (
+                <Text style={styles.assignLaterLockedHintBelow}>
+                  Remove driver or vehicle assignment to enable assign later.
+                </Text>
+              ) : null}
+            </View>
+            {state.assignLater ? (
+              <Text style={styles.warningText}>
+                {supplyIsAsset
+                  ? "Assign vehicle and driver on the trip screen before the trip starts."
+                  : "Add vehicle number and driver phone on the trip screen before the trip starts."}
+              </Text>
             ) : null}
             </>
             ) : null}
@@ -2256,6 +2273,7 @@ export function AddTripFormFields({
                     ? supplierToNumericPartyPreview(selectedSupplierRow)
                     : undefined
                 }
+                suppressPartyPreview={Boolean(allocationContextRow?.right)}
                 wizardShell
               />
             ) : null}
@@ -2453,6 +2471,8 @@ export function AddTripFormFields({
                           {showDriverFleetList ? (
                             <AssignmentEntityAvatarGrid
                               title="Select Driver"
+                              variant={isWizardAllocationCard ? "wizard" : "grid"}
+                              embedded={isWizardAllocationCard}
                               totalCount={driverOptions.length}
                               errorOutline={invalid("assetDriver")}
                               selectedId={state.driverId}
@@ -2536,6 +2556,8 @@ export function AddTripFormFields({
                           {showVehicleFleetList ? (
                             <AssignmentEntityAvatarGrid
                               title="Select Vehicle"
+                              variant={isWizardAllocationCard ? "wizard" : "grid"}
+                              embedded={isWizardAllocationCard}
                               totalCount={vehicleOptions.length}
                               errorOutline={invalid("assetVehicle")}
                               selectedId={state.vehicleId}
@@ -2653,13 +2675,7 @@ export function AddTripFormFields({
                                   style={styles.selectionSummarySub}
                                   numberOfLines={1}
                                 >
-                                  {[
-                                    selectedSupplierRow!.supplier_type,
-                                    selectedSupplierRow!.phone,
-                                    selectedSupplierRow!.email,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" · ")}
+                                  {resolveWizardClientPhone(selectedSupplierRow!.phone) ?? "—"}
                                 </Text>
                               </View>
                             </View>
@@ -2673,6 +2689,8 @@ export function AddTripFormFields({
                         {showPartnerList ? (
                           <AssignmentEntityAvatarGrid
                             title="Select Transport Partner"
+                            variant={isWizardAllocationCard ? "wizard" : "grid"}
+                            embedded={isWizardAllocationCard}
                             totalCount={suppliers.length}
                             errorOutline={invalid("partner")}
                             selectedId={state.supplierId}
@@ -3557,6 +3575,24 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     width: "100%",
     gap: 8,
+  },
+  wizardClientPickerBlock: {
+    width: "100%",
+    alignSelf: "stretch",
+    gap: 12,
+  },
+  wizardClientPickerHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    textAlign: "center",
+  },
+  gridColWizardFill: {
+    width: "100%",
+    flex: 1,
+    minWidth: 0,
+    alignSelf: "stretch",
   },
   gridRow: { gap: 10 },
   /** Extra gap when driver + vehicle stack vertically so sections don’t feel glued. */

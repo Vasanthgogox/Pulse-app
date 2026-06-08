@@ -10,6 +10,7 @@ import {
   WizardFormBody,
   WizardPartyContextRow,
 } from "@/components/full-page-wizard";
+import { resolveWizardClientPhone } from "@/features/clients/utils/clientContactDisplay.util";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { ThemedConfirmModal } from "@/components/ThemedConfirmModal";
@@ -724,7 +725,7 @@ export default function CreateIndentScreen() {
       right: {
         label: "Client",
         name: selectedClientRow.name ?? "Client",
-        subtitle: selectedClientRow.address ?? null,
+        subtitle: resolveWizardClientPhone(selectedClientRow.phone) ?? null,
         entityType: "client" as const,
         avatarUrl:
           (selectedClientRow as { avatar_url?: string | null }).avatar_url ??
@@ -1560,7 +1561,7 @@ export default function CreateIndentScreen() {
                         {form.client_id && !clientListExpanded && selectedClientRow ? (
                           <WizardClientSummaryCard
                             name={selectedClientRow.name ?? "Client"}
-                            subtitle={selectedClientRow.address}
+                            subtitle={resolveWizardClientPhone(selectedClientRow.phone)}
                             avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
                             avatarSeed={(selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null}
                             onPress={() => setClientListExpanded(true)}
@@ -1765,7 +1766,7 @@ export default function CreateIndentScreen() {
                         selectedClientRow
                           ? {
                               name: selectedClientRow.name ?? "Client",
-                              subtitle: selectedClientRow.address ?? undefined,
+                              subtitle: resolveWizardClientPhone(selectedClientRow.phone) ?? undefined,
                               entityType: "client",
                               avatarUrl:
                                 (selectedClientRow as { avatar_url?: string | null })

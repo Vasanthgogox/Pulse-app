@@ -16,7 +16,7 @@ import {
 } from "@/components/mobile-input/keypad";
 import {
   fullPageWizardStyles,
-  WizardClientSummaryCard,
+  WizardEntityPartyCell,
 } from "@/components/full-page-wizard";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import Theme from "@/constants/Theme";
@@ -60,10 +60,11 @@ export const ClientSaleKeypadFlow = memo(function ClientSaleKeypadFlow({
         keyboardShouldPersistTaps="handled"
       >
         {partyPreview ? (
-          <WizardClientSummaryCard
+          <WizardEntityPartyCell
             label="Client"
             name={partyPreview.name}
             subtitle={partyPreview.subtitle}
+            entityType={partyPreview.entityType ?? "client"}
             avatarUrl={partyPreview.avatarUrl}
             avatarSeed={partyPreview.avatarSeed}
           />

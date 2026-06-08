@@ -2,7 +2,7 @@ import { memo, type ReactNode } from "react";
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { PartyAvatar, type PartyEntityType } from "@/components/PartyAvatar";
-import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
+import { fullPageWizardStyles as styles, WIZARD_PARTY_AVATAR_SIZE } from "./fullPageWizardStyles";
 
 export type WizardEntityPartyCellProps = {
   label: string;
@@ -30,7 +30,7 @@ export const WizardEntityPartyCell = memo(function WizardEntityPartyCell({
   avatarSeed,
   organizationImageUrl,
   organizationAvatarSeed,
-  avatarSize = 34,
+  avatarSize = WIZARD_PARTY_AVATAR_SIZE,
   onPress,
   style,
   avatar,

@@ -45,6 +45,8 @@ export interface PartnerRatesKeypadFlowProps {
   keypadInset?: boolean;
   /** Compact layout inside FullPageWizardShell fillBody (keypad stays above footer). */
   wizardShell?: boolean;
+  /** Hide centered party card when parent already shows context row. */
+  suppressPartyPreview?: boolean;
 }
 
 export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
@@ -56,6 +58,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
   hint = "Enter the rate you will pay this partner.",
   keypadInset = false,
   wizardShell = false,
+  suppressPartyPreview = false,
 }: PartnerRatesKeypadFlowProps) {
   const [active, setActive] = useState<ActiveField>("rate");
 
@@ -64,7 +67,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
-      if (active === "rate") {
+      if (wizardShell || active === "rate") {
         onPartnerRateChange(applyKeypadPress(rateRaw, key, { maxDecimalPlaces: 2 }));
         return;
       }
@@ -78,33 +81,68 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
       onAdvancePaidChange,
       onPartnerRateChange,
       rateRaw,
+      wizardShell,
     ],
   );
 
   const useInset = keypadInset || wizardShell;
-  const heroVariant = wizardShell ? ("default" as const) : ("hero" as const);
+
+  if (wizardShell) {
+    return (
+      <View style={[flow.root, styles.rootWizard]}>
+        <ScrollView
+          style={styles.mainScroll}
+          contentContainerStyle={styles.mainWizard}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {partyPreview && !suppressPartyPreview ? (
+            <WizardEntitySummaryCard
+              label="Transport partner"
+              name={partyPreview.name}
+              subtitle={partyPreview.subtitle}
+              entityType={partyPreview.entityType ?? "supplier"}
+              avatarUrl={partyPreview.avatarUrl}
+              avatarSeed={partyPreview.avatarSeed}
+              organizationImageUrl={partyPreview.organizationImageUrl}
+              organizationAvatarSeed={partyPreview.organizationAvatarSeed}
+            />
+          ) : null}
+
+          <View style={fullPageWizardStyles.wizardFieldBlock}>
+            <Text style={fullPageWizardStyles.wizardFieldLabel}>
+              Partner rate (₹) *
+            </Text>
+            <NumericDisplay
+              rawValue={rateRaw}
+              type="currency"
+              prefix="₹"
+              placeholder="0"
+              variant="hero"
+            />
+          </View>
+        </ScrollView>
+
+        <View style={flow.keypadDockWizard}>
+          <DecimalKeypad
+            onKey={handleKey}
+            showDecimal
+            variant="pay"
+            size="compact"
+          />
+        </View>
+      </View>
+    );
+  }
 
   const mainContent = (
     <>
       {partyPreview ? (
-        wizardShell ? (
-          <WizardEntitySummaryCard
-            label="Transport partner"
-            name={partyPreview.name}
-            subtitle={partyPreview.subtitle}
-            entityType={partyPreview.entityType ?? "supplier"}
-            avatarUrl={partyPreview.avatarUrl}
-            avatarSeed={partyPreview.avatarSeed}
-            organizationImageUrl={partyPreview.organizationImageUrl}
-            organizationAvatarSeed={partyPreview.organizationAvatarSeed}
-          />
-        ) : (
-          <NumericEntryRecipientHero
-            party={partyPreview}
-            caption="Partner rate"
-            compact={false}
-          />
-        )
+        <NumericEntryRecipientHero
+          party={partyPreview}
+          caption="Partner rate"
+          compact={false}
+        />
       ) : null}
 
       <Pressable
@@ -113,15 +151,13 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
         accessibilityRole="button"
         accessibilityState={{ selected: active === "rate" }}
       >
-        <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.fieldLabel}>
-          Partner rate (₹) *
-        </Text>
+        <Text style={styles.fieldLabel}>Partner rate (₹) *</Text>
         <NumericDisplay
           rawValue={rateRaw}
           type="currency"
           prefix="₹"
           placeholder="0"
-          variant={heroVariant}
+          variant="hero"
         />
       </Pressable>
 
@@ -135,13 +171,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
         accessibilityState={{ selected: active === "advance" }}
       >
         <View style={styles.advanceLabelRow}>
-          <Text
-            style={
-              wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.fieldLabelSecondary
-            }
-          >
-            Advance paid (₹)
-          </Text>
+          <Text style={styles.fieldLabelSecondary}>Advance paid (₹)</Text>
           <Text style={styles.optionalPill}>Optional</Text>
         </View>
         <NumericDisplay
@@ -149,36 +179,19 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
           type="currency"
           prefix="₹"
           placeholder="0"
-          variant={active === "advance" ? heroVariant : "default"}
+          variant={active === "advance" ? "hero" : "default"}
         />
       </Pressable>
 
-      {!wizardShell && hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </>
   );
 
   return (
-    <View style={[flow.root, styles.root, wizardShell && styles.rootWizard]}>
-      {wizardShell ? (
-        <ScrollView
-          style={styles.mainScroll}
-          contentContainerStyle={styles.main}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {mainContent}
-        </ScrollView>
-      ) : (
-        <View style={[flow.main, styles.main]}>{mainContent}</View>
-      )}
+    <View style={[flow.root, styles.root]}>
+      <View style={[flow.main, styles.main]}>{mainContent}</View>
 
-      <View
-        style={
-          wizardShell
-            ? flow.keypadDockWizard
-            : [flow.keypadDock, useInset && styles.keypadDockInset]
-        }
-      >
+      <View style={[flow.keypadDock, useInset && styles.keypadDockInset]}>
         <DecimalKeypad
           onKey={handleKey}
           showDecimal
@@ -206,6 +219,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 2,
     paddingBottom: 4,
+  },
+  mainWizard: {
+    gap: 12,
+    paddingTop: 2,
+    paddingBottom: 8,
   },
   fieldBlock: {
     gap: 6,

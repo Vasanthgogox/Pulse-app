@@ -69,8 +69,8 @@ export function NumericDisplay({
             isEmpty && isHero && styles.amountPlaceholderHero,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit={!isHero}
-          minimumFontScale={isHero ? 0.72 : 0.4}
+          adjustsFontSizeToFit={!isHero && !isEmpty}
+          minimumFontScale={isHero ? 0.72 : 0.85}
           allowFontScaling={false}
         >
           {display}

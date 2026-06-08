@@ -1,12 +1,11 @@
-import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import Theme from "@/constants/Theme";
+import { useMemo } from "react";
 import type { ClientRow } from "@/features/clients/services/clients.service";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { resolveWizardClientPhone } from "@/features/clients/utils/clientContactDisplay.util";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
-
-const WIZARD_CLIENT_AVATAR_SIZE = 30;
+import { fullPageWizardStyles as styles, WIZARD_PARTY_AVATAR_SIZE, WIZARD_PARTY_GRID_COLUMNS } from "./fullPageWizardStyles";
+import { WizardEntityPartyCell } from "./WizardEntityPartyCell";
+import { WizardSelectionGrid } from "./WizardSelectionGrid";
 
 export interface WizardClientPickerProps {
   clients: ClientRow[];
@@ -18,6 +17,16 @@ export interface WizardClientPickerProps {
   listMaxHeight?: number;
 }
 
+function sortClientsByName(clients: ClientRow[]): ClientRow[] {
+  return [...clients].sort((a, b) =>
+    (a.name ?? a.contact_person ?? "").localeCompare(
+      b.name ?? b.contact_person ?? "",
+      "en",
+      { sensitivity: "base" },
+    ),
+  );
+}
+
 export function WizardClientPicker({
   clients,
   loading = false,
@@ -25,66 +34,42 @@ export function WizardClientPicker({
   onSelect,
   onAddClient,
   emptyMessage = "No clients yet. Add a client to continue.",
-  listMaxHeight = 320,
+  listMaxHeight = 420,
 }: WizardClientPickerProps) {
-  if (loading) {
-    return (
-      <View style={styles.clientLoadingWrap}>
-        <LoadingIndicator size="small" color={Theme.primary} />
-      </View>
-    );
-  }
+  const sortedClients = useMemo(() => sortClientsByName(clients), [clients]);
 
-  if (clients.length === 0) {
-    return (
-      <View style={styles.shipperWarningCard}>
-        <Text style={styles.shipperWarningText}>{emptyMessage}</Text>
-        {onAddClient ? (
-          <Pressable style={styles.addClientBtn} onPress={onAddClient}>
-            <Text style={styles.addClientBtnText}>+ Add client</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    );
-  }
+  const gridItems = useMemo(
+    () =>
+      sortedClients.map((client) => {
+        const name = client.name ?? client.contact_person ?? "Client";
+        return {
+          id: client.id,
+          name,
+          subtitle: resolveWizardClientPhone(client.phone),
+          avatarUrl: client.avatar_url ?? null,
+          avatarSeed: client.avatar_seed ?? null,
+          entityType: "client" as const,
+        };
+      }),
+    [sortedClients],
+  );
 
   return (
-    <View style={{ gap: 8 }}>
-      <View style={styles.clientListWrap}>
-        <ScrollView
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          style={{ maxHeight: listMaxHeight }}
-        >
-          {clients.map((client) => {
-            const selected = selectedClientId === client.id;
-            const name = client.name ?? client.contact_person ?? "Client";
-            return (
-              <Pressable
-                key={client.id}
-                style={[styles.clientRow, selected && styles.clientRowSelected]}
-                onPress={() => onSelect(client)}
-              >
-                <PartyAvatar
-                  name={name}
-                  avatarUrl={client.avatar_url ?? null}
-                  avatarSeed={client.avatar_seed ?? null}
-                  entityType="client"
-                  size={WIZARD_CLIENT_AVATAR_SIZE}
-                  shape="rounded"
-                />
-                <View style={styles.partyTextWrap}>
-                  <Text style={styles.partyName} numberOfLines={1}>
-                    {name}
-                  </Text>
-                  <Text style={styles.blockMeta} numberOfLines={1}>
-                    {client.phone?.trim() || client.address?.trim() || "—"}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+    <View style={pickerStyles.root}>
+      <View style={pickerStyles.gridArea}>
+        <WizardSelectionGrid
+          items={gridItems}
+          selectedId={selectedClientId}
+          onSelect={(id) => {
+            const client = sortedClients.find((c) => c.id === id);
+            if (client) onSelect(client);
+          }}
+          loading={loading}
+          emptyMessage={emptyMessage}
+          listMaxHeight={listMaxHeight}
+          variant="partyCard"
+          columns={WIZARD_PARTY_GRID_COLUMNS}
+        />
       </View>
       {onAddClient ? (
         <Pressable style={styles.addClientBtn} onPress={onAddClient}>
@@ -110,32 +95,29 @@ export function WizardClientSummaryCard({
   label?: string;
   onPress?: () => void;
 }) {
-  const content = (
-    <View style={styles.shipperMarkCard}>
-      <PartyAvatar
-        name={name}
-        avatarUrl={avatarUrl ?? null}
-        avatarSeed={avatarSeed ?? null}
-        entityType="client"
-        size={WIZARD_CLIENT_AVATAR_SIZE}
-        shape="rounded"
-      />
-      <View style={styles.partyTextWrap}>
-        <Text style={styles.partyLabel}>{label}</Text>
-        <Text style={styles.partyName} numberOfLines={1}>
-          {name}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.blockMeta} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+  return (
+    <WizardEntityPartyCell
+      label={label}
+      name={name}
+      subtitle={subtitle}
+      entityType="client"
+      avatarUrl={avatarUrl}
+      avatarSeed={avatarSeed}
+      avatarSize={WIZARD_PARTY_AVATAR_SIZE}
+      onPress={onPress}
+    />
   );
-
-  if (onPress) {
-    return <Pressable onPress={onPress}>{content}</Pressable>;
-  }
-  return content;
 }
+
+const pickerStyles = StyleSheet.create({
+  root: {
+    width: "100%",
+    alignSelf: "stretch",
+    gap: 12,
+  },
+  gridArea: {
+    width: "100%",
+    minHeight: 0,
+    alignSelf: "stretch",
+  },
+});

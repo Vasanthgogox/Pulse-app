@@ -26,6 +26,8 @@ type SortBy =
 
 type PaymentFilter = "all" | "pending" | "partial" | "paid";
 
+type AttributionFilter = "all" | "attributed";
+
 type DateFilterChip = "all" | "today" | "tomorrow" | "this_week" | "this_month";
 
 export type TripsFilterSortOption = {
@@ -65,6 +67,11 @@ export interface TripsFilterBottomSheetProps {
   paymentFilter: PaymentFilter;
   onPaymentFilterChange: (id: PaymentFilter) => void;
   paymentFilterOptionLabel: (id: PaymentFilter) => string;
+  attributionFilterLabel: string;
+  attributionFilters: readonly AttributionFilter[];
+  attributionFilter: AttributionFilter;
+  onAttributionFilterChange: (id: AttributionFilter) => void;
+  attributionFilterOptionLabel: (id: AttributionFilter) => string;
   loadTypeOptions: string[];
   loadTypeFilter: string;
   onLoadTypeFilterChange: (value: string) => void;
@@ -157,6 +164,11 @@ export function TripsFilterBottomSheet({
   paymentFilter,
   onPaymentFilterChange,
   paymentFilterOptionLabel,
+  attributionFilterLabel,
+  attributionFilters,
+  attributionFilter,
+  onAttributionFilterChange,
+  attributionFilterOptionLabel,
   loadTypeOptions,
   loadTypeFilter,
   onLoadTypeFilterChange,
@@ -263,6 +275,19 @@ export function TripsFilterBottomSheet({
                   label={paymentFilterOptionLabel(f)}
                   active={paymentFilter === f}
                   onPress={() => onPaymentFilterChange(f)}
+                />
+              ))}
+            </FilterSection>
+
+            <View style={styles.sectionDivider} />
+
+            <FilterSection title={attributionFilterLabel} icon="exchange">
+              {attributionFilters.map((f) => (
+                <FilterChip
+                  key={f}
+                  label={attributionFilterOptionLabel(f)}
+                  active={attributionFilter === f}
+                  onPress={() => onAttributionFilterChange(f)}
                 />
               ))}
             </FilterSection>

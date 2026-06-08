@@ -6,6 +6,10 @@ export const WIZARD_ACCENT = Theme.primary;
 export const WIZARD_ACCENT_SOFT = "rgba(79, 70, 229, 0.08)";
 export const WIZARD_ACCENT_BORDER = "rgba(99, 102, 241, 0.35)";
 export const WIZARD_ACCENT_MUTED = "rgba(238, 242, 255, 0.9)";
+/** Avatar size for wizard context rows + 2-col selection tiles (attribution parity). */
+export const WIZARD_PARTY_AVATAR_SIZE = 30;
+/** Party selection grids always use two columns (Driver · Shipper parity). */
+export const WIZARD_PARTY_GRID_COLUMNS = 2;
 
 /** Shared light full-page wizard chrome (attribution / create trip / load / allocation). */
 export const fullPageWizardStyles = StyleSheet.create({
@@ -149,6 +153,8 @@ export const fullPageWizardStyles = StyleSheet.create({
   partyRow: {
     flexDirection: "row",
     gap: 10,
+    width: "100%",
+    alignSelf: "stretch",
   },
   partyRowStack: {
     flexDirection: "column",
@@ -158,12 +164,21 @@ export const fullPageWizardStyles = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     padding: 10,
+  },
+  /** Full-width selectable party tile inside 2-col wizard grids. */
+  partyCardSelectable: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  partyCardSelected: {
+    borderColor: WIZARD_ACCENT,
+    backgroundColor: WIZARD_ACCENT_SOFT,
   },
   partyTextWrap: {
     flex: 1,
@@ -178,12 +193,13 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   partyName: {
     color: Theme.textPrimaryDark,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
+    lineHeight: 17,
   },
   partySubtitle: {
     color: Theme.textSecondary,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
     marginTop: 1,
   },
@@ -339,6 +355,176 @@ export const fullPageWizardStyles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
   },
+  /** Two-column attribution-style entity picker grid. */
+  selectionGridWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  wizardPickerListShell: {
+    width: "100%",
+    alignSelf: "stretch",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+    padding: 0,
+  },
+  wizardPickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    width: "100%",
+  },
+  wizardPickerTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: Theme.textMuted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+  },
+  wizardPickerCountBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: WIZARD_ACCENT_BORDER,
+    backgroundColor: WIZARD_ACCENT_SOFT,
+    flexShrink: 0,
+  },
+  wizardPickerCountBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: WIZARD_ACCENT,
+  },
+  wizardPickerFooterHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  wizardPickerSecondaryBtn: {
+    alignSelf: "stretch",
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  wizardPickerSecondaryBtnText: {
+    color: WIZARD_ACCENT,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  selectionGridScrollContent: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  selectionGridScrollContentFlat: {
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+    paddingBottom: 4,
+  },
+  selectionGrid: {
+    gap: 10,
+    width: "100%",
+  },
+  selectionGridRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+    width: "100%",
+  },
+  selectionGridCell: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  selectionGridTile: {
+    alignItems: "center",
+    justifyContent: "flex-start",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    minHeight: 108,
+  },
+  selectionGridTileSelected: {
+    borderColor: WIZARD_ACCENT,
+    backgroundColor: WIZARD_ACCENT_SOFT,
+  },
+  selectionGridCheckParty: {
+    right: -4,
+    bottom: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  selectionGridTileDisabled: {
+    opacity: 0.55,
+  },
+  selectionGridAvatarWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  selectionGridCheck: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: WIZARD_ACCENT,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Theme.cardWhite,
+  },
+  selectionGridName: {
+    marginTop: 8,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    width: "100%",
+    paddingHorizontal: 2,
+  },
+  selectionGridNameCompact: {
+    marginTop: 6,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  selectionGridNameDisabled: {
+    color: Theme.textMuted,
+  },
+  selectionGridMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    width: "100%",
+    paddingHorizontal: 2,
+  },
+  selectionGridMetaWarn: {
+    color: Theme.warning,
+    fontWeight: "700",
+  },
   clientLoadingWrap: {
     paddingVertical: 20,
     alignItems: "center",
@@ -384,17 +570,20 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "600",
   },
   addClientBtn: {
-    alignSelf: "flex-start",
-    borderRadius: 8,
+    alignSelf: "stretch",
+    minHeight: 44,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   addClientBtnText: {
     color: WIZARD_ACCENT,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   /** Wizard step field label — matches attribution block titles. */
@@ -439,7 +628,8 @@ export const fullPageWizardStyles = StyleSheet.create({
   /** Flat list block — no outer card when parent already uses formSectionCard. */
   blockFlat: {
     width: "100%",
-    gap: 8,
+    alignSelf: "stretch",
+    gap: 10,
   },
   wizardPickerBtn: {
     flexDirection: "row",
