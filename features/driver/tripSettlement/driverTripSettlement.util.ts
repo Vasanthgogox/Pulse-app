@@ -1,4 +1,8 @@
-import { isAggregateTrip, tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
+import {
+  isAggregateTrip,
+  tripEarningsForDriver,
+  type DriverTripPayoutTerms,
+} from "@/features/drivers/utils/driverUtils.util";
 import { getDriverTripDisplayNumber } from "@/features/driver/utils/driverTripSequence.util";
 import type { DriverLedgerRow } from "@/features/drivers/services/drivers.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
@@ -222,13 +226,21 @@ export function buildDriverTripSettlementView(input: {
   fleetOrgName: string;
   driverTripNumberById: Record<string, string>;
   tripCompleted: boolean;
+  payoutTerms?: DriverTripPayoutTerms | null;
 }): DriverTripSettlementView {
-  const { trip, ledgerEntries, fleetOrgName, driverTripNumberById, tripCompleted } = input;
+  const {
+    trip,
+    ledgerEntries,
+    fleetOrgName,
+    driverTripNumberById,
+    tripCompleted,
+    payoutTerms,
+  } = input;
   const displayId = getDriverTripDisplayNumber(trip, driverTripNumberById);
   const from = trip.pickup_area?.trim() || "Unknown origin";
   const to = trip.drop_location?.trim() || "Unknown destination";
   const isSalary = isAggregateTrip(trip);
-  const expectedAmount = Math.round(tripEarningsForDriver(trip));
+  const expectedAmount = Math.round(tripEarningsForDriver(trip, payoutTerms));
 
   if (isSalary) {
     return {

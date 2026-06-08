@@ -51,6 +51,10 @@ export interface TripForCompose {
   supplier_linked_organization_id: string | null;
   /** From `trips.indent_id` — set only for marketplace/indent-backed trips. */
   indent_id?: string | null;
+  /** Long-haul scheduled ETA inputs (350 km/day plan). */
+  distance?: string | number | null;
+  started_at?: string | null;
+  pickup_date?: string | null;
 }
 
 export async function getTripsForCompose(
@@ -94,6 +98,9 @@ export async function getTripsForCompose(
     client_linked_organization_id: null,
     supplier_linked_organization_id: null,
     indent_id: (row.indent_id as string | null | undefined) ?? null,
+    distance: (row.distance as string | number | null | undefined) ?? null,
+    started_at: (row.started_at as string | null | undefined) ?? null,
+    pickup_date: (row.pickup_date as string | null | undefined) ?? null,
   }));
 
   const clientIds = Array.from(
@@ -682,6 +689,34 @@ export async function getMessagesByConversation(
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+async function enrichNetworkConversationsWithPartnerBranding(
+  conversations: NetworkConversation[],
+): Promise<NetworkConversation[]> {
+  const partnerIds = Array.from(
+    new Set(
+      conversations
+        .map((c) => (c.partner_org_id ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  if (partnerIds.length === 0) return conversations;
+
+  const { getLinkedOrgProfilesBatch } = await import(
+    "@/features/clients/services/clients.service"
+  );
+  const brandingByOrgId = await getLinkedOrgProfilesBatch(partnerIds);
+
+  return conversations.map((conv) => {
+    const branding = brandingByOrgId[conv.partner_org_id];
+    if (!branding) return conv;
+    return {
+      ...conv,
+      partner_logo_url: branding.logoUrl ?? null,
+      partner_avatar_seed: branding.orgAvatarSeed ?? branding.avatarSeed ?? null,
+    };
+  });
+}
+
 export async function getNetworkConversationsByOrg(
   orgId: string,
 ): Promise<NetworkConversation[]> {
@@ -697,7 +732,7 @@ export async function getNetworkConversationsByOrg(
 
   if (error) throw error;
 
-  return ((data ?? []) as unknown[]).map((rawRow) => {
+  const mapped = ((data ?? []) as unknown[]).map((rawRow) => {
     const row = rawRow as Record<string, unknown>;
     const isA = row.org_a_id === orgId;
     return {
@@ -711,6 +746,8 @@ export async function getNetworkConversationsByOrg(
       ),
     };
   }) as unknown as NetworkConversation[];
+
+  return enrichNetworkConversationsWithPartnerBranding(mapped);
 }
 
 export async function getNetworkConversationsDelta(
@@ -1086,7 +1123,23 @@ export async function getIntegratedPartners(
       });
     }
   }
-  return partners;
+
+  if (partners.length === 0) return partners;
+  const { getLinkedOrgProfilesBatch } = await import(
+    "@/features/clients/services/clients.service"
+  );
+  const brandingByOrgId = await getLinkedOrgProfilesBatch(
+    partners.map((p) => p.org_id),
+  );
+  return partners.map((p) => {
+    const branding = brandingByOrgId[p.org_id];
+    if (!branding) return p;
+    return {
+      ...p,
+      logo_url: branding.logoUrl ?? null,
+      avatar_seed: branding.orgAvatarSeed ?? branding.avatarSeed ?? null,
+    };
+  });
 }
 
 // ── Driver chat ───────────────────────────────────────────────────────────────

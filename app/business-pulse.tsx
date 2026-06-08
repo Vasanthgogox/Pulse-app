@@ -1,10 +1,14 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
-import Layout from "@/constants/Layout";
+import { Calendar, ChevronLeft, ChevronRight } from "lucide-react-native";
+
 import Theme from "@/constants/Theme";
 import { BusinessPulseScreen } from "@/features/business-pulse/components/BusinessPulseScreen";
+import {
+  PULSE_PAGE_BG,
+  pulseEnterpriseStyles as ent,
+} from "@/features/business-pulse/components/pulseEnterpriseStyles";
 import { PulseFilterProvider } from "@/features/business-pulse/state/pulseFilterStore";
 
 export default function BusinessPulseRoute() {
@@ -14,15 +18,22 @@ export default function BusinessPulseRoute() {
   return (
     <PulseFilterProvider>
       <View style={styles.container}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
           <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
-            <FontAwesome name="chevron-left" size={14} color={Theme.textPrimaryDark} />
+            <ChevronLeft size={16} color="#181C32" strokeWidth={2.2} />
           </Pressable>
-          <View style={styles.topBarCenter}>
-            <Text style={styles.topEyebrow}>INTELLIGENCE</Text>
-            <Text style={styles.topTitle}>Business Pulse</Text>
+          <View style={styles.topBarMain}>
+            <Text style={styles.pageTitle}>Business Pulse</Text>
+            <View style={styles.breadcrumbRow}>
+              <Text style={styles.breadcrumb}>Workspace</Text>
+              <ChevronRight size={11} color="#A1A5B7" strokeWidth={2.2} />
+              <Text style={styles.breadcrumbActive}>Intelligence</Text>
+            </View>
           </View>
-          <View style={styles.topBarSpacer} />
+          <View style={ent.datePill}>
+            <Calendar size={12} color="#A1A5B7" strokeWidth={2} />
+            <Text style={ent.datePillText}>Live scope</Text>
+          </View>
         </View>
         <BusinessPulseScreen embedded topInset={0} />
       </View>
@@ -33,45 +44,64 @@ export default function BusinessPulseRoute() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: PULSE_PAGE_BG,
   },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 4,
-    backgroundColor: Theme.surface,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)" as unknown as undefined,
+      },
+      default: {
+        shadowColor: "#0f172a",
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+        elevation: 1,
+      },
+    }),
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.whiteMuted,
-    borderWidth: 1,
-    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
-  topBarCenter: {
+  topBarMain: {
     flex: 1,
-    alignItems: "center",
     minWidth: 0,
+    gap: 2,
   },
-  topEyebrow: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.primary,
-    letterSpacing: 1.2,
+  pageTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#181C32",
+    letterSpacing: -0.2,
   },
-  topTitle: {
-    color: Theme.textPrimaryDark,
-    fontSize: 13,
-    fontWeight: "800",
-    marginTop: 1,
+  breadcrumbRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
-  topBarSpacer: {
-    width: 36,
+  breadcrumb: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#A1A5B7",
+  },
+  breadcrumbActive: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#181C32",
   },
 });

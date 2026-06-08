@@ -4,6 +4,9 @@ import type { SharedLedgerNotificationRow } from '@/features/finance/services/sh
 
 export type RegistryFeedKind = 'ops' | 'salary' | 'shared';
 
+/** Metronic-style notification filter tabs. */
+export type RegistryFilterTab = 'all' | 'driver' | 'trip' | 'payment' | 'archive';
+
 export type RegistryFeedEntry = {
   id: string;
   kind: RegistryFeedKind;
@@ -80,4 +83,43 @@ export function buildRegistryFeed(input: {
   }
 
   return entries.sort((a, b) => b.sortKey - a.sortKey);
+}
+
+export function registryFeedLifecycleTab(filter: RegistryFilterTab): 'active' | 'history' {
+  return filter === 'archive' ? 'history' : 'active';
+}
+
+export function entryMatchesRegistryFilter(
+  entry: RegistryFeedEntry,
+  filter: RegistryFilterTab,
+): boolean {
+  if (filter === 'all' || filter === 'archive') return true;
+  if (filter === 'driver') {
+    if (entry.kind === 'salary') return true;
+    if (entry.kind === 'ops' && entry.ops?.category === 'unassigned_trip') return true;
+    return false;
+  }
+  if (filter === 'trip') {
+    if (entry.kind !== 'ops' || !entry.ops) return false;
+    const cat = entry.ops.category;
+    if (cat === 'unassigned_trip') return false;
+    return cat !== 'payment_received' && cat !== 'dispute';
+  }
+  if (filter === 'payment') {
+    if (entry.kind === 'shared') return true;
+    if (entry.kind === 'ops' && entry.ops) {
+      const cat = entry.ops.category;
+      return cat === 'payment_received' || cat === 'dispute';
+    }
+    return false;
+  }
+  return true;
+}
+
+export function filterRegistryFeed(
+  entries: RegistryFeedEntry[],
+  filter: RegistryFilterTab,
+): RegistryFeedEntry[] {
+  if (filter === 'all' || filter === 'archive') return entries;
+  return entries.filter((entry) => entryMatchesRegistryFilter(entry, filter));
 }

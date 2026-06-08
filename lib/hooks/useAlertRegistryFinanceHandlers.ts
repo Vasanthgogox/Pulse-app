@@ -2,7 +2,10 @@ import { useCallback, useState } from "react";
 import type { AlertRegistryFinanceHandlers } from "@/components/AlertRegistryPanel";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
+import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
+import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
@@ -33,7 +36,16 @@ export function useAlertRegistryFinanceHandlers(): {
   );
 
   const openLedgerForSalaryPayment = useCallback(
-    (req: SalaryRequestWithDriverRow) => {
+    async (req: SalaryRequestWithDriverRow) => {
+      const isTripBasedAttribution =
+        req.request_type === "trip_based" &&
+        String(req.note ?? "").toLowerCase().includes("fleet trip");
+      if (isTripBasedAttribution) {
+        router.push(
+          `/(modals)/attribution-trip-create?requestId=${encodeURIComponent(req.id)}` as const,
+        );
+        return;
+      }
       const driverName = req.drivers?.name?.trim() || t("driver");
       const isTripBased =
         req.request_type === "trip_based" &&
@@ -55,6 +67,18 @@ export function useAlertRegistryFinanceHandlers(): {
       router.push(`/(modals)/ledger-sync?${q.toString()}` as const);
     },
     [router, t],
+  );
+
+  const viewSalaryArchive = useCallback(
+    (req: SalaryRequestWithDriverRow) => {
+      const tripId = Array.isArray(req.trip_ids) ? req.trip_ids[0] : null;
+      if (tripId) {
+        router.push(`/trip-ledger/${tripId}` as const);
+        return;
+      }
+      router.push("/(tabs)/finance" as Parameters<typeof router.push>[0]);
+    },
+    [router],
   );
 
   const handleSharedAction = useCallback(
@@ -95,11 +119,32 @@ export function useAlertRegistryFinanceHandlers(): {
     [orgId, markSharedLedgerRead, router],
   );
 
+  const handleDismissOps = useCallback(
+    async (ops: GlobalOperationAlert) => {
+      if (!orgId) {
+        useGlobalSyncStore.getState().dismissOperationAlert(ops.id);
+        return;
+      }
+      await useGlobalSyncStore.getState().acknowledgeGlobalAlert(ops.id, orgId);
+    },
+    [orgId],
+  );
+
+  const handleOpenOps = useCallback(
+    (ops: GlobalOperationAlert) => {
+      navigateToOpsAlert(router, ops);
+    },
+    [router],
+  );
+
   const finance: AlertRegistryFinanceHandlers = {
     onRejectSalary: (id) => void handleSalaryReject(id),
     onPaySalary: openLedgerForSalaryPayment,
+    onViewSalaryArchive: viewSalaryArchive,
     onMarkSharedRead: (id) => void markSharedLedgerRead(id),
     onSharedAction: (item) => void handleSharedAction(item),
+    onDismissOps: (ops) => void handleDismissOps(ops),
+    onOpenOps: handleOpenOps,
     busySalaryId: notifActionId,
   };
 

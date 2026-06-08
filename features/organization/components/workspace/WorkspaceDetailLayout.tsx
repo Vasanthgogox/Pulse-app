@@ -18,16 +18,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DETAIL_CANVAS = "#f4f6fb";
-/**
- * Content max-width tracks the flex card's max width (480 px in
- * `app/workspace.tsx`) plus a small overflow buffer for embedded
- * lists / forms. The old 720 px rail was wider than the card itself
- * and effectively a no-op; setting it to 520 keeps content centered
- * on the rare wider-than-card breakpoint while letting it stretch
- * comfortably edge-to-edge inside the card.
- */
-const CONTENT_MAX_WIDTH = 520;
+const DETAIL_CANVAS = "#f5f7fb";
+const CONTENT_MAX_WIDTH = 720;
 
 type Props = {
   title: string;
@@ -40,6 +32,8 @@ type Props = {
   /** When true, children fill remaining height (e.g. embedded lists). */
   fillBody?: boolean;
   scrollProps?: Pick<ScrollViewProps, "keyboardShouldPersistTaps">;
+  /** Override centred column width (e.g. product catalogue grid). */
+  contentMaxWidth?: number;
 };
 
 export function WorkspaceDetailLayout({
@@ -51,6 +45,7 @@ export function WorkspaceDetailLayout({
   children,
   fillBody = false,
   scrollProps,
+  contentMaxWidth = CONTENT_MAX_WIDTH,
 }: Props) {
   const insets = useSafeAreaInsets();
   const hasFooter = !!footerSlot;
@@ -78,7 +73,9 @@ export function WorkspaceDetailLayout({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps={scrollProps?.keyboardShouldPersistTaps ?? "handled"}
     >
-      <View style={styles.contentColumn}>{children}</View>
+      <View style={[styles.contentColumn, { maxWidth: contentMaxWidth }]}>
+        {children}
+      </View>
     </ScrollView>
   );
 
@@ -98,7 +95,9 @@ export function WorkspaceDetailLayout({
       </KeyboardAvoidingView>
       {hasFooter ? (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
-          <View style={styles.footerInner}>{footerSlot}</View>
+          <View style={[styles.footerInner, { maxWidth: contentMaxWidth }]}>
+            {footerSlot}
+          </View>
         </View>
       ) : null}
     </View>
@@ -115,9 +114,9 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 16,
-    paddingHorizontal: 18,
-    alignItems: "center",
+    paddingTop: 18,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    alignItems: "stretch",
   },
   contentColumn: {
     width: "100%",
@@ -135,17 +134,16 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingHorizontal: 18,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 4,
   },
   footerInner: {
     width: "100%",
-    maxWidth: CONTENT_MAX_WIDTH,
     alignSelf: "center",
   },
 });

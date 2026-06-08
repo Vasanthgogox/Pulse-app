@@ -33,7 +33,7 @@ export default function PendingEarningsScreen() {
   const listBg = isDark ? colors.background : LIST_BG;
   const cardBg = isDark ? colors.surface : Theme.cardWhite;
 
-  const { loading, refreshing, refresh, pendingItems, pendingTotal, tripCount } =
+  const { loading, refreshing, refresh, pendingItems, pendingTotal, tripCount, employerDetails } =
     useDriverPendingEarnings();
 
   const sections = useMemo(
@@ -83,6 +83,25 @@ export default function PendingEarningsScreen() {
             </Text>
           </View>
         </View>
+
+        {employerDetails.length > 0 ? (
+          <View style={styles.employerWrap}>
+            {employerDetails.map((employer) => (
+              <View key={employer.orgId} style={styles.employerCard}>
+                <Text style={styles.employerName} numberOfLines={1}>
+                  {employer.orgName}
+                </Text>
+                <View style={styles.employerTermsRow}>
+                  {employer.salaryLines.map((line) => (
+                    <Text key={`${employer.orgId}-${line.label}`} style={styles.employerTermPill}>
+                      {line.label}: {line.value}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={styles.salaryCta}
@@ -223,6 +242,43 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(167,243,208,0.75)',
     fontWeight: '500',
+  },
+  employerWrap: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  employerCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  employerName: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    color: 'rgba(236,253,245,0.95)',
+  },
+  employerTermsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  employerTermPill: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(167,243,208,0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.28)',
+    backgroundColor: 'rgba(16,185,129,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    overflow: 'hidden',
   },
   salaryCta: {
     alignSelf: 'stretch',

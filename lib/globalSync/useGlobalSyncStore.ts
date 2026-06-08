@@ -395,26 +395,32 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     networkStatus:            { ...DEFAULT_NETWORK_STATUS },
 
     refreshInboundProtocol: async (orgId) => {
-      const { getConnectionRequestsReceived, getConnectionRequestsSent } =
-        await loadConnectionRequestsService();
-      const [receivedRes, sentRes] = await withTimeout(
-        Promise.all([
-          getConnectionRequestsReceived(orgId),
-          getConnectionRequestsSent(orgId),
-        ]),
-        15_000,
-      );
-      const received = receivedRes.error ? [] : receivedRes.requests;
-      const sent = sentRes.error ? [] : sentRes.requests;
-      const { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId } =
-        await withTimeout(fetchInboundProtocolSnapshot(orgId, received, sent), 15_000);
-      set({
-        connectionRequestsReceived: received,
-        connectionRequestsSent: sent,
-        partnerDisplayByOrgId,
-        partnerAvatarUriByOrgId,
-        partnerOwnerIdByOrgId,
-      });
+      try {
+        const { getConnectionRequestsReceived, getConnectionRequestsSent } =
+          await loadConnectionRequestsService();
+        const [receivedRes, sentRes] = await withTimeout(
+          Promise.all([
+            getConnectionRequestsReceived(orgId),
+            getConnectionRequestsSent(orgId),
+          ]),
+          15_000,
+        );
+        const received = receivedRes.error ? [] : receivedRes.requests;
+        const sent = sentRes.error ? [] : sentRes.requests;
+        const { partnerDisplayByOrgId, partnerAvatarUriByOrgId, partnerOwnerIdByOrgId } =
+          await withTimeout(fetchInboundProtocolSnapshot(orgId, received, sent), 15_000);
+        set({
+          connectionRequestsReceived: received,
+          connectionRequestsSent: sent,
+          partnerDisplayByOrgId,
+          partnerAvatarUriByOrgId,
+          partnerOwnerIdByOrgId,
+        });
+      } catch (err) {
+        if (__DEV__) {
+          console.warn("[globalSync] refreshInboundProtocol failed", err);
+        }
+      }
     },
 
     // ── bootstrap ────────────────────────────────────────────────────────────

@@ -1,5 +1,16 @@
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { useQuery } from "@tanstack/react-query";
+import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
+import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
+import {
+  resolveNetworkPartnerAvatar,
+  resolveTripConversationAvatar,
+  resolveTripMessagePeerAvatar,
+  type ChatOrgBranding,
+} from "@/features/chat/utils/chatAvatar.util";
+import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
+import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { chatFilterChromeStyles } from "@/constants/ChatFilterChrome";
 import Theme from "@/constants/Theme";
 import { ROUTES } from "@/lib/routes";
@@ -126,11 +137,12 @@ import { pe } from "@/lib/platformViewStyle.util";
 import { commandPriorityScore } from "../utils/commandPriority.util";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
-import { ChatLedgerEventCard, ChatSystemEventCard } from "./ChatEventCard";
+import { isLocationPingMessage } from "../utils/locationPingChatDisplay.util";
+import { ChatLedgerEventCard, ChatSystemEventCard, buildChatRouteContextLabel } from "./ChatEventCard";
+import { ChatLocationSystemCard } from "./ChatLocationSystemCard";
 import { DocumentShareCard } from "./DocumentShareCard";
 import { DocumentShareSheet } from "./DocumentShareSheet";
 import { isLongHaulLateChatMessage, LateAlertCard } from "./LateAlertCard";
-import { LocationEventCard } from "./LocationEventCard";
 import { TripCard } from "./TripCard";
 
 type TabId = "trips" | "indent" | "network";
@@ -756,6 +768,24 @@ export function ChatScreen() {
   /** Trips from fleet (incl. no driver) to merge into hub cards that have no conversation row yet. */
   const [hubComposeTrips, setHubComposeTrips] = useState<TripForCompose[]>([]);
   const hubComposeTripsLoadedAtRef = useRef<number>(0);
+
+  const tripLinkedOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of [...composeTrips, ...hubComposeTrips]) {
+      const clientOrg = (t.client_linked_organization_id ?? "").trim();
+      const supplierOrg = (t.supplier_linked_organization_id ?? "").trim();
+      if (clientOrg) ids.add(clientOrg);
+      if (supplierOrg) ids.add(supplierOrg);
+    }
+    return Array.from(ids).sort();
+  }, [composeTrips, hubComposeTrips]);
+
+  const { data: tripLinkedOrgBranding = {} } = useQuery({
+    queryKey: queryKeys.linkedOrgDisplay(tripLinkedOrgIds),
+    queryFn: () => getLinkedOrgProfilesBatch(tripLinkedOrgIds),
+    enabled: tripLinkedOrgIds.length > 0,
+    staleTime: STALE.moderate,
+  });
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
@@ -1592,10 +1622,16 @@ export function ChatScreen() {
         })
       : "";
 
-    const avatarName = partyLine || partyLabel(item.party_type);
+    const composeTrip = hubComposeTrips.find((t) => t.id === item.trip_id) ?? null;
     const lastMsgSeed = item.messages.length > 0
       ? (item.messages[item.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
       : null;
+    const laneAvatar = resolveTripConversationAvatar(
+      item,
+      composeTrip,
+      tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
+      lastMsgSeed,
+    );
     return (
       <TouchableOpacity
         style={[
@@ -1608,11 +1644,9 @@ export function ChatScreen() {
         activeOpacity={0.8}
       >
         <View style={s.chatAvatarWrap}>
-          <PartyAvatar
-            name={avatarName}
-            entityType={item.party_type}
+          <ChatPartyAvatar
+            identity={laneAvatar}
             size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
-            avatarSeed={lastMsgSeed}
           />
           {item.unread_dispatcher_count > 0 && !active && (
             <View style={s.chatAvatarUnreadDot} />
@@ -1681,9 +1715,12 @@ export function ChatScreen() {
     isNativeMobile,
     currentOrgId,
     tripListDisambiguatedLabels,
+    hubComposeTrips,
+    tripLinkedOrgBranding,
   ]);
 
   const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
+    const partnerAvatar = resolveNetworkPartnerAvatar(item);
     const last = item.messages[item.messages.length - 1];
     const active = selectedNetId === item.id;
     return (
@@ -1701,9 +1738,8 @@ export function ChatScreen() {
         }}
         activeOpacity={0.8}
       >
-        <PartyAvatar
-          name={item.partnerName}
-          entityType="client"
+        <ChatPartyAvatar
+          identity={partnerAvatar}
           size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
         />
         <View style={s.chatBody}>
@@ -2726,6 +2762,7 @@ export function ChatScreen() {
         selectedConv={selectedConv}
         conversations={conversations}
         composeTrips={hubComposeTrips}
+        linkedOrgBranding={tripLinkedOrgBranding as Record<string, ChatOrgBranding>}
         messagesRef={messagesRef}
         messageInput={messageInput}
         setMessageInput={setMessageInput}
@@ -3713,6 +3750,32 @@ const s = StyleSheet.create({
     backgroundColor: "#ffffff",
     flexShrink: 0,
   },
+  detailHeaderMiddle: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    minWidth: 0,
+  },
+  detailHeaderTripCol: {
+    flexShrink: 1,
+    flexGrow: 0,
+    minWidth: 72,
+    maxWidth: 240,
+  },
+  detailHeaderTripColMobile: {
+    flexShrink: 1,
+    flexGrow: 0,
+    minWidth: 64,
+    maxWidth: 148,
+  },
+  detailHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: 4,
+  },
   listHeaderMobile: {
     paddingHorizontal: 12,
     paddingTop: 10,
@@ -3830,8 +3893,8 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   detailMissionBarMobile: {
-    flexDirection: "column",
-    alignItems: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -3870,22 +3933,23 @@ const s = StyleSheet.create({
     letterSpacing: 0.4,
   },
   detailMissionDate: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: "#94a3b8",
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
     flexShrink: 0,
   },
   detailMissionTabsScroller: {
-    flexShrink: 0,
-    flexGrow: 0,
-    maxWidth: "58%",
-    minHeight: 44,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 420,
+    minHeight: 36,
   },
   detailMissionTabsScrollerMobile: {
-    maxWidth: "100%",
-    width: "100%",
-    minHeight: 40,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 280,
+    minHeight: 34,
   },
   detailMissionUnread: {
     paddingHorizontal: 8,
@@ -3941,22 +4005,23 @@ const s = StyleSheet.create({
     justifyContent: "flex-end",
     flexGrow: 1,
     gap: 6,
-    paddingLeft: 8,
-    paddingRight: 0,
-    minHeight: 44,
+    paddingLeft: 4,
+    paddingRight: 2,
+    minHeight: 36,
   },
   detailPartyTab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#e8ecf1",
     backgroundColor: "#ffffff",
-    maxWidth: 200,
-    minHeight: 44,
+    maxWidth: 136,
+    minHeight: 34,
+    flexShrink: 0,
   },
   detailPartyTabOn: {
     borderColor: "#0f172a",
@@ -3998,9 +4063,9 @@ const s = StyleSheet.create({
   },
   /** Mission bar party chips: role glyph (briefcase / truck / user), not initials. */
   detailPartyTabIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
@@ -4738,6 +4803,7 @@ function ChatDetailHeader({
   counterpartyType,
   isDesktop,
   onCloseDetail,
+  middleContent,
 }: {
   title: string;
   subtitle?: string;
@@ -4746,6 +4812,8 @@ function ChatDetailHeader({
   counterpartyType?: "client" | "supplier" | null;
   isDesktop: boolean;
   onCloseDetail: () => void;
+  /** Route, date, party tabs — rendered inline between title and actions (trip detail). */
+  middleContent?: React.ReactNode;
 }) {
   const nativeMobile = isChatNativeMobile(isDesktop);
   const dualLane = Boolean(partyType && counterpartyType);
@@ -4773,7 +4841,12 @@ function ChatDetailHeader({
           <MessageSquare size={nativeMobile ? 16 : 18} color="#fff" />
         )}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View
+        style={[
+          middleContent ? s.detailHeaderTripCol : { flex: 1, minWidth: 0 },
+          middleContent && nativeMobile && s.detailHeaderTripColMobile,
+        ]}
+      >
         <Text
           style={[s.detailTitle, nativeMobile && s.detailTitleMobile]}
           numberOfLines={1}
@@ -4789,15 +4862,18 @@ function ChatDetailHeader({
           </Text>
         ) : null}
       </View>
+      {middleContent ? (
+        <View style={s.detailHeaderMiddle}>{middleContent}</View>
+      ) : null}
       {!nativeMobile ? (
-        <>
+        <View style={s.detailHeaderActions}>
           <TouchableOpacity hitSlop={10}>
             <Search size={17} color="#64748b" />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ marginLeft: 8 }}>
+          <TouchableOpacity hitSlop={10}>
             <MoreVertical size={17} color="#64748b" />
           </TouchableOpacity>
-        </>
+        </View>
       ) : null}
     </View>
   );
@@ -4818,7 +4894,7 @@ function ChatBubble({
   content,
   timestamp,
   senderName,
-  avatarSeed,
+  peerAvatar,
   deliveryStatus,
   isNew,
   isMobile,
@@ -4828,7 +4904,7 @@ function ChatBubble({
   content: string;
   timestamp: string;
   senderName?: string;
-  avatarSeed?: string | null;
+  peerAvatar?: ResolvedPartyAvatarIdentity | null;
   /** WhatsApp-style ticks for outgoing rows (from `resolveOutgoingDeliveryStatus`). */
   deliveryStatus?: MessageDeliveryStatus;
   /** True only for messages that arrived via Realtime after this screen mounted.
@@ -4898,25 +4974,15 @@ function ChatBubble({
         },
       ]}
     >
-      {!isOwn && (
+      {!isOwn && peerAvatar ? (
         onAvatarPress ? (
           <Pressable onPress={onAvatarPress} hitSlop={6}>
-            <PartyAvatar
-              name={senderName ?? "?"}
-              entityType="client"
-              size={avatarSize}
-              avatarSeed={avatarSeed ?? null}
-            />
+            <ChatPartyAvatar identity={peerAvatar} size={avatarSize} />
           </Pressable>
         ) : (
-          <PartyAvatar
-            name={senderName ?? "?"}
-            entityType="client"
-            size={avatarSize}
-            avatarSeed={avatarSeed ?? null}
-          />
+          <ChatPartyAvatar identity={peerAvatar} size={avatarSize} />
         )
-      )}
+      ) : null}
       <View style={{ maxWidth: bubbleMaxWidth }}>
         <View
           style={[
@@ -4945,15 +5011,21 @@ function ChatBubble({
           {isOwn && <MessageTick status={deliveryStatus} />}
         </View>
       </View>
-      {isOwn && (
-        <PartyAvatar
-          name={profile?.full_name || profile?.displayName || "You"}
-          avatarUrl={profile?.avatar_url ?? null}
-          organizationImageUrl={currentOrganization?.logo_url ?? null}
-          entityType="client"
+      {isOwn ? (
+        <ChatPartyAvatar
+          identity={{
+            displayName: profile?.full_name || profile?.displayName || "You",
+            entityType: "client",
+          }}
+          isOwnUser
+          userName={profile?.full_name || profile?.displayName || "You"}
+          userAvatarUrl={profile?.avatar_url ?? null}
+          userAvatarSeed={profile?.avatar_seed ?? null}
+          userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+          userOrgOwnerAvatarSeed={profile?.avatar_seed ?? null}
           size={avatarSize}
         />
-      )}
+      ) : null}
     </Animated.View>
   );
 }
@@ -5175,6 +5247,7 @@ function TripConversationDetailPanel({
   selectedConv,
   conversations,
   composeTrips,
+  linkedOrgBranding,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -5196,6 +5269,7 @@ function TripConversationDetailPanel({
   selectedConv: TripConversation | null;
   conversations: TripConversation[];
   composeTrips: TripForCompose[];
+  linkedOrgBranding: Record<string, ChatOrgBranding>;
   messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -5220,6 +5294,7 @@ function TripConversationDetailPanel({
       selectedConv={selectedConv}
       conversations={conversations}
       composeTrips={composeTrips}
+      linkedOrgBranding={linkedOrgBranding}
       messagesRef={messagesRef}
       messageInput={messageInput}
       setMessageInput={setMessageInput}
@@ -5245,6 +5320,7 @@ function TripConversationDetailLoaded({
   selectedConv,
   conversations,
   composeTrips,
+  linkedOrgBranding,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -5266,6 +5342,7 @@ function TripConversationDetailLoaded({
   selectedConv: TripConversation;
   conversations: TripConversation[];
   composeTrips: TripForCompose[];
+  linkedOrgBranding: Record<string, ChatOrgBranding>;
   messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -5535,10 +5612,7 @@ function TripConversationDetailLoaded({
    */
   const locationPingRunInfo = useMemo(() => {
     const info = new Map<string, { isLast: boolean; runCount: number }>();
-    const isLocationPing = (m: TripMessageRow) =>
-      (m.message_type === 'system_log' || m.message_type === 'system' ||
-       m.message_type === 'update' || m.message_type === 'location_log') &&
-      parseMessageLocationData(m) !== null;
+    const isLocationPing = (m: TripMessageRow) => isLocationPingMessage(m);
 
     let runIds: string[] = [];
     const flushRun = () => {
@@ -5885,11 +5959,26 @@ function TripConversationDetailLoaded({
     // Ledger events only appear in Client/Supplier tabs; tracking in Driver tab.
     if (!isMessageVisibleInTab(m.message_type, liveConv.party_type)) return null;
 
+    const routeContext = buildChatRouteContextLabel(
+      liveConv.pickup_area,
+      liveConv.drop_location,
+      m.created_at,
+    );
+
     if (m.message_type === "tracking") {
       const trackLoc = parseMessageLocationData(m);
       if (trackLoc) {
         return (
-          <LocationEventCard message={m} location={trackLoc} isMobile={!isDesktop} />
+          <ChatLocationSystemCard
+            message={m}
+            location={trackLoc}
+            isMobile={!isDesktop}
+            tripHint={{
+              pickupArea: liveConv.pickup_area,
+              dropLocation: liveConv.drop_location,
+              status: liveConv.trip_status,
+            }}
+          />
         );
       }
     }
@@ -5905,11 +5994,20 @@ function TripConversationDetailLoaded({
           financialViewerBlocked={!allowFinancialCards}
           hideLedgerActions={!allowLedgerActions}
           isMobile={!isDesktop}
+          routeContext={routeContext}
+          composeTrip={tripCompose}
         />
       );
     }
     if (m.message_type === "assignment_update") {
-      return <ChatSystemEventCard message={m} isMobile={!isDesktop} />;
+      return (
+        <ChatSystemEventCard
+          message={m}
+          isMobile={!isDesktop}
+          routeContext={routeContext}
+          composeTrip={tripCompose}
+        />
+      );
     }
     if (
       m.message_type === "system" ||
@@ -5924,6 +6022,13 @@ function TripConversationDetailLoaded({
             message={m}
             liveRevisedEta={longHaulLiveEta}
             liveHealthStatus={longHaulLiveHealth}
+            tripPlan={{
+              distance: tripCompose?.distance ?? null,
+              startedAt: tripCompose?.started_at ?? null,
+              pickupAt: tripCompose?.pickup_date ?? null,
+              createdAt:
+                tripCompose?.created_at ?? liveConv.trip_created_at ?? null,
+            }}
           />
         );
       }
@@ -5935,15 +6040,28 @@ function TripConversationDetailLoaded({
         const pingInfo = locationPingRunInfo.get(m.id);
         if (pingInfo && !pingInfo.isLast) return null;
         return (
-          <LocationEventCard
+          <ChatLocationSystemCard
             message={m}
             location={locData}
             isMobile={!isDesktop}
             consolidatedCount={pingInfo?.runCount ?? 1}
+            tripHint={{
+              pickupArea: liveConv.pickup_area,
+              dropLocation: liveConv.drop_location,
+              status: liveConv.trip_status,
+            }}
+            composeTrip={tripCompose}
           />
         );
       }
-      return <ChatSystemEventCard message={m} isMobile={!isDesktop} />;
+      return (
+        <ChatSystemEventCard
+          message={m}
+          isMobile={!isDesktop}
+          routeContext={routeContext}
+          composeTrip={tripCompose}
+        />
+      );
     }
     if (
       m.message_type === "ledger_event" ||
@@ -5990,13 +6108,23 @@ function TripConversationDetailLoaded({
         onAvatarPress = () => router.push(`/public-profile/driver/${driverId}`);
       }
     }
+    const peerAvatar = own
+      ? null
+      : resolveTripMessagePeerAvatar({
+          message: m,
+          conversationPartyType: liveConv.party_type,
+          composeTrip: tripCompose,
+          brandingMap: linkedOrgBranding,
+          fallbackName: peerLabel,
+        });
+
     return (
       <ChatBubble
         isOwn={own}
         content={m.content}
         timestamp={m.created_at}
         senderName={own ? undefined : peerLabel}
-        avatarSeed={own ? undefined : m.sender_avatar_seed}
+        peerAvatar={peerAvatar}
         deliveryStatus={own ? resolveOutgoingDeliveryStatus(m) : undefined}
         isNew={Date.parse(m.created_at) > mountedAtMs}
         isMobile={!isDesktop}
@@ -6023,6 +6151,8 @@ function TripConversationDetailLoaded({
     supplierId,
     driverId,
     locationPingRunInfo,
+    tripCompose,
+    linkedOrgBranding,
   ]);
 
   const indentShipperDisplayName = useMemo(() => {
@@ -6058,7 +6188,7 @@ function TripConversationDetailLoaded({
       <PartyIcon
         partyType={partyType}
         active={selected}
-        size={18}
+        size={16}
         tone={selected ? "list" : "hub"}
       />
     </View>
@@ -6081,113 +6211,101 @@ function TripConversationDetailLoaded({
     return () => clearTimeout(t);
   }, [isDesktop, keyboardOpen, messagesRef]);
 
-  const missionBar = (
-      <View style={[s.detailMissionBar, !isDesktop && s.detailMissionBarMobile]}>
-        <View style={s.detailMissionRoute}>
-          <MapPin size={13} color={CHAT_ACCENT} />
-          <View style={s.detailMissionRouteTextBlock}>
-            <View style={s.detailMissionRouteLine}>
-              <View style={s.detailMissionRouteTextWrap}>
-                <Text style={s.detailMissionRouteText} numberOfLines={1} ellipsizeMode="tail">
-                  {liveConv.pickup_area} {"→"} {liveConv.drop_location}
-                </Text>
-              </View>
-              {missionDateLabel ? (
-                <Text style={s.detailMissionDate} numberOfLines={1}>
-                  {missionDateLabel}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+  const tripHeaderMiddle = (
+    <>
+      {missionDateLabel ? (
+        <Text style={s.detailMissionDate} numberOfLines={1}>
+          {missionDateLabel}
+        </Text>
+      ) : null}
+      {allowFinancialCards &&
+      paymentBalance != null &&
+      (liveConv.party_type === "client" || liveConv.party_type === "supplier") ? (
+        <View style={s.detailMissionUnread}>
+          <Text style={s.detailMissionUnreadText}>
+            {paymentBalance >= 0 ? "+" : "−"}₹{Math.abs(paymentBalance).toLocaleString("en-IN")}
+          </Text>
         </View>
-        {allowFinancialCards &&
-          paymentBalance != null &&
-          (liveConv.party_type === 'client' || liveConv.party_type === 'supplier') ? (
-          <View style={s.detailMissionUnread}>
-            <Text style={s.detailMissionUnreadText}>
-              {paymentBalance >= 0 ? '+' : '−'}₹{Math.abs(paymentBalance).toLocaleString('en-IN')}
-            </Text>
-          </View>
-        ) : null}
-        {missionBarPartyTypes.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[
-              s.detailMissionTabsScroller,
-              !isDesktop && s.detailMissionTabsScrollerMobile,
-            ]}
-            contentContainerStyle={s.detailPartyTabs}
-          >
-            {missionBarPartyTypes.map((tab) => {
-              const on = liveConv.party_type === tab.rowType;
-              const hasConversation = Boolean(partyConversationMap[tab.rowType]);
-              const relabeledClientTab = tab.displayType !== tab.rowType;
-              const partyLine = relabeledClientTab
-                ? formatChatPartyName(
-                    indentShipperDisplayName || liveConv.trip_organization_name || null,
-                  )
-                : tab.rowType === "client" &&
-                    supplierFleetOwnsTrip &&
-                    indentShipperDisplayName
-                  ? formatChatPartyName(indentShipperDisplayName)
-                  : formatChatPartyName(displayPartyName(tab.rowType));
-              return (
-                <TouchableOpacity
-                  key={tab.displayType}
-                  style={[
-                    s.detailPartyTab,
-                    on && s.detailPartyTabOn,
-                    !hasConversation && s.detailPartyTabOff,
-                  ]}
-                  onPress={() => { void switchConversation(tab.rowType); }}
-                  activeOpacity={0.82}
-                >
-                  {partyTabIcon(tab.displayType, on)}
-                  <View style={s.detailPartyTabTextCol}>
-                    {partyLine ? (
-                      <Text
-                        style={[s.detailPartyTabName, on && s.detailPartyTabNameOn]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {partyLine}
-                      </Text>
-                    ) : null}
+      ) : null}
+      {missionBarPartyTypes.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[
+            s.detailMissionTabsScroller,
+            !isDesktop && s.detailMissionTabsScrollerMobile,
+          ]}
+          contentContainerStyle={s.detailPartyTabs}
+        >
+          {missionBarPartyTypes.map((tab) => {
+            const on = liveConv.party_type === tab.rowType;
+            const hasConversation = Boolean(partyConversationMap[tab.rowType]);
+            const relabeledClientTab = tab.displayType !== tab.rowType;
+            const partyLine = relabeledClientTab
+              ? formatChatPartyName(
+                  indentShipperDisplayName || liveConv.trip_organization_name || null,
+                )
+              : tab.rowType === "client" &&
+                  supplierFleetOwnsTrip &&
+                  indentShipperDisplayName
+                ? formatChatPartyName(indentShipperDisplayName)
+                : formatChatPartyName(displayPartyName(tab.rowType));
+            return (
+              <TouchableOpacity
+                key={tab.displayType}
+                style={[
+                  s.detailPartyTab,
+                  on && s.detailPartyTabOn,
+                  !hasConversation && s.detailPartyTabOff,
+                ]}
+                onPress={() => {
+                  void switchConversation(tab.rowType);
+                }}
+                activeOpacity={0.82}
+              >
+                {partyTabIcon(tab.displayType, on)}
+                <View style={s.detailPartyTabTextCol}>
+                  {partyLine ? (
                     <Text
-                      style={[
-                        s.detailPartyTabText,
-                        on && s.detailPartyTabTextOn,
-                        !hasConversation && s.detailPartyTabTextOff,
-                      ]}
+                      style={[s.detailPartyTabName, on && s.detailPartyTabNameOn]}
                       numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
-                      {partyLabel(tab.displayType)}
+                      {partyLine}
                     </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-      </View>
+                  ) : null}
+                  <Text
+                    style={[
+                      s.detailPartyTabText,
+                      on && s.detailPartyTabTextOn,
+                      !hasConversation && s.detailPartyTabTextOff,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {partyLabel(tab.displayType)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+    </>
   );
 
   return (
     <ChatConversationLayout
       isDesktop={isDesktop}
       header={
-        <>
-          <ChatDetailHeader
-            title={`${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`}
-            subtitle={chatDetailSubtitle}
-            partyType={liveConv.party_type}
-            counterpartyType={headerCounterparty}
-            isDesktop={isDesktop}
-            onCloseDetail={onCloseDetail}
-          />
-          {missionBar}
-        </>
+        <ChatDetailHeader
+          title={`${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`}
+          subtitle={chatDetailSubtitle}
+          partyType={liveConv.party_type}
+          counterpartyType={headerCounterparty}
+          isDesktop={isDesktop}
+          onCloseDetail={onCloseDetail}
+          middleContent={tripHeaderMiddle}
+        />
       }
       messages={
       <FlatList
@@ -6331,6 +6449,11 @@ function NetworkDetailPanel({
               content={m.content}
               timestamp={m.timestamp}
               senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
+              peerAvatar={
+                m.senderId !== "dispatcher-1"
+                  ? resolveNetworkPartnerAvatar(selectedNet)
+                  : null
+              }
               isMobile={!isDesktop}
             />
           )}

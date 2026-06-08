@@ -1,10 +1,18 @@
 import Theme from "@/constants/Theme";
+import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import {
   assignmentShellColors,
   assignmentShellStyles,
 } from "@/features/trips/styles/assignmentShellShared";
 import { Building2, ListChecks, Truck } from "lucide-react-native";
-import { StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export type SupplyAllocationMode = "asset" | "aggregate";
 
@@ -17,6 +25,8 @@ export type SupplyAllocationModeBarProps = {
   compact?: boolean;
   /** stack: segment above assign-later; inline: one row (desktop). */
   layout?: "stack" | "inline";
+  /** Light wizard chips — matches attribution / create trip. */
+  variant?: "classic" | "wizard";
 };
 
 export function SupplyAllocationModeBar({
@@ -27,11 +37,58 @@ export function SupplyAllocationModeBar({
   assignLaterDisabled = false,
   compact = false,
   layout = "stack",
+  variant = "classic",
 }: SupplyAllocationModeBarProps) {
   const isAsset = mode === "asset";
   const isInline = layout === "inline";
+  const isWizard = variant === "wizard";
 
-  const segmentPill = (
+  const segmentPill = isWizard ? (
+    <View style={fullPageWizardStyles.modeRow}>
+      <Pressable
+        style={[
+          fullPageWizardStyles.modeChip,
+          isAsset && fullPageWizardStyles.modeChipActive,
+        ]}
+        onPress={() => onModeChange("asset")}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isAsset }}
+      >
+        <View style={styles.wizardChipInner}>
+          <Truck size={13} color={isAsset ? Theme.primary : Theme.textMuted} />
+          <Text
+            style={[
+              fullPageWizardStyles.modeChipText,
+              isAsset && fullPageWizardStyles.modeChipTextActive,
+            ]}
+          >
+            Asset
+          </Text>
+        </View>
+      </Pressable>
+      <Pressable
+        style={[
+          fullPageWizardStyles.modeChip,
+          !isAsset && fullPageWizardStyles.modeChipActive,
+        ]}
+        onPress={() => onModeChange("aggregate")}
+        accessibilityRole="button"
+        accessibilityState={{ selected: !isAsset }}
+      >
+        <View style={styles.wizardChipInner}>
+          <Building2 size={13} color={!isAsset ? Theme.primary : Theme.textMuted} />
+          <Text
+            style={[
+              fullPageWizardStyles.modeChipText,
+              !isAsset && fullPageWizardStyles.modeChipTextActive,
+            ]}
+          >
+            Aggregate
+          </Text>
+        </View>
+      </Pressable>
+    </View>
+  ) : (
     <View
       style={[
         assignmentShellStyles.supplySegmentSection,
@@ -83,7 +140,35 @@ export function SupplyAllocationModeBar({
     </View>
   );
 
-  const assignLaterRow = (
+  const assignLaterRow = isWizard ? (
+    <View
+      style={[
+        fullPageWizardStyles.shipperMarkCard,
+        assignLaterDisabled && styles.assignLaterDisabled,
+      ]}
+    >
+      <View style={styles.wizardAssignLaterRow}>
+        <View style={styles.wizardAssignLaterIcon}>
+          <ListChecks size={16} color={Theme.primary} />
+        </View>
+        <View style={fullPageWizardStyles.partyTextWrap}>
+          <Text style={fullPageWizardStyles.partyName}>Assign later</Text>
+          <Text style={fullPageWizardStyles.blockMeta} numberOfLines={2}>
+            {isAsset
+              ? "Pick vehicle & driver on trip detail"
+              : "Add vehicle & driver phone on trip detail"}
+          </Text>
+        </View>
+        <Switch
+          value={assignLater}
+          onValueChange={onAssignLaterChange}
+          disabled={assignLaterDisabled}
+          trackColor={{ false: Theme.borderLight, true: Theme.primary }}
+          thumbColor="#ffffff"
+        />
+      </View>
+    </View>
+  ) : (
     <View
       style={[
         assignmentShellStyles.supplyAssignLaterOuter,
@@ -130,14 +215,39 @@ export function SupplyAllocationModeBar({
   }
 
   return (
-    <>
+    <View style={isWizard ? styles.wizardStack : undefined}>
       {segmentPill}
       {assignLaterRow}
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wizardStack: {
+    gap: 10,
+    width: "100%",
+  },
+  wizardChipInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  wizardAssignLaterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+  },
+  wizardAssignLaterIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   assignLaterDisabled: {
     opacity: 0.65,
   },

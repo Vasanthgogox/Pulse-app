@@ -880,7 +880,6 @@ export function DiscoverView({
       ) : (
         <FlashList
           data={listData}
-          estimatedItemSize={90}
           keyExtractor={(item, i) => (item._type === "header" ? `h-${i}` : item.org.id)}
           renderItem={({ item }) => {
             if (item._type === "header") {

@@ -1041,7 +1041,6 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
             <FlashList
               data={["", ...filteredSuppliers]}
               keyExtractor={(item) => item || "__all__"}
-              estimatedItemSize={48}
               {...tabBarScrollProps}
               renderItem={({ item }) => (
                 <Pressable

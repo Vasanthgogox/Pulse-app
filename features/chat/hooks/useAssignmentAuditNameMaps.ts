@@ -1,8 +1,26 @@
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AssignmentNameMaps } from "../utils/assignmentAuditChatMessages.util";
+
+const EMPTY_MAPS: AssignmentNameMaps = { driverNames: {}, vehicleLabels: {} };
+
+function auditRowsStableKey(rows: TripAssignmentAuditRow[]): string {
+  if (rows.length === 0) return "";
+  return rows
+    .map(
+      (row) =>
+        [
+          row.id,
+          row.driver_id_prev,
+          row.driver_id_new,
+          row.vehicle_id_prev,
+          row.vehicle_id_new,
+        ].join(":"),
+    )
+    .join("|");
+}
 
 /** Resolve driver/vehicle labels for assignment audit rows (Pulse chat timeline). */
 export function useAssignmentAuditNameMaps(
@@ -13,14 +31,17 @@ export function useAssignmentAuditNameMaps(
     vehicle_display_number?: string | null;
   },
 ): AssignmentNameMaps {
-  const [maps, setMaps] = useState<AssignmentNameMaps>({
-    driverNames: {},
-    vehicleLabels: {},
-  });
+  const [maps, setMaps] = useState<AssignmentNameMaps>(EMPTY_MAPS);
+  const auditRowsKey = useMemo(() => auditRowsStableKey(auditRows), [auditRows]);
 
   useEffect(() => {
-    if (!orgId || auditRows.length === 0) {
-      setMaps({ driverNames: {}, vehicleLabels: {} });
+    if (!orgId || auditRowsKey === "") {
+      setMaps((prev) =>
+        Object.keys(prev.driverNames).length === 0 &&
+        Object.keys(prev.vehicleLabels).length === 0
+          ? prev
+          : EMPTY_MAPS,
+      );
       return;
     }
     const driverIds = new Set<string>();
@@ -61,7 +82,7 @@ export function useAssignmentAuditNameMaps(
     };
   }, [
     orgId,
-    auditRows,
+    auditRowsKey,
     tripFallback?.driver_display_name,
     tripFallback?.vehicle_display_number,
   ]);

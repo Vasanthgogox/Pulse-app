@@ -80,6 +80,7 @@ import { ActiveWorkspaceProvider } from '@/contexts/ActiveWorkspaceContext';
 import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { LazyChatProviders } from '@/components/LazyChatProviders';
+import { isFloatingChatHostRoute } from '@/lib/floatingChatHostRoute.util';
 import { GlobalSyncProvider } from '@/lib/globalSync/GlobalSyncContext';
 
 markStartupPhase('js_parse_start');
@@ -336,7 +337,7 @@ export default function RootLayout() {
           }}
           persistOptions={{
             persister,
-            maxAge: 24 * 60 * 60 * 1000,
+            maxAge: 6 * 60 * 60 * 1000,  // 6h: balances cold-start speed vs memory on long-shift devices
             dehydrateOptions: {
               shouldDehydrateQuery: (query) => {
                 if (query.state.status !== 'success') return false;
@@ -397,16 +398,11 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const auth = useOptionalAuth();
   const isDriverRole = auth?.profile?.role === 'driver';
+  const isChatRoute =
+    pathname === ROUTES.CHAT || pathname.startsWith('/chat');
   const isDispatcherChatRouteActive =
     !isDriverRole &&
-    (pathname === ROUTES.TABS.TRIPS ||
-      pathname === ROUTES.TABS.NETWORK ||
-      pathname === ROUTES.CHAT ||
-      pathname.startsWith('/chat'));
-  const isChatModalRoute =
-    !isDriverRole &&
-    (pathname === ROUTES.CHAT || pathname.startsWith('/chat'));
-
+    (isFloatingChatHostRoute(pathname) || isChatRoute);
   useEffect(() => {
     installForegroundPruning();
     if (!__DEV__) return;
@@ -425,8 +421,8 @@ function RootLayoutNav() {
           out of the startup chunk. They re-wrap the tree after first idle.
         */}
         <LazyChatProviders
-          isActive={isDispatcherChatRouteActive}
-          requireProviders={isChatModalRoute}
+          isActive={isDispatcherChatRouteActive && !isChatRoute}
+          skipWrap={isChatRoute && !isDriverRole}
         >
           <View style={{ flex: 1 }}>
             <GlobalOperationsToast />
@@ -465,10 +461,10 @@ function RootLayoutNav() {
               <Stack.Screen
                 name="workspace"
                 options={{
-                  presentation: 'card',
-                  animation: 'slide_from_right',
+                  presentation: "transparentModal",
+                  animation: "fade",
                   headerShown: false,
-                  contentStyle: { flex: 1, backgroundColor: '#f4f6fb' },
+                  contentStyle: { flex: 1, backgroundColor: "transparent" },
                 }}
               />
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />

@@ -17,6 +17,7 @@ import {
 } from '@/features/driver/utils/driverCommunication.util';
 import { phonePeMetaDate } from '@/features/driver/utils/driverGpayTransactions.util';
 import { isAggregateTrip, tripEarningsForDriver } from '@/features/drivers/utils/driverUtils.util';
+import { buildCompensationSalaryLines, buildDriverInviteSalaryLines } from '@/features/drivers/utils/driverInviteOffer.util';
 import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
 import {
   buildDriverTripNumberMap,
@@ -48,10 +49,6 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-function tripEarnings(t: tripsService.TripRow): number {
-  return tripEarningsForDriver(t);
-}
 
 function formatTransactionDateSection(dateStr: string): string {
   const d = new Date(dateStr);
@@ -364,6 +361,7 @@ export default function DriverPassbookDetailScreen() {
   }, []);
 
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -395,6 +393,7 @@ export default function DriverPassbookDetailScreen() {
       const d = drivers.find((x) => x.organization_id === orgId);
       setDriver(d ?? null);
       if (!d) {
+        setInvites([]);
         setTrips([]);
         setLedgerEntries([]);
         setLoading(false);
@@ -403,12 +402,15 @@ export default function DriverPassbookDetailScreen() {
       Promise.all([
         tripsService.getTripsByDriver(d.id),
         driversService.getDriverLedgerByDriver(d.id),
+        driversService.getDriverInvitesReceived(),
       ])
-        .then(([tRes, ledgerRes]) => {
+        .then(([tRes, ledgerRes, invitesRes]) => {
           setTrips(tRes.trips ?? []);
           setLedgerEntries(ledgerRes.entries ?? []);
+          setInvites(invitesRes.invites ?? []);
         })
         .catch(() => {
+          setInvites([]);
           setTrips([]);
           setLedgerEntries([]);
         })
@@ -504,9 +506,50 @@ export default function DriverPassbookDetailScreen() {
     }, 0),
   );
 
+  const acceptedInviteForOrg = useMemo(() => {
+    return invites
+      .filter(
+        (inv) =>
+          String(inv.from_organization_id ?? '') === String(orgId) &&
+          String(inv.status ?? '').toLowerCase() === 'accepted',
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.responded_at ?? b.created_at).getTime() -
+          new Date(a.responded_at ?? a.created_at).getTime(),
+      )[0] ?? null;
+  }, [invites, orgId]);
+
+  const salaryTermLines = useMemo(() => {
+    if (acceptedInviteForOrg) return buildDriverInviteSalaryLines(acceptedInviteForOrg);
+    return buildCompensationSalaryLines({
+      payableAmount: driver?.payable_amount ?? null,
+      commissionPercent: driver?.commission_percent ?? null,
+      commissionPerKm: driver?.commission_per_km ?? null,
+    });
+  }, [acceptedInviteForOrg, driver?.payable_amount, driver?.commission_percent, driver?.commission_per_km]);
+
+  const tripPayoutTerms = useMemo(
+    () => ({
+      commissionPercent: acceptedInviteForOrg?.commission_percent ?? driver?.commission_percent ?? null,
+      commissionPerKm: acceptedInviteForOrg?.commission_per_km ?? driver?.commission_per_km ?? null,
+    }),
+    [
+      acceptedInviteForOrg?.commission_percent,
+      acceptedInviteForOrg?.commission_per_km,
+      driver?.commission_percent,
+      driver?.commission_per_km,
+    ],
+  );
+
+  const earningsForTrip = useCallback(
+    (trip: tripsService.TripRow) => tripEarningsForDriver(trip, tripPayoutTerms),
+    [tripPayoutTerms],
+  );
+
   const totalEarned = useMemo(() => {
-    return Math.round(completedTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
-  }, [completedTrips]);
+    return Math.round(completedTrips.reduce((sum, trip) => sum + earningsForTrip(trip), 0));
+  }, [completedTrips, earningsForTrip]);
 
   const pendingToCollect = useMemo(() => Math.max(0, totalEarned - totalReceived), [totalEarned, totalReceived]);
 
@@ -540,7 +583,7 @@ export default function DriverPassbookDetailScreen() {
       const isSettled = receivedAmt > 0;
       const fleetPendingLedger = latestFleetPaidPendingLedgerByTripId[trip.id];
       const hasFleetPending = !!fleetPendingLedger;
-      const isActionRequired = !isSettled && !hasFleetPending && isAggregateTrip(trip) && tripEarnings(trip) === 0;
+      const isActionRequired = !isSettled && !hasFleetPending && isAggregateTrip(trip) && earningsForTrip(trip) === 0;
       const status: 'Pending' | 'Action Required' | 'Settled' = isSettled
         ? 'Settled'
         : isActionRequired
@@ -588,8 +631,8 @@ export default function DriverPassbookDetailScreen() {
           isSettled
             ? receivedAmt
             : hasFleetPending
-              ? Number(fleetPendingLedger?.amount ?? tripEarnings(trip))
-              : tripEarnings(trip),
+              ? Number(fleetPendingLedger?.amount ?? earningsForTrip(trip))
+              : earningsForTrip(trip),
         ),
         status,
         subStatus,
@@ -612,6 +655,7 @@ export default function DriverPassbookDetailScreen() {
     latestFleetPaidPendingLedgerByTripId,
     orgName,
     driverTripNumberById,
+    earningsForTrip,
   ]);
 
   const isFleetMarkedAwaitingVerify = useCallback(
@@ -915,6 +959,16 @@ export default function DriverPassbookDetailScreen() {
                 <Text style={styles.fleetHeroActiveText}>{activeLabel ?? 'ACTIVE'}</Text>
               </View>
             </View>
+            {salaryTermLines.length > 0 ? (
+              <View style={styles.fleetHeroPayTermsWrap}>
+                {salaryTermLines.map((line) => (
+                  <View key={line.label} style={styles.fleetHeroPayTermPill}>
+                    <Text style={styles.fleetHeroPayTermLabel}>{line.label}</Text>
+                    <Text style={styles.fleetHeroPayTermValue}>{line.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
           <View
             style={[
@@ -1823,6 +1877,35 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     color: 'rgba(16,185,129,0.95)',
+  },
+  fleetHeroPayTermsWrap: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  fleetHeroPayTermPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.26)',
+    backgroundColor: 'rgba(15,23,42,0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  fleetHeroPayTermLabel: {
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: 'rgba(148,163,184,0.9)',
+  },
+  fleetHeroPayTermValue: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: 'rgba(226,232,240,0.95)',
   },
   fleetHeroIcon: {
     width: 40,

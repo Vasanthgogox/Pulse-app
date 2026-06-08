@@ -2,8 +2,10 @@
  * GPay-style partner rate + optional advance (custom keypad, no system keyboard).
  * Shared by Create Trip allocation and indent aggregate deploy.
  */
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import { WizardNumericKeypadFlow } from "@/components/full-page-wizard/WizardNumericKeypadFlow";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
@@ -38,6 +40,10 @@ export interface PartnerRatesKeypadFlowProps {
   hint?: string;
   /** No negative horizontal bleed (use inside padded wizard shell). */
   keypadInset?: boolean;
+  /** Compact layout inside FullPageWizardShell fillBody (keypad stays above footer). */
+  wizardShell?: boolean;
+  /** Hide centered party card when parent already shows context row. */
+  suppressPartyPreview?: boolean;
 }
 
 export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
@@ -48,6 +54,8 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
   partyPreview,
   hint = "Enter the rate you will pay this partner.",
   keypadInset = false,
+  wizardShell = false,
+  suppressPartyPreview = false,
 }: PartnerRatesKeypadFlowProps) {
   const [active, setActive] = useState<ActiveField>("rate");
 
@@ -64,68 +72,90 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
         applyKeypadPress(advanceRaw, key, { maxDecimalPlaces: 2 }),
       );
     },
-    [
-      active,
-      advanceRaw,
-      onAdvancePaidChange,
-      onPartnerRateChange,
-      rateRaw,
+    [active, advanceRaw, onAdvancePaidChange, onPartnerRateChange, rateRaw],
+  );
+
+  const useInset = keypadInset || wizardShell;
+
+  const wizardFields = useMemo(
+    () => [
+      {
+        id: "rate",
+        label: "Partner rate",
+        rawValue: rateRaw,
+        onRawValueChange: onPartnerRateChange,
+      },
     ],
+    [onPartnerRateChange, rateRaw],
+  );
+
+  if (wizardShell) {
+    return (
+      <WizardNumericKeypadFlow
+        fields={wizardFields}
+        partyPreview={suppressPartyPreview ? undefined : partyPreview}
+        hint={hint}
+      />
+    );
+  }
+
+  const mainContent = (
+    <>
+      {partyPreview ? (
+        <NumericEntryRecipientHero
+          party={partyPreview}
+          caption="Partner rate"
+          compact={false}
+        />
+      ) : null}
+
+      <Pressable
+        onPress={() => setActive("rate")}
+        style={[styles.fieldBlock, active === "rate" && styles.fieldBlockActive]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active === "rate" }}
+      >
+        <Text style={styles.fieldLabel}>Partner rate (₹) *</Text>
+        <NumericDisplay
+          rawValue={rateRaw}
+          type="currency"
+          prefix="₹"
+          placeholder="0"
+          variant="hero"
+        />
+      </Pressable>
+
+      <Pressable
+        onPress={() => setActive("advance")}
+        style={[
+          styles.fieldBlock,
+          active === "advance" && styles.fieldBlockActive,
+        ]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active === "advance" }}
+      >
+        <View style={styles.advanceLabelRow}>
+          <Text style={styles.fieldLabelSecondary}>Advance paid (₹)</Text>
+          <Text style={styles.optionalPill}>Optional</Text>
+        </View>
+        <NumericDisplay
+          rawValue={advanceRaw}
+          type="currency"
+          prefix="₹"
+          placeholder="0"
+          variant={active === "advance" ? "hero" : "default"}
+        />
+      </Pressable>
+
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+    </>
   );
 
   return (
     <View style={[flow.root, styles.root]}>
-      <View style={[flow.main, styles.main]}>
-        {partyPreview ? (
-          <NumericEntryRecipientHero
-            party={partyPreview}
-            caption="Partner rate"
-            compact
-          />
-        ) : null}
+      <View style={[flow.main, styles.main]}>{mainContent}</View>
 
-        <Pressable
-          onPress={() => setActive("rate")}
-          style={[styles.fieldBlock, active === "rate" && styles.fieldBlockActive]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "rate" }}
-        >
-          <Text style={styles.fieldLabel}>Partner rate (₹) *</Text>
-          <NumericDisplay
-            rawValue={rateRaw}
-            type="currency"
-            prefix="₹"
-            placeholder="0"
-            variant="hero"
-          />
-        </Pressable>
-
-        <Pressable
-          onPress={() => setActive("advance")}
-          style={[
-            styles.fieldBlock,
-            active === "advance" && styles.fieldBlockActive,
-          ]}
-          accessibilityRole="button"
-          accessibilityState={{ selected: active === "advance" }}
-        >
-          <View style={styles.advanceLabelRow}>
-            <Text style={styles.fieldLabelSecondary}>Advance paid (₹)</Text>
-            <Text style={styles.optionalPill}>Optional</Text>
-          </View>
-          <NumericDisplay
-            rawValue={advanceRaw}
-            type="currency"
-            prefix="₹"
-            placeholder="0"
-            variant={active === "advance" ? "hero" : "default"}
-          />
-        </Pressable>
-
-        <Text style={styles.hint}>{hint}</Text>
-      </View>
-
-      <View style={[flow.keypadDock, keypadInset && styles.keypadDockInset]}>
+      <View style={[flow.keypadDock, useInset && styles.keypadDockInset]}>
         <DecimalKeypad
           onKey={handleKey}
           showDecimal
@@ -142,8 +172,9 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   main: {
-    gap: 10,
+    gap: 8,
     paddingTop: 2,
+    paddingBottom: 4,
   },
   fieldBlock: {
     gap: 6,

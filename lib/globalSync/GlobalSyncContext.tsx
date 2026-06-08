@@ -136,7 +136,10 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
         }
 
         if (table === 'connection_requests') {
-          void useGlobalSyncStore.getState().refreshInboundProtocol(orgId);
+          void useGlobalSyncStore
+            .getState()
+            .refreshInboundProtocol(orgId)
+            .catch(() => {});
           // When an invite is approved the DB trigger creates/updates supplier + client
           // rows for both orgs. Invalidate those caches so both sides see the change
           // without waiting for the next full bootstrap.

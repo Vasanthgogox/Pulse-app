@@ -17,11 +17,10 @@ import { User } from "lucide-react-native";
 import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import { PhoneNumberKeypadFlow } from "@/components/party/keypad/PhoneNumberKeypadFlow";
+import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
-import { partyMobileWizardStyles as wizard } from "@/components/party/partyMobileWizardStyles";
 import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
 import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip/DriverPhoneRecommendations";
-import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneLookup.util";
 import type { AddTripIssueField } from "./useAddTripForm";
 
@@ -101,13 +100,14 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
   if (step === "driverPhone") {
     return (
       <PhoneNumberKeypadFlow
-        label="DRIVER PHONE (TRACKING) *"
+        label="Driver phone (tracking) *"
         placeholder="10-digit number"
         value={driverPhone}
         onChangeText={onDriverPhoneChange}
         error={invalid("driverPhone")}
         footerExtras={phoneFooterExtras}
         testID={`${testIDPrefix}-driver-phone`}
+        wizardShell
       />
     );
   }
@@ -120,6 +120,7 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
         onChangeText={onVehicleTextChange}
         error={invalid("vehicleNumber")}
         testID={`${testIDPrefix}-vehicle-keypad`}
+        wizardShell
       />
       </View>
     );
@@ -165,13 +166,13 @@ export const AggregateTrackingMobileStep = memo(function AggregateTrackingMobile
         />
       ) : null}
 
-      <Text style={wizard.fieldLabel}>DRIVER NAME (TRACKING) *</Text>
+      <Text style={fullPageWizardStyles.wizardFieldLabel}>Driver name (tracking) *</Text>
       <TextInput
         ref={driverNameInputRef}
         style={[
-          wizard.input,
-          assignmentShellStyles.inputWell,
+          fullPageWizardStyles.wizardFieldInput,
           invalid("driverName") && styles.inputError,
+          Platform.OS === "web" && styles.webInput,
         ]}
         placeholder="e.g. Suresh Kumar"
         placeholderTextColor={Theme.textMuted}
@@ -233,11 +234,14 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   suggestName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     marginTop: 2,
   },
+  webInput: {
+    outlineStyle: "none",
+  } as object,
   inputError: {
     borderColor: Theme.destructive,
     borderWidth: 2,

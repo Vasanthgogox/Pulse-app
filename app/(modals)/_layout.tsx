@@ -33,6 +33,10 @@ export default function ModalsLayout() {
         name="ledger-sync"
         options={{ presentation: 'fullScreenModal', title: 'Ledger' }}
       />
+      <Stack.Screen
+        name="attribution-trip-create"
+        options={{ presentation: 'fullScreenModal', title: 'Attribution' }}
+      />
       <Stack.Screen name="language-settings" />
       <Stack.Screen name="sms-otp-parsing" />
       <Stack.Screen

@@ -1152,14 +1152,17 @@ export function onAuthStateChange(
   return () => subscription.unsubscribe();
 }
 
+const PROFILE_SELECT_COLUMNS =
+  "id,email,full_name,role,aggregated,asset,company_name,phone,avatar_url,avatar_seed,bio";
+
 /** Fetch a specific user's profile from the public.profiles table. */
 export async function getProfile(uid: string): Promise<AuthProfile | null> {
   try {
     const { data, error } = await supabase()
       .from("profiles")
-      .select("*")
+      .select(PROFILE_SELECT_COLUMNS)
       .eq("id", uid)
-      .single();
+      .maybeSingle();
     if (error || !data) return null;
     return mapDbProfileToAuth(data);
   } catch {

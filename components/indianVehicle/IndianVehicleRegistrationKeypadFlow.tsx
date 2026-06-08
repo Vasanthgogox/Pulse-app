@@ -7,7 +7,8 @@ import { Truck } from "lucide-react-native";
 
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { partyMobileWizardStyles as wizard } from "@/components/party/partyMobileWizardStyles";
+import { fullPageWizardStyles } from "@/components/full-page-wizard";
+import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import { IndianVehicleRegistrationKeypad } from "@/components/indianVehicle/IndianVehicleRegistrationKeypad";
 import {
   appendIndianVehicleChar,
@@ -23,6 +24,7 @@ export interface IndianVehicleRegistrationKeypadFlowProps {
   onChangeText: (value: string) => void;
   error?: boolean;
   testID?: string;
+  wizardShell?: boolean;
 }
 
 export const IndianVehicleRegistrationKeypadFlow = memo(
@@ -31,6 +33,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     onChangeText,
     error = false,
     testID = "indian-vehicle-keypad-flow",
+    wizardShell = false,
   }: IndianVehicleRegistrationKeypadFlowProps) {
     const normLen = getIndianVehicleNormalizedLength(value);
     const keyboardKind = getIndianVehicleKeyboardKind(normLen);
@@ -54,8 +57,10 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
 
     return (
       <View style={styles.root} testID={testID}>
-        <View style={styles.main}>
-          <Text style={wizard.fieldLabel}>REGISTRATION</Text>
+        <View style={[styles.main, wizardShell && styles.mainWizard]}>
+          <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.regLabel}>
+            Registration
+          </Text>
           <Text style={styles.formatHint}>{formatHint}</Text>
 
           <View style={styles.formatMaskRow}>
@@ -96,7 +101,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
           </View>
         </View>
 
-        <View style={styles.keypadDock}>
+        <View style={[styles.keypadDock, wizardShell && flow.keypadDockWizard]}>
           <IndianVehicleRegistrationKeypad
             kind={keyboardKind}
             onKey={handleKey}
@@ -128,6 +133,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minHeight: 0,
     gap: 0,
+  },
+  mainWizard: {
+    paddingHorizontal: 0,
+  },
+  regLabel: {
+    color: Theme.textMuted,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    marginBottom: 6,
   },
   formatHint: {
     fontSize: 12,

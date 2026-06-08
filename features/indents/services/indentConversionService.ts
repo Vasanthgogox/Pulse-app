@@ -86,8 +86,51 @@ export async function awardIndentToTrip(
   return { error: null, trip: rows[0] ?? null };
 }
 
+export interface CreateTripFromAssignedIndentOptions {
+  driverId?: string | null;
+  vehicleId?: string | null;
+  vehicleDisplayNumber?: string | null;
+}
+
 /**
- * O(n) batch conversion: creates trips for every 'awarded' indent in the org
+ * Supplier Claimed deploy when indent was assigned to this org without a direct_quotes row.
+ * Backed by public.create_trip_from_assigned_indent (supplier auth on assigned_supplier_id).
+ */
+export async function createTripFromAssignedIndent(
+  indentId: string,
+  options?: CreateTripFromAssignedIndentOptions,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  if (!indentId) {
+    return { error: new Error('indentId is required'), trip: null };
+  }
+
+  const payload: {
+    p_indent_id: string;
+    p_driver_id?: string | null;
+    p_vehicle_id?: string | null;
+    p_vehicle_display_number?: string | null;
+  } = { p_indent_id: indentId };
+
+  if (options?.driverId != null) payload.p_driver_id = options.driverId;
+  if (options?.vehicleId != null) payload.p_vehicle_id = options.vehicleId;
+  if (options?.vehicleDisplayNumber != null) {
+    payload.p_vehicle_display_number = options.vehicleDisplayNumber.trim() || null;
+  }
+
+  const { data, error } = await supabase().rpc(
+    'create_trip_from_assigned_indent',
+    payload,
+  );
+
+  if (error) {
+    return { error: new Error(error.message), trip: null };
+  }
+
+  const rows = (data ?? []) as TripRow[];
+  return { error: null, trip: rows[0] ?? null };
+}
+
+/**
  * that doesn't already have a trip. Single round-trip to the DB (set-based INSERT).
  *
  * Returns the count of trips created.  Already-existing trips are untouched.

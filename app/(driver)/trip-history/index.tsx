@@ -460,6 +460,7 @@ export default function DriverTripsScreen() {
   const { profile } = useAuth();
   const { avatarUri } = useDriverAvatarUri();
   const [driver, setDriver] = useState<driversService.DriverRow | null>(null);
+  const [linkedDriverRows, setLinkedDriverRows] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<
     Awaited<ReturnType<typeof driversService.getDriverInvitesReceived>>["invites"]
   >([]);
@@ -510,6 +511,7 @@ export default function DriverTripsScreen() {
       }
       // Include all rows (including left fleets) so history shows all trips ever driven.
       const drivers = res.drivers ?? [];
+      setLinkedDriverRows(drivers);
       const activeDriver = drivers.find((d) => !d.left_at) ?? drivers[0] ?? null;
       if (drivers.length > 0) {
         setDriver(activeDriver);
@@ -788,6 +790,44 @@ export default function DriverTripsScreen() {
     [rpcAssignerUserIdByTripId, assignmentActorByTripId],
   );
 
+  const acceptedInviteOrgIds = useMemo(() => {
+    return new Set(
+      invites
+        .filter((i) => String(i.status ?? "").toLowerCase() === "accepted")
+        .map((i) => String(i.from_organization_id ?? "").trim())
+        .filter((orgId) => orgId.length > 0),
+    );
+  }, [invites]);
+
+  const salaryRelationshipOrgIds = useMemo(() => {
+    const set = new Set<string>();
+    linkedDriverRows.forEach((row) => {
+      const orgId = String(row.organization_id ?? "").trim();
+      if (!orgId) return;
+      const hasPayTerms =
+        (row.payable_amount != null && Number(row.payable_amount) > 0) ||
+        (row.commission_percent != null && Number(row.commission_percent) > 0) ||
+        (row.commission_per_km != null && Number(row.commission_per_km) > 0);
+      if (hasPayTerms) set.add(orgId);
+    });
+    return set;
+  }, [linkedDriverRows]);
+
+  const isFleetDispatchedTrip = useCallback(
+    (trip: tripsService.TripRow): boolean => {
+      const tripOrgId = String(trip.organization_id ?? "").trim();
+      if (!tripOrgId) return false;
+      const hasSalaryRelationship = salaryRelationshipOrgIds.has(tripOrgId);
+      if (!hasSalaryRelationship) return false;
+      if (acceptedInviteOrgIds.has(tripOrgId)) return true;
+      return linkedDriverRows.some((row) => {
+        if (String(row.organization_id ?? "").trim() !== tripOrgId) return false;
+        return row.tracking_only !== true;
+      });
+    },
+    [acceptedInviteOrgIds, salaryRelationshipOrgIds, linkedDriverRows],
+  );
+
   const assignerPayloadByTripId = useMemo(() => {
     const byTrip: Record<string, JobCardAssignerPayload> = {};
     for (const trip of trips) {
@@ -912,6 +952,7 @@ export default function DriverTripsScreen() {
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
     const badgeLabel = getTripStageBadgeLabel(item);
+    const isFleetTrip = isFleetDispatchedTrip(item);
     const pickupParts = splitLocationPrimarySecondary(item.pickup_area);
     const dropParts = splitLocationPrimarySecondary(item.drop_location);
     const corridorHint = [pickupParts.secondary, dropParts.secondary].filter(Boolean).join(" · ");
@@ -1007,7 +1048,7 @@ export default function DriverTripsScreen() {
           <View
             style={[styles.cardRefBottom, { borderTopColor: isDark ? colors.borderSubtle : "#f8fafc" }]}
           >
-            <View>
+            <View style={styles.cardRefBottomLeft}>
               <Text
                 style={[
                   styles.manifestLabel,
@@ -1018,9 +1059,21 @@ export default function DriverTripsScreen() {
               >
                 Distance
               </Text>
-              <Text style={[styles.manifestValue, { color: colors.text }]}>
-                {formatDistance(item.distance)}
-              </Text>
+              <View style={styles.cardRefDistanceRow}>
+                <Text style={[styles.manifestValue, { color: colors.text }]}>
+                  {formatDistance(item.distance)}
+                </Text>
+                <Text
+                  style={[
+                    styles.tripTypeBadge,
+                    isFleetTrip
+                      ? styles.tripTypeBadgeFleet
+                      : styles.tripTypeBadgeOpen,
+                  ]}
+                >
+                  {isFleetTrip ? "FLEET TRIP" : "OPEN TRIP"}
+                </Text>
+              </View>
             </View>
             <View style={styles.yieldWrapRef}>
               <Text
@@ -1266,7 +1319,6 @@ export default function DriverTripsScreen() {
       <FlashList
         data={filteredTrips}
         keyExtractor={(item) => item.id}
-        estimatedItemSize={110}
         renderItem={renderItem}
         contentContainerStyle={{
           ...styles.listContent,
@@ -1673,11 +1725,23 @@ const styles = StyleSheet.create({
   cardRefBottom: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "flex-start",
     paddingTop: 12,
     marginTop: 3,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: TRIP_CARD_REF.divider,
+  },
+  cardRefBottomLeft: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 10,
+  },
+  cardRefDistanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    columnGap: 8,
+    rowGap: 6,
   },
   manifestLabel: {
     fontSize: 8,
@@ -1695,7 +1759,35 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     lineHeight: 14,
   },
-  yieldWrapRef: { alignItems: "flex-end", minWidth: 0, flexShrink: 0 },
+  tripTypeBadge: {
+    alignSelf: "flex-start",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  tripTypeBadgeFleet: {
+    color: Theme.driverEmeraldDark,
+    backgroundColor: "rgba(16,185,129,0.10)",
+    borderColor: "rgba(16,185,129,0.30)",
+  },
+  tripTypeBadgeOpen: {
+    color: "#4f46e5",
+    backgroundColor: "rgba(99,102,241,0.10)",
+    borderColor: "rgba(99,102,241,0.30)",
+  },
+  yieldWrapRef: {
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    minWidth: 0,
+    flexShrink: 0,
+    minHeight: 42,
+  },
   yieldLabelRef: {
     fontSize: 8,
     fontWeight: "700",

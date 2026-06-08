@@ -412,6 +412,8 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   }
 
   const selectedTrip = trip;
+  const showHistoryAttributionBar =
+    detailTab === "settlement" && !isTripHistoryFleet && !!historyCurrentEmployer;
 
   return (
     <View
@@ -534,7 +536,11 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
                 styles.detailContentRef,
                 {
                   paddingHorizontal: Layout.screenPaddingHorizontal,
-                  paddingBottom: Layout.modalBottomPadding + insets.bottom,
+                  paddingBottom:
+                    Layout.modalBottomPadding +
+                    insets.bottom +
+                    Layout.tabBarDockHeight +
+                    (showHistoryAttributionBar ? 88 : 0),
                   paddingTop: 16,
                 },
               ]}
@@ -1001,36 +1007,48 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
               {detailTab === "settlement" ? (
                 <>
                   <TripDetailSettlementPanel trip={selectedTrip} />
-                  {!isTripHistoryFleet && historyCurrentEmployer ? (
-                    <View style={[histAttrStyles.wrap, { borderTopColor: colors.border }]}>
-                      <Text style={[histAttrStyles.label, { color: colors.textMuted }]}>
-                        Fleet attribution
-                      </Text>
-                      {isTripHistoryAttributed ? (
-                        <View style={histAttrStyles.doneBadge}>
-                          <FontAwesome name="check-circle" size={14} color="#d97706" />
-                          <Text style={histAttrStyles.doneBadgeText}>
-                            Sent to {historyCurrentEmployer.orgName} for review
-                          </Text>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={histAttrStyles.btn}
-                          onPress={() => void handleHistoryAttributeTrip()}
-                          disabled={attributeLoading}
-                          activeOpacity={0.8}
-                        >
-                          <FontAwesome name="building" size={13} color="#d97706" />
-                          <Text style={histAttrStyles.btnText}>
-                            {attributeLoading ? "Attributing…" : `Attribute to ${historyCurrentEmployer.orgName}`}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ) : null}
                 </>
               ) : null}
             </ScrollView>
+
+            {showHistoryAttributionBar ? (
+              <View
+                style={[
+                  histAttrStyles.stickyWrap,
+                  {
+                    bottom: Layout.tabBarDockHeight + 8,
+                    backgroundColor: colors.surface,
+                    borderTopColor: colors.border,
+                  },
+                ]}
+              >
+                <Text style={[histAttrStyles.label, { color: colors.textMuted }]}>
+                  Fleet attribution
+                </Text>
+                {isTripHistoryAttributed ? (
+                  <View style={histAttrStyles.doneBadge}>
+                    <FontAwesome name="check-circle" size={14} color="#d97706" />
+                    <Text style={histAttrStyles.doneBadgeText}>
+                      Sent to {historyCurrentEmployer?.orgName} for review
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={histAttrStyles.btn}
+                    onPress={() => void handleHistoryAttributeTrip()}
+                    disabled={attributeLoading}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome name="building" size={13} color="#d97706" />
+                    <Text style={histAttrStyles.btnText}>
+                      {attributeLoading
+                        ? "Attributing…"
+                        : `Attribute to ${historyCurrentEmployer?.orgName}`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null}
 
             <Modal
               visible={!!podPreviewUrl || podPreviewLoading}
@@ -1134,12 +1152,23 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
 }
 
 const histAttrStyles = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+  stickyWrap: {
+    position: "absolute",
+    left: Layout.screenPaddingHorizontal,
+    right: Layout.screenPaddingHorizontal,
     borderTopWidth: StyleSheet.hairlineWidth,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
     gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
   },
   label: {
     fontSize: 11,

@@ -7,6 +7,7 @@ import { useDriverMaster } from '@/features/trips/hooks/useDriverMaster';
 import { useVehicleMaster } from '@/features/trips/hooks/useVehicleMaster';
 import { useReassignTrip } from '@/features/trips/hooks/useReassignTrip';
 import { useReassignMigrationGate } from '@/features/trips/hooks/useReassignMigrationGate';
+import Layout from "@/constants/Layout";
 import { getTripOtpForDisplay } from '@/features/trips/services/tripOtp.service';
 import type { TripRow } from '@/features/trips/services/trips.service';
 import type { ReassignCompletedMeta } from '@/features/trips/components/reassign/reassign.types';
@@ -83,7 +84,7 @@ export function ReassignSheet({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const useMobileWizard = Platform.OS !== 'web' || windowWidth < 680;
+  const useMobileWizard = Platform.OS !== 'web' || windowWidth < Layout.wizardSteppedMaxWidth;
   const { drivers, isLoading: driversLoading, refetch: refetchDrivers } =
     useDriverMaster(organizationId);
   const { vehicles, isLoading: vehiclesLoading, refetch: refetchVehicles } =

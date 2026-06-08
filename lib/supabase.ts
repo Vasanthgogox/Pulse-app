@@ -30,8 +30,11 @@ try {
 }
 
 const REQUEST_TIMEOUT_MS = 25_000;
-const RETRY_DELAY_MS = 2_000;
-const MAX_RETRIES = 1;
+const MAX_RETRIES = 2;   // 3 total attempts: initial + 2 retries
+/** Exponential backoff: attempt 1 → 2s, attempt 2 → 4s */
+function retryDelayMs(attempt: number): number {
+  return Math.min(2_000 * Math.pow(2, attempt - 1), 8_000);
+}
 
 /** Fetch with timeout and one retry to cope with flaky home WiFi / DNS. */
 async function fetchWithTimeoutAndRetry(
@@ -64,7 +67,7 @@ async function fetchWithTimeoutAndRetry(
           lastError.message === 'Load failed' ||
           /timeout|network|failed|access control checks/i.test(lastError.message));
       if (!isRetryable) throw lastError;
-      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
     }
   }
   throw lastError ?? new Error('Network request failed');

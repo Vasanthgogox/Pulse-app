@@ -302,8 +302,8 @@ export async function withTimeout<T>(
 export const AUTH_TIMEOUT_MS = 15_000;
 /** Cold-start refresh — align with lib/supabase fetch timeout (25s) + one retry window. */
 export const AUTH_RESTORE_REFRESH_TIMEOUT_MS = 25_000;
-/** Timeout for profile verification which chains two network calls. */
-export const PROFILE_VERIFY_TIMEOUT_MS = 20_000;
+/** Timeout for profile verification (may chain getProfile + provision + re-fetch). */
+export const PROFILE_VERIFY_TIMEOUT_MS = 30_000;
 /** Skip restore-time getUser() when access token has more than this TTL remaining. */
 export const AUTH_SESSION_FRESH_MS = 5 * 60 * 1000;
 

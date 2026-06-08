@@ -164,6 +164,7 @@ export function TripAssignmentFlowScreen({
     <AssignmentFlowShell
       variant="pulse"
       fullScreen
+      scrollBody
       title="Driver & vehicle"
       subtitle={stepSubtitle}
       onClose={onBack}

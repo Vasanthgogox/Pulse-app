@@ -19,9 +19,8 @@ export function getAllocationSubSteps(
     if (!state.assignLater) {
       steps.push("driverPhone", "driverName", "vehicle");
     }
-  } else if (state.supplySource === "asset" && !state.assignLater) {
-    steps.push("fleetDriver", "fleetVehicle");
   }
+  // Asset driver + vehicle pickers render on the supply sub-step (same screen as mode bar).
   return steps;
 }
 
@@ -33,6 +32,9 @@ export function allocationSubStepFields(
     case "supply":
       if (state?.supplySource === "aggregate") {
         return new Set(["partner"]);
+      }
+      if (state?.supplySource === "asset" && !state?.assignLater) {
+        return new Set(["assetDriver", "assetVehicle"]);
       }
       return new Set();
     case "partner":

@@ -19,6 +19,12 @@ import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { IndianVehicleRegistrationInput } from "@/components/indianVehicle/IndianVehicleRegistrationInput";
 import { AssignmentEntityAvatarGrid } from "@/features/trips/components/AssignmentEntityAvatarGrid";
+import {
+  driverOptionsToAvatarGridItems,
+  vehicleOptionsToAvatarGridItems,
+  type FleetDriverOption,
+  type FleetVehicleOption,
+} from "@/features/trips/utils/fleetAvatarGridItems.util";
 import { AssignmentEntityPicker } from "@/features/trips/components/AssignmentEntityPicker";
 import { suppliersToAvatarGridItems } from "@/features/suppliers/utils/supplierAvatarGridItems.util";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
@@ -96,48 +102,21 @@ export function AssetRosterPickers({
   const { driverIdsOnActiveTrip, vehicleIdsOnActiveTrip, isDriverBusy, isVehicleBusy } =
     fleetAvailability;
 
-  const driverPickerItems = useMemo(
-    () =>
-      activeDrivers.map((d) => {
-        const id = String(d.id);
-        const busy = isDriverBusy(id);
-        return {
-          id,
-          title: d.name ?? d.phone ?? "—",
-          avatarUrl: d.avatar_url,
-          avatarSeed: d.avatar_seed,
-          entityType: "driver" as const,
-          disabled: busy,
-          statusLabel: busy ? "On trip" : undefined,
-          listSubtitle: busy
-            ? "On trip"
-            : d.phone
-              ? `Phone: ${d.phone}`
-              : "Available",
-        };
-      }),
-    [activeDrivers, driverIdsOnActiveTrip],
-  );
+  const driverPickerItems = useMemo(() => {
+    const options: FleetDriverOption[] = activeDrivers.map((d) => ({
+      ...d,
+      isBusy: isDriverBusy(String(d.id)),
+    }));
+    return driverOptionsToAvatarGridItems(options);
+  }, [activeDrivers, isDriverBusy]);
 
-  const vehiclePickerItems = useMemo(
-    () =>
-      vehicles.map((v) => {
-        const id = String(v.id);
-        const busy = isVehicleBusy(id);
-        const typeLine = v.vehicle_type
-          ? `${v.vehicle_type}${v.vehicle_body_type ? ` · ${v.vehicle_body_type}` : ""}`
-          : "Fleet vehicle";
-        return {
-          id,
-          title: v.vehicle_number ?? "—",
-          entityType: "driver" as const,
-          disabled: busy,
-          statusLabel: busy ? "On trip" : undefined,
-          listSubtitle: busy ? "On trip" : typeLine,
-        };
-      }),
-    [vehicles, vehicleIdsOnActiveTrip],
-  );
+  const vehiclePickerItems = useMemo(() => {
+    const options: FleetVehicleOption[] = vehicles.map((v) => ({
+      ...v,
+      isBusy: isVehicleBusy(String(v.id)),
+    }));
+    return vehicleOptionsToAvatarGridItems(options);
+  }, [vehicles, isVehicleBusy]);
 
   const hasBusyDrivers = driverIdsOnActiveTrip.length > 0;
   const hasBusyVehicles = vehicleIdsOnActiveTrip.length > 0;
@@ -168,6 +147,8 @@ export function AssetRosterPickers({
         isFlow ? (
           <AssignmentEntityAvatarGrid
             title="Select Driver"
+            variant="wizard"
+            embedded
             totalCount={activeDrivers.length}
             selectedId={assignDriverId}
             onSelect={(id) => {
@@ -195,7 +176,7 @@ export function AssetRosterPickers({
             items={driverPickerItems.map((d) => ({
               id: d.id,
               title: d.title,
-              subtitle: d.listSubtitle,
+              subtitle: d.subtitle ?? d.statusLabel,
               disabled: d.disabled,
             }))}
             emptyMessage="No asset drivers were found in your organization. Add a salaried driver to continue with Asset-based assignment, or use the Aggregate flow from the previous step."
@@ -217,6 +198,8 @@ export function AssetRosterPickers({
         isFlow ? (
           <AssignmentEntityAvatarGrid
             title="Select Vehicle"
+            variant="wizard"
+            embedded
             totalCount={vehicles.length}
             selectedId={
               typeof assignVehicleId === "string" ? assignVehicleId : null
@@ -248,7 +231,7 @@ export function AssetRosterPickers({
             items={vehiclePickerItems.map((v) => ({
               id: v.id,
               title: v.title,
-              subtitle: v.listSubtitle,
+              subtitle: v.subtitle ?? v.statusLabel,
               disabled: v.disabled,
             }))}
             emptyMessage="No vehicles were found in your fleet. Add an own vehicle to continue with Asset-based assignment."

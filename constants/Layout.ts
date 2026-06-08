@@ -117,6 +117,18 @@ export const Layout = {
   fabShadowOpacity: 0.3,
   fabShadowRadius: 12,
   fabElevation: 12,
+  /** Full-page wizard: stepped layout max viewport (native + mobile web). */
+  wizardSteppedMaxWidth: 600,
+  /** Full-page wizard: centered body column max width. */
+  wizardBodyMaxWidth: 860,
+  /** Multi-card desktop grid (non-wizard forms only). */
+  wizardDesktopGridMinWidth: 1080,
+  /** Workspace flex card — hub-only drawer width (desktop). */
+  workspaceCardHubWidth: 420,
+  /** Workspace split view — min viewport to show hub + detail side-by-side. */
+  workspaceSplitMinWidth: 720,
+  /** Workspace flex card — max width when detail panel is open. */
+  workspaceCardMaxWidth: 960,
   /**
    * Entity detail hero (Client / Supplier / Driver / Vehicle): one system of sizes so
    * financial + profile columns align everywhere. Prefer compact density when content is heavy.

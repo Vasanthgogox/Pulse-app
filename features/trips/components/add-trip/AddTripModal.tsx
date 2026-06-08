@@ -4,13 +4,14 @@
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
 import { useEffect, useMemo, useState } from "react";
+import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
 import {
   Alert,
   Platform,
+  View,
   useWindowDimensions,
 } from "react-native";
 import { showAppAlert } from "@/lib/appAlert";
-import Animated, { FadeInDown } from "react-native-reanimated";
 import { AddTripFormFields } from "./AddTripFormFields";
 import { AddTripModalLayout } from "./AddTripModalLayout";
 import { AddTripWizardProgress } from "./AddTripWizardProgress";
@@ -59,7 +60,7 @@ function buildOtpScreenContext(state: AddTripFormState): AddTripOtpScreenContext
   };
 }
 
-type WizardStep = "route" | "commodity" | "client" | "allocation";
+type WizardStep = "route" | "commodity" | "client" | "sale" | "allocation";
 
 export function AddTripModal({
   organizationId,
@@ -73,17 +74,10 @@ export function AddTripModal({
   const [wizardStep, setWizardStep] = useState<WizardStep>("route");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
-  /** Narrow viewport (native + web mobile): full step wizard. */
-  const wizardEnabled = winW < 600;
-  /**
-   * Web tablet: all section cards visible, but aggregate driver/phone/vehicle
-   * uses the same sub-step flow as mobile (phone → name → vehicle).
-   */
-  const webAllocSubSteps =
-    isWeb &&
-    winW >= 600 &&
-    winW < 1080 &&
-    form.state.supplySource === "aggregate";
+  /** Full-page modal: stepped wizard on native + web (mobile app parity). */
+  const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
+  /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
+  const webAllocSubSteps = false;
   const allocationFlowActive =
     (wizardEnabled && wizardStep === "allocation") || webAllocSubSteps;
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
@@ -135,7 +129,10 @@ export function AddTripModal({
         return new Set(["vehicleType", "loadType", "tons"]);
       }
       if (wizardStep === "client") {
-        return new Set(["client", "clientPrice"]);
+        return new Set(["client"]);
+      }
+      if (wizardStep === "sale") {
+        return new Set(["clientPrice"]);
       }
       if (wizardStep === "allocation") {
         return allocationSubStepFields(allocationSubStep, form.state);
@@ -183,7 +180,8 @@ export function AddTripModal({
     ? wizardEnabled && wizardStep !== "allocation"
       ? wizardStep === "route" ||
         wizardStep === "commodity" ||
-        wizardStep === "client"
+        wizardStep === "client" ||
+        wizardStep === "sale"
         ? "Continue"
         : "Create Trip"
       : isLastAllocationStep
@@ -191,17 +189,58 @@ export function AddTripModal({
         : "Continue"
     : "Create Trip";
 
-  const wizardSubtitle = wizardEnabled
-    ? wizardStep === "route"
-      ? "Route"
-      : wizardStep === "commodity"
-        ? "Commodity"
-        : wizardStep === "client"
-          ? "Client & Price"
-          : `Allocation · ${allocationSubStepLabel(allocationSubStep)}`
-    : webAllocSubSteps
-      ? `Allocation · ${allocationSubStepLabel(allocationSubStep)}`
-      : undefined;
+  const wizardStepMeta = useMemo(() => {
+    if (!wizardEnabled) return null;
+    const topSteps = [
+      { id: "route", label: "Route" },
+      { id: "commodity", label: "Commodity" },
+      { id: "client", label: "Client" },
+      { id: "sale", label: "Sale" },
+      { id: "allocation", label: "Allocation" },
+    ] as const;
+    const topIndex = topSteps.findIndex((s) => s.id === wizardStep);
+    if (wizardStep !== "allocation") {
+      return {
+        steps: topSteps,
+        currentId: wizardStep,
+        stepIndex: topIndex >= 0 ? topIndex + 1 : 1,
+        stepTotal: topSteps.length,
+        title: "Create Trip",
+        subtitle:
+          wizardStep === "route"
+            ? "Enter pickup, drop and trip date."
+            : wizardStep === "commodity"
+              ? "Vehicle type, load and weight."
+              : wizardStep === "client"
+                ? "Select the billing client."
+                : wizardStep === "sale"
+                  ? "Enter the client sale value."
+                  : "Assign supply for this trip.",
+      };
+    }
+    const allocSteps = allocationSteps.map((id) => ({
+      id,
+      label: allocationSubStepLabel(id),
+    }));
+    const allocIndex = allocationSteps.indexOf(allocationSubStep);
+    return {
+      steps: allocSteps,
+      currentId: allocationSubStep,
+      stepIndex: allocIndex >= 0 ? allocIndex + 1 : 1,
+      stepTotal: allocSteps.length,
+      title: "Allocation",
+      subtitle: `Assign supply · ${allocationSubStepLabel(allocationSubStep)}`,
+    };
+  }, [wizardEnabled, wizardStep, allocationSteps, allocationSubStep]);
+
+  const allocationFillBody =
+    allocationFlowActive &&
+    (allocationSubStep === "rates" ||
+      allocationSubStep === "driverPhone" ||
+      allocationSubStep === "vehicle");
+
+  const saleFillBody = wizardEnabled && wizardStep === "sale";
+  const wizardFillBody = saleFillBody || allocationFillBody;
 
   const handleSubmit = async () => {
     setValidationAttempted(true);
@@ -299,6 +338,16 @@ export function AddTripModal({
         showAppAlert("Missing details", msg);
         return;
       }
+      setWizardStep("sale");
+      return;
+    }
+    if (wizardStep === "sale") {
+      if (stepIssues.length > 0) {
+        const msg = stepIssues[0]?.message ?? "Fill required fields.";
+        setSubmitError(msg);
+        showAppAlert("Missing details", msg);
+        return;
+      }
       setAllocationSubStep(getAllocationSubSteps(form.state)[0] ?? "supply");
       setWizardStep("allocation");
       return;
@@ -327,11 +376,23 @@ export function AddTripModal({
         setAllocationSubStep(allocationSteps[allocIdx - 1]!);
         return;
       }
+      setWizardStep("sale");
+      return;
+    }
+    if (wizardStep === "sale") {
       setWizardStep("client");
       return;
     }
     if (wizardStep === "client") {
+      setWizardStep("commodity");
+      return;
+    }
+    if (wizardStep === "commodity") {
       setWizardStep("route");
+      return;
+    }
+    if (wizardStep === "route") {
+      onClose();
       return;
     }
     onClose();
@@ -376,8 +437,15 @@ export function AddTripModal({
 
   return (
     <AddTripModalLayout
-      title="Create Trip"
-      subtitle={wizardSubtitle ?? undefined}
+      title={wizardStepMeta?.title ?? "Create Trip"}
+      subtitle={
+        wizardStepMeta?.subtitle ??
+        (webAllocSubSteps
+          ? `Allocation · ${allocationSubStepLabel(allocationSubStep)}`
+          : "Route · commodity · client · allocation")
+      }
+      stepIndex={wizardStepMeta?.stepIndex}
+      stepTotal={wizardStepMeta?.stepTotal}
       submitLabel={wizardSubmitLabel}
       canSubmit={stepCanAdvance}
       submitting={submitting}
@@ -385,29 +453,18 @@ export function AddTripModal({
       validationMessage={visibleValidationMessage ?? submitError}
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
+      fillBody={wizardFillBody}
+      scrollBody={wizardEnabled && !wizardFillBody}
+      progress={
+        wizardEnabled && wizardStepMeta ? (
+          <AddTripWizardProgress
+            steps={wizardStepMeta.steps}
+            currentStepId={wizardStepMeta.currentId}
+          />
+        ) : null
+      }
     >
-      {wizardEnabled ? (
-        <AddTripWizardProgress
-          steps={[
-            { id: "route", label: "Route" },
-            { id: "commodity", label: "Commodity" },
-            { id: "client", label: "Client" },
-            { id: "allocation", label: "Allocation" },
-          ]}
-          currentStepId={wizardStep}
-        />
-      ) : null}
-      <Animated.View
-        key={
-          wizardEnabled
-            ? `${wizardStep}-${allocationSubStep}`
-            : webAllocSubSteps
-              ? `web-alloc-${allocationSubStep}`
-              : "create-trip-form"
-        }
-        entering={FadeInDown.duration(360)}
-        style={{ flex: 1, minHeight: 0 }}
-      >
+      <View style={{ flex: 1, minHeight: 0 }}>
       <AddTripFormFields
         state={form.state}
         setters={form.setters}
@@ -426,7 +483,7 @@ export function AddTripModal({
         showInlineCta={false}
         submitting={submitting}
       />
-      </Animated.View>
+      </View>
     </AddTripModalLayout>
   );
 }

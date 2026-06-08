@@ -1493,3 +1493,42 @@ export async function updateLedgerEntry(
   // updateLedgerEntry intentionally does not post to chat to avoid duplicate events.
   return { error: null, row: toLedgerRow(row) };
 }
+
+/**
+ * Create an opening balance entry for a client or supplier.
+ * Called during onboarding when a company migrates from another system.
+ *
+ * For a CLIENT with outstanding RECEIVABLE: amount_in = outstanding (they owe us)
+ * For a SUPPLIER with outstanding PAYABLE: amount_out = outstanding (we owe them)
+ *
+ * The entry is flagged is_opening_balance=true so it's excluded from normal P&L.
+ */
+export async function createOpeningBalance(
+  orgId: string,
+  params: {
+    contactType: 'client' | 'supplier';
+    contactId: string;
+    partyName: string;
+    amount: number;
+    direction: 'receivable' | 'payable';  // receivable = they owe us; payable = we owe them
+    asOnDate: string;  // YYYY-MM-DD
+  },
+): Promise<{ error: Error | null }> {
+  const isReceivable = params.direction === 'receivable';
+  const { data, error } = await supabase()
+    .from('transactions')
+    .insert({
+      organization_id: orgId,
+      party_name: params.partyName,
+      description: `Opening balance as on ${params.asOnDate}`,
+      amount_in:   isReceivable ? params.amount : 0,
+      amount_out:  isReceivable ? 0 : params.amount,
+      transaction_date: params.asOnDate,
+      contact_id:   params.contactId,
+      contact_type: params.contactType,
+      ledger_flow_type: 'opening_balance',
+      is_opening_balance: true,
+    });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}

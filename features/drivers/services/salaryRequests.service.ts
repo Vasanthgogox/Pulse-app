@@ -92,6 +92,10 @@ export interface SalaryRequestWithDriverRow extends SalaryRequestRow {
   drivers?: {
     name: string | null;
     user_id?: string | null;
+    profiles?: {
+      avatar_url?: string | null;
+      avatar_seed?: string | null;
+    } | null;
   } | null;
 }
 
@@ -116,7 +120,7 @@ export async function getSalaryRequestsByOrganization(
 
   let q = supabase()
     .from('driver_salary_requests')
-    .select('*, drivers(name, user_id)')
+    .select("*, drivers(name, user_id, profiles(avatar_url, avatar_seed))")
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false });
   if (options.status) q = q.eq('status', options.status);
@@ -127,6 +131,20 @@ export async function getSalaryRequestsByOrganization(
   const { data, error } = await q;
   if (error) return { error: new Error(error.message), requests: [] };
   return { error: null, requests: (data ?? []) as SalaryRequestWithDriverRow[] };
+}
+
+export async function getSalaryRequestByIdForOrganization(
+  organizationId: string,
+  requestId: string,
+): Promise<{ error: Error | null; request: SalaryRequestWithDriverRow | null }> {
+  const { data, error } = await supabase()
+    .from('driver_salary_requests')
+    .select("*, drivers(name, user_id, profiles(avatar_url, avatar_seed))")
+    .eq('organization_id', organizationId)
+    .eq('id', requestId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), request: null };
+  return { error: null, request: (data as SalaryRequestWithDriverRow | null) ?? null };
 }
 
 /**

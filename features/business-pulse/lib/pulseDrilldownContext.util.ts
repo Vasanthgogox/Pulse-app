@@ -1,6 +1,7 @@
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
 import type { PulseFilterState } from "@/features/business-pulse/types";
+import type { DrilldownRowPartyIds } from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 import { vehicleDisplayLabel } from "@/features/business-pulse/lib/vehicleDisplay.util";
 import { daysOutstanding } from "@/features/business-pulse/selectors/pulseAgingSelectors";
 import type { FinanceAgingKind } from "@/features/business-pulse/selectors/pulseAgingSelectors";
@@ -40,6 +41,8 @@ export type DrilldownColumnDef = {
   label: string;
   align?: "left" | "right";
   width: number;
+  /** Desktop table stretch weight (full-bleed layout). */
+  flex?: number;
   pdfWidth: string;
   isMoney?: boolean;
   isPct?: boolean;
@@ -55,6 +58,7 @@ export type PulseDrilldownView = {
   filterCaption: string;
   columns: DrilldownColumnDef[];
   rows: DrilldownDataRow[];
+  rowPartyIds: DrilldownRowPartyIds[];
 };
 
 type DomainTab =
@@ -87,23 +91,23 @@ const LENS_LABELS: Record<DrilldownLens, string> = {
 };
 
 const COLUMN: Record<DrilldownColumnKey, Omit<DrilldownColumnDef, "key">> = {
-  trip: { label: "Trip", width: 88, pdfWidth: "9%" },
-  date: { label: "Date", width: 72, pdfWidth: "8%" },
-  route: { label: "Route", width: 140, pdfWidth: "16%" },
-  branch: { label: "Branch", width: 80, pdfWidth: "9%" },
-  client: { label: "Client", width: 100, pdfWidth: "12%" },
-  supplier: { label: "Supplier", width: 100, pdfWidth: "12%" },
-  vehicle: { label: "Vehicle", width: 96, pdfWidth: "10%" },
-  driver: { label: "Driver", width: 88, pdfWidth: "10%" },
-  tripMode: { label: "Payout", width: 64, pdfWidth: "7%" },
-  execution: { label: "Model", width: 72, pdfWidth: "7%" },
-  settlement: { label: "Settlement", width: 88, pdfWidth: "9%" },
-  category: { label: "Category", width: 110, pdfWidth: "12%" },
-  daysOutstanding: { label: "Days", align: "right", width: 48, pdfWidth: "6%" },
-  revenue: { label: "Revenue", align: "right", width: 76, pdfWidth: "8%", isMoney: true },
-  cost: { label: "Cost", align: "right", width: 76, pdfWidth: "8%", isMoney: true },
-  margin: { label: "P&L", align: "right", width: 76, pdfWidth: "8%", isMoney: true },
-  marginPct: { label: "Margin %", align: "right", width: 64, pdfWidth: "7%", isPct: true },
+  trip: { label: "Trip", width: 88, flex: 1.15, pdfWidth: "9%" },
+  date: { label: "Date", width: 72, flex: 0.95, pdfWidth: "8%" },
+  route: { label: "Route", width: 140, flex: 1.85, pdfWidth: "16%" },
+  branch: { label: "Branch", width: 80, flex: 1, pdfWidth: "9%" },
+  client: { label: "Client", width: 100, flex: 1.45, pdfWidth: "12%" },
+  supplier: { label: "Supplier", width: 100, flex: 1.45, pdfWidth: "12%" },
+  vehicle: { label: "Vehicle", width: 96, flex: 1.2, pdfWidth: "10%" },
+  driver: { label: "Driver", width: 88, flex: 1.2, pdfWidth: "10%" },
+  tripMode: { label: "Payout", width: 64, flex: 0.85, pdfWidth: "7%" },
+  execution: { label: "Model", width: 72, flex: 0.9, pdfWidth: "7%" },
+  settlement: { label: "Settlement", width: 88, flex: 1.05, pdfWidth: "9%" },
+  category: { label: "Category", width: 110, flex: 1.25, pdfWidth: "12%" },
+  daysOutstanding: { label: "Days", align: "right", width: 48, flex: 0.65, pdfWidth: "6%" },
+  revenue: { label: "Revenue", align: "right", width: 76, flex: 1.05, pdfWidth: "8%", isMoney: true },
+  cost: { label: "Cost", align: "right", width: 76, flex: 1.05, pdfWidth: "8%", isMoney: true },
+  margin: { label: "P&L", align: "right", width: 76, flex: 1.05, pdfWidth: "8%", isMoney: true },
+  marginPct: { label: "Margin %", align: "right", width: 64, flex: 0.85, pdfWidth: "7%", isPct: true },
 };
 
 function col(...keys: DrilldownColumnKey[]): DrilldownColumnDef[] {
@@ -313,7 +317,10 @@ export function buildPulseDrilldownView(input: {
     return true;
   });
 
-  const rows: DrilldownDataRow[] = filteredTrips.map((trip) => {
+  const rows: DrilldownDataRow[] = [];
+  const rowPartyIds: DrilldownRowPartyIds[] = [];
+
+  for (const trip of filteredTrips) {
     const revenue = Number(trip.client_price ?? 0);
     const cost = Number(trip.supplier_rate ?? 0);
     const margin = revenue - cost;
@@ -331,7 +338,7 @@ export function buildPulseDrilldownView(input: {
         ? Math.max(0, toNumber(trip.supplier_rate))
         : 0);
 
-    const base: DrilldownDataRow = {
+    rows.push({
       trip: String(trip.trip_operational_code ?? trip.trip_number ?? trip.id),
       date: dateIso || "—",
       route,
@@ -349,10 +356,14 @@ export function buildPulseDrilldownView(input: {
       cost: lens === "finance_payable" ? payableAmount : cost,
       margin,
       marginPct: formatMarginPct(revenue, margin),
-    };
-
-    return base;
-  });
+    });
+    rowPartyIds.push({
+      clientId: trip.client_id,
+      supplierId: trip.supplier_id,
+      driverId: trip.driver_id,
+      vehicleId: trip.vehicle_id,
+    });
+  }
 
   const filterCaption = buildPulseFilterCaption(input.filters, input.nameLabels, {
     compareCaption: input.compareCaption,
@@ -367,6 +378,7 @@ export function buildPulseDrilldownView(input: {
     filterCaption,
     columns,
     rows,
+    rowPartyIds,
   };
 }
 

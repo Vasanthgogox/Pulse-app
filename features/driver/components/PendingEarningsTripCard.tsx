@@ -1,5 +1,6 @@
 import Theme from '@/constants/Theme';
 import { getFleetAvatarUriForOrg } from '@/features/vehicles/utils/fleetAvatar.util';
+import { resolvePartyDisplayUri } from '@/lib/partyAvatarDisplay';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { PendingEarningsTripItem } from '../hooks/useDriverPendingEarnings';
@@ -28,10 +29,17 @@ export function PendingEarningsTripCard({
   isDark,
   onPress,
 }: Props) {
-  const fleetAvatarUri = getFleetAvatarUriForOrg(
-    String(item.trip.organization_id ?? ''),
-    item.provider,
-  );
+  const fleetAvatarUri =
+    resolvePartyDisplayUri({
+      organizationImageUrl: item.organizationImageUrl,
+      organizationAvatarSeed: item.organizationAvatarSeed,
+      avatarUrl: item.organizationAvatarUrl,
+      entityType: 'client',
+    }) ??
+    getFleetAvatarUriForOrg(
+      String(item.trip.organization_id ?? ''),
+      item.provider,
+    );
 
   return (
     <TouchableOpacity

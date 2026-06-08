@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 
+require('./scripts/expo-env');
+
 // Load .env from same directory as this config file (project root)
 const projectRoot = __dirname;
 const envPath = path.join(projectRoot, '.env');

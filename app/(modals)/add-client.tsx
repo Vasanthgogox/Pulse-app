@@ -14,12 +14,12 @@ function closeModal(
   router: ReturnType<typeof useRouter>,
   returnTo?: string,
 ) {
-  if (router.canGoBack()) {
-    router.back();
-    return;
-  }
   if (returnTo) {
     router.replace(returnTo as Parameters<typeof router.replace>[0]);
+    return;
+  }
+  if (router.canGoBack()) {
+    router.back();
     return;
   }
   router.replace(ROUTES.TABS.NETWORK as "/");
@@ -27,13 +27,27 @@ function closeModal(
 
 export default function AddClientScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    returnTo?: string | string[];
+    prefillOrganizationName?: string | string[];
+    prefillContactName?: string | string[];
+    prefillPhone?: string | string[];
+  }>();
   const partyPortal = usePartyPortalRouteHandlers();
   const { currentOrganization, isLoading } = useOrganization();
   const returnToParam = Array.isArray(params.returnTo)
     ? params.returnTo[0]
     : params.returnTo;
   const returnTo = returnToParam?.startsWith("/") ? returnToParam : undefined;
+  const prefillOrganizationName = Array.isArray(params.prefillOrganizationName)
+    ? params.prefillOrganizationName[0]
+    : params.prefillOrganizationName;
+  const prefillContactName = Array.isArray(params.prefillContactName)
+    ? params.prefillContactName[0]
+    : params.prefillContactName;
+  const prefillPhone = Array.isArray(params.prefillPhone)
+    ? params.prefillPhone[0]
+    : params.prefillPhone;
 
   const searchInviteeByPhone = async (
     phone: string,
@@ -69,6 +83,7 @@ export default function AddClientScreen() {
   return (
     <PartyRegistrationPortal
       visible
+      forceFullPage
       initialKind="client"
       onClose={() => closeModal(router, returnTo)}
       organizationId={partyPortal.organizationId}
@@ -80,6 +95,11 @@ export default function AddClientScreen() {
       onAddSupplier={partyPortal.handleAddSupplierComplete}
       onAddDriver={partyPortal.handleAddDriverDirect}
       onAddVehicle={partyPortal.handleAddVehicleComplete}
+      initialClientPrefill={{
+        organizationName: prefillOrganizationName ?? "",
+        contactName: prefillContactName ?? "",
+        phone: prefillPhone ?? "",
+      }}
       searchInviteeByPhone={searchInviteeByPhone}
       onSendInvitation={handleSendInvitation}
     />

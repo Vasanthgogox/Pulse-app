@@ -22,6 +22,8 @@ import {
   modelLabel,
   orgInitials,
   PURPLE,
+  PURPLE_BORDER,
+  PURPLE_TINT,
   SectionHeader,
   workspacePanelStyles as styles,
 } from "@/features/organization/components/workspace/workspacePanelUi";
@@ -236,7 +238,7 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
       }
     >
       {/* ── Logo upload card ────────────────────────────────────────────── */}
-      <View style={local.uploadCard}>
+      <View style={[styles.card, local.uploadCard]}>
         <View style={local.uploadThumbWrap}>
           {logoUri ? (
             <Image source={{ uri: logoUri }} style={local.uploadThumb} />
@@ -248,7 +250,7 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
             </View>
           )}
           <View style={local.uploadThumbBadge}>
-            <Camera size={14} color="#fff" strokeWidth={2.4} />
+            <Camera size={12} color={Theme.textOnDark} strokeWidth={2.4} />
           </View>
         </View>
         <View style={local.uploadInfo}>
@@ -271,7 +273,7 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
                   <LoadingIndicator size="small" color={PURPLE} />
                 ) : (
                   <>
-                    <UploadCloud size={13} color={PURPLE} strokeWidth={2.4} />
+                    <UploadCloud size={12} color={PURPLE} strokeWidth={2.4} />
                     <Text style={local.uploadBtnText}>Upload New</Text>
                   </>
                 )}
@@ -286,7 +288,7 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
                     pressed && !logoUploading && { opacity: 0.85 },
                   ]}
                 >
-                  <Trash2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
+                  <Trash2 size={12} color={Theme.textMuted} strokeWidth={2.2} />
                   <Text style={local.removeBtnText}>Remove</Text>
                 </Pressable>
               ) : null}
@@ -305,7 +307,7 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
       {/* ── KYC banner ──────────────────────────────────────────────────── */}
       {canEdit && kycMissing > 0 ? (
         <View style={styles.kycBanner}>
-          <AlertTriangle size={15} color={AMBER} strokeWidth={2.2} />
+          <AlertTriangle size={14} color={AMBER} strokeWidth={2.2} />
           <View style={{ flex: 1 }}>
             <Text style={styles.kycBannerTitle}>
               {kycMissing === 3
@@ -321,9 +323,9 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
 
       {/* ── General Details card ────────────────────────────────────────── */}
       <View style={styles.card}>
-        <SectionHeader label="General Details" color={Theme.textMuted} />
+        <SectionHeader label="General Details" />
 
-        <View style={local.fieldGroup}>
+        <View style={[local.fieldGroup, local.fieldGroupFirst]}>
           <Text style={local.fieldLabel}>Workspace Name</Text>
           <TextInput
             ref={nameInputRef}
@@ -353,7 +355,7 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
 
       {/* ── Invoice Branding card ───────────────────────────────────────── */}
       <View style={styles.card}>
-        <SectionHeader label="Invoice Branding" color={Theme.textMuted} />
+        <SectionHeader label="Invoice Branding" />
         <View style={styles.previewPaper}>
           <Text style={styles.previewWatermark}>{previewName}</Text>
           <View style={styles.previewLogoRow}>
@@ -380,33 +382,24 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
 }
 
 const local = StyleSheet.create({
-  // Upload card
   uploadCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 18,
-    padding: 18,
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 1,
+    gap: 14,
+    padding: 14,
   },
   uploadThumbWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 20,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: Theme.surface,
-    borderWidth: 2,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     position: "relative",
+    flexShrink: 0,
   },
   uploadThumb: { width: "100%", height: "100%" },
   uploadThumbFallback: {
@@ -414,121 +407,129 @@ const local = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(79,70,229,0.08)",
+    backgroundColor: PURPLE_TINT,
   },
-  uploadThumbInitials: { fontSize: 26, fontWeight: "900", color: PURPLE },
+  uploadThumbInitials: { fontSize: 22, fontWeight: "800", color: PURPLE },
   uploadThumbBadge: {
     position: "absolute",
-    bottom: 4,
-    right: 4,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    bottom: 2,
+    right: 2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: PURPLE,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: Theme.cardWhite,
   },
-  uploadInfo: { flex: 1, minWidth: 0, gap: 4 },
-  uploadTitle: { fontSize: 15, fontWeight: "800", color: Theme.textPrimaryDark },
+  uploadInfo: { flex: 1, minWidth: 0, gap: 3 },
+  uploadTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
   uploadSub: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
-    lineHeight: 16,
+    color: Theme.textSecondary,
+    lineHeight: 15,
   },
-  uploadActions: { flexDirection: "row", gap: 10, marginTop: 12 },
+  uploadActions: { flexDirection: "row", gap: 8, marginTop: 10, flexWrap: "wrap" },
   uploadBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 10,
-    backgroundColor: "rgba(79,70,229,0.08)",
+    backgroundColor: PURPLE_TINT,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(79,70,229,0.18)",
+    borderColor: PURPLE_BORDER,
   },
   uploadBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     color: PURPLE,
-    letterSpacing: 0.6,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   removeBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
   removeBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     color: Theme.textMuted,
-    letterSpacing: 0.6,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   lockNote: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 10,
+    marginTop: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.surface,
     alignSelf: "flex-start",
   },
-  lockNoteText: { fontSize: 11, color: Theme.textMuted, fontWeight: "600" },
+  lockNoteText: { fontSize: 11, color: Theme.textMuted, fontWeight: "500", lineHeight: 15 },
 
-  // Field rows
   fieldGroup: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 8,
+    gap: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  fieldGroupFirst: {
+    borderTopWidth: 0,
   },
   fieldLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 1.4,
+    letterSpacing: 1.1,
     textTransform: "uppercase",
   },
   fieldInput: {
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 15,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    minHeight: 50,
+    minHeight: 42,
   },
   fieldInputReadonly: {
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.surface,
     color: Theme.textSecondary,
   },
-  fieldStatic: { fontSize: 15, fontWeight: "700", color: Theme.textSecondary },
+  fieldStatic: { fontSize: 11, fontWeight: "700", color: Theme.textSecondary },
 
-  // Footer actions
   footerActions: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 16,
-    borderRadius: 16,
-    backgroundColor: Theme.surface,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
     alignItems: "center",
@@ -536,34 +537,27 @@ const local = StyleSheet.create({
   },
   cancelText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     color: Theme.textMuted,
-    letterSpacing: 1.4,
+    letterSpacing: 0.2,
     textTransform: "uppercase",
   },
   saveBtn: {
-    flex: 2,
-    paddingVertical: 16,
-    borderRadius: 16,
+    flex: 1.4,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: PURPLE,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: PURPLE,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 5,
   },
   saveBtnDisabled: {
-    backgroundColor: Theme.borderMedium,
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: "#c8cdd8",
   },
   saveText: {
     fontSize: 11,
-    fontWeight: "800",
-    color: "#fff",
-    letterSpacing: 1.4,
+    fontWeight: "700",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
     textTransform: "uppercase",
   },
 });

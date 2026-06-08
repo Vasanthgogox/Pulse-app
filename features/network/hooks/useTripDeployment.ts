@@ -4,7 +4,10 @@
  */
 
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
+import { createTripFromAssignedIndent } from "@/features/indents/services/indentConversionService";
+import { getAcceptedDirectQuoteForIndent } from "@/features/indents/services/direct-quotes.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
+import { resolveIndentDeployQuoteWithFreshQuote } from "@/features/indents/utils/resolveIndentDeployQuote.util";
 import { useInvalidateIndents, useInvalidateTrips } from "@/lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateOperationalIdentity } from "@/lib/queries/operationalInvalidation";
@@ -39,13 +42,19 @@ export function useTripDeployment({
       return;
     }
 
-    const acceptedQuote = Array.from(myQuoteByIndentId.values()).find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
+    const myQuotes = Array.from(myQuoteByIndentId.values());
+    const { quote: freshQuote } = await getAcceptedDirectQuoteForIndent(
+      orgId,
+      load.id,
+    );
+    const resolution = resolveIndentDeployQuoteWithFreshQuote(
+      load,
+      orgId,
+      myQuotes,
+      freshQuote,
     );
 
-    if (!acceptedQuote) {
+    if (!resolution) {
       Alert.alert(
         "Cannot start trip",
         "No accepted quote found for this load. Please ensure the load is awarded to you.",
@@ -55,7 +64,10 @@ export function useTripDeployment({
 
     try {
       setAssigningTripId(load.id);
-      const { error, trip } = await acceptAwardedQuote(acceptedQuote.id);
+      const { error, trip } =
+        resolution.mode === "direct_quote"
+          ? await acceptAwardedQuote(resolution.quote.id)
+          : await createTripFromAssignedIndent(load.id);
       if (error || !trip) {
         Alert.alert(
           "Could not create trip",

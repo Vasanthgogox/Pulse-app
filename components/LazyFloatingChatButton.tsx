@@ -15,7 +15,7 @@
  * which Metro caches at the bundle level.
  */
 import { useEffect, useState, type ComponentType } from 'react';
-import { scheduleIdleWork } from '@/lib/scheduleIdleWork';
+import { preloadChatProviderModules } from '@/lib/preloadChatWarmup';
 
 type Comp = ComponentType<Record<string, never>>;
 
@@ -24,12 +24,11 @@ export function LazyFloatingChatButton() {
 
   useEffect(() => {
     let cancelled = false;
-    scheduleIdleWork(() => {
+    // Eager: preview FAB needs providers + component immediately on desktop web.
+    void preloadChatProviderModules();
+    void import('@/components/FloatingChatButton').then((m) => {
       if (cancelled) return;
-      void import('@/components/FloatingChatButton').then((m) => {
-        if (cancelled) return;
-        setComp(() => m.FloatingChatButton as Comp);
-      });
+      setComp(() => m.FloatingChatButton as Comp);
     });
     return () => {
       cancelled = true;

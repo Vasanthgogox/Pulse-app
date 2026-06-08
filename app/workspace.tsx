@@ -1,24 +1,14 @@
 /**
- * Workspace overlay — 40vw right-anchored flex card with a tap-to-close
- * backdrop on wider viewports; full-screen card on narrow viewports.
- *
- * Master/detail swap inside the same card:
- *  - No `?panel=` → hub (org header + quick actions + workspace list + footer)
- *  - `?panel=settings|team|kyc|account` → matching detail panel
- *
- * Registered with `presentation: 'transparentModal'` in the root Stack so the
- * underlying screen (Home / Network / etc.) shows through the backdrop.
- *
- * Lives at `app/workspace.tsx` (flat) so the route name registers as
- * `workspace` and matches the `<Stack.Screen name="workspace" />` entry in
- * `app/_layout.tsx`. A nested `app/workspace/index.tsx` would register as
- * `workspace/index` on this Expo Router version and break the screen options.
+ * Workspace overlay — right-anchored flex card with backdrop on desktop;
+ * full-screen on mobile. Master/detail split widens the card when a panel opens.
  */
+import { WorkspaceFlexCardShell } from "@/components/layout/WorkspaceFlexCardShell";
 import { WorkspaceHubMenu } from "@/components/profile/WorkspaceHubMenu";
 import { WorkspaceAccountPanel } from "@/features/organization/components/workspace/WorkspaceAccountPanel";
 import { WorkspaceEditAccountPanel } from "@/features/organization/components/workspace/WorkspaceEditAccountPanel";
 import { WorkspaceFeedbackProvider } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
 import { WorkspaceOrgKycPanel } from "@/features/organization/components/workspace/WorkspaceOrgKycPanel";
+import { WorkspaceProductsPanel } from "@/features/organization/components/workspace/WorkspaceProductsPanel";
 import { WorkspaceSettingsPanel } from "@/features/organization/components/workspace/WorkspaceSettingsPanel";
 import { WorkspaceTeamPanel } from "@/features/organization/components/workspace/WorkspaceTeamPanel";
 import {
@@ -76,24 +66,31 @@ export default function WorkspaceScreen() {
     if (activePanel === "kyc") {
       return <WorkspaceOrgKycPanel onBack={closePanel} />;
     }
+    if (activePanel === "products") {
+      return <WorkspaceProductsPanel onBack={closePanel} />;
+    }
     return null;
   }, [activePanel, closePanel, openPanel]);
 
+  const hub = (
+    <WorkspaceHubMenu
+      activePanel={activePanel}
+      onSelectPanel={openPanel}
+      onExit={closeOverlay}
+    />
+  );
+
   return (
     <View style={styles.root}>
-      <View style={styles.page}>
-        <WorkspaceFeedbackProvider>
-          {activePanel ? (
-            panelContent
-          ) : (
-            <WorkspaceHubMenu
-              activePanel={null}
-              onSelectPanel={openPanel}
-              onExit={closeOverlay}
-            />
-          )}
-        </WorkspaceFeedbackProvider>
-      </View>
+      <WorkspaceFeedbackProvider>
+        <WorkspaceFlexCardShell
+          hub={hub}
+          panel={panelContent}
+          panelOpen={!!activePanel}
+          onDismiss={closeOverlay}
+          onClosePanel={closePanel}
+        />
+      </WorkspaceFeedbackProvider>
     </View>
   );
 }
@@ -101,10 +98,6 @@ export default function WorkspaceScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#f4f6fb",
-  },
-  page: {
-    flex: 1,
-    backgroundColor: "#f4f6fb",
+    backgroundColor: "transparent",
   },
 });

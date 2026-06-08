@@ -145,10 +145,10 @@ export function getCapabilitiesFromProfile(
   if (profile.role === "driver") return [];
   const caps: Capability[] = [];
   if (profile.aggregated !== false) {
-    caps.push("dispatch", "marketplace_post", "finance_view");
+    caps.push("dispatch", "marketplace_post", "finance_view", "finance_manage");
   }
   if (profile.asset !== false) {
-    caps.push("fleet_management", "dispatch_for_own_fleet", "marketplace_bid");
+    caps.push("fleet_management", "dispatch_for_own_fleet", "marketplace_bid", "finance_manage");
   }
   return [...new Set(caps)];
 }

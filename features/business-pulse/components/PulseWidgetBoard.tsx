@@ -1,11 +1,11 @@
 import { memo, type ReactNode } from "react";
-import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 
 /** Desktop breakpoints for Business Pulse dashboard composition. */
 export function usePulseDesktopLayout() {
   const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === "web" && width >= 1024;
-  const isWideDesktop = Platform.OS === "web" && width >= 1280;
+  const isDesktop = width >= 960;
+  const isWideDesktop = width >= 1280;
   return { isDesktop, isWideDesktop, width };
 }
 
@@ -15,7 +15,7 @@ export type PulseWidgetRowProps = {
   splitOnDesktop?: boolean;
 };
 
-/** Side-by-side on desktop web; stacked on mobile / narrow. */
+/** Side-by-side on desktop; stacked on mobile / narrow. */
 export const PulseWidgetRow = memo(function PulseWidgetRow({
   children,
   splitOnDesktop = true,
@@ -47,10 +47,39 @@ export const PulseWidgetCol = memo(function PulseWidgetCol({
     <View
       style={[
         boardStyles.col,
-        { flex, minWidth: minWidth ?? 0, maxWidth },
+        {
+          flex,
+          flexBasis: flex != null ? 0 : undefined,
+          minWidth: minWidth ?? 0,
+          maxWidth,
+        },
       ]}
     >
       {children}
+    </View>
+  );
+});
+
+/** Desktop overview — narrow left rail + flexible main column (Metronic profile layout). */
+export const PulseOverviewDesktopLayout = memo(function PulseOverviewDesktopLayout({
+  left,
+  main,
+}: {
+  left: ReactNode;
+  main: ReactNode;
+}) {
+  const { isWideDesktop } = usePulseDesktopLayout();
+  return (
+    <View style={boardStyles.overviewDesktop}>
+      <View
+        style={[
+          boardStyles.overviewLeft,
+          isWideDesktop && boardStyles.overviewLeftWide,
+        ]}
+      >
+        {left}
+      </View>
+      <View style={boardStyles.overviewMain}>{main}</View>
     </View>
   );
 });
@@ -69,5 +98,27 @@ const boardStyles = StyleSheet.create({
   },
   col: {
     minWidth: 0,
+    alignSelf: "stretch",
+  },
+  overviewDesktop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    width: "100%",
+  },
+  overviewLeft: {
+    width: 320,
+    maxWidth: "34%",
+    flexShrink: 0,
+    gap: 12,
+  },
+  overviewLeftWide: {
+    width: 360,
+    maxWidth: "36%",
+  },
+  overviewMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 12,
   },
 });

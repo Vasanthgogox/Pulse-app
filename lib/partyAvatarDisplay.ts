@@ -12,7 +12,7 @@ import {
   extractPathFromStorageUrl,
 } from "@/lib/avatarUpload";
 
-export type PartyEntityType = "client" | "supplier" | "driver";
+export type PartyEntityType = "client" | "supplier" | "driver" | "vehicle";
 
 /**
  * Http(s) URLs safe to pass to `Image` without signing. Supabase object URLs for

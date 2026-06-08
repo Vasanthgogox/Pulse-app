@@ -98,7 +98,7 @@ export function kycCompletionPct(kyc: WorkspaceKyc | null): number {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-export function SectionHeader({ label, color = AMBER }: { label: string; color?: string }) {
+export function SectionHeader({ label, color = PURPLE }: { label: string; color?: string }) {
   return (
     <View style={sh.wrap}>
       <View style={[sh.accent, { backgroundColor: color }]} />
@@ -111,18 +111,21 @@ const sh = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: Theme.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
-  accent: { width: 4, height: 16, borderRadius: 2 },
+  accent: { width: 2, height: 10, borderRadius: 1 },
   title: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 1.1,
     textTransform: 'uppercase',
-    color: Theme.textSecondary,
+    color: Theme.textMuted,
   },
 });
 
@@ -466,36 +469,46 @@ export const workspacePanelStyles = StyleSheet.create({
 
   // Content (legacy full-page panels)
   content: { padding: Layout.screenPaddingHorizontal, gap: 14 },
-  /** Detail pane cards — aligned with split-panel screenshot */
+  /** Detail pane cards — aligned with WorkspaceHubMenu sectionCard */
   detailCard: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e4e7ef',
     overflow: 'hidden',
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e4e7ef',
     overflow: 'hidden',
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
 
-  // KYC banner
-  kycBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: AMBER_TINT, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(217,119,6,0.2)', paddingHorizontal: 14, paddingVertical: 12 },
-  kycBannerTitle: { fontSize: 13, fontWeight: '700', color: AMBER },
-  kycBannerSub: { fontSize: 11, color: AMBER, opacity: 0.8, marginTop: 1 },
+  // KYC banner — hub insightBanner scale
+  kycBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: AMBER_TINT,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(217,119,6,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  kycBannerTitle: { fontSize: 12, fontWeight: '800', color: AMBER, letterSpacing: -0.2 },
+  kycBannerSub: { fontSize: 11, fontWeight: '500', color: AMBER, opacity: 0.85, marginTop: 2, lineHeight: 15 },
 
   // KYC progress
   kycProgressWrap: { paddingHorizontal: 14, paddingVertical: 10, gap: 6 },
@@ -514,14 +527,14 @@ export const workspacePanelStyles = StyleSheet.create({
   nameSaveTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
   // Invoice preview
-  previewPaper: { borderWidth: 1, borderColor: Theme.borderLight, borderRadius: 12, backgroundColor: '#fff', overflow: 'hidden', paddingVertical: 20, paddingHorizontal: 16, minHeight: 110, justifyContent: 'center', position: 'relative', margin: 14, marginTop: 4 },
-  previewWatermark: { position: 'absolute', transform: [{ rotate: '-30deg' }], fontSize: 28, fontWeight: '900', color: 'rgba(15,23,42,0.05)', textTransform: 'uppercase', alignSelf: 'center' },
+  previewPaper: { borderWidth: StyleSheet.hairlineWidth, borderColor: Theme.borderLight, borderRadius: 12, backgroundColor: '#fff', overflow: 'hidden', paddingVertical: 18, paddingHorizontal: 14, minHeight: 100, justifyContent: 'center', position: 'relative', margin: 14, marginTop: 4 },
+  previewWatermark: { position: 'absolute', transform: [{ rotate: '-30deg' }], fontSize: 24, fontWeight: '900', color: 'rgba(15,23,42,0.05)', textTransform: 'uppercase', alignSelf: 'center' },
   previewLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  previewLogo: { width: 48, height: 48, borderRadius: 10, backgroundColor: Theme.surfaceGray },
-  previewLogoFallback: { width: 48, height: 48, borderRadius: 10, backgroundColor: PURPLE_TINT, alignItems: 'center', justifyContent: 'center' },
-  previewLogoInitials: { fontSize: 16, fontWeight: '900', color: PURPLE },
-  previewCompanyName: { fontSize: 16, fontWeight: '900', color: Theme.textPrimaryDark, letterSpacing: 1 },
-  previewDocType: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
+  previewLogo: { width: 44, height: 44, borderRadius: 22, backgroundColor: Theme.surfaceGray },
+  previewLogoFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: PURPLE_TINT, alignItems: 'center', justifyContent: 'center' },
+  previewLogoInitials: { fontSize: 14, fontWeight: '800', color: PURPLE },
+  previewCompanyName: { fontSize: 12, fontWeight: '800', color: Theme.textPrimaryDark, letterSpacing: 0.6 },
+  previewDocType: { fontSize: 10, fontWeight: '500', color: Theme.textMuted, marginTop: 2 },
 
   // Logo upload row
   logoUploadRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight },

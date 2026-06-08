@@ -132,7 +132,25 @@ export async function updateDirectQuoteStatus(
 }
 
 /**
- * Fetch all accepted direct quotes for indents owned by the given org.
+ * Fetch accepted direct quote for a single indent (supplier deploy — fresh read).
+ */
+export async function getAcceptedDirectQuoteForIndent(
+  bidderOrgId: string,
+  indentId: string,
+): Promise<{ error: Error | null; quote: DirectQuoteRow | null }> {
+  const { data, error } = await supabase()
+    .from('direct_quotes')
+    .select('*')
+    .eq('bidder_organization_id', bidderOrgId)
+    .eq('indent_id', indentId)
+    .eq('status', 'accepted')
+    .maybeSingle();
+
+  if (error) return { error: new Error(error.message), quote: null };
+  return { error: null, quote: (data as DirectQuoteRow | null) ?? null };
+}
+
+/**
  * Used by finance aggregation to show supplier due amounts before a trip is created
  * (indent awarded state). Returns minimal shape for O(n) aggregation.
  * Query: direct_quotes WHERE status='accepted' AND indent_id IN (indents owned by orgId).

@@ -4,12 +4,20 @@ import Theme from "@/constants/Theme";
 import {
   partyAvatarBackgroundColor,
   partyAvatarInitialsTextColor,
-  partyAvatarHasRenderableOutput,
   partyInitialsFromName,
   resolvePartyDisplayUri,
   resolvePartyPhotoUriAsync,
   type PartyEntityType,
 } from "@/lib/partyAvatarDisplay";
+
+export type { PartyEntityType } from "@/lib/partyAvatarDisplay";
+export type PartyAvatarShape = "circle" | "rounded" | "square";
+
+function partyAvatarRadius(size: number, shape: PartyAvatarShape): number {
+  if (shape === "circle") return size / 2;
+  if (shape === "rounded") return Math.round(size * 0.26);
+  return 4;
+}
 
 export type PartyAvatarProps = {
   name: string;
@@ -22,6 +30,8 @@ export type PartyAvatarProps = {
   avatarSeed?: string | null;
   entityType?: PartyEntityType;
   size: number;
+  /** `rounded` matches attribution / shipper picker tiles (not full circle). */
+  shape?: PartyAvatarShape;
   style?: StyleProp<ViewStyle>;
   borderStyle?: StyleProp<ImageStyle>;
 };
@@ -38,9 +48,11 @@ export function PartyAvatar({
   avatarSeed,
   entityType = "client",
   size,
+  shape = "circle",
   style,
   borderStyle,
 }: PartyAvatarProps) {
+  const radius = partyAvatarRadius(size, shape);
   const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const hasRawPhotoField = Boolean(
@@ -82,20 +94,10 @@ export function PartyAvatar({
         entityType,
       });
   const uri = resolvedPhotoUri ?? syncUri;
-  if (
-    !partyAvatarHasRenderableOutput({
-      name,
-      organizationImageUrl,
-      organizationAvatarSeed,
-      avatarUrl,
-      avatarSeed,
-      entityType,
-    })
-  ) {
-    return null;
-  }
-  const initials = partyInitialsFromName(name);
-  const bg = partyAvatarBackgroundColor((initialsColorSeed ?? "").trim() || name);
+  const displayName = (name ?? "").trim() || "Party";
+  const colorSeed = (initialsColorSeed ?? avatarSeed ?? "").trim() || displayName;
+  const initials = partyInitialsFromName(displayName);
+  const bg = partyAvatarBackgroundColor(colorSeed);
   const initialsColor = partyAvatarInitialsTextColor(bg);
 
   if (uri && !imageFailed) {
@@ -109,7 +111,7 @@ export function PartyAvatar({
           {
             width: size,
             height: size,
-            borderRadius: size / 2,
+            borderRadius: radius,
             backgroundColor: Theme.surface,
             borderWidth: 1,
             borderColor: Theme.border,
@@ -129,7 +131,7 @@ export function PartyAvatar({
         {
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: radius,
           backgroundColor: bg,
           borderWidth: 1,
           borderColor: Theme.border,

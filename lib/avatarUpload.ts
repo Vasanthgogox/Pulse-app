@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { File } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 export const AVATAR_BUCKET = 'userprofiles';
@@ -552,43 +552,92 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
   return promise;
 }
 
+/** Drop cached signed URL so the next resolve picks up a new upload. */
+export function invalidateSignedAvatarCache(path?: string | null): void {
+  const key = (path ?? '').trim();
+  if (!key) return;
+  signedAvatarUrlCache.delete(key);
+  inFlightAvatarRequests.delete(key);
+}
+
+async function resolveDriverAvatarDisplayUrl(
+  avatarUrl: string,
+  userId?: string | null,
+): Promise<string | null> {
+  const raw = avatarUrl.trim();
+  if (!raw) return null;
+
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    const storageRef = extractPathFromStorageUrl(raw);
+    if (
+      storageRef &&
+      (storageRef.bucket === AVATAR_BUCKET || storageRef.bucket === LEGACY_AVATAR_BUCKET)
+    ) {
+      return await getSignedAvatarUrl(storageRef.path);
+    }
+    return raw;
+  }
+
+  const signed = await getSignedAvatarUrl(raw);
+  if (signed) return signed;
+
+  const uid = (userId ?? '').trim();
+  if (uid && uid !== raw) {
+    return await getSignedAvatarUrl(uid);
+  }
+  return null;
+}
+
 /**
- * Resolve profile.avatar_url to a displayable URI: if it's a storage path, returns signed URL; if it's already http(s), returns as-is; otherwise uses preset avatar from seed.
+ * Resolve profile.avatar_url to a displayable URI: signed storage path, http URL,
+ * or bundled preset from **profile.avatar_seed** (DB), not stale AsyncStorage alone.
  */
 export function useDriverAvatarUri(): { avatarUri: string; loading: boolean } {
   const { profile } = useAuth();
-  const { avatarSeed } = useDriverAvatar();
-  const presetUri = getAvatarUriForSeed(avatarSeed);
-  const [avatarUri, setAvatarUri] = useState(presetUri);
+  const { avatarSeed: contextSeed, setAvatarSeed, previewUri, setPreviewUri } = useDriverAvatar();
+  const profileSeed = profile?.avatar_seed?.trim() ?? '';
+  const effectiveSeed = profileSeed || contextSeed;
+  const presetUri = getAvatarUriForSeed(effectiveSeed);
+  const storedPhoto = profile?.avatar_url?.trim() ?? '';
+  const [avatarUri, setAvatarUri] = useState<string>(presetUri);
   const [loading, setLoading] = useState(false);
-
-  const resolve = useCallback(async (avatarUrl: string | undefined) => {
-    if (!avatarUrl?.trim()) {
-      setAvatarUri(presetUri);
-      return;
-    }
-    if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
-      const storageRef = extractPathFromStorageUrl(avatarUrl);
-      // Backward compatibility: old profiles may store full storage URL instead of object path.
-      if (storageRef && (storageRef.bucket === AVATAR_BUCKET || storageRef.bucket === LEGACY_AVATAR_BUCKET)) {
-        setLoading(true);
-        const signed = await getSignedAvatarUrl(storageRef.path);
-        setAvatarUri(signed ?? presetUri);
-        setLoading(false);
-        return;
-      }
-      setAvatarUri(avatarUrl);
-      return;
-    }
-    setLoading(true);
-    const signed = await getSignedAvatarUrl(avatarUrl.trim());
-    setAvatarUri(signed ?? presetUri);
-    setLoading(false);
-  }, [presetUri]);
+  const lastStoredPhotoRef = useRef('');
 
   useEffect(() => {
-    resolve(profile?.avatar_url);
-  }, [profile?.avatar_url, resolve]);
+    if (profileSeed && profileSeed !== contextSeed) {
+      setAvatarSeed(profileSeed);
+    }
+  }, [profileSeed, contextSeed, setAvatarSeed]);
 
-  return { avatarUri: avatarUri || presetUri, loading };
+  const resolve = useCallback(async () => {
+    if (!storedPhoto) {
+      setAvatarUri(presetUri);
+      setLoading(false);
+      lastStoredPhotoRef.current = '';
+      return;
+    }
+
+    if (lastStoredPhotoRef.current !== storedPhoto) {
+      invalidateSignedAvatarCache(storedPhoto);
+      lastStoredPhotoRef.current = storedPhoto;
+    }
+
+    setLoading(true);
+    const signed = await resolveDriverAvatarDisplayUrl(storedPhoto, profile?.uid);
+    // Never fall back to a preset while a stored photo path exists — that caused stale avatars.
+    setAvatarUri(signed ?? (storedPhoto ? '' : presetUri));
+    if (signed) setPreviewUri(null);
+    setLoading(false);
+  }, [storedPhoto, presetUri, profile?.uid, setPreviewUri]);
+
+  useEffect(() => {
+    void resolve();
+  }, [resolve]);
+
+  const resolved = storedPhoto ? avatarUri : avatarUri || presetUri;
+
+  return {
+    avatarUri: previewUri?.trim() || resolved,
+    loading: Boolean(storedPhoto) && loading && !previewUri?.trim(),
+  };
 }

@@ -165,7 +165,6 @@ export function FleetEntityPickerModal({
             <FlashList<DriverRow | VehicleRow>
               data={listRows}
               keyExtractor={(item) => item.id}
-              estimatedItemSize={56}
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={

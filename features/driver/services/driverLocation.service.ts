@@ -5,7 +5,7 @@
  */
 import { supabase } from '@/lib/supabase';
 
-export type DriverLocationSource = 'live' | 'tap' | 'background';
+export type DriverLocationSource = 'live' | 'tap' | 'background' | 'simulated';
 
 export interface ReportDriverLocationParams {
   driverId: string;
@@ -19,6 +19,8 @@ export interface ReportDriverLocationParams {
   odometerKm?: number | null;
   /** Explicit capture time (defaults to DB `now()`). */
   recordedAt?: string | null;
+  /** Reverse-geocoded city/area for chat copy (no map tiles). */
+  addressLabel?: string | null;
 }
 
 export interface ReportDriverLocationResult {
@@ -49,6 +51,7 @@ export async function reportDriverLocation(
     source,
     odometerKm,
     recordedAt,
+    addressLabel,
   } = params;
   const row: Record<string, unknown> = {
     driver_id: driverId,
@@ -64,6 +67,9 @@ export async function reportDriverLocation(
   }
   if (typeof recordedAt === 'string' && recordedAt.trim() !== '') {
     row.recorded_at = recordedAt.trim();
+  }
+  if (typeof addressLabel === 'string' && addressLabel.trim() !== '') {
+    row.address_label = addressLabel.trim();
   }
   const { error } = await supabase().from('driver_locations').insert(row);
   if (error) {

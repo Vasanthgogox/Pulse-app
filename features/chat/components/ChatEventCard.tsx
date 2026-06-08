@@ -7,7 +7,6 @@ import {
   View,
 } from "react-native";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle,
   ChevronRight,
@@ -29,6 +28,12 @@ import {
   partyInitialsFromName,
 } from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import {
+  resolveSystemUpdateDriverAvatar,
+  type SystemUpdateDriverContext,
+} from "../utils/chatAvatar.util";
+import { ChatPartyAvatar } from "./ChatPartyAvatar";
+import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import {
   getLedgerBookPendingSnapshot,
@@ -62,7 +67,7 @@ const STATUS_ICON_MAP: Record<
     bg: CHAT_ACCENT_SOFT,
     sheetLabel: "Assigned",
     rightWord: "NEW",
-    rightColor: "#4338ca",
+    rightColor: Theme.primary,
   },
   in_progress: {
     Icon: Send,
@@ -160,21 +165,6 @@ function inferStatusFromContent(content: string): keyof typeof STATUS_ICON_MAP {
   return "default";
 }
 
-/** WhatsApp-style “protocol / milestone” system ribbon (completed + protocol copy). */
-function shouldUsePulseProtocolSystemCard(
-  content: string,
-  statusKey: keyof typeof STATUS_ICON_MAP,
-): boolean {
-  const c = (content ?? "").toLowerCase();
-  if (statusKey === "completed" || statusKey === "delivered") return true;
-  return (
-    c.includes("protocol") ||
-    c.includes("threshold") ||
-    c.includes("destination threshold") ||
-    c.includes("trip protocol")
-  );
-}
-
 export function getStatusEventSheetVisuals(statusKey: string) {
   const row = STATUS_ICON_MAP[statusKey as keyof typeof STATUS_ICON_MAP];
   return row ?? STATUS_ICON_MAP.default;
@@ -261,6 +251,33 @@ export function formatTripEventSheetDate(iso: string): string {
   } catch {
     return "";
   }
+}
+
+/** Route ribbon above system-update cards — e.g. `MUMBAI → HYDERABAD · TODAY`. */
+export function buildChatRouteContextLabel(
+  pickupArea?: string | null,
+  dropLocation?: string | null,
+  createdAt?: string | null,
+): string | null {
+  const pickup = String(pickupArea ?? "").trim();
+  const drop = String(dropLocation ?? "").trim();
+  if (!pickup || !drop) return null;
+  const route = `${pickup} → ${drop}`.toUpperCase();
+  let dayLabel = "TODAY";
+  if (createdAt) {
+    try {
+      const eventDay = new Date(createdAt);
+      const now = new Date();
+      if (eventDay.toDateString() !== now.toDateString()) {
+        dayLabel = eventDay
+          .toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+          .toUpperCase();
+      }
+    } catch {
+      /* keep TODAY */
+    }
+  }
+  return `${route} · ${dayLabel}`;
 }
 
 export function ChatLedgerEventCard({
@@ -729,115 +746,6 @@ const s = StyleSheet.create({
     textTransform: "none",
     letterSpacing: 0,
   },
-  pulseProtoCardMobile: {
-    borderLeftWidth: 3,
-    borderLeftColor: "#10b981",
-  },
-  // Pulse-style system protocol ribbon (completed / milestone)
-  pulseProtoWrap: {
-    alignSelf: "center",
-    maxWidth: "92%",
-    width: "100%",
-    marginVertical: 6,
-  },
-  pulseProtoCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderTopWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderLeftWidth: 4,
-    borderTopColor: "#e8ecf1",
-    borderRightColor: "#e8ecf1",
-    borderBottomColor: "#e8ecf1",
-    borderLeftColor: "#10b981",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    shadowColor: "#059669",
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  pulseProtoIconCol: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  pulseProtoIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#ecfdf5",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pulseProtoLiveDot: {
-    position: "absolute",
-    right: 2,
-    bottom: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#10b981",
-    borderWidth: 2,
-    borderColor: "#ffffff",
-  },
-  pulseProtoDivider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: "#f1f5f9",
-    marginVertical: 2,
-  },
-  pulseProtoBody: {
-    flex: 1,
-    minWidth: 0,
-    paddingLeft: 4,
-    gap: 4,
-  },
-  pulseProtoTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
-    lineHeight: 16,
-  },
-  pulseProtoSubtitle: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#64748b",
-    lineHeight: 14,
-  },
-  pulseProtoRight: {
-    alignItems: "flex-end",
-    flexShrink: 0,
-    gap: 6,
-    paddingLeft: 6,
-  },
-  pulseProtoBadge: {
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  pulseProtoBadgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#047857",
-    letterSpacing: 0.6,
-  },
-  pulseProtoTime: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#94a3b8",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
 
   /** ── TripProgressEventCard (modern, txn-card-aligned) ──────────────────
    *  Visual language mirrors `FinanceKanbanTab`'s `timelineCard` so a
@@ -863,9 +771,28 @@ const s = StyleSheet.create({
    *      mirroring the txn card's `expandHint`. */
   progressWrap: {
     alignSelf: "center",
-    maxWidth: "85%",
+    maxWidth: "94%",
     width: "100%",
-    marginVertical: 4,
+    marginVertical: 6,
+    gap: 6,
+  },
+  routeContextPill: {
+    alignSelf: "center",
+    maxWidth: "100%",
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#f8fafc",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#eef2f7",
+  },
+  routeContextText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#cbd5e1",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+    textAlign: "center",
   },
   progressWrapMobile: {
     alignSelf: "stretch",
@@ -876,19 +803,18 @@ const s = StyleSheet.create({
   progressCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: Theme.screenBackground,
+    gap: 12,
+    backgroundColor: Theme.cardWhite,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.04)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: "#000",
+    borderColor: "#eef2f7",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#0f172a",
     shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
-    position: "relative",
   },
   progressCardMobile: {
     flexDirection: "column",
@@ -909,12 +835,12 @@ const s = StyleSheet.create({
     gap: 10,
   },
   progressAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
+    backgroundColor: "rgba(79, 70, 229, 0.1)",
     flexShrink: 0,
   },
   progressAvatarMobile: {
@@ -923,9 +849,9 @@ const s = StyleSheet.create({
     borderRadius: CHAT_MOBILE.eventAvatar / 2,
   },
   progressAvatarText: {
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.15,
   },
   progressBody: {
     flex: 1,
@@ -938,25 +864,27 @@ const s = StyleSheet.create({
    *  tag. Sits above the narrative sentence so the eye lands on
    *  "SYSTEM UPDATE" / "TRIP STATUS" first. */
   progressKicker: {
-    ...FinanceTxnTypography.partyTitle,
     fontSize: 10,
-    letterSpacing: 0.4,
+    fontWeight: "800",
+    letterSpacing: 0.65,
+    textTransform: "uppercase",
   },
   progressKickerMobile: {
-    ...FinanceTxnTypography.partyTitle,
-    fontSize: 11,
-    letterSpacing: 0.4,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.65,
+    textTransform: "uppercase",
   },
   /** Narrative sentence — kept in sentence case (it's prose, not a
    *  proper noun like the txn party name). Weight + size echo the
    *  txn `amount` text so it carries the same visual weight in the
    *  card hierarchy. */
   progressTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 16,
-    marginTop: 1,
+    lineHeight: 18,
+    marginTop: 2,
   },
   progressTitleMobile: {
     fontSize: CHAT_MOBILE.eventTitleSize,
@@ -969,12 +897,12 @@ const s = StyleSheet.create({
    *  `timelineCardDateVehicle`: 8 px UPPERCASE, slate, letterSpacing
    *  0.5. */
   progressMeta: {
-    fontSize: 8,
-    fontWeight: "400",
-    color: Theme.textSecondary,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 2,
+    letterSpacing: 0.45,
+    marginTop: 4,
   },
   progressMetaMobile: {
     fontSize: CHAT_MOBILE.eventMetaSize,
@@ -1017,36 +945,31 @@ const s = StyleSheet.create({
   progressPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
+    gap: 5,
+    paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
+    backgroundColor: Theme.cardWhite,
   },
   progressPillDot: {
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     borderRadius: 3,
   },
-  /** Pill label — italic uppercase status color, same recipe as
-   *  `tripPillText` → `FinanceTxnTypography.tripId`. */
   progressPillText: {
-    ...FinanceTxnTypography.tripId,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
   },
   progressTime: {
-    ...FinanceTxnTypography.dateLine,
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: 9,
+    fontWeight: "700",
+    lineHeight: 12,
     color: Theme.textMuted,
-  },
-  /** Bottom-right chevron — mirrors `expandHint` from the txn card
-   *  (8 px, opacity 0.3). Visual cue only; rows themselves are not
-   *  navigable so we don't wrap the chevron in a TouchableOpacity. */
-  progressExpandHint: {
-    position: "absolute",
-    bottom: 4,
-    right: 12,
-    opacity: 0.3,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
   progressFooterMobile: {
     flexDirection: "row",
@@ -1068,27 +991,33 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   progressPillTextMobile: {
-    ...FinanceTxnTypography.tripId,
-    fontSize: 10,
-    letterSpacing: 0.4,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
   },
   progressTimeMobile: {
-    ...FinanceTxnTypography.dateLine,
     fontSize: CHAT_MOBILE.eventTimeSize,
+    fontWeight: "700",
     color: Theme.textMuted,
     flexShrink: 0,
+    textTransform: "uppercase",
   },
 });
 
 export interface TripProgressEventCardProps {
   avatarSeed: string;
+  /** When set, renders driver/party photo instead of initials from `avatarSeed`. */
+  avatarIdentity?: ResolvedPartyAvatarIdentity | null;
   avatarDotColor: string;
+  kicker?: string;
   title: string;
   metaLine: string;
   subLine?: string | null;
   rightPrimary: string;
   rightPrimaryColor: string;
   time: string;
+  routeContext?: string | null;
   isMobile?: boolean;
 }
 
@@ -1109,16 +1038,14 @@ function hexWithAlpha(hex: string, alphaHex: string): string {
   return hex;
 }
 
-/** Split the conventional `"Kicker · DATE · Status"` meta string into
- *  an italic-uppercase kicker and the remaining UPPERCASE date / status
- *  string. Falls back gracefully if no separator is present. */
+/** Split legacy `"Kicker · DATE · Status"` meta strings when no explicit kicker is passed. */
 function splitProgressMetaLine(metaLine: string): {
   kicker: string;
   rest: string;
 } {
   const sep = " · ";
   const i = metaLine.indexOf(sep);
-  if (i < 0) return { kicker: metaLine.trim(), rest: "" };
+  if (i < 0) return { kicker: "", rest: metaLine.trim() };
   return {
     kicker: metaLine.slice(0, i).trim(),
     rest: metaLine.slice(i + sep.length).trim(),
@@ -1126,39 +1053,44 @@ function splitProgressMetaLine(metaLine: string): {
 }
 
 /**
- * Modern system-update card. Mirrors the finance transaction row
- * (`FinanceKanbanTab` → `timelineCard`) — same chrome, same italic
- * uppercase kicker, same trip-style pill on the right, same subtle
- * bottom-right chevron. Status color theming ties the avatar, kicker,
- * and pill into a single status-themed unit.
+ * System-update card — Metronic-style ribbon with route context, avatar,
+ * kicker, narrative, status pill, and timestamp.
  */
 export function TripProgressEventCard({
   avatarSeed,
-  avatarDotColor: _avatarDotColor,
+  avatarIdentity = null,
+  avatarDotColor,
+  kicker,
   title,
   metaLine,
   subLine,
   rightPrimary,
   rightPrimaryColor,
   time,
+  routeContext,
   isMobile = false,
 }: TripProgressEventCardProps) {
-  const { kicker, rest: dateMeta } = splitProgressMetaLine(metaLine);
+  const parsed = splitProgressMetaLine(metaLine);
+  const kickerText = (kicker ?? parsed.kicker).trim();
+  const dateMeta = kicker ? metaLine.trim() : parsed.rest;
 
-  const avatarBg = hexWithAlpha(rightPrimaryColor, "1F");
-  const avatarBorder = hexWithAlpha(rightPrimaryColor, "55");
-  const pillBg = hexWithAlpha(rightPrimaryColor, "12");
-  const pillBorder = hexWithAlpha(rightPrimaryColor, "3D");
+  const pillBorder = hexWithAlpha(rightPrimaryColor, "66");
+  const accent = rightPrimaryColor;
 
-  const avatarEl = (
+  const avatarSize = isMobile ? CHAT_MOBILE.eventAvatar : 40;
+  const avatarEl = avatarIdentity ? (
     <View
       style={[
         s.progressAvatar,
         isMobile && s.progressAvatarMobile,
-        { backgroundColor: avatarBg, borderColor: avatarBorder },
+        { backgroundColor: "transparent", overflow: "hidden" },
       ]}
     >
-      <Text style={[s.progressAvatarText, { color: rightPrimaryColor }]}>
+      <ChatPartyAvatar identity={avatarIdentity} size={avatarSize} />
+    </View>
+  ) : (
+    <View style={[s.progressAvatar, isMobile && s.progressAvatarMobile]}>
+      <Text style={[s.progressAvatarText, { color: accent }]}>
         {partyInitialsFromName(avatarSeed)}
       </Text>
     </View>
@@ -1166,15 +1098,15 @@ export function TripProgressEventCard({
 
   const bodyEl = (
     <View style={s.progressBody}>
-      {kicker ? (
+      {kickerText ? (
         <Text
           style={[
             isMobile ? s.progressKickerMobile : s.progressKicker,
-            { color: rightPrimaryColor },
+            { color: accent },
           ]}
           numberOfLines={1}
         >
-          {kicker}
+          {kickerText}
         </Text>
       ) : null}
       <Text
@@ -1206,14 +1138,14 @@ export function TripProgressEventCard({
     <View
       style={[
         isMobile ? s.progressPillMobile : s.progressPill,
-        { backgroundColor: pillBg, borderColor: pillBorder },
+        { borderColor: pillBorder },
       ]}
     >
-      <View style={[s.progressPillDot, { backgroundColor: rightPrimaryColor }]} />
+      <View style={[s.progressPillDot, { backgroundColor: accent }]} />
       <Text
         style={[
           isMobile ? s.progressPillTextMobile : s.progressPillText,
-          { color: rightPrimaryColor },
+          { color: accent },
         ]}
         numberOfLines={1}
       >
@@ -1222,8 +1154,18 @@ export function TripProgressEventCard({
     </View>
   );
 
+  const routeRibbon =
+    routeContext && routeContext.trim().length > 0 ? (
+      <View style={s.routeContextPill}>
+        <Text style={s.routeContextText} numberOfLines={2}>
+          {routeContext}
+        </Text>
+      </View>
+    ) : null;
+
   return (
     <View style={[s.progressWrap, isMobile && s.progressWrapMobile]}>
+      {routeRibbon}
       <View style={[s.progressCard, isMobile && s.progressCardMobile]}>
         {isMobile ? (
           <>
@@ -1248,9 +1190,6 @@ export function TripProgressEventCard({
                 {time}
               </Text>
             </View>
-            <View style={[s.progressExpandHint, { pointerEvents: "none" }]}>
-              <ChevronRight size={8} color={Theme.textMuted} />
-            </View>
           </>
         )}
       </View>
@@ -1259,6 +1198,10 @@ export function TripProgressEventCard({
 }
 
 function systemSheetAvatarSeed(content: string): string {
+  const vehicle = (content ?? "").match(
+    /\b([A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{3,4})\b/i,
+  );
+  if (vehicle?.[1]) return vehicle[1].replace(/\s+/g, " ").trim();
   const m = (content ?? "").match(/\b(TRP[-A-Z0-9]+)\b/i);
   if (m?.[1]) return m[1].toUpperCase();
   const trip = (content ?? "").match(/\b([A-Z]{2,4}\d{2,6})\b/);
@@ -1266,87 +1209,16 @@ function systemSheetAvatarSeed(content: string): string {
   return "Trip update";
 }
 
-function PulseSystemProtocolCard({
-  title,
-  subtitle,
-  displayTime,
-  isMobile = false,
-}: {
-  title: string;
-  subtitle: string;
-  displayTime: string;
-  isMobile?: boolean;
-}) {
-  if (isMobile) {
-    return (
-      <View style={[s.ledgerWrap, s.ledgerWrapMobile]}>
-        <View style={[s.ledgerCard, s.ledgerCardMobile, s.pulseProtoCardMobile]}>
-          <View style={s.ledgerTopRowMobile}>
-            <View style={s.pulseProtoIconCol}>
-              <View style={s.pulseProtoIconCircle}>
-                <Activity size={18} color="#059669" strokeWidth={2.4} />
-              </View>
-              <View style={s.pulseProtoLiveDot} />
-            </View>
-            <View style={s.ledgerBody}>
-              <Text style={[s.ledgerTitle, s.ledgerTitleMobile]} numberOfLines={4}>
-                {title}
-              </Text>
-              <Text style={[s.ledgerMeta, s.ledgerMetaMobile]} numberOfLines={4}>
-                {subtitle}
-              </Text>
-            </View>
-          </View>
-          <View style={s.ledgerFooterMobile}>
-            <View style={s.pulseProtoBadge}>
-              <Text style={s.pulseProtoBadgeText}>SYSTEM DONE</Text>
-            </View>
-            <Text style={s.ledgerTimeMobile} numberOfLines={1}>
-              {displayTime}
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={s.pulseProtoWrap}>
-      <View style={s.pulseProtoCard}>
-        <View style={s.pulseProtoIconCol}>
-          <View style={s.pulseProtoIconCircle}>
-            <Activity size={18} color="#059669" strokeWidth={2.4} />
-          </View>
-          <View style={s.pulseProtoLiveDot} />
-        </View>
-        <View style={s.pulseProtoDivider} />
-        <View style={s.pulseProtoBody}>
-          <Text style={s.pulseProtoTitle} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={s.pulseProtoSubtitle} numberOfLines={3}>
-            {subtitle}
-          </Text>
-        </View>
-        <View style={s.pulseProtoRight}>
-          <View style={s.pulseProtoBadge}>
-            <Text style={s.pulseProtoBadgeText}>SYSTEM DONE</Text>
-          </View>
-          <Text style={s.pulseProtoTime} numberOfLines={1}>
-            {displayTime}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 export function ChatSystemEventCard({
   message,
   isMobile = false,
+  routeContext,
+  composeTrip,
 }: {
   message: TripMessageRow;
   isMobile?: boolean;
+  routeContext?: string | null;
+  composeTrip?: SystemUpdateDriverContext["composeTrip"];
 }) {
   const statusKey = inferStatusFromContent(message.content);
   const cfg = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
@@ -1363,37 +1235,22 @@ export function ChatSystemEventCard({
     // keep raw
   }
 
-  const metaLine = `System update · ${dateUpper} · ${cfg.sheetLabel}`;
   const seed = systemSheetAvatarSeed(message.content);
-
-  if (shouldUsePulseProtocolSystemCard(message.content, statusKey)) {
-    const tripRef =
-      (message.content ?? "").match(/\b(TRP[-A-Z0-9]+)\b/i)?.[1] ??
-      (message.content ?? "").match(/\b([A-Z]{2,4}\d{2,6})\b/i)?.[1];
-    const subtitle = tripRef
-      ? `${tripRef} has reached a destination milestone on the shared trip channel.`
-      : `Recorded ${dateUpper} · ${cfg.sheetLabel}.`;
-
-    return (
-      <PulseSystemProtocolCard
-        title={message.content.trim() || "Trip protocol update"}
-        subtitle={subtitle}
-        displayTime={displayTime}
-        isMobile={isMobile}
-      />
-    );
-  }
+  const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
 
   return (
     <TripProgressEventCard
       avatarSeed={seed}
+      avatarIdentity={driverAvatar}
       avatarDotColor={cfg.rightColor}
+      kicker="SYSTEM UPDATE"
       title={message.content.trim() || "Trip update"}
-      metaLine={metaLine}
+      metaLine={`${dateUpper} · ${cfg.sheetLabel.toUpperCase()}`}
       subLine={null}
       rightPrimary={cfg.rightWord}
       rightPrimaryColor={cfg.rightColor}
       time={displayTime}
+      routeContext={routeContext}
       isMobile={isMobile}
     />
   );

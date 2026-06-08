@@ -313,9 +313,13 @@ export function useAvatar(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  const hasUploadedPhoto = rawUrlCandidates(party, context).some(
+    (u) => typeof u === 'string' && u.trim().length > 0,
+  );
+
   return {
-    imageUri: photoUri ?? presetUri,
-    loading: loading && !presetUri,
+    imageUri: photoUri ?? (hasUploadedPhoto ? null : presetUri),
+    loading: hasUploadedPhoto ? loading : false,
     initials: deriveInitials(party.name),
     initialsColor: deriveInitialsColor(party.name),
   };

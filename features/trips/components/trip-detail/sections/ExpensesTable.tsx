@@ -1,6 +1,7 @@
 /**
  * Trip Expenses table — elevated design matching FinanceOverview style.
  */
+import { FeatureBanner } from "@/components/FeatureBanner";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -105,13 +106,20 @@ export function ExpensesTable({
 
 function EmptyState() {
   return (
-    <View style={styles.emptyWrap}>
-      <View style={styles.emptyIconCircle}>
-        <FontAwesome name="inbox" size={22} color="#d1d5db" />
-      </View>
-      <Text style={styles.emptyTitle}>No expenses yet</Text>
-      <Text style={styles.emptySubtitle}>Expenses logged for this trip will appear here</Text>
-    </View>
+    <FeatureBanner
+      compact
+      title="No expenses yet"
+      description="Fuel, tolls, and driver advances logged for this trip will appear here."
+      illustration="📊"
+      accentColor="#059669"
+      bullets={[
+        { label: "Fuel & toll logs" },
+        { label: "Driver advances" },
+        { label: "Deductions tracked" },
+        { label: "Audit-ready records" },
+      ]}
+      style={styles.emptyBanner}
+    />
   );
 }
 
@@ -603,31 +611,8 @@ const styles = StyleSheet.create({
   },
 
   // ── Empty state ──
-  emptyWrap: {
-    paddingVertical: 40,
-    alignItems: "center",
-    gap: 8,
-  },
-  emptyIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#f9fafb",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  emptySubtitle: {
-    fontSize: 12,
-    color: "#9ca3af",
-    textAlign: "center",
-    maxWidth: 260,
-    lineHeight: 18,
+  emptyBanner: {
+    margin: 16,
   },
 
   // ── Native cards ──

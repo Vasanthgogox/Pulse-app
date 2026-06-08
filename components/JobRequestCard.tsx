@@ -7,6 +7,9 @@ import {
   HeroKindBadge,
   RouteInlineRow,
   sheetStyles,
+  TRIP_SHEET_BODY_PAD,
+  TRIP_SHEET_BTN_HEIGHT,
+  TRIP_SHEET_HERO_PAD,
   TRIP_SHEET_TOP_RADIUS,
   TripDetailsStrip,
 } from "@/components/driver/DriverTripSheetLayout";
@@ -30,7 +33,6 @@ import {
 } from "react-native";
 
 const HOLD_DURATION_MS = 1500;
-const HOLD_BTN_HEIGHT = 38;
 const OTP_LENGTH = 6;
 const HOLD_PRESS_RETENTION = 100;
 
@@ -385,7 +387,7 @@ export function JobRequestCard({
           {!collapsed ? (
             <View style={styles.body}>
               <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionLabel, { color: mutedTextColor }]}>
+                <Text style={[sheetStyles.sectionLabel, { color: mutedTextColor }]}>
                   TRIP DETAILS
                 </Text>
               </View>
@@ -508,16 +510,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   hero: {
-    paddingTop: 14,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
+    paddingTop: TRIP_SHEET_HERO_PAD.top,
+    paddingHorizontal: TRIP_SHEET_HERO_PAD.horizontal,
+    paddingBottom: TRIP_SHEET_HERO_PAD.bottom,
+    gap: 10,
   },
   heroCompact: {
-    paddingTop: 14,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
+    paddingTop: TRIP_SHEET_HERO_PAD.top,
+    paddingHorizontal: TRIP_SHEET_HERO_PAD.horizontal,
+    paddingBottom: TRIP_SHEET_HERO_PAD.bottom,
+    gap: 10,
   },
   heroTopRow: {
     flexDirection: "row",
@@ -533,7 +535,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   heroEyebrow: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.9,
     color: MINT,
@@ -570,9 +572,9 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(255,255,255,0.22)",
   },
   heroIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
@@ -584,42 +586,36 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   heroAmount: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "900",
     color: "#fff",
     letterSpacing: -0.25,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   heroAmountLabel: {
-    fontSize: 6,
+    fontSize: 7,
     fontWeight: "800",
     letterSpacing: 0.6,
     color: MINT,
     textTransform: "uppercase",
   },
   heroTitleCompact: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "900",
     color: "#fff",
     letterSpacing: -0.3,
   },
   body: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 6,
+    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
+    paddingTop: TRIP_SHEET_BODY_PAD.top,
+    paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
+    gap: TRIP_SHEET_BODY_PAD.gap,
     backgroundColor: Theme.surface,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  sectionLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
   },
   errorText: {
     fontSize: 11,
@@ -635,8 +631,8 @@ const styles = StyleSheet.create({
   },
   declineBtn: {
     flex: 1,
-    minHeight: HOLD_BTN_HEIGHT,
-    borderRadius: 9,
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.border,
     backgroundColor: Theme.screenBackground,
@@ -645,12 +641,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   declineBtnText: {
-    fontSize: 11,
+    ...sheetStyles.bodyLinkText,
     fontWeight: "600",
   },
   holdBtn: {
-    minHeight: HOLD_BTN_HEIGHT,
-    borderRadius: 9,
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
+    borderRadius: 10,
     overflow: "hidden",
   },
   holdBtnFlex: {
@@ -661,7 +657,7 @@ const styles = StyleSheet.create({
   },
   holdGradient: {
     flex: 1,
-    minHeight: HOLD_BTN_HEIGHT,
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 12,
@@ -675,10 +671,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   holdLabel: {
-    fontSize: 11,
-    fontWeight: "800",
+    ...sheetStyles.bodyBtnText,
     color: "#fff",
-    letterSpacing: -0.2,
     zIndex: 1,
   },
   btnDisabled: {
@@ -731,14 +725,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   verifyGradient: {
-    minHeight: HOLD_BTN_HEIGHT,
+    minHeight: TRIP_SHEET_BTN_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   verifyText: {
-    fontSize: 15,
-    fontWeight: "800",
+    ...sheetStyles.bodyBtnText,
     color: "#fff",
   },
 });

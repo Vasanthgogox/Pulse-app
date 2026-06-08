@@ -403,4 +403,9 @@ export const queryKeys = {
   /** Driver linked-user profile images (signed URLs) fetched via batch RPC. */
   driverProfileImages: (ids: string[]) =>
     ["q", "driver-profile-images", ids.join(",")] as const,
+
+  workspace: {
+    products: (orgId: string) => ["q", "workspace", "products", orgId] as const,
+    waitlist: (orgId: string) => ["q", "workspace", "waitlist", orgId] as const,
+  },
 } as const;

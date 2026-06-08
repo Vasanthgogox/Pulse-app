@@ -1,7 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Clock } from "lucide-react-native";
 import type { TripMessageRow } from "../types/chat.types";
+import {
+  buildLongHaulLateDisplay,
+  type LongHaulLateTripPlanInput,
+} from "../utils/longHaulLateDisplay.util";
 import {
   isLongHaulLateChatMessage,
   readLongHaulMetaFromMessage,
@@ -14,12 +18,30 @@ export interface LateAlertCardProps {
   /** Live rolling ETA/health from chat store (updates after pings with forward metadata). */
   liveRevisedEta?: string | null;
   liveHealthStatus?: string | null;
+  /** Trip plan inputs for scheduled ETA when metadata lacks `original_eta`. */
+  tripPlan?: LongHaulLateTripPlanInput | null;
 }
 
-export const LateAlertCard = React.memo(function LateAlertCard({ message, liveRevisedEta, liveHealthStatus }: LateAlertCardProps) {
+export const LateAlertCard = React.memo(function LateAlertCard({
+  message,
+  liveRevisedEta,
+  liveHealthStatus,
+  tripPlan,
+}: LateAlertCardProps) {
   const fromMsg = readLongHaulMetaFromMessage(message);
-  const newEta = liveRevisedEta ?? fromMsg.newEta;
+  const revisedRaw = liveRevisedEta ?? fromMsg.newEta;
   const health = liveHealthStatus ?? fromMsg.health;
+
+  const display = useMemo(
+    () =>
+      buildLongHaulLateDisplay({
+        revisedEta: revisedRaw,
+        originalEta: fromMsg.originalEta,
+        tripPlan,
+      }),
+    [revisedRaw, fromMsg.originalEta, tripPlan],
+  );
+
   let displayTime = message.created_at;
   try {
     displayTime = new Date(message.created_at).toLocaleTimeString("en-IN", {
@@ -31,7 +53,6 @@ export const LateAlertCard = React.memo(function LateAlertCard({ message, liveRe
     // keep raw
   }
 
-  const bodyText = (message.content ?? "").trim();
   const healthReadable = health ? health.replace(/_/g, " ") : null;
 
   return (
@@ -41,17 +62,36 @@ export const LateAlertCard = React.memo(function LateAlertCard({ message, liveRe
       </View>
       <View style={s.body}>
         <Text style={s.headline}>Vehicle behind schedule</Text>
-        {newEta ? (
+
+        {display.scheduledEtaLabel ? (
           <Text style={s.detail}>
-            Revised ETA: <Text style={s.detailStrong}>{newEta}</Text>
+            Scheduled ETA:{" "}
+            <Text style={s.detailStrong}>{display.scheduledEtaLabel}</Text>
           </Text>
         ) : null}
+
+        {display.revisedEtaLabel ? (
+          <Text style={s.detail}>
+            Updated ETA:{" "}
+            <Text style={[s.detailStrong, s.revisedStrong]}>
+              {display.revisedEtaLabel}
+            </Text>
+          </Text>
+        ) : null}
+
+        {display.delayLabel ? (
+          <Text style={s.delayLine}>
+            Delay: <Text style={s.delayStrong}>{display.delayLabel}</Text>
+            <Text style={s.paceHint}> · pace {display.paceLabel}</Text>
+          </Text>
+        ) : null}
+
         {healthReadable ? (
           <Text style={s.detail}>
             Health: <Text style={s.detailStrong}>{healthReadable}</Text>
           </Text>
         ) : null}
-        {bodyText ? <Text style={s.detail}>{bodyText}</Text> : null}
+
         <Text style={s.time}>{displayTime}</Text>
       </View>
     </View>
@@ -106,6 +146,25 @@ const s = StyleSheet.create({
   detailStrong: {
     color: "#334155",
     fontWeight: "600",
+  },
+  revisedStrong: {
+    color: "#b45309",
+  },
+  delayLine: {
+    fontSize: 13,
+    color: "#64748b",
+    lineHeight: 19,
+    fontWeight: "500",
+    marginTop: 4,
+  },
+  delayStrong: {
+    color: "#be123c",
+    fontWeight: "700",
+  },
+  paceHint: {
+    color: "#94a3b8",
+    fontWeight: "500",
+    fontSize: 12,
   },
   time: {
     fontSize: 11,

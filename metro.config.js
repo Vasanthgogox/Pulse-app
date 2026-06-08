@@ -1,5 +1,6 @@
 const path = require('path');
 const os = require('os');
+require('./scripts/expo-env');
 const { FileStore } = require('metro-cache');
 const { getDefaultConfig } = require('expo/metro-config');
 
@@ -22,10 +23,11 @@ if (usePersistentMetroCache) {
 
 // ── Worker concurrency (override with METRO_MAX_WORKERS) ─────────────────────
 const cpuCount = os.cpus().length;
+// Cap workers — 8+ workers on large graphs routinely OOMs Node during web/iOS bundles.
 config.maxWorkers = Math.max(
   1,
   Number(process.env.METRO_MAX_WORKERS) ||
-    Math.min(8, Math.max(2, cpuCount - 1)),
+    Math.min(4, Math.max(2, cpuCount - 1)),
 );
 
 // ── Keep file watcher off heavy / non-app trees ───────────────────────────────

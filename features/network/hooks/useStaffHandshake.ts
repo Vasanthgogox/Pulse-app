@@ -6,7 +6,12 @@
 
 import { upsertTripSubcontract } from "@/features/finance/services/tripSubcontracts.service";
 import { acceptAwardedQuote } from "@/features/indents/services/accept-awarded-quote.service";
+import {
+  createTripFromAssignedIndent,
+} from "@/features/indents/services/indentConversionService";
+import { getAcceptedDirectQuoteForIndent } from "@/features/indents/services/direct-quotes.service";
 import { updateIndent, type DirectQuoteRow, type IndentRow } from "@/features/indents";
+import { resolveIndentDeployQuote, resolveIndentDeployQuoteWithFreshQuote } from "@/features/indents/utils/resolveIndentDeployQuote.util";
 import {
   isDeployTripDetailsReady,
   parseTonsInputToWeightKg,
@@ -27,6 +32,7 @@ import { generateTripOtp } from "@/features/trips/services/tripOtp.service";
 import type { ExistingDriverMatch } from "@/features/drivers/services/drivers.service";
 import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
 import { updateDirectQuoteAssignment } from "@/features/indents";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import { useInvalidateIndents, useInvalidateTrips } from "@/lib/queries";
 import { validatePhone } from "@/lib/phoneValidation";
 import { formatIndianVehicleNumber, formatMobileNumber } from "@/lib/format";
@@ -71,6 +77,54 @@ async function persistIndentDeployTripDetails(
     load_type: loadType.trim(),
   });
   return { error };
+}
+
+type DeployTripAssignment = {
+  driverId?: string | null;
+  vehicleId?: string | null;
+  vehicleDisplayNumber?: string | null;
+};
+
+async function createDeployTripFromAward(
+  load: IndentRow,
+  orgId: string,
+  myQuotes: DirectQuoteRow[],
+  assignment: DeployTripAssignment,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { quote: freshQuote } = await getAcceptedDirectQuoteForIndent(
+    orgId,
+    load.id,
+  );
+  const resolution = resolveIndentDeployQuoteWithFreshQuote(
+    load,
+    orgId,
+    myQuotes,
+    freshQuote,
+  );
+  if (!resolution) {
+    return {
+      error: new Error("No accepted quote found for this load."),
+      trip: null,
+    };
+  }
+
+  if (resolution.mode === "direct_quote") {
+    const { error: assignErr } = await updateDirectQuoteAssignment(
+      resolution.quote.id,
+      assignment.driverId ?? null,
+      assignment.vehicleId ?? null,
+    );
+    if (assignErr) return { error: assignErr, trip: null };
+    return acceptAwardedQuote(resolution.quote.id, {
+      vehicle_display_number: assignment.vehicleDisplayNumber ?? undefined,
+    });
+  }
+
+  return createTripFromAssignedIndent(load.id, {
+    driverId: assignment.driverId ?? null,
+    vehicleId: assignment.vehicleId ?? null,
+    vehicleDisplayNumber: assignment.vehicleDisplayNumber ?? null,
+  });
 }
 
 export interface StaffHandshakeResult {
@@ -392,12 +446,8 @@ export function useStaffHandshake({
       setCurrentLoad(null);
       return;
     }
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    if (!acceptedQuote) {
+    const resolution = resolveIndentDeployQuote(load, orgId, myQuotes);
+    if (!resolution) {
       Alert.alert("Cannot deploy", "No accepted quote found for this load.");
       return;
     }
@@ -432,17 +482,14 @@ export function useStaffHandshake({
         Alert.alert("Could not save trip details", detailsErr.message);
         return;
       }
-      const { error: assignErr } = await updateDirectQuoteAssignment(
-        acceptedQuote.id,
-        assignDriverId,
-        assignVehicleId,
-      );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
+      const { error: tripErr, trip } = await createDeployTripFromAward(
+        load,
+        orgId,
+        myQuotes,
+        {
+          driverId: assignDriverId,
+          vehicleId: assignVehicleId,
+        },
       );
       if (tripErr || !trip) {
         Alert.alert(
@@ -514,12 +561,8 @@ export function useStaffHandshake({
       setCurrentLoad(null);
       return;
     }
-    const acceptedQuote = myQuotes.find(
-      (q) =>
-        (q.status || "").toLowerCase() === "accepted" &&
-        q.indent_id === load.id,
-    );
-    if (!acceptedQuote) {
+    const resolution = resolveIndentDeployQuote(load, orgId, myQuotes);
+    if (!resolution) {
       Alert.alert("Cannot deploy", "No accepted quote found for this load.");
       return;
     }
@@ -609,20 +652,15 @@ export function useStaffHandshake({
         : typeof assignVehicleId === "string"
           ? assignVehicleId
           : null;
-      const { error: assignErr } = await updateDirectQuoteAssignment(
-        acceptedQuote.id,
-        null,
-        vehicleIdForQuote,
-      );
-      if (assignErr) {
-        Alert.alert("Could not assign", assignErr.message);
-        return;
-      }
       const regNum = deferHandshakeAssignment ? "" : regTrimmed;
-      const { error: tripErr, trip } = await acceptAwardedQuote(
-        acceptedQuote.id,
+      const { error: tripErr, trip } = await createDeployTripFromAward(
+        load,
+        orgId,
+        myQuotes,
         {
-          vehicle_display_number: regNum || undefined,
+          driverId: null,
+          vehicleId: vehicleIdForQuote,
+          vehicleDisplayNumber: regNum || null,
         },
       );
       if (tripErr || !trip) {

@@ -1,6 +1,13 @@
-import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Pressable, Text, View, type ViewStyle } from "react-native";
+import { ChevronDown, ChevronUp, MoreVertical } from "lucide-react-native";
+
 import Theme from "@/constants/Theme";
+import { PulsePartyCell } from "@/features/business-pulse/components/PulsePartyCell";
+import { PulseTablePagination } from "@/features/business-pulse/components/PulseTablePagination";
+import { pulseTableStyles as tbl } from "@/features/business-pulse/components/pulseTableStyles";
+import type { PulsePartyProfile } from "@/features/business-pulse/lib/pulsePartyAvatars.util";
+import { pulsePartyForName } from "@/features/business-pulse/lib/pulsePartyAvatars.util";
 
 export type PulseTableColumn = {
   key: string;
@@ -9,11 +16,13 @@ export type PulseTableColumn = {
   width?: number;
   align?: "left" | "right";
   money?: boolean;
+  sortable?: boolean;
 };
 
 export type PulseTableRow = {
   id: string;
   cells: Record<string, string>;
+  party?: PulsePartyProfile;
   tone?: "healthy" | "warning" | "critical" | null;
   selected?: boolean;
 };
@@ -23,96 +32,137 @@ type Props = {
   rows: PulseTableRow[];
   onRowPress?: (id: string) => void;
   emptyMessage?: string;
+  pageSize?: number;
+  showPagination?: boolean;
 };
 
 function cellContainerStyle(col: PulseTableColumn): ViewStyle {
   if (col.width != null) {
-    return {
-      width: col.width,
-      flexShrink: 0,
-      flexGrow: 0,
-    };
+    return { width: col.width, flexShrink: 0, flexGrow: 0 };
   }
-  return {
-    flex: col.flex ?? 1,
-    minWidth: 0,
-  };
+  return { flex: col.flex ?? 1, minWidth: 0 };
 }
 
-function CellText({
+function alignWrap(align?: "left" | "right"): ViewStyle {
+  return align === "right" ? { alignItems: "flex-end" } : { alignItems: "flex-start" };
+}
+
+function primaryMeta(row: PulseTableRow, columns: PulseTableColumn[]): string | null {
+  if (row.cells.nameMeta) return row.cells.nameMeta;
+  const tripsCol = columns.find((c) => c.key === "trips");
+  if (tripsCol && row.cells.trips) return `${row.cells.trips} trips`;
+  return null;
+}
+
+function CellContent({
   column,
-  value,
-  tone,
+  row,
+  columns,
 }: {
   column: PulseTableColumn;
-  value: string;
-  tone?: "positive" | "negative" | null;
+  row: PulseTableRow;
+  columns: PulseTableColumn[];
 }) {
-  const alignRight = column.align === "right";
+  const raw = row.cells[column.key] ?? "—";
+  const explicitTone =
+    row.cells[`${column.key}Tone`] === "negative"
+      ? "negative"
+      : row.cells[`${column.key}Tone`] === "positive"
+        ? "positive"
+        : null;
+
+  if (column.key === "name") {
+    const meta = primaryMeta(row, columns);
+    const displayName = raw !== "—" ? raw : row.id;
+    const party: PulsePartyProfile =
+      row.party ?? pulsePartyForName(displayName, "client");
+    return <PulsePartyCell party={party} meta={meta} avatarSize={40} />;
+  }
+
   return (
     <Text
       style={[
-        styles.cellText,
-        alignRight && styles.cellTextRight,
-        column.money && styles.cellMoney,
-        tone === "positive" && styles.positive,
-        tone === "negative" && styles.negative,
+        tbl.cellText,
+        column.align === "right" && tbl.cellTextRight,
+        column.money && tbl.cellMoney,
+        explicitTone === "positive" && tbl.positive,
+        explicitTone === "negative" && tbl.negative,
       ]}
       numberOfLines={column.flex != null && column.flex >= 2 ? 2 : 1}
     >
-      {value}
+      {raw}
     </Text>
   );
 }
 
-export function PulseRankingTable({ columns, rows, onRowPress, emptyMessage }: Props) {
+export function PulseRankingTable({
+  columns,
+  rows,
+  onRowPress,
+  emptyMessage,
+  pageSize = 8,
+  showPagination = true,
+}: Props) {
+  const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    setPage(0);
+  }, [rows.length]);
+
+  const pagedRows = useMemo(() => {
+    if (!showPagination || pageSize <= 0) return rows;
+    const start = page * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [page, pageSize, rows, showPagination]);
+
   if (rows.length === 0) {
-    return emptyMessage ? <Text style={styles.empty}>{emptyMessage}</Text> : null;
+    return emptyMessage ? <Text style={tbl.empty}>{emptyMessage}</Text> : null;
   }
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.headerRow}>
+    <View style={tbl.shell}>
+      <View style={tbl.headerRow}>
         {columns.map((col) => (
           <View
             key={col.key}
-            style={[cellContainerStyle(col), alignWrap(col.align)]}
+            style={[cellContainerStyle(col), alignWrap(col.align), tbl.headerCell]}
           >
-            <Text style={[styles.headerText, col.align === "right" && styles.headerTextRight]}>
+            <Text style={[tbl.headerText, col.align === "right" && tbl.headerTextRight]}>
               {col.label}
             </Text>
+            {col.sortable !== false && col.key !== "name" ? (
+              <View style={{ gap: -4 }}>
+                <ChevronUp size={10} color={Theme.textMuted} strokeWidth={2.5} />
+                <ChevronDown size={10} color={Theme.textMuted} strokeWidth={2.5} />
+              </View>
+            ) : null}
           </View>
         ))}
+        <View style={tbl.rowMenu} />
       </View>
-      {rows.map((row) => {
+
+      {pagedRows.map((row) => {
         const content = (
           <>
-            {columns.map((col) => {
-              const raw = row.cells[col.key] ?? "—";
-              const explicitTone =
-                row.cells[`${col.key}Tone`] === "negative"
-                  ? "negative"
-                  : row.cells[`${col.key}Tone`] === "positive"
-                    ? "positive"
-                    : null;
-              return (
-                <View
-                  key={col.key}
-                  style={[cellContainerStyle(col), alignWrap(col.align)]}
-                >
-                  <CellText column={col} value={raw} tone={explicitTone} />
-                </View>
-              );
-            })}
+            {columns.map((col) => (
+              <View
+                key={col.key}
+                style={[cellContainerStyle(col), alignWrap(col.align)]}
+              >
+                <CellContent column={col} row={row} columns={columns} />
+              </View>
+            ))}
+            <View style={tbl.rowMenu}>
+              <MoreVertical size={16} color={Theme.textMuted} strokeWidth={2} />
+            </View>
           </>
         );
 
         const rowStyle = [
-          styles.dataRow,
-          row.tone === "critical" && styles.toneCritical,
-          row.tone === "warning" && styles.toneWarning,
-          row.tone === "healthy" && styles.toneHealthy,
-          row.selected && styles.rowSelected,
+          tbl.dataRow,
+          row.tone === "critical" && tbl.toneCritical,
+          row.tone === "warning" && tbl.toneWarning,
+          row.selected && tbl.dataRowSelected,
         ];
 
         if (onRowPress) {
@@ -120,7 +170,7 @@ export function PulseRankingTable({ columns, rows, onRowPress, emptyMessage }: P
             <Pressable
               key={row.id}
               onPress={() => onRowPress(row.id)}
-              style={({ pressed }) => [...rowStyle, pressed && styles.rowPressed]}
+              style={({ pressed }) => [...rowStyle, pressed && tbl.dataRowPressed]}
             >
               {content}
             </Pressable>
@@ -133,15 +183,20 @@ export function PulseRankingTable({ columns, rows, onRowPress, emptyMessage }: P
           </View>
         );
       })}
+
+      {showPagination && pageSize > 0 && rows.length > pageSize ? (
+        <PulseTablePagination
+          page={page}
+          pageSize={pageSize}
+          total={rows.length}
+          onPageChange={setPage}
+        />
+      ) : null}
     </View>
   );
 }
 
-function alignWrap(align?: "left" | "right"): ViewStyle {
-  return align === "right" ? { alignItems: "flex-end" } : { alignItems: "flex-start" };
-}
-
-/** Section label + table — consistent card interior layout */
+/** @deprecated Use PulseDashboardCard + PulseRankingTable */
 export function PulseTableSection({
   title,
   subtitle,
@@ -154,127 +209,17 @@ export function PulseTableSection({
   children: ReactNode;
 }) {
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionHeaderLeft}>
-          {icon}
-          <Text style={styles.sectionTitle}>{title}</Text>
-        </View>
-        {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+    <View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingBottom: 8 }}>
+        {icon}
+        <Text style={{ fontSize: 12, fontWeight: "600", color: "#181C32" }}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={{ fontSize: 12, color: Theme.textMuted }}>{subtitle}</Text>
+        ) : null}
       </View>
       {children}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    gap: 0,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Theme.whiteMuted,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    marginBottom: 6,
-  },
-  headerText: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  headerTextRight: {
-    textAlign: "right",
-  },
-  dataRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.whiteMuted,
-    marginBottom: 5,
-  },
-  rowPressed: {
-    opacity: 0.88,
-  },
-  rowSelected: {
-    borderColor: Theme.primary,
-    backgroundColor: "#eef2ff",
-  },
-  toneHealthy: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#bbf7d0",
-  },
-  toneWarning: {
-    backgroundColor: "#fffbeb",
-    borderColor: "#fde68a",
-  },
-  toneCritical: {
-    backgroundColor: "#fff1f2",
-    borderColor: "#fecdd3",
-  },
-  cellText: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.text,
-  },
-  cellTextRight: {
-    textAlign: "right",
-  },
-  cellMoney: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  positive: {
-    color: "#047857",
-  },
-  negative: {
-    color: Theme.teslaRed,
-  },
-  empty: {
-    fontSize: 9,
-    color: Theme.textMuted,
-    paddingVertical: 8,
-  },
-  section: {
-    gap: 8,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  sectionHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flex: 1,
-    minWidth: 0,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-  },
-  sectionSubtitle: {
-    fontSize: 9,
-    color: Theme.textMuted,
-    fontWeight: "600",
-    flexShrink: 1,
-    textAlign: "right",
-  },
-});

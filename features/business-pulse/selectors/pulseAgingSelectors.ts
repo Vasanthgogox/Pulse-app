@@ -1,4 +1,5 @@
 import type { PulseDataset, PulseFilterState } from "../types";
+import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { applyPulseFilters } from "./pulseSelectors";
 
 export type AgingBucketId = "0_30" | "31_60" | "61_90" | "90_plus";
@@ -10,6 +11,8 @@ export type AgingLineItem = {
   tripId: string;
   tripRef: string;
   party: string;
+  partyEntityId?: string;
+  partyEntityType?: PartyEntityType;
   category: string;
   amount: number;
   daysOutstanding: number;
@@ -152,6 +155,8 @@ function collectAgingLines(
       tripId: row.trip_id,
       tripRef,
       party: driverName ?? "Driver settlement",
+      partyEntityId: trip?.driver_id ? String(trip.driver_id) : undefined,
+      partyEntityType: trip?.driver_id ? "driver" : undefined,
       category: "Fuel reimbursement",
       amount,
       anchorDate,
@@ -172,6 +177,8 @@ function collectAgingLines(
       tripId: row.trip_id,
       tripRef,
       party: driverName ?? "Driver settlement",
+      partyEntityId: trip?.driver_id ? String(trip.driver_id) : undefined,
+      partyEntityType: trip?.driver_id ? "driver" : undefined,
       category: "Toll reimbursement",
       amount,
       anchorDate,
@@ -188,6 +195,8 @@ function collectAgingLines(
       tripId: trip.id,
       tripRef: String(trip.trip_operational_code ?? trip.trip_number ?? trip.id),
       party: labels.supplierNames.get(String(trip.supplier_id)) ?? "Supplier",
+      partyEntityId: String(trip.supplier_id),
+      partyEntityType: "supplier",
       category: "Supplier payable",
       amount: supplierDue,
       anchorDate,
@@ -206,6 +215,8 @@ function collectAgingLines(
       tripId: trip.id,
       tripRef: String(trip.trip_operational_code ?? trip.trip_number ?? trip.id),
       party: labels.clientNames.get(String(trip.client_id)) ?? "Client",
+      partyEntityId: String(trip.client_id),
+      partyEntityType: "client",
       category: "Client receivable",
       amount: clientDue,
       anchorDate,

@@ -3,7 +3,8 @@ export type WorkspacePanelId =
   | "account-edit"
   | "settings"
   | "team"
-  | "kyc";
+  | "kyc"
+  | "products";
 
 export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   account: "My Account",
@@ -11,11 +12,13 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   settings: "Workspace settings",
   team: "Team members",
   kyc: "Org identity & KYC",
+  products: "Pulse Products",
 };
 
 export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>> = {
   account: "Manage your personal identity",
   "account-edit": "Update your name, photo and status",
+  products: "Your logistics business operating system",
 };
 
 export function parseWorkspacePanelId(
@@ -27,7 +30,8 @@ export function parseWorkspacePanelId(
     value === "account-edit" ||
     value === "settings" ||
     value === "team" ||
-    value === "kyc"
+    value === "kyc" ||
+    value === "products"
   ) {
     return value;
   }

@@ -372,6 +372,8 @@ export interface NetworkMessageRow {
 export interface NetworkConversation extends NetworkConversationRow {
   partner_org_id: string;
   partner_name: string;
+  partner_logo_url?: string | null;
+  partner_avatar_seed?: string | null;
   unread_count: number;
   messages: NetworkMessageRow[];
 }
@@ -379,6 +381,8 @@ export interface NetworkConversation extends NetworkConversationRow {
 export interface NetworkPartner {
   org_id: string;
   name: string;
+  logo_url?: string | null;
+  avatar_seed?: string | null;
 }
 
 // ── Shareable document item ───────────────────────────────────────────────────

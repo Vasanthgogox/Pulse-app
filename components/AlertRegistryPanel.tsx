@@ -1,22 +1,49 @@
 /**
- * Mission Radar — Alert Registry dropdown (bell popover).
- * WhatsApp bootstrap: feed from global sync store; 15 visible, load more (+15 in-memory or DB page).
+ * Notifications panel — Metronic-style dropdown (bell popover + full-screen route).
  */
+export type { RegistryFilterTab } from "@/lib/globalSync/registryFeed.util";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Theme from "@/constants/Theme";
+import {
+  RegistryCardActions,
+  RegistryGhostButton,
+  RegistryPrimaryButton,
+} from "@/components/AlertRegistryCardActions";
 import { AlertRegistrySignalCard } from "@/components/AlertRegistrySignalCard";
-import type { AlertSignalStatus } from "@/components/AlertRegistrySignalCard";
+import {
+  opsAlertTagVariant,
+  formatRegistryLabel,
+  salaryRequestStatusTone,
+  sharedNotificationStatusTone,
+  type RegistryTag,
+} from "@/lib/alertRegistry/registryAlertPresentation.util";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import { REGISTRY_PAGE_SIZE } from "@/lib/globalSync/registryFeed.constants";
+import {
+  filterRegistryFeed,
+  registryFeedLifecycleTab,
+  type RegistryFilterTab,
+} from "@/lib/globalSync/registryFeed.util";
 import { useRegistryFeed } from "@/lib/globalSync/useRegistryFeed";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
-import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
+import {
+  buildOpsRegistryCardPresentation,
+  opsRegistryActionLabel,
+  type RegistryPartyLookup,
+} from "@/lib/alertRegistry/registryOpsPresentation.util";
+import {
+  resolveSalaryRegistryAvatar,
+  resolveSharedRegistryAvatar,
+} from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
-import { LinearGradient } from "expo-linear-gradient";
-import { ChevronDown, Radar, RefreshCw, X } from "lucide-react-native";
+import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
+import { ChevronDown, Settings2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   Platform,
@@ -24,114 +51,241 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
+  useWindowDimensions,
   type ViewStyle,
 } from "react-native";
 
+const FILTER_TABS: { id: RegistryFilterTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "driver", label: "Driver" },
+  { id: "trip", label: "Trip" },
+  { id: "payment", label: "Payment" },
+  { id: "archive", label: "Archive" },
+];
+
+const EMPTY_COPY: Record<
+  RegistryFilterTab,
+  { title: string; body: string }
+> = {
+  all: {
+    title: "You're all caught up",
+    body: "New operational and finance signals will appear here.",
+  },
+  driver: {
+    title: "No driver requests",
+    body: "Salary requests and trips waiting for driver assignment appear here.",
+  },
+  trip: {
+    title: "No trip alerts",
+    body: "Late logs, idle vehicles, and other active trip signals appear here.",
+  },
+  payment: {
+    title: "No payment alerts",
+    body: "Shared ledger updates, disputes, and payment receipts appear here.",
+  },
+  archive: {
+    title: "No archived items",
+    body: "Resolved and read notifications are kept in this archive.",
+  },
+};
+
 function formatRelativeTime(iso: string | null | undefined): string {
-  if (!iso) return "Now";
+  if (!iso) return "Just now";
   const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return "Now";
+  if (Number.isNaN(ts)) return "Just now";
   const diffMs = Date.now() - ts;
   const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return "Now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function categoryMeta(item: GlobalOperationAlert): {
-  typeLabel: string;
-  status: AlertSignalStatus;
-} {
-  if (item.category === "late_log") {
-    return { typeLabel: "LATE LOG", status: "WARNING" };
+function formatRegistryTabCount(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
+
+function formatSalaryAmount(amount: number | null | undefined): string {
+  return `₹${Number(amount ?? 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatSalaryHighlight(req: SalaryRequestWithDriverRow): string {
+  return `₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`;
+}
+
+function opsContextLabel(item: GlobalOperationAlert): string {
+  if (item.category === "late_log") return "Operations";
+  if (item.category === "unassigned_trip") return "Operations";
+  if (item.category === "vehicle_idle") return "Fleet";
+  if (item.category === "payment_received") return "Finance";
+  if (item.category === "dispute") return "Finance";
+  return "Operations";
+}
+
+function opsTag(item: GlobalOperationAlert): string {
+  if (item.category === "late_log") return "late log";
+  if (item.category === "unassigned_trip") return "unassigned";
+  if (item.category === "vehicle_idle") return "idle";
+  if (item.category === "payment_received") return "payment received";
+  if (item.category === "dispute") return "dispute";
+  return item.category.replace(/_/g, " ");
+}
+
+function splitOpsDetailLines(
+  ops: GlobalOperationAlert,
+  presentationDetail?: string,
+): { title?: string; subtitle?: string; body?: string } {
+  const raw = (presentationDetail ?? ops.subtitle ?? "").trim();
+  if (!raw) return {};
+  const parts = raw.split("·").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return { title: parts[0], subtitle: parts.slice(1).join(" · ") };
   }
-  if (item.category === "unassigned_trip") {
-    return { typeLabel: "UNASSIGNED TRIP", status: "ACTION" };
+  return { body: raw };
+}
+
+function paymentContextLabel(item: SharedLedgerNotificationRow): string {
+  if (item.event_type === "dispute_received" || item.event_type === "dispute_status_changed") {
+    return "Dispute";
   }
-  if (item.category === "vehicle_idle") {
-    return { typeLabel: "IDLE", status: "WARNING" };
+  if (item.event_type === "mismatch_detected" || item.event_type === "partner_only_ghost") {
+    return "Ledger mismatch";
   }
-  if (item.category === "payment_received") {
-    return { typeLabel: "PAYMENT", status: "INFO" };
+  return "Payment due";
+}
+
+function paymentTag(item: SharedLedgerNotificationRow): string {
+  if (item.event_type === "dispute_received" || item.event_type === "dispute_status_changed") {
+    return "dispute";
   }
-  const label = item.category.replace(/_/g, " ").toUpperCase();
-  return {
-    typeLabel: label.slice(0, 18),
-    status: item.kind === "critical" ? "ACTION" : "WARNING",
-  };
+  if (item.event_type === "pending_partner_followup") return "follow up";
+  if (item.event_type === "mismatch_detected") return "mismatch";
+  return "ledger";
 }
 
 export type AlertRegistryFinanceHandlers = {
   onRejectSalary: (requestId: string) => void;
   onPaySalary: (req: SalaryRequestWithDriverRow) => void;
+  onViewSalaryArchive: (req: SalaryRequestWithDriverRow) => void;
   onMarkSharedRead: (notificationId: string) => void;
   onSharedAction: (item: SharedLedgerNotificationRow) => void;
+  onDismissOps: (ops: GlobalOperationAlert) => void;
+  onOpenOps: (ops: GlobalOperationAlert) => void;
   busySalaryId: string | null;
 };
 
 export type AlertRegistryPanelLayout = "popover" | "fullscreen";
 
 export type AlertRegistryPanelProps = {
-  tab: "active" | "history";
-  onTabChange: (tab: "active" | "history") => void;
+  filterTab: RegistryFilterTab;
+  onFilterTabChange: (tab: RegistryFilterTab) => void;
   onClose: () => void;
   onSync?: () => void | Promise<void>;
   syncing?: boolean;
   finance: AlertRegistryFinanceHandlers;
-  /** Popover (desktop bell) vs full-screen mobile route. */
   layout?: AlertRegistryPanelLayout;
   topInset?: number;
   bottomInset?: number;
 };
 
+function sharedTagVariant(label: string): RegistryTag["variant"] {
+  if (label === "dispute") return "danger";
+  if (label === "mismatch" || label === "follow up") return "warning";
+  return "neutral";
+}
+
+function opsActionLabel(ops: GlobalOperationAlert): string {
+  return opsRegistryActionLabel(ops);
+}
+
 function RegistryFeedList({
-  tab,
+  filterTab,
   visibleCount,
   finance,
-  cardActionStyles,
 }: {
-  tab: "active" | "history";
+  filterTab: RegistryFilterTab;
   visibleCount: number;
   finance: AlertRegistryFinanceHandlers;
-  cardActionStyles: {
-    registryCardActions: object;
-    registryGhostBtn: object;
-    registryGhostBtnText: object;
-    registryPrimaryBtn: object;
-    registryPrimaryBtnText: object;
-    registryStatusText: object;
-  };
 }) {
   const auth = useOptionalAuth();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const bootstrapStatus = useGlobalSyncStore((s) => s.bootstrapStatus);
-  const { feed } = useRegistryFeed(tab, orgId);
+  const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
+  const partnerDisplayByOrgId = useGlobalSyncStore((s) => s.partnerDisplayByOrgId);
+  const partnerAvatarUriByOrgId = useGlobalSyncStore((s) => s.partnerAvatarUriByOrgId);
+  const { data: drivers = [] } = useDriversQuery(orgId);
+  const { data: clients = [] } = useClientsQuery(orgId);
+  const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const driversById = useMemo(
+    () => new Map(drivers.map((driver) => [driver.id, driver])),
+    [drivers],
+  );
+  const clientsById = useMemo(
+    () => new Map(clients.map((client) => [client.id, client])),
+    [clients],
+  );
+  const suppliersById = useMemo(
+    () => new Map(suppliers.map((supplier) => [supplier.id, supplier])),
+    [suppliers],
+  );
+  const partyCtx = useMemo(
+    (): RegistryPartyLookup => ({
+      activeTrips,
+      driversById,
+      clientsById,
+      suppliersById,
+      org: org?.currentOrganization ?? null,
+      partnerDisplay: partnerDisplayByOrgId,
+      partnerAvatarUri: partnerAvatarUriByOrgId,
+    }),
+    [
+      activeTrips,
+      driversById,
+      clientsById,
+      suppliersById,
+      org?.currentOrganization,
+      partnerDisplayByOrgId,
+      partnerAvatarUriByOrgId,
+    ],
+  );
+  const lifecycleTab = registryFeedLifecycleTab(filterTab);
+  const { feed: rawFeed } = useRegistryFeed(lifecycleTab, orgId);
+  const feed = useMemo(
+    () => filterRegistryFeed(rawFeed, filterTab),
+    [rawFeed, filterTab],
+  );
+  const isActiveView = filterTab !== "archive";
 
   const visible = feed.slice(0, visibleCount);
+  const firstAttributionEntryId = useMemo(() => {
+    const first = visible.find(
+      (entry) =>
+        entry.kind === "salary" &&
+        !!entry.salary &&
+        entry.salary.request_type === "trip_based" &&
+        String(entry.salary.note ?? "").toLowerCase().includes("fleet trip"),
+    );
+    return first?.id ?? null;
+  }, [visible]);
 
   if (auth?.profile?.role === "driver" || !orgId || bootstrapStatus !== "ready") {
     return null;
   }
 
-  if (tab === "history" && feed.length === 0) {
+  if (feed.length === 0) {
+    const empty = EMPTY_COPY[filterTab];
     return (
-      <Text style={styles.emptyHint}>
-        Finance and ledger history appears here after items are read or resolved.
-      </Text>
-    );
-  }
-
-  if (tab === "active" && feed.length === 0) {
-    return (
-      <Text style={styles.emptyHint}>
-        All clear — waiting for realtime signals.
-      </Text>
+      <View style={styles.emptyWrap}>
+        <Text style={styles.emptyTitle}>{empty.title}</Text>
+        <Text style={styles.emptyBody}>{empty.body}</Text>
+      </View>
     );
   }
 
@@ -139,109 +293,230 @@ function RegistryFeedList({
     <>
       {visible.map((entry) => {
         if (entry.kind === "ops" && entry.ops) {
-          const meta = categoryMeta(entry.ops);
+          const ops = entry.ops;
+          const opsTags: RegistryTag[] = [
+            { label: opsTag(ops), variant: opsAlertTagVariant(ops.category) },
+          ];
+          const presentation = buildOpsRegistryCardPresentation(ops, partyCtx);
+          const detailLines = splitOpsDetailLines(ops, presentation.detail);
           return (
             <AlertRegistrySignalCard
               key={entry.id}
-              typeLabel={meta.typeLabel}
-              title={entry.ops.title}
-              detail={entry.ops.subtitle ?? "Review operational protocol."}
-              tripId={entry.ops.trip_number}
-              timeLabel={formatRelativeTime(entry.ops.created_at)}
-              status={meta.status}
+              mode="active"
+              avatar={presentation.avatar}
+              actorName={presentation.actorName}
+              actionText={presentation.actionText}
+              highlightText={presentation.highlightText}
+              trailingText={presentation.trailingText}
+              detailTitle={detailLines.title}
+              detailSubtitle={detailLines.subtitle}
+              detail={detailLines.body}
+              timeLabel={formatRelativeTime(ops.created_at)}
+              contextLabel={opsContextLabel(ops)}
+              tags={opsTags}
+              isUnread={isActiveView}
+              footer={
+                <RegistryCardActions>
+                  <RegistryGhostButton
+                    label="Decline"
+                    onPress={() => finance.onDismissOps(ops)}
+                  />
+                  <RegistryPrimaryButton
+                    label={opsActionLabel(ops)}
+                    onPress={() => finance.onOpenOps(ops)}
+                  />
+                </RegistryCardActions>
+              }
             />
           );
         }
+
         if (entry.kind === "shared" && entry.shared) {
           const item = entry.shared;
+          const amountMeta =
+            item.amount_meta != null && Number.isFinite(Number(item.amount_meta))
+              ? `Amount: ₹${Number(item.amount_meta).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}`
+              : null;
+          const tagLabel = paymentTag(item);
+          const sharedTags: RegistryTag[] = [
+            { label: tagLabel, variant: sharedTagVariant(tagLabel) },
+          ];
+          const statusTone = sharedNotificationStatusTone(item.status);
+          const sharedAvatar = resolveSharedRegistryAvatar(item, {
+            org: partyCtx.org,
+            partnerDisplay: partyCtx.partnerDisplay,
+            partnerAvatarUri: partyCtx.partnerAvatarUri,
+          });
+          const sharedActionText =
+            item.event_type === "dispute_received" ||
+            item.event_type === "dispute_status_changed"
+              ? "raised"
+              : "posted";
+          const sharedHighlight =
+            item.event_type === "dispute_received" ||
+            item.event_type === "dispute_status_changed"
+              ? item.title
+              : item.amount_meta != null && Number.isFinite(Number(item.amount_meta))
+                ? `₹${Number(item.amount_meta).toLocaleString("en-IN", {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}`
+                : item.title;
           return (
             <AlertRegistrySignalCard
               key={entry.id}
-              typeLabel="SHARED LEDGER"
-              title={item.title}
-              detail={`${sharedLedgerActionLabel(item.event_type)} · ${new Date(item.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}`}
-              status="INFO"
+              mode={isActiveView ? "active" : "completed"}
+              avatar={sharedAvatar}
+              actorName={sharedAvatar.name}
+              actionText={sharedActionText}
+              highlightText={sharedHighlight}
+              detailTitle={
+                amountMeta
+                  ? amountMeta.replace(/^Amount:\s*/, "")
+                  : item.title
+              }
+              detailSubtitle={
+                item.subtitle ?? sharedLedgerActionLabel(item.event_type)
+              }
+              timeLabel={formatRelativeTime(item.created_at)}
+              contextLabel={paymentContextLabel(item)}
+              tags={isActiveView ? sharedTags : undefined}
+              isUnread={isActiveView && item.status !== "read"}
+              statusPill={
+                !isActiveView
+                  ? { label: String(item.status ?? "read"), tone: statusTone }
+                  : undefined
+              }
               footer={
-                tab === "active" ? (
-                  <View style={cardActionStyles.registryCardActions}>
-                    <TouchableOpacity
-                      style={cardActionStyles.registryGhostBtn}
+                isActiveView ? (
+                  <RegistryCardActions>
+                    <RegistryGhostButton
+                      label="Decline"
                       onPress={() => finance.onMarkSharedRead(item.id)}
-                    >
-                      <Text style={cardActionStyles.registryGhostBtnText}>
-                        Read
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={cardActionStyles.registryPrimaryBtn}
+                    />
+                    <RegistryPrimaryButton
+                      label={sharedLedgerActionLabel(item.event_type)}
                       onPress={() => finance.onSharedAction(item)}
-                    >
-                      <Text style={cardActionStyles.registryPrimaryBtnText}>
-                        {sharedLedgerActionLabel(item.event_type)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                    />
+                  </RegistryCardActions>
                 ) : (
-                  <Text style={cardActionStyles.registryStatusText}>
-                    {String(item.status ?? "").toUpperCase()}
-                  </Text>
+                  <RegistryCardActions>
+                    <RegistryGhostButton
+                      label="View ledger"
+                      onPress={() => finance.onSharedAction(item)}
+                    />
+                  </RegistryCardActions>
                 )
               }
             />
           );
         }
+
         if (entry.kind === "salary" && entry.salary) {
           const req = entry.salary;
+          const driverName = req.drivers?.name ?? "Driver";
+          const isTripBasedAttribution =
+            req.request_type === "trip_based" &&
+            String(req.note ?? "").toLowerCase().includes("fleet trip");
+
+          const salaryTags: RegistryTag[] = isTripBasedAttribution
+            ? [
+                { label: "attribution", variant: "default" },
+                { label: "trip based", variant: "neutral" },
+              ]
+            : [
+                { label: "salary", variant: "default" },
+                { label: req.request_type.replace("_", " "), variant: "neutral" },
+              ];
+          const statusTone = salaryRequestStatusTone(req.status);
+
           return (
-            <AlertRegistrySignalCard
-              key={entry.id}
-              typeLabel="SALARY REQUEST"
-              title={`${req.drivers?.name ?? "Driver"} requested payment`}
-              detail={`${req.request_type.replace("_", " ")} · ₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`}
-              status="ACTION"
-              timeLabel={new Date(req.created_at).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-              })}
-              footer={
-                tab === "active" ? (
-                  <View style={cardActionStyles.registryCardActions}>
-                    <TouchableOpacity
-                      style={cardActionStyles.registryGhostBtn}
-                      onPress={() => finance.onRejectSalary(req.id)}
-                      disabled={finance.busySalaryId === req.id}
-                    >
-                      <Text style={cardActionStyles.registryGhostBtnText}>
-                        Reject
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={cardActionStyles.registryPrimaryBtn}
-                      onPress={() => finance.onPaySalary(req)}
-                    >
-                      <Text style={cardActionStyles.registryPrimaryBtnText}>
-                        Pay now
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={cardActionStyles.registryStatusText}>
-                    {String(req.status ?? "").toUpperCase()}
-                  </Text>
-                )
-              }
-            />
+            <View key={entry.id}>
+              {entry.id === firstAttributionEntryId ? (
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupHeaderText}>Attribution requests</Text>
+                </View>
+              ) : null}
+              <AlertRegistrySignalCard
+                mode={isActiveView ? "active" : "completed"}
+                avatar={resolveSalaryRegistryAvatar(req, driversById)}
+                actorName={driverName}
+                actionText={
+                  isTripBasedAttribution
+                    ? "sent a trip for review on"
+                    : "requested payment for"
+                }
+                highlightText={formatSalaryHighlight(req)}
+                detailTitle={formatSalaryAmount(req.amount)}
+                detailSubtitle={
+                  isTripBasedAttribution
+                    ? "Fleet trip attribution request"
+                    : `${formatRegistryLabel(req.request_type)} salary request`
+                }
+                timeLabel={formatRelativeTime(req.created_at)}
+                contextLabel={
+                  isTripBasedAttribution ? "Fleet attribution" : "Salary request"
+                }
+                tags={isActiveView ? salaryTags : undefined}
+                isUnread={isActiveView}
+                statusPill={
+                  !isActiveView
+                    ? { label: String(req.status ?? ""), tone: statusTone }
+                    : undefined
+                }
+                footer={
+                  isActiveView ? (
+                    <RegistryCardActions>
+                      <RegistryGhostButton
+                        label="Decline"
+                        onPress={() => finance.onRejectSalary(req.id)}
+                        disabled={finance.busySalaryId === req.id}
+                      />
+                      <RegistryPrimaryButton
+                        label={isTripBasedAttribution ? "Accept" : "Pay now"}
+                        onPress={() => finance.onPaySalary(req)}
+                      />
+                    </RegistryCardActions>
+                  ) : (
+                    <RegistryCardActions>
+                      <RegistryGhostButton
+                        label="View details"
+                        onPress={() => finance.onViewSalaryArchive(req)}
+                      />
+                    </RegistryCardActions>
+                  )
+                }
+              />
+            </View>
           );
         }
+
         return null;
       })}
     </>
   );
 }
 
+const TABS = FILTER_TABS;
+
+/** Metronic demo2 dropdown + privacy-settings chrome. */
+const METRONIC = {
+  border: "#EFF2F5",
+  muted: "#A1A5B7",
+  primaryBtn: "#181C32",
+  ghostBorder: "#DBDFE9",
+  panelWidth: 480,
+  /** Distance from viewport top to popover start (header + bell anchor). */
+  popoverOffsetTop: 108,
+  popoverBottomGap: 12,
+} as const;
+
 export function AlertRegistryPanel({
-  tab,
-  onTabChange,
+  filterTab,
+  onFilterTabChange,
   onClose,
   onSync,
   syncing = false,
@@ -251,22 +526,41 @@ export function AlertRegistryPanel({
   bottomInset = 0,
 }: AlertRegistryPanelProps) {
   const isFullscreen = layout === "fullscreen";
+  const { height: windowHeight } = useWindowDimensions();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const [syncSpin, setSyncSpin] = useState(false);
   const [visibleCount, setVisibleCount] = useState(REGISTRY_PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const markAllNotificationsRead = useGlobalSyncStore((s) => s.markAllNotificationsRead);
   const salaryRequestsHasMore = useGlobalSyncStore((s) => s.salaryRequestsHasMore);
   const loadMoreSalaryRequests = useGlobalSyncStore((s) => s.loadMoreSalaryRequests);
-  const { feed } = useRegistryFeed(tab, orgId);
-  const hasMoreInMemory = visibleCount < feed.length;
-  const hasMoreInDb = tab === "active" && salaryRequestsHasMore;
+  const { feed: activeFeed } = useRegistryFeed("active", orgId);
+  const { feed: historyFeed } = useRegistryFeed("history", orgId);
+  const { feed } = useRegistryFeed(registryFeedLifecycleTab(filterTab), orgId);
+  const filteredFeed = useMemo(
+    () => filterRegistryFeed(feed, filterTab),
+    [feed, filterTab],
+  );
+  const tabCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        FILTER_TABS.map((t) => [
+          t.id,
+          t.id === "archive"
+            ? historyFeed.length
+            : filterRegistryFeed(activeFeed, t.id).length,
+        ]),
+      ) as Record<RegistryFilterTab, number>,
+    [activeFeed, historyFeed.length],
+  );
+  const hasMoreInMemory = visibleCount < filteredFeed.length;
+  const hasMoreInDb = filterTab !== "archive" && salaryRequestsHasMore;
   const showLoadMore = hasMoreInMemory || hasMoreInDb;
-
   useEffect(() => {
     setVisibleCount(REGISTRY_PAGE_SIZE);
-  }, [tab]);
+  }, [filterTab]);
 
   const handleSync = async () => {
     if (!onSync) return;
@@ -301,18 +595,6 @@ export function AlertRegistryPanel({
     loadMoreSalaryRequests,
   ]);
 
-  const cardActionStyles = useMemo(
-    () => ({
-      registryCardActions: styles.registryCardActions,
-      registryGhostBtn: styles.registryGhostBtn,
-      registryGhostBtnText: styles.registryGhostBtnText,
-      registryPrimaryBtn: styles.registryPrimaryBtn,
-      registryPrimaryBtnText: styles.registryPrimaryBtnText,
-      registryStatusText: styles.registryStatusText,
-    }),
-    [],
-  );
-
   const fullscreenShell: ViewStyle | undefined = isFullscreen
     ? {
         flex: 1,
@@ -325,122 +607,157 @@ export function AlertRegistryPanel({
       }
     : undefined;
 
+  const popoverShell: ViewStyle | undefined =
+    layout === "popover"
+      ? {
+          height:
+            windowHeight -
+            METRONIC.popoverOffsetTop -
+            METRONIC.popoverBottomGap,
+          maxHeight:
+            windowHeight -
+            METRONIC.popoverOffsetTop -
+            METRONIC.popoverBottomGap,
+        }
+      : undefined;
+
   return (
-    <View style={[styles.shell, fullscreenShell]}>
-      <View style={[styles.header, isFullscreen && { paddingTop: 14 + topInset }]}>
-        <LinearGradient
-          colors={["#171A20", "#1e293b"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.headerGlow} pointerEvents="none" />
-        <View style={styles.headerTextCol}>
-          <View style={styles.missionRow}>
-            <Radar size={12} color="#818cf8" />
-            <Text style={styles.missionTitle}>Mission Radar</Text>
-          </View>
-          <Text style={styles.missionSub}>
-            Automated operational surveillance
-          </Text>
-        </View>
+    <View style={[styles.shell, fullscreenShell, popoverShell]}>
+      <View style={[styles.header, isFullscreen && { paddingTop: 16 + topInset }]}>
+        <Text style={styles.headerTitle}>Notifications</Text>
         <Pressable
           onPress={onClose}
           style={styles.closeBtn}
           accessibilityRole="button"
-          accessibilityLabel="Close alert registry"
+          accessibilityLabel="Close notifications"
+          hitSlop={8}
         >
-          <X size={16} color="#94a3b8" />
+          <X size={16} color={METRONIC.muted} strokeWidth={2} />
         </Pressable>
       </View>
 
-      <View style={[styles.body, isFullscreen && { flex: 1 }]}>
-        <View style={styles.tabTrack}>
-          {(["active", "history"] as const).map((t) => {
-            const selected = tab === t;
+      <View style={styles.tabBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabScroll}
+          contentContainerStyle={styles.tabScrollContent}
+        >
+          {TABS.map((t) => {
+            const selected = filterTab === t.id;
+            const count = tabCounts[t.id] ?? 0;
+            const showCount = count > 0;
             return (
               <Pressable
-                key={t}
-                onPress={() => onTabChange(t)}
-                style={[styles.tabBtn, selected && styles.tabBtnActive]}
+                key={t.id}
+                onPress={() => onFilterTabChange(t.id)}
+                style={styles.tabItem}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
+                accessibilityLabel={
+                  showCount ? `${t.label}, ${count} items` : t.label
+                }
               >
-                <Text
-                  style={[styles.tabText, selected && styles.tabTextActive]}
-                >
-                  {t === "active" ? "ACTIVE" : "HISTORY"}
-                </Text>
+                <View style={styles.tabLabelRow}>
+                  <Text style={[styles.tabText, selected && styles.tabTextActive]}>
+                    {t.label}
+                  </Text>
+                  {showCount ? (
+                    <View
+                      style={[
+                        styles.tabCountBadge,
+                        selected && styles.tabCountBadgeActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabCountText,
+                          selected && styles.tabCountTextActive,
+                        ]}
+                      >
+                        {formatRegistryTabCount(count)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                {selected ? <View style={styles.tabIndicator} /> : null}
               </Pressable>
             );
           })}
-        </View>
-
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Critical signals</Text>
-          <View style={styles.liveAudit}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveAuditText}>Live audit</Text>
-          </View>
-        </View>
-
-        <ScrollView
-          style={[styles.scroll, isFullscreen && { flex: 1, maxHeight: undefined }]}
-          contentContainerStyle={[
-            styles.scrollContent,
-            isFullscreen && { paddingBottom: bottomInset + 8 },
-          ]}
-          showsVerticalScrollIndicator
-          nestedScrollEnabled
-        >
-          <RegistryFeedList
-            tab={tab}
-            visibleCount={visibleCount}
-            finance={finance}
-            cardActionStyles={cardActionStyles}
-          />
-          {showLoadMore ? (
-            <Pressable
-              onPress={() => void handleLoadMore()}
-              style={styles.loadMoreBtn}
-              disabled={loadingMore}
-              accessibilityRole="button"
-              accessibilityLabel="Load more alerts"
-            >
-              {loadingMore ? (
-                <ActivityIndicator size="small" color={Theme.textMuted} />
-              ) : (
-                <ChevronDown size={12} color={Theme.textMuted} />
-              )}
-              <Text style={styles.loadMoreText}>
-                {loadingMore
-                  ? "Loading…"
-                  : `Load ${REGISTRY_PAGE_SIZE} more`}
-              </Text>
-            </Pressable>
-          ) : null}
         </ScrollView>
-      </View>
-
-      <View
-        style={[
-          styles.footer,
-          isFullscreen && { paddingBottom: 10 + bottomInset },
-        ]}
-      >
         <Pressable
           onPress={() => void handleSync()}
-          style={styles.syncBtn}
+          style={styles.settingsBtn}
           disabled={syncing || syncSpin}
           accessibilityRole="button"
-          accessibilityLabel="Refresh registry"
+          accessibilityLabel="Refresh notifications"
         >
           {syncing || syncSpin ? (
             <ActivityIndicator size="small" color={Theme.textMuted} />
           ) : (
-            <RefreshCw size={11} color={Theme.textMuted} />
+            <Settings2 size={16} color={METRONIC.muted} strokeWidth={2} />
           )}
-          <Text style={styles.syncBtnText}>Authorized registry sync</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView
+        style={[
+          styles.scroll,
+          (isFullscreen || layout === "popover") && { flex: 1, maxHeight: undefined },
+        ]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isFullscreen && { paddingBottom: bottomInset + 8 },
+        ]}
+        showsVerticalScrollIndicator
+        nestedScrollEnabled
+      >
+        <RegistryFeedList
+          filterTab={filterTab}
+          visibleCount={visibleCount}
+          finance={finance}
+        />
+        {showLoadMore ? (
+          <Pressable
+            onPress={() => void handleLoadMore()}
+            style={styles.loadMoreBtn}
+            disabled={loadingMore}
+            accessibilityRole="button"
+            accessibilityLabel="Load more notifications"
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color={Theme.textMuted} />
+            ) : (
+              <ChevronDown size={14} color={Theme.textMuted} />
+            )}
+            <Text style={styles.loadMoreText}>
+              {loadingMore ? "Loading…" : `Load ${REGISTRY_PAGE_SIZE} more`}
+            </Text>
+          </Pressable>
+        ) : null}
+      </ScrollView>
+
+      <View
+        style={[
+          styles.footer,
+          isFullscreen && { paddingBottom: 12 + bottomInset },
+        ]}
+      >
+        <Pressable
+          onPress={() => onFilterTabChange("archive")}
+          style={styles.footerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="View archive"
+        >
+          <Text style={styles.footerBtnText}>Archive all</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => markAllNotificationsRead()}
+          style={styles.footerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Mark all as read"
+        >
+          <Text style={styles.footerBtnText}>Mark all as read</Text>
         </Pressable>
       </View>
     </View>
@@ -449,269 +766,223 @@ export function AlertRegistryPanel({
 
 const styles = StyleSheet.create({
   shell: {
-    width: 440,
+    width: METRONIC.panelWidth,
     maxWidth: Platform.OS === "web" ? ("96vw" as unknown as number) : "100%",
-    borderRadius: 32,
+    flexDirection: "column",
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
     ...Platform.select({
       web: {
-        boxShadow: "0 24px 64px rgba(15,23,42,0.22)",
+        boxShadow: "0 4px 24px rgba(24, 28, 50, 0.08)",
       },
       default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 16 },
-        shadowOpacity: 0.2,
-        shadowRadius: 28,
-        elevation: 24,
+        shadowColor: "#181C32",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 12,
       },
     }),
   },
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-    overflow: "hidden",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 0,
+    backgroundColor: Theme.cardWhite,
   },
-  headerGlow: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    width: 100,
-    height: 100,
-    borderBottomLeftRadius: 100,
-    backgroundColor: "rgba(99,102,241,0.12)",
-  },
-  headerTextCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 4,
-    zIndex: 1,
-  },
-  missionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  missionTitle: {
-    fontSize: 9,
+  headerTitle: {
+    fontSize: 15,
     fontWeight: "600",
-    fontStyle: "italic",
-    color: Theme.textOnDark,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  missionSub: {
-    fontSize: 7,
-    fontWeight: "400",
-    color: "rgba(148,163,184,0.9)",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    color: METRONIC.primaryBtn,
+    letterSpacing: -0.15,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    zIndex: 1,
   },
-  body: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 6,
-    gap: 10,
-    backgroundColor: Theme.cardWhite,
-  },
-  tabTrack: {
+  tabBar: {
     flexDirection: "row",
-    gap: 4,
-    padding: 3,
-    borderRadius: 16,
-    backgroundColor: "rgba(241,245,249,0.9)",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabBtnActive: {
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    paddingLeft: 12,
+    paddingRight: 10,
+    paddingTop: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 4px 14px rgba(15,23,42,0.1)",
-      },
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
-        elevation: 3,
-      },
-    }),
+  },
+  tabScroll: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tabScrollContent: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 16,
+    paddingRight: 6,
+  },
+  tabList: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 20,
+    flex: 1,
+    minWidth: 0,
+  },
+  tabItem: {
+    position: "relative",
+    paddingBottom: 10,
+    alignItems: "center",
+    gap: 5,
+    minWidth: 36,
+  },
+  tabLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    position: "relative",
   },
   tabText: {
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "500",
-    letterSpacing: 0.7,
-    color: Theme.textMuted,
-    textTransform: "uppercase",
+    color: METRONIC.muted,
   },
   tabTextActive: {
-    color: Theme.textPrimaryDark,
+    color: Theme.primary,
     fontWeight: "600",
   },
-  sectionHead: {
-    flexDirection: "row",
+  tabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: Theme.primary,
+  },
+  tabCountBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 2,
-    minHeight: 18,
-  },
-  sectionTitle: {
-    fontSize: 8,
-    fontWeight: "600",
-    color: Theme.networkSectionLabel,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  liveAudit: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  liveDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    justifyContent: "center",
     backgroundColor: Theme.teslaRed,
+    borderWidth: 1,
+    borderColor: Theme.teslaRed,
   },
-  liveAuditText: {
-    fontSize: 7,
-    fontWeight: "500",
-    color: Theme.teslaRed,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+  tabCountBadgeActive: {
+    backgroundColor: Theme.teslaRed,
+    borderColor: Theme.teslaRed,
+  },
+  tabCountText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    lineHeight: 12,
+  },
+  tabCountTextActive: {
+    color: Theme.textOnPrimary,
+  },
+  settingsBtn: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 5,
   },
   scroll: {
-    maxHeight: 420,
+    flexGrow: 1,
+    flexShrink: 1,
+    backgroundColor: Theme.cardWhite,
   },
   scrollContent: {
-    gap: 8,
-    paddingBottom: 6,
-    paddingRight: 2,
+    paddingBottom: 4,
   },
-  emptyHint: {
+  emptyWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 28,
+    alignItems: "center",
+    gap: 5,
+  },
+  emptyTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: METRONIC.primaryBtn,
+    textAlign: "center",
+  },
+  emptyBody: {
     fontSize: 11,
-    fontWeight: "400",
-    color: Theme.textSecondary,
     lineHeight: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
+    fontWeight: "400",
+    color: METRONIC.muted,
+    textAlign: "center",
+    maxWidth: 260,
+  },
+  groupHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  groupHeaderText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: METRONIC.muted,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
   },
   loadMoreBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
     paddingVertical: 10,
+    marginHorizontal: 16,
     marginTop: 2,
-    borderRadius: 12,
+    marginBottom: 6,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    borderColor: METRONIC.ghostBorder,
+    backgroundColor: Theme.cardWhite,
   },
   loadMoreText: {
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "600",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    color: METRONIC.muted,
   },
   footer: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: "#FBFBFB",
-    alignItems: "center",
-  },
-  syncBtn: {
     flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+  },
+  footerBtn: {
+    flex: 1,
+    minHeight: 34,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: METRONIC.ghostBorder,
     backgroundColor: Theme.cardWhite,
-    minWidth: 200,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  syncBtnText: {
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  registryCardActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 6,
-    marginTop: 2,
-  },
-  registryGhostBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-  },
-  registryGhostBtnText: {
-    fontSize: 7,
+  footerBtnText: {
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
-  },
-  registryPrimaryBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#171A20",
-    backgroundColor: "#171A20",
-  },
-  registryPrimaryBtnText: {
-    fontSize: 7,
-    fontWeight: "600",
-    color: Theme.textOnDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
-  },
-  registryStatusText: {
-    fontSize: 7,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginTop: 2,
-    textAlign: "right" as const,
+    color: METRONIC.primaryBtn,
   },
 });
