@@ -58,11 +58,17 @@ export function useRegistryFeed(
     );
   }, [activeTrips, items]);
 
+  const opsAlertsForFeed = useMemo(() => {
+    if (activeSalaryRequests.length === 0) return opsAlerts;
+    // Dedicated salary cards (kind: salary) own the feed row — drop ops mirrors.
+    return opsAlerts.filter((a) => a.category !== 'salary');
+  }, [opsAlerts, activeSalaryRequests.length]);
+
   const feed = useMemo(
     () =>
       buildRegistryFeed({
         tab,
-        opsAlerts,
+        opsAlerts: opsAlertsForFeed,
         activeSalary: activeSalaryRequests,
         historySalary: historySalaryRequests,
         activeShared: activeSharedNotifications,
@@ -70,7 +76,7 @@ export function useRegistryFeed(
       }),
     [
       tab,
-      opsAlerts,
+      opsAlertsForFeed,
       activeSalaryRequests,
       historySalaryRequests,
       activeSharedNotifications,

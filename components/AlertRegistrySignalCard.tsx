@@ -26,12 +26,12 @@ const METRONIC = {
   primaryBtn: "#181C32",
   ghostBorder: "#DBDFE9",
   link: Theme.primary,
-  alertRed: Theme.teslaRed,
+  unreadDot: "#50CD89",
 } as const;
 
 const TAG = {
-  height: 20,
-  paddingHorizontal: 8,
+  height: 18,
+  paddingHorizontal: 7,
   borderRadius: 4,
   borderWidth: 1,
 } as const;
@@ -131,7 +131,7 @@ export function RegistryTagPill({ tag }: { tag: RegistryTag }) {
   );
 }
 
-const AVATAR_SIZE = 36;
+const AVATAR_SIZE = 32;
 
 export function AlertRegistrySignalCard({
   avatar,
@@ -236,8 +236,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-    paddingVertical: 12,
+    gap: 9,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
@@ -254,16 +254,16 @@ const styles = StyleSheet.create({
   },
   statusDot: {
     position: "absolute",
-    right: -1,
+    right: 0,
     bottom: 0,
-    width: 9,
-    height: 9,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
   },
   statusDotUnread: {
-    backgroundColor: METRONIC.alertRed,
+    backgroundColor: METRONIC.unreadDot,
   },
   statusDotRead: {
     backgroundColor: METRONIC.muted,
@@ -271,11 +271,11 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 3,
   },
   headline: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 16,
     color: METRONIC.primaryBtn,
   },
   actorName: {
@@ -291,8 +291,8 @@ const styles = StyleSheet.create({
     color: METRONIC.link,
   },
   metaLine: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "500",
     color: METRONIC.muted,
   },
@@ -301,28 +301,28 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   detailCard: {
-    marginTop: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    marginTop: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
     borderRadius: 6,
     backgroundColor: METRONIC.quoteBg,
-    gap: 2,
+    gap: 1,
   },
   detailTitle: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
   },
   detailSubtitle: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "500",
     color: "#78829D",
   },
   detailBody: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "500",
     color: "#78829D",
   },
@@ -333,16 +333,16 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tagText: {
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 9,
+    lineHeight: 11,
     fontWeight: "600",
   },
   metaBlock: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
-    gap: 10,
-    marginTop: 4,
+    gap: 8,
+    marginTop: 3,
     alignSelf: "stretch",
   },
   metaLeft: {

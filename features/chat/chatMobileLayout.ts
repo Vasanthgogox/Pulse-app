@@ -1,49 +1,51 @@
 /**
- * Mobile chat layout tokens — WhatsApp-inspired spacing and typography.
+ * Mobile chat layout tokens — Metronic demo2 density (compact typography).
  */
 import { Platform } from "react-native";
 
 export const CHAT_MOBILE = {
-  /** Conversation thread background (warm neutral, like WhatsApp). */
-  wallpaper: "#ECE5DD",
-  composerBar: "#F0F2F5",
+  /** Conversation thread background */
+  wallpaper: "#FFFFFF",
+  composerBar: "#FFFFFF",
   composerInput: "#FFFFFF",
   headerBg: "#FFFFFF",
-  headerBorder: "#E5E7EB",
-  bubbleMaxWidthPct: "82%",
-  avatarSize: 40,
-  bubbleFontSize: 13.5,
-  bubbleLineHeight: 19,
-  bubblePadH: 11,
-  bubblePadV: 7,
-  metaFontSize: 10,
-  headerTitleSize: 15,
-  headerSubtitleSize: 11,
-  listRowPad: 10,
-  listAvatar: 56,
-  listTitleSize: 13,
-  listPreviewSize: 12,
-  listTimeSize: 10,
-  composerMinHeight: 38,
-  composerMaxHeight: 112,
-  composerFontSize: 16,
-  composerLineHeight: 20,
-  iconBtn: 36,
-  sendBtn: 38,
-  plusBtn: 36,
+  headerBorder: "#EFF2F5",
+  bubbleMaxWidthPct: "78%",
+  avatarSize: 32,
+  bubbleFontSize: 12,
+  bubbleLineHeight: 17,
+  bubblePadH: 10,
+  bubblePadV: 8,
+  bubbleRadius: 12,
+  metaFontSize: 9,
+  headerTitleSize: 13,
+  headerSubtitleSize: 10,
+  listRowPad: 8,
+  listAvatar: 44,
+  listTitleSize: 12,
+  listPreviewSize: 11,
+  listTimeSize: 9,
+  composerMinHeight: 36,
+  composerMaxHeight: 96,
+  composerFontSize: 13,
+  composerLineHeight: 18,
+  iconBtn: 32,
+  sendBtnHeight: 34,
+  sendBtnMinWidth: 64,
+  plusBtn: 32,
   /** Centered system / payment / location event cards in the thread. */
-  eventCardRadius: 12,
-  eventCardPadH: 14,
-  eventCardPadV: 12,
-  eventTitleSize: 14,
-  eventTitleLine: 19,
-  eventMetaSize: 11,
-  eventMetaLine: 15,
-  eventSubSize: 10,
-  eventAmountSize: 13,
-  eventTimeSize: 10,
-  eventAvatar: 42,
-  eventCardGap: 8,
+  eventCardRadius: 10,
+  eventCardPadH: 12,
+  eventCardPadV: 10,
+  eventTitleSize: 12,
+  eventTitleLine: 16,
+  eventMetaSize: 10,
+  eventMetaLine: 14,
+  eventSubSize: 9,
+  eventAmountSize: 12,
+  eventTimeSize: 9,
+  eventAvatar: 36,
+  eventCardGap: 6,
 } as const;
 
 export function isChatNativeMobile(isDesktop: boolean): boolean {
@@ -52,6 +54,5 @@ export function isChatNativeMobile(isDesktop: boolean): boolean {
 
 /** Space reserved above a fixed mobile-web composer (input row + safe padding). */
 export function mobileWebComposerReservePx(): number {
-  return CHAT_MOBILE.composerMinHeight + 20;
+  return CHAT_MOBILE.composerMinHeight + CHAT_MOBILE.sendBtnHeight + 28;
 }
-

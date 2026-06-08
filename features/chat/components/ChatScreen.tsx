@@ -16,7 +16,18 @@ import Theme from "@/constants/Theme";
 import { ROUTES } from "@/lib/routes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { CHAT_ACCENT, CHAT_ACCENT_BORDER, CHAT_ACCENT_SOFT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
+import {
+  CHAT_ACCENT,
+  CHAT_ACCENT_BORDER,
+  CHAT_ACCENT_SOFT,
+  CHAT_ICON_MUTED,
+  CHAT_INCOMING_BUBBLE,
+  CHAT_SEND_BG,
+  CHAT_TEXT_MUTED,
+  CHAT_TEXT_PRIMARY,
+  CHAT_TEXT_SECONDARY,
+  CHAT_THREAD_BG,
+} from "@/features/chat/chatTheme";
 import {
   CHAT_MOBILE,
   isChatNativeMobile,
@@ -2824,8 +2835,8 @@ export function ChatScreen() {
   if (isDesktop) {
     return (
       <LinearGradient
-        colors={["#edfafa", "#ffffff", CHAT_ACCENT_SOFT]}
-        locations={[0, 0.45, 1]}
+        colors={["#FFFFFF", "#F9F9F9", "#F5F8FA"]}
+        locations={[0, 0.5, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[s.root, { paddingTop: insets.top }]}
@@ -2860,8 +2871,8 @@ export function ChatScreen() {
 
   return (
     <LinearGradient
-      colors={["#edfafa", "#ffffff", CHAT_ACCENT_SOFT]}
-      locations={[0, 0.45, 1]}
+      colors={["#FFFFFF", "#F9F9F9", "#F5F8FA"]}
+        locations={[0, 0.5, 1]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[
@@ -2985,19 +2996,19 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: "#0f172a",
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: "#181C32",
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   brandTitle: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "800",
     color: "#fff",
-    letterSpacing: -0.4,
-    fontStyle: "italic",
+    letterSpacing: -0.2,
+    fontStyle: "normal",
   },
   brandDot: {
     color: CHAT_ACCENT,
@@ -3021,15 +3032,15 @@ const s = StyleSheet.create({
     flexWrap: "nowrap",
     alignItems: "stretch",
     gap: 6,
-    marginHorizontal: 14,
+    marginHorizontal: 12,
     marginTop: 8,
     marginBottom: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-    borderRadius: 18,
-    backgroundColor: "#f1f5f9",
+    paddingVertical: 3,
+    paddingHorizontal: 3,
+    borderRadius: 10,
+    backgroundColor: "#F5F8FA",
     borderWidth: 1,
-    borderColor: "#e8ecf1",
+    borderColor: "#EFF2F5",
   },
   tripHubScrollContent: {
     paddingHorizontal: 14,
@@ -3037,24 +3048,24 @@ const s = StyleSheet.create({
     gap: 8,
   },
   tripHubCard: {
-    borderRadius: 28,
+    borderRadius: 14,
     backgroundColor: "#ffffff",
-    borderWidth: 2,
-    borderColor: "#f1f5f9",
-    padding: 12,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#EFF2F5",
+    padding: 10,
+    shadowColor: "#181C32",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
   tripHubCardOn: {
-    backgroundColor: "#020617",
-    borderColor: "#020617",
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 5,
+    backgroundColor: "#181C32",
+    borderColor: "#181C32",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   tripHubAlertBar: {
     flexDirection: "row",
@@ -3158,13 +3169,13 @@ const s = StyleSheet.create({
     color: "#ffffff",
   },
   tripHubTripTitle: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "800",
+    color: CHAT_TEXT_PRIMARY,
     textTransform: "uppercase",
-    fontStyle: "italic",
-    letterSpacing: -0.35,
-    lineHeight: 16,
+    fontStyle: "normal",
+    letterSpacing: 0.2,
+    lineHeight: 14,
   },
   tripHubTripTitleOn: {
     color: "#ffffff",
@@ -3742,12 +3753,12 @@ const s = StyleSheet.create({
   detailHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#eef2f7",
-    backgroundColor: "#ffffff",
+    borderBottomColor: CHAT_ACCENT_BORDER,
+    backgroundColor: CHAT_THREAD_BG,
     flexShrink: 0,
   },
   detailHeaderMiddle: {
@@ -3841,44 +3852,47 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    minWidth: 38,
-    height: 38,
-    paddingHorizontal: 5,
-    borderRadius: 14,
-    backgroundColor: "#0f172a",
+    gap: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: CHAT_ACCENT_SOFT,
+    borderWidth: 1,
+    borderColor: CHAT_ACCENT_BORDER,
   },
   detailTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.2,
-    fontStyle: "italic",
+    fontSize: 13,
+    fontWeight: "700",
+    color: CHAT_TEXT_PRIMARY,
+    letterSpacing: -0.1,
+    fontStyle: "normal",
   },
   detailIconWrapMobile: {
-    minWidth: 34,
-    height: 34,
-    borderRadius: 12,
-    paddingHorizontal: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   detailTitleMobile: {
     fontSize: CHAT_MOBILE.headerTitleSize,
     fontWeight: "700",
     fontStyle: "normal",
-    letterSpacing: -0.15,
+    letterSpacing: -0.1,
   },
   detailPartySubtitleMobile: {
     fontSize: CHAT_MOBILE.headerSubtitleSize,
     marginTop: 1,
-  },
-  /** Party / org subtitle under trip title — matches ledger `tableCellParty` (light italic, not bold). */
-  detailPartySubtitle: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "300",
+    color: CHAT_TEXT_MUTED,
     fontStyle: "italic",
-    color: Theme.textRouteCard,
-    letterSpacing: 0.15,
+    fontWeight: "400",
+  },
+  /** Party / org subtitle under trip title */
+  detailPartySubtitle: {
+    marginTop: 1,
+    fontSize: 10,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: CHAT_TEXT_MUTED,
+    letterSpacing: 0.1,
   },
   detailMissionBar: {
     flexDirection: "row",
@@ -4101,12 +4115,12 @@ const s = StyleSheet.create({
     borderTopColor: CHAT_MOBILE.headerBorder,
   },
   msgs: { flex: 1, backgroundColor: "transparent" },
-  msgsContent: { paddingHorizontal: 14, paddingTop: 12, gap: 10, paddingBottom: 12 },
+  msgsContent: { paddingHorizontal: 12, paddingTop: 10, gap: 8, paddingBottom: 10 },
   msgsContentMobile: {
     paddingHorizontal: 10,
     paddingTop: 8,
     gap: CHAT_MOBILE.eventCardGap,
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
 
   sysMsg: {
@@ -4149,103 +4163,94 @@ const s = StyleSheet.create({
     lineHeight: CHAT_MOBILE.eventMetaLine,
   },
 
-  bubbleWrap: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  bubbleWrap: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   bubbleWrapOwn: { justifyContent: "flex-end" },
   bubbleWrapOther: { justifyContent: "flex-start" },
-  bubble: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10 },
+  bubble: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
   bubbleMobile: {
-    borderRadius: 14,
+    borderRadius: CHAT_MOBILE.bubbleRadius,
     paddingHorizontal: CHAT_MOBILE.bubblePadH,
     paddingVertical: CHAT_MOBILE.bubblePadV,
   },
   bubbleOwn: {
     backgroundColor: CHAT_ACCENT,
-    borderBottomRightRadius: 6,
-    shadowColor: CHAT_ACCENT,
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  bubbleOther: {
-    backgroundColor: "#fff",
-    borderBottomLeftRadius: 6,
-    borderWidth: 1,
-    borderColor: "#e9edf5",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  bubbleOwnMobile: {
-    borderBottomRightRadius: 4,
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  bubbleOtherMobile: {
-    backgroundColor: "#FFFFFF",
-    borderBottomLeftRadius: 4,
-    borderColor: "rgba(0,0,0,0.06)",
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
+    borderBottomRightRadius: 12,
+    shadowOpacity: 0,
     elevation: 0,
   },
-  bubbleText: { fontSize: 14, lineHeight: 20 },
+  bubbleOther: {
+    backgroundColor: CHAT_INCOMING_BUBBLE,
+    borderBottomLeftRadius: 12,
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  bubbleOwnMobile: {
+    borderBottomRightRadius: CHAT_MOBILE.bubbleRadius,
+  },
+  bubbleOtherMobile: {
+    backgroundColor: CHAT_INCOMING_BUBBLE,
+    borderBottomLeftRadius: CHAT_MOBILE.bubbleRadius,
+  },
+  bubbleText: { fontSize: 13, lineHeight: 18 },
   bubbleTextMobile: {
     fontSize: CHAT_MOBILE.bubbleFontSize,
     lineHeight: CHAT_MOBILE.bubbleLineHeight,
   },
-  bubbleTextOwn: { color: "#fff" },
-  bubbleTextOther: { color: "#1e293b" },
-  bubbleMeta: { fontSize: 10, color: "#94a3b8", letterSpacing: 0.2 },
+  bubbleTextOwn: { color: "#fff", fontWeight: "500" },
+  bubbleTextOther: { color: CHAT_TEXT_PRIMARY, fontWeight: "500" },
+  bubbleMeta: { fontSize: 9, color: CHAT_TEXT_MUTED, letterSpacing: 0.1 },
   bubbleMetaMobile: {
     fontSize: CHAT_MOBILE.metaFontSize,
     marginTop: 2,
-    color: "#8696A0",
+    color: CHAT_TEXT_MUTED,
   },
-  bubbleMetaRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4 },
+  bubbleMetaRow: { flexDirection: "row", alignItems: "center", gap: 2, marginTop: 3 },
   bubbleMetaRowOwn: { justifyContent: "flex-end" },
 
   inputWrap: {
     position: "relative",
-    backgroundColor: "#fff",
+    backgroundColor: CHAT_THREAD_BG,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: CHAT_ACCENT_BORDER,
+    paddingHorizontal: 10,
+    paddingTop: 8,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    gap: 8,
+    paddingHorizontal: 4,
     paddingBottom: 6,
-    minHeight: 48,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: CHAT_ACCENT_BORDER,
+    borderRadius: 10,
+    paddingTop: 6,
   },
   plusBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 0,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "transparent",
   },
   input: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: "#f1f5f9",
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 14,
-    paddingTop: Platform.OS === "ios" ? 10 : 8,
-    paddingBottom: Platform.OS === "ios" ? 10 : 8,
-    fontSize: 15,
-    lineHeight: 20,
-    color: "#0f172a",
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    borderWidth: 0,
+    paddingHorizontal: 4,
+    paddingTop: Platform.OS === "ios" ? 7 : 6,
+    paddingBottom: Platform.OS === "ios" ? 7 : 6,
+    fontSize: 13,
+    lineHeight: 18,
+    color: CHAT_TEXT_PRIMARY,
     maxHeight: 120,
-    minHeight: 40,
+    minHeight: 34,
   },
   inputWeb: Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {},
   iconBtn: {
@@ -4259,26 +4264,18 @@ const s = StyleSheet.create({
     borderColor: "#e9edf5",
   },
   sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#0f172a",
+    minWidth: 64,
+    height: 34,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    backgroundColor: CHAT_SEND_BG,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.26,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  /** Idle (no text): purple accent; with text `sendBtn` overrides to black. */
   sendBtnOff: {
-    backgroundColor: CHAT_ACCENT,
-    shadowColor: CHAT_ACCENT,
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    backgroundColor: "#E4E6EF",
   },
 
   chipRow: { paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2, gap: 6 },
@@ -4832,13 +4829,13 @@ function ChatDetailHeader({
       <View style={[s.detailIconWrap, nativeMobile && s.detailIconWrapMobile]}>
         {partyType ? (
           <>
-            <PartyIcon partyType={partyType} active size={dualLane ? 14 : nativeMobile ? 16 : 18} />
+            <PartyIcon partyType={partyType} active tone="hub" size={dualLane ? 13 : nativeMobile ? 14 : 15} />
             {counterpartyType ? (
-              <PartyIcon partyType={counterpartyType} active size={14} />
+              <PartyIcon partyType={counterpartyType} active tone="hub" size={13} />
             ) : null}
           </>
         ) : (
-          <MessageSquare size={nativeMobile ? 16 : 18} color="#fff" />
+          <MessageSquare size={nativeMobile ? 14 : 16} color={CHAT_TEXT_PRIMARY} />
         )}
       </View>
       <View
@@ -4865,16 +4862,16 @@ function ChatDetailHeader({
       {middleContent ? (
         <View style={s.detailHeaderMiddle}>{middleContent}</View>
       ) : null}
-      {!nativeMobile ? (
-        <View style={s.detailHeaderActions}>
+      <View style={s.detailHeaderActions}>
+        {!isDesktop ? null : (
           <TouchableOpacity hitSlop={10}>
-            <Search size={17} color="#64748b" />
+            <Search size={16} color={CHAT_TEXT_SECONDARY} />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={10}>
-            <MoreVertical size={17} color="#64748b" />
-          </TouchableOpacity>
-        </View>
-      ) : null}
+        )}
+        <TouchableOpacity hitSlop={10}>
+          <MoreVertical size={16} color={CHAT_TEXT_SECONDARY} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -5006,9 +5003,9 @@ function ChatBubble({
         <View style={[s.bubbleMetaRow, isOwn && s.bubbleMetaRowOwn]}>
           <Text style={[s.bubbleMeta, isMobile && s.bubbleMetaMobile]}>
             {displayTime}
-            {senderName ? ` · ${senderName.toUpperCase()}` : " · YOU"}
+            {!isOwn && senderName ? ` · ${senderName}` : ""}
           </Text>
-          {isOwn && <MessageTick status={deliveryStatus} />}
+          {isOwn ? <MessageTick status={deliveryStatus} compact /> : null}
         </View>
       </View>
       {isOwn ? (
@@ -5213,7 +5210,15 @@ function ChatInputBar({
               }).start();
             }}
           >
-            <Send size={15} color="#fff" />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "700",
+                color: canSend ? "#fff" : CHAT_TEXT_MUTED,
+              }}
+            >
+              Send
+            </Text>
           </TouchableOpacity>
         </Animated.View>
       </View>

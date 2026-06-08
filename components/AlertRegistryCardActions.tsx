@@ -11,11 +11,11 @@ const METRONIC = {
 } as const;
 
 const BTN = {
-  height: 28,
-  paddingHorizontal: 12,
+  height: 26,
+  paddingHorizontal: 10,
   borderRadius: 4,
   borderWidth: 1,
-  minWidth: 72,
+  minWidth: 68,
 } as const;
 
 export const alertRegistryActionStyles = StyleSheet.create({
@@ -38,7 +38,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
     justifyContent: "center",
   },
   ghostBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
   },
@@ -54,7 +54,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
     justifyContent: "center",
   },
   primaryBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: Theme.textOnPrimary,
   },
@@ -71,13 +71,13 @@ export const alertRegistryActionStyles = StyleSheet.create({
     flexShrink: 0,
   },
   viewBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
   },
   statusPill: {
-    height: 20,
-    paddingHorizontal: 8,
+    height: 18,
+    paddingHorizontal: 7,
     borderRadius: 4,
     borderWidth: 1,
     alignItems: "center",
@@ -85,8 +85,8 @@ export const alertRegistryActionStyles = StyleSheet.create({
     flexShrink: 0,
   },
   statusPillText: {
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 9,
+    lineHeight: 11,
     fontWeight: "600",
   },
   btnDisabled: {
