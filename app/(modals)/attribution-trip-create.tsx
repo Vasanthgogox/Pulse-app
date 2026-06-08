@@ -4,6 +4,7 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import { NumericDisplay } from "@/components/mobile-input/NumericDisplay";
 import { applyKeypadPress, type KeypadKey } from "@/components/mobile-input/keypad";
+import { WizardPartyContextRow } from "@/components/full-page-wizard";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -314,7 +315,6 @@ export default function AttributionTripCreateModal() {
   const canContinueFromClientStep =
     clientMode === "shipper" ? !!matchedShipperClient : !!selectedClientId;
   const canContinueFromSaleStep = Number(saleValue) > 0;
-  const isCompact = width < 420;
 
   const goBackInWizard = useCallback(() => {
     if (wizardStep === "review") {
@@ -368,6 +368,38 @@ export default function AttributionTripCreateModal() {
     entityType: "client",
   });
 
+  const driverPartyCell = {
+    label: "Driver",
+    name: driverName,
+    entityType: "driver" as const,
+    avatar: (
+      <Avatar
+        party={{
+          type: "driver",
+          name: driverName,
+          avatarUrl: driverAvatarUrl,
+          avatarSeed: driverAvatarSeed,
+        }}
+        size={34}
+      />
+    ),
+  };
+
+  const shipperPartyCell = {
+    label: "Shipper",
+    name: shipperName,
+    entityType: "client" as const,
+    avatarUrl: shipperAvatarUri,
+  };
+
+  const clientPartyCell = {
+    label: "Client",
+    name: selectedClientNameForDisplay,
+    entityType: "client" as const,
+    avatarUrl: clientAvatarUri,
+    avatarSeed: selectedClient?.avatar_seed ?? null,
+  };
+
   if (wizardStep === "sale") {
     return (
       <View style={styles.root}>
@@ -396,10 +428,9 @@ export default function AttributionTripCreateModal() {
             <Text style={styles.subtitle}>
               Enter the billed sale value for this attributed trip.
             </Text>
-            <Text style={styles.blockMeta} numberOfLines={1}>
-              Client: {selectedClientNameForDisplay}
-            </Text>
           </View>
+
+          <WizardPartyContextRow left={driverPartyCell} right={clientPartyCell} />
 
           <View style={styles.saleDisplayCard}>
             <Text style={styles.saleDisplayLabel}>Sale value (INR)</Text>
@@ -504,36 +535,7 @@ export default function AttributionTripCreateModal() {
             contentContainerStyle={[styles.stepScrollContent, width >= 920 && styles.scrollBodyWide]}
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.partyRow, isCompact && styles.partyRowStack]}>
-              <View style={styles.partyCard}>
-                <Avatar
-                  party={{
-                    type: "driver",
-                    name: driverName,
-                    avatarUrl: driverAvatarUrl,
-                    avatarSeed: driverAvatarSeed,
-                  }}
-                  size={34}
-                />
-                <View style={styles.partyTextWrap}>
-                  <Text style={styles.partyLabel}>Driver</Text>
-                  <Text style={styles.partyName} numberOfLines={1}>{driverName}</Text>
-                </View>
-              </View>
-              <View style={styles.partyCard}>
-                <PartyAvatar
-                  name={shipperName}
-                  avatarUrl={shipperAvatarUri}
-                  entityType="client"
-                  size={34}
-                  shape="rounded"
-                />
-                <View style={styles.partyTextWrap}>
-                  <Text style={styles.partyLabel}>Shipper</Text>
-                  <Text style={styles.partyName} numberOfLines={1}>{shipperName}</Text>
-                </View>
-              </View>
-            </View>
+            <WizardPartyContextRow left={driverPartyCell} right={shipperPartyCell} />
 
             <View style={styles.block}>
               <Text style={styles.blockTitle}>Route details</Text>
@@ -696,37 +698,7 @@ export default function AttributionTripCreateModal() {
 
           {stepProgress}
 
-          <View style={[styles.partyRow, isCompact && styles.partyRowStack]}>
-            <View style={[styles.partyCard, styles.reviewPartyCard]}>
-              <Avatar
-                party={{
-                  type: "driver",
-                  name: driverName,
-                  avatarUrl: driverAvatarUrl,
-                  avatarSeed: driverAvatarSeed,
-                }}
-                size={36}
-              />
-              <View style={styles.partyTextWrap}>
-                <Text style={styles.partyLabel}>Driver</Text>
-                <Text style={styles.partyName} numberOfLines={1}>{driverName}</Text>
-              </View>
-            </View>
-            <View style={[styles.partyCard, styles.reviewPartyCard]}>
-              <PartyAvatar
-                name={selectedClientNameForDisplay}
-                avatarUrl={clientAvatarUri}
-                avatarSeed={selectedClient?.avatar_seed ?? null}
-                entityType="client"
-                size={36}
-                shape="rounded"
-              />
-              <View style={styles.partyTextWrap}>
-                <Text style={styles.partyLabel}>Client</Text>
-                <Text style={styles.partyName} numberOfLines={1}>{selectedClientNameForDisplay}</Text>
-              </View>
-            </View>
-          </View>
+          <WizardPartyContextRow left={driverPartyCell} right={clientPartyCell} />
 
           <View style={styles.reviewSummaryCard}>
             <Text style={styles.blockTitle}>Trip summary</Text>

@@ -6,6 +6,7 @@ import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { KeypadKey } from "@/components/mobile-input/keypad";
+import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import Theme from "@/constants/Theme";

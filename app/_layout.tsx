@@ -337,7 +337,7 @@ export default function RootLayout() {
           }}
           persistOptions={{
             persister,
-            maxAge: 24 * 60 * 60 * 1000,
+            maxAge: 6 * 60 * 60 * 1000,  // 6h: balances cold-start speed vs memory on long-shift devices
             dehydrateOptions: {
               shouldDehydrateQuery: (query) => {
                 if (query.state.status !== 'success') return false;

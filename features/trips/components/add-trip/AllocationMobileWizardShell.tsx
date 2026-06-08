@@ -22,7 +22,7 @@ export const AllocationMobileWizardShell = memo(function AllocationMobileWizardS
       style={[
         styles.stage,
         fillBody && styles.stageFill,
-        !fillBody && fullPageWizardStyles.formSectionCard,
+        !fillBody && fullPageWizardStyles.wizardStepContentFlat,
       ]}
     >
       {children}

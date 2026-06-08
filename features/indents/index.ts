@@ -28,8 +28,8 @@ export const updateDirectQuoteStatus = directQuotesService.updateDirectQuoteStat
 export const updateDirectQuoteAssignment = directQuotesService.updateDirectQuoteAssignment;
 export type DirectQuoteRow = directQuotesService.DirectQuoteRow;
 
-export { awardIndentToTrip, batchAwardIndentsToTrips } from '@/features/indents/services/indentConversionService';
-export type { AwardIndentOptions, BatchAwardResult } from '@/features/indents/services/indentConversionService';
+export { awardIndentToTrip, batchAwardIndentsToTrips, createTripFromAssignedIndent } from '@/features/indents/services/indentConversionService';
+export type { AwardIndentOptions, BatchAwardResult, CreateTripFromAssignedIndentOptions } from '@/features/indents/services/indentConversionService';
 
 export { IndentDetailScreen };
 export { IndentBidAmountEntry } from '@/features/indents/components/IndentBidAmountEntry';

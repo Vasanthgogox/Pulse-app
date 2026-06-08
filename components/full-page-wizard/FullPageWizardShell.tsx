@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Layout } from "@/constants/Layout";
 import { dockPaddingBottom, useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
 
@@ -46,7 +47,7 @@ export function FullPageWizardShell({
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { keyboardVisible } = useKeyboardVisible();
-  const isWide = width >= 920;
+  const isWide = width >= Layout.wizardBodyMaxWidth;
   const isKeypadStep = fillBody;
   const stepLabel =
     stepIndex != null && stepTotal != null && stepTotal > 0

@@ -1,7 +1,7 @@
 /**
  * Create Trip — sectioned form (route, client, allocation); Theme tokens only.
  */
-import { fullPageWizardStyles, WizardClientPicker, WizardClientSummaryCard, WizardEntitySummaryCard, WizardFormBody } from "@/components/full-page-wizard";
+import { fullPageWizardStyles, WizardClientPicker, WizardClientSummaryCard, WizardEntitySummaryCard, WizardFormBody, WizardPartyContextRow, WizardPriorSelections, type WizardPriorSelectionItem } from "@/components/full-page-wizard";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -97,6 +97,7 @@ import { PartnerRatesKeypadFlow } from "@/features/trips/components/allocation/P
 import { supplierToNumericPartyPreview } from "@/features/suppliers/utils/supplierNumericPartyPreview.util";
 import { useKeyboardAccessory } from "@/contexts/KeyboardAccessoryContext";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
+import { ClientSaleKeypadFlow } from "./ClientSaleKeypadFlow";
 import { DriverPhoneRecommendations } from "./DriverPhoneRecommendations";
 import { lookupDriversByPhoneVariants } from "@/features/trips/utils/driverPhoneLookup.util";
 import { LocationSearchField } from "./LocationSearchField";
@@ -191,7 +192,7 @@ function allocationProgressTabLabel(
 ): string {
   switch (step) {
     case "supply":
-      return supplySource === "aggregate" ? "Partner" : "Mode";
+      return supplySource === "aggregate" ? "Partner" : supplySource === "asset" ? "Fleet" : "Mode";
     case "rates":
       return "Rates";
     case "driverPhone":
@@ -248,9 +249,12 @@ export function AddTripFormFields({
   const isCompactMobile = winW < 480;
   const isWeb = Platform.OS === "web";
   const useWebCurrencyField = isWeb && winW >= 720;
-  /** Web only: CSS grid — row1 route|commodity; row2 client; row3 supply; row4 CTA. */
+  /** Web only: CSS grid when not in stepped wizard (legacy wide form). */
   const desktopFormGrid =
-    Platform.OS === "web" && winW >= 1080 && !isCompactMobile;
+    wizardSection == null &&
+    Platform.OS === "web" &&
+    winW >= Layout.wizardDesktopGridMinWidth &&
+    !isCompactMobile;
   /** Tighter typography and fields (desktop grid + mobile). */
   const isDenseForm = !isWeb || desktopFormGrid || winW < 1280;
   const iconFieldInputStyle = [
@@ -317,23 +321,20 @@ export function AddTripFormFields({
     isAggregateMobileWizard &&
     (aggregateTrackingStep != null || allocationSubStep === "rates");
   /** Keypad steps: flex column in modal body (footer stays below; no ScrollView overlap). */
+  const isWizardSaleKeypad = wizardSection === "sale";
   const allocationFillBody =
     mobileAllocWizard && allocKeypadFullscreen && isWizardAllocationCard;
-  /** Entity picker steps — transparent shell (no nested card clipping). */
-  const allocationEntityPickerStep =
-    mobileAllocWizard &&
-    isWizardAllocationCard &&
-    !allocationFillBody &&
-    (allocationSubStep === "supply" ||
-      allocationSubStep === "fleetDriver" ||
-      allocationSubStep === "fleetVehicle");
-  const allocationShellFill = allocationFillBody || allocationEntityPickerStep;
+  /** Sale + allocation keypad steps — flex column in modal body. */
+  const wizardKeypadFill =
+    (wizardSection != null && isWizardSaleKeypad) || allocationFillBody;
+  /** Keypad-only steps use fillBody; entity pickers scroll in the shell. */
+  const allocationShellFill = allocationFillBody;
   /** Shell owns scroll on mobile wizard steps (not nested ScrollView). */
   const wizardShellScroll =
-    wizardSection != null && !allocationFillBody;
+    wizardSection != null && !wizardKeypadFill;
   /** Unified attribution-style labels/inputs on all wizard steps except keypad fill. */
   const isWizardTypography =
-    wizardSection != null && !allocationFillBody;
+    wizardSection != null && !wizardKeypadFill;
   const fieldLabelStyle = [
     isWizardTypography ? fullPageWizardStyles.wizardFieldLabel : styles.label,
     !isWizardTypography && labelStyle,
@@ -754,13 +755,27 @@ export function AddTripFormFields({
   const showVehicleFleetSummary =
     Boolean(state.vehicleId && !vehicleListExpanded && selectedVehicleRow);
   useEffect(() => {
-    if (allocationSubStep !== "fleetDriver") return;
+    if (allocationSubStep !== "supply" || state.supplySource !== "asset" || state.assignLater)
+      return;
     if (!state.driverId || !selectedDriverRow) setDriverListExpanded(true);
-  }, [allocationSubStep, state.driverId, selectedDriverRow]);
+  }, [
+    allocationSubStep,
+    state.supplySource,
+    state.assignLater,
+    state.driverId,
+    selectedDriverRow,
+  ]);
   useEffect(() => {
-    if (allocationSubStep !== "fleetVehicle") return;
+    if (allocationSubStep !== "supply" || state.supplySource !== "asset" || state.assignLater)
+      return;
     if (!state.vehicleId || !selectedVehicleRow) setVehicleListExpanded(true);
-  }, [allocationSubStep, state.vehicleId, selectedVehicleRow]);
+  }, [
+    allocationSubStep,
+    state.supplySource,
+    state.assignLater,
+    state.vehicleId,
+    selectedVehicleRow,
+  ]);
   const driverAvatarGridItems = useMemo(
     () =>
       driverOptionsToAvatarGridItems(
@@ -786,6 +801,12 @@ export function AddTripFormFields({
     pickupDropdownOpen || dropDropdownOpen || notesModalOpen;
 
   const supplyIsAsset = state.supplySource === "asset";
+  const showAssetFleetOnSupply =
+    supplyIsAsset &&
+    !state.assignLater &&
+    mobileAllocWizard &&
+    isWizardAllocationCard &&
+    allocationSubStep === "supply";
   const selectedClientRow = clients.find((c) => c.id === state.clientId) ?? null;
   const selectedSupplierRow = suppliers.find((s) => s.id === state.supplierId) ?? null;
   const showClientList = !state.clientId || clientListExpanded;
@@ -823,17 +844,186 @@ export function AddTripFormFields({
   const assignLaterSwitchDisabled =
     supplyIsAsset ? assetDriverVehicleBothSet : aggregateDriverVehicleBothSet;
 
+  const allocationPriorSelections = useMemo((): WizardPriorSelectionItem[] => {
+    if (
+      !mobileAllocWizard ||
+      !isWizardAllocationCard ||
+      state.supplySource !== "aggregate" ||
+      state.assignLater
+    ) {
+      return [];
+    }
+    const items: WizardPriorSelectionItem[] = [];
+    const step = allocationSubStep;
+    const rateSteps = new Set(["driverPhone", "driverName", "vehicle"]);
+    const rateRaw = state.supplierRate.trim();
+    if (rateSteps.has(step ?? "") && rateRaw) {
+      items.push({
+        id: "rate",
+        label: "Partner rate",
+        name: `₹${Number(rateRaw).toLocaleString("en-IN")}`,
+        subtitle: state.advancePaid.trim()
+          ? `Advance ₹${Number(state.advancePaid.trim()).toLocaleString("en-IN")}`
+          : null,
+      });
+    }
+    const phoneSteps = new Set(["driverName", "vehicle"]);
+    if (phoneSteps.has(step ?? "") && state.driverPhone.trim()) {
+      items.push({
+        id: "phone",
+        label: "Driver phone",
+        name: state.driverPhone.trim(),
+      });
+    }
+    if (step === "vehicle" && state.aggregateDriverName.trim()) {
+      items.push({
+        id: "name",
+        label: "Driver name",
+        name: state.aggregateDriverName.trim(),
+      });
+    }
+    return items;
+  }, [
+    mobileAllocWizard,
+    isWizardAllocationCard,
+    state.supplySource,
+    state.assignLater,
+    state.supplierRate,
+    state.advancePaid,
+    state.driverPhone,
+    state.aggregateDriverName,
+    allocationSubStep,
+  ]);
+
+  const allocationContextRow = useMemo(() => {
+    if (!mobileAllocWizard || !isWizardAllocationCard || !selectedClientRow) {
+      return null;
+    }
+
+    const left = {
+      label: "Client",
+      name: selectedClientRow.name ?? "Client",
+      subtitle: selectedClientRow.address ?? null,
+      entityType: "client" as const,
+      avatarUrl: selectedClientRow.avatar_url ?? null,
+      avatarSeed: selectedClientRow.avatar_seed ?? null,
+    };
+
+    if (state.supplySource === "aggregate" && !state.assignLater) {
+      const step = allocationSubStep;
+      const driverSteps = new Set(["driverPhone", "driverName", "vehicle"]);
+      if (driverSteps.has(step ?? "")) {
+        const driverName =
+          state.aggregateDriverName.trim() ||
+          state.driverPhone.trim() ||
+          "Select driver";
+        return {
+          left,
+          right: {
+            label: "Driver",
+            name: driverName,
+            subtitle:
+              state.aggregateDriverName.trim() && state.driverPhone.trim()
+                ? state.driverPhone.trim()
+                : null,
+            entityType: "driver" as const,
+          },
+        };
+      }
+
+      const partnerSteps = new Set(["supply", "rates"]);
+      if (partnerSteps.has(step ?? "")) {
+        return {
+          left,
+          right: selectedSupplierRow
+            ? {
+                label: "Partner",
+                name:
+                  selectedSupplierRow.company_name?.trim() ||
+                  selectedSupplierRow.name?.trim() ||
+                  "—",
+                subtitle: [
+                  selectedSupplierRow.supplier_type,
+                  selectedSupplierRow.phone,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                entityType: "supplier" as const,
+                avatarUrl:
+                  (selectedSupplierRow as { avatar_url?: string | null })
+                    .avatar_url ?? null,
+                avatarSeed:
+                  (selectedSupplierRow as { avatar_seed?: string | null })
+                    .avatar_seed ?? null,
+              }
+            : step === "supply"
+              ? {
+                  label: "Partner",
+                  name: "Select partner",
+                  entityType: "supplier" as const,
+                }
+              : null,
+        };
+      }
+    }
+
+    if (
+      state.supplySource === "asset" &&
+      !state.assignLater &&
+      showAssetFleetOnSupply &&
+      allocationSubStep === "supply"
+    ) {
+      return {
+        left,
+        right: selectedDriverRow
+          ? {
+              label: "Driver",
+              name: selectedDriverRow.name ?? "Driver",
+              subtitle: [selectedDriverRow.phone, selectedDriverRow.email]
+                .filter(Boolean)
+                .join(" · "),
+              entityType: "driver" as const,
+              avatarUrl:
+                (selectedDriverRow as { avatar_url?: string | null })
+                  .avatar_url ?? null,
+              avatarSeed:
+                (selectedDriverRow as { avatar_seed?: string | null })
+                  .avatar_seed ?? null,
+            }
+          : {
+              label: "Driver",
+              name: "Select driver",
+              entityType: "driver" as const,
+            },
+      };
+    }
+
+    return null;
+  }, [
+    mobileAllocWizard,
+    isWizardAllocationCard,
+    selectedClientRow,
+    state.supplySource,
+    state.assignLater,
+    state.aggregateDriverName,
+    state.driverPhone,
+    allocationSubStep,
+    selectedSupplierRow,
+    showAssetFleetOnSupply,
+    selectedDriverRow,
+  ]);
+
   return (
-    <View style={[styles.pageWrap, allocationFillBody && styles.pageWrapFill]}>
+    <View style={[styles.pageWrap, wizardKeypadFill && styles.pageWrapFill]}>
       <WizardFormBody
         shellScroll={wizardShellScroll}
         contentContainerStyle={[
           styles.scrollContent,
           isDenseForm && !wizardShellScroll && styles.scrollContentDense,
           wizardShellScroll && styles.scrollContentWizard,
-          allocationFillBody && styles.scrollContentFillBody,
+          wizardKeypadFill && styles.scrollContentFillBody,
           {
-            paddingBottom: allocationFillBody
+            paddingBottom: wizardKeypadFill
               ? 8
               : mobileAllocWizard && isWizardAllocationCard
                 ? wizardFooterPad + insets.bottom
@@ -846,7 +1036,7 @@ export function AddTripFormFields({
         ]}
         scrollViewProps={{
           style: styles.scroll,
-          scrollEnabled: allocationFillBody
+          scrollEnabled: wizardKeypadFill
             ? false
             : Platform.OS === "web"
               ? true
@@ -854,7 +1044,7 @@ export function AddTripFormFields({
                 ? true
                 : !scrollBlocked,
           keyboardShouldPersistTaps: "handled",
-          showsVerticalScrollIndicator: allocationFillBody
+          showsVerticalScrollIndicator: wizardKeypadFill
             ? false
             : Platform.OS === "web" || isCompactMobile
               ? true
@@ -864,7 +1054,7 @@ export function AddTripFormFields({
         <View
           style={[
             styles.contentMax,
-            allocationFillBody && styles.contentMaxFill,
+            wizardKeypadFill && styles.contentMaxFill,
             {
               maxWidth: desktopFormGrid
                 ? desktopFormMaxWidth
@@ -881,19 +1071,19 @@ export function AddTripFormFields({
             },
           ]}
         >
-          <View style={[styles.mainGrid, allocationFillBody && styles.mainGridFill]}>
+          <View style={[styles.mainGrid, wizardKeypadFill && styles.mainGridFill]}>
             <View
               style={[
                 styles.formColumn,
                 desktopFormGrid && styles.formColumnGridWeb,
-                allocationFillBody && styles.formColumnFill,
+                wizardKeypadFill && styles.formColumnFill,
               ]}
             >
           {/* 01 Route */}
           {showRouteCard ? (
             <View
               style={[
-                isWizardTypography ? styles.cardWizardShell : styles.card,
+                isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopGrid,
                 desktopFormGrid && styles.cardDesktopStretch,
@@ -1409,7 +1599,7 @@ export function AddTripFormFields({
           {showCommodityCard ? (
             <View
               style={[
-                isWizardTypography ? styles.cardWizardShell : styles.card,
+                isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopGrid,
                 desktopFormGrid && styles.cardDesktopStretch,
@@ -1470,9 +1660,29 @@ export function AddTripFormFields({
 
           {/* 03 Client & Commercials */}
           {showClientCard ? (
+            isWizardSaleKeypad ? (
+              <ClientSaleKeypadFlow
+                clientPrice={state.clientPrice}
+                onClientPriceChange={(v) => setters.setClientPrice(v)}
+                partyPreview={
+                  selectedClientRow
+                    ? {
+                        name: selectedClientRow.name ?? "Client",
+                        subtitle: selectedClientRow.address ?? undefined,
+                        entityType: "client",
+                        avatarUrl: selectedClientRow.avatar_url ?? null,
+                        avatarSeed: selectedClientRow.avatar_seed ?? null,
+                      }
+                    : undefined
+                }
+                errorMessage={
+                  invalid("clientPrice") ? "Enter a sale price greater than 0" : undefined
+                }
+              />
+            ) : (
             <View
               style={[
-                isWizardTypography ? styles.cardWizardShell : styles.card,
+                isWizardTypography ? fullPageWizardStyles.wizardStepContentFlat : styles.card,
                 !isWizardTypography && isDenseForm && styles.cardDense,
                 desktopFormGrid && styles.cardDesktopGrid,
                 (wizardSection === "client" || wizardSection === "sale") &&
@@ -1753,6 +1963,7 @@ export function AddTripFormFields({
               </View>
             ) : null}
           </View>
+            )
           ) : null}
 
           {/* 04 Supply & Allocation */}
@@ -1767,11 +1978,22 @@ export function AddTripFormFields({
               style={
                 allocationFillBody
                   ? styles.allocationKeypadBody
-                  : allocationEntityPickerStep
+                  : showAssetFleetOnSupply
                     ? styles.allocationPickerBody
                     : styles.allocationStepBody
               }
             >
+            {allocationContextRow ? (
+              <WizardPartyContextRow
+                left={allocationContextRow.left}
+                right={allocationContextRow.right}
+              />
+            ) : null}
+
+            {allocationPriorSelections.length > 0 ? (
+              <WizardPriorSelections items={allocationPriorSelections} />
+            ) : null}
+
             {showAlloc("supply") ? (
             <>
             <SupplyAllocationModeBar
@@ -1802,7 +2024,7 @@ export function AddTripFormFields({
                 <ActivityIndicator color={Theme.iconPrimary} />
               ) : (
                 <>
-                  {showPartnerSummary && selectedSupplierRow ? (
+                  {showPartnerSummary && selectedSupplierRow && !allocationContextRow?.right ? (
                     <View style={{ marginBottom: 10 }}>
                       <WizardEntitySummaryCard
                         label="Partner"
@@ -1880,7 +2102,7 @@ export function AddTripFormFields({
             </>
             ) : null}
 
-            {supplyIsAsset && showAlloc("fleetDriver") && !state.assignLater ? (
+            {supplyIsAsset && showAssetFleetOnSupply ? (
               <>
                 {busyFleetHintAsset ? (
                   <View style={styles.warnBanner}>
@@ -1896,7 +2118,7 @@ export function AddTripFormFields({
                   <ActivityIndicator color={Theme.iconPrimary} />
                 ) : (
                   <>
-                    {showDriverFleetSummary && selectedDriverRow ? (
+                    {showDriverFleetSummary && selectedDriverRow && !allocationContextRow?.right ? (
                       <View style={{ marginBottom: 10 }}>
                         <WizardEntitySummaryCard
                           label="Driver"
@@ -1948,7 +2170,7 @@ export function AddTripFormFields({
               </>
             ) : null}
 
-            {supplyIsAsset && showAlloc("fleetVehicle") && !state.assignLater ? (
+            {supplyIsAsset && showAssetFleetOnSupply ? (
               <>
                 {!state.assignLater &&
                 availableVehicles.length === 0 &&
@@ -3226,20 +3448,9 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     marginBottom: 0,
   },
-  cardWizardShell: {
-    ...fullPageWizardStyles.formSectionCard,
-    marginBottom: 0,
-    shadowOpacity: 0,
-    elevation: 0,
-    shadowColor: "transparent",
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-  },
   cardWizardStep: {
     marginBottom: 0,
-    ...fullPageWizardStyles.formSectionCard,
-    shadowOpacity: 0,
-    elevation: 0,
+    ...fullPageWizardStyles.wizardStepContentFlat,
   },
   cardHeadDense: {
     paddingBottom: 4,

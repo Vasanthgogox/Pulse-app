@@ -6,7 +6,12 @@ import { Platform, StyleSheet, Text, useWindowDimensions, View } from "react-nat
 import { useRouter } from "expo-router";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { fullPageWizardStyles } from "@/components/full-page-wizard";
+import {
+  fullPageWizardStyles,
+  WizardPartyContextRow,
+  WizardPriorSelections,
+  type WizardPriorSelectionItem,
+} from "@/components/full-page-wizard";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { IndentAggregateAllocationStep } from "@/features/indents/components/IndentAggregateAllocationStep";
 import { IndentAllocationTripDetailsStep } from "@/features/indents/components/IndentAllocationTripDetailsStep";
@@ -24,6 +29,7 @@ import { AssignmentFlowFooter } from "@/features/trips/components/assignment/ass
 import { AssignmentFlowShell } from "@/features/trips/components/assignment/AssignmentFlowShell";
 import { SupplyAllocationModeBar } from "@/features/trips/components/SupplyAllocationModeBar";
 import { formatIsoDateForDisplay, isValidIsoDateString } from "@/lib/dateIso.util";
+import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { ROUTES } from "@/lib/routes";
 import {
   useDriversQuery,
@@ -180,6 +186,240 @@ export function IndentAllocationFlowScreen({
   const tripWeightLabel = deployWeightTons.trim()
     ? `${deployWeightTons.trim()} t`
     : "—";
+
+  const shipperLabel = currentLoad
+    ? resolveMarketIndentShipperLabel(currentLoad)
+    : "Shipper";
+  const loadRouteSubtitle = currentLoad
+    ? `${currentLoad.pickup_area || "—"} → ${currentLoad.drop_location || "—"}`
+    : null;
+
+  const priorSelections = useMemo((): WizardPriorSelectionItem[] => {
+    if (!currentLoad || deployOtpCode) return [];
+    const items: WizardPriorSelectionItem[] = [];
+
+    if (useAdHocDriver) {
+      const rateSteps = new Set([
+        "driverPhone",
+        "driverName",
+        "vehicleReg",
+        "commodity",
+      ]);
+      const rateRaw = subcontractRate.trim();
+      if (rateSteps.has(step) && rateRaw) {
+        items.push({
+          id: "rate",
+          label: "Partner rate",
+          name: `₹${Number(rateRaw).toLocaleString("en-IN")}`,
+          subtitle: state.aggregateAdvancePaid.trim()
+            ? `Advance ₹${Number(state.aggregateAdvancePaid.trim()).toLocaleString("en-IN")}`
+            : null,
+          onPress: () => setStep("rates"),
+        });
+      }
+
+      const phoneSteps = new Set(["driverName", "vehicleReg", "commodity"]);
+      if (phoneSteps.has(step) && aggregateDriverPhone.trim()) {
+        items.push({
+          id: "phone",
+          label: "Driver phone",
+          name: aggregateDriverPhone.trim(),
+          onPress: () => setStep("driverPhone"),
+        });
+      }
+
+      const nameSteps = new Set(["vehicleReg", "commodity"]);
+      if (nameSteps.has(step) && aggregateDriverTrackingName.trim()) {
+        items.push({
+          id: "name",
+          label: "Driver name",
+          name: aggregateDriverTrackingName.trim(),
+          onPress: () => setStep("driverName"),
+        });
+      }
+
+      if (step === "commodity" && assignVehicleRegistration.trim()) {
+        items.push({
+          id: "vehicleReg",
+          label: "Vehicle",
+          name: assignVehicleRegistration.trim(),
+          onPress: () => setStep("vehicleReg"),
+        });
+      }
+    } else if (!staffHandshakeAssignLater) {
+      if (step === "commodity" && typeof assignVehicleId === "string" && selectedVehicle) {
+        items.push({
+          id: "vehicle",
+          label: "Vehicle",
+          name: vehicleLabel,
+          subtitle: [
+            selectedVehicle.vehicle_body_type || selectedVehicle.vehicle_type,
+            selectedVehicle.vehicle_size,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          entityType: "driver",
+          onPress: () => setStep("vehicle"),
+        });
+      }
+    }
+
+    return items;
+  }, [
+    currentLoad,
+    deployOtpCode,
+    useAdHocDriver,
+    staffHandshakeAssignLater,
+    step,
+    shipperLabel,
+    loadRouteSubtitle,
+    subcontractSupplierId,
+    selectedPartner,
+    partnerLabel,
+    subcontractRate,
+    state.aggregateAdvancePaid,
+    aggregateDriverPhone,
+    aggregateDriverTrackingName,
+    assignVehicleRegistration,
+    assignDriverId,
+    selectedDriver,
+    driverLabel,
+    assignVehicleId,
+    selectedVehicle,
+    vehicleLabel,
+  ]);
+
+  const allocationContextRow = useMemo(() => {
+    if (deployOtpCode || !currentLoad) return null;
+
+    const left = {
+      label: "Shipper",
+      name: shipperLabel,
+      subtitle: loadRouteSubtitle,
+      entityType: "client" as const,
+    };
+
+    if (useAdHocDriver) {
+      const driverSteps = new Set<IndentAllocationStepId>([
+        "driverPhone",
+        "driverName",
+        "vehicleReg",
+        "commodity",
+      ]);
+      if (driverSteps.has(step)) {
+        const driverName =
+          aggregateDriverTrackingName.trim() ||
+          aggregateDriverPhone.trim() ||
+          "Select driver";
+        return {
+          left,
+          right: {
+            label: "Driver",
+            name: driverName,
+            subtitle:
+              aggregateDriverTrackingName.trim() && aggregateDriverPhone.trim()
+                ? aggregateDriverPhone.trim()
+                : null,
+            entityType: "driver" as const,
+            onPress:
+              step !== "driverPhone" ? () => setStep("driverPhone") : undefined,
+          },
+        };
+      }
+
+      const partnerSteps = new Set<IndentAllocationStepId>(["partner", "rates"]);
+      if (partnerSteps.has(step)) {
+        return {
+          left,
+          right: {
+            label: "Partner",
+            name:
+              selectedPartner && subcontractSupplierId
+                ? partnerLabel
+                : step === "partner"
+                  ? "Select partner"
+                  : "—",
+            subtitle: selectedPartner
+              ? [selectedPartner.supplier_type, selectedPartner.phone]
+                  .filter(Boolean)
+                  .join(" · ")
+              : null,
+            entityType: "supplier" as const,
+            avatarUrl:
+              (selectedPartner as { avatar_url?: string | null })?.avatar_url ??
+              null,
+            avatarSeed:
+              (selectedPartner as { avatar_seed?: string | null })?.avatar_seed ??
+              null,
+            onPress:
+              step !== "partner" && selectedPartner
+                ? () => setStep("partner")
+                : undefined,
+          },
+        };
+      }
+
+      return { left, right: null };
+    }
+
+    if (staffHandshakeAssignLater && step === "commodity") {
+      return { left, right: null };
+    }
+
+    const assetSteps = new Set<IndentAllocationStepId>([
+      "driver",
+      "vehicle",
+      "commodity",
+    ]);
+    if (assetSteps.has(step)) {
+      return {
+        left,
+        right: {
+          label: "Driver",
+          name:
+            assignDriverId && selectedDriver
+              ? driverLabel
+              : step === "driver"
+                ? "Select driver"
+                : "—",
+          subtitle: selectedDriver
+            ? [selectedDriver.phone, selectedDriver.email]
+                .filter(Boolean)
+                .join(" · ")
+            : null,
+          entityType: "driver" as const,
+          avatarUrl:
+            (selectedDriver as { avatar_url?: string | null })?.avatar_url ??
+            null,
+          avatarSeed:
+            (selectedDriver as { avatar_seed?: string | null })?.avatar_seed ??
+            null,
+          onPress:
+            step !== "driver" && assignDriverId
+              ? () => setStep("driver")
+              : undefined,
+        },
+      };
+    }
+
+    return { left, right: null };
+  }, [
+    deployOtpCode,
+    currentLoad,
+    shipperLabel,
+    loadRouteSubtitle,
+    useAdHocDriver,
+    staffHandshakeAssignLater,
+    step,
+    aggregateDriverTrackingName,
+    aggregateDriverPhone,
+    selectedPartner,
+    subcontractSupplierId,
+    partnerLabel,
+    assignDriverId,
+    selectedDriver,
+    driverLabel,
+  ]);
 
   const stepComplete = isIndentAllocationStepComplete(step, {
     assignDriverId,
@@ -373,6 +613,17 @@ export function IndentAllocationFlowScreen({
         />
       ) : (
         <View style={[styles.flowBody, fullPageWizardStyles.wizardStepBody]}>
+          {allocationContextRow ? (
+            <WizardPartyContextRow
+              left={allocationContextRow.left}
+              right={allocationContextRow.right}
+            />
+          ) : null}
+
+          {!deployOtpCode && priorSelections.length > 0 ? (
+            <WizardPriorSelections items={priorSelections} />
+          ) : null}
+
           {showModeBar ? (
             <SupplyAllocationModeBar
               variant="wizard"

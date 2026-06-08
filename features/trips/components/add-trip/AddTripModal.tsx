@@ -3,7 +3,7 @@
  * Thin container; logic lives in useAddTripForm and useClientsForTrip.
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
-import { useEffect, useMemo, useState } from "react";
+import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
 import {
   Alert,
   Platform,
@@ -73,17 +73,10 @@ export function AddTripModal({
   const [wizardStep, setWizardStep] = useState<WizardStep>("route");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
-  /** Narrow viewport (native + web mobile): full step wizard. */
-  const wizardEnabled = winW < 600;
-  /**
-   * Web tablet: all section cards visible, but aggregate driver/phone/vehicle
-   * uses the same sub-step flow as mobile (phone → name → vehicle).
-   */
-  const webAllocSubSteps =
-    isWeb &&
-    winW >= 600 &&
-    winW < 1080 &&
-    form.state.supplySource === "aggregate";
+  /** Full-page modal: stepped wizard on native + web (mobile app parity). */
+  const wizardEnabled = WIZARD_FULL_PAGE_STEPPED;
+  /** Legacy tablet-only allocation sub-steps — superseded by full stepped wizard. */
+  const webAllocSubSteps = false;
   const allocationFlowActive =
     (wizardEnabled && wizardStep === "allocation") || webAllocSubSteps;
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
@@ -244,6 +237,9 @@ export function AddTripModal({
     (allocationSubStep === "rates" ||
       allocationSubStep === "driverPhone" ||
       allocationSubStep === "vehicle");
+
+  const saleFillBody = wizardEnabled && wizardStep === "sale";
+  const wizardFillBody = saleFillBody || allocationFillBody;
 
   const handleSubmit = async () => {
     setValidationAttempted(true);
@@ -456,8 +452,8 @@ export function AddTripModal({
       validationMessage={visibleValidationMessage ?? submitError}
       onClose={handleWizardBackOrClose}
       onSubmit={handleWizardPrimary}
-      fillBody={allocationFillBody}
-      scrollBody={wizardEnabled && !allocationFillBody}
+      fillBody={wizardFillBody}
+      scrollBody={wizardEnabled && !wizardFillBody}
       progress={
         wizardEnabled && wizardStepMeta ? (
           <AddTripWizardProgress

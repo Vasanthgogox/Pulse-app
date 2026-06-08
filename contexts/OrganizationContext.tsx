@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import * as organizationService from '@/features/organization/services/organization.service';
 import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { CurrentOrganization } from '@/types/organization';
+import { getQueryClient } from '@/lib/queryClient';
 
 interface OrganizationContextType {
   currentOrganization: CurrentOrganization | null;
@@ -34,6 +35,7 @@ export function useOrganization() {
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [currentOrganization, setCurrentOrganization] = useState<CurrentOrganization | null>(null);
+  const prevOrgIdRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   /** Current effect session signal — refresh uses this ref so sign-out / user swap cancels in-flight work (no shared mountedRef race). */
@@ -95,6 +97,22 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       signal.cancelled = true;
     };
   }, [user, loadOrganizationsForSession]);
+
+  // Invalidate non-realtime TanStack Query cache on org switch to prevent cross-org data bleed.
+  // Realtime-covered queries self-update; the rest need a forced eviction.
+  useEffect(() => {
+    const newOrgId = currentOrganization?.id ?? null;
+    if (prevOrgIdRef.current !== null && prevOrgIdRef.current !== newOrgId) {
+      const qc = getQueryClient();
+      // Remove all cached entity lists — they're org-scoped and must not leak across orgs.
+      // Realtime subscriptions will re-populate fresh data after the switch.
+      qc.removeQueries({ predicate: (q) => {
+        const key = q.queryKey;
+        return Array.isArray(key) && key[0] === 'q';
+      }});
+    }
+    prevOrgIdRef.current = newOrgId;
+  }, [currentOrganization?.id]);
 
   // Stable context value: consumers only re-render when the fields they actually
   // use change. Without useMemo the object is recreated on every render of

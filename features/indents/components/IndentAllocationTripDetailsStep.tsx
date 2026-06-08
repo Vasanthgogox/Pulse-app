@@ -65,7 +65,7 @@ export const IndentAllocationTripDetailsStep = memo(
     const preferWebSelect = Platform.OS === "web";
 
     return (
-      <View style={[fullPageWizardStyles.formSectionCard, styles.root, isWide && styles.rootWebWide]}>
+      <View style={[fullPageWizardStyles.wizardStepContentFlat, styles.root, isWide && styles.rootWebWide]}>
         <View style={fullPageWizardStyles.wizardFieldBlock}>
           <Text style={fullPageWizardStyles.wizardFieldLabel}>Trip start date</Text>
           <View style={fullPageWizardStyles.quickDateRow}>

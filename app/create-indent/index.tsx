@@ -8,6 +8,7 @@ import {
   WizardClientPicker,
   WizardClientSummaryCard,
   WizardFormBody,
+  WizardPartyContextRow,
 } from "@/components/full-page-wizard";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
@@ -17,6 +18,7 @@ import {
   type IndentShareTicketFields,
 } from "@/features/indents/components/IndentShareTicketModal";
 import Layout from "@/constants/Layout";
+import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
 import Theme from "@/constants/Theme";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import { useAuth } from "@/contexts/AuthContext";
@@ -336,9 +338,8 @@ export default function CreateIndentScreen() {
 
   const isWide = windowWidth >= 720;
   const isCompactMobile = windowWidth < 480;
-  /** Web only: same wide shell as Create Trip (`AddTripFormFields`). */
-  const desktopFormGrid =
-    Platform.OS === "web" && windowWidth >= 1080 && !isCompactMobile;
+  /** Stepped wizard — no multi-card desktop grid. */
+  const desktopFormGrid = false;
   const desktopFormMaxWidth = Math.min(windowWidth - 28, 1680);
 
   const webCursor =
@@ -393,8 +394,9 @@ export default function CreateIndentScreen() {
     : params.draftId;
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
-  const isMobileWizard = Platform.OS !== "web" && windowWidth < 600;
-  const isDenseForm = isMobileWizard || (Platform.OS !== "web" && windowWidth < 600);
+  /** Full-page Create Load — stepped wizard on native + web (matches Create Trip). */
+  const isMobileWizard = WIZARD_FULL_PAGE_STEPPED;
+  const isDenseForm = isMobileWizard || windowWidth < Layout.wizardSteppedMaxWidth;
   const [wizardStep, setWizardStep] = useState<IndentWizardStep>("route");
 
   useEffect(() => {
@@ -707,6 +709,38 @@ export default function CreateIndentScreen() {
     () => clients.find((c) => c.id === form.client_id) ?? null,
     [clients, form.client_id],
   );
+
+  const indentWizardContextRow = useMemo(() => {
+    if (!isMobileWizard || !selectedClientRow) return null;
+    if (wizardStep === "route" || wizardStep === "client") return null;
+    const pickup = compactLocationLabel(form.pickup_area) || "—";
+    const drop = compactLocationLabel(form.drop_location) || "—";
+    return {
+      left: {
+        label: "Route",
+        name: `${pickup} → ${drop}`,
+        entityType: "client" as const,
+      },
+      right: {
+        label: "Client",
+        name: selectedClientRow.name ?? "Client",
+        subtitle: selectedClientRow.address ?? null,
+        entityType: "client" as const,
+        avatarUrl:
+          (selectedClientRow as { avatar_url?: string | null }).avatar_url ??
+          null,
+        avatarSeed:
+          (selectedClientRow as { avatar_seed?: string | null }).avatar_seed ??
+          null,
+      },
+    };
+  }, [
+    isMobileWizard,
+    selectedClientRow,
+    wizardStep,
+    form.pickup_area,
+    form.drop_location,
+  ]);
 
   const handleSelectClient = useCallback(
     (client: ClientRow) => {
@@ -1162,12 +1196,19 @@ export default function CreateIndentScreen() {
                       desktopFormGrid && styles.formColumnGridWeb,
                     ]}
                   >
+              {indentWizardContextRow ? (
+                <WizardPartyContextRow
+                  left={indentWizardContextRow.left}
+                  right={indentWizardContextRow.right}
+                />
+              ) : null}
+
               {/* 01 Route */}
               {showWizardStep("route") ? (
                 <View
                   style={[
                     isMobileWizard
-                      ? fullPageWizardStyles.formSectionCard
+                      ? fullPageWizardStyles.wizardStepContentFlat
                       : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridRouteWeb,
                   ]}
@@ -1484,7 +1525,7 @@ export default function CreateIndentScreen() {
                 <View
                   style={[
                     isMobileWizard
-                      ? fullPageWizardStyles.formSectionCard
+                      ? fullPageWizardStyles.wizardStepContentFlat
                       : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridClientWeb,
                   ]}
@@ -1773,17 +1814,7 @@ export default function CreateIndentScreen() {
 
               {/* 02b Commercials (mobile wizard) */}
               {isMobileWizard && showWizardStep("prices") ? (
-                <View style={fullPageWizardStyles.formSectionCard}>
-                  {selectedClientRow ? (
-                    <View style={{ marginBottom: 12 }}>
-                      <WizardClientSummaryCard
-                        name={selectedClientRow.name ?? "Client"}
-                        subtitle={selectedClientRow.address}
-                        avatarUrl={(selectedClientRow as { avatar_url?: string | null }).avatar_url ?? null}
-                        avatarSeed={(selectedClientRow as { avatar_seed?: string | null }).avatar_seed ?? null}
-                      />
-                    </View>
-                  ) : null}
+                <View style={fullPageWizardStyles.wizardStepContentFlat}>
                   <SmartInput
                     type="currency"
                     label="Client sale price"
@@ -1820,7 +1851,7 @@ export default function CreateIndentScreen() {
 
               {/* 03 Load — mobile wizard steps */}
               {isMobileWizard && showWizardStep("vehicle") ? (
-                <View style={fullPageWizardStyles.formSectionCard}>
+                <View style={fullPageWizardStyles.wizardStepContentFlat}>
                   <IndentWizardMobileStep
                     step="vehicle"
                     mode={vehicleTypeIsOther ? "text" : "picker"}
@@ -1852,7 +1883,7 @@ export default function CreateIndentScreen() {
               ) : null}
 
               {isMobileWizard && showWizardStep("loadType") ? (
-                <View style={fullPageWizardStyles.formSectionCard}>
+                <View style={fullPageWizardStyles.wizardStepContentFlat}>
                   <IndentWizardMobileStep
                     step="loadType"
                     mode="picker"
@@ -1868,7 +1899,7 @@ export default function CreateIndentScreen() {
               ) : null}
 
               {isMobileWizard && showWizardStep("weight") ? (
-                <View style={fullPageWizardStyles.formSectionCard}>
+                <View style={fullPageWizardStyles.wizardStepContentFlat}>
                   <IndentWizardMobileStep
                     step="weight"
                     mode="text"

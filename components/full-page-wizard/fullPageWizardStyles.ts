@@ -18,6 +18,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     minHeight: 0,
     paddingHorizontal: 16,
     gap: 12,
+    width: "100%",
+    maxWidth: 860,
+    alignSelf: "center",
   },
   pageRootKeypad: {
     gap: 8,
@@ -137,6 +140,12 @@ export const fullPageWizardStyles = StyleSheet.create({
     maxWidth: 860,
     alignSelf: "center",
   },
+  /** Flat step content — no nested card chrome inside the wizard shell. */
+  wizardStepContentFlat: {
+    width: "100%",
+    gap: 12,
+    paddingBottom: 4,
+  },
   partyRow: {
     flexDirection: "row",
     gap: 10,
@@ -171,6 +180,12 @@ export const fullPageWizardStyles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     fontSize: 12,
     fontWeight: "700",
+  },
+  partySubtitle: {
+    color: Theme.textSecondary,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 1,
   },
   block: {
     borderRadius: 12,
@@ -410,6 +425,12 @@ export const fullPageWizardStyles = StyleSheet.create({
     width: "100%",
     gap: 12,
     paddingBottom: 4,
+  },
+  /** Prior-step summary cards stacked above the active field (attribution-style). */
+  wizardPriorSelectionsStack: {
+    width: "100%",
+    gap: 8,
+    marginBottom: 4,
   },
   wizardFieldBlock: {
     width: "100%",
