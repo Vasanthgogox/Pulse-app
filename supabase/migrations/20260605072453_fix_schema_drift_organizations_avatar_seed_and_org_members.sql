@@ -35,6 +35,7 @@ WHERE joined_at = now() AND created_at IS NOT NULL;
 -- Fix: use existing SECURITY DEFINER is_org_member(org_id) helper (safe,
 -- no recursion risk) to let active org members see the full roster.
 DROP POLICY IF EXISTS "Users can read own memberships" ON public.organization_members;
+DROP POLICY IF EXISTS "org_members_read_roster" ON public.organization_members;
 
 CREATE POLICY "org_members_read_roster"
   ON public.organization_members FOR SELECT
@@ -50,6 +51,7 @@ CREATE POLICY "org_members_read_roster"
 -- ── 4. RLS — INSERT policy fix ───────────────────────────────────────────────
 -- Old policy: only owner self-join. Blocked admin-initiated invites entirely.
 DROP POLICY IF EXISTS "organization_members_owner_self_join" ON public.organization_members;
+DROP POLICY IF EXISTS "org_members_insert" ON public.organization_members;
 
 CREATE POLICY "org_members_insert"
   ON public.organization_members FOR INSERT

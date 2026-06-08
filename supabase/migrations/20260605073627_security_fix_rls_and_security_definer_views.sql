@@ -17,6 +17,7 @@ ALTER TABLE public.operational_sequences ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.operational_sequences FROM anon;
 
 -- Org members can read their own org's sequences (e.g. display "next #")
+DROP POLICY IF EXISTS "operational_sequences_select" ON public.operational_sequences;
 CREATE POLICY "operational_sequences_select"
   ON public.operational_sequences FOR SELECT
   TO authenticated
@@ -24,6 +25,7 @@ CREATE POLICY "operational_sequences_select"
 
 -- Org members can increment their own org's sequence counters
 -- (fired on trip/invoice/etc creation)
+DROP POLICY IF EXISTS "operational_sequences_update" ON public.operational_sequences;
 CREATE POLICY "operational_sequences_update"
   ON public.operational_sequences FOR UPDATE
   TO authenticated
@@ -31,6 +33,7 @@ CREATE POLICY "operational_sequences_update"
   WITH CHECK (public.is_org_member(organization_id));
 
 -- Only org admins/owners may create new sequence types for their org
+DROP POLICY IF EXISTS "operational_sequences_insert" ON public.operational_sequences;
 CREATE POLICY "operational_sequences_insert"
   ON public.operational_sequences FOR INSERT
   TO authenticated
