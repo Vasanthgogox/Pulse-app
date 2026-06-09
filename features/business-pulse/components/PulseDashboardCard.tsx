@@ -59,20 +59,24 @@ const styles = StyleSheet.create({
   titleBlock: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   menuIcon: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 6,
+    backgroundColor: "transparent",
   },
   body: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 14,
   },
   bodyFlush: {
     paddingHorizontal: 0,
+    paddingTop: 0,
     paddingBottom: 0,
   },
 });

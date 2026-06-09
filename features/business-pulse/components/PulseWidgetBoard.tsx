@@ -107,14 +107,14 @@ const boardStyles = StyleSheet.create({
     width: "100%",
   },
   overviewLeft: {
-    width: 320,
-    maxWidth: "34%",
+    width: 268,
+    maxWidth: "28%",
     flexShrink: 0,
     gap: 12,
   },
   overviewLeftWide: {
-    width: 360,
-    maxWidth: "36%",
+    width: 288,
+    maxWidth: "29%",
   },
   overviewMain: {
     flex: 1,

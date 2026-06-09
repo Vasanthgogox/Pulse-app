@@ -201,13 +201,13 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontSize: 10,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   partyName: {
     color: Theme.textPrimaryDark,
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 17,
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 16,
   },
   partySubtitle: {
     color: Theme.textSecondary,
@@ -225,13 +225,13 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   blockTitle: {
     color: Theme.textPrimaryDark,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "600",
   },
   blockLine: {
     color: Theme.textPrimaryDark,
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
   },
   blockMeta: {
     color: Theme.textSecondary,
@@ -259,7 +259,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   modeChipText: {
     fontSize: 11,
     color: Theme.textSecondary,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   modeChipTextActive: {
     color: WIZARD_ACCENT,
@@ -528,7 +528,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     marginTop: 8,
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: "700",
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
     textAlign: "center",
     width: "100%",
@@ -615,7 +615,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   addClientBtnText: {
     color: WIZARD_ACCENT,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   /** Wizard step field label — matches attribution block titles. */
   wizardFieldLabel: {
@@ -633,13 +633,15 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: Theme.screenBackground,
     color: Theme.textPrimaryDark,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "400",
     fontStyle: "normal",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    minHeight: 44,
-    marginBottom: 8,
+    minHeight: 40,
+    marginBottom: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   wizardStepBody: {
     width: "100%",

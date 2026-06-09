@@ -18,6 +18,46 @@ export function connectionRequestTypeLabel(row: ConnectionRequestRow): string {
   return 'PARTY';
 }
 
+/** Lowercase role phrase for received invite headlines (handles merged CLIENT · SUPPLIER). */
+export function inviteReceivedRolePhrase(type: string): string {
+  const upper = type.toUpperCase();
+  const hasClient = upper.includes('CLIENT');
+  const hasSupplier = upper.includes('SUPPLIER');
+  if (hasClient && hasSupplier) return 'client and supplier';
+  if (hasClient) return 'client';
+  if (hasSupplier) return 'supplier';
+  return 'partner';
+}
+
+export type InviteHeadlineParts = {
+  actionText: string;
+  highlightText?: string;
+  trailingText?: string;
+};
+
+export function inviteHeadlineParts(
+  tab: 'received' | 'sent',
+  item: Pick<InboundProtocolInviteItem, 'kind' | 'type' | 'name'>,
+): InviteHeadlineParts {
+  if (tab === 'sent') {
+    return {
+      actionText: 'awaiting response on',
+      highlightText: item.name,
+    };
+  }
+  if (item.kind === 'driver') {
+    return { actionText: 'requested to join your fleet' };
+  }
+  const role = inviteReceivedRolePhrase(item.type);
+  if (role === 'partner') {
+    return { actionText: 'would like to connect with you' };
+  }
+  return {
+    actionText: 'would like to add you as a',
+    highlightText: role,
+  };
+}
+
 export function partnerOrgIdForRequest(
   row: ConnectionRequestRow,
   direction: 'received' | 'sent',

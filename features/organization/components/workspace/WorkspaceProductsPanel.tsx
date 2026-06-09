@@ -1,8 +1,8 @@
 /**
- * Workspace Products Panel — enterprise catalogue grid (HubSpot / Zoho style).
+ * Workspace Products Panel — Metronic-style module catalogue.
  *
- * Desktop: segmented filter + 3-column card grid with icon, category pill,
- * description, dashed rule, and ghost CTA. Mobile: single column, same cards.
+ * Desktop: segmented filter + 3-column project cards (icon, status pill,
+ * pricing meta, progress bar, footer CTA). Mobile: single column, same cards.
  */
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,7 +30,7 @@ import {
   useWorkspaceProductsQuery,
   useWorkspaceWaitlistQuery,
 } from "@/lib/queries/useWorkspaceProductsQuery";
-import { AlertCircle, ExternalLink, Lock, Plug, X } from "lucide-react-native";
+import { AlertCircle, ChevronRight, Lock, X } from "lucide-react-native";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -48,8 +48,72 @@ import {
 } from "react-native";
 
 const NAVY = Theme.primary;
-const GRID_GAP = 20;
+const GRID_GAP = 22;
 const CATALOG_MAX_WIDTH = 960;
+
+const METRONIC_STATUS = {
+  connected: { bg: "#E8FFF3", text: "#50CD89", label: "Connected" },
+  included: { bg: "#EEF2FF", text: Theme.primary, label: "Included" },
+  waitlist: { bg: "#F1FAFF", text: "#009EF7", label: "On waitlist" },
+  upcoming: { bg: "#F5F8FA", text: "#7E8299", label: "Upcoming" },
+  discover: { bg: "#F1FAFF", text: "#009EF7", label: "Early access" },
+} as const;
+
+function formatPricingHint(product: ProductDefinition): string {
+  const p = product.pricing;
+  if (p.model === "free") return "Free · included";
+  if (p.customQuote) return "Custom pricing";
+  if (p.startsAt != null) {
+    return `From ₹${p.startsAt.toLocaleString("en-IN")}${p.unit ? ` / ${p.unit}` : ""}`;
+  }
+  return product.status === "active" ? "Available now" : "Coming soon";
+}
+
+function moduleStatusMeta(
+  product: ProductDefinition,
+  isActive: boolean,
+  isPulseCore: boolean,
+  isOnWaitlist: boolean,
+): { label: string; bg: string; text: string; progress: number; progressColor: string } {
+  if (isPulseCore) {
+    return {
+      ...METRONIC_STATUS.included,
+      progress: 100,
+      progressColor: Theme.primary,
+    };
+  }
+  if (isActive) {
+    return {
+      ...METRONIC_STATUS.connected,
+      progress: 100,
+      progressColor: "#50CD89",
+    };
+  }
+  if (isOnWaitlist) {
+    return {
+      ...METRONIC_STATUS.waitlist,
+      progress: 42,
+      progressColor: "#009EF7",
+    };
+  }
+  if (product.badge?.label) {
+    const upcoming =
+      product.status === "coming_soon" || product.status === "planned";
+    const tone = upcoming ? METRONIC_STATUS.upcoming : METRONIC_STATUS.discover;
+    return {
+      label: product.badge.label,
+      bg: tone.bg,
+      text: tone.text,
+      progress: upcoming ? 0 : product.status === "early_access" ? 22 : 12,
+      progressColor: upcoming ? "#D5D8E3" : "#009EF7",
+    };
+  }
+  return {
+    ...METRONIC_STATUS.upcoming,
+    progress: 0,
+    progressColor: "#D5D8E3",
+  };
+}
 
 type CatalogFilter = "all" | "active" | "discover";
 
@@ -67,23 +131,6 @@ function gridColumns(contentWidth: number): number {
 
 function shortProductName(name: string): string {
   return name.replace(/^Pulse\s+/i, "").trim() || name;
-}
-
-function productCategoryLabel(product: ProductDefinition): string {
-  const labels: Partial<Record<ProductId, string>> = {
-    pulse_core: "Core",
-    pulse_pod_pro: "Operations",
-    pulse_fleet_pro: "Fleet",
-    pulse_finance_pro: "Finance",
-    pulse_invoice_pro: "Finance",
-    pulse_marketplace: "Network",
-    pulse_exchange: "Network",
-    pulse_people: "People",
-    pulse_talent: "Talent",
-    pulse_compliance: "Compliance",
-    pulse_ai: "Intelligence",
-  };
-  return labels[product.id] ?? "Module";
 }
 
 function filterProducts(
@@ -168,12 +215,11 @@ function ProductCatalogCard({
   isActive,
   isOnWaitlist,
   activeProductIds,
-  onJoinWaitlist,
-  onManage,
 }: ProductCardProps) {
   const isPulseCore = product.id === "pulse_core";
   const canBeActivated = canActivate(product.id, activeProductIds);
   const missingDeps = product.dependencies.filter((d) => !activeProductIds.has(d));
+  const status = moduleStatusMeta(product, isActive, isPulseCore, isOnWaitlist);
 
   const ctaLabel = useMemo(() => {
     if (isPulseCore) return "Included in workspace";
@@ -184,96 +230,95 @@ function ProductCatalogCard({
   }, [isPulseCore, isActive, isOnWaitlist, product.status]);
 
   const ctaDisabled = isPulseCore || isOnWaitlist;
-  const ctaAction = isActive ? () => onManage(product) : () => onJoinWaitlist(product);
+  const isLockedModule = !isPulseCore;
+  const isLive = isActive || isPulseCore;
+  const pricingHint = isLive ? formatPricingHint(product) : null;
 
   return (
-    <View style={[s.card, isActive && s.cardActive]}>
-      <View style={s.cardBody}>
-        <View style={s.cardTopRow}>
-          <ProductLogo productId={product.id} size={44} active={isActive || isPulseCore} />
-          <View style={s.cardTopRight}>
-            <View style={s.categoryPill}>
-              <Text style={s.categoryPillText}>{productCategoryLabel(product)}</Text>
-            </View>
-            <Pressable
-              onPress={ctaDisabled ? undefined : ctaAction}
-              disabled={ctaDisabled}
-              style={({ pressed }) => [s.externalBtn, pressed && { opacity: 0.7 }]}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${product.name}`}
-            >
-              <ExternalLink size={15} color={Theme.textMuted} strokeWidth={2} />
-            </Pressable>
-          </View>
+    <View
+      style={[s.card, (isActive || isPulseCore) && s.cardActive]}
+      accessibilityLabel={`${product.name}, ${status.label}`}
+    >
+      <View style={s.cardHeader}>
+        <ProductLogo
+          productId={product.id}
+          size={32}
+          active={isLive}
+          showActiveDot={isActive && !isPulseCore}
+        />
+        <View style={[s.statusPill, { backgroundColor: status.bg }]}>
+          <Text style={[s.statusPillText, { color: status.text }]}>{status.label}</Text>
         </View>
-
-        <Text style={s.cardTitle}>{shortProductName(product.name)}</Text>
-        <Text style={s.cardDescription} numberOfLines={2}>
-          {product.description}
-        </Text>
-
-        {product.badge ? (
-          <View style={s.badgeRow}>
-            <StatusBadge label={product.badge.label} variant={product.badge.variant} />
-          </View>
-        ) : isActive && !isPulseCore ? (
-          <View style={s.badgeRow}>
-            <StatusBadge label="Active" variant="green" />
-          </View>
-        ) : isPulseCore ? (
-          <View style={s.badgeRow}>
-            <StatusBadge label="Included" variant="indigo" />
-          </View>
-        ) : null}
-
-        {!canBeActivated && missingDeps.length > 0 ? (
-          <View style={s.depWarn}>
-            <AlertCircle size={13} color={Theme.textMuted} strokeWidth={2} />
-            <Text style={s.depWarnText} numberOfLines={2}>
-              Requires {missingDeps.map((d) => shortProductName(getProduct(d).name)).join(", ")}
-            </Text>
-          </View>
-        ) : null}
       </View>
 
-      <View style={s.cardFooter}>
-        <View style={s.cardDivider} />
-        <View style={s.footerRow}>
-          <Pressable
-            onPress={ctaDisabled ? undefined : ctaAction}
-            disabled={ctaDisabled}
-            style={({ pressed }) => [
-              s.connectBtn,
-              ctaDisabled && s.connectBtnDisabled,
-              pressed && !ctaDisabled && s.connectBtnPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={ctaLabel}
-          >
-            <Plug size={13} color={isActive ? NAVY : Theme.textSecondary} strokeWidth={2.2} />
-            <Text
-              style={[
-                s.connectBtnText,
-                ctaDisabled && s.connectBtnTextDisabled,
-                isActive && !isPulseCore && s.connectBtnTextActive,
-              ]}
-            >
-              {ctaLabel}
-            </Text>
-          </Pressable>
-          <Switch
-            value={isActive || isPulseCore}
-            disabled={isPulseCore || ctaDisabled}
-            onValueChange={() => {
-              if (!ctaDisabled) ctaAction();
-            }}
-            trackColor={{ false: "#e4e6ef", true: "rgba(79,70,229,0.35)" }}
-            thumbColor={isActive || isPulseCore ? NAVY : "#f4f4f5"}
-            ios_backgroundColor="#e4e6ef"
-            accessibilityLabel={`${product.name} enabled`}
-          />
+      <Text style={s.cardTitle}>{shortProductName(product.name)}</Text>
+      <Text style={s.cardDescription} numberOfLines={2}>
+        {product.tagline || product.description}
+      </Text>
+
+      <View style={s.metaRow}>
+        <Text style={s.metaLabel}>Pricing</Text>
+        {isLive ? (
+          <Text style={s.metaValue} numberOfLines={1}>
+            {pricingHint}
+          </Text>
+        ) : (
+          <Text style={s.metaValueMasked} numberOfLines={1} accessibilityLabel="Pricing hidden">
+            ••••••
+          </Text>
+        )}
+      </View>
+
+      <View style={s.progressTrack}>
+        <View
+          style={[
+            s.progressFill,
+            {
+              width: `${status.progress}%`,
+              backgroundColor: status.progressColor,
+            },
+          ]}
+        />
+      </View>
+
+      {!canBeActivated && missingDeps.length > 0 ? (
+        <View style={s.depWarn}>
+          <AlertCircle size={12} color={Theme.textMuted} strokeWidth={2} />
+          <Text style={s.depWarnText} numberOfLines={2}>
+            Requires {missingDeps.map((d) => shortProductName(getProduct(d).name)).join(", ")}
+          </Text>
         </View>
+      ) : null}
+
+      <View style={s.cardFooter}>
+        <View style={s.footerCta}>
+          <Text
+            style={[
+              s.footerCtaText,
+              (ctaDisabled || isLockedModule) && s.footerCtaTextMuted,
+              isPulseCore && s.footerCtaTextActive,
+            ]}
+          >
+            {ctaLabel}
+          </Text>
+          {isPulseCore ? (
+            <ChevronRight size={12} color={NAVY} strokeWidth={2.2} />
+          ) : null}
+        </View>
+        {isLockedModule ? (
+          <View style={s.lockBadge} accessibilityLabel={`${product.name} locked`}>
+            <Lock size={12} color={Theme.textMuted} strokeWidth={2} />
+          </View>
+        ) : (
+          <Switch
+            value
+            disabled
+            trackColor={{ false: "#E4E6EF", true: "rgba(79,70,229,0.32)" }}
+            thumbColor={NAVY}
+            ios_backgroundColor="#E4E6EF"
+            accessibilityLabel={`${product.name} included`}
+          />
+        )}
       </View>
     </View>
   );
@@ -722,116 +767,131 @@ const s = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#eff2f5",
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 0,
+    borderColor: "#EFF2F5",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
     ...Platform.select({
-      web: { boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)" as unknown as undefined },
+      web: {
+        boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.06)" as unknown as undefined,
+      },
     }),
   },
   cardActive: {
     borderColor: WORKSPACE_ACCENT_BORDER,
+    backgroundColor: "#FCFCFF",
   },
-  cardBody: {
-    flex: 1,
-    minHeight: 0,
-    paddingBottom: 16,
-  },
-  cardTopRow: {
+  cardHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 8,
   },
-  cardTopRight: {
-    alignItems: "flex-end",
-    gap: 8,
+  statusPill: {
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     flexShrink: 0,
   },
-  externalBtn: {
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 6,
-  },
-  categoryPill: {
-    borderRadius: 6,
-    backgroundColor: "#f1f4f9",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  categoryPillText: {
+  statusPillText: {
     fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    fontWeight: "600",
+    letterSpacing: 0.05,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-    lineHeight: 22,
-    marginBottom: 6,
+    letterSpacing: -0.1,
+    lineHeight: 17,
+    marginBottom: 3,
   },
   cardDescription: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: "400",
     color: Theme.textSecondary,
-    minHeight: 40,
+    minHeight: 30,
+    marginBottom: 8,
   },
-  badgeRow: {
-    marginTop: 12,
-  },
-  cardFooter: {
-    marginTop: "auto",
-  },
-  cardDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: "#eff2f5",
-    width: "100%",
-  },
-  footerRow: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    paddingVertical: 14,
+    gap: 8,
+    marginBottom: 6,
   },
-  connectBtn: {
+  metaLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
+  metaValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
+  metaValueMasked: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#C4C8D4",
+    letterSpacing: 1.2,
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E4E6EF",
+    overflow: "hidden",
+    marginBottom: 10,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  cardFooter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: "#e4e6ef",
-    borderStyle: Platform.OS === "web" ? "dashed" : "solid",
-    backgroundColor: Theme.cardWhite,
+    justifyContent: "space-between",
+    gap: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#EFF2F5",
+    paddingTop: 8,
+    marginTop: "auto",
+  },
+  footerCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
     flexShrink: 1,
+    minHeight: 28,
   },
-  connectBtnDisabled: {
-    opacity: 0.55,
-  },
-  connectBtnPressed: {
-    backgroundColor: "#f9fafb",
-  },
-  connectBtnText: {
-    fontSize: 13,
+  footerCtaText: {
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  connectBtnTextDisabled: {
+  footerCtaTextMuted: {
     color: Theme.textMuted,
+    fontWeight: "500",
   },
-  connectBtnTextActive: {
+  footerCtaTextActive: {
     color: NAVY,
+  },
+  lockBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
 
   depWarn: {

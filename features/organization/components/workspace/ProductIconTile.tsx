@@ -14,9 +14,9 @@ type ProductIconTileProps = {
 };
 
 const SIZE_MAP = {
-  sm: 36,
-  md: 44,
-  lg: 52,
+  sm: 30,
+  md: 36,
+  lg: 44,
 } as const;
 
 export function ProductIconTile({

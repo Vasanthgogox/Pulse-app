@@ -771,8 +771,8 @@ const s = StyleSheet.create({
    *      mirroring the txn card's `expandHint`. */
   progressWrap: {
     alignSelf: "center",
-    maxWidth: "94%",
-    width: "100%",
+    width: "60%",
+    maxWidth: "60%",
     marginVertical: 6,
     gap: 6,
   },
@@ -864,9 +864,10 @@ const s = StyleSheet.create({
    *  tag. Sits above the narrative sentence so the eye lands on
    *  "SYSTEM UPDATE" / "TRIP STATUS" first. */
   progressKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.65,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   progressKickerMobile: {
@@ -880,10 +881,10 @@ const s = StyleSheet.create({
    *  txn `amount` text so it carries the same visual weight in the
    *  card hierarchy. */
   progressTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
-    lineHeight: 18,
+    lineHeight: 17,
     marginTop: 2,
   },
   progressTitleMobile: {
@@ -897,11 +898,12 @@ const s = StyleSheet.create({
    *  `timelineCardDateVehicle`: 8 px UPPERCASE, slate, letterSpacing
    *  0.5. */
   progressMeta: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
+    lineHeight: 15,
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.45,
+    letterSpacing: 0.4,
     marginTop: 4,
   },
   progressMetaMobile: {
@@ -958,15 +960,16 @@ const s = StyleSheet.create({
     borderRadius: 3,
   },
   progressPillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.55,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 15,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
   progressTime: {
-    fontSize: 9,
-    fontWeight: "700",
-    lineHeight: 12,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 15,
     color: Theme.textMuted,
     letterSpacing: 0.2,
     textTransform: "uppercase",

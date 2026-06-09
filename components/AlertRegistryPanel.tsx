@@ -181,7 +181,7 @@ export type AlertRegistryFinanceHandlers = {
   busySalaryId: string | null;
 };
 
-export type AlertRegistryPanelLayout = "popover" | "fullscreen";
+export type AlertRegistryPanelLayout = "popover" | "fullscreen" | "drawer";
 
 export type AlertRegistryPanelProps = {
   filterTab: RegistryFilterTab;
@@ -554,6 +554,7 @@ export function AlertRegistryPanel({
   bottomInset = 0,
 }: AlertRegistryPanelProps) {
   const isFullscreen = layout === "fullscreen";
+  const isDrawer = layout === "drawer";
   const { height: windowHeight } = useWindowDimensions();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
@@ -649,8 +650,25 @@ export function AlertRegistryPanel({
         }
       : undefined;
 
+  const drawerShell: ViewStyle | undefined = isDrawer
+    ? {
+        flex: 1,
+        width: "100%",
+        height: "100%",
+        maxWidth: "100%",
+        maxHeight: "100%",
+        borderRadius: 0,
+        borderWidth: 0,
+        elevation: 0,
+        shadowOpacity: 0,
+        ...Platform.select({
+          web: { boxShadow: "none" as unknown as undefined },
+        }),
+      }
+    : undefined;
+
   return (
-    <View style={[styles.shell, fullscreenShell, popoverShell]}>
+    <View style={[styles.shell, fullscreenShell, popoverShell, drawerShell]}>
       <View style={[styles.header, isFullscreen && { paddingTop: 16 + topInset }]}>
         <Text style={styles.headerTitle}>Notifications</Text>
         <Pressable
@@ -715,7 +733,10 @@ export function AlertRegistryPanel({
       <ScrollView
         style={[
           styles.scroll,
-          (isFullscreen || layout === "popover") && { flex: 1, maxHeight: undefined },
+          (isFullscreen || layout === "popover" || isDrawer) && {
+            flex: 1,
+            maxHeight: undefined,
+          },
         ]}
         contentContainerStyle={[
           styles.scrollContent,

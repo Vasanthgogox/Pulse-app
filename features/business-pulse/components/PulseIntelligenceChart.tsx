@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 
 import Theme from "@/constants/Theme";
 import { pulseEnterpriseStyles as ent } from "@/features/business-pulse/components/pulseEnterpriseStyles";
@@ -80,56 +80,73 @@ export function PulseIntelligenceChart({
           ))}
         </View>
         <View style={styles.chartCol}>
-          <Svg width="100%" height={196} viewBox="0 0 100 100" preserveAspectRatio="none">
+          <Svg width="100%" height={152} viewBox="0 0 100 100" preserveAspectRatio="none">
             <Defs>
-              <LinearGradient id="pulseAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor={Theme.primary} stopOpacity={0.2} />
-                <Stop offset="100%" stopColor={Theme.primary} stopOpacity={0.02} />
+              <LinearGradient id="pulseAreaGrad2" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor={Theme.primary} stopOpacity={0.08} />
+                <Stop offset="100%" stopColor={Theme.primary} stopOpacity={0} />
               </LinearGradient>
             </Defs>
+            {/* Horizontal grid lines */}
             {[25, 50, 75].map((y) => (
               <Path
                 key={y}
                 d={`M4,${y} L96,${y}`}
                 stroke="#eff2f5"
-                strokeWidth={0.8}
+                strokeWidth={0.6}
               />
             ))}
-            {areaPath ? <Path d={areaPath} fill="url(#pulseAreaGrad)" /> : null}
+            {/* Subtle area fill */}
+            {areaPath ? <Path d={areaPath} fill="url(#pulseAreaGrad2)" /> : null}
+            {/* Main line */}
             {linePath ? (
               <Path
                 d={linePath}
                 fill="none"
                 stroke={Theme.primary}
-                strokeWidth={2.2}
+                strokeWidth={1.8}
                 strokeLinecap="round"
+                strokeLinejoin="round"
               />
             ) : null}
+            {/* Invisible hit targets for month selection */}
+            {coords.map(({ x, item }) => (
+              <Rect
+                key={`hit-${item.month}`}
+                x={x - 4}
+                y={0}
+                width={8}
+                height={96}
+                fill="transparent"
+              />
+            ))}
+            {/* Active dots */}
             {coords.map(({ x, y, item }) => {
               const active = selectedMonth === item.month;
-              return (
+              return active ? (
                 <Circle
                   key={item.month}
                   cx={x}
                   cy={y}
-                  r={active ? 2.6 : 0}
+                  r={3}
                   fill={Theme.primary}
-                  stroke={Theme.cardWhite}
+                  stroke="#ffffff"
                   strokeWidth={1.5}
                 />
-              );
+              ) : null;
             })}
+            {/* Selected month: vertical line + dot */}
             {selected ? (
               <>
                 <Path
-                  d={`M${selected.x},8 L${selected.x},92`}
+                  d={`M${selected.x},6 L${selected.x},94`}
                   stroke={Theme.primary}
-                  strokeWidth={0.8}
+                  strokeWidth={0.7}
                   strokeDasharray="2,2"
-                  opacity={0.5}
+                  opacity={0.4}
                 />
-                <Circle cx={selected.x} cy={selected.y} r={3.2} fill={Theme.primary} />
-                <Circle cx={selected.x} cy={selected.y} r={5.5} fill={Theme.primary} opacity={0.15} />
+                <Circle cx={selected.x} cy={selected.y} r={4} fill={Theme.primary} opacity={0.12} />
+                <Circle cx={selected.x} cy={selected.y} r={2.8} fill={Theme.primary} stroke="#fff" strokeWidth={1.5} />
               </>
             ) : null}
           </Svg>
@@ -170,9 +187,9 @@ const styles = StyleSheet.create({
   chartRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 8,
+    gap: 6,
     width: "100%",
-    minHeight: 176,
+    minHeight: 140,
   },
   yAxis: {
     width: 42,

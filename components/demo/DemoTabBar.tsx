@@ -5,6 +5,7 @@ import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter
 import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
+import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
@@ -58,6 +59,7 @@ import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/sal
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
+import { Inbox, MessageSquare } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -282,6 +284,7 @@ export function DemoTabBar({
   const businessConnectionModal = useOptionalBusinessConnectionRequestModal();
   const notificationsPopoverRootRef = useRef<View | null>(null);
   const invitationsPopoverRootRef = useRef<View | null>(null);
+  const registryDrawerRef = useRef<View | null>(null);
   const mobileNetworkAnchorRef = useRef<View | null>(null);
   /** Worklet-readable: sub-dock must fully hide when false (don’t let bar visibility opacity show it on other tabs). */
   const networkDockOpenSV = useSharedValue(false);
@@ -684,11 +687,19 @@ export function DemoTabBar({
         invitationsPopoverRootRef.current as unknown as { contains?: (node: Node) => boolean } | null;
       const networkRoot =
         mobileNetworkAnchorRef.current as unknown as { contains?: (node: Node) => boolean } | null;
-      const inNotifications =
+      const drawerHost =
+        registryDrawerRef.current as unknown as {
+          contains?: (node: Node) => boolean;
+        } | null;
+      const inDrawer =
+        !!drawerHost &&
+        typeof drawerHost.contains === "function" &&
+        drawerHost.contains(target);
+      const inNotificationsBell =
         !!notificationsRoot &&
         typeof notificationsRoot.contains === "function" &&
         notificationsRoot.contains(target);
-      const inInvitations =
+      const inInvitationsBell =
         !!invitationsRoot &&
         typeof invitationsRoot.contains === "function" &&
         invitationsRoot.contains(target);
@@ -696,7 +707,7 @@ export function DemoTabBar({
         !!networkRoot &&
         typeof networkRoot.contains === "function" &&
         networkRoot.contains(target);
-      if (inNotifications || inInvitations || inNetworkDock) return;
+      if (inDrawer || inNotificationsBell || inInvitationsBell || inNetworkDock) return;
       setShowNotifications(false);
       setShowInvitations(false);
       collapseNetworkDock();
@@ -776,10 +787,15 @@ export function DemoTabBar({
             ))}
           </View>
 
-          <View style={styles.webUtilityWrap}>
+          <View
+            style={[
+              styles.webUtilityWrap,
+              (showNotifications || showInvitations) && styles.webUtilityWrapAboveDrawer,
+            ]}
+          >
             <AnimatedPress
-              style={styles.webBellBtn}
-              activeOpacity={0.8}
+              style={styles.webHeaderIconHit}
+              activeOpacity={0.72}
               onPressIn={warmChatRoute}
               onPress={() => {
                 setShowNotifications(false);
@@ -787,103 +803,57 @@ export function DemoTabBar({
                 router.push(ROUTES.CHAT as Parameters<typeof router.push>[0]);
               }}
             >
-              <FontAwesome5 name="comments" size={16} color="#64748b" />
-              {messageUnreadCount > 0 ? <View style={styles.webBellDot} /> : null}
+              <MessageSquare
+                size={22}
+                color={WEB_HEADER_ICON.muted}
+                strokeWidth={WEB_HEADER_ICON.stroke}
+              />
+              {messageUnreadCount > 0 ? (
+                <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotChat]} />
+              ) : null}
             </AnimatedPress>
             <View style={styles.webPopoverAnchor} ref={notificationsPopoverRootRef}>
               <AnimatedPress
-                style={[
-                  styles.webBellBtn,
-                  showNotifications && styles.webBellBtnActive,
-                ]}
-                activeOpacity={0.8}
+                style={styles.webHeaderIconHit}
+                activeOpacity={0.72}
                 onPress={() => {
                   setShowNotifications((v) => !v);
                   setShowInvitations(false);
                 }}
               >
                 <NotificationBellIcon
-                  size={18}
-                  color={showNotifications ? Theme.textOnDark : Theme.textSecondary}
+                  size={22}
+                  color={
+                    showNotifications ? WEB_HEADER_ICON.active : WEB_HEADER_ICON.muted
+                  }
+                  strokeWidth={WEB_HEADER_ICON.stroke}
                   badgeCount={showNotifications ? 0 : notificationCount}
                 />
               </AnimatedPress>
-              {showNotifications ? (
-                <View style={styles.webAlertRegistryAnchor}>
-                  <AlertRegistryPanel
-                    filterTab={notifTab}
-                    onFilterTabChange={setNotifTab}
-                    onClose={() => setShowNotifications(false)}
-                    onSync={refreshRegistry}
-                    syncing={notifActionId != null}
-                    finance={{
-                      onOpenDetail: openAlertDetail,
-                      onRejectSalary: (id) => void handleSalaryReject(id),
-                      onPaySalary: openLedgerForSalaryPayment,
-                      onViewSalaryArchive: handleViewSalaryArchive,
-                      onMarkSharedRead: (id) => void markSharedLedgerRead(id),
-                      onSharedAction: (item) => void handleSharedAction(item),
-                      onDismissOps: (ops) => void handleDismissOps(ops),
-                      onOpenOps: handleOpenOps,
-                      busySalaryId: notifActionId,
-                    }}
-                  />
-                </View>
-              ) : null}
             </View>
             <View style={styles.webPopoverAnchor} ref={invitationsPopoverRootRef}>
               <AnimatedPress
-                style={[
-                  styles.webBellBtn,
-                  showInvitations && styles.webBellBtnActive,
-                ]}
-                activeOpacity={0.8}
+                style={styles.webHeaderIconHit}
+                activeOpacity={0.72}
                 onPress={() => {
                   setShowInvitations((v) => !v);
                   setShowNotifications(false);
                 }}
               >
-                <FontAwesome5
-                  name="inbox"
-                  size={15}
-                  color={showInvitations ? "#ffffff" : "#64748b"}
+                <Inbox
+                  size={22}
+                  color={showInvitations ? WEB_HEADER_ICON.active : WEB_HEADER_ICON.muted}
+                  strokeWidth={WEB_HEADER_ICON.stroke}
                 />
                 {pendingInvites > 0 && !showInvitations ? (
-                  <View style={styles.webBellDot} />
+                  <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotInbox]} />
                 ) : null}
               </AnimatedPress>
-              {showInvitations ? (
-                <View style={styles.webInviteRegistryAnchor}>
-                  <InboundProtocolPanel
-                    tab={inviteTab}
-                    onTabChange={setInviteTab}
-                    onClose={() => setShowInvitations(false)}
-                    pendingCount={pendingInvites}
-                    receivedItems={receivedInviteItems}
-                    sentItems={sentInviteItems}
-                    busyId={inviteActionId}
-                    onApprove={(item) => void handleInviteAction(item, "approve")}
-                    onReject={(item) => void handleInviteAction(item, "reject")}
-                    onCancel={(item) => void handleInviteAction(item, "cancel")}
-                    onOpenInviteDetail={(item) => {
-                      setShowInvitations(false);
-                      businessConnectionModal?.presentConnectionInvite(item);
-                    }}
-                    onManageAll={() => {
-                      setShowInvitations(false);
-                      router.push({
-                        pathname: "/network",
-                        params: { view: "requests", ts: String(Date.now()) },
-                      } as never);
-                    }}
-                  />
-                </View>
-              ) : null}
             </View>
             <AnimatedPress
               onPress={onProfilePress}
               style={styles.webAvatarBtn}
-              activeOpacity={0.8}
+              activeOpacity={0.88}
             >
               {profileAvatarUri ? (
                 <Image
@@ -897,6 +867,63 @@ export function DemoTabBar({
           </View>
         </View>
       </View>
+
+      <RegistryWebDrawer
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        hostRef={registryDrawerRef}
+      >
+        <AlertRegistryPanel
+          layout="drawer"
+          filterTab={notifTab}
+          onFilterTabChange={setNotifTab}
+          onClose={() => setShowNotifications(false)}
+          onSync={refreshRegistry}
+          syncing={notifActionId != null}
+          finance={{
+            onOpenDetail: openAlertDetail,
+            onRejectSalary: (id) => void handleSalaryReject(id),
+            onPaySalary: openLedgerForSalaryPayment,
+            onViewSalaryArchive: handleViewSalaryArchive,
+            onMarkSharedRead: (id) => void markSharedLedgerRead(id),
+            onSharedAction: (item) => void handleSharedAction(item),
+            onDismissOps: (ops) => void handleDismissOps(ops),
+            onOpenOps: handleOpenOps,
+            busySalaryId: notifActionId,
+          }}
+        />
+      </RegistryWebDrawer>
+
+      <RegistryWebDrawer
+        visible={showInvitations}
+        onClose={() => setShowInvitations(false)}
+        hostRef={registryDrawerRef}
+      >
+        <InboundProtocolPanel
+          layout="drawer"
+          tab={inviteTab}
+          onTabChange={setInviteTab}
+          onClose={() => setShowInvitations(false)}
+          pendingCount={pendingInvites}
+          receivedItems={receivedInviteItems}
+          sentItems={sentInviteItems}
+          busyId={inviteActionId}
+          onApprove={(item) => void handleInviteAction(item, "approve")}
+          onReject={(item) => void handleInviteAction(item, "reject")}
+          onCancel={(item) => void handleInviteAction(item, "cancel")}
+          onOpenInviteDetail={(item) => {
+            setShowInvitations(false);
+            businessConnectionModal?.presentConnectionInvite(item);
+          }}
+          onManageAll={() => {
+            setShowInvitations(false);
+            router.push({
+              pathname: "/network",
+              params: { view: "requests", ts: String(Date.now()) },
+            } as never);
+          }}
+        />
+      </RegistryWebDrawer>
       </Fragment>
     );
   }
@@ -918,6 +945,13 @@ export function DemoTabBar({
     />
   );
 }
+
+/** Metronic utility toolbar — outline icons, no squircle chrome. */
+const WEB_HEADER_ICON = {
+  muted: "#5E6278",
+  active: "#181C32",
+  stroke: 1.85,
+} as const;
 
 const styles = StyleSheet.create({
   staticIconWrap: {
@@ -1408,40 +1442,41 @@ const styles = StyleSheet.create({
   webUtilityWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    minWidth: 90,
+    gap: 18,
+    minWidth: 120,
     justifyContent: "flex-end",
-    paddingRight: 6,
+    paddingRight: 4,
+  },
+  webUtilityWrapAboveDrawer: {
+    position: "relative",
+    zIndex: 250,
   },
   webPopoverAnchor: {
     position: "relative",
     zIndex: 40,
   },
-  webBellBtn: {
+  webHeaderIconHit: {
     width: 40,
     height: 40,
-    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
     position: "relative",
   },
-  webBellBtnActive: {
-    backgroundColor: "#171A20",
-    borderColor: "#171A20",
-  },
-  webBellDot: {
+  webHeaderIconDot: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
     borderRadius: 4,
-    backgroundColor: Theme.teslaRed,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: "#ffffff",
+  },
+  webHeaderIconDotChat: {
+    backgroundColor: "#50CD89",
+  },
+  webHeaderIconDotInbox: {
+    backgroundColor: Theme.teslaRed,
   },
   webAlertRegistryAnchor: {
     position: "absolute",
@@ -1783,24 +1818,23 @@ const styles = StyleSheet.create({
     lineHeight: 11,
   },
   webAvatarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4f46e5",
-    shadowColor: "#4f46e5",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    marginLeft: 2,
+    borderWidth: 1.5,
+    borderColor: "#181C32",
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
   },
   webAvatarText: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#181C32",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   webInviteIconWrap: {
     width: 16,
@@ -1860,9 +1894,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   webProfileAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
+    width: "100%",
+    height: "100%",
+    borderRadius: 19,
   },
   dockColumn: {
     flex: 1,

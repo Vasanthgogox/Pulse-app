@@ -1,6 +1,8 @@
 /**
- * Workspace Settings — strictly follows the reference master/detail layout:
+ * Workspace Settings — hub-aligned detail pane (matches WorkspaceHubMenu density).
+ *
  *   Card 1: Workspace logo + Upload New / Remove
+ *   KYC insight banner (when incomplete)
  *   Card 2: General Details (workspace name, operating model)
  *   Card 3: Invoice Branding preview
  *   Sticky footer: Cancel + Save Changes
@@ -237,142 +239,145 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
         ) : undefined
       }
     >
-      {/* ── Logo upload card ────────────────────────────────────────────── */}
-      <View style={[styles.card, local.uploadCard]}>
-        <View style={local.uploadThumbWrap}>
-          {logoUri ? (
-            <Image source={{ uri: logoUri }} style={local.uploadThumb} />
-          ) : (
-            <View style={local.uploadThumbFallback}>
-              <Text style={local.uploadThumbInitials}>
-                {orgInitials(previewName)}
-              </Text>
-            </View>
-          )}
-          <View style={local.uploadThumbBadge}>
-            <Camera size={12} color={Theme.textOnDark} strokeWidth={2.4} />
-          </View>
-        </View>
-        <View style={local.uploadInfo}>
-          <Text style={local.uploadTitle}>Workspace Logo</Text>
-          <Text style={local.uploadSub}>
-            PNG or JPG up to 5 MB. Recommended size 256 × 256 px.
-          </Text>
-          {canEdit ? (
-            <View style={local.uploadActions}>
-              <Pressable
-                onPress={() => void handleUploadLogo()}
-                disabled={logoUploading}
-                style={({ pressed }) => [
-                  local.uploadBtn,
-                  logoUploading && { opacity: 0.6 },
-                  pressed && !logoUploading && { opacity: 0.9 },
-                ]}
-              >
-                {logoUploading ? (
-                  <LoadingIndicator size="small" color={PURPLE} />
-                ) : (
-                  <>
-                    <UploadCloud size={12} color={PURPLE} strokeWidth={2.4} />
-                    <Text style={local.uploadBtnText}>Upload New</Text>
-                  </>
-                )}
-              </Pressable>
+      <View style={styles.panelStack}>
+        <View style={[styles.detailCard, local.logoCard]}>
+          <View style={local.logoRow}>
+            <View style={local.uploadThumbWrap}>
               {logoUri ? (
-                <Pressable
-                  onPress={() => void handleRemoveLogo()}
-                  disabled={logoUploading}
-                  style={({ pressed }) => [
-                    local.removeBtn,
-                    logoUploading && { opacity: 0.5 },
-                    pressed && !logoUploading && { opacity: 0.85 },
-                  ]}
-                >
-                  <Trash2 size={12} color={Theme.textMuted} strokeWidth={2.2} />
-                  <Text style={local.removeBtnText}>Remove</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : (
-            <View style={local.lockNote}>
-              <Lock size={11} color={Theme.textMuted} strokeWidth={2} />
-              <Text style={local.lockNoteText}>
-                Only admins and owners can change the workspace logo.
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* ── KYC banner ──────────────────────────────────────────────────── */}
-      {canEdit && kycMissing > 0 ? (
-        <View style={styles.kycBanner}>
-          <AlertTriangle size={14} color={AMBER} strokeWidth={2.2} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.kycBannerTitle}>
-              {kycMissing === 3
-                ? "KYC not started"
-                : `${kycMissing} compliance field${kycMissing > 1 ? "s" : ""} missing`}
-            </Text>
-            <Text style={styles.kycBannerSub}>
-              Complete org identity &amp; KYC to unlock billing
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      {/* ── General Details card ────────────────────────────────────────── */}
-      <View style={styles.card}>
-        <SectionHeader label="General Details" />
-
-        <View style={[local.fieldGroup, local.fieldGroupFirst]}>
-          <Text style={local.fieldLabel}>Workspace Name</Text>
-          <TextInput
-            ref={nameInputRef}
-            style={[local.fieldInput, !canEdit && local.fieldInputReadonly]}
-            value={orgName}
-            onChangeText={canEdit ? setOrgName : undefined}
-            placeholder="e.g. GoGoX Logistics"
-            placeholderTextColor={Theme.textMuted}
-            maxLength={64}
-            editable={canEdit}
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              if (isDirty) void handleSaveName();
-            }}
-          />
-        </View>
-
-        <View style={local.fieldGroup}>
-          <Text style={local.fieldLabel}>Operating Model</Text>
-          <View style={[local.fieldInput, local.fieldInputReadonly]}>
-            <Text style={local.fieldStatic}>
-              {modelLabel(currentOrganization?.operatingModel)}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── Invoice Branding card ───────────────────────────────────────── */}
-      <View style={styles.card}>
-        <SectionHeader label="Invoice Branding" />
-        <View style={styles.previewPaper}>
-          <Text style={styles.previewWatermark}>{previewName}</Text>
-          <View style={styles.previewLogoRow}>
-            {logoUri ? (
-              <Image source={{ uri: logoUri }} style={styles.previewLogo} />
-            ) : (
-              <View style={styles.previewLogoFallback}>
-                <Text style={styles.previewLogoInitials}>
-                  {orgInitials(previewName)}
-                </Text>
+                <Image source={{ uri: logoUri }} style={local.uploadThumb} />
+              ) : (
+                <View style={local.uploadThumbFallback}>
+                  <Text style={local.uploadThumbInitials}>
+                    {orgInitials(previewName)}
+                  </Text>
+                </View>
+              )}
+              <View style={local.uploadThumbBadge}>
+                <Camera size={10} color={Theme.textOnDark} strokeWidth={2.4} />
               </View>
-            )}
-            <View>
-              <Text style={styles.previewCompanyName}>
-                {previewName.toUpperCase()}
+            </View>
+            <View style={local.uploadInfo}>
+              <Text style={local.uploadTitle}>Workspace Logo</Text>
+              <Text style={local.uploadSub}>
+                PNG or JPG up to 5 MB. Recommended size 256 × 256 px.
               </Text>
-              <Text style={styles.previewDocType}>Commercial Invoice</Text>
+              {canEdit ? (
+                <View style={local.uploadActions}>
+                  <Pressable
+                    onPress={() => void handleUploadLogo()}
+                    disabled={logoUploading}
+                    style={({ pressed }) => [
+                      local.uploadBtn,
+                      logoUploading && { opacity: 0.6 },
+                      pressed && !logoUploading && { opacity: 0.9 },
+                    ]}
+                  >
+                    {logoUploading ? (
+                      <LoadingIndicator size="small" color={PURPLE} />
+                    ) : (
+                      <>
+                        <UploadCloud size={11} color={PURPLE} strokeWidth={2.2} />
+                        <Text style={local.uploadBtnText}>Upload New</Text>
+                      </>
+                    )}
+                  </Pressable>
+                  {logoUri ? (
+                    <Pressable
+                      onPress={() => void handleRemoveLogo()}
+                      disabled={logoUploading}
+                      style={({ pressed }) => [
+                        local.removeBtn,
+                        logoUploading && { opacity: 0.5 },
+                        pressed && !logoUploading && { opacity: 0.85 },
+                      ]}
+                    >
+                      <Trash2 size={11} color={Theme.textMuted} strokeWidth={2.2} />
+                      <Text style={local.removeBtnText}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={[styles.kycReadonlyNote, local.readonlyNote]}>
+                  <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
+                  <Text style={styles.kycReadonlyText}>
+                    Only admins and owners can change the workspace logo.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {canEdit && kycMissing > 0 ? (
+          <View style={styles.kycBanner}>
+            <AlertTriangle size={13} color={AMBER} strokeWidth={2.2} />
+            <View style={local.bannerText}>
+              <Text style={styles.kycBannerTitle}>
+                {kycMissing === 3
+                  ? "KYC not started"
+                  : `${kycMissing} compliance field${kycMissing > 1 ? "s" : ""} missing`}
+              </Text>
+              <Text style={styles.kycBannerSub}>
+                Complete org identity &amp; KYC to unlock billing
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.detailCard}>
+          <SectionHeader label="General Details" />
+
+          <View style={[styles.panelFieldGroup, styles.panelFieldGroupFirst]}>
+            <Text style={styles.panelFieldLabel}>Workspace Name</Text>
+            <TextInput
+              ref={nameInputRef}
+              style={[
+                styles.panelFieldInput,
+                !canEdit && styles.panelFieldInputReadonly,
+              ]}
+              value={orgName}
+              onChangeText={canEdit ? setOrgName : undefined}
+              placeholder="e.g. GoGoX Logistics"
+              placeholderTextColor={Theme.textMuted}
+              maxLength={64}
+              editable={canEdit}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (isDirty) void handleSaveName();
+              }}
+            />
+          </View>
+
+          <View style={styles.panelFieldGroup}>
+            <Text style={styles.panelFieldLabel}>Operating Model</Text>
+            <View style={[styles.panelFieldInput, styles.panelFieldInputReadonly]}>
+              <Text style={styles.panelFieldStatic}>
+                {modelLabel(currentOrganization?.operatingModel)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.detailCard}>
+          <SectionHeader label="Invoice Branding" />
+          <View style={styles.previewPaper}>
+            <Text style={styles.previewWatermark}>{previewName}</Text>
+            <View style={styles.previewLogoRow}>
+              {logoUri ? (
+                <Image source={{ uri: logoUri }} style={styles.previewLogo} />
+              ) : (
+                <View style={styles.previewLogoFallback}>
+                  <Text style={styles.previewLogoInitials}>
+                    {orgInitials(previewName)}
+                  </Text>
+                </View>
+              )}
+              <View>
+                <Text style={styles.previewCompanyName}>
+                  {previewName.toUpperCase()}
+                </Text>
+                <Text style={styles.previewDocType}>Commercial Invoice</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -382,16 +387,16 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
 }
 
 const local = StyleSheet.create({
-  uploadCard: {
+  logoCard: { padding: 14 },
+  logoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 14,
-    padding: 14,
+    gap: 12,
   },
   uploadThumbWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
@@ -409,14 +414,14 @@ const local = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: PURPLE_TINT,
   },
-  uploadThumbInitials: { fontSize: 22, fontWeight: "800", color: PURPLE },
+  uploadThumbInitials: { fontSize: 16, fontWeight: "800", color: PURPLE },
   uploadThumbBadge: {
     position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    bottom: 0,
+    right: 0,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: PURPLE,
     alignItems: "center",
     justifyContent: "center",
@@ -425,101 +430,66 @@ const local = StyleSheet.create({
   },
   uploadInfo: { flex: 1, minWidth: 0, gap: 3 },
   uploadTitle: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.05,
   },
   uploadSub: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 15,
+    lineHeight: 14,
   },
-  uploadActions: { flexDirection: "row", gap: 8, marginTop: 10, flexWrap: "wrap" },
+  uploadActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+    flexWrap: "wrap",
+  },
   uploadBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     backgroundColor: PURPLE_TINT,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: PURPLE_BORDER,
   },
   uploadBtnText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "600",
     color: PURPLE,
-    letterSpacing: 0.3,
+    letterSpacing: 0.25,
     textTransform: "uppercase",
   },
   removeBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
   removeBtnText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.25,
     textTransform: "uppercase",
   },
-  lockNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  bannerText: { flex: 1, minWidth: 0, gap: 2 },
+  readonlyNote: {
+    marginHorizontal: 0,
     marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
-    alignSelf: "flex-start",
+    marginBottom: 0,
+    alignSelf: "stretch",
   },
-  lockNoteText: { fontSize: 11, color: Theme.textMuted, fontWeight: "500", lineHeight: 15 },
-
-  fieldGroup: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
-  fieldGroupFirst: {
-    borderTopWidth: 0,
-  },
-  fieldLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
-  fieldInput: {
-    backgroundColor: Theme.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    minHeight: 42,
-  },
-  fieldInputReadonly: {
-    backgroundColor: Theme.surface,
-    color: Theme.textSecondary,
-  },
-  fieldStatic: { fontSize: 11, fontWeight: "700", color: Theme.textSecondary },
 
   footerActions: {
     flexDirection: "row",
@@ -527,8 +497,8 @@ const local = StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 10,
     backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
@@ -536,16 +506,16 @@ const local = StyleSheet.create({
     justifyContent: "center",
   },
   cancelText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textMuted,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
   saveBtn: {
     flex: 1.4,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 10,
     backgroundColor: PURPLE,
     alignItems: "center",
     justifyContent: "center",
@@ -554,10 +524,10 @@ const local = StyleSheet.create({
     backgroundColor: "#c8cdd8",
   },
   saveText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textOnDark,
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
   },
 });
