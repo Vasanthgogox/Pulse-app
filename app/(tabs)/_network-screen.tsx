@@ -214,7 +214,7 @@ function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
-  const searchParams = useLocalSearchParams<{ view?: string; hubTab?: string }>();
+  const searchParams = useLocalSearchParams<{ view?: string; hub?: string; hubTab?: string }>();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const isDesktopMatrix = width >= 1100;
   const isMobileLayout = width < 820;
@@ -303,16 +303,33 @@ function NetworkScreenInner() {
   const animatedSupplierCount = useAnimatedCount(supplierCount);
   const animatedDriverCount = useAnimatedCount(driverCount);
   const totalConnectionsDisplay = String(animatedTotalConnections).padStart(2, "0");
+  const hubTabParam = searchParams.hubTab;
+  const hubParam = searchParams.hub;
+  const showDesktopHub = useMemo(() => {
+    if (!isWideNetwork) return false;
+    if (hubParam === "1" || hubParam === "true") return true;
+    const tab = hubTabParam;
+    return (
+      tab === "details" ||
+      tab === "team" ||
+      tab === "profile" ||
+      tab === "sales" ||
+      tab === "goals" ||
+      tab === "asset" ||
+      tab === "connections" ||
+      tab === "grow"
+    );
+  }, [isWideNetwork, hubParam, hubTabParam]);
   const onCreatePost = () => router.push("/(modals)/create-post");
   useEffect(() => {
     if (searchParams.view !== "requests") return;
-    if (isWideNetwork) {
+    if (showDesktopHub) {
       setInvitationsOpen(true);
       setViewMode("dashboard");
     } else {
       setViewMode("requests");
     }
-  }, [searchParams.view, isWideNetwork]);
+  }, [searchParams.view, showDesktopHub]);
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
   const integratedPartnerOrgIds = useMemo(() => {
     const ids = new Set<string>();
@@ -572,7 +589,7 @@ function NetworkScreenInner() {
     );
   }
 
-  if (viewMode === "requests" && !isWideNetwork) {
+  if (viewMode === "requests" && !showDesktopHub) {
     return (
       <View style={styles.container}>
         <InboundProtocolPanel
@@ -602,6 +619,10 @@ function NetworkScreenInner() {
   const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
 
   const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
+    if (item.role === "CLIENT") {
+      router.push(ROUTES.clientProfile(item.id) as Parameters<typeof router.push>[0]);
+      return;
+    }
     setSelectedProfileNode({
       id: item.linked_organization_id ?? item.id,
       name: item.name,
@@ -1223,10 +1244,10 @@ function NetworkScreenInner() {
 
   const orgDisplayName = organization?.name?.trim() || "Network";
 
-  const hubTabParam = searchParams.hubTab;
   const initialHubTab: NetworkDesktopTab | undefined =
     hubTabParam === "details" ||
     hubTabParam === "team" ||
+    hubTabParam === "profile" ||
     hubTabParam === "sales" ||
     hubTabParam === "goals" ||
     hubTabParam === "asset" ||
@@ -1235,7 +1256,7 @@ function NetworkScreenInner() {
       ? hubTabParam
       : undefined;
 
-  const desktopHub = isWideNetwork ? (
+  const desktopHub = showDesktopHub ? (
     <NetworkDesktopHub
       organization={organization}
       orgId={orgId}
@@ -1286,7 +1307,7 @@ function NetworkScreenInner() {
           title={orgDisplayName}
           invitationBadgeCount={pendingCount}
           onInvitationsPress={() => {
-            if (isWideNetwork) setInvitationsOpen(true);
+            if (showDesktopHub) setInvitationsOpen(true);
             else setViewMode("requests");
           }}
         />

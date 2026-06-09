@@ -45,9 +45,9 @@ function adjustmentsForTrip(
 }
 
 export function aggregateSuppliers(
-  suppliers: SupplierLike[],
-  trips: TripForSupplier[],
-  transactions: LedgerTx[],
+  suppliers: readonly SupplierLike[],
+  trips: readonly TripForSupplier[],
+  transactions: readonly LedgerTx[],
   tripsWhereOrgIsClient?: TripWhereOrgIsClient[],
   tripPartyMap?: TripPartyMap | null,
   /** When provided, trip payables match Adjustment Registry (cost vs revenue where applicable). */

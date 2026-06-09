@@ -228,9 +228,16 @@ function AnimatedNavPill({
 
 export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
 
+/** Desktop web: PULSE opens hub layout; NETWORK pill opens classic scroll layout. */
+export type NetworkTabLayout = "hub" | "classic";
+
+export type DemoTabChangeOptions = {
+  networkLayout?: NetworkTabLayout;
+};
+
 interface DemoTabBarProps {
   activeTab: DemoTabId;
-  onTabChange: (tab: DemoTabId) => void;
+  onTabChange: (tab: DemoTabId, options?: DemoTabChangeOptions) => void;
   onProfilePress?: () => void;
   onNotificationsPress?: () => void;
 }
@@ -764,14 +771,22 @@ export function DemoTabBar({
       <Fragment>
       <View style={[styles.webTopShell, Platform.OS === "web" && ({ backdropFilter: "blur(24px)" } as unknown as ViewStyle)]}>
         <View style={styles.webHeaderRow}>
-          <View style={styles.webBrandWrap}>
+          <Pressable
+            onPress={() => onTabChange("network", { networkLayout: "hub" })}
+            style={({ pressed }) => [
+              styles.webBrandWrap,
+              pressed && { opacity: 0.88 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Open Pulse network hub"
+          >
             <View>
               <Text style={styles.webBrandTitle}>
                 PULSE
                 <Text style={styles.webBrandDotText}>.</Text>
               </Text>
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.webNavPillGroup}>
             {navItems.map((item) => (
@@ -1345,6 +1360,9 @@ const styles = StyleSheet.create({
     gap: 8,
     minWidth: 230,
     paddingRight: 8,
+    ...Platform.select({
+      web: { cursor: "pointer" as const },
+    }),
   },
   webBrandLogo: {
     width: 36,

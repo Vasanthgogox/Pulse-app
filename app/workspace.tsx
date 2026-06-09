@@ -47,10 +47,7 @@ export default function WorkspaceScreen() {
   useEffect(() => {
     if (activePanel !== "team") return;
     closeOverlay();
-    router.replace({
-      pathname: ROUTES.TABS.NETWORK,
-      params: { hubTab: "team" },
-    } as Parameters<typeof router.replace>[0]);
+    router.replace(ROUTES.MODALS.TEAM as Parameters<typeof router.replace>[0]);
   }, [activePanel, closeOverlay, router]);
 
   const panelContent = useMemo(() => {

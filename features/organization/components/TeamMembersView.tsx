@@ -405,12 +405,21 @@ function EmptyMembers({ onInvite }: { onInvite?: () => void }) {
   );
 }
 
-function EmptyPending() {
+function EmptyPending({ onInvite }: { onInvite?: () => void }) {
   return (
     <View style={styles.emptyWrap}>
       <UserCheck size={32} color={Theme.textSection} strokeWidth={1.5} />
       <Text style={styles.emptyTitle}>No pending invites</Text>
       <Text style={styles.emptySub}>Sent invitations will appear here.</Text>
+      {onInvite ? (
+        <Pressable
+          onPress={onInvite}
+          style={({ pressed }) => [styles.emptyInviteBtn, pressed && { opacity: 0.8 }]}
+        >
+          <UserPlus2 size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
+          <Text style={styles.emptyInviteBtnText}>Invite member</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -424,6 +433,7 @@ export function TeamMembersView({
   onInvite,
   embedded = false,
   desktopMetronic = false,
+  initialSubTab,
 }: {
   orgId: string;
   currentUserId: string | null;
@@ -433,11 +443,19 @@ export function TeamMembersView({
   embedded?: boolean;
   /** Metronic desktop hub — underline sub-tabs, tighter padding. */
   desktopMetronic?: boolean;
+  /** After inline invite, open on pending tab. */
+  initialSubTab?: "members" | "pending";
 }) {
-  const [tab, setTab] = useState<"members" | "pending">("members");
+  const [tab, setTab] = useState<"members" | "pending">(
+    () => initialSubTab ?? "members",
+  );
   const [search, setSearch] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  React.useEffect(() => {
+    if (initialSubTab) setTab(initialSubTab);
+  }, [initialSubTab]);
 
   const query = useOrgMembersQuery(orgId);
   const invalidate = useInvalidateOrgMembers(orgId);
@@ -596,7 +614,7 @@ export function TeamMembersView({
         tab === "members" ? (
           <EmptyMembers onInvite={canManage ? onInvite : undefined} />
         ) : (
-          <EmptyPending />
+          <EmptyPending onInvite={canManage ? onInvite : undefined} />
         )
       ) : (
         <View style={[styles.grid, embedded && styles.gridEmbedded]}>

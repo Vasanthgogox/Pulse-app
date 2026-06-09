@@ -22,7 +22,6 @@ export default function InviteMemberScreen() {
     } else {
       router.replace({
         pathname: ROUTES.TABS.NETWORK,
-        params: { hubTab: "team" },
       } as Parameters<typeof router.replace>[0]);
     }
   };

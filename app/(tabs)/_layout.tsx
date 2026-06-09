@@ -8,7 +8,7 @@ import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
-import { DemoTabBar, type DemoTabId } from '@/components/demo';
+import { DemoTabBar, type DemoTabId, type DemoTabChangeOptions } from '@/components/demo';
 import { DemoTabBarAutoHideShell } from '@/contexts/DemoTabBarScrollContext';
 import { getLastTabRoute, saveLastTabRoute } from '@/lib/lastRoute';
 import { useLayoutInsets } from '@/lib/layoutInsets';
@@ -54,9 +54,20 @@ function DemoCustomTabBar(
     : 'trips';
 
   const onTabChange = useCallback(
-    (tab: DemoTabId) => {
+    (tab: DemoTabId, options?: DemoTabChangeOptions) => {
       if (tab === 'loadCenter') {
         router.push(ROUTES.PULSE_LOADS);
+        return;
+      }
+      if (tab === 'network') {
+        const hub = options?.networkLayout === 'hub';
+        router.replace({
+          pathname: ROUTES.TABS.NETWORK,
+          params: hub
+            ? { hub: '1', hubTab: 'details' }
+            : { hub: '', hubTab: '' },
+        } as Parameters<typeof router.replace>[0]);
+        navigation.navigate('network');
         return;
       }
       navigation.navigate(tab);

@@ -197,9 +197,6 @@ export function NetworkDesktopGrowPanel({
   const [sentRequestRoles, setSentRequestRoles] = useState<
     Record<string, ConnectionInviteRole>
   >({});
-  const [sentOrgSnapshots, setSentOrgSnapshots] = useState<
-    Record<string, ScoredDiscoverOrg>
-  >({});
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [sortMode, setSortMode] = useState<GrowSortMode>("recommended");
   const [signalFilters, setSignalFilters] = useState<Set<GrowSignalFilter>>(
@@ -210,7 +207,6 @@ export function NetworkDesktopGrowPanel({
   useEffect(() => {
     setSentRequestRoles({});
     setDismissedIds(new Set());
-    setSentOrgSnapshots({});
   }, [orgId, orgSearch]);
 
   const todayInviteCount = useMemo(
@@ -279,43 +275,13 @@ export function NetworkDesktopGrowPanel({
     [recommendationCandidates],
   );
 
-  const sentRequestOrgs = useMemo(() => {
-    const byId = new Map<string, ScoredDiscoverOrg>();
-    for (const org of filteredOrgs) {
-      if (pendingSentOrgIds.has(org.id)) byId.set(org.id, org);
-    }
-    for (const [id, snapshot] of Object.entries(sentOrgSnapshots)) {
-      if (pendingSentOrgIds.has(id) && !byId.has(id)) byId.set(id, snapshot);
-    }
-    const ordered: ScoredDiscoverOrg[] = [];
-    for (const row of sentQ.data ?? []) {
-      if (row.status !== "pending" || !row.to_organization_id) continue;
-      const existing = byId.get(row.to_organization_id);
-      if (existing) {
-        ordered.push(existing);
-        continue;
-      }
-      ordered.push(
-        scoreDiscoverOrg({
-          id: row.to_organization_id,
-          name: row.to_org_name?.trim() || "Organization",
-          avatar_seed: null,
-          connection_status: "pending",
-        }),
-      );
-    }
-    return ordered;
-  }, [filteredOrgs, sentOrgSnapshots, pendingSentOrgIds, sentQ.data]);
-
   const renderGrowOrgCard = (
     org: ScoredDiscoverOrg,
     variant: "grid" | "list",
-    opts?: { forcePending?: boolean },
   ) => {
     const pendingRole =
       sentRequestRoles[org.id] ?? pendingRoleByOrgId.get(org.id) ?? null;
     const pending =
-      opts?.forcePending ||
       Boolean(pendingRole) ||
       String(org.connection_status ?? "").toLowerCase() === "pending";
     return (
@@ -407,7 +373,6 @@ export function NetworkDesktopGrowPanel({
       return;
     }
     setSentRequestRoles((prev) => ({ ...prev, [org.id]: mode }));
-    setSentOrgSnapshots((prev) => ({ ...prev, [org.id]: org }));
     if (!alreadyInvited && requestId) {
       queryClient.setQueryData<ConnectionRequestRow[]>(
         queryKeys.connectionRequests.sent(orgId),
@@ -447,11 +412,6 @@ export function NetworkDesktopGrowPanel({
       return;
     }
     setSentRequestRoles((prev) => {
-      const next = { ...prev };
-      delete next[org.id];
-      return next;
-    });
-    setSentOrgSnapshots((prev) => {
       const next = { ...prev };
       delete next[org.id];
       return next;
@@ -692,30 +652,6 @@ export function NetworkDesktopGrowPanel({
               </Pressable>
             </View>
           </View>
-
-          {sentRequestOrgs.length > 0 ? (
-            <>
-              <View style={styles.growSectionHeader}>
-                <Text style={styles.growSectionTitle}>Sent requests</Text>
-                <Text style={styles.growSectionSub}>
-                  {sentRequestOrgs.length} pending
-                </Text>
-              </View>
-              {gridView ? (
-                <View style={[styles.growCardGrid, styles.growSentStack]}>
-                  {sentRequestOrgs.map((org) =>
-                    renderGrowOrgCard(org, "grid", { forcePending: true }),
-                  )}
-                </View>
-              ) : (
-                <View style={styles.growSentStack}>
-                  {sentRequestOrgs.map((org) =>
-                    renderGrowOrgCard(org, "list", { forcePending: true }),
-                  )}
-                </View>
-              )}
-            </>
-          ) : null}
 
           <View style={styles.growSectionHeader}>
             <Text style={styles.growSectionTitle}>Recommended partners</Text>

@@ -156,6 +156,10 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
     };
   }, [currentOrganization?.logo_url]);
 
+  const openMyProfile = () => {
+    onSelectPanel("account");
+  };
+
   const rows: HubRow[] = [
     {
       id: "settings",
@@ -167,9 +171,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
       id: "team",
       label: "Team members",
       icon: <Users size={14} color={NAVY} strokeWidth={2.2} />,
-      route: isDesktopNetwork
-        ? `${ROUTES.TABS.NETWORK}?hubTab=team`
-        : ROUTES.MODALS.TEAM,
+      route: ROUTES.MODALS.TEAM,
     },
     {
       id: "kyc",
@@ -235,7 +237,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.quickRow}>
             <Pressable
               style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() => onSelectPanel("account")}
+              onPress={openMyProfile}
               accessibilityRole="button"
               accessibilityLabel="My account"
             >
@@ -355,7 +357,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.footerDivider} />
           <View style={styles.footerRow}>
             <Pressable
-              onPress={() => onSelectPanel("account")}
+              onPress={openMyProfile}
               style={({ pressed }) => [styles.footerIdentity, pressed && { opacity: 0.85 }]}
               accessibilityRole="button"
               accessibilityLabel="Open my account"

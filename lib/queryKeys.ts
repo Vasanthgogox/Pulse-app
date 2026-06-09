@@ -89,6 +89,8 @@ export const queryKeys = {
         : (["q", "clients", orgId] as const),
     detail: (orgId: string, clientId: string) =>
       ["q", "clients", orgId, clientId] as const,
+    managementBundle: (orgId: string, clientId: string) =>
+      ["q", "clients", orgId, clientId, "management-bundle"] as const,
   },
 
   suppliers: {

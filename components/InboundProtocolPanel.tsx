@@ -264,7 +264,9 @@ function InviteGridCard({
       </View>
 
       <View style={styles.gridFooter}>
-        <RegistryStatusPill label={statusLabel} tone={statusTone} />
+        <View style={styles.gridFooterLeft}>
+          <RegistryStatusPill label={statusLabel} tone={statusTone} />
+        </View>
         <View style={styles.gridActions}>
           {tab === "received" ? (
             <>
@@ -778,15 +780,23 @@ const styles = StyleSheet.create({
     color: "#78829D",
   },
   gridFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
     marginTop: "auto",
+  },
+  gridFooterLeft: {
+    flexShrink: 0,
   },
   gridActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 8,
+    flexShrink: 0,
+    marginLeft: "auto",
   },
   emptyWrap: {
     paddingHorizontal: 16,

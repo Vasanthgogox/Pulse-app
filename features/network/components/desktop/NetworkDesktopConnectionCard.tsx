@@ -5,6 +5,7 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
+import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
 import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { BadgeCheck } from "lucide-react-native";
@@ -18,6 +19,38 @@ function slugHandle(name: string, id: string): string {
     .slice(0, 18);
   const tail = id.replace(/-/g, "").slice(0, 6);
   return `${base || "partner"}${tail}.pulse`;
+}
+
+function roleTone(role: ConnectedOrg["role"]) {
+  if (role === "CLIENT") {
+    return {
+      bg: Theme.networkBadgeClientBg,
+      text: Theme.networkBadgeClientText,
+      border: Theme.networkBadgeClientBorder,
+    };
+  }
+  if (role === "DRIVER") {
+    return {
+      bg: Theme.networkBadgeDriverBg,
+      text: Theme.networkBadgeDriverText,
+      border: Theme.networkBadgeDriverBorder,
+    };
+  }
+  return {
+    bg: Theme.networkBadgeSupplierBg,
+    text: Theme.networkBadgeSupplierText,
+    border: Theme.networkBadgeSupplierBorder,
+  };
+}
+
+function ratingFilledCount(rating: number | null | undefined): number {
+  if (rating == null || !Number.isFinite(rating)) return 0;
+  return Math.max(0, Math.min(5, Math.round(rating)));
+}
+
+function formatRating(rating: number | null | undefined): string {
+  if (rating == null || !Number.isFinite(rating)) return "—";
+  return rating.toFixed(1);
 }
 
 type Props = {
@@ -40,6 +73,10 @@ export function NetworkDesktopConnectionCard({
     : slugHandle(item.name, item.id);
   const inApp = item.is_integrated;
   const inviteDisabled = inApp || actionLoading;
+  const tone = roleTone(item.role);
+  const ratingValue = item.rating ?? null;
+  const filledStars = ratingFilledCount(ratingValue);
+  const ratingLabel = formatRating(ratingValue);
 
   return (
     <Pressable
@@ -48,6 +85,28 @@ export function NetworkDesktopConnectionCard({
       accessibilityRole="button"
       accessibilityLabel={`Open ${item.name}`}
     >
+      <View style={styles.topMetaRow}>
+        <View
+          style={[
+            styles.roleTag,
+            { backgroundColor: tone.bg, borderColor: tone.border },
+          ]}
+        >
+          <Text style={[styles.roleTagText, { color: tone.text }]}>{item.role}</Text>
+        </View>
+        <View style={styles.ratingWrap}>
+          <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
+          <Text
+            style={[
+              styles.ratingText,
+              ratingValue == null && styles.ratingTextEmpty,
+            ]}
+          >
+            {ratingLabel}
+          </Text>
+        </View>
+      </View>
+
       <View style={styles.avatarWrap}>
         <PartyAvatar
           name={item.name}
@@ -124,10 +183,6 @@ export function NetworkDesktopConnectionCard({
           </Pressable>
         )}
       </View>
-
-      <Text style={styles.role} numberOfLines={1}>
-        {item.role}
-      </Text>
     </Pressable>
   );
 }
@@ -149,6 +204,41 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     opacity: 0.92,
+  },
+  topMetaRow: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 2,
+  },
+  roleTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  roleTagText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.35,
+  },
+  ratingWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  ratingText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#181C32",
+    minWidth: 22,
+    textAlign: "right",
+  },
+  ratingTextEmpty: {
+    color: "#A1A5B7",
   },
   avatarWrap: {
     width: 56,
@@ -269,13 +359,5 @@ const styles = StyleSheet.create({
   },
   actionBtnPressed: {
     opacity: 0.88,
-  },
-  role: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.45,
-    textTransform: "uppercase",
-    color: "#78829D",
-    marginTop: 1,
   },
 });

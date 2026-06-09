@@ -21,7 +21,7 @@ import { NetworkDesktopDetailsPanel } from "@/features/network/components/deskto
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";
 import { NetworkDesktopGrowPanel } from "@/features/network/components/desktop/NetworkDesktopGrowPanel";
 import { NetworkDesktopHubHero } from "@/features/network/components/desktop/NetworkDesktopHubHero";
-import { NetworkDesktopInvitationsPanel } from "@/features/network/components/desktop/NetworkDesktopInvitationsPanel";
+import { NetworkDesktopProfilePanel } from "@/features/network/components/desktop/NetworkDesktopProfilePanel";
 import { NetworkDesktopTeamPanel } from "@/features/network/components/desktop/NetworkDesktopTeamPanel";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
@@ -36,6 +36,7 @@ import { ROUTES } from "@/lib/routes";
 export type NetworkDesktopTab =
   | "details"
   | "team"
+  | "profile"
   | "sales"
   | "goals"
   | "asset"
@@ -45,6 +46,7 @@ export type NetworkDesktopTab =
 const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "details", label: "Details" },
   { id: "team", label: "Team" },
+  { id: "profile", label: "My Profile" },
   { id: "sales", label: "Connection sales" },
   { id: "goals", label: "Goals" },
   { id: "asset", label: "Asset sales" },
@@ -56,6 +58,7 @@ function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
   if (
     raw === "details" ||
     raw === "team" ||
+    raw === "profile" ||
     raw === "sales" ||
     raw === "goals" ||
     raw === "asset" ||
@@ -161,10 +164,6 @@ export function NetworkDesktopHub({
     if (parsed) setTab(parsed);
   }, [initialTab]);
 
-  const handleInviteTeamMember = () => {
-    router.push(ROUTES.MODALS.INVITE_MEMBER as never);
-  };
-
   const selectTab = (next: NetworkDesktopTab) => {
     onInvitationsOpenChange(false);
     setTab(next);
@@ -220,9 +219,12 @@ export function NetworkDesktopHub({
           orgName={orgName}
           currentUserId={user?.uid ?? null}
           canManage={canManageTeam}
-          onInvite={handleInviteTeamMember}
         />
       );
+    }
+
+    if (tab === "profile") {
+      return <NetworkDesktopProfilePanel organization={organization} />;
     }
 
     if (tab === "sales") {
@@ -295,6 +297,7 @@ export function NetworkDesktopHub({
         totalConnections={totalConnections}
         clientCount={clientCount}
         supplierCount={supplierCount}
+        onProfilePress={() => selectTab("profile")}
       />
 
       <View style={styles.tabBar}>

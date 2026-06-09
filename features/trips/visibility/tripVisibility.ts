@@ -109,7 +109,7 @@ export function isTripEligibleForSharedLedger(
 
 export function buildUniqueLinkedOrgIdMap<
   T extends { id: string; linked_organization_id?: string | null }
->(rows: T[]): Map<string, string> {
+>(rows: readonly T[]): Map<string, string> {
   const counts = new Map<string, number>();
   for (const row of rows) {
     const linkedOrgId = row.linked_organization_id ?? null;

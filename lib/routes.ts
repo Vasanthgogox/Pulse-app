@@ -78,6 +78,15 @@ export const ROUTES = {
     `/vehicle/${encodeURIComponent(vehicleId)}/analytics` as const,
   clientAnalytics: (clientId: string) =>
     `/client/${encodeURIComponent(clientId)}/analytics` as const,
+  /** Metronic client management hub (Overview, KYC, Warehouses, Contracts, …). */
+  clientProfile: (clientId: string, tab?: string) => {
+    const base = `/client/${encodeURIComponent(clientId)}/profile` as const;
+    if (!tab) return base;
+    return `${base}?tab=${encodeURIComponent(tab)}` as const;
+  },
+  /** Finance ledger + trips detail for a client. */
+  clientDetail: (clientId: string) =>
+    `/client/${encodeURIComponent(clientId)}` as const,
   supplierAnalytics: (supplierId: string) =>
     `/supplier/${encodeURIComponent(supplierId)}/analytics` as const,
   driverAnalytics: (driverId: string) =>
