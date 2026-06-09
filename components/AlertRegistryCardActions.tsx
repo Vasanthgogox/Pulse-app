@@ -6,7 +6,11 @@ import Theme from "@/constants/Theme";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 const METRONIC = {
+  /** Label color on ghost / view buttons */
   primaryBtn: "#181C32",
+  /** Filled primary CTA — neutral gray (not black) */
+  primaryBtnBg: "#78829D",
+  primaryBtnBorder: "#78829D",
   ghostBorder: "#DBDFE9",
 } as const;
 
@@ -48,8 +52,8 @@ export const alertRegistryActionStyles = StyleSheet.create({
     paddingHorizontal: BTN.paddingHorizontal,
     borderRadius: BTN.borderRadius,
     borderWidth: BTN.borderWidth,
-    borderColor: METRONIC.primaryBtn,
-    backgroundColor: METRONIC.primaryBtn,
+    borderColor: METRONIC.primaryBtnBorder,
+    backgroundColor: METRONIC.primaryBtnBg,
     alignItems: "center",
     justifyContent: "center",
   },

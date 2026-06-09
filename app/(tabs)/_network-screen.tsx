@@ -20,6 +20,7 @@ import {
   type ConnectedOrg,
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
+import { NetworkDesktopHub } from "@/features/network/components/desktop/NetworkDesktopHub";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { NetworkPhoneAndContactsPanel } from "@/features/network/components/NetworkPhoneAndContactsPanel";
 import { discoverSearchTermForOrgs } from "@/lib/networkPhoneSearch";
@@ -1217,6 +1218,37 @@ function NetworkScreenInner() {
 
   const orgDisplayName = organization?.name?.trim() || "Network";
 
+  const desktopHub = isWideNetwork ? (
+    <NetworkDesktopHub
+      organization={organization}
+      orgId={orgId}
+      totalConnections={totalConnections}
+      clientCount={clientCount}
+      supplierCount={supplierCount}
+      driverCount={driverCount}
+      pendingInviteCount={pendingCount}
+      connSearch={connSearch}
+      onConnSearchChange={setConnSearch}
+      connFilter={connFilter}
+      onConnFilterChange={setConnFilter}
+      discoverSearch={discoverSearch}
+      onDiscoverSearchChange={setDiscoverSearch}
+      discoverOrgSearch={discoverOrgSearch}
+      integratedPartnerOrgIds={integratedPartnerOrgIds}
+      discoverInviteCount={discoverInviteCount}
+      discoverInviteLimit={discoverInviteLimit}
+      onDiscoverInviteCountChange={(count, limit) => {
+        setDiscoverInviteCount(count);
+        setDiscoverInviteLimit(limit);
+      }}
+      onOpenProfileFromConnection={handleOpenProfileFromConnection}
+      onOpenProfileFromDiscover={handleOpenProfileFromDiscover}
+      onPressMutuals={handlePressMutuals}
+      onOpenMutualProfile={handleOpenMutualProfile}
+      onInvitationsPress={() => setViewMode("requests")}
+    />
+  ) : null;
+
   return (
     <View style={styles.container}>
       {showHomePageHeader ? (
@@ -1226,7 +1258,7 @@ function NetworkScreenInner() {
           onInvitationsPress={() => setViewMode("requests")}
         />
       ) : null}
-      {scrollContent}
+      {desktopHub ?? scrollContent}
       <MutualConnectionsModal
         visible={Boolean(mutualModalTarget)}
         viewerOrgId={orgId}
