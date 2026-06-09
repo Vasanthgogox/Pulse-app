@@ -1027,6 +1027,8 @@ export function ConnectionsView({
               <NetworkDesktopConnectionCard
                 item={item}
                 onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
+                onInvite={() => void inviteOffAppParty(item)}
+                actionLoading={invitingId === item.id}
               />
             </View>
           ))}
@@ -1051,29 +1053,33 @@ export function ConnectionsView({
   }, [windowWidth]);
 
   const renderMetronicHorizontalScrollBody = () => (
-    <ScrollView
-      horizontal
-      nestedScrollEnabled
-      directionalLockEnabled
-      showsHorizontalScrollIndicator={false}
-      style={styles.metronicHorizontalScroll}
-      contentContainerStyle={styles.metronicHorizontalScrollContent}
-    >
-      {connections.map((item) => (
-        <View
-          key={`${item.role}-${item.id}`}
-          style={[
-            styles.metronicHorizontalCard,
-            { width: metronicHorizontalCardWidth },
-          ]}
-        >
-          <NetworkDesktopConnectionCard
-            item={item}
-            onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
-          />
-        </View>
-      ))}
-    </ScrollView>
+    <View style={styles.metronicHorizontalScrollWrap}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.metronicHorizontalScroll}
+        contentContainerStyle={styles.metronicHorizontalScrollContent}
+      >
+        {connections.map((item) => (
+          <View
+            key={`${item.role}-${item.id}`}
+            style={[
+              styles.metronicHorizontalCard,
+              { width: metronicHorizontalCardWidth },
+            ]}
+          >
+            <NetworkDesktopConnectionCard
+              item={item}
+              onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
+              onInvite={() => void inviteOffAppParty(item)}
+              actionLoading={invitingId === item.id}
+            />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 
   const renderHubConnectionsBody = () =>
@@ -1351,7 +1357,8 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     backgroundColor: "transparent",
     paddingTop: 4,
-    paddingBottom: 6,
+    paddingBottom: 10,
+    overflow: "visible",
   },
   metronicGridRoot: {
     width: "100%",
@@ -1368,19 +1375,28 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: "25%",
   },
+  metronicHorizontalScrollWrap: {
+    width: "100%",
+    minHeight: 200,
+    overflow: "visible",
+  },
   metronicHorizontalScroll: {
     width: "100%",
+    minHeight: 200,
     flexGrow: 0,
   },
   metronicHorizontalScrollContent: {
     flexDirection: "row",
+    alignItems: "stretch",
     gap: 12,
     paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
     paddingBottom: 8,
+    minHeight: 200,
   },
   metronicHorizontalCard: {
     flexShrink: 0,
     minWidth: 0,
+    alignSelf: "stretch",
   },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {

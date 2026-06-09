@@ -39,11 +39,13 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -77,6 +79,8 @@ type Props = {
 export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktopNetwork = Platform.OS === "web" && width >= 1180;
   const { user, profile, signOut } = useAuth();
   const { currentOrganization } = useOrganization();
   const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
@@ -163,7 +167,9 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
       id: "team",
       label: "Team members",
       icon: <Users size={14} color={NAVY} strokeWidth={2.2} />,
-      panelId: "team",
+      route: isDesktopNetwork
+        ? `${ROUTES.TABS.NETWORK}?hubTab=team`
+        : ROUTES.MODALS.TEAM,
     },
     {
       id: "kyc",
@@ -309,7 +315,10 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                       onSelectPanel(row.panelId);
                       return;
                     }
-                    if (row.route) navigate(row.route);
+                    if (row.route) {
+                      onExit?.();
+                      navigate(row.route);
+                    }
                   }}
                   style={({ pressed }) => [
                     styles.menuRow,

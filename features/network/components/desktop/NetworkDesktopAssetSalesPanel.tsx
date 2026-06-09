@@ -48,6 +48,13 @@ import {
   type AssetSalesCrossFilters,
   type SalesDateRange,
 } from "@/features/network/utils/assetSalesAnalytics.util";
+import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
+import {
+  exportAssetVehiclesExcel,
+  exportAssetVehiclesPdf,
+  exportAssetDriversExcel,
+  exportAssetDriversPdf,
+} from "@/features/network/lib/networkExport.util";
 import { formatINRChip } from "@/lib/format";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
@@ -836,9 +843,22 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
             >
               <View style={styles.salesWidgetHeader}>
                 <Text style={styles.salesCardTitle}>Asset sale trends</Text>
-                <Pressable style={styles.salesCardMenu}>
-                  <MoreVertical size={15} color={METRONIC.muted} />
-                </Pressable>
+                <NetworkExportMenu
+                  actions={[
+                    {
+                      label: "Export Vehicles Excel",
+                      sublabel: "Fleet vehicle P&L report",
+                      kind: "excel",
+                      onExport: () => exportAssetVehiclesExcel(vehicleTableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                    },
+                    {
+                      label: "Export Vehicles PDF",
+                      kind: "pdf",
+                      onExport: () => exportAssetVehiclesPdf(vehicleTableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                    },
+                  ]}
+                  triggerStyle={styles.salesCardMenu}
+                />
               </View>
               <Text style={styles.salesWidgetSub}>
                 Tap a point to cross-filter by month
@@ -1220,9 +1240,22 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
           <View style={[styles.salesCard, styles.salesTableCard]}>
             <View style={styles.salesTableTitleRow}>
               <Text style={styles.salesCardTitle}>Fleet drivers</Text>
-              <Pressable style={styles.salesCardMenu}>
-                <MoreVertical size={15} color={METRONIC.muted} />
-              </Pressable>
+              <NetworkExportMenu
+                actions={[
+                  {
+                    label: "Export Drivers Excel",
+                    sublabel: "Payroll, commission, settlement",
+                    kind: "excel",
+                    onExport: () => exportAssetDriversExcel(tableRows, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                  {
+                    label: "Export Drivers PDF",
+                    kind: "pdf",
+                    onExport: () => exportAssetDriversPdf(tableRows, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                ]}
+                triggerStyle={styles.salesCardMenu}
+              />
             </View>
 
             <View style={styles.salesTableToolbar}>
@@ -1254,10 +1287,26 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
                   }
                 />
               </View>
-              <Pressable style={styles.salesColumnsBtn}>
-                <LayoutGrid size={13} color={METRONIC.muted} />
-                <Text style={styles.salesColumnsBtnText}>Columns</Text>
-              </Pressable>
+              <NetworkExportMenu
+                actions={[
+                  {
+                    label: "Export Drivers Excel",
+                    kind: "excel",
+                    onExport: () => exportAssetDriversExcel(tableRows, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                  {
+                    label: "Export Drivers PDF",
+                    kind: "pdf",
+                    onExport: () => exportAssetDriversPdf(tableRows, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                ]}
+                trigger={
+                  <View style={styles.salesColumnsBtn}>
+                    <LayoutGrid size={13} color={METRONIC.muted} />
+                    <Text style={styles.salesColumnsBtnText}>Export ↓</Text>
+                  </View>
+                }
+              />
             </View>
 
             <View style={styles.salesTableScroll}>
@@ -1509,9 +1558,22 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
                   Vehicle score engine · utilization · revenue per km
                 </Text>
               </View>
-              <Pressable style={styles.salesCardMenu}>
-                <MoreVertical size={15} color={METRONIC.muted} />
-              </Pressable>
+              <NetworkExportMenu
+                actions={[
+                  {
+                    label: "Export Vehicles Excel",
+                    sublabel: "P&L, utilization, scores",
+                    kind: "excel",
+                    onExport: () => exportAssetVehiclesExcel(vehicleTableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                  {
+                    label: "Export Vehicles PDF",
+                    kind: "pdf",
+                    onExport: () => exportAssetVehiclesPdf(vehicleTableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                ]}
+                triggerStyle={styles.salesCardMenu}
+              />
             </View>
 
             <View style={styles.salesTableToolbar}>
@@ -1543,10 +1605,26 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
                   }
                 />
               </View>
-              <Pressable style={styles.salesColumnsBtn}>
-                <Activity size={13} color={METRONIC.muted} />
-                <Text style={styles.salesColumnsBtnText}>Analytics</Text>
-              </Pressable>
+              <NetworkExportMenu
+                actions={[
+                  {
+                    label: "Export Excel (.xlsx)",
+                    kind: "excel",
+                    onExport: () => exportAssetVehiclesExcel(vehicleTableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                  {
+                    label: "Export PDF",
+                    kind: "pdf",
+                    onExport: () => exportAssetVehiclesPdf(vehicleTableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                  },
+                ]}
+                trigger={
+                  <View style={styles.salesColumnsBtn}>
+                    <Activity size={13} color={METRONIC.muted} />
+                    <Text style={styles.salesColumnsBtnText}>Export ↓</Text>
+                  </View>
+                }
+              />
             </View>
 
             <View style={styles.salesTableScroll}>

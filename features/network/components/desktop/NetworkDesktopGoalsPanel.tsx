@@ -1,6 +1,6 @@
 /**
- * Goals tab — targets for clients, suppliers, vehicles, drivers;
- * payable/receivable balance widgets (Metronic reference layout).
+ * Goals tab — monthly sales targets (revenue, trips, margin %);
+ * client-level revenue; vehicle/driver asset targets; quarter & YTD rollups.
  */
 import Theme from "@/constants/Theme";
 import { NetworkDesktopGoalsBalanceChart } from "@/features/network/components/desktop/NetworkDesktopGoalsBalanceChart";
@@ -9,20 +9,29 @@ import {
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import {
-  DEFAULT_NETWORK_ORG_GOALS,
-  loadNetworkOrgGoals,
-  patchGoalDimension,
-  saveNetworkOrgGoals,
-  type GoalDimension,
-  type NetworkOrgGoals,
+  carryForwardGoals,
+  DEFAULT_NETWORK_GOALS_STORE,
+  getMonthStore,
+  loadNetworkGoalsStore,
+  monthLabelFromKey,
+  patchAggregateTarget,
+  patchEntityTarget,
+  previousMonthKey,
+  saveNetworkGoalsStore,
+  type GoalFocus,
+  type NetworkGoalsStore,
 } from "@/features/network/services/networkGoalsStorage.service";
 import {
+  balancePeriodMonthKeys,
   buildBalanceTrendPoints,
+  buildEntityGoalRows,
   buildGoalSummaryRows,
-  buildTopEntityGoalRows,
-  computeGoalsActuals,
+  buildPeriodSummary,
+  computeGoalsActualsForRollup,
   computePayableReceivableSnapshot,
+  getRecentMonthKeys,
   type GoalTargetRow,
+  type GoalsRollup,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
 import type { SalesDateRange } from "@/features/network/utils/connectionSalesAnalytics.util";
 import { formatINR, formatINRChip } from "@/lib/format";
@@ -37,6 +46,7 @@ import {
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Copy,
   MoreVertical,
   Pencil,
   Target,
@@ -56,11 +66,16 @@ type Props = {
   orgId: string;
 };
 
-const DATE_RANGES: { id: SalesDateRange; label: string }[] = [
-  { id: "3m", label: "3 months" },
-  { id: "6m", label: "6 months" },
-  { id: "12m", label: "12 months" },
-  { id: "all", label: "All time" },
+const ROLLUPS: { id: GoalsRollup; label: string }[] = [
+  { id: "month", label: "Month" },
+  { id: "quarter", label: "Quarter" },
+  { id: "year", label: "Year" },
+];
+
+const FOCUS_TABS: { id: GoalFocus; label: string }[] = [
+  { id: "client", label: "Clients" },
+  { id: "vehicle", label: "Vehicles" },
+  { id: "driver", label: "Drivers" },
 ];
 
 const BALANCE_PERIODS: { id: SalesDateRange; label: string }[] = [
@@ -68,13 +83,6 @@ const BALANCE_PERIODS: { id: SalesDateRange; label: string }[] = [
   { id: "6m", label: "Quarter" },
   { id: "12m", label: "Year" },
   { id: "all", label: "All" },
-];
-
-const DIMENSIONS: { id: GoalDimension; label: string }[] = [
-  { id: "client", label: "Clients" },
-  { id: "supplier", label: "Suppliers" },
-  { id: "vehicle", label: "Vehicles" },
-  { id: "driver", label: "Drivers" },
 ];
 
 function FilterChip({
@@ -103,14 +111,16 @@ function FilterChip({
   );
 }
 
-function formatGoalValue(row: GoalTargetRow): string {
+function formatMetricValue(row: GoalTargetRow): string {
   if (row.unit === "trips") return String(Math.round(row.actual));
+  if (row.unit === "pct") return `${row.actual.toFixed(1)}%`;
   return formatINRChip(row.actual);
 }
 
-function formatGoalTarget(row: GoalTargetRow): string {
+function formatMetricTarget(row: GoalTargetRow): string {
   if (row.target <= 0) return "Not set";
   if (row.unit === "trips") return `${Math.round(row.target)} trips`;
+  if (row.unit === "pct") return `${row.target.toFixed(1)}%`;
   return formatINRChip(row.target);
 }
 
@@ -205,6 +215,9 @@ function GoalTargetCard({
   onCancel: () => void;
 }) {
   const hasTarget = row.target > 0;
+  const placeholder =
+    row.unit === "trips" ? "Trips" : row.unit === "pct" ? "Margin %" : "INR";
+
   return (
     <View style={styles.goalsTargetCard}>
       <View style={styles.goalsTargetCardHeader}>
@@ -216,13 +229,11 @@ function GoalTargetCard({
       <Text style={styles.goalsTargetCardHint}>{row.subtitle}</Text>
       <View style={styles.goalsTargetInner}>
         <View style={styles.goalsTargetValueCol}>
-          <Text style={styles.goalsTargetActual}>
-            {formatGoalValue(row)}
-          </Text>
+          <Text style={styles.goalsTargetActual}>{formatMetricValue(row)}</Text>
           <Text style={styles.goalsTargetMeta} numberOfLines={2}>
             {hasTarget
-              ? `${row.progressPct}% of ${formatGoalTarget(row)}`
-              : "Set a monthly target to track progress."}
+              ? `${row.progressPct}% of ${formatMetricTarget(row)}`
+              : "Set a monthly target for the selected month."}
           </Text>
         </View>
         {editing ? (
@@ -232,7 +243,7 @@ function GoalTargetCard({
               value={draft}
               onChangeText={onDraftChange}
               keyboardType="numeric"
-              placeholder={row.unit === "trips" ? "Trips" : "INR"}
+              placeholder={placeholder}
               placeholderTextColor={METRONIC.muted}
             />
             <View style={styles.goalsTargetEditActions}>
@@ -256,9 +267,7 @@ function GoalTargetCard({
         <View
           style={[
             styles.goalsTargetSliderFill,
-            {
-              width: `${hasTarget ? Math.min(100, row.progressPct) : 8}%`,
-            },
+            { width: `${hasTarget ? Math.min(100, row.progressPct) : 8}%` },
           ]}
         />
         <View
@@ -301,16 +310,29 @@ function GoalTargetCard({
   );
 }
 
+type EntityEditState = {
+  entityId: string;
+  revenueDraft: string;
+  tripsDraft: string;
+};
+
 export function NetworkDesktopGoalsPanel({ orgId }: Props) {
-  const [dateRange, setDateRange] = useState<SalesDateRange>("6m");
-  const [balancePeriod, setBalancePeriod] = useState<SalesDateRange>("6m");
-  const [activeDimension, setActiveDimension] = useState<GoalDimension>("client");
-  const [goals, setGoals] = useState<NetworkOrgGoals>(DEFAULT_NETWORK_ORG_GOALS);
-  const [goalsLoading, setGoalsLoading] = useState(true);
-  const [editingDimension, setEditingDimension] = useState<GoalDimension | null>(
-    null,
+  const monthOptions = useMemo(() => getRecentMonthKeys(3), []);
+  const [selectedMonthKey, setSelectedMonthKey] = useState(
+    () => monthOptions[monthOptions.length - 1] ?? getRecentMonthKeys(1)[0],
   );
+  const [rollup, setRollup] = useState<GoalsRollup>("month");
+  const [activeFocus, setActiveFocus] = useState<GoalFocus>("client");
+  const [balancePeriod, setBalancePeriod] = useState<SalesDateRange>("3m");
+  const [goalsStore, setGoalsStore] = useState<NetworkGoalsStore>(
+    DEFAULT_NETWORK_GOALS_STORE,
+  );
+  const [goalsLoading, setGoalsLoading] = useState(true);
+  const [editingMetric, setEditingMetric] = useState<
+    GoalTargetRow["metric"] | null
+  >(null);
   const [draftTarget, setDraftTarget] = useState("");
+  const [entityEdit, setEntityEdit] = useState<EntityEditState | null>(null);
   const [balanceChartWidth, setBalanceChartWidth] = useState(420);
   const [saving, setSaving] = useState(false);
 
@@ -331,9 +353,9 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   useEffect(() => {
     let cancelled = false;
     setGoalsLoading(true);
-    void loadNetworkOrgGoals(orgId).then((loaded) => {
+    void loadNetworkGoalsStore(orgId).then((loaded) => {
       if (!cancelled) {
-        setGoals(loaded);
+        setGoalsStore(loaded);
         setGoalsLoading(false);
       }
     });
@@ -343,8 +365,13 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   }, [orgId]);
 
   const actuals = useMemo(
-    () => computeGoalsActuals(trips, dateRange),
-    [trips, dateRange],
+    () => computeGoalsActualsForRollup(trips, selectedMonthKey, rollup),
+    [trips, selectedMonthKey, rollup],
+  );
+
+  const periodSummary = useMemo(
+    () => buildPeriodSummary(goalsStore, selectedMonthKey, rollup),
+    [goalsStore, selectedMonthKey, rollup],
   );
 
   const balanceSnapshot = useMemo(
@@ -360,37 +387,53 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   );
 
   const balanceTrend = useMemo(
-    () => buildBalanceTrendPoints(trips, balancePeriod),
+    () => buildBalanceTrendPoints(trips, balancePeriodMonthKeys(balancePeriod)),
     [trips, balancePeriod],
   );
 
   const summaryRows = useMemo(
-    () => buildGoalSummaryRows(goals, actuals),
-    [goals, actuals],
+    () => buildGoalSummaryRows(goalsStore, actuals, selectedMonthKey, rollup),
+    [goalsStore, actuals, selectedMonthKey, rollup],
   );
 
-  const topEntities = useMemo(
+  const entityRows = useMemo(
     () =>
-      buildTopEntityGoalRows(
-        activeDimension,
+      buildEntityGoalRows(
+        activeFocus,
+        goalsStore,
         clients,
-        suppliers,
         drivers,
         vehicles,
         trips,
-        dateRange,
-        8,
+        selectedMonthKey,
+        rollup,
+        20,
       ),
     [
-      activeDimension,
+      activeFocus,
+      goalsStore,
       clients,
-      suppliers,
       drivers,
       vehicles,
       trips,
-      dateRange,
+      selectedMonthKey,
+      rollup,
     ],
   );
+
+  const selectedMonthStore = useMemo(
+    () => getMonthStore(goalsStore, selectedMonthKey),
+    [goalsStore, selectedMonthKey],
+  );
+
+  const prevMonthKey = previousMonthKey(selectedMonthKey);
+  const monthHasTargets =
+    selectedMonthStore.aggregate.revenueInr > 0 ||
+    selectedMonthStore.aggregate.tripCount > 0 ||
+    selectedMonthStore.aggregate.marginPct > 0 ||
+    Object.keys(selectedMonthStore.clients).length > 0 ||
+    Object.keys(selectedMonthStore.vehicles).length > 0 ||
+    Object.keys(selectedMonthStore.drivers).length > 0;
 
   const receivableProgress =
     balanceSnapshot.receivableBilled > 0
@@ -408,12 +451,12 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   const payableProgress =
     payableTotal > 0 ? Math.round((payablePaid / payableTotal) * 100) : 0;
 
-  const persistGoals = useCallback(
-    async (next: NetworkOrgGoals) => {
+  const persistStore = useCallback(
+    async (next: NetworkGoalsStore) => {
       setSaving(true);
-      setGoals(next);
+      setGoalsStore(next);
       try {
-        await saveNetworkOrgGoals(orgId, next);
+        await saveNetworkGoalsStore(orgId, next);
       } finally {
         setSaving(false);
       }
@@ -421,18 +464,77 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
     [orgId],
   );
 
-  const startEdit = (dimension: GoalDimension, current: number) => {
-    setEditingDimension(dimension);
-    setDraftTarget(current > 0 ? String(current) : "");
+  const startAggregateEdit = (row: GoalTargetRow) => {
+    setEditingMetric(row.metric);
+    setDraftTarget(row.target > 0 ? String(row.target) : "");
   };
 
-  const saveEdit = async (dimension: GoalDimension) => {
+  const saveAggregateEdit = async (metric: GoalTargetRow["metric"]) => {
     const parsed = Number(draftTarget.replace(/,/g, "").trim());
     if (!Number.isFinite(parsed) || parsed < 0) return;
-    const next = patchGoalDimension(goals, dimension, parsed);
-    await persistGoals(next);
-    setEditingDimension(null);
+    const patch =
+      metric === "revenue"
+        ? { revenueInr: parsed }
+        : metric === "trips"
+          ? { tripCount: Math.round(parsed) }
+          : { marginPct: Math.min(100, parsed) };
+    const next = patchAggregateTarget(goalsStore, selectedMonthKey, patch);
+    await persistStore(next);
+    setEditingMetric(null);
     setDraftTarget("");
+  };
+
+  const handleCarryForward = async () => {
+    if (!prevMonthKey) return;
+    const next = carryForwardGoals(
+      goalsStore,
+      prevMonthKey,
+      selectedMonthKey,
+      "all",
+    );
+    await persistStore(next);
+  };
+
+  const startEntityEdit = (entityId: string) => {
+    const month = getMonthStore(goalsStore, selectedMonthKey);
+    const bucket =
+      activeFocus === "client"
+        ? month.clients
+        : activeFocus === "vehicle"
+          ? month.vehicles
+          : month.drivers;
+    const target = bucket[entityId] ?? { revenueInr: 0, tripCount: 0 };
+    setEntityEdit({
+      entityId,
+      revenueDraft: target.revenueInr > 0 ? String(target.revenueInr) : "",
+      tripsDraft: target.tripCount > 0 ? String(target.tripCount) : "",
+    });
+  };
+
+  const saveEntityEdit = async () => {
+    if (!entityEdit) return;
+    const revenue = Number(entityEdit.revenueDraft.replace(/,/g, "").trim());
+    const tripCount = Number(entityEdit.tripsDraft.replace(/,/g, "").trim());
+    if (
+      !Number.isFinite(revenue) ||
+      revenue < 0 ||
+      !Number.isFinite(tripCount) ||
+      tripCount < 0
+    ) {
+      return;
+    }
+    const next = patchEntityTarget(
+      goalsStore,
+      selectedMonthKey,
+      activeFocus,
+      entityEdit.entityId,
+      {
+        revenueInr: revenue,
+        tripCount: Math.round(tripCount),
+      },
+    );
+    await persistStore(next);
+    setEntityEdit(null);
   };
 
   const dataLoading =
@@ -441,6 +543,8 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
     clientsQ.isLoading ||
     suppliersQ.isLoading;
 
+  const targetsSetCount = summaryRows.filter((r) => r.target > 0).length;
+
   return (
     <View style={styles.salesBody}>
       <View style={styles.splitRow}>
@@ -448,36 +552,62 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Goal filters</Text>
             <Text style={styles.salesFilterHint}>
-              Period and focus for targets & balance
+              Set targets per month · view month, quarter, or YTD
             </Text>
 
-            <Text style={styles.salesFilterGroup}>Period</Text>
+            <Text style={styles.salesFilterGroup}>Target month</Text>
             <View style={styles.tagWrap}>
-              {DATE_RANGES.map((range) => (
+              {monthOptions.map((key) => (
                 <FilterChip
-                  key={range.id}
-                  label={range.label}
-                  active={dateRange === range.id}
-                  onPress={() => setDateRange(range.id)}
+                  key={key}
+                  label={monthLabelFromKey(key)}
+                  active={selectedMonthKey === key}
+                  onPress={() => setSelectedMonthKey(key)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.salesFilterGroup}>Rollup view</Text>
+            <View style={styles.tagWrap}>
+              {ROLLUPS.map((r) => (
+                <FilterChip
+                  key={r.id}
+                  label={r.label}
+                  active={rollup === r.id}
+                  onPress={() => setRollup(r.id)}
                 />
               ))}
             </View>
 
             <Text style={styles.salesFilterGroup}>Focus</Text>
             <View style={styles.tagWrap}>
-              {DIMENSIONS.map((dim) => (
+              {FOCUS_TABS.map((tab) => (
                 <FilterChip
-                  key={dim.id}
-                  label={dim.label}
-                  active={activeDimension === dim.id}
-                  onPress={() => setActiveDimension(dim.id)}
+                  key={tab.id}
+                  label={tab.label}
+                  active={activeFocus === tab.id}
+                  onPress={() => setActiveFocus(tab.id)}
                 />
               ))}
             </View>
+
+            {!monthHasTargets && prevMonthKey ? (
+              <Pressable
+                style={styles.goalsCarryForwardBtn}
+                onPress={() => void handleCarryForward()}
+              >
+                <Copy size={14} color={METRONIC.link} />
+                <Text style={styles.goalsCarryForwardText}>
+                  Carry forward from {monthLabelFromKey(prevMonthKey)}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <View style={[styles.salesCard, styles.salesCardPad]}>
-            <Text style={styles.cardTitle}>Target progress</Text>
+            <Text style={styles.cardTitle}>
+              {periodSummary.rollupLabel} progress
+            </Text>
             {summaryRows.map((row, idx) => (
               <View
                 key={row.id}
@@ -503,11 +633,22 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                   />
                 </View>
                 <Text style={styles.goalsSidebarMeta}>
-                  {formatGoalValue(row)}
-                  {row.target > 0 ? ` / ${formatGoalTarget(row)}` : ""}
+                  {formatMetricValue(row)}
+                  {row.target > 0 ? ` / ${formatMetricTarget(row)}` : ""}
                 </Text>
               </View>
             ))}
+          </View>
+
+          <View style={[styles.salesCard, styles.salesCardPad]}>
+            <Text style={styles.cardTitle}>Entity targets (rollup)</Text>
+            <Text style={styles.goalsNetSub}>
+              Clients {formatINRChip(periodSummary.clientTargetSum.revenueInr)}
+              {" · "}
+              Vehicles {formatINRChip(periodSummary.vehicleTargetSum.revenueInr)}
+              {" · "}
+              Drivers {formatINRChip(periodSummary.driverTargetSum.revenueInr)}
+            </Text>
           </View>
 
           <View style={[styles.salesCard, styles.salesCardPad]}>
@@ -570,7 +711,7 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                 <View style={styles.salesWidgetHeader}>
                   <Text style={styles.salesCardTitle}>Balance trend</Text>
                   <Text style={styles.goalsChartSub}>
-                    Receivable vs payable by month
+                    Receivable vs payable · last 3 months
                   </Text>
                 </View>
                 <View
@@ -590,23 +731,29 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                 </View>
               </View>
 
-              <View style={styles.goalsTargetGrid}>
+              <View style={styles.goalsMonthBanner}>
+                <Text style={styles.goalsMonthBannerTitle}>
+                  Aggregate targets · {monthLabelFromKey(selectedMonthKey)}
+                </Text>
+                <Text style={styles.goalsMonthBannerSub}>
+                  {rollup === "month"
+                    ? "Editing this month only"
+                    : `${periodSummary.rollupLabel} compares cumulative actuals vs summed monthly targets`}
+                </Text>
+              </View>
+
+              <View style={styles.goalsTargetGridThree}>
                 {summaryRows.map((row) => (
                   <GoalTargetCard
                     key={row.id}
                     row={row}
-                    editing={editingDimension === row.dimension}
+                    editing={editingMetric === row.metric}
                     draft={draftTarget}
                     onDraftChange={setDraftTarget}
-                    onStartEdit={() =>
-                      startEdit(
-                        row.dimension,
-                        row.target,
-                      )
-                    }
-                    onSave={() => void saveEdit(row.dimension)}
+                    onStartEdit={() => startAggregateEdit(row)}
+                    onSave={() => void saveAggregateEdit(row.metric)}
                     onCancel={() => {
-                      setEditingDimension(null);
+                      setEditingMetric(null);
                       setDraftTarget("");
                     }}
                   />
@@ -617,12 +764,17 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                 <View style={styles.salesTableTitleRow}>
                   <View style={styles.salesTripTableTitleCol}>
                     <Text style={styles.salesCardTitle}>
-                      {DIMENSIONS.find((d) => d.id === activeDimension)?.label}{" "}
-                      breakdown
+                      {FOCUS_TABS.find((t) => t.id === activeFocus)?.label}{" "}
+                      targets
                     </Text>
                     <Text style={styles.salesTripTableSub}>
-                      Top performers for selected period · tap pencil on goals
-                      above to set targets
+                      {activeFocus === "client"
+                        ? "Revenue per client · set for "
+                        : "Revenue & trips per asset · set for "}
+                      {monthLabelFromKey(selectedMonthKey)}
+                      {rollup !== "month"
+                        ? ` · showing ${periodSummary.rollupLabel} actuals`
+                        : ""}
                     </Text>
                   </View>
                   {saving ? (
@@ -634,75 +786,157 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                   )}
                 </View>
 
-                <View style={styles.goalsEntityTableHead}>
-                  <Text style={[styles.goalsEntityHeadCell, styles.goalsEntityNameCol]}>
-                    Name
-                  </Text>
-                  <Text style={[styles.goalsEntityHeadCell, styles.goalsEntityMetaCol]}>
-                    Activity
-                  </Text>
-                  <Text
-                    style={[
-                      styles.goalsEntityHeadCell,
-                      styles.goalsEntityValueCol,
-                      styles.salesGridNumHead,
-                    ]}
-                  >
-                    {activeDimension === "client" || activeDimension === "supplier"
-                      ? "Amount"
-                      : "Trips"}
-                  </Text>
-                  <View style={styles.goalsEntityActionCol} />
+                <View style={styles.salesTableScroll}>
+                  <View style={styles.goalsEntityTableHead}>
+                    <View style={styles.goalsEntityTableGrid}>
+                    <Text
+                      style={[styles.goalsEntityHeadCell, styles.goalsEntityColName]}
+                    >
+                      Name
+                    </Text>
+                    <Text
+                      style={[
+                        styles.goalsEntityHeadCell,
+                        styles.goalsEntityColActual,
+                        styles.goalsEntityHeadNum,
+                      ]}
+                    >
+                      Actual
+                    </Text>
+                    <Text
+                      style={[
+                        styles.goalsEntityHeadCell,
+                        styles.goalsEntityColTarget,
+                        styles.goalsEntityHeadNum,
+                      ]}
+                    >
+                      Target
+                    </Text>
+                    <Text
+                      style={[
+                        styles.goalsEntityHeadCell,
+                        styles.goalsEntityColProgress,
+                        styles.goalsEntityHeadNum,
+                      ]}
+                    >
+                      Progress
+                    </Text>
+                    <View style={styles.goalsEntityColAction} />
+                  </View>
                 </View>
 
-                {topEntities.length === 0 ? (
+                {entityRows.length === 0 ? (
                   <View style={styles.salesTableEmpty}>
                     <Text style={styles.emptyText}>
-                      No activity for this focus in the selected period.
+                      No {activeFocus}s found. Add connections to set targets.
                     </Text>
                   </View>
                 ) : (
-                  topEntities.map((entity, idx) => (
-                    <View
-                      key={entity.id}
-                      style={[
-                        styles.goalsEntityRow,
-                        idx === topEntities.length - 1 &&
-                          styles.salesTableRowLast,
-                      ]}
-                    >
-                      <View style={styles.goalsEntityNameCol}>
-                        <Text style={styles.goalsEntityName} numberOfLines={1}>
-                          {entity.name}
-                        </Text>
-                      </View>
-                      <View style={styles.goalsEntityMetaCol}>
-                        <Text style={styles.goalsEntityMeta} numberOfLines={1}>
-                          {entity.meta}
-                        </Text>
-                      </View>
-                      <View style={styles.goalsEntityValueCol}>
-                        <Text style={styles.goalsEntityValue} numberOfLines={1}>
-                          {activeDimension === "client" ||
-                          activeDimension === "supplier"
-                            ? formatINRChip(entity.value)
-                            : String(entity.trips)}
-                        </Text>
-                      </View>
-                      <Pressable style={styles.goalsEntityActionCol}>
-                        <Target size={14} color={METRONIC.muted} />
-                      </Pressable>
-                    </View>
-                  ))
-                )}
+                  entityRows.map((entity, idx) => {
+                    const isEditing = entityEdit?.entityId === entity.id;
+                    const primaryActual =
+                      activeFocus === "client"
+                        ? formatINRChip(entity.actualRevenue)
+                        : `${formatINRChip(entity.actualRevenue)} · ${entity.actualTrips} trips`;
+                    const primaryTarget =
+                      activeFocus === "client"
+                        ? entity.targetRevenue > 0
+                          ? formatINRChip(entity.targetRevenue)
+                          : "—"
+                        : entity.hasTarget
+                          ? `${formatINRChip(entity.targetRevenue)} · ${entity.targetTrips} trips`
+                          : "—";
+                    const progressPct =
+                      activeFocus === "client"
+                        ? entity.revenueProgressPct
+                        : Math.round(
+                            (entity.revenueProgressPct + entity.tripProgressPct) / 2,
+                          );
 
-                {topEntities.length > 0 ? (
-                  <Pressable style={styles.goalsViewMore}>
-                    <Text style={styles.goalsViewMoreText}>
-                      View all {DIMENSIONS.find((d) => d.id === activeDimension)?.label?.toLowerCase()}
-                    </Text>
-                  </Pressable>
-                ) : null}
+                    return (
+                      <View
+                        key={entity.id}
+                        style={[
+                          styles.goalsEntityRow,
+                          idx === entityRows.length - 1 &&
+                            styles.salesTableRowLast,
+                        ]}
+                      >
+                        <View style={styles.goalsEntityTableGrid}>
+                          <View style={styles.goalsEntityColName}>
+                            <Text style={styles.goalsEntityName} numberOfLines={1}>
+                              {entity.name}
+                            </Text>
+                            <Text style={styles.goalsEntityMeta} numberOfLines={1}>
+                              {entity.meta}
+                            </Text>
+                          </View>
+                          <View style={styles.goalsEntityColActual}>
+                            <Text style={styles.goalsEntityValue} numberOfLines={1}>
+                              {primaryActual}
+                            </Text>
+                          </View>
+                          <View style={styles.goalsEntityColTarget}>
+                            {isEditing ? (
+                              <View style={styles.goalsEntityEditStack}>
+                                <TextInput
+                                  style={styles.goalsEntityInput}
+                                  value={entityEdit.revenueDraft}
+                                  onChangeText={(v) =>
+                                    setEntityEdit((prev) =>
+                                      prev ? { ...prev, revenueDraft: v } : prev,
+                                    )
+                                  }
+                                  keyboardType="numeric"
+                                  placeholder="Revenue INR"
+                                  placeholderTextColor={METRONIC.muted}
+                                />
+                                {activeFocus !== "client" ? (
+                                  <TextInput
+                                    style={styles.goalsEntityInput}
+                                    value={entityEdit.tripsDraft}
+                                    onChangeText={(v) =>
+                                      setEntityEdit((prev) =>
+                                        prev ? { ...prev, tripsDraft: v } : prev,
+                                      )
+                                    }
+                                    keyboardType="numeric"
+                                    placeholder="Trips"
+                                    placeholderTextColor={METRONIC.muted}
+                                  />
+                                ) : null}
+                              </View>
+                            ) : (
+                              <Text style={styles.goalsEntityValue} numberOfLines={2}>
+                                {primaryTarget}
+                              </Text>
+                            )}
+                          </View>
+                          <View style={styles.goalsEntityColProgress}>
+                            <Text style={styles.goalsEntityProgressText}>
+                              {entity.hasTarget ? `${progressPct}%` : "—"}
+                            </Text>
+                          </View>
+                          <Pressable
+                            style={styles.goalsEntityColAction}
+                            onPress={() =>
+                              isEditing
+                                ? void saveEntityEdit()
+                                : startEntityEdit(entity.id)
+                            }
+                          >
+                            {isEditing ? (
+                              <Text style={styles.goalsEntitySaveLink}>Save</Text>
+                            ) : (
+                              <Target size={14} color={METRONIC.muted} />
+                            )}
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+                </View>
               </View>
 
               <View style={styles.salesKpiRow}>
@@ -720,27 +954,29 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                     <TrendingUp size={16} color="#50CD89" />
                   </View>
                   <Text style={styles.salesKpiValue}>
-                    {formatINRChip(actuals.clientSales)}
+                    {formatINRChip(actuals.revenueInr)}
                   </Text>
-                  <Text style={styles.salesKpiLabel}>Period sales</Text>
-                </View>
-                <View style={styles.salesKpiCard}>
-                  <View style={styles.salesKpiIcon}>
-                    <ArrowUpRight size={16} color="#F1416C" />
-                  </View>
-                  <Text style={styles.salesKpiValue}>
-                    {formatINRChip(balanceSnapshot.totalPayable)}
+                  <Text style={styles.salesKpiLabel}>
+                    {periodSummary.rollupLabel} sales
                   </Text>
-                  <Text style={styles.salesKpiLabel}>Open payable</Text>
                 </View>
                 <View style={styles.salesKpiCard}>
                   <View style={styles.salesKpiIcon}>
                     <Target size={16} color={Theme.driverGold} />
                   </View>
                   <Text style={styles.salesKpiValue}>
-                    {summaryRows.filter((r) => r.target > 0).length}/4
+                    {actuals.marginPct.toFixed(1)}%
                   </Text>
-                  <Text style={styles.salesKpiLabel}>Targets set</Text>
+                  <Text style={styles.salesKpiLabel}>Actual margin</Text>
+                </View>
+                <View style={styles.salesKpiCard}>
+                  <View style={styles.salesKpiIcon}>
+                    <ArrowUpRight size={16} color="#F1416C" />
+                  </View>
+                  <Text style={styles.salesKpiValue}>
+                    {targetsSetCount}/3
+                  </Text>
+                  <Text style={styles.salesKpiLabel}>Aggregate targets set</Text>
                 </View>
               </View>
             </>

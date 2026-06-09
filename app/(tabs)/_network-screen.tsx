@@ -21,6 +21,7 @@ import {
   type ConnectionFilterTab,
 } from "@/features/network/components/ConnectionsView";
 import { NetworkDesktopHub } from "@/features/network/components/desktop/NetworkDesktopHub";
+import type { NetworkDesktopTab } from "@/features/network/components/desktop/NetworkDesktopHub";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { NetworkPhoneAndContactsPanel } from "@/features/network/components/NetworkPhoneAndContactsPanel";
 import { discoverSearchTermForOrgs } from "@/lib/networkPhoneSearch";
@@ -32,7 +33,6 @@ import {
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
-import { NetworkProfileModalChrome } from "@/features/network/components/NetworkProfileGlassShell";
 import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
 import { LinearGradient } from "expo-linear-gradient";
 import { ContentErrorState } from "@/components/ContentErrorState";
@@ -214,7 +214,7 @@ function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
-  const searchParams = useLocalSearchParams<{ view?: string }>();
+  const searchParams = useLocalSearchParams<{ view?: string; hubTab?: string }>();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const isDesktopMatrix = width >= 1100;
   const isMobileLayout = width < 820;
@@ -239,6 +239,7 @@ function NetworkScreenInner() {
   const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
   const [discoverSearch, setDiscoverSearch] = useState("");
   const [viewMode, setViewMode] = useState<"dashboard" | "requests">("dashboard");
+  const [invitationsOpen, setInvitationsOpen] = useState(false);
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
   const [selectedProfileNode, setSelectedProfileNode] = useState<NetworkProfileNode | null>(null);
   const [mutualModalTarget, setMutualModalTarget] = useState<{
@@ -304,10 +305,14 @@ function NetworkScreenInner() {
   const totalConnectionsDisplay = String(animatedTotalConnections).padStart(2, "0");
   const onCreatePost = () => router.push("/(modals)/create-post");
   useEffect(() => {
-    if (searchParams.view === "requests") {
+    if (searchParams.view !== "requests") return;
+    if (isWideNetwork) {
+      setInvitationsOpen(true);
+      setViewMode("dashboard");
+    } else {
       setViewMode("requests");
     }
-  }, [searchParams.view]);
+  }, [searchParams.view, isWideNetwork]);
   const allowLoadPosts = organization?.capabilities?.canBid ?? true;
   const integratedPartnerOrgIds = useMemo(() => {
     const ids = new Set<string>();
@@ -567,7 +572,7 @@ function NetworkScreenInner() {
     );
   }
 
-  if (viewMode === "requests") {
+  if (viewMode === "requests" && !isWideNetwork) {
     return (
       <View style={styles.container}>
         <InboundProtocolPanel
@@ -1218,6 +1223,18 @@ function NetworkScreenInner() {
 
   const orgDisplayName = organization?.name?.trim() || "Network";
 
+  const hubTabParam = searchParams.hubTab;
+  const initialHubTab: NetworkDesktopTab | undefined =
+    hubTabParam === "details" ||
+    hubTabParam === "team" ||
+    hubTabParam === "sales" ||
+    hubTabParam === "goals" ||
+    hubTabParam === "asset" ||
+    hubTabParam === "connections" ||
+    hubTabParam === "grow"
+      ? hubTabParam
+      : undefined;
+
   const desktopHub = isWideNetwork ? (
     <NetworkDesktopHub
       organization={organization}
@@ -1245,7 +1262,20 @@ function NetworkScreenInner() {
       onOpenProfileFromDiscover={handleOpenProfileFromDiscover}
       onPressMutuals={handlePressMutuals}
       onOpenMutualProfile={handleOpenMutualProfile}
-      onInvitationsPress={() => setViewMode("requests")}
+      invitationsOpen={invitationsOpen}
+      onInvitationsOpenChange={setInvitationsOpen}
+      inviteTab={inviteTab}
+      onInviteTabChange={setInviteTab}
+      receivedInviteItems={receivedInviteItems}
+      sentInviteItems={sentInviteItems}
+      inviteBusyId={inviteActionId}
+      onInviteApprove={(item) => void handleInviteAction(item, "approve")}
+      onInviteReject={(item) => void handleInviteAction(item, "reject")}
+      onInviteCancel={(item) => void handleInviteAction(item, "cancel")}
+      onOpenInviteDetail={(item) =>
+        businessConnectionModal?.presentConnectionInvite(item)
+      }
+      initialTab={initialHubTab}
     />
   ) : null;
 
@@ -1255,7 +1285,10 @@ function NetworkScreenInner() {
         <HomePageHeader
           title={orgDisplayName}
           invitationBadgeCount={pendingCount}
-          onInvitationsPress={() => setViewMode("requests")}
+          onInvitationsPress={() => {
+            if (isWideNetwork) setInvitationsOpen(true);
+            else setViewMode("requests");
+          }}
         />
       ) : null}
       {desktopHub ?? scrollContent}
@@ -1281,67 +1314,39 @@ function NetworkScreenInner() {
           ]}
         >
           <Pressable style={styles.profileModalBackdropTouch} onPress={() => setSelectedProfileNode(null)} />
-            <View style={[styles.profileModalCard, isMobileLayout && styles.profileModalCardMobile]}>
-              <NetworkProfileModalChrome>
-                <View style={styles.profileModalHead}>
-                  <LinearGradient
-                    colors={["rgba(15, 23, 42, 0.94)", "rgba(30, 41, 59, 0.9)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <LinearGradient
-                    colors={["rgba(255,255,255,0.14)", "rgba(255,255,255,0)"]}
-                    start={{ x: 0.5, y: 0 }}
-                    end={{ x: 0.5, y: 0.55 }}
-                    style={styles.profileModalHeadSpecular}
-                    pointerEvents="none"
-                  />
-                  <Text
-                    style={[
-                      styles.profileModalKicker,
-                      FinanceTxnTypography.columnTitle,
-                      styles.profileModalKickerOnDark,
-                    ]}
-                  >
-                    Network profile
-                  </Text>
-                  <Pressable
-                    onPress={() => setSelectedProfileNode(null)}
-                    style={({ pressed }) => [
-                      styles.profileModalClose,
-                      pressed && { opacity: 0.72 },
-                    ]}
-                    hitSlop={8}
-                  >
-                    <X size={14} color={Theme.textOnPrimary} strokeWidth={2.4} />
-                  </Pressable>
-                </View>
+            <View
+              style={[
+                styles.profileModalCard,
+                isMobileLayout && styles.profileModalCardMobile,
+                isWideNetwork && styles.profileModalCardDesktop,
+              ]}
+            >
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={[
                     styles.profileModalScroll,
                     isMobileLayout && styles.profileModalScrollMobile,
+                    isWideNetwork && styles.profileModalScrollDesktop,
                     isMobileLayout && {
                       paddingBottom: 16 + insets.bottom,
                     },
                   ]}
                 >
+                  <NetworkProfileModalBody
+                    node={selectedProfileNode}
+                    isMobile={isMobileLayout}
+                    profileStatsLoading={profileStatsLoading}
+                    totalTrips={selectedProfileStats.totalTrips ?? 0}
+                    onClose={() => setSelectedProfileNode(null)}
+                  />
+
                   <View
                     style={[
-                      styles.profileIdentityCardModal,
-                      isMobileLayout && styles.profileIdentityCardModalMobile,
+                      styles.profileCtaStack,
+                      isWideNetwork && styles.profileCtaStackDesktop,
                     ]}
                   >
-                    <NetworkProfileModalBody
-                      node={selectedProfileNode}
-                      isMobile={isMobileLayout}
-                      profileStatsLoading={profileStatsLoading}
-                      totalTrips={selectedProfileStats.totalTrips ?? 0}
-                    />
-
-                  <View style={styles.profileCtaStack}>
                     {profileEffectiveStatus !== "CONNECTED" ? (
                       profileEffectiveStatus === "REQUEST SENT" ? (
                         /* Request already exists for this org. The
@@ -1422,9 +1427,7 @@ function NetworkScreenInner() {
                       <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
                     </Pressable>
                   </View>
-                </View>
                 </ScrollView>
-              </NetworkProfileModalChrome>
             </View>
         </View>
       </Modal>
@@ -1748,24 +1751,27 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     maxHeight: "88%",
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Theme.networkGlassBorder,
-    backgroundColor: "#F4F6FB",
+    borderColor: "#EFF2F5",
+    backgroundColor: Theme.cardWhite,
     overflow: "hidden",
     alignSelf: "center",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.16,
-    shadowRadius: 32,
-    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 12 },
     elevation: 10,
     ...Platform.select({
       web: {
-        boxShadow:
-          "0 24px 64px rgba(15, 23, 42, 0.18), 0 0 0 0.5px rgba(255, 255, 255, 0.65) inset",
+        boxShadow: "0 16px 48px rgba(24, 28, 50, 0.12)",
       },
       default: {},
     }),
+  },
+  profileModalCardDesktop: {
+    maxWidth: 560,
+    maxHeight: "90%",
   },
   profileModalCardMobile: {
     maxHeight: "94%",
@@ -1810,11 +1816,14 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   profileModalScroll: {
-    padding: 10,
-    paddingBottom: 14,
-    gap: 8,
+    padding: 0,
+    paddingBottom: 16,
+    gap: 0,
     alignItems: "stretch",
     flexGrow: 0,
+  },
+  profileModalScrollDesktop: {
+    paddingBottom: 20,
   },
   profileModalScrollMobile: {
     paddingHorizontal: 10,
@@ -2136,7 +2145,14 @@ const styles = StyleSheet.create({
   },
   profileCtaStack: {
     width: "100%",
-    gap: 6,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  profileCtaStackDesktop: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    gap: 10,
   },
   profilePrimaryBtn: {
     minHeight: 32,

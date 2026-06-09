@@ -21,13 +21,21 @@ import { NetworkDesktopDetailsPanel } from "@/features/network/components/deskto
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";
 import { NetworkDesktopGrowPanel } from "@/features/network/components/desktop/NetworkDesktopGrowPanel";
 import { NetworkDesktopHubHero } from "@/features/network/components/desktop/NetworkDesktopHubHero";
+import { NetworkDesktopInvitationsPanel } from "@/features/network/components/desktop/NetworkDesktopInvitationsPanel";
+import { NetworkDesktopTeamPanel } from "@/features/network/components/desktop/NetworkDesktopTeamPanel";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
+import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
+import { exportConnectionsExcel } from "@/features/network/lib/networkExport.util";
+import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 
 export type NetworkDesktopTab =
   | "details"
+  | "team"
   | "sales"
   | "goals"
   | "asset"
@@ -36,12 +44,28 @@ export type NetworkDesktopTab =
 
 const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "details", label: "Details" },
+  { id: "team", label: "Team" },
   { id: "sales", label: "Connection sales" },
   { id: "goals", label: "Goals" },
   { id: "asset", label: "Asset sales" },
   { id: "connections", label: "Your connections" },
   { id: "grow", label: "Grow your network" },
 ];
+
+function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
+  if (
+    raw === "details" ||
+    raw === "team" ||
+    raw === "sales" ||
+    raw === "goals" ||
+    raw === "asset" ||
+    raw === "connections" ||
+    raw === "grow"
+  ) {
+    return raw;
+  }
+  return null;
+}
 
 type Props = {
   organization: CurrentOrganization | null;
@@ -70,7 +94,18 @@ type Props = {
   }) => void;
   onPressMutuals: (org: { id: string; name: string }) => void;
   onOpenMutualProfile: (org: MutualConnectionRow) => void;
-  onInvitationsPress: () => void;
+  invitationsOpen: boolean;
+  onInvitationsOpenChange: (open: boolean) => void;
+  inviteTab: "received" | "sent";
+  onInviteTabChange: (tab: "received" | "sent") => void;
+  receivedInviteItems: InboundProtocolInviteItem[];
+  sentInviteItems: InboundProtocolInviteItem[];
+  inviteBusyId: string | null;
+  onInviteApprove: (item: InboundProtocolInviteItem) => void;
+  onInviteReject: (item: InboundProtocolInviteItem) => void;
+  onInviteCancel: (item: InboundProtocolInviteItem) => void;
+  onOpenInviteDetail?: (item: InboundProtocolInviteItem) => void;
+  initialTab?: NetworkDesktopTab;
 };
 
 export function NetworkDesktopHub({
@@ -96,14 +131,44 @@ export function NetworkDesktopHub({
   onOpenProfileFromDiscover,
   onPressMutuals,
   onOpenMutualProfile,
-  onInvitationsPress,
+  invitationsOpen,
+  onInvitationsOpenChange,
+  inviteTab,
+  onInviteTabChange,
+  receivedInviteItems,
+  sentInviteItems,
+  inviteBusyId,
+  onInviteApprove,
+  onInviteReject,
+  onInviteCancel,
+  onOpenInviteDetail,
+  initialTab,
 }: Props) {
-  const { profile } = useAuth();
-  const [tab, setTab] = useState<NetworkDesktopTab>("details");
+  const { user, profile } = useAuth();
+  const router = useRouter();
+  const [tab, setTab] = useState<NetworkDesktopTab>(
+    () => parseHubTab(initialTab) ?? "details",
+  );
+  const [allConnections, setAllConnections] = useState<ConnectedOrg[]>([]);
   const orgName = organization?.name?.trim() || "Your workspace";
   const email = profile?.email?.trim() || "—";
   const modelLabel =
     organization?.operatingModel?.replace(/_/g, " ") ?? "Logistics workspace";
+  const canManageTeam = profile?.role !== "driver";
+
+  useEffect(() => {
+    const parsed = parseHubTab(initialTab);
+    if (parsed) setTab(parsed);
+  }, [initialTab]);
+
+  const handleInviteTeamMember = () => {
+    router.push(ROUTES.MODALS.INVITE_MEMBER as never);
+  };
+
+  const selectTab = (next: NetworkDesktopTab) => {
+    onInvitationsOpenChange(false);
+    setTab(next);
+  };
 
   const panel = (() => {
     if (!orgId) {
@@ -111,6 +176,24 @@ export function NetworkDesktopHub({
         <View style={styles.emptyWrap}>
           <LoadingIndicator color={Theme.primary} />
         </View>
+      );
+    }
+
+    if (invitationsOpen) {
+      return (
+        <NetworkDesktopInvitationsPanel
+          tab={inviteTab}
+          onTabChange={onInviteTabChange}
+          onClose={() => onInvitationsOpenChange(false)}
+          pendingCount={pendingInviteCount}
+          receivedItems={receivedInviteItems}
+          sentItems={sentInviteItems}
+          busyId={inviteBusyId}
+          onApprove={onInviteApprove}
+          onReject={onInviteReject}
+          onCancel={onInviteCancel}
+          onOpenInviteDetail={onOpenInviteDetail}
+        />
       );
     }
 
@@ -126,6 +209,18 @@ export function NetworkDesktopHub({
           supplierCount={supplierCount}
           driverCount={driverCount}
           pendingInviteCount={pendingInviteCount}
+        />
+      );
+    }
+
+    if (tab === "team") {
+      return (
+        <NetworkDesktopTeamPanel
+          orgId={orgId}
+          orgName={orgName}
+          currentUserId={user?.uid ?? null}
+          canManage={canManageTeam}
+          onInvite={handleInviteTeamMember}
         />
       );
     }
@@ -162,6 +257,7 @@ export function NetworkDesktopHub({
           connFilter={connFilter}
           onConnFilterChange={onConnFilterChange}
           onOpenProfile={onOpenProfileFromConnection}
+          onConnectionsComputed={setAllConnections}
         />
       );
     }
@@ -209,11 +305,11 @@ export function NetworkDesktopHub({
           contentContainerStyle={styles.tabScrollContent}
         >
           {TABS.map((t) => {
-            const active = tab === t.id;
+            const active = !invitationsOpen && tab === t.id;
             return (
               <Pressable
                 key={t.id}
-                onPress={() => setTab(t.id)}
+                onPress={() => selectTab(t.id)}
                 style={[styles.tabBtn, active && styles.tabBtnActive]}
               >
                 <Text style={[styles.tabText, active && styles.tabTextActive]}>
@@ -225,18 +321,53 @@ export function NetworkDesktopHub({
         </ScrollView>
         <View style={styles.tabActions}>
           <Pressable
-            style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
-            onPress={onInvitationsPress}
+            style={[
+              styles.tabActionBtn,
+              styles.tabActionBtnPrimary,
+              invitationsOpen && styles.tabActionBtnInvitesOn,
+            ]}
+            onPress={() => onInvitationsOpenChange(!invitationsOpen)}
+            accessibilityRole="button"
+            accessibilityLabel="Connection invites"
           >
-            <UserPlus size={14} color={Theme.textOnPrimary} />
-            <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>
+            <UserPlus
+              size={14}
+              color={invitationsOpen ? Theme.textOnPrimary : Theme.textOnPrimary}
+            />
+            <Text
+              style={[
+                styles.tabActionBtnText,
+                styles.tabActionBtnTextOn,
+                invitationsOpen && styles.tabActionBtnTextInvitesOn,
+              ]}
+            >
               {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
             </Text>
           </Pressable>
-          <Pressable style={styles.tabActionIconBtn}>
+          <Pressable
+            style={styles.tabActionIconBtn}
+            onPress={() => router.push(ROUTES.CHAT as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open chat"
+          >
             <MessageSquare size={16} color={METRONIC.text} />
           </Pressable>
-          <Pressable style={styles.tabActionIconBtn}>
+          <NetworkExportMenu
+            actions={[
+              {
+                label: "Export Connections (Excel)",
+                sublabel: "All clients, suppliers & drivers",
+                kind: "excel",
+                onExport: () =>
+                  exportConnectionsExcel(
+                    allConnections,
+                    organization?.name ?? "Workspace",
+                  ),
+              },
+            ]}
+            triggerStyle={styles.tabActionIconBtn}
+          />
+          <Pressable style={styles.tabActionIconBtn} hitSlop={8}>
             <MoreHorizontal size={16} color={METRONIC.text} />
           </Pressable>
         </View>

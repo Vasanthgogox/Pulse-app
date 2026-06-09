@@ -7,22 +7,28 @@ import type { SupplierRow } from "@/features/suppliers/services/suppliers.servic
 import type { LedgerTx } from "@/features/finance/aggregation/types";
 import {
   getMonthKeys,
-  monthsForRange,
   type SalesDateRange,
 } from "@/features/network/utils/connectionSalesAnalytics.util";
-import type { NetworkOrgGoals } from "@/features/network/services/networkGoalsStorage.service";
+import type {
+  EntityTargetMetrics,
+  GoalFocus,
+  NetworkGoalsMonthStore,
+  NetworkGoalsStore,
+  SalesTargetMetrics,
+} from "@/features/network/services/networkGoalsStorage.service";
+import {
+  EMPTY_ENTITY_TARGET,
+  EMPTY_SALES_TARGET,
+  getMonthStore,
+  monthLabelFromKey,
+} from "@/features/network/services/networkGoalsStorage.service";
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
 
-export type GoalDimension = "client" | "supplier" | "vehicle" | "driver";
+export type GoalsRollup = "month" | "quarter" | "year";
 
-export type GoalsActuals = {
-  clientSales: number;
-  supplierCost: number;
-  vehicleTrips: number;
-  driverTrips: number;
-};
+export type GoalsActuals = SalesTargetMetrics;
 
 export type PayableReceivableSnapshot = {
   receivableDue: number;
@@ -38,27 +44,35 @@ export type PayableReceivableSnapshot = {
 
 export type GoalTargetRow = {
   id: string;
-  dimension: GoalDimension;
+  metric: "revenue" | "trips" | "margin";
   label: string;
   subtitle: string;
   actual: number;
   target: number;
   progressPct: number;
-  unit: "inr" | "trips";
+  unit: "inr" | "trips" | "pct";
   status: "on_track" | "behind" | "unset";
 };
 
-const MONTH_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-] as const;
+export type EntityGoalRow = {
+  id: string;
+  name: string;
+  meta: string;
+  actualRevenue: number;
+  actualTrips: number;
+  targetRevenue: number;
+  targetTrips: number;
+  revenueProgressPct: number;
+  tripProgressPct: number;
+  hasTarget: boolean;
+};
 
-function monthLabelShort(monthKey: string): string {
-  const [, m] = monthKey.split("-");
-  const idx = parseInt(m, 10) - 1;
-  const y = monthKey.split("-")[0]?.slice(2) ?? "";
-  return `${MONTH_SHORT[idx] ?? m} '${y}`;
-}
+export type BalanceTrendPoint = {
+  monthKey: string;
+  label: string;
+  receivable: number;
+  payable: number;
+};
 
 function tripMonthKey(trip: TripRow): string | null {
   const raw = trip.pickup_date ?? trip.completed_at ?? trip.created_at;
@@ -66,17 +80,6 @@ function tripMonthKey(trip: TripRow): string | null {
   const d = new Date(raw);
   if (!Number.isFinite(d.getTime())) return null;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function tripInDateRange(trip: TripRow, dateRange: SalesDateRange): boolean {
-  const monthKey = tripMonthKey(trip);
-  if (!monthKey) return dateRange === "all";
-  const keys = getMonthKeys(monthsForRange(dateRange));
-  return keys.includes(monthKey);
-}
-
-function tripsInRange(trips: readonly TripRow[], dateRange: SalesDateRange): TripRow[] {
-  return trips.filter((trip) => tripInDateRange(trip, dateRange));
 }
 
 function progressPct(actual: number, target: number): number {
@@ -87,31 +90,151 @@ function progressPct(actual: number, target: number): number {
 function goalStatus(
   actual: number,
   target: number,
+  higherIsBetter = true,
 ): GoalTargetRow["status"] {
   if (target <= 0) return "unset";
+  if (!higherIsBetter) {
+    return actual <= target * 1.05 ? "on_track" : "behind";
+  }
   return actual >= target * 0.85 ? "on_track" : "behind";
 }
 
-export function computeGoalsActuals(
-  trips: readonly TripRow[],
-  dateRange: SalesDateRange,
-): GoalsActuals {
-  const rows = tripsInRange(trips, dateRange);
-  let clientSales = 0;
-  let supplierCost = 0;
-  let vehicleTrips = 0;
-  let driverTrips = 0;
+function sumEntityTargets(
+  bucket: Record<string, EntityTargetMetrics>,
+): EntityTargetMetrics {
+  let revenueInr = 0;
+  let tripCount = 0;
+  for (const row of Object.values(bucket)) {
+    revenueInr += row.revenueInr;
+    tripCount += row.tripCount;
+  }
+  return { revenueInr, tripCount };
+}
 
-  for (const trip of rows) {
-    const sales = Number(trip.client_price);
-    const cost = Number(trip.supplier_rate);
-    if (Number.isFinite(sales)) clientSales += Math.max(0, sales);
-    if (Number.isFinite(cost)) supplierCost += Math.max(0, cost);
-    if (trip.vehicle_id && isAssetExecutionTrip(trip)) vehicleTrips += 1;
-    if (trip.driver_id && isAssetExecutionTrip(trip)) driverTrips += 1;
+/** Month keys included in rollup for a selected month. */
+export function rollupMonthKeys(
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): string[] {
+  const [y, m] = selectedMonthKey.split("-").map(Number);
+  if (!y || !m) return [selectedMonthKey];
+
+  if (rollup === "month") return [selectedMonthKey];
+
+  if (rollup === "quarter") {
+    const qStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
+    const keys: string[] = [];
+    for (let mo = qStartMonth; mo <= m; mo += 1) {
+      keys.push(`${y}-${String(mo).padStart(2, "0")}`);
+    }
+    return keys;
   }
 
-  return { clientSales, supplierCost, vehicleTrips, driverTrips };
+  const keys: string[] = [];
+  for (let mo = 1; mo <= m; mo += 1) {
+    keys.push(`${y}-${String(mo).padStart(2, "0")}`);
+  }
+  return keys;
+}
+
+function rollupLabel(selectedMonthKey: string, rollup: GoalsRollup): string {
+  if (rollup === "month") return monthLabelFromKey(selectedMonthKey);
+  const [y, m] = selectedMonthKey.split("-").map(Number);
+  if (rollup === "quarter") {
+    const q = Math.ceil(m / 3);
+    return `Q${q} '${String(y).slice(2)}`;
+  }
+  return `YTD '${String(y).slice(2)}`;
+}
+
+function tripsInMonthKeys(
+  trips: readonly TripRow[],
+  monthKeys: readonly string[],
+): TripRow[] {
+  const set = new Set(monthKeys);
+  return trips.filter((trip) => {
+    const key = tripMonthKey(trip);
+    return key != null && set.has(key);
+  });
+}
+
+function computeTripMetrics(trips: readonly TripRow[]): GoalsActuals {
+  let revenueInr = 0;
+  let tripCount = 0;
+  let totalCost = 0;
+
+  for (const trip of trips) {
+    const sales = Number(trip.client_price);
+    const cost = Number(trip.supplier_rate);
+    if (Number.isFinite(sales)) revenueInr += Math.max(0, sales);
+    if (Number.isFinite(cost)) totalCost += Math.max(0, cost);
+    tripCount += 1;
+  }
+
+  const marginPct =
+    revenueInr > 0
+      ? Math.round(((revenueInr - totalCost) / revenueInr) * 1000) / 10
+      : 0;
+
+  return { revenueInr, tripCount, marginPct };
+}
+
+function sumAggregateTargets(
+  store: NetworkGoalsStore,
+  monthKeys: readonly string[],
+): SalesTargetMetrics {
+  let revenueInr = 0;
+  let tripCount = 0;
+  let marginWeighted = 0;
+  let marginWeight = 0;
+
+  for (const key of monthKeys) {
+    const month = getMonthStore(store, key);
+    revenueInr += month.aggregate.revenueInr;
+    tripCount += month.aggregate.tripCount;
+    if (month.aggregate.marginPct > 0) {
+      const weight = month.aggregate.revenueInr || 1;
+      marginWeighted += month.aggregate.marginPct * weight;
+      marginWeight += weight;
+    }
+  }
+
+  const marginPct =
+    marginWeight > 0 ? Math.round((marginWeighted / marginWeight) * 10) / 10 : 0;
+
+  return { revenueInr, tripCount, marginPct };
+}
+
+function sumEntityTargetsForKeys(
+  store: NetworkGoalsStore,
+  monthKeys: readonly string[],
+  focus: GoalFocus,
+  entityId: string,
+): EntityTargetMetrics {
+  let revenueInr = 0;
+  let tripCount = 0;
+  for (const key of monthKeys) {
+    const month = getMonthStore(store, key);
+    const bucket =
+      focus === "client"
+        ? month.clients
+        : focus === "vehicle"
+          ? month.vehicles
+          : month.drivers;
+    const row = bucket[entityId] ?? EMPTY_ENTITY_TARGET;
+    revenueInr += row.revenueInr;
+    tripCount += row.tripCount;
+  }
+  return { revenueInr, tripCount };
+}
+
+export function computeGoalsActualsForRollup(
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): GoalsActuals {
+  const keys = rollupMonthKeys(selectedMonthKey, rollup);
+  return computeTripMetrics(tripsInMonthKeys(trips, keys));
 }
 
 export function computePayableReceivableSnapshot(
@@ -162,19 +285,11 @@ export function computePayableReceivableSnapshot(
   };
 }
 
-export type BalanceTrendPoint = {
-  monthKey: string;
-  label: string;
-  receivable: number;
-  payable: number;
-};
-
 export function buildBalanceTrendPoints(
   trips: readonly TripRow[],
-  dateRange: SalesDateRange,
+  monthKeys: readonly string[],
 ): BalanceTrendPoint[] {
-  const keys = getMonthKeys(monthsForRange(dateRange));
-  return keys.map((key) => {
+  return monthKeys.map((key) => {
     let receivable = 0;
     let payable = 0;
     for (const trip of trips) {
@@ -186,7 +301,7 @@ export function buildBalanceTrendPoints(
     }
     return {
       monthKey: key,
-      label: monthLabelShort(key),
+      label: monthLabelFromKey(key),
       receivable,
       payable,
     };
@@ -194,168 +309,247 @@ export function buildBalanceTrendPoints(
 }
 
 export function buildGoalSummaryRows(
-  goals: NetworkOrgGoals,
+  store: NetworkGoalsStore,
   actuals: GoalsActuals,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
 ): GoalTargetRow[] {
+  const keys = rollupMonthKeys(selectedMonthKey, rollup);
+  const targets = sumAggregateTargets(store, keys);
+  const periodLabel = rollupLabel(selectedMonthKey, rollup);
+
   return [
     {
-      id: "goal-client",
-      dimension: "client",
-      label: "Client sales",
-      subtitle: "Revenue from client billing",
-      actual: actuals.clientSales,
-      target: goals.clientSalesInr,
-      progressPct: progressPct(actuals.clientSales, goals.clientSalesInr),
+      id: "goal-revenue",
+      metric: "revenue",
+      label: "Sales revenue",
+      subtitle: `${periodLabel} · client billing target`,
+      actual: actuals.revenueInr,
+      target: targets.revenueInr,
+      progressPct: progressPct(actuals.revenueInr, targets.revenueInr),
       unit: "inr",
-      status: goalStatus(actuals.clientSales, goals.clientSalesInr),
+      status: goalStatus(actuals.revenueInr, targets.revenueInr),
     },
     {
-      id: "goal-supplier",
-      dimension: "supplier",
-      label: "Supplier cost",
-      subtitle: "Market payout budget",
-      actual: actuals.supplierCost,
-      target: goals.supplierCostInr,
-      progressPct: progressPct(actuals.supplierCost, goals.supplierCostInr),
-      unit: "inr",
-      status: goalStatus(actuals.supplierCost, goals.supplierCostInr),
-    },
-    {
-      id: "goal-vehicle",
-      dimension: "vehicle",
-      label: "Vehicle trips",
-      subtitle: "Asset fleet executions",
-      actual: actuals.vehicleTrips,
-      target: goals.vehicleTrips,
-      progressPct: progressPct(actuals.vehicleTrips, goals.vehicleTrips),
+      id: "goal-trips",
+      metric: "trips",
+      label: "Trip count",
+      subtitle: `${periodLabel} · fleet execution target`,
+      actual: actuals.tripCount,
+      target: targets.tripCount,
+      progressPct: progressPct(actuals.tripCount, targets.tripCount),
       unit: "trips",
-      status: goalStatus(actuals.vehicleTrips, goals.vehicleTrips),
+      status: goalStatus(actuals.tripCount, targets.tripCount),
     },
     {
-      id: "goal-driver",
-      dimension: "driver",
-      label: "Driver trips",
-      subtitle: "Assigned driver missions",
-      actual: actuals.driverTrips,
-      target: goals.driverTrips,
-      progressPct: progressPct(actuals.driverTrips, goals.driverTrips),
-      unit: "trips",
-      status: goalStatus(actuals.driverTrips, goals.driverTrips),
+      id: "goal-margin",
+      metric: "margin",
+      label: "Margin %",
+      subtitle: `${periodLabel} · sales minus supplier cost`,
+      actual: actuals.marginPct,
+      target: targets.marginPct,
+      progressPct: progressPct(actuals.marginPct, targets.marginPct),
+      unit: "pct",
+      status: goalStatus(actuals.marginPct, targets.marginPct),
     },
   ];
 }
 
-export function buildTopEntityGoalRows(
-  dimension: GoalDimension,
-  clients: readonly ClientRow[],
-  suppliers: readonly SupplierRow[],
-  drivers: readonly DriverRow[],
-  vehicles: readonly VehicleRow[],
+function entityActualsForFocus(
+  focus: GoalFocus,
   trips: readonly TripRow[],
-  dateRange: SalesDateRange,
-  limit = 6,
-): Array<{
-  id: string;
-  name: string;
-  meta: string;
-  value: number;
-  trips: number;
-}> {
-  const scoped = tripsInRange(trips, dateRange);
-  const tallies = new Map<string, { name: string; value: number; trips: number }>();
+  monthKeys: readonly string[],
+): Map<string, { name: string; revenue: number; trips: number }> {
+  const scoped = tripsInMonthKeys(trips, monthKeys);
+  const tallies = new Map<string, { name: string; revenue: number; trips: number }>();
 
-  if (dimension === "client") {
-    for (const trip of scoped) {
+  for (const trip of scoped) {
+    if (focus === "client") {
       if (!trip.client_id) continue;
       const name = trip.client_name?.trim() || "Client";
-      const prev = tallies.get(trip.client_id) ?? { name, value: 0, trips: 0 };
+      const prev = tallies.get(trip.client_id) ?? { name, revenue: 0, trips: 0 };
       const sales = Number(trip.client_price);
       tallies.set(trip.client_id, {
         name,
-        value: prev.value + (Number.isFinite(sales) ? Math.max(0, sales) : 0),
+        revenue:
+          prev.revenue +
+          (Number.isFinite(sales) ? Math.max(0, sales) : 0),
         trips: prev.trips + 1,
       });
-    }
-    for (const c of clients) {
-      if (!tallies.has(c.id)) {
-        tallies.set(c.id, {
-          name: (c.name ?? c.contact_person ?? "Client").trim(),
-          value: 0,
-          trips: 0,
-        });
-      }
-    }
-  } else if (dimension === "supplier") {
-    for (const trip of scoped) {
-      if (!trip.supplier_id) continue;
-      const name = trip.supplier_name?.trim() || "Supplier";
-      const prev = tallies.get(trip.supplier_id) ?? { name, value: 0, trips: 0 };
-      const cost = Number(trip.supplier_rate);
-      tallies.set(trip.supplier_id, {
-        name,
-        value: prev.value + (Number.isFinite(cost) ? Math.max(0, cost) : 0),
-        trips: prev.trips + 1,
-      });
-    }
-    for (const s of suppliers) {
-      if (!tallies.has(s.id)) {
-        tallies.set(s.id, {
-          name: (s.name ?? s.company_name ?? "Supplier").trim(),
-          value: 0,
-          trips: 0,
-        });
-      }
-    }
-  } else if (dimension === "vehicle") {
-    for (const trip of scoped) {
+    } else if (focus === "vehicle") {
       if (!trip.vehicle_id || !isAssetExecutionTrip(trip)) continue;
-      const name =
-        trip.vehicle_display_number?.trim() ||
-        vehicles.find((v) => v.id === trip.vehicle_id)?.vehicle_number ||
-        "Vehicle";
-      const prev = tallies.get(trip.vehicle_id) ?? { name, value: 0, trips: 0 };
+      const name = trip.vehicle_display_number?.trim() || "Vehicle";
+      const prev = tallies.get(trip.vehicle_id) ?? { name, revenue: 0, trips: 0 };
       const sales = Number(trip.client_price);
       tallies.set(trip.vehicle_id, {
         name: String(name),
-        value: prev.value + (Number.isFinite(sales) ? Math.max(0, sales) : 0),
+        revenue:
+          prev.revenue +
+          (Number.isFinite(sales) ? Math.max(0, sales) : 0),
         trips: prev.trips + 1,
       });
-    }
-  } else {
-    for (const trip of scoped) {
+    } else {
       if (!trip.driver_id || !isAssetExecutionTrip(trip)) continue;
       const name = trip.driver_display_name?.trim() || "Driver";
-      const prev = tallies.get(trip.driver_id) ?? { name, value: 0, trips: 0 };
+      const prev = tallies.get(trip.driver_id) ?? { name, revenue: 0, trips: 0 };
+      const sales = Number(trip.client_price);
       tallies.set(trip.driver_id, {
         name,
-        value: prev.value,
+        revenue:
+          prev.revenue +
+          (Number.isFinite(sales) ? Math.max(0, sales) : 0),
         trips: prev.trips + 1,
       });
     }
+  }
+
+  return tallies;
+}
+
+export function buildEntityGoalRows(
+  focus: GoalFocus,
+  store: NetworkGoalsStore,
+  clients: readonly ClientRow[],
+  drivers: readonly DriverRow[],
+  vehicles: readonly VehicleRow[],
+  trips: readonly TripRow[],
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+  limit = 12,
+): EntityGoalRow[] {
+  const monthKeys = rollupMonthKeys(selectedMonthKey, rollup);
+  const actuals = entityActualsForFocus(focus, trips, monthKeys);
+
+  if (focus === "client") {
+    for (const c of clients) {
+      if (!actuals.has(c.id)) {
+        actuals.set(c.id, {
+          name: (c.name ?? c.contact_person ?? "Client").trim(),
+          revenue: 0,
+          trips: 0,
+        });
+      }
+    }
+  } else if (focus === "driver") {
     for (const d of drivers) {
-      if (!tallies.has(d.id)) {
-        tallies.set(d.id, {
+      if (!actuals.has(d.id)) {
+        actuals.set(d.id, {
           name: (d.name ?? "Driver").trim(),
-          value: 0,
+          revenue: 0,
+          trips: 0,
+        });
+      }
+    }
+  } else {
+    for (const v of vehicles) {
+      if (!actuals.has(v.id)) {
+        actuals.set(v.id, {
+          name: (v.vehicle_number ?? "Vehicle").trim(),
+          revenue: 0,
           trips: 0,
         });
       }
     }
   }
 
-  return [...tallies.entries()]
-    .map(([id, row]) => ({
+  const rows: EntityGoalRow[] = [...actuals.entries()].map(([id, row]) => {
+    const target = sumEntityTargetsForKeys(store, monthKeys, focus, id);
+    const hasTarget = target.revenueInr > 0 || target.tripCount > 0;
+    return {
       id,
       name: row.name,
       meta:
-        dimension === "client" || dimension === "supplier"
-          ? `${row.trips} trips`
-          : dimension === "vehicle"
-            ? `${row.trips} trips · sales`
-            : `${row.trips} trips`,
-      value: row.value,
-      trips: row.trips,
-    }))
-    .sort((a, b) => b.trips - a.trips || b.value - a.value)
+        focus === "client"
+          ? `${row.trips} trips · client sales`
+          : `${row.trips} trips · asset revenue`,
+      actualRevenue: row.revenue,
+      actualTrips: row.trips,
+      targetRevenue: target.revenueInr,
+      targetTrips: target.tripCount,
+      revenueProgressPct: progressPct(row.revenue, target.revenueInr),
+      tripProgressPct: progressPct(row.trips, target.tripCount),
+      hasTarget,
+    };
+  });
+
+  return rows
+    .sort(
+      (a, b) =>
+        b.actualRevenue - a.actualRevenue ||
+        b.actualTrips - a.actualTrips ||
+        a.name.localeCompare(b.name),
+    )
     .slice(0, limit);
 }
+
+/** Client-level revenue targets for selected month only (for inline month editor). */
+export function clientTargetsForMonth(
+  monthStore: NetworkGoalsMonthStore,
+): Array<{ id: string; target: EntityTargetMetrics }> {
+  return Object.entries(monthStore.clients).map(([id, target]) => ({
+    id,
+    target,
+  }));
+}
+
+export function getRecentMonthKeys(count = 3, now = new Date()): string[] {
+  return getMonthKeys(count, now);
+}
+
+export type GoalsPeriodSummary = {
+  rollupLabel: string;
+  monthKeys: string[];
+  aggregateTarget: SalesTargetMetrics;
+  clientTargetSum: EntityTargetMetrics;
+  vehicleTargetSum: EntityTargetMetrics;
+  driverTargetSum: EntityTargetMetrics;
+};
+
+export function buildPeriodSummary(
+  store: NetworkGoalsStore,
+  selectedMonthKey: string,
+  rollup: GoalsRollup,
+): GoalsPeriodSummary {
+  const monthKeys = rollupMonthKeys(selectedMonthKey, rollup);
+  let clientTargetSum = { ...EMPTY_ENTITY_TARGET };
+  let vehicleTargetSum = { ...EMPTY_ENTITY_TARGET };
+  let driverTargetSum = { ...EMPTY_ENTITY_TARGET };
+
+  for (const key of monthKeys) {
+    const month = getMonthStore(store, key);
+    const c = sumEntityTargets(month.clients);
+    const v = sumEntityTargets(month.vehicles);
+    const d = sumEntityTargets(month.drivers);
+    clientTargetSum = {
+      revenueInr: clientTargetSum.revenueInr + c.revenueInr,
+      tripCount: clientTargetSum.tripCount + c.tripCount,
+    };
+    vehicleTargetSum = {
+      revenueInr: vehicleTargetSum.revenueInr + v.revenueInr,
+      tripCount: vehicleTargetSum.tripCount + v.tripCount,
+    };
+    driverTargetSum = {
+      revenueInr: driverTargetSum.revenueInr + d.revenueInr,
+      tripCount: driverTargetSum.tripCount + d.tripCount,
+    };
+  }
+
+  return {
+    rollupLabel: rollupLabel(selectedMonthKey, rollup),
+    monthKeys,
+    aggregateTarget: sumAggregateTargets(store, monthKeys),
+    clientTargetSum,
+    vehicleTargetSum,
+    driverTargetSum,
+  };
+}
+
+/** Balance widget period maps to trailing month keys. */
+export function balancePeriodMonthKeys(period: SalesDateRange): string[] {
+  if (period === "3m") return getMonthKeys(3);
+  if (period === "6m") return getMonthKeys(6);
+  if (period === "12m") return getMonthKeys(12);
+  return getMonthKeys(18);
+}
+
+export { EMPTY_SALES_TARGET };

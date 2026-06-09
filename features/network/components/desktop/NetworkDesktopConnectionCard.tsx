@@ -1,6 +1,7 @@
 /**
  * Your connections — Metronic user-directory tile (avatar + name + verified + handle).
  */
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
@@ -22,14 +23,23 @@ function slugHandle(name: string, id: string): string {
 type Props = {
   item: ConnectedOrg;
   onPress?: () => void;
+  onInvite?: () => void;
+  actionLoading?: boolean;
 };
 
-export function NetworkDesktopConnectionCard({ item, onPress }: Props) {
+export function NetworkDesktopConnectionCard({
+  item,
+  onPress,
+  onInvite,
+  actionLoading = false,
+}: Props) {
   const entityType: PartyEntityType =
     item.role === "DRIVER" ? "driver" : item.role === "SUPPLIER" ? "supplier" : "client";
   const handle = item.phone
     ? formatPartyContactPhone(item.phone)
     : slugHandle(item.name, item.id);
+  const inApp = item.is_integrated;
+  const inviteDisabled = inApp || actionLoading;
 
   return (
     <Pressable
@@ -47,19 +57,74 @@ export function NetworkDesktopConnectionCard({ item, onPress }: Props) {
           size={56}
           shape="circle"
         />
-        {item.is_integrated ? <View style={styles.onlineDot} /> : null}
+        {inApp ? <View style={styles.onlineDot} /> : null}
       </View>
       <View style={styles.nameRow}>
         <Text style={styles.name} numberOfLines={1}>
           {item.name}
         </Text>
-        {item.is_integrated ? (
+        {inApp ? (
           <BadgeCheck size={14} color={Theme.primary} strokeWidth={2.2} />
         ) : null}
       </View>
       <Text style={styles.handle} numberOfLines={1}>
         {handle}
       </Text>
+
+      <View style={styles.footerRow}>
+        <View
+          style={[
+            styles.appTag,
+            inApp ? styles.appTagOn : styles.appTagOff,
+          ]}
+        >
+          <View
+            style={[
+              styles.appTagDot,
+              inApp ? styles.appTagDotOn : styles.appTagDotOff,
+            ]}
+          />
+          <Text
+            style={[
+              styles.appTagText,
+              inApp ? styles.appTagTextOn : styles.appTagTextOff,
+            ]}
+          >
+            {inApp ? "In app" : "Not in app"}
+          </Text>
+        </View>
+
+        {inApp ? (
+          <View style={[styles.actionBtn, styles.actionBtnConnected]}>
+            <Text style={styles.actionBtnConnectedText}>Connected</Text>
+          </View>
+        ) : (
+          <Pressable
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              onInvite?.();
+            }}
+            disabled={inviteDisabled}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              styles.actionBtnInvite,
+              inviteDisabled && styles.actionBtnDisabled,
+              pressed && !inviteDisabled && styles.actionBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Invite ${item.name}`}
+          >
+            {actionLoading ? (
+              <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+            ) : (
+              <Text style={styles.actionBtnInviteText}>
+                {item.phone?.trim() ? "Invite" : "Add phone"}
+              </Text>
+            )}
+          </Pressable>
+        )}
+      </View>
+
       <Text style={styles.role} numberOfLines={1}>
         {item.role}
       </Text>
@@ -70,14 +135,14 @@ export function NetworkDesktopConnectionCard({ item, onPress }: Props) {
 const styles = StyleSheet.create({
   card: {
     alignItems: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#EFF2F5",
     backgroundColor: Theme.cardWhite,
-    minHeight: 168,
-    gap: 6,
+    minHeight: 188,
+    gap: 5,
     ...({
       boxShadow: "0 0 20px 0 rgba(76, 87, 125, 0.05)",
     } as object),
@@ -122,12 +187,95 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
     textAlign: "center",
   },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 2,
+    maxWidth: "100%",
+    flexWrap: "wrap",
+  },
+  appTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  appTagOn: {
+    backgroundColor: "rgba(80, 205, 137, 0.1)",
+    borderColor: "rgba(80, 205, 137, 0.35)",
+  },
+  appTagOff: {
+    backgroundColor: "#F5F8FA",
+    borderColor: "#EFF2F5",
+  },
+  appTagDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  appTagDotOn: {
+    backgroundColor: "#50CD89",
+  },
+  appTagDotOff: {
+    backgroundColor: "#A1A5B7",
+  },
+  appTagText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  appTagTextOn: {
+    color: "#1B7F4A",
+  },
+  appTagTextOff: {
+    color: "#78829D",
+  },
+  actionBtn: {
+    minHeight: 24,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 52,
+  },
+  actionBtnInvite: {
+    backgroundColor: Theme.primary,
+  },
+  actionBtnInviteText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.15,
+  },
+  actionBtnConnected: {
+    backgroundColor: "#F5F8FA",
+    borderWidth: 1,
+    borderColor: "#EFF2F5",
+  },
+  actionBtnConnectedText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#78829D",
+    letterSpacing: 0.15,
+  },
+  actionBtnDisabled: {
+    opacity: 0.55,
+  },
+  actionBtnPressed: {
+    opacity: 0.88,
+  },
   role: {
     fontSize: 9,
     fontWeight: "700",
     letterSpacing: 0.45,
     textTransform: "uppercase",
     color: "#78829D",
-    marginTop: 2,
+    marginTop: 1,
   },
 });

@@ -1,12 +1,7 @@
 /**
- * Network profile modal body — invitation-hub card layout.
+ * Network profile modal body — hub hex hero layout (aligned with org network page).
  */
-import {
-  NetworkProfileInviteHero,
-  NetworkProfileInviteStats,
-} from "@/features/network/components/NetworkProfileInviteHero";
-import { networkProfileInviteStyles as s } from "@/features/network/components/networkProfileInvite.styles";
-import * as Linking from "expo-linking";
+import { NetworkProfileHubHero } from "@/features/network/components/NetworkProfileHubHero";
 import { View } from "react-native";
 
 export type NetworkProfileModalNode = {
@@ -29,15 +24,11 @@ export type NetworkProfileModalBodyProps = {
   isMobile?: boolean;
   profileStatsLoading: boolean;
   totalTrips: number;
+  onClose?: () => void;
 };
 
 function formatConnectionStatus(status: NetworkProfileModalNode["status"]): string {
   return status.replace(/_/g, " ");
-}
-
-function presenceLabel(status: NetworkProfileModalNode["status"]): string {
-  if (status === "CONNECTED" || status === "LIVE") return "LIVE";
-  return "Pending";
 }
 
 function entityTypeFromRole(
@@ -52,49 +43,35 @@ export function NetworkProfileModalBody({
   node,
   profileStatsLoading,
   totalTrips,
+  onClose,
 }: NetworkProfileModalBodyProps) {
   const connectionLabel = formatConnectionStatus(node.status);
-  const presenceValue = presenceLabel(node.status);
-  const linkLive = node.status === "CONNECTED" || node.status === "LIVE";
   const ratingNum = node.rating;
   const ratingEmpty = ratingNum == null;
-  const ratingDisplay = ratingEmpty ? "No rating" : `${ratingNum.toFixed(1)}★`;
+  const ratingValue = ratingEmpty ? "—" : ratingNum.toFixed(1);
   const tripsValue = profileStatsLoading ? "…" : String(totalTrips);
-
-  const openPhone = () => {
-    if (!node.phone) return;
-    const tel = node.phone.replace(/\s/g, "");
-    void Linking.openURL(`tel:${tel}`);
-  };
+  const inApp =
+    node.is_integrated ?? (node.status === "CONNECTED" || node.status === "LIVE");
 
   return (
-    <View style={{ width: "100%" }}>
-      <NetworkProfileInviteHero
+    <View style={{ width: "100%", borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: "hidden" }}>
+      <NetworkProfileHubHero
         name={node.name}
-        subtitle={node.location}
         roleLabel={node.type}
-        linkLabel={connectionLabel}
-        linkLive={linkLive}
-        ratingDisplay={ratingDisplay}
-        ratingEmpty={ratingEmpty}
+        location={node.location}
+        phone={node.phone ?? null}
         entityType={entityTypeFromRole(node.type)}
         avatarUrl={node.avatar_url}
         avatarSeed={node.avatar_seed}
-        showVerified={node.is_integrated ?? false}
-        phone={node.phone ?? null}
-        onPressPhone={node.phone ? openPhone : undefined}
-        avatarSize={80}
-        style={s.card}
-        footer={
-          <NetworkProfileInviteStats
-            items={[
-              { label: "AVG RATING", value: ratingEmpty ? "—" : ratingNum!.toFixed(1) },
-              { label: "TRIPS", value: tripsValue },
-              { label: "PRESENCE", value: presenceValue, live: linkLive },
-              { label: "MUTUALS", value: String(node.mutuals) },
-            ]}
-          />
-        }
+        showVerified={inApp}
+        inApp={inApp}
+        connectionStatus={connectionLabel}
+        onClose={onClose}
+        stats={[
+          { value: tripsValue, label: "trips" },
+          { value: ratingValue, label: "rating" },
+          { value: String(node.mutuals), label: "mutuals" },
+        ]}
       />
     </View>
   );

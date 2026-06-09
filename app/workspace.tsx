@@ -10,14 +10,13 @@ import { WorkspaceFeedbackProvider } from "@/features/organization/components/wo
 import { WorkspaceOrgKycPanel } from "@/features/organization/components/workspace/WorkspaceOrgKycPanel";
 import { WorkspaceProductsPanel } from "@/features/organization/components/workspace/WorkspaceProductsPanel";
 import { WorkspaceSettingsPanel } from "@/features/organization/components/workspace/WorkspaceSettingsPanel";
-import { WorkspaceTeamPanel } from "@/features/organization/components/workspace/WorkspaceTeamPanel";
 import {
   parseWorkspacePanelId,
   type WorkspacePanelId,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 
 export default function WorkspaceScreen() {
@@ -45,6 +44,15 @@ export default function WorkspaceScreen() {
     router.setParams({ panel: "" });
   }, [router]);
 
+  useEffect(() => {
+    if (activePanel !== "team") return;
+    closeOverlay();
+    router.replace({
+      pathname: ROUTES.TABS.NETWORK,
+      params: { hubTab: "team" },
+    } as Parameters<typeof router.replace>[0]);
+  }, [activePanel, closeOverlay, router]);
+
   const panelContent = useMemo(() => {
     if (activePanel === "account") {
       return (
@@ -59,9 +67,6 @@ export default function WorkspaceScreen() {
     }
     if (activePanel === "settings") {
       return <WorkspaceSettingsPanel onBack={closePanel} />;
-    }
-    if (activePanel === "team") {
-      return <WorkspaceTeamPanel onBack={closePanel} />;
     }
     if (activePanel === "kyc") {
       return <WorkspaceOrgKycPanel onBack={closePanel} />;

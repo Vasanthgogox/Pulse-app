@@ -31,6 +31,7 @@ type Props = {
   connFilter: ConnectionFilterTab;
   onConnFilterChange: (v: ConnectionFilterTab) => void;
   onOpenProfile: (item: ConnectedOrg) => void;
+  onConnectionsComputed?: (connections: ConnectedOrg[]) => void;
 };
 
 export function NetworkDesktopConnectionsPanel({
@@ -41,8 +42,14 @@ export function NetworkDesktopConnectionsPanel({
   connFilter,
   onConnFilterChange,
   onOpenProfile,
+  onConnectionsComputed,
 }: Props) {
   const [connections, setConnections] = useState<ConnectedOrg[]>([]);
+
+  const handleConnectionsComputed = (items: ConnectedOrg[]) => {
+    setConnections(items);
+    onConnectionsComputed?.(items);
+  };
   const tripsQ = useTripsQuery(orgId);
   const trips = tripsQ.data ?? [];
 
@@ -104,23 +111,27 @@ export function NetworkDesktopConnectionsPanel({
         </View>
       </View>
 
-      <ConnectionsView
-        orgId={orgId}
-        embedded
-        hubMode
-        desktopMetronicGrid
-        desktopMetronicHorizontalScroll
-        hubSearch={connSearch}
-        hubFilter={connFilter}
-        onOpenProfile={onOpenProfile}
-        onConnectionsComputed={setConnections}
-      />
+      <View style={styles.connectionsCardsSection}>
+        <ConnectionsView
+          orgId={orgId}
+          embedded
+          hubMode
+          desktopMetronicGrid
+          desktopMetronicHorizontalScroll
+          hubSearch={connSearch}
+          hubFilter={connFilter}
+          onOpenProfile={onOpenProfile}
+          onConnectionsComputed={handleConnectionsComputed}
+        />
+      </View>
 
       <NetworkDesktopPartnersPerformanceTable
         connections={connections}
         trips={trips}
         baseFilters={partnerFilters}
         onOpenProfile={onOpenProfile}
+        companyName="Your workspace"
+        dateRangeLabel={connFilter === "ALL" ? "All connections" : connFilter}
       />
     </View>
   );

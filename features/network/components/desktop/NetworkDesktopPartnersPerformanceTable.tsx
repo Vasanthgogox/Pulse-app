@@ -10,21 +10,25 @@ import {
   SalesTableRevenueCell,
   SalesTableTripsCell,
 } from "@/features/network/components/desktop/NetworkDesktopSalesTableCells";
+import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import {
+  exportConnectionSalesExcel,
+  exportConnectionSalesPdf,
+} from "@/features/network/lib/networkExport.util";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import {
   buildSalesTableRows,
+  computeSalesKpis,
   paginateRows,
   type SalesCrossFilters,
 } from "@/features/network/utils/connectionSalesAnalytics.util";
 import {
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
-  MoreVertical,
   Search,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -38,6 +42,8 @@ type Props = {
   baseFilters: SalesCrossFilters;
   onOpenProfile: (item: ConnectedOrg) => void;
   title?: string;
+  companyName?: string;
+  dateRangeLabel?: string;
 };
 
 export function NetworkDesktopPartnersPerformanceTable({
@@ -46,6 +52,8 @@ export function NetworkDesktopPartnersPerformanceTable({
   baseFilters,
   onOpenProfile,
   title = "Partners",
+  companyName = "Your workspace",
+  dateRangeLabel = "All time",
 }: Props) {
   const [tablePage, setTablePage] = useState(1);
   const [rowsPerPage, setRowsPerPage] =
@@ -66,6 +74,10 @@ export function NetworkDesktopPartnersPerformanceTable({
     () => buildSalesTableRows(connections, trips, mergedFilters),
     [connections, trips, mergedFilters],
   );
+  const kpis = useMemo(
+    () => computeSalesKpis(connections, trips, mergedFilters),
+    [connections, trips, mergedFilters],
+  );
   const pagination = useMemo(
     () => paginateRows(tableRows, tablePage, rowsPerPage),
     [tableRows, tablePage, rowsPerPage],
@@ -75,9 +87,23 @@ export function NetworkDesktopPartnersPerformanceTable({
     <View style={[styles.salesCard, styles.salesTableCard, styles.connectionsPartnersTable]}>
       <View style={styles.salesTableTitleRow}>
         <Text style={styles.salesCardTitle}>{title}</Text>
-        <Pressable style={styles.salesCardMenu}>
-          <MoreVertical size={15} color={METRONIC.muted} />
-        </Pressable>
+        <NetworkExportMenu
+          actions={[
+            {
+              label: "Export Excel",
+              sublabel: "Partners, KPIs, margins",
+              kind: "excel",
+              onExport: () => exportConnectionSalesExcel(tableRows, kpis, companyName, dateRangeLabel),
+            },
+            {
+              label: "Export PDF",
+              sublabel: "Print-ready partner report",
+              kind: "pdf",
+              onExport: () => exportConnectionSalesPdf(tableRows, kpis, companyName, dateRangeLabel),
+            },
+          ]}
+          triggerStyle={styles.salesCardMenu}
+        />
       </View>
 
       <View style={styles.salesTableToolbar}>
@@ -109,10 +135,25 @@ export function NetworkDesktopPartnersPerformanceTable({
             thumbColor={onlyWithTrips ? METRONIC.link : Theme.cardWhite}
           />
         </View>
-        <Pressable style={styles.salesColumnsBtn}>
-          <LayoutGrid size={13} color={METRONIC.muted} />
-          <Text style={styles.salesColumnsBtnText}>Columns</Text>
-        </Pressable>
+        <NetworkExportMenu
+          actions={[
+            {
+              label: "Export Excel (.xlsx)",
+              kind: "excel",
+              onExport: () => exportConnectionSalesExcel(tableRows, kpis, companyName, dateRangeLabel),
+            },
+            {
+              label: "Export PDF",
+              kind: "pdf",
+              onExport: () => exportConnectionSalesPdf(tableRows, kpis, companyName, dateRangeLabel),
+            },
+          ]}
+          trigger={
+            <View style={styles.salesColumnsBtn}>
+              <Text style={styles.salesColumnsBtnText}>Export ↓</Text>
+            </View>
+          }
+        />
       </View>
 
       <View style={styles.salesTableScroll}>
@@ -231,9 +272,7 @@ export function NetworkDesktopPartnersPerformanceTable({
                     </Text>
                   </View>
                 </View>
-                <Pressable style={styles.salesColMenu}>
-                  <MoreVertical size={14} color={METRONIC.muted} />
-                </Pressable>
+                <View style={styles.salesColMenu} />
               </View>
             </Pressable>
           ))

@@ -158,14 +158,14 @@ export const networkDesktopHubStyles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     paddingHorizontal: 32,
-    paddingVertical: 12,
+    paddingTop: 0,
     backgroundColor: Theme.cardWhite,
-    minHeight: 54,
+    minHeight: 48,
   },
   tabScroll: {
     flexGrow: 0,
@@ -173,30 +173,32 @@ export const networkDesktopHubStyles = StyleSheet.create({
   },
   tabScrollContent: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    alignItems: "flex-end",
+    gap: 0,
   },
   tabBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: METRONIC.border,
-    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 0,
+    borderWidth: 0,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    backgroundColor: "transparent",
+    marginBottom: -1,
   },
   tabBtnActive: {
-    borderColor: METRONIC.accent,
-    backgroundColor: "rgba(79, 70, 229, 0.06)",
+    borderBottomColor: METRONIC.accent,
+    backgroundColor: "transparent",
   },
   tabText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: METRONIC.subtle,
-    letterSpacing: 0.1,
+    fontSize: 13,
+    fontWeight: "500",
+    color: METRONIC.muted,
+    letterSpacing: 0,
   },
   tabTextActive: {
-    color: METRONIC.accent,
-    fontWeight: "700",
+    color: METRONIC.text,
+    fontWeight: "600",
   },
   tabActions: {
     flexDirection: "row",
@@ -1545,9 +1547,19 @@ export const networkDesktopHubStyles = StyleSheet.create({
     color: METRONIC.muted,
     lineHeight: 14,
   },
+  /** Desktop hub — horizontal connection card strip (matches card minHeight). */
+  connectionsCardsSection: {
+    width: "100%",
+    minHeight: 188,
+    marginBottom: 4,
+    zIndex: 1,
+  },
   connectionsPartnersTable: {
-    marginTop: 16,
+    marginTop: 0,
     marginHorizontal: 0,
+    width: "100%",
+    alignSelf: "stretch",
+    zIndex: 0,
   },
   salesColTripRef: {
     minWidth: 0,
@@ -2798,6 +2810,46 @@ export const networkDesktopHubStyles = StyleSheet.create({
     gap: 14,
     marginBottom: 4,
   },
+  goalsTargetGridThree: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    marginBottom: 4,
+  },
+  goalsCarryForwardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "#F1FAFF",
+  },
+  goalsCarryForwardText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+    color: METRONIC.link,
+    lineHeight: 15,
+  },
+  goalsMonthBanner: {
+    marginBottom: 8,
+    gap: 2,
+  },
+  goalsMonthBannerTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: METRONIC.text,
+  },
+  goalsMonthBannerSub: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: METRONIC.subtle,
+    lineHeight: 15,
+  },
   goalsTargetCard: {
     flex: 1,
     minWidth: 280,
@@ -3019,13 +3071,22 @@ export const networkDesktopHubStyles = StyleSheet.create({
     lineHeight: 16,
   },
   goalsEntityTableHead: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
     backgroundColor: "#FAFBFC",
+  },
+  goalsEntityTableGrid: {
+    width: "100%",
+    minWidth: 640,
+    ...({
+      display: "grid",
+      gridTemplateColumns: "minmax(180px, 1.6fr) 96px 96px 72px 36px",
+      columnGap: 16,
+      alignItems: "center",
+      boxSizing: "border-box",
+    } as object),
   },
   goalsEntityHeadCell: {
     fontSize: 10,
@@ -3033,31 +3094,51 @@ export const networkDesktopHubStyles = StyleSheet.create({
     color: METRONIC.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    ...({
+      whiteSpace: "nowrap",
+    } as object),
+  },
+  goalsEntityHeadNum: {
+    textAlign: "right",
+    ...({
+      justifySelf: "end",
+      width: "100%",
+    } as object),
+  },
+  goalsEntityColName: {
+    minWidth: 0,
+  },
+  goalsEntityColActual: {
+    minWidth: 0,
+    ...({
+      justifySelf: "end",
+      width: "100%",
+    } as object),
+  },
+  goalsEntityColTarget: {
+    minWidth: 0,
+    ...({
+      justifySelf: "end",
+      width: "100%",
+    } as object),
+  },
+  goalsEntityColProgress: {
+    minWidth: 0,
+    ...({
+      justifySelf: "end",
+      width: "100%",
+    } as object),
+  },
+  goalsEntityColAction: {
+    ...({
+      justifySelf: "center",
+    } as object),
   },
   goalsEntityRow: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
-  },
-  goalsEntityNameCol: {
-    flex: 1.4,
-    minWidth: 0,
-  },
-  goalsEntityMetaCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  goalsEntityValueCol: {
-    width: 88,
-    alignItems: "flex-end",
-  },
-  goalsEntityActionCol: {
-    width: 32,
-    alignItems: "center",
-    justifyContent: "center",
   },
   goalsEntityName: {
     fontSize: 13,
@@ -3074,6 +3155,43 @@ export const networkDesktopHubStyles = StyleSheet.create({
     fontWeight: "700",
     color: METRONIC.text,
     textAlign: "right",
+    ...({
+      whiteSpace: "nowrap",
+    } as object),
+  },
+  goalsEntityProgressText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: METRONIC.link,
+    textAlign: "right",
+    ...({
+      whiteSpace: "nowrap",
+    } as object),
+  },
+  goalsEntityEditStack: {
+    gap: 6,
+    width: "100%",
+    alignItems: "stretch",
+    ...({
+      justifySelf: "end",
+    } as object),
+  },
+  goalsEntityInput: {
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: METRONIC.text,
+    backgroundColor: Theme.cardWhite,
+    textAlign: "right",
+  },
+  goalsEntitySaveLink: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: METRONIC.link,
   },
   goalsViewMore: {
     alignItems: "center",
@@ -3089,5 +3207,64 @@ export const networkDesktopHubStyles = StyleSheet.create({
       textDecorationLine: "underline",
       textDecorationStyle: "dashed",
     } as object),
+  },
+  teamPanelTitleCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  teamPanelCard: {
+    overflow: "hidden",
+    paddingTop: 4,
+  },
+  teamInviteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: METRONIC.accent,
+    flexShrink: 0,
+  },
+  teamInviteBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+  invitationsPanelCard: {
+    overflow: "hidden",
+    paddingBottom: 0,
+  },
+  invitationsPanelHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 4,
+  },
+  invitationsPanelTitleCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  invitationsCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+  },
+  tabActionBtnInvitesOn: {
+    backgroundColor: METRONIC.accent,
+    borderColor: METRONIC.accent,
+  },
+  tabActionBtnTextInvitesOn: {
+    color: Theme.textOnPrimary,
   },
 });

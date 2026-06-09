@@ -37,6 +37,11 @@ import {
 } from "@/features/network/utils/connectionSalesAnalytics.util";
 import { formatINRChip } from "@/lib/format";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
+import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
+import {
+  exportConnectionSalesExcel,
+  exportConnectionSalesPdf,
+} from "@/features/network/lib/networkExport.util";
 import {
   LayoutGrid,
   MoreVertical,
@@ -446,9 +451,23 @@ export function NetworkDesktopConnectionSalesPanel({
             >
               <View style={styles.salesWidgetHeader}>
                 <Text style={styles.salesCardTitle}>Sale trends</Text>
-                <Pressable style={styles.salesCardMenu}>
-                  <MoreVertical size={15} color={METRONIC.muted} />
-                </Pressable>
+                <NetworkExportMenu
+                  actions={[
+                    {
+                      label: "Export Sales Excel",
+                      sublabel: "Partners, margins, trip counts",
+                      kind: "excel",
+                      onExport: () => exportConnectionSalesExcel(tableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                    },
+                    {
+                      label: "Export Sales PDF",
+                      sublabel: "Print-ready partner report",
+                      kind: "pdf",
+                      onExport: () => exportConnectionSalesPdf(tableRows, kpis, "Your workspace", filters.dateRange ?? "All time"),
+                    },
+                  ]}
+                  triggerStyle={styles.salesCardMenu}
+                />
               </View>
               <Text style={styles.salesWidgetSub}>
                 Client sales by month · tap to cross-filter
