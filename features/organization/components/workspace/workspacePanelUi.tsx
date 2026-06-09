@@ -152,15 +152,15 @@ export function KycProgressBlock({
 }
 
 const kp = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  wrap: { paddingHorizontal: 14, paddingBottom: 10, gap: 6 },
   track: {
-    height: 6,
-    borderRadius: 4,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: Theme.surfaceGray,
     overflow: 'hidden',
   },
-  fill: { height: '100%', borderRadius: 4 },
-  label: { fontSize: 11, fontWeight: '700', color: Theme.textMuted, letterSpacing: 0.3 },
+  fill: { height: '100%', borderRadius: 3 },
+  label: { fontSize: 10, fontWeight: '700', color: Theme.textMuted, letterSpacing: 0.4 },
 });
 
 export function InfoRow({ label, value }: { label: string; value: string }) {
@@ -177,21 +177,28 @@ const ir = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    minHeight: 48,
+    minHeight: 52,
   },
-  label: { fontSize: 13, color: Theme.textMuted, fontWeight: '500', flexShrink: 0 },
+  label: {
+    fontSize: 11,
+    color: Theme.textMuted,
+    fontWeight: '500',
+    flexShrink: 0,
+    letterSpacing: -0.05,
+  },
   value: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: Theme.textPrimaryDark,
     textAlign: 'right',
     flex: 1,
     minWidth: 0,
+    letterSpacing: -0.05,
   },
 });
 
@@ -213,9 +220,9 @@ export function OrgIdCopyRow({
     >
       <View style={[oid.icon, { backgroundColor: PURPLE_TINT }]}>
         {copying ? (
-          <Check size={14} color={GREEN} strokeWidth={2.8} />
+          <Check size={13} color={GREEN} strokeWidth={2.6} />
         ) : (
-          <Copy size={14} color={PURPLE} strokeWidth={2.2} />
+          <Copy size={13} color={PURPLE} strokeWidth={2.2} />
         )}
       </View>
       <View style={oid.text}>
@@ -253,17 +260,40 @@ export function NavRow({
         <Text style={nr.label}>{label}</Text>
         {sub ? <Text style={nr.sub}>{sub}</Text> : null}
       </View>
-      <ChevronRight size={15} color={Theme.textMuted} strokeWidth={2} />
+      <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2} />
     </Pressable>
   );
 }
 
 const nr = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Theme.borderLight, minHeight: 52 },
-  icon: { width: 34, height: 34, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: Theme.surfaceGray },
-  text: { flex: 1, minWidth: 0 },
-  label: { fontSize: 14, fontWeight: '600', color: Theme.textPrimaryDark },
-  sub: { fontSize: 11, color: Theme.textMuted, marginTop: 1 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    minHeight: 52,
+  },
+  icon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+  },
+  text: { flex: 1, minWidth: 0, gap: 2 },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.05,
+  },
+  sub: { fontSize: 10, color: Theme.textMuted, fontWeight: '500', lineHeight: 14 },
 });
 
 // ─── Inline KYC field editor ──────────────────────────────────────────────────
@@ -291,10 +321,10 @@ export function KycFieldRow({
   const hasValue = !!value?.trim();
 
   const statusIcon = isVerified
-    ? <CheckCircle2 size={15} color={GREEN} strokeWidth={2.2} />
+    ? <CheckCircle2 size={14} color={GREEN} strokeWidth={2.2} />
     : hasValue
-    ? <Clock size={15} color={AMBER} strokeWidth={2.2} />
-    : <CircleDashed size={15} color={Theme.textMuted} strokeWidth={2} />;
+    ? <Clock size={14} color={AMBER} strokeWidth={2.2} />
+    : <CircleDashed size={14} color={Theme.textMuted} strokeWidth={2} />;
 
   const statusText = isVerified ? 'Verified' : hasValue ? (value ?? '') : 'Not added';
   const statusColor = isVerified ? GREEN : hasValue ? AMBER : Theme.textMuted;
@@ -361,11 +391,11 @@ export function KycFieldRow({
       </View>
       {canEdit && !isVerified && !editing ? (
         <Pressable style={kf.editBtn} onPress={handleEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Edit ${kycLabel(field)}`}>
-          <Pencil size={12} color={PURPLE} strokeWidth={2.4} />
+          <Pencil size={11} color={PURPLE} strokeWidth={2.2} />
           <Text style={kf.editBtnText}>Edit</Text>
         </Pressable>
       ) : isVerified ? (
-        <Lock size={14} color={Theme.textMuted} strokeWidth={2} style={kf.lockIcon} />
+        <Lock size={12} color={Theme.textMuted} strokeWidth={2} style={kf.lockIcon} />
       ) : null}
     </View>
   );
@@ -376,37 +406,70 @@ const kf = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    minHeight: 64,
+    minHeight: 52,
   },
-  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  body: { flex: 1, minWidth: 0, gap: 3 },
-  label: { fontSize: 14, fontWeight: '700', color: Theme.textPrimaryDark },
-  sub: { fontSize: 11, color: Theme.textMuted, lineHeight: 15 },
-  subMuted: { color: Theme.textMuted },
+  iconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  body: { flex: 1, minWidth: 0, gap: 2 },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.05,
+  },
+  sub: { fontSize: 10, color: Theme.textMuted, lineHeight: 14, fontWeight: '500' },
+  subMuted: { color: Theme.textMuted, fontWeight: '500' },
   subStatus: { fontWeight: '600' },
   editRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  input: { flex: 1, fontSize: 13, fontWeight: '600', color: Theme.textPrimaryDark, borderWidth: 1.5, borderColor: PURPLE_BORDER, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: Theme.surface },
-  saveBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: PURPLE, alignItems: 'center', justifyContent: 'center' },
-  cancelBtn: { paddingHorizontal: 8 },
-  cancelText: { fontSize: 12, color: Theme.textMuted, fontWeight: '600' },
-  errText: { fontSize: 10, color: Theme.negative, marginTop: 3 },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    color: Theme.textPrimaryDark,
+    borderWidth: 1,
+    borderColor: PURPLE_BORDER,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: Theme.screenBackground,
+    minHeight: 44,
+  },
+  saveBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: PURPLE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtn: { paddingHorizontal: 6 },
+  cancelText: { fontSize: 11, color: Theme.textMuted, fontWeight: '600' },
+  errText: { fontSize: 10, color: Theme.negative, marginTop: 3, fontWeight: '500' },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderRadius: 8,
     backgroundColor: PURPLE_TINT,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: PURPLE_BORDER,
   },
-  editBtnText: { fontSize: 11, fontWeight: '700', color: PURPLE },
-  lockIcon: { marginRight: 4 },
+  editBtnText: { fontSize: 10, fontWeight: '600', color: PURPLE },
+  lockIcon: { marginRight: 2 },
 });
 
 const oid = StyleSheet.create({
@@ -414,28 +477,36 @@ const oid = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    minHeight: 64,
+    minHeight: 52,
   },
   icon: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PURPLE_BORDER,
   },
-  text: { flex: 1, minWidth: 0 },
-  label: { fontSize: 14, fontWeight: '700', color: Theme.textPrimaryDark },
-  value: {
+  text: { flex: 1, minWidth: 0, gap: 2 },
+  label: {
     fontSize: 11,
-    color: Theme.textMuted,
-    marginTop: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.05,
   },
-  hint: { fontSize: 12, fontWeight: '700', color: PURPLE },
+  value: {
+    fontSize: 9,
+    color: Theme.textMuted,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 0.1,
+  },
+  hint: { fontSize: 11, fontWeight: '600', color: PURPLE },
 });
 
 
@@ -507,16 +578,74 @@ export const workspacePanelStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
-  kycBannerTitle: { fontSize: 12, fontWeight: '800', color: AMBER, letterSpacing: -0.2 },
-  kycBannerSub: { fontSize: 11, fontWeight: '500', color: AMBER, opacity: 0.85, marginTop: 2, lineHeight: 15 },
+  kycBannerTitle: { fontSize: 11, fontWeight: '700', color: AMBER, letterSpacing: -0.05 },
+  kycBannerSub: { fontSize: 10, fontWeight: '500', color: AMBER, opacity: 0.85, marginTop: 2, lineHeight: 14 },
 
   // KYC progress
   kycProgressWrap: { paddingHorizontal: 14, paddingVertical: 10, gap: 6 },
   kycTrack: { height: 5, borderRadius: 3, backgroundColor: Theme.surfaceGray, overflow: 'hidden' },
   kycFill: { height: '100%', borderRadius: 3 },
   kycPctLabel: { fontSize: 10, fontWeight: '700', color: Theme.textMuted, letterSpacing: 0.4 },
-  kycReadonlyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: Theme.surfaceGray },
-  kycReadonlyText: { fontSize: 11, color: Theme.textMuted, flex: 1 },
+  kycReadonlyNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 14,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  kycReadonlyText: { fontSize: 10, color: Theme.textMuted, flex: 1, fontWeight: '500', lineHeight: 14 },
+  kycStack: { gap: 18, width: '100%' },
+  /** Shared vertical stack for workspace detail panes (settings, KYC, etc.). */
+  panelStack: { gap: 18, width: '100%' },
+
+  // Hub-aligned form fields (settings, account edit)
+  panelFieldGroup: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  panelFieldGroupFirst: { borderTopWidth: 0 },
+  panelFieldLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Theme.textMuted,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  panelFieldInput: {
+    width: '100%',
+    alignSelf: 'stretch',
+    backgroundColor: Theme.screenBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    color: Theme.textPrimaryDark,
+    minHeight: 44,
+  },
+  panelFieldInputReadonly: {
+    backgroundColor: Theme.surface,
+    color: Theme.textSecondary,
+  },
+  panelFieldStatic: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    color: Theme.textSecondary,
+    letterSpacing: -0.1,
+  },
 
   // Org name field
   nameInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: Theme.borderMedium, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: Theme.surface, gap: 10, marginHorizontal: 14, marginBottom: 2 },
@@ -526,14 +655,50 @@ export const workspacePanelStyles = StyleSheet.create({
   nameSaveGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14 },
   nameSaveTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
-  // Invoice preview
-  previewPaper: { borderWidth: StyleSheet.hairlineWidth, borderColor: Theme.borderLight, borderRadius: 12, backgroundColor: '#fff', overflow: 'hidden', paddingVertical: 18, paddingHorizontal: 14, minHeight: 100, justifyContent: 'center', position: 'relative', margin: 14, marginTop: 4 },
-  previewWatermark: { position: 'absolute', transform: [{ rotate: '-30deg' }], fontSize: 24, fontWeight: '900', color: 'rgba(15,23,42,0.05)', textTransform: 'uppercase', alignSelf: 'center' },
-  previewLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  previewLogo: { width: 44, height: 44, borderRadius: 22, backgroundColor: Theme.surfaceGray },
-  previewLogoFallback: { width: 44, height: 44, borderRadius: 22, backgroundColor: PURPLE_TINT, alignItems: 'center', justifyContent: 'center' },
-  previewLogoInitials: { fontSize: 14, fontWeight: '800', color: PURPLE },
-  previewCompanyName: { fontSize: 12, fontWeight: '800', color: Theme.textPrimaryDark, letterSpacing: 0.6 },
+  // Invoice preview — hub insight scale
+  previewPaper: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
+    overflow: 'hidden',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    minHeight: 88,
+    justifyContent: 'center',
+    position: 'relative',
+    marginHorizontal: 14,
+    marginBottom: 14,
+    marginTop: 4,
+  },
+  previewWatermark: {
+    position: 'absolute',
+    transform: [{ rotate: '-30deg' }],
+    fontSize: 18,
+    fontWeight: '800',
+    color: 'rgba(15,23,42,0.05)',
+    textTransform: 'uppercase',
+    alignSelf: 'center',
+  },
+  previewLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  previewLogo: { width: 36, height: 36, borderRadius: 18, backgroundColor: Theme.surfaceGray },
+  previewLogoFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: PURPLE_TINT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PURPLE_BORDER,
+  },
+  previewLogoInitials: { fontSize: 12, fontWeight: '800', color: PURPLE },
+  previewCompanyName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.35,
+  },
   previewDocType: { fontSize: 10, fontWeight: '500', color: Theme.textMuted, marginTop: 2 },
 
   // Logo upload row

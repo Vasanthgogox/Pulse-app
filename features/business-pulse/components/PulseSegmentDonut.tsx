@@ -21,8 +21,8 @@ export function PulseSegmentDonut({ slices, emptyMessage }: Props) {
     return emptyMessage ? <Text style={styles.empty}>{emptyMessage}</Text> : null;
   }
 
-  const size = 116;
-  const stroke = 12;
+  const size = 100;
+  const stroke = 10;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   chartCol: {
-    width: 116,
+    width: 100,
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
@@ -96,23 +96,23 @@ const styles = StyleSheet.create({
   legend: {
     flex: 1,
     minWidth: 0,
-    gap: 8,
+    gap: 7,
     justifyContent: "center",
   },
   legendRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 7,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     flexShrink: 0,
   },
   legendLabel: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     color: "#181C32",
   },
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#A1A5B7",
-    minWidth: 36,
+    minWidth: 32,
     textAlign: "right",
   },
   empty: {

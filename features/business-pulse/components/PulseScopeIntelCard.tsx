@@ -71,10 +71,10 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-    paddingVertical: 8,
+    gap: 8,
+    paddingVertical: 7,
   },
   rowBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,

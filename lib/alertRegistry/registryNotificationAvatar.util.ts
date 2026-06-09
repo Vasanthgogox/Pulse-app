@@ -1,7 +1,10 @@
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
-import type { InboundPartnerDisplay } from "@/lib/globalSync/inboundProtocol.types";
+import type {
+  InboundPartnerDisplay,
+  InboundProtocolInviteItem,
+} from "@/lib/globalSync/inboundProtocol.types";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
@@ -148,5 +151,21 @@ export function resolveSharedRegistryAvatar(
     name: item.title?.trim() || "Partner",
     entityType: "client",
     initialsColorSeed: item.id,
+  };
+}
+
+/** Avatar for inbound connection / driver invitation rows (notifications feed parity). */
+export function resolveInboundInviteAvatar(
+  item: InboundProtocolInviteItem,
+): RegistryNotificationAvatar {
+  const isDriver = item.kind === "driver";
+  return {
+    name: item.name?.trim() || "Partner",
+    entityType: isDriver ? "driver" : "client",
+    organizationImageUrl: item.logoUrl ?? item.avatarUri ?? null,
+    organizationAvatarSeed: item.orgAvatarSeed ?? null,
+    avatarUrl: isDriver ? item.avatarUri : item.ownerAvatarUrl ?? null,
+    avatarSeed: item.senderAvatarSeed ?? null,
+    initialsColorSeed: item.partnerOrgId || item.id,
   };
 }

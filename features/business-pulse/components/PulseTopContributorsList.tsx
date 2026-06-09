@@ -87,9 +87,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 2,
-    minHeight: 48,
+    minHeight: 44,
   },
   rowBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,

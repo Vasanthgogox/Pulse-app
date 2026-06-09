@@ -1,3 +1,10 @@
+/**
+ * Org identity & KYC — detail pane aligned with WorkspaceHubMenu density.
+ *
+ * Typography, row height, and card chrome mirror the hub home section cards
+ * (11px row labels, 9px section eyebrows, 34px icon tiles, 18px card gap).
+ */
+import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
@@ -22,7 +29,6 @@ import {
   updateWorkspaceKyc,
 } from "@/features/organization/services/organization.service";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
-import Theme from "@/constants/Theme";
 import * as Clipboard from "expo-clipboard";
 import { Lock } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -68,7 +74,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
       setCopying(false);
       notice({
         kind: "error",
-        title: "Couldn’t copy",
+        title: "Couldn't copy",
         message: "Clipboard access was denied.",
       });
     }
@@ -100,6 +106,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
   const kycPct = kycCompletionPct(kyc);
   const progressColor =
     kycPct === 100 ? GREEN : kycPct > 50 ? AMBER : Theme.negative;
+  const kycAccent = kycPct === 100 ? GREEN : AMBER;
 
   return (
     <WorkspaceDetailLayout
@@ -107,59 +114,60 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
       subtitle={orgName || "Organisation"}
       onBack={onBack}
     >
-      <View style={styles.card}>
-        <SectionHeader
-          label="Compliance & KYC"
-          color={kycPct === 100 ? GREEN : AMBER}
-        />
-        <KycProgressBlock pct={kycPct} barColor={progressColor} />
-        {!canEdit ? (
-          <View style={styles.kycReadonlyNote}>
-            <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
-            <Text style={styles.kycReadonlyText}>
-              Only admins and owners can edit KYC fields.
-            </Text>
-          </View>
-        ) : null}
-        <KycFieldRow
-          field="gstin"
-          value={kyc?.gstin}
-          verificationStatus={kyc?.verification_status}
-          canEdit={canEdit}
-          onSave={handleSaveKycField}
-        />
-        <KycFieldRow
-          field="business_pan"
-          value={kyc?.business_pan}
-          verificationStatus={kyc?.verification_status}
-          canEdit={canEdit}
-          onSave={handleSaveKycField}
-        />
-        <KycFieldRow
-          field="cin"
-          value={kyc?.cin}
-          verificationStatus={kyc?.verification_status}
-          canEdit={canEdit}
-          onSave={handleSaveKycField}
-        />
-      </View>
+      <View style={styles.panelStack}>
+        <View style={styles.detailCard}>
+          <SectionHeader label="Compliance & KYC" color={kycAccent} />
+          <KycProgressBlock pct={kycPct} barColor={progressColor} />
+          {!canEdit ? (
+            <View style={styles.kycReadonlyNote}>
+              <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
+              <Text style={styles.kycReadonlyText}>
+                Only admins and owners can edit KYC fields.
+              </Text>
+            </View>
+          ) : null}
+          <KycFieldRow
+            field="gstin"
+            value={kyc?.gstin}
+            verificationStatus={kyc?.verification_status}
+            canEdit={canEdit}
+            onSave={handleSaveKycField}
+          />
+          <KycFieldRow
+            field="business_pan"
+            value={kyc?.business_pan}
+            verificationStatus={kyc?.verification_status}
+            canEdit={canEdit}
+            onSave={handleSaveKycField}
+          />
+          <KycFieldRow
+            field="cin"
+            value={kyc?.cin}
+            verificationStatus={kyc?.verification_status}
+            canEdit={canEdit}
+            onSave={handleSaveKycField}
+          />
+        </View>
 
-      <View style={styles.card}>
-        <SectionHeader label="Org Identity" />
-        <OrgIdCopyRow
-          orgId={orgId}
-          copying={copying}
-          onCopy={() => void handleCopyOrgId()}
-        />
-        <InfoRow
-          label="Operating model"
-          value={modelLabel(currentOrganization?.operatingModel)}
-        />
-        {user?.email ? <InfoRow label="Owner email" value={user.email} /> : null}
-        <InfoRow
-          label="Display name"
-          value={orgName || orgInitials(orgName)}
-        />
+        <View style={styles.detailCard}>
+          <SectionHeader label="Org Identity" />
+          <OrgIdCopyRow
+            orgId={orgId}
+            copying={copying}
+            onCopy={() => void handleCopyOrgId()}
+          />
+          <InfoRow
+            label="Operating model"
+            value={modelLabel(currentOrganization?.operatingModel)}
+          />
+          {user?.email ? (
+            <InfoRow label="Owner email" value={user.email} />
+          ) : null}
+          <InfoRow
+            label="Display name"
+            value={orgName || orgInitials(orgName)}
+          />
+        </View>
       </View>
     </WorkspaceDetailLayout>
   );

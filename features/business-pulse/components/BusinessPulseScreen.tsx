@@ -151,6 +151,7 @@ function MetricCard({
   compareActive,
   desktopQuarter,
   icon,
+  barPct,
 }: {
   title: string;
   value: string;
@@ -161,6 +162,7 @@ function MetricCard({
   compareActive: boolean;
   desktopQuarter?: boolean;
   icon?: ReactNode;
+  barPct?: number;
 }) {
   const up = deltaPct >= 0;
   const accentStyle =
@@ -169,6 +171,10 @@ function MetricCard({
       : state === "warning"
         ? ent.kpiAccentWarning
         : ent.kpiAccentCritical;
+  const barColor =
+    state === "healthy" ? Theme.primary : state === "warning" ? "#f59e0b" : "#ef4444";
+  const barFill = typeof barPct === "number" ? Math.min(100, Math.max(0, barPct)) : null;
+
   return (
     <View
       style={[
@@ -176,24 +182,26 @@ function MetricCard({
         styles.metricCard,
         desktopQuarter && styles.metricCardQuarter,
         accentStyle,
-        density === "tiny" ? styles.metricTiny : density === "compact" ? styles.metricCompact : styles.metricStandard,
       ]}
     >
       <View style={styles.kpiTopRow}>
         {icon ? <View style={styles.kpiIconChip}>{icon}</View> : null}
-        <Text style={[ent.kpiTitle, icon ? styles.kpiTitleWithIcon : null]}>{title}</Text>
+        <Text style={[ent.kpiTitle, icon ? styles.kpiTitleWithIcon : null]} numberOfLines={1}>{title}</Text>
+        {compareActive ? (
+          <View style={[styles.deltaBadge, up ? styles.deltaBadgeUp : styles.deltaBadgeDown]}>
+            <Text style={[styles.deltaBadgeText, up ? styles.positive : styles.negative]}>
+              {up ? "+" : "−"}{Math.abs(deltaPct).toFixed(1)}%
+            </Text>
+          </View>
+        ) : null}
       </View>
-      <Text style={ent.kpiValue}>{value}</Text>
-      {compareActive ? (
-        <View style={styles.metricDeltaRow}>
-          {up ? <TrendingUp size={10} color={Theme.primary} /> : <TrendingDown size={10} color={Theme.textMuted} />}
-          <Text style={[styles.metricDeltaText, up ? styles.positive : styles.negative]}>
-            {up ? "+" : "−"}
-            {Math.abs(deltaPct).toFixed(1)}% vs prior
-          </Text>
+      <Text style={ent.kpiValue} numberOfLines={1}>{value}</Text>
+      <Text style={ent.kpiInsight} numberOfLines={1}>{insight}</Text>
+      {barFill !== null ? (
+        <View style={styles.kpiBarTrack}>
+          <View style={[styles.kpiBarFill, { width: `${barFill}%` as unknown as number, backgroundColor: barColor }]} />
         </View>
       ) : null}
-      <Text style={ent.kpiInsight}>{insight}</Text>
     </View>
   );
 }
@@ -1106,6 +1114,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   }
 
   const renderOverview = () => {
+    // ── Compare banner ─────────────────────────────────────────────────────────
     const compareBanner =
       compareActive && compareOverview ? (
         <View style={styles.compareBanner}>
@@ -1117,57 +1126,39 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
         </View>
       ) : null;
 
+    // ── 4-card KPI strip ────────────────────────────────────────────────────────
+    const marginPct = overview.revenue > 0 ? (overview.margin / overview.revenue) * 100 : 0;
     const kpiStrip = (
-      <View
-        style={[
-          styles.executiveGrid,
-          styles.widgetGroup,
-          kpiQuarter && styles.executiveGridQuarter,
-        ]}
-      >
+      <View style={[styles.kpiRow]}>
         <MetricCard
           title="Revenue"
           value={inr(overview.revenue)}
           deltaPct={deltas.revenue}
-          insight={
-            compareActive
-              ? `Current window vs prior ${inr(compareOverview?.revenue ?? 0)}`
-              : `${scoped.trips.length} trips in scope`
-          }
+          insight={`${scoped.trips.length} trips in scope`}
           state={deltas.revenue < -5 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          barPct={Math.min(100, (overview.revenue / Math.max(overview.revenue, 1)) * 100)}
           icon={<IndianRupee size={12} color={Theme.primary} strokeWidth={2.2} />}
         />
         <MetricCard
           title="Net Margin"
           value={inr(overview.margin)}
           deltaPct={deltas.margin}
-          insight={
-            compareActive
-              ? `Prior margin ${inr(compareOverview?.margin ?? 0)}`
-              : overview.margin >= 0
-                ? "Margin quality stable"
-                : "Cost pressure in scope"
-          }
-          state={deltas.margin < -3 ? "warning" : "healthy"}
+          insight={overview.margin >= 0 ? `${Math.max(0, marginPct).toFixed(0)}% margin rate` : "Cost pressure"}
+          state={overview.margin < 0 ? "critical" : deltas.margin < -3 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          barPct={Math.max(0, marginPct)}
           icon={<TrendingUp size={12} color={Theme.primary} strokeWidth={2.2} />}
         />
         <MetricCard
           title="Cash Exposure"
           value={inr(overview.cashExposure)}
           deltaPct={deltas.cashExposure}
-          insight={
-            compareActive
-              ? `Prior exposure ${inr(compareOverview?.cashExposure ?? 0)}`
-              : overview.cashExposure > 0
-                ? "Settlement queue active"
-                : "Healthy cash movement"
-          }
+          insight={overview.cashExposure > 0 ? "Settlement queue active" : "Healthy cash movement"}
           state={overview.cashExposure > 0 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
@@ -1178,43 +1169,62 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
           title="Fleet Utilization"
           value={`${overview.fleetUtilization.toFixed(0)}%`}
           deltaPct={deltas.utilization}
-          insight={`Compliance ${overview.complianceRisk} · Ops ${overview.operationalHealth}`}
+          insight={`${docExposure.vehiclesAtRisk + docExposure.driversAtRisk} docs need review`}
           state={overview.fleetUtilization < 50 ? "warning" : "healthy"}
           density={density}
           compareActive={compareActive}
           desktopQuarter={kpiQuarter}
+          barPct={overview.fleetUtilization}
           icon={<Truck size={12} color={Theme.textPrimaryDark} strokeWidth={2.2} />}
         />
       </View>
     );
 
-    const opsSignals = (
-      <View style={styles.opsRow}>
-        <View style={styles.opsBadge}>
-          <AlertTriangle size={12} color={Theme.textMuted} />
-          <Text style={styles.opsBadgeText}>Delayed: {operations.delayedTrips}</Text>
-        </View>
-        <View style={styles.opsBadge}>
-          <ListChecks size={12} color={Theme.primary} />
-          <Text style={styles.opsBadgeText}>Pending: {operations.pendingApprovals}</Text>
-        </View>
-        <View style={styles.opsBadge}>
-          <ShieldAlert size={12} color={Theme.textPrimaryDark} />
-          <Text style={styles.opsBadgeText}>
-            Docs at risk: {docExposure.vehiclesAtRisk + docExposure.driversAtRisk}
-          </Text>
-        </View>
-        <View style={styles.opsBadge}>
-          <CheckCircle2 size={12} color={Theme.primary} />
-          <Text style={styles.opsBadgeText}>State: {String(operations.state)}</Text>
-        </View>
-      </View>
-    );
+    // ── Ops alert banner (only renders when there are real issues) ─────────────
+    const totalAlerts =
+      operations.delayedTrips +
+      operations.pendingApprovals +
+      docExposure.vehiclesAtRisk +
+      docExposure.driversAtRisk;
 
+    const opsAlertBanner =
+      totalAlerts > 0 ? (
+        <View style={styles.opsAlertBanner}>
+          <AlertTriangle size={13} color="#92400e" strokeWidth={2.2} />
+          <Text style={styles.opsAlertLabel}>Live alerts</Text>
+          <View style={styles.opsAlertPills}>
+            {operations.delayedTrips > 0 ? (
+              <View style={[styles.opsAlertPill, styles.opsAlertWarn]}>
+                <Text style={styles.opsAlertPillText}>{operations.delayedTrips} delayed</Text>
+              </View>
+            ) : null}
+            {operations.pendingApprovals > 0 ? (
+              <View style={[styles.opsAlertPill, styles.opsAlertInfo]}>
+                <Text style={styles.opsAlertPillText}>{operations.pendingApprovals} pending</Text>
+              </View>
+            ) : null}
+            {docExposure.vehiclesAtRisk + docExposure.driversAtRisk > 0 ? (
+              <View style={[styles.opsAlertPill, styles.opsAlertCrit]}>
+                <Text style={styles.opsAlertPillText}>
+                  {docExposure.vehiclesAtRisk + docExposure.driversAtRisk} docs at risk
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Pressable
+            onPress={() => setActiveDomain("compliance")}
+            style={({ pressed }) => [styles.opsAlertCta, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.opsAlertCtaText}>Review →</Text>
+          </Pressable>
+        </View>
+      ) : null;
+
+    // ── Revenue intelligence chart ─────────────────────────────────────────────
     const revenueChart = (
       <PulseDashboardCard
         title="Revenue intelligence"
-        subtitle="Monthly revenue trend · tap a month to filter"
+        subtitle="Monthly trend · tap a month to filter"
         footerLabel="View trip drilldown"
         onFooterPress={scrollToDrilldown}
       >
@@ -1234,13 +1244,14 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
       </PulseDashboardCard>
     );
 
+    // ── Top contributors + Revenue mix side-by-side ────────────────────────────
     const contributorsAndMix = (
       <PulseWidgetRow>
-        <PulseWidgetCol flex={1}>
+        <PulseWidgetCol flex={3}>
           <PulseDashboardCard
             title="Top clients"
-            subtitle="Revenue contributors in current scope"
-            footerLabel="All clients"
+            subtitle="Revenue contributors"
+            footerLabel="All clients →"
             onFooterPress={() => setActiveDomain("sales")}
           >
             <PulseTopContributorsList
@@ -1250,71 +1261,44 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
             />
           </PulseDashboardCard>
         </PulseWidgetCol>
-        <PulseWidgetCol flex={1}>
-          <PulseDashboardCard title="Revenue mix" subtitle="Client contribution breakdown">
-            <PulseSegmentDonut slices={revenueSegmentSlices} emptyMessage="No revenue data in scope." />
+        <PulseWidgetCol flex={2}>
+          <PulseDashboardCard title="Revenue mix" subtitle="Client share">
+            <PulseSegmentDonut slices={revenueSegmentSlices} emptyMessage="No revenue data." />
           </PulseDashboardCard>
         </PulseWidgetCol>
       </PulseWidgetRow>
     );
 
+    // ── Client performance table (5 rows, paginated) ──────────────────────────
     const clientTable = (
       <PulseDashboardCard
         title="Client performance"
-        subtitle="Member-level revenue and margin"
+        subtitle={`${clientRankingRows.length} clients in scope`}
         noPadding
       >
         <PulseRankingTable
           columns={PULSE_CLIENT_COLUMNS}
           rows={clientRankingRows}
           onRowPress={(id) => toggleFilterValue("clientIds", id)}
+          pageSize={5}
+          showPagination={clientRankingRows.length > 5}
           emptyMessage="No clients in current scope."
         />
       </PulseDashboardCard>
     );
 
-    const laneTable = (
-      <PulseDashboardCard title="Lane profitability" subtitle="Route corridors in scope" noPadding>
-        <PulseRankingTable
-          columns={PULSE_ROUTE_COLUMNS}
-          rows={routeRankingRows}
-          onRowPress={(id) => toggleFilterValue("routes", id)}
-          emptyMessage="No lanes in current scope."
-        />
+    // ── Scope intelligence (left rail) ────────────────────────────────────────
+    const scopeIntelCard = (
+      <PulseDashboardCard title="Scope intelligence" subtitle="Active context">
+        <PulseScopeIntelCard rows={scopeIntelRows} />
       </PulseDashboardCard>
     );
 
-    const supplierSection = (
-      <PulseWidgetRow>
-        <PulseWidgetCol flex={1}>
-          <PulseDashboardCard
-            title="Top suppliers"
-            subtitle="Reliability and settlement exposure"
-            footerLabel="All suppliers"
-            onFooterPress={() => setActiveDomain("supply")}
-          >
-            <PulseTopContributorsList
-              rows={supplierContributorRows}
-              onRowPress={(id) => toggleFilterValue("supplierIds", id)}
-              emptyMessage="No suppliers in current scope."
-            />
-          </PulseDashboardCard>
-        </PulseWidgetCol>
-        <PulseWidgetCol flex={1}>
-          <PulseDashboardCard title="Settlement exposure" subtitle="Supplier payable concentration">
-            <PulseSegmentDonut
-              slices={supplierSettlementSlices}
-              emptyMessage="No settlement exposure in scope."
-            />
-          </PulseDashboardCard>
-        </PulseWidgetCol>
-      </PulseWidgetRow>
-    );
-
+    // ── City / branch concentration (left rail) ───────────────────────────────
     const branchCityCard = (
       <PulseDashboardCard
-        title="Branch / city concentration"
-        subtitle="Pickup cities ranked by revenue share"
+        title="City concentration"
+        subtitle="Pickup revenue by city"
         noPadding
       >
         <View style={styles.cityWidgetInset}>
@@ -1327,21 +1311,19 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
       </PulseDashboardCard>
     );
 
-    const scopeIntelCard = (
-      <PulseDashboardCard title="Scope intelligence" subtitle="Active filter context">
-        <PulseScopeIntelCard rows={scopeIntelRows} />
-      </PulseDashboardCard>
-    );
-
-    const filterCard = (
-      <PulseDashboardCard title="Cross-filters" subtitle="Pinned entities · tap to remove">
-        {renderEntityFilterPanel()}
-      </PulseDashboardCard>
-    );
-
-    const opsSignalsCard = (
-      <PulseDashboardCard title="Operational signals" subtitle="Live health telemetry">
-        {opsSignals}
+    // ── Top suppliers (left rail on desktop) ──────────────────────────────────
+    const suppliersCompact = (
+      <PulseDashboardCard
+        title="Top suppliers"
+        subtitle="Settlement exposure"
+        footerLabel="Supply tab →"
+        onFooterPress={() => setActiveDomain("supply")}
+      >
+        <PulseTopContributorsList
+          rows={supplierContributorRows.slice(0, 4)}
+          onRowPress={(id) => toggleFilterValue("supplierIds", id)}
+          emptyMessage="No suppliers in scope."
+        />
       </PulseDashboardCard>
     );
 
@@ -1354,32 +1336,27 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
             left={
               <>
                 {scopeIntelCard}
-                {filterCard}
                 {branchCityCard}
-                {opsSignalsCard}
+                {suppliersCompact}
               </>
             }
             main={
               <>
+                {opsAlertBanner}
                 {revenueChart}
                 {contributorsAndMix}
                 {clientTable}
-                {laneTable}
-                {supplierSection}
               </>
             }
           />
         ) : (
           <>
-            {scopeIntelCard}
-            {filterCard}
+            {opsAlertBanner}
             {revenueChart}
             {contributorsAndMix}
+            {scopeIntelCard}
             {branchCityCard}
             {clientTable}
-            {laneTable}
-            {supplierSection}
-            {opsSignalsCard}
           </>
         )}
       </View>
@@ -2604,11 +2581,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.6,
   },
+  // ── KPI row ────────────────────────────────────────────────────────────────
+  kpiRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    alignItems: "stretch",
+    width: "100%",
+  },
   metricCard: {
-    width: "48%",
+    width: "22%",
     flexGrow: 1,
-    maxWidth: "100%",
-    minWidth: 140,
+    flexShrink: 1,
+    minWidth: 136,
   },
   metricCardQuarter: {
     flex: 1,
@@ -2616,18 +2601,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: undefined,
   },
-  metricTiny: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  metricCompact: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  metricStandard: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
+  metricTiny: {},
+  metricCompact: {},
+  metricStandard: {},
   metricTitle: {
     fontSize: 9,
     fontWeight: "800",
@@ -2655,6 +2631,82 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: Theme.textSecondary,
     marginTop: 2,
+  },
+  // Delta badge in KPI top row
+  deltaBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    marginLeft: "auto",
+  },
+  deltaBadgeUp: {
+    backgroundColor: "#dcfce7",
+  },
+  deltaBadgeDown: {
+    backgroundColor: "#fef2f2",
+  },
+  deltaBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  // KPI progress bar
+  kpiBarTrack: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#f1f5f9",
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  kpiBarFill: {
+    height: 3,
+    borderRadius: 2,
+  },
+  // ── Ops alert banner ──────────────────────────────────────────────────────
+  opsAlertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexWrap: "wrap",
+  },
+  opsAlertLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#92400e",
+    flexShrink: 0,
+  },
+  opsAlertPills: {
+    flexDirection: "row",
+    gap: 6,
+    flex: 1,
+    flexWrap: "wrap",
+  },
+  opsAlertPill: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  opsAlertWarn: { backgroundColor: "#fef3c7" },
+  opsAlertInfo: { backgroundColor: "#eff6ff" },
+  opsAlertCrit: { backgroundColor: "#fef2f2" },
+  opsAlertPillText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  opsAlertCta: {
+    marginLeft: "auto" as unknown as number,
+    flexShrink: 0,
+  },
+  opsAlertCtaText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.primary,
   },
   card: {
     borderWidth: StyleSheet.hairlineWidth,

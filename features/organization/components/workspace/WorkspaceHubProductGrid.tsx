@@ -67,7 +67,7 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
         </View>
         <View style={styles.catalogueLink}>
           <Text style={styles.catalogueLinkText}>Catalogue</Text>
-          <ChevronRight size={14} color={Theme.primary} strokeWidth={2.2} />
+          <ChevronRight size={12} color={Theme.primary} strokeWidth={2.2} />
         </View>
       </Pressable>
 
@@ -83,21 +83,32 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
           return (
             <Pressable
               key={product.id}
-              style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
-              onPress={() => {
-                onSelectProduct?.(product.id);
-                onOpenCatalogue();
-              }}
+              style={({ pressed }) => [
+                styles.chip,
+                pressed && isActive && styles.chipPressed,
+              ]}
+              onPress={
+                isActive
+                  ? () => {
+                      onSelectProduct?.(product.id);
+                      onOpenCatalogue();
+                    }
+                  : undefined
+              }
+              disabled={!isActive}
               accessibilityRole="button"
-              accessibilityLabel={`${product.name}${isActive ? ", connected" : ""}`}
+              accessibilityLabel={`${product.name}${isActive ? ", connected" : ", locked"}`}
             >
               <ProductLogo
                 productId={product.id}
-                size={44}
+                size={34}
                 active={isActive}
                 showActiveDot={isActive}
               />
-              <Text style={styles.chipName} numberOfLines={1}>
+              <Text
+                style={[styles.chipName, isActive && styles.chipNameActive]}
+                numberOfLines={1}
+              >
                 {shortProductName(product.name)}
               </Text>
             </Pressable>
@@ -113,9 +124,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
-    paddingTop: 12,
-    paddingBottom: 10,
-    gap: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
+    gap: 8,
   },
   dockHeader: {
     flexDirection: "row",
@@ -133,16 +144,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   dockEyebrow: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
   dockMeta: {
-    fontSize: 12,
-    fontWeight: "500",
+    fontSize: 10,
+    fontWeight: "400",
     color: Theme.textMuted,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   catalogueLink: {
     flexDirection: "row",
@@ -153,32 +164,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   catalogueLinkText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     color: Theme.primary,
   },
   scrollContent: {
-    paddingHorizontal: 14,
-    gap: 4,
+    paddingHorizontal: 12,
+    gap: 2,
     paddingBottom: 2,
   },
   chip: {
-    width: 80,
+    width: 62,
     alignItems: "center",
-    gap: 7,
+    gap: 5,
     paddingHorizontal: 2,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   chipPressed: {
     backgroundColor: "#f4f6fa",
   },
   chipName: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontSize: 9,
+    fontWeight: "500",
+    color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 13,
+    lineHeight: 12,
     width: "100%",
+  },
+  chipNameActive: {
+    color: Theme.textPrimaryDark,
+    fontWeight: "600",
   },
 });

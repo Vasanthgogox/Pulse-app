@@ -81,7 +81,8 @@ export default function AttributionTripCreateModal() {
   const [wizardStep, setWizardStep] = useState<WizardStep>("client");
   const [clientMode, setClientMode] = useState<"shipper" | "existing">("shipper");
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [clientName, setClientName] = useState("");
+  /** Search filter only — never mirrors the selected client name. */
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [saleValue, setSaleValue] = useState("");
 
   const loadClients = useCallback(async () => {
@@ -181,10 +182,7 @@ export default function AttributionTripCreateModal() {
   useEffect(() => {
     if (clientMode !== "shipper") return;
     setSelectedClientId(matchedShipperClient?.id ?? null);
-    if (matchedShipperClient?.name) {
-      setClientName(matchedShipperClient.name);
-    }
-  }, [clientMode, matchedShipperClient?.id, matchedShipperClient?.name]);
+  }, [clientMode, matchedShipperClient?.id]);
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === selectedClientId) ?? null,
@@ -314,7 +312,6 @@ export default function AttributionTripCreateModal() {
     submitting,
     selectedClient?.id,
     selectedClient?.name,
-    clientName,
     saleValue,
     router,
   ]);
@@ -324,12 +321,12 @@ export default function AttributionTripCreateModal() {
   const canContinueFromSaleStep = Number(saleValue) > 0;
 
   const filteredClients = useMemo(() => {
-    const q = clientName.trim().toLowerCase();
+    const q = clientSearchQuery.trim().toLowerCase();
     const list = q
       ? clients.filter((c) => String(c.name ?? "").toLowerCase().includes(q))
       : clients;
     return list.slice(0, 40);
-  }, [clients, clientName]);
+  }, [clients, clientSearchQuery]);
 
   const goBackInWizard = useCallback(() => {
     if (wizardStep === "review") {
@@ -483,10 +480,7 @@ export default function AttributionTripCreateModal() {
       <View style={styles.modeRow}>
         <Pressable
           style={[styles.modeChip, clientMode === "shipper" && styles.modeChipActive]}
-          onPress={() => {
-            setClientMode("shipper");
-            setClientName(shipperName);
-          }}
+          onPress={() => setClientMode("shipper")}
         >
           <Text
             style={[
@@ -499,7 +493,10 @@ export default function AttributionTripCreateModal() {
         </Pressable>
         <Pressable
           style={[styles.modeChip, clientMode === "existing" && styles.modeChipActive]}
-          onPress={() => setClientMode("existing")}
+          onPress={() => {
+            setClientMode("existing");
+            setClientSearchQuery("");
+          }}
         >
           <Text
             style={[
@@ -556,11 +553,13 @@ export default function AttributionTripCreateModal() {
       ) : (
         <>
           <TextInput
-            value={clientName}
-            onChangeText={setClientName}
+            value={clientSearchQuery}
+            onChangeText={setClientSearchQuery}
             placeholder="Search client"
             placeholderTextColor={Theme.textMuted}
-            style={styles.input}
+            style={fullPageWizardStyles.wizardFieldInput}
+            autoCorrect={false}
+            autoCapitalize="none"
           />
           <WizardClientPicker
             clients={filteredClients}
@@ -568,7 +567,6 @@ export default function AttributionTripCreateModal() {
             selectedClientId={selectedClientId}
             onSelect={(client) => {
               setSelectedClientId(client.id);
-              setClientName(client.name ?? "");
             }}
             onAddClient={openAddClientFlow}
             listMaxHeight={isWideLayout ? 340 : 260}
@@ -759,12 +757,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   partyName: {
     color: Theme.textPrimaryDark,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "500",
+    lineHeight: 16,
   },
   block: {
     borderRadius: 12,
@@ -772,17 +771,19 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     padding: 12,
-    gap: 8,
+    gap: 10,
+    width: "100%",
+    alignSelf: "stretch",
   },
   blockTitle: {
     color: Theme.textPrimaryDark,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "600",
   },
   blockLine: {
     color: Theme.textPrimaryDark,
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
   },
   blockMeta: {
     color: Theme.textSecondary,
@@ -876,33 +877,9 @@ const styles = StyleSheet.create({
   },
   reviewLine: {
     color: Theme.textPrimaryDark,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "700",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    borderRadius: 10,
-    backgroundColor: Theme.screenBackground,
-    color: Theme.textPrimaryDark,
-    fontSize: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  addClientBtn: {
-    alignSelf: "flex-start",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  addClientBtnText: {
-    color: Theme.primary,
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
   },
   hint: {
     color: Theme.textMuted,

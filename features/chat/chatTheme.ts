@@ -2,12 +2,12 @@
  * Chat feature tokens — Metronic demo2 density (compact, professional).
  */
 /** Outgoing message bubble + primary thread accent */
-export const CHAT_ACCENT = "#3699FF";
-export const CHAT_ACCENT_SOFT = "#F3F6F9";
-/** Light borders / dividers */
-export const CHAT_ACCENT_BORDER = "#EFF2F5";
+export const CHAT_ACCENT = "#5b5ef4";
+export const CHAT_ACCENT_SOFT = "#eef2ff";
+/** Light borders / dividers (indigo tint aligned to CHAT_ACCENT) */
+export const CHAT_ACCENT_BORDER = "#c7d2fe";
 /** Unselected icons on light pills */
-export const CHAT_ICON_MUTED = "#A1A5B7";
+export const CHAT_ICON_MUTED = "#475569";
 /** Metronic text hierarchy */
 export const CHAT_TEXT_PRIMARY = "#181C32";
 export const CHAT_TEXT_SECONDARY = "#7E8299";

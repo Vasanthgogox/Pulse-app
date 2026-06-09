@@ -3,6 +3,15 @@ import { useOptionalAwardedIndentDeployModal } from '@/contexts/AwardedIndentDep
 import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { BusinessConnectionRequestModal } from '@/features/network/components/BusinessConnectionRequestModal';
 import { isConnectionProtocolInvite } from '@/features/network/utils/businessConnectionOffer.util';
+import {
+  clearAutoPromptRecord,
+  inviteAutoPromptKey,
+  isAutoPromptEligible,
+  loadAutoPromptRecord,
+  recordAutoPromptDay,
+  saveAutoPromptRecord,
+  type ConnectionInviteAutoPromptRecord,
+} from '@/lib/connectionInviteAutoPrompt.util';
 import type { InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol.types';
 import { useInboundProtocolInvites } from '@/lib/globalSync/useInboundProtocolInvites';
 import { useInboundProtocolInviteActions } from '@/lib/hooks/useInboundProtocolInviteActions';
@@ -53,7 +62,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
   const { inviteActionId, handleInviteAction } = useInboundProtocolInviteActions(orgId);
 
   const pendingConnectionInvites = useMemo(
-    () => receivedItems.filter(isConnectionProtocolInvite),
+    () => (receivedItems ?? []).filter(isConnectionProtocolInvite),
     [receivedItems],
   );
 
@@ -61,17 +70,84 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
   const [queueViewIndex, setQueueViewIndex] = useState(0);
   const [focusedInviteId, setFocusedInviteId] = useState<string | null>(null);
   const [declineTarget, setDeclineTarget] = useState<InboundProtocolInviteItem | null>(null);
+  const [promptByPartnerKey, setPromptByPartnerKey] = useState<
+    Record<string, ConnectionInviteAutoPromptRecord>
+  >({});
+  const [promptScheduleLoaded, setPromptScheduleLoaded] = useState(false);
+  /** Keeps the auto-prompt modal open until the user dismisses or acts. */
+  const [autoPresentedInviteId, setAutoPresentedInviteId] = useState<string | null>(null);
+  const recordedAutoPromptRef = useRef<Set<string>>(new Set());
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  const pendingPartnerKeys = useMemo(() => {
+    const keys = new Set(pendingConnectionInvites.map(inviteAutoPromptKey));
+    return Array.from(keys).sort().join('|');
+  }, [pendingConnectionInvites]);
 
   const clearSessionSnooze = useCallback(() => {
     setSessionSnoozedIds(new Set());
     setQueueViewIndex(0);
     setFocusedInviteId(null);
+    setAutoPresentedInviteId(null);
   }, []);
 
   const refreshConnectionRequests = useCallback(async () => {
     await refreshInboundProtocol();
   }, [refreshInboundProtocol]);
+
+  useEffect(() => {
+    if (!orgId) {
+      setPromptScheduleLoaded(true);
+      return;
+    }
+    if (pendingPartnerKeys.length === 0) {
+      setPromptScheduleLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+    const partnerKeys = pendingPartnerKeys.split('|').filter(Boolean);
+
+    void (async () => {
+      const entries = await Promise.all(
+        partnerKeys.map(async (partnerKey) => {
+          const record = await loadAutoPromptRecord(orgId, partnerKey);
+          return [partnerKey, record] as const;
+        }),
+      );
+      if (cancelled) return;
+      setPromptByPartnerKey((prev) => {
+        const merged: Record<string, ConnectionInviteAutoPromptRecord> = { ...prev };
+        for (const [partnerKey, record] of entries) {
+          const existing = merged[partnerKey] ?? { shownDates: [] };
+          const dates = [
+            ...new Set([...existing.shownDates, ...record.shownDates]),
+          ].slice(0, 3);
+          merged[partnerKey] = { shownDates: dates };
+        }
+        return merged;
+      });
+      setPromptScheduleLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, pendingPartnerKeys]);
+
+  const persistAutoPromptDay = useCallback(
+    (invite: InboundProtocolInviteItem) => {
+      if (!orgId) return;
+      const partnerKey = inviteAutoPromptKey(invite);
+      setPromptByPartnerKey((prev) => {
+        const current = prev[partnerKey] ?? { shownDates: [] };
+        const next = recordAutoPromptDay(current);
+        void saveAutoPromptRecord(orgId, partnerKey, next);
+        return { ...prev, [partnerKey]: next };
+      });
+    },
+    [orgId],
+  );
 
   useEffect(() => {
     if (!orgId) return;
@@ -91,16 +167,28 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
     return () => sub.remove();
   }, [orgId, clearSessionSnooze, refreshInboundProtocol]);
 
-  const visiblePendingInvites = useMemo(
+  const sessionEligibleInvites = useMemo(
     () => pendingConnectionInvites.filter((i) => !sessionSnoozedIds.has(i.id)),
     [pendingConnectionInvites, sessionSnoozedIds],
   );
 
+  const autoPromptEligibleInvites = useMemo(() => {
+    if (!promptScheduleLoaded) return [];
+    return sessionEligibleInvites.filter((invite) => {
+      const partnerKey = inviteAutoPromptKey(invite);
+      const record = promptByPartnerKey[partnerKey] ?? { shownDates: [] };
+      return isAutoPromptEligible(record);
+    });
+  }, [sessionEligibleInvites, promptByPartnerKey, promptScheduleLoaded]);
+
   useEffect(() => {
-    if (queueViewIndex >= visiblePendingInvites.length && visiblePendingInvites.length > 0) {
+    if (
+      queueViewIndex >= autoPromptEligibleInvites.length &&
+      autoPromptEligibleInvites.length > 0
+    ) {
       setQueueViewIndex(0);
     }
-  }, [queueViewIndex, visiblePendingInvites.length]);
+  }, [queueViewIndex, autoPromptEligibleInvites.length]);
 
   const activeInvite = useMemo(() => {
     if (focusedInviteId) {
@@ -108,12 +196,19 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
         pendingConnectionInvites.find((invite) => invite.id === focusedInviteId) ?? null
       );
     }
-    if (visiblePendingInvites.length === 0) return null;
-    return visiblePendingInvites[queueViewIndex % visiblePendingInvites.length];
+    if (autoPresentedInviteId) {
+      return (
+        pendingConnectionInvites.find((invite) => invite.id === autoPresentedInviteId) ?? null
+      );
+    }
+    if (!promptScheduleLoaded || autoPromptEligibleInvites.length === 0) return null;
+    return autoPromptEligibleInvites[queueViewIndex % autoPromptEligibleInvites.length];
   }, [
     focusedInviteId,
+    autoPresentedInviteId,
     pendingConnectionInvites,
-    visiblePendingInvites,
+    autoPromptEligibleInvites,
+    promptScheduleLoaded,
     queueViewIndex,
   ]);
 
@@ -124,9 +219,19 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
   const showModal = !!activeInvite && !declineTarget && !blockedByDeploy;
 
+  useEffect(() => {
+    if (!showModal || !activeInvite || userOpenedInvite) return;
+    setAutoPresentedInviteId((prev) => prev ?? activeInvite.id);
+    const partnerKey = inviteAutoPromptKey(activeInvite);
+    if (recordedAutoPromptRef.current.has(partnerKey)) return;
+    recordedAutoPromptRef.current.add(partnerKey);
+    persistAutoPromptDay(activeInvite);
+  }, [showModal, activeInvite?.id, userOpenedInvite, persistAutoPromptDay]);
+
   const presentConnectionInvite = useCallback(
     (item: InboundProtocolInviteItem) => {
       if (!isConnectionProtocolInvite(item)) return;
+      setAutoPresentedInviteId(null);
       setSessionSnoozedIds((prev) => {
         const next = new Set(prev);
         next.delete(item.id);
@@ -146,31 +251,59 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
   const handleLater = useCallback(() => {
     if (!activeInvite) return;
+    if (!userOpenedInvite) {
+      const partnerKey = inviteAutoPromptKey(activeInvite);
+      if (!recordedAutoPromptRef.current.has(partnerKey)) {
+        recordedAutoPromptRef.current.add(partnerKey);
+        persistAutoPromptDay(activeInvite);
+      }
+    }
+    setAutoPresentedInviteId(null);
     setFocusedInviteId(null);
     setSessionSnoozedIds((prev) => new Set(prev).add(activeInvite.id));
-  }, [activeInvite]);
+  }, [activeInvite, persistAutoPromptDay, userOpenedInvite]);
 
   const handleNext = useCallback(() => {
-    if (visiblePendingInvites.length <= 1) return;
-    setQueueViewIndex((i) => (i + 1) % visiblePendingInvites.length);
-  }, [visiblePendingInvites.length]);
+    if (autoPromptEligibleInvites.length <= 1) return;
+    setQueueViewIndex((i) => (i + 1) % autoPromptEligibleInvites.length);
+  }, [autoPromptEligibleInvites.length]);
+
+  const clearInvitePromptSchedule = useCallback(
+    (invite: InboundProtocolInviteItem) => {
+      if (!orgId) return;
+      const partnerKey = inviteAutoPromptKey(invite);
+      void clearAutoPromptRecord(orgId, partnerKey);
+      recordedAutoPromptRef.current.delete(partnerKey);
+      setPromptByPartnerKey((prev) => {
+        if (!(partnerKey in prev)) return prev;
+        const next = { ...prev };
+        delete next[partnerKey];
+        return next;
+      });
+    },
+    [orgId],
+  );
 
   const handleAccept = useCallback(async () => {
     if (!activeInvite) return;
     await handleInviteAction(activeInvite, 'approve');
+    clearInvitePromptSchedule(activeInvite);
     setSessionSnoozedIds((prev) => {
       const next = new Set(prev);
       next.delete(activeInvite.id);
       return next;
     });
+    setAutoPresentedInviteId(null);
     setFocusedInviteId(null);
     setQueueViewIndex(0);
-  }, [activeInvite, handleInviteAction]);
+  }, [activeInvite, clearInvitePromptSchedule, handleInviteAction]);
 
   const runDecline = useCallback(
     async (item: InboundProtocolInviteItem) => {
       await handleInviteAction(item, 'reject');
+      clearInvitePromptSchedule(item);
       setDeclineTarget(null);
+      setAutoPresentedInviteId(null);
       setFocusedInviteId(null);
       setSessionSnoozedIds((prev) => {
         const next = new Set(prev);
@@ -179,7 +312,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
       });
       setQueueViewIndex(0);
     },
-    [handleInviteAction],
+    [clearInvitePromptSchedule, handleInviteAction],
   );
 
   const handleDeclinePress = useCallback(() => {
@@ -231,7 +364,7 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
           onDecline={handleDeclinePress}
           onLater={handleLater}
           onNext={
-            !focusedInviteId && visiblePendingInvites.length > 1 ? handleNext : undefined
+            !focusedInviteId && autoPromptEligibleInvites.length > 1 ? handleNext : undefined
           }
         />
       ) : null}

@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   contentColumn: {
     width: "100%",
     maxWidth: CONTENT_MAX_WIDTH,
-    gap: 14,
+    gap: 18,
     alignSelf: "center",
   },
   fillBody: {
