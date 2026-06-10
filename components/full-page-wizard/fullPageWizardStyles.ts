@@ -8,8 +8,10 @@ export const WIZARD_ACCENT_BORDER = "rgba(99, 102, 241, 0.35)";
 export const WIZARD_ACCENT_MUTED = "rgba(238, 242, 255, 0.9)";
 /** Avatar size for wizard context rows + 2-col selection tiles (attribution parity). */
 export const WIZARD_PARTY_AVATAR_SIZE = 30;
-/** Party selection grids always use two columns (Driver · Shipper parity). */
+/** Party selection grids on compact / mobile layouts. */
 export const WIZARD_PARTY_GRID_COLUMNS = 2;
+/** Desktop party picker — four tiles per row (create trip / attribution parity). */
+export const WIZARD_PARTY_GRID_COLUMNS_DESKTOP = 4;
 
 /** Shared light full-page wizard chrome (attribution / create trip / load / allocation). */
 export const fullPageWizardStyles = StyleSheet.create({
@@ -843,7 +845,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   desktopFrameMain: {
     flex: 1,
     minWidth: 0,
-    maxWidth: 680,
+    maxWidth: 820,
     alignSelf: "stretch",
   },
   desktopInsightRail: {

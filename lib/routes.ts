@@ -84,9 +84,36 @@ export const ROUTES = {
     if (!tab) return base;
     return `${base}?tab=${encodeURIComponent(tab)}` as const;
   },
+  /** Party directory — customers, suppliers, drivers, vehicles. */
+  partyDirectory: (kind: "customers" | "suppliers" | "drivers" | "vehicles") =>
+    `/party/${kind}` as const,
+  supplierProfile: (supplierId: string, tab?: string) => {
+    const base = `/supplier/${encodeURIComponent(supplierId)}/profile` as const;
+    if (!tab) return base;
+    return `${base}?tab=${encodeURIComponent(tab)}` as const;
+  },
+  driverProfile: (driverId: string, tab?: string) => {
+    const base = `/driver/${encodeURIComponent(driverId)}/profile` as const;
+    if (!tab) return base;
+    return `${base}?tab=${encodeURIComponent(tab)}` as const;
+  },
+  vehicleProfile: (vehicleId: string, tab?: string) => {
+    const base = `/vehicle/${encodeURIComponent(vehicleId)}/profile` as const;
+    if (!tab) return base;
+    return `${base}?tab=${encodeURIComponent(tab)}` as const;
+  },
   /** Finance ledger + trips detail for a client. */
   clientDetail: (clientId: string) =>
     `/client/${encodeURIComponent(clientId)}` as const,
+  /** Finance ledger + trips detail for a supplier. */
+  supplierDetail: (supplierId: string) =>
+    `/supplier/${encodeURIComponent(supplierId)}` as const,
+  /** Fleet driver detail (trips, cash flow, earnings). */
+  driverDetail: (driverId: string) =>
+    `/driver/${encodeURIComponent(driverId)}` as const,
+  /** Vehicle detail (trips, P&L, operations). */
+  vehicleDetail: (vehicleId: string) =>
+    `/vehicle/${encodeURIComponent(vehicleId)}` as const,
   supplierAnalytics: (supplierId: string) =>
     `/supplier/${encodeURIComponent(supplierId)}/analytics` as const,
   driverAnalytics: (driverId: string) =>

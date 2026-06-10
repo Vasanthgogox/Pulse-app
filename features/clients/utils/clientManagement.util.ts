@@ -1,4 +1,8 @@
-import type { ClientKycDocType, ClientKycDocumentRow } from '@/features/clients/types/clientManagement.types';
+import type {
+  ClientKycDocType,
+  ClientKycDocumentRow,
+  ClientWarehouseExtended,
+} from '@/features/clients/types/clientManagement.types';
 import { KYC_DOC_LABELS, MANDATORY_KYC_DOC_TYPES } from '@/features/clients/types/clientManagement.types';
 
 export function computeKycScore(documents: ClientKycDocumentRow[]): {
@@ -35,9 +39,19 @@ export function kycMissingLabels(missing: ClientKycDocType[]): string[] {
   return missing.map((t) => KYC_DOC_LABELS[t]);
 }
 
+/** Display label for lane-rate origin/destination tied to a warehouse. */
+export function formatWarehouseLaneLabel(
+  warehouse: Pick<ClientWarehouseExtended, 'name' | 'city' | 'state'>,
+): string {
+  const name = warehouse.name?.trim() || 'Warehouse';
+  const cityState = [warehouse.city, warehouse.state].filter(Boolean).join(', ');
+  return cityState ? `${name} · ${cityState}` : name;
+}
+
 export function formatClientPhoneDisplay(phone: string | null | undefined): string {
   const raw = phone?.trim();
   if (!raw) return "—";
+  if (/^linked-/i.test(raw)) return "—";
   if (/^[0-9a-f-]{30,}$/i.test(raw)) return "—";
   return raw;
 }

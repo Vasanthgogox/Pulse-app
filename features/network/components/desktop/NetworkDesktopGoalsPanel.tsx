@@ -3,6 +3,7 @@
  * client-level revenue; vehicle/driver asset targets; quarter & YTD rollups.
  */
 import Theme from "@/constants/Theme";
+import { NetworkDesktopEntityGoalWizard } from "@/features/network/components/desktop/NetworkDesktopEntityGoalWizard";
 import { NetworkDesktopGoalsBalanceChart } from "@/features/network/components/desktop/NetworkDesktopGoalsBalanceChart";
 import {
   METRONIC,
@@ -30,6 +31,7 @@ import {
   computeGoalsActualsForRollup,
   computePayableReceivableSnapshot,
   getRecentMonthKeys,
+  type EntityGoalRow,
   type GoalTargetRow,
   type GoalsRollup,
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
@@ -310,12 +312,6 @@ function GoalTargetCard({
   );
 }
 
-type EntityEditState = {
-  entityId: string;
-  revenueDraft: string;
-  tripsDraft: string;
-};
-
 export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   const monthOptions = useMemo(() => getRecentMonthKeys(3), []);
   const [selectedMonthKey, setSelectedMonthKey] = useState(
@@ -332,7 +328,9 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
     GoalTargetRow["metric"] | null
   >(null);
   const [draftTarget, setDraftTarget] = useState("");
-  const [entityEdit, setEntityEdit] = useState<EntityEditState | null>(null);
+  const [goalWizardEntity, setGoalWizardEntity] = useState<EntityGoalRow | null>(
+    null,
+  );
   const [balanceChartWidth, setBalanceChartWidth] = useState(420);
   const [saving, setSaving] = useState(false);
 
@@ -495,46 +493,30 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
     await persistStore(next);
   };
 
-  const startEntityEdit = (entityId: string) => {
-    const month = getMonthStore(goalsStore, selectedMonthKey);
-    const bucket =
-      activeFocus === "client"
-        ? month.clients
-        : activeFocus === "vehicle"
-          ? month.vehicles
-          : month.drivers;
-    const target = bucket[entityId] ?? { revenueInr: 0, tripCount: 0 };
-    setEntityEdit({
-      entityId,
-      revenueDraft: target.revenueInr > 0 ? String(target.revenueInr) : "",
-      tripsDraft: target.tripCount > 0 ? String(target.tripCount) : "",
-    });
-  };
+  const goalWizardClient = useMemo(() => {
+    if (!goalWizardEntity || activeFocus !== "client") return null;
+    return clients.find((c) => c.id === goalWizardEntity.id) ?? null;
+  }, [activeFocus, clients, goalWizardEntity]);
 
-  const saveEntityEdit = async () => {
-    if (!entityEdit) return;
-    const revenue = Number(entityEdit.revenueDraft.replace(/,/g, "").trim());
-    const tripCount = Number(entityEdit.tripsDraft.replace(/,/g, "").trim());
-    if (
-      !Number.isFinite(revenue) ||
-      revenue < 0 ||
-      !Number.isFinite(tripCount) ||
-      tripCount < 0
-    ) {
-      return;
+  const saveGoalWizard = async (revenueInr: number, tripCount: number) => {
+    if (!goalWizardEntity) return;
+    setSaving(true);
+    try {
+      const next = patchEntityTarget(
+        goalsStore,
+        selectedMonthKey,
+        activeFocus,
+        goalWizardEntity.id,
+        {
+          revenueInr,
+          tripCount,
+        },
+      );
+      await persistStore(next);
+      setGoalWizardEntity(null);
+    } finally {
+      setSaving(false);
     }
-    const next = patchEntityTarget(
-      goalsStore,
-      selectedMonthKey,
-      activeFocus,
-      entityEdit.entityId,
-      {
-        revenueInr: revenue,
-        tripCount: Math.round(tripCount),
-      },
-    );
-    await persistStore(next);
-    setEntityEdit(null);
   };
 
   const dataLoading =
@@ -833,7 +815,6 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                   </View>
                 ) : (
                   entityRows.map((entity, idx) => {
-                    const isEditing = entityEdit?.entityId === entity.id;
                     const primaryActual =
                       activeFocus === "client"
                         ? formatINRChip(entity.actualRevenue)
@@ -854,13 +835,16 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                           );
 
                     return (
-                      <View
+                      <Pressable
                         key={entity.id}
                         style={[
                           styles.goalsEntityRow,
                           idx === entityRows.length - 1 &&
                             styles.salesTableRowLast,
                         ]}
+                        onPress={() => setGoalWizardEntity(entity)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set goal for ${entity.name}`}
                       >
                         <View style={styles.goalsEntityTableGrid}>
                           <View style={styles.goalsEntityColName}>
@@ -877,62 +861,20 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
                             </Text>
                           </View>
                           <View style={styles.goalsEntityColTarget}>
-                            {isEditing ? (
-                              <View style={styles.goalsEntityEditStack}>
-                                <TextInput
-                                  style={styles.goalsEntityInput}
-                                  value={entityEdit.revenueDraft}
-                                  onChangeText={(v) =>
-                                    setEntityEdit((prev) =>
-                                      prev ? { ...prev, revenueDraft: v } : prev,
-                                    )
-                                  }
-                                  keyboardType="numeric"
-                                  placeholder="Revenue INR"
-                                  placeholderTextColor={METRONIC.muted}
-                                />
-                                {activeFocus !== "client" ? (
-                                  <TextInput
-                                    style={styles.goalsEntityInput}
-                                    value={entityEdit.tripsDraft}
-                                    onChangeText={(v) =>
-                                      setEntityEdit((prev) =>
-                                        prev ? { ...prev, tripsDraft: v } : prev,
-                                      )
-                                    }
-                                    keyboardType="numeric"
-                                    placeholder="Trips"
-                                    placeholderTextColor={METRONIC.muted}
-                                  />
-                                ) : null}
-                              </View>
-                            ) : (
-                              <Text style={styles.goalsEntityValue} numberOfLines={2}>
-                                {primaryTarget}
-                              </Text>
-                            )}
+                            <Text style={styles.goalsEntityValue} numberOfLines={2}>
+                              {primaryTarget}
+                            </Text>
                           </View>
                           <View style={styles.goalsEntityColProgress}>
                             <Text style={styles.goalsEntityProgressText}>
                               {entity.hasTarget ? `${progressPct}%` : "—"}
                             </Text>
                           </View>
-                          <Pressable
-                            style={styles.goalsEntityColAction}
-                            onPress={() =>
-                              isEditing
-                                ? void saveEntityEdit()
-                                : startEntityEdit(entity.id)
-                            }
-                          >
-                            {isEditing ? (
-                              <Text style={styles.goalsEntitySaveLink}>Save</Text>
-                            ) : (
-                              <Target size={14} color={METRONIC.muted} />
-                            )}
-                          </Pressable>
+                          <View style={styles.goalsEntityColAction}>
+                            <Target size={14} color={METRONIC.link} />
+                          </View>
                         </View>
-                      </View>
+                      </Pressable>
                     );
                   })
                 )}
@@ -983,6 +925,19 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
           )}
         </View>
       </View>
+
+      <NetworkDesktopEntityGoalWizard
+        visible={goalWizardEntity != null}
+        focus={activeFocus}
+        entity={goalWizardEntity}
+        client={goalWizardClient}
+        selectedMonthKey={selectedMonthKey}
+        goalsStore={goalsStore}
+        trips={trips}
+        saving={saving}
+        onClose={() => setGoalWizardEntity(null)}
+        onSave={saveGoalWizard}
+      />
     </View>
   );
 }

@@ -10,10 +10,19 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { NetworkDesktopLocationModal } from "@/features/network/components/desktop/NetworkDesktopLocationModal";
 import { useOrganizationOfficeMap } from "@/features/network/hooks/useOrganizationOfficeMap";
 import { buildProjectPeopleStack } from "@/features/network/utils/networkProjectPeople.util";
+import {
+  buildHeadquarterLocationCard,
+  formatLocationSubtitle,
+  LOCATION_TYPE_GRADIENTS,
+  type LocationCardModel,
+} from "@/features/network/utils/organizationLocationDisplay.util";
+import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useOrganizationLocationsQuery } from "@/lib/queries/useOrganizationLocationsQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import {
   Briefcase,
@@ -29,8 +38,8 @@ import {
   Users,
 } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, Text, View, type ViewStyle } from "react-native";
 
 type Props = {
   orgId: string | null;
@@ -153,12 +162,6 @@ function OpenProtocolRow({
   );
 }
 
-const LOCATION_GRADIENTS = [
-  { bg: "#E8FFF3", accent: "#50CD89", label: "Primary hub" },
-  { bg: "#F8F5FF", accent: "#7239EA", label: "Regional office" },
-  { bg: "#F1FAFF", accent: "#009EF7", label: "Dispatch center" },
-] as const;
-
 const PRODUCT_TAGS = [
   "Trips",
   "Indents",
@@ -181,7 +184,23 @@ export function NetworkDesktopDetailsPanel({
   driverCount,
   pendingInviteCount,
 }: Props) {
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [editingLocation, setEditingLocation] =
+    useState<OrganizationWorkspaceLocation | null>(null);
+  const [locationDraft, setLocationDraft] = useState<
+    Partial<{
+      name: string;
+      location_type: OrganizationWorkspaceLocation["location_type"];
+      department: string;
+      address_line: string;
+      city: string;
+      state: string;
+      is_verified: boolean;
+    }>
+  >();
+
   const officeMapQ = useOrganizationOfficeMap(orgId);
+  const locationsQ = useOrganizationLocationsQuery(orgId);
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const driversQ = useDriversQuery(orgId);
@@ -215,6 +234,71 @@ export function NetworkDesktopDetailsPanel({
     () => (driversQ.data ?? []).filter((d) => !d.left_at),
     [driversQ.data],
   );
+
+  const headquarterCard = useMemo(
+    () => buildHeadquarterLocationCard(orgName, officeMapQ.data?.rawLocation ?? null),
+    [officeMapQ.data?.rawLocation, orgName],
+  );
+
+  const locationCards: LocationCardModel[] = useMemo(() => {
+    const saved = locationsQ.data ?? [];
+    if (saved.length === 0) return [headquarterCard];
+    return saved.map((loc) => ({
+      id: loc.id,
+      name: loc.name,
+      locationType: loc.location_type,
+      department: loc.department ?? "Operations & dispatch",
+      addressLine: loc.address_line?.trim() ?? "",
+      city: loc.city,
+      state: loc.state,
+      verified: loc.is_verified,
+      persisted: true,
+    }));
+  }, [headquarterCard, locationsQ.data]);
+
+  const locationCountLabel = useMemo(() => {
+    const n = locationsQ.data?.length ?? 0;
+    if (n === 0) return "1 hub";
+    return `${n} hub${n === 1 ? "" : "s"}`;
+  }, [locationsQ.data?.length]);
+
+  const openAddLocation = () => {
+    setEditingLocation(null);
+    setLocationDraft({
+      name: `${orgName} hub`,
+      location_type: "primary_hub",
+      department: "Operations & dispatch",
+      address_line:
+        officeMapQ.data?.rawLocation?.address_line ??
+        officeMapQ.data?.addressLabel,
+      city: officeMapQ.data?.rawLocation?.city ?? undefined,
+      state: officeMapQ.data?.rawLocation?.state ?? undefined,
+      is_verified: false,
+    });
+    setLocationModalOpen(true);
+  };
+
+  const openLocationDetail = (card: LocationCardModel) => {
+    if (card.persisted) {
+      const row = (locationsQ.data ?? []).find((l) => l.id === card.id);
+      if (!row) return;
+      setEditingLocation(row);
+      setLocationDraft(undefined);
+      setLocationModalOpen(true);
+      return;
+    }
+    setEditingLocation(null);
+    setLocationDraft({
+      name: card.name,
+      location_type: card.locationType,
+      department: card.department,
+      address_line: card.addressLine || officeMapQ.data?.addressLabel,
+      city: card.city ?? undefined,
+      state: card.state ?? undefined,
+      is_verified: card.verified,
+    });
+    setLocationModalOpen(true);
+  };
 
   const projectRows = useMemo(() => {
     const clients = clientsQ.data ?? [];
@@ -280,7 +364,7 @@ export function NetworkDesktopDetailsPanel({
         <View style={styles.sidebar}>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Highlights</Text>
-            <HighlightRow label="Locations" value="3 hubs" />
+            <HighlightRow label="Locations" value={locationCountLabel} />
             <HighlightRow label="Founded" value="2024" />
             <HighlightRow label="Status" valueNode={<StatusPill label="Subscribed" />} />
             <HighlightRow label="Area" value="India" />
@@ -385,34 +469,79 @@ export function NetworkDesktopDetailsPanel({
 
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>Locations</Text>
-              <Pressable style={styles.offerLocationBtn}>
+              <Text style={[styles.cardTitle, styles.cardTitleInline]}>Locations</Text>
+              <Pressable
+                style={styles.offerLocationBtn}
+                onPress={openAddLocation}
+                accessibilityRole="button"
+                accessibilityLabel="Offer location"
+              >
                 <MapPin size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
                 <Text style={styles.offerLocationBtnText}>Offer location</Text>
               </Pressable>
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.locationsScroll}
-            >
-              {LOCATION_GRADIENTS.map((loc, i) => (
-                <View key={loc.label} style={styles.locationCard}>
-                  <View style={[styles.locationImage, { backgroundColor: loc.bg }]}>
-                    <Briefcase size={28} color={loc.accent} strokeWidth={1.8} />
-                  </View>
-                  <Text style={styles.locationTitle}>
-                    {orgName} {loc.label}
-                  </Text>
-                  <Text style={styles.locationAddress}>
-                    Hub {i + 1} · Operations & dispatch
-                  </Text>
-                  <Text style={styles.locationAddress}>
-                    India · Verified workspace
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
+            {locationsQ.isLoading ? (
+              <View style={styles.locationsEmpty}>
+                <ActivityIndicator color={METRONIC.muted} />
+              </View>
+            ) : locationCards.length === 0 ? (
+              <View style={styles.locationsEmpty}>
+                <Text style={styles.locationsEmptyText}>
+                  No locations yet. Add your first hub or office.
+                </Text>
+                <Pressable style={styles.offerLocationBtn} onPress={openAddLocation}>
+                  <MapPin size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                  <Text style={styles.offerLocationBtnText}>Offer location</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.locationsGrid}>
+                {locationCards.map((card, i) => {
+                  const gradient = LOCATION_TYPE_GRADIENTS[card.locationType];
+                  const { line1, line2 } = formatLocationSubtitle(
+                    i + 1,
+                    card.department,
+                    card.city,
+                    card.state,
+                    card.verified,
+                  );
+                  return (
+                    <Pressable
+                      key={card.id}
+                      style={({ pressed }) => [
+                        styles.locationCard,
+                        styles.locationCardPressable,
+                        Platform.OS === "web"
+                          ? ({ cursor: "pointer" } as ViewStyle)
+                          : null,
+                        pressed && { opacity: 0.92 },
+                      ]}
+                      onPress={() => openLocationDetail(card)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${card.name}`}
+                    >
+                      <View
+                        style={[styles.locationImage, { backgroundColor: gradient.bg }]}
+                      >
+                        <Briefcase size={28} color={gradient.accent} strokeWidth={1.8} />
+                      </View>
+                      <Text style={styles.locationTitle} numberOfLines={2}>
+                        {card.name}
+                      </Text>
+                      <Text style={styles.locationAddress} numberOfLines={1}>
+                        {line1}
+                      </Text>
+                      <Text style={styles.locationAddress} numberOfLines={1}>
+                        {line2}
+                      </Text>
+                      {!card.persisted ? (
+                        <Text style={styles.locationLinkHint}>Tap to save details</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           <View style={styles.card}>
@@ -523,6 +652,21 @@ export function NetworkDesktopDetailsPanel({
           />
         </View>
       </View>
+
+      {orgId ? (
+        <NetworkDesktopLocationModal
+          visible={locationModalOpen}
+          orgId={orgId}
+          orgName={orgName}
+          location={editingLocation}
+          initialDraft={locationDraft}
+          onClose={() => {
+            setLocationModalOpen(false);
+            setEditingLocation(null);
+            setLocationDraft(undefined);
+          }}
+        />
+      ) : null}
     </View>
   );
 }

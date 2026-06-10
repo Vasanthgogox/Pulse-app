@@ -96,7 +96,6 @@ export function SupplierProfileHubHero({
           <View style={styles.heroAvatarRing}>
             <PartyAvatar
               entityType="supplier"
-              entityId={supplier.id}
               name={displayName}
               avatarUrl={supplier.avatar_url}
               avatarSeed={supplier.avatar_seed}

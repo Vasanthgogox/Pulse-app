@@ -31,6 +31,9 @@ import {
   LogOut,
   Settings2,
   Sparkles,
+  Car,
+  Truck,
+  User,
   Users,
   X,
 } from "lucide-react-native";
@@ -184,6 +187,33 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
       label: "Business Pulse intelligence",
       icon: <Sparkles size={14} color={NAVY} strokeWidth={2.2} />,
       route: ROUTES.BUSINESS_PULSE,
+    },
+  ];
+
+  const partyRows: HubRow[] = [
+    {
+      id: "party-customers",
+      label: "Customer",
+      icon: <Building2 size={14} color={NAVY} strokeWidth={2.2} />,
+      route: ROUTES.partyDirectory("customers"),
+    },
+    {
+      id: "party-suppliers",
+      label: "Supplier",
+      icon: <Truck size={14} color={NAVY} strokeWidth={2.2} />,
+      route: ROUTES.partyDirectory("suppliers"),
+    },
+    {
+      id: "party-drivers",
+      label: "Driver",
+      icon: <User size={14} color={NAVY} strokeWidth={2.2} />,
+      route: ROUTES.partyDirectory("drivers"),
+    },
+    {
+      id: "party-vehicles",
+      label: "Vehicle",
+      icon: <Car size={14} color={NAVY} strokeWidth={2.2} />,
+      route: ROUTES.partyDirectory("vehicles"),
     },
   ];
 
@@ -342,6 +372,39 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                     color={selected ? NAVY : Theme.textMuted}
                     strokeWidth={2}
                   />
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionAccent} />
+              <Text style={styles.sectionTitle}>Party</Text>
+            </View>
+            {partyRows.map((row, idx) => {
+              const isFirst = idx === 0;
+              return (
+                <Pressable
+                  key={row.id}
+                  onPress={() => {
+                    if (row.route) {
+                      onExit?.();
+                      navigate(row.route);
+                    }
+                  }}
+                  style={({ pressed }) => [
+                    styles.menuRow,
+                    isFirst && styles.menuRowFirst,
+                    pressed && styles.menuRowPressed,
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.menuRowIcon}>{row.icon}</View>
+                  <Text style={styles.menuRowLabel} numberOfLines={1}>
+                    {row.label}
+                  </Text>
+                  <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2} />
                 </Pressable>
               );
             })}

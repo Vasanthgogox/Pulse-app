@@ -67,7 +67,6 @@ export function ClientProfileHubHero({
           <View style={styles.heroAvatarRing}>
             <PartyAvatar
               entityType="client"
-              entityId={client.id}
               name={displayName}
               avatarUrl={client.avatar_url}
               avatarSeed={client.avatar_seed}

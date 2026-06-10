@@ -21,6 +21,7 @@ import {
   EMPTY_SALES_TARGET,
   getMonthStore,
   monthLabelFromKey,
+  previousMonthKey,
 } from "@/features/network/services/networkGoalsStorage.service";
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import type { TripRow } from "@/features/trips/services/trips.service";
@@ -550,6 +551,165 @@ export function balancePeriodMonthKeys(period: SalesDateRange): string[] {
   if (period === "6m") return getMonthKeys(6);
   if (period === "12m") return getMonthKeys(12);
   return getMonthKeys(18);
+}
+
+export type EntityMonthPerformance = {
+  monthKey: string;
+  label: string;
+  actualRevenue: number;
+  actualTrips: number;
+  targetRevenue: number;
+  targetTrips: number;
+  revenueProgressPct: number;
+  tripProgressPct: number;
+};
+
+export type EntityGoalRecommendation = {
+  recommendedRevenue: number;
+  recommendedTrips: number;
+  rationale: string;
+};
+
+/** Three calendar months immediately before the selected target month. */
+export function getPriorMonthKeys(
+  selectedMonthKey: string,
+  count = 3,
+): string[] {
+  const keys: string[] = [];
+  let cursor = selectedMonthKey;
+  for (let i = 0; i < count; i++) {
+    const prev = previousMonthKey(cursor);
+    if (!prev) break;
+    keys.unshift(prev);
+    cursor = prev;
+  }
+  return keys;
+}
+
+function entityTargetForMonth(
+  store: NetworkGoalsStore,
+  monthKey: string,
+  focus: GoalFocus,
+  entityId: string,
+): EntityTargetMetrics {
+  const month = getMonthStore(store, monthKey);
+  const bucket =
+    focus === "client"
+      ? month.clients
+      : focus === "vehicle"
+        ? month.vehicles
+        : month.drivers;
+  return bucket[entityId] ?? { ...EMPTY_ENTITY_TARGET };
+}
+
+export function buildEntityMonthlyPerformance(
+  focus: GoalFocus,
+  entityId: string,
+  trips: readonly TripRow[],
+  store: NetworkGoalsStore,
+  monthKeys: readonly string[],
+): EntityMonthPerformance[] {
+  return monthKeys.map((monthKey) => {
+    const actuals = entityActualsForFocus(focus, trips, [monthKey]);
+    const row = actuals.get(entityId) ?? { name: "", revenue: 0, trips: 0 };
+    const target = entityTargetForMonth(store, monthKey, focus, entityId);
+    return {
+      monthKey,
+      label: monthLabelFromKey(monthKey),
+      actualRevenue: row.revenue,
+      actualTrips: row.trips,
+      targetRevenue: target.revenueInr,
+      targetTrips: target.tripCount,
+      revenueProgressPct: progressPct(row.revenue, target.revenueInr),
+      tripProgressPct: progressPct(row.trips, target.tripCount),
+    };
+  });
+}
+
+export function recommendEntityGoalTarget(
+  history: readonly EntityMonthPerformance[],
+  previousMonthTarget: EntityTargetMetrics,
+  focus: GoalFocus,
+): EntityGoalRecommendation {
+  const trailing = history.filter((h) => h.actualRevenue > 0 || h.actualTrips > 0);
+  const avgRevenue =
+    trailing.length > 0
+      ? trailing.reduce((sum, h) => sum + h.actualRevenue, 0) / trailing.length
+      : 0;
+  const avgTrips =
+    trailing.length > 0
+      ? trailing.reduce((sum, h) => sum + h.actualTrips, 0) / trailing.length
+      : 0;
+  const last = history[history.length - 1];
+  const prevRevenue = previousMonthTarget.revenueInr;
+  const prevTrips = previousMonthTarget.tripCount;
+
+  if (focus === "client") {
+    if (prevRevenue > 0 && last) {
+      const hitRate = progressPct(last.actualRevenue, prevRevenue);
+      if (hitRate >= 90) {
+        return {
+          recommendedRevenue: Math.round(prevRevenue * 1.08),
+          recommendedTrips: 0,
+          rationale:
+            "Client beat last month's target — suggest an 8% stretch for the new month.",
+        };
+      }
+      if (hitRate >= 70) {
+        return {
+          recommendedRevenue: Math.round(prevRevenue),
+          recommendedTrips: 0,
+          rationale:
+            "Performance was close to target — carry the same revenue goal forward.",
+        };
+      }
+      return {
+        recommendedRevenue: Math.round(
+          Math.max(avgRevenue * 1.1, last.actualRevenue * 1.05, 0),
+        ),
+        recommendedTrips: 0,
+        rationale:
+          "Below prior target — recommend a realistic uplift from the 3-month average.",
+      };
+    }
+    const base = Math.max(avgRevenue, last?.actualRevenue ?? 0);
+    return {
+      recommendedRevenue: Math.round(base > 0 ? base * 1.12 : 0),
+      recommendedTrips: 0,
+      rationale:
+        base > 0
+          ? "No prior target — base recommendation on trailing client sales."
+          : "No sales history yet — set an introductory target manually.",
+    };
+  }
+
+  if (prevRevenue > 0 || prevTrips > 0) {
+    const revHit = prevRevenue > 0 && last
+      ? progressPct(last.actualRevenue, prevRevenue)
+      : 100;
+    const tripHit = prevTrips > 0 && last
+      ? progressPct(last.actualTrips, prevTrips)
+      : 100;
+    const blended = Math.round((revHit + tripHit) / 2);
+    if (blended >= 85) {
+      return {
+        recommendedRevenue: Math.round(prevRevenue * 1.05),
+        recommendedTrips: Math.max(0, Math.round(prevTrips * 1.05)),
+        rationale: "Asset is on track — modest 5% stretch on revenue and trips.",
+      };
+    }
+    return {
+      recommendedRevenue: Math.round(Math.max(avgRevenue, last?.actualRevenue ?? 0)),
+      recommendedTrips: Math.max(0, Math.round(Math.max(avgTrips, last?.actualTrips ?? 0))),
+      rationale: "Recommend aligning with recent actual performance.",
+    };
+  }
+
+  return {
+    recommendedRevenue: Math.round(avgRevenue * 1.1),
+    recommendedTrips: Math.max(0, Math.round(avgTrips * 1.1)),
+    rationale: "No saved target — use trailing 3-month averages as a starting point.",
+  };
 }
 
 export { EMPTY_SALES_TARGET };

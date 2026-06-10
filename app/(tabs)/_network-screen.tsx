@@ -620,7 +620,7 @@ function NetworkScreenInner() {
 
   const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
     if (item.role === "CLIENT") {
-      router.push(ROUTES.clientProfile(item.id) as Parameters<typeof router.push>[0]);
+      router.push(ROUTES.clientDetail(item.id) as Parameters<typeof router.push>[0]);
       return;
     }
     setSelectedProfileNode({

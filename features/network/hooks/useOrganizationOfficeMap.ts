@@ -1,4 +1,7 @@
-import { getOrganizationLocationsByIds } from "@/features/organization/services/organization.service";
+import {
+  getOrganizationLocationsByIds,
+  type OrganizationLocation,
+} from "@/features/organization/services/organization.service";
 import { geocodeOrganizationOffice } from "@/features/network/utils/geocodeOrganizationOffice.util";
 import { formatOrganizationOfficeAddress } from "@/features/network/utils/organizationOfficeLocation.util";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +15,7 @@ export type OrganizationOfficeMapData = {
   addressLabel: string;
   coordinate: OfficeMapCoordinate | null;
   geocodedName: string | null;
+  rawLocation: OrganizationLocation | null;
 };
 
 export function useOrganizationOfficeMap(orgId: string | null) {
@@ -31,7 +35,7 @@ export function useOrganizationOfficeMap(orgId: string | null) {
       const { coordinate, geocodedName } =
         await geocodeOrganizationOffice(location);
 
-      return { addressLabel, coordinate, geocodedName };
+      return { addressLabel, coordinate, geocodedName, rawLocation: location };
     },
   });
 }

@@ -207,7 +207,7 @@ export function SupplierProfileHub({
       </View>
 
       {/* Stats bar */}
-      <View style={styles.metricsWrap as object}>
+      <View style={{ paddingHorizontal: 32, paddingTop: 20, paddingBottom: 4, backgroundColor: "#ffffff" }}>
         <View style={styles.statsBar}>
           {stats.map((s, idx) => (
             <View

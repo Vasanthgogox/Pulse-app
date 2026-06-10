@@ -52,9 +52,12 @@ export function ClientProfileHub({
   bundle,
   initialTab = "overview",
   onBack,
+  onRefresh,
 }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<ClientProfileTab>(initialTab);
+  const orgId = String((bundle.client as Record<string, unknown>)?.organization_id ?? client.organization_id ?? "");
+  const clientId = client.id;
   const kyc = computeKycScore(bundle.kyc_documents);
   const locationLabel =
     [bundle.client?.state, bundle.client?.country].filter(Boolean).join(", ") ||
@@ -65,12 +68,14 @@ export function ClientProfileHub({
     if (initialTab) setTab(initialTab);
   }, [initialTab]);
 
+  const sharedProps = { bundle, orgId, clientId, onRefresh: onRefresh ?? (() => {}) };
+
   const panel = (() => {
     switch (tab) {
       case "overview":
         return <ClientProfileOverviewPanel bundle={bundle} />;
       case "contacts":
-        return <ClientProfileContactsPanel bundle={bundle} />;
+        return <ClientProfileContactsPanel {...sharedProps} />;
       case "kyc":
         return (
           <ClientProfileKycPanel
@@ -81,13 +86,13 @@ export function ClientProfileHub({
           />
         );
       case "warehouses":
-        return <ClientProfileWarehousesPanel bundle={bundle} />;
+        return <ClientProfileWarehousesPanel {...sharedProps} />;
       case "contracts":
-        return <ClientProfileContractsPanel bundle={bundle} />;
+        return <ClientProfileContractsPanel {...sharedProps} />;
       case "commercials":
-        return <ClientProfileCommercialsPanel bundle={bundle} />;
+        return <ClientProfileCommercialsPanel {...sharedProps} />;
       case "finance":
-        return <ClientProfileFinancePanel bundle={bundle} />;
+        return <ClientProfileFinancePanel {...sharedProps} />;
       case "vault":
         return <ClientProfileVaultPanel bundle={bundle} />;
       case "audit":

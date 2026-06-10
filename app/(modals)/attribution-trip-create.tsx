@@ -5,6 +5,7 @@ import {
   FullPageWizardFooter,
   FullPageWizardShell,
   fullPageWizardStyles,
+  WIZARD_PARTY_GRID_COLUMNS_DESKTOP,
   WizardClientPicker,
   WizardContextSummary,
   WizardNumericKeypadFlow,
@@ -570,6 +571,7 @@ export default function AttributionTripCreateModal() {
             }}
             onAddClient={openAddClientFlow}
             listMaxHeight={isWideLayout ? 340 : 260}
+            columns={isWideLayout ? WIZARD_PARTY_GRID_COLUMNS_DESKTOP : 2}
           />
         </>
       )}
@@ -597,9 +599,9 @@ export default function AttributionTripCreateModal() {
       <>
         <WizardPartyContextRow left={driverPartyCell} right={shipperPartyCell} />
         {isWideLayout ? (
-          <View style={styles.desktopStepGrid}>
-            <View style={styles.desktopStepCol}>{routeDetailsBlock}</View>
-            <View style={styles.desktopStepCol}>{selectClientBlock}</View>
+          <View style={styles.desktopStepStack}>
+            {routeDetailsBlock}
+            {selectClientBlock}
           </View>
         ) : (
           <>
@@ -735,15 +737,9 @@ const styles = StyleSheet.create({
   wizardStepTextActive: {
     ...fullPageWizardStyles.wizardStepTextActive,
   },
-  desktopStepGrid: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
+  desktopStepStack: {
     width: "100%",
-  },
-  desktopStepCol: {
-    flex: 1,
-    minWidth: 0,
+    gap: 12,
   },
   selectClientBlockWide: {
     minHeight: 360,

@@ -21,6 +21,7 @@ export {
   WIZARD_ACCENT,
   WIZARD_PARTY_AVATAR_SIZE,
   WIZARD_PARTY_GRID_COLUMNS,
+  WIZARD_PARTY_GRID_COLUMNS_DESKTOP,
 } from "./fullPageWizardStyles";
 export { WizardFormBody } from "./WizardFormBody";
 export {
