@@ -164,6 +164,13 @@ type NetworkProfileNode = {
   avatar_url?: string | null;
   avatar_seed?: string | null;
   is_integrated?: boolean;
+  // Enriched fields from snapshot
+  registered_address?: string | null;
+  branch_count?: number;
+  sector?: string | null;
+  website?: string | null;
+  gstin?: string | null;
+  operating_model?: string | null;
 };
 
 const UUID_REGEX =
@@ -451,6 +458,13 @@ function NetworkScreenInner() {
               avatar_url: snap.avatar_url ?? prev.avatar_url,
               avatar_seed: snap.avatar_seed ?? prev.avatar_seed,
               is_integrated: snap.is_integrated ?? prev.is_integrated,
+              // Enriched profile data
+              registered_address: snap.registered_address ?? null,
+              branch_count: snap.branch_count ?? 0,
+              sector: snap.sector ?? null,
+              website: snap.website ?? null,
+              gstin: snap.gstin ?? null,
+              operating_model: snap.operating_model ?? null,
             };
           });
         }
@@ -620,7 +634,7 @@ function NetworkScreenInner() {
 
   const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
     if (item.role === "CLIENT") {
-      router.push(ROUTES.clientProfile(item.id) as Parameters<typeof router.push>[0]);
+      router.push(ROUTES.clientDetail(item.id) as Parameters<typeof router.push>[0]);
       return;
     }
     setSelectedProfileNode({
@@ -1252,7 +1266,8 @@ function NetworkScreenInner() {
     hubTabParam === "goals" ||
     hubTabParam === "asset" ||
     hubTabParam === "connections" ||
-    hubTabParam === "grow"
+    hubTabParam === "grow" ||
+    hubTabParam === "chat"
       ? hubTabParam
       : undefined;
 
@@ -1312,7 +1327,11 @@ function NetworkScreenInner() {
           }}
         />
       ) : null}
-      {desktopHub ?? scrollContent}
+      {desktopHub ? (
+        <View style={styles.desktopHubShell}>{desktopHub}</View>
+      ) : (
+        scrollContent
+      )}
       <MutualConnectionsModal
         visible={Boolean(mutualModalTarget)}
         viewerOrgId={orgId}
@@ -1484,6 +1503,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Theme.networkPageBackground,
     minHeight: 0,
+  },
+  desktopHubShell: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
   },
   orgGateWrap: {
     flex: 1,

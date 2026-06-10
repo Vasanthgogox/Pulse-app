@@ -6,6 +6,7 @@ import { useAvatar } from '@/lib/useAvatar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useDriverAvatar } from '@/contexts/DriverAvatarContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { EditProfileModal } from '@/features/auth/components/EditProfileModal';
@@ -30,6 +31,7 @@ import {
     Edit3,
     Fuel,
     Gauge,
+    Globe,
     History,
     LogOut,
     Milestone,
@@ -88,6 +90,9 @@ export default function DriverProfileScreen() {
   const isDark = theme === 'dark';
   const colors = useDriverThemeColors();
   const { user, profile, signOut, refreshSession, patchProfile } = useAuth();
+  const { locale, localeOptions } = useLanguage();
+  const languageLabel =
+    localeOptions.find((o) => o.value === locale)?.label ?? 'English';
   const { avatarSeed, setAvatarSeed, setPreviewUri } = useDriverAvatar();
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [profileView, setProfileView] = useState<ProfileView>('main');
@@ -678,6 +683,34 @@ export default function DriverProfileScreen() {
                   </View>
                 </TouchableOpacity>
 
+                <TouchableOpacity
+                  style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]}
+                  onPress={() =>
+                    router.push(
+                      ROUTES.MODALS.LANGUAGE_SETTINGS as Parameters<typeof router.push>[0],
+                    )
+                  }
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel="Language settings"
+                >
+                  <View style={styles.rowCardLeft}>
+                    <View style={styles.violetIcon}>
+                      <Globe size={18} color={Theme.primary} />
+                    </View>
+                    <View style={styles.rowCardText}>
+                      <Text style={[styles.rowEyebrow, { color: muted }]}>PREFERENCES</Text>
+                      <Text style={[styles.rowTitle, { color: colors.text }]}>Language</Text>
+                      <Text style={[styles.rowSub, { color: muted }]} numberOfLines={1}>
+                        {languageLabel}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.chevPill, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
+                    <ChevronRight size={18} color={muted} />
+                  </View>
+                </TouchableOpacity>
+
                 <View style={styles.statsRow}>
                   <View style={[styles.statBox, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
                     <View style={styles.amberIcon}>
@@ -919,6 +952,14 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 14,
     backgroundColor: SLATE_900,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  violetIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(79,70,229,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },

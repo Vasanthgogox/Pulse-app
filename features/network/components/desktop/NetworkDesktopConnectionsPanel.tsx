@@ -32,6 +32,7 @@ type Props = {
   onConnFilterChange: (v: ConnectionFilterTab) => void;
   onOpenProfile: (item: ConnectedOrg) => void;
   onConnectionsComputed?: (connections: ConnectedOrg[]) => void;
+  onChatIntegrated?: (item: ConnectedOrg) => void;
 };
 
 export function NetworkDesktopConnectionsPanel({
@@ -43,6 +44,7 @@ export function NetworkDesktopConnectionsPanel({
   onConnFilterChange,
   onOpenProfile,
   onConnectionsComputed,
+  onChatIntegrated,
 }: Props) {
   const [connections, setConnections] = useState<ConnectedOrg[]>([]);
 
@@ -118,6 +120,7 @@ export function NetworkDesktopConnectionsPanel({
           hubMode
           desktopMetronicGrid
           desktopMetronicHorizontalScroll
+          onChatIntegrated={onChatIntegrated}
           hubSearch={connSearch}
           hubFilter={connFilter}
           onOpenProfile={onOpenProfile}

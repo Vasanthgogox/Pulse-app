@@ -104,7 +104,9 @@ const localeBundles: Record<AppLocale, Record<string, string>> = {
 export function getTranslation(key: string, locale: AppLocale): string {
   const bundle = localeBundles[locale];
   const enBundle = localeBundles.en;
-  if (!bundle || !enBundle) return key;
+  if (!enBundle) return key;
+  // If bundle is empty or missing, fall back to English
+  if (!bundle || Object.keys(bundle).length === 0) return enBundle[key] ?? key;
   return bundle[key] ?? enBundle[key] ?? key;
 }
 

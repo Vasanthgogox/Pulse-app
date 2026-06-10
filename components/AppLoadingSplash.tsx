@@ -4,7 +4,7 @@
  */
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import { tGlobal, useLanguage } from '@/contexts/LanguageContext';
+import { tGlobal, useOptionalLanguage } from '@/contexts/LanguageContext';
 import { MotiView } from 'moti';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -159,7 +159,7 @@ export function AppLoadingSplash(props: AppLoadingSplashProps) {
 }
 
 function AppLoadingSplashWithLanguage(props: AppLoadingSplashProps) {
-  const { t } = useLanguage();
+  const { t } = useOptionalLanguage();
   return <AppLoadingSplashView {...props} translate={t} />;
 }
 

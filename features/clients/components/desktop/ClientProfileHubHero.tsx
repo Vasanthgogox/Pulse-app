@@ -67,7 +67,6 @@ export function ClientProfileHubHero({
           <View style={styles.heroAvatarRing}>
             <PartyAvatar
               entityType="client"
-              entityId={client.id}
               name={displayName}
               avatarUrl={client.avatar_url}
               avatarSeed={client.avatar_seed}
@@ -117,7 +116,7 @@ export function ClientProfileHubHero({
           <View style={cpStyles.heroTagRow}>
             <StatusPill label="CLIENT" />
             <StatusPill
-              label={inApp ? "IN APP" : "NOT IN APP"}
+              label={inApp ? "INTEGRATED" : "NOT IN APP"}
               tone={inApp ? "green" : "muted"}
             />
             <StatusPill label={status.toUpperCase()} tone="warn" />

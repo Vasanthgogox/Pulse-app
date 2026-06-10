@@ -286,7 +286,8 @@ export default function DriverSignUpScreen() {
   }, []);
 
   const pageBody = (pageIndex: number, content: React.ReactNode) => {
-    if (useMobileLayout && pageIndex !== step) return null;
+    // Always gate on current step — the horizontal pager doesn't work reliably on web.
+    if (pageIndex !== step) return null;
 
     const inner = (
       <View
@@ -386,7 +387,7 @@ export default function DriverSignUpScreen() {
 
   const goToPage = (index: number) => {
     setStep(index);
-    scrollRef.current?.scrollTo({ x: index * pageWidth, animated: true });
+    // scrollTo removed — only one step renders at a time so there is nothing to scroll.
   };
 
   const validatePhoneStep = async () => {

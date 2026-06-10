@@ -2,7 +2,7 @@ import Layout from '@/constants/Layout';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { tGlobal } from '@/contexts/LanguageContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import {
   claimIndexBootRedirect,
@@ -34,7 +34,6 @@ const SIGN_IN_BOOT_KEY = '__sign_in__';
 
 export default function Index() {
   const insets = useSafeAreaInsets();
-  const { t } = useLanguage();
   const isOnline = useIsOnline();
   const { user, profile, roleVerified, loading, refreshSession } = useAuth();
   const router = useRouter();
@@ -136,7 +135,7 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <AppLoadingSplash variant={splashVariant} />
+      <AppLoadingSplash variant={splashVariant} useGlobalI18n />
       {(showOfflineHint || showRetry) && (
         <View
           style={[
@@ -145,18 +144,18 @@ export default function Index() {
           ]}
         >
           {showOfflineHint ? (
-            <Text style={styles.splashHint}>{t('splashOfflineHint')}</Text>
+            <Text style={styles.splashHint}>{tGlobal('splashOfflineHint')}</Text>
           ) : null}
           {showRetry ? (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel={t('splashRetrySession')}
+              accessibilityLabel={tGlobal('splashRetrySession')}
               style={styles.retryButton}
               onPress={() => {
                 void refreshSession();
               }}
             >
-              <Text style={styles.retryLabel}>{t('splashRetrySession')}</Text>
+              <Text style={styles.retryLabel}>{tGlobal('splashRetrySession')}</Text>
             </TouchableOpacity>
           ) : null}
         </View>

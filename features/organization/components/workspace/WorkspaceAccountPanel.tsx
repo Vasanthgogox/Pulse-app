@@ -15,12 +15,18 @@ import {
   WORKSPACE_PANEL_TITLES,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
+import { ROUTES } from "@/lib/routes";
 import {
   Building2,
+  ChevronRight,
   Lock,
   MessageSquare,
   Pencil,
+  Settings2,
   Shield,
+  Sparkles,
+  Users,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -35,6 +41,8 @@ const AMBER_TINT = "rgba(217,119,6,0.08)";
 type Props = {
   onBack: () => void;
   onEdit: () => void;
+  onOpenPanel?: (panel: WorkspacePanelId) => void;
+  onOpenRoute?: (path: string) => void;
 };
 
 function SectionHeader({ label }: { label: string }) {
@@ -164,7 +172,48 @@ const rowStyles = StyleSheet.create({
   },
 });
 
-export function WorkspaceAccountPanel({ onBack, onEdit }: Props) {
+function ManagementRow({
+  label,
+  icon,
+  onPress,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [mgmtStyles.row, pressed && { opacity: 0.85 }]}
+      accessibilityRole="button"
+    >
+      <View style={mgmtStyles.icon}>{icon}</View>
+      <Text style={mgmtStyles.label}>{label}</Text>
+      <ChevronRight size={13} color={Theme.textMuted} strokeWidth={2} />
+    </Pressable>
+  );
+}
+
+const mgmtStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  icon: { width: 28, alignItems: "center" },
+  label: { flex: 1, fontSize: 12, fontWeight: "600", color: Theme.textPrimaryDark },
+});
+
+export function WorkspaceAccountPanel({
+  onBack,
+  onEdit,
+  onOpenPanel,
+  onOpenRoute,
+}: Props) {
   const { profile, user, status } = useAuth();
 
   const isLoading = status === "restoring";
@@ -316,6 +365,40 @@ export function WorkspaceAccountPanel({ onBack, onEdit }: Props) {
           </View>
         </View>
       </View>
+
+      {(onOpenPanel || onOpenRoute) ? (
+        <View style={styles.card}>
+          <SectionHeader label="Workspace Management" />
+          {onOpenPanel ? (
+            <>
+              <ManagementRow
+                label="Workspace settings"
+                icon={<Building2 size={15} color={PURPLE} strokeWidth={1.8} />}
+                onPress={() => onOpenPanel("settings")}
+              />
+              <ManagementRow
+                label="Org identity & KYC"
+                icon={<Settings2 size={15} color={PURPLE} strokeWidth={1.8} />}
+                onPress={() => onOpenPanel("kyc")}
+              />
+            </>
+          ) : null}
+          {onOpenRoute ? (
+            <>
+              <ManagementRow
+                label="Team members"
+                icon={<Users size={15} color={PURPLE} strokeWidth={1.8} />}
+                onPress={() => onOpenRoute(ROUTES.MODALS.TEAM)}
+              />
+              <ManagementRow
+                label="Business Pulse intelligence"
+                icon={<Sparkles size={15} color={PURPLE} strokeWidth={1.8} />}
+                onPress={() => onOpenRoute(ROUTES.BUSINESS_PULSE)}
+              />
+            </>
+          ) : null}
+        </View>
+      ) : null}
 
     </WorkspaceDetailLayout>
   );

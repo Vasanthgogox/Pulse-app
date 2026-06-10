@@ -229,6 +229,14 @@ export const queryKeys = {
     list: (orgId: string) => ["q", "org-members", orgId, "list"] as const,
   },
 
+  organizationLocations: {
+    list: (orgId: string) => ["q", "organization-locations", orgId] as const,
+  },
+
+  organizationWorkspaceProfile: {
+    detail: (orgId: string) => ["q", "organization-workspace-profile", orgId] as const,
+  },
+
   teamInvites: {
     mine: () => ["q", "team-invites", "mine"] as const,
   },

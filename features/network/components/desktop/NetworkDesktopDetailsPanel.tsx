@@ -1,20 +1,37 @@
 /**
  * Details tab — Metronic company profile (Highlights, Open protocols, Company
- * profile, Locations, Projects) aligned with KeenThemes reference.
+ * profile, Locations) with inline CRUD aligned to KeenThemes reference.
  */
 import Theme from "@/constants/Theme";
 import type { CurrentOrganization } from "@/types/organization";
 import { NetworkDesktopHeadquarterMap } from "@/features/network/components/desktop/NetworkDesktopHeadquarterMap";
+import { NetworkDesktopLocationModal } from "@/features/network/components/desktop/NetworkDesktopLocationModal";
 import { NetworkDesktopPeopleStack } from "@/features/network/components/desktop/NetworkDesktopPeopleStack";
+import { buildProjectPeopleStack } from "@/features/network/utils/networkProjectPeople.util";
+import {
+  NetworkDesktopWorkspaceProfileModal,
+  type WorkspaceProfileEditSection,
+} from "@/features/network/components/desktop/NetworkDesktopWorkspaceProfileModal";
+import { useOrganizationOfficeMap } from "@/features/network/hooks/useOrganizationOfficeMap";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
-import { useOrganizationOfficeMap } from "@/features/network/hooks/useOrganizationOfficeMap";
-import { buildProjectPeopleStack } from "@/features/network/utils/networkProjectPeople.util";
-import { useClientsQuery } from "@/lib/queries/useClientsQuery";
-import { useDriversQuery } from "@/lib/queries/useDriversQuery";
-import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import {
+  buildHeadquarterLocationCard,
+  formatLocationSubtitle,
+  LOCATION_TYPE_GRADIENTS,
+  type LocationCardModel,
+} from "@/features/network/utils/organizationLocationDisplay.util";
+import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
+import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
+import {
+  useClientsQuery,
+  useDriversQuery,
+  useSuppliersQuery,
+} from "@/lib/queries";
+import { useOrganizationLocationsQuery } from "@/lib/queries/useOrganizationLocationsQuery";
+import { useOrganizationWorkspaceProfileQuery } from "@/lib/queries/useOrganizationWorkspaceProfileQuery";
 import {
   Briefcase,
   Calendar,
@@ -22,15 +39,24 @@ import {
   Mail,
   MapPin,
   MoreHorizontal,
+  Pencil,
   Phone,
+  Plus,
   Truck,
   User,
   UserPlus,
   Users,
 } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 
 type Props = {
   orgId: string | null;
@@ -52,6 +78,40 @@ function StatusPill({ label }: { label: string }) {
   );
 }
 
+function CardHeader({
+  title,
+  onEdit,
+  editLabel = "Edit",
+  action,
+}: {
+  title: string;
+  onEdit?: () => void;
+  editLabel?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <View style={styles.cardHeaderRow}>
+      <Text style={[styles.cardTitle, styles.cardTitleInline]}>{title}</Text>
+      {action}
+      {onEdit ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.cardEditBtn,
+            pressed && { opacity: 0.85 },
+            Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+          ]}
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel={`${editLabel} ${title}`}
+        >
+          <Pencil size={12} color={METRONIC.muted} strokeWidth={2.2} />
+          <Text style={styles.cardEditBtnText}>{editLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function HighlightRow({
   label,
   value,
@@ -69,7 +129,7 @@ function HighlightRow({
     <View style={[styles.kvRow, last && styles.kvRowLast]}>
       <Text style={styles.kvLabel}>{label}</Text>
       {valueNode ?? (
-        <Text style={[styles.kvValue, link && styles.kvValueLink]} numberOfLines={1}>
+        <Text style={[styles.kvValue, link && styles.kvValueLink]} numberOfLines={2}>
           {value}
         </Text>
       )}
@@ -84,10 +144,11 @@ function NetworkLinkRow({
   icon: typeof Globe;
   value: string;
 }) {
+  if (!value || value === "—") return null;
   return (
     <View style={styles.networkLinkRow}>
       <Icon size={15} color={METRONIC.muted} strokeWidth={2} />
-      <Text style={styles.networkLinkText} numberOfLines={1}>
+      <Text style={styles.networkLinkText} numberOfLines={2}>
         {value}
       </Text>
     </View>
@@ -153,13 +214,7 @@ function OpenProtocolRow({
   );
 }
 
-const LOCATION_GRADIENTS = [
-  { bg: "#E8FFF3", accent: "#50CD89", label: "Primary hub" },
-  { bg: "#F8F5FF", accent: "#7239EA", label: "Regional office" },
-  { bg: "#F1FAFF", accent: "#009EF7", label: "Dispatch center" },
-] as const;
-
-const PRODUCT_TAGS = [
+const CAPABILITY_TAGS = [
   "Trips",
   "Indents",
   "Ledger",
@@ -169,6 +224,64 @@ const PRODUCT_TAGS = [
   "Chat",
   "Analytics",
 ] as const;
+
+function defaultAbout(orgName: string, modelLabel: string): string {
+  return `${orgName} uses Pulse to manage clients, suppliers, and fleet partners on one network. Connect with verified organisations to share trips, indents, and ledger entries across your ${modelLabel.toLowerCase()} workspace.`;
+}
+
+function defaultProducts(
+  canPostLoads: boolean,
+  canBid: boolean,
+  canManageAssets: boolean,
+  marketplaceOn: boolean,
+): string[] {
+  return [
+    "Trip management",
+    canPostLoads ? "Load posting" : "Load viewing",
+    canBid ? "Market bidding" : "Partner matching",
+    canManageAssets ? "Asset fleet" : "Partner fleet",
+    marketplaceOn ? "Marketplace" : "Private network",
+    "Ledger sync",
+  ];
+}
+
+function profileDerived(
+  profile: OrganizationWorkspaceProfile | undefined,
+  orgName: string,
+  email: string,
+  slug: string,
+  modelLabel: string,
+  canPostLoads: boolean,
+  canBid: boolean,
+  canManageAssets: boolean,
+  marketplaceOn: boolean,
+) {
+  const foundedYear =
+    profile?.founded_year ??
+    (profile?.created_at ? new Date(profile.created_at).getFullYear() : new Date().getFullYear());
+
+  return {
+    foundedYear: String(foundedYear),
+    area: profile?.profile_area?.trim() || profile?.zone?.trim() || "India",
+    ceo: profile?.profile_ceo_name?.trim() || email.split("@")[0] || "Owner",
+    sector: profile?.profile_sector?.trim() || "Logistics & transport",
+    website:
+      profile?.profile_website?.trim() ||
+      `https://${slug || "workspace"}.pulse`,
+    facebook: profile?.profile_facebook?.trim() || "",
+    youtube: profile?.profile_youtube?.trim() || "",
+    about:
+      profile?.profile_about?.trim() ||
+      defaultAbout(orgName, modelLabel),
+    products:
+      (profile?.profile_products?.length ?? 0) > 0
+        ? profile!.profile_products
+        : defaultProducts(canPostLoads, canBid, canManageAssets, marketplaceOn),
+    addressLine: profile?.address_line?.trim() || "",
+    city: profile?.city?.trim() || "",
+    state: profile?.state?.trim() || "",
+  };
+}
 
 export function NetworkDesktopDetailsPanel({
   orgId,
@@ -181,13 +294,29 @@ export function NetworkDesktopDetailsPanel({
   driverCount,
   pendingInviteCount,
 }: Props) {
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [editingLocation, setEditingLocation] =
+    useState<OrganizationWorkspaceLocation | null>(null);
+  const [locationDraft, setLocationDraft] = useState<
+    Partial<{
+      name: string;
+      location_type: OrganizationWorkspaceLocation["location_type"];
+      department: string;
+      address_line: string;
+      city: string;
+      state: string;
+      is_verified: boolean;
+    }>
+  >();
+  const [profileEditSection, setProfileEditSection] =
+    useState<WorkspaceProfileEditSection | null>(null);
+
+  const profileQ = useOrganizationWorkspaceProfileQuery(orgId);
   const officeMapQ = useOrganizationOfficeMap(orgId);
+  const locationsQ = useOrganizationLocationsQuery(orgId);
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const driversQ = useDriversQuery(orgId);
-  const officeAddress =
-    officeMapQ.data?.addressLabel ?? "Registered business address on file";
-  const officeCoordinate = officeMapQ.data?.coordinate ?? null;
 
   const orgName = organization?.name?.trim() || "Your workspace";
   const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -199,10 +328,39 @@ export function NetworkDesktopDetailsPanel({
   const canBid = organization?.capabilities?.canBid ?? false;
   const canManageAssets = organization?.capabilities?.canManageAssets ?? false;
 
-  const activeTags = PRODUCT_TAGS.filter((_, i) => {
-    const flags = [true, canPostLoads, true, canManageAssets, marketplaceOn, true, true, totalConnections > 0];
+  const activeCapabilityTags = CAPABILITY_TAGS.filter((_, i) => {
+    const flags = [
+      true,
+      canPostLoads,
+      true,
+      canManageAssets,
+      marketplaceOn,
+      true,
+      true,
+      totalConnections > 0,
+    ];
     return flags[i];
   });
+
+  const derived = profileDerived(
+    profileQ.data,
+    orgName,
+    email,
+    slug,
+    modelLabel,
+    canPostLoads,
+    canBid,
+    canManageAssets,
+    marketplaceOn,
+  );
+
+  const officeAddress = useMemo(() => {
+    const parts = [derived.addressLine, derived.city, derived.state].filter(Boolean);
+    if (parts.length > 0) return parts.join(", ");
+    return officeMapQ.data?.addressLabel ?? "Add your registered office address";
+  }, [derived.addressLine, derived.city, derived.state, officeMapQ.data?.addressLabel]);
+
+  const officeCoordinate = officeMapQ.data?.coordinate ?? null;
 
   const stats = [
     { value: String(totalConnections), label: "Connections" },
@@ -210,6 +368,65 @@ export function NetworkDesktopDetailsPanel({
     { value: String(supplierCount), label: "Suppliers" },
     { value: String(driverCount), label: "Fleet" },
   ];
+
+  const headquarterCard = useMemo(
+    () => buildHeadquarterLocationCard(orgName, officeMapQ.data?.rawLocation ?? null),
+    [officeMapQ.data?.rawLocation, orgName],
+  );
+
+  const locationCards: LocationCardModel[] = useMemo(() => {
+    const saved = locationsQ.data ?? [];
+    if (saved.length === 0) return [headquarterCard];
+    return saved.map((loc) => ({
+      id: loc.id,
+      name: loc.name,
+      locationType: loc.location_type,
+      department: loc.department ?? "Operations & dispatch",
+      addressLine: loc.address_line?.trim() ?? "",
+      city: loc.city,
+      state: loc.state,
+      verified: loc.is_verified,
+      persisted: true,
+    }));
+  }, [headquarterCard, locationsQ.data]);
+
+  const locationCountLabel = useMemo(() => {
+    const locs = locationsQ.data ?? [];
+    if (locs.length === 0) return "Add locations";
+    const regOff = locs.filter((l) => l.location_type === "registered_office").length;
+    const branches = locs.filter((l) => l.location_type === "branch_office").length;
+    const hubs = locs.filter((l) => l.location_type === "primary_hub" || l.location_type === "regional_office" || l.location_type === "dispatch_center").length;
+    const warehouses = locs.filter((l) => l.location_type === "warehouse").length;
+    const parts: string[] = [];
+    if (regOff > 0) parts.push(`${regOff} Reg. office`);
+    if (branches > 0) parts.push(`${branches} Branch${branches > 1 ? "es" : ""}`);
+    if (hubs > 0) parts.push(`${hubs} Hub${hubs > 1 ? "s" : ""}`);
+    if (warehouses > 0) parts.push(`${warehouses} WH`);
+    return parts.length > 0 ? parts.join(" · ") : `${locs.length} location${locs.length > 1 ? "s" : ""}`;
+  }, [locationsQ.data]);
+
+  const openAddLocation = (type: OrganizationWorkspaceLocation["location_type"] = "registered_office") => {
+    setEditingLocation(null);
+    const labelMap: Record<string, string> = {
+      registered_office: "Registered office",
+      branch_office: "Branch office",
+      primary_hub: "Hub",
+      regional_office: "Regional office",
+      dispatch_center: "Dispatch center",
+      warehouse: "Warehouse",
+      other: "Location",
+    };
+    setLocationDraft({
+      name: `${orgName} ${labelMap[type] ?? "Location"}`,
+      location_type: type,
+      department: type === "registered_office" ? "Legal & compliance" : "Operations & dispatch",
+      address_line: derived.addressLine || officeMapQ.data?.addressLabel,
+      city: derived.city || officeMapQ.data?.rawLocation?.city || undefined,
+      state: derived.state || officeMapQ.data?.rawLocation?.state || undefined,
+      is_verified: false,
+    });
+    setLocationModalOpen(true);
+  };
 
   const activeDrivers = useMemo(
     () => (driversQ.data ?? []).filter((d) => !d.left_at),
@@ -262,6 +479,36 @@ export function NetworkDesktopDetailsPanel({
     totalConnections,
   ]);
 
+  const openLocationDetail = (card: LocationCardModel) => {
+    if (card.persisted) {
+      const row = (locationsQ.data ?? []).find((l) => l.id === card.id);
+      if (!row) return;
+      setEditingLocation(row);
+      setLocationDraft(undefined);
+      setLocationModalOpen(true);
+      return;
+    }
+    setEditingLocation(null);
+    setLocationDraft({
+      name: card.name,
+      location_type: card.locationType,
+      department: card.department,
+      address_line: card.addressLine || officeAddress,
+      city: card.city ?? undefined,
+      state: card.state ?? undefined,
+      is_verified: card.verified,
+    });
+    setLocationModalOpen(true);
+  };
+
+  if (!orgId) {
+    return (
+      <View style={styles.detailsBody}>
+        <ActivityIndicator color={METRONIC.muted} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.detailsBody}>
       <View style={styles.statsBar}>
@@ -279,13 +526,16 @@ export function NetworkDesktopDetailsPanel({
       <View style={styles.splitRow}>
         <View style={styles.sidebar}>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Highlights</Text>
-            <HighlightRow label="Locations" value="3 hubs" />
-            <HighlightRow label="Founded" value="2024" />
+            <CardHeader
+              title="Highlights"
+              onEdit={() => setProfileEditSection("highlights")}
+            />
+            <HighlightRow label="Locations" value={locationCountLabel} />
+            <HighlightRow label="Founded" value={derived.foundedYear} />
             <HighlightRow label="Status" valueNode={<StatusPill label="Subscribed" />} />
-            <HighlightRow label="Area" value="India" />
-            <HighlightRow label="CEO" value={email.split("@")[0] || "Owner"} link />
-            <HighlightRow label="Sector" value="Logistics & transport" last />
+            <HighlightRow label="Area" value={derived.area} />
+            <HighlightRow label="CEO" value={derived.ceo} link />
+            <HighlightRow label="Sector" value={derived.sector} last />
           </View>
 
           <View style={styles.card}>
@@ -315,11 +565,11 @@ export function NetworkDesktopDetailsPanel({
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Network</Text>
-            <NetworkLinkRow
-              icon={Globe}
-              value={`https://${slug || "workspace"}.pulse`}
+            <CardHeader
+              title="Network"
+              onEdit={() => setProfileEditSection("contact")}
             />
+            <NetworkLinkRow icon={Globe} value={derived.website} />
             <NetworkLinkRow icon={Mail} value={email} />
             <NetworkLinkRow icon={Phone} value={phoneDisplay} />
           </View>
@@ -327,7 +577,7 @@ export function NetworkDesktopDetailsPanel({
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Tags</Text>
             <View style={styles.tagWrap}>
-              {activeTags.map((tag) => (
+              {activeCapabilityTags.map((tag) => (
                 <View key={tag} style={styles.tagPill}>
                   <Text style={styles.tagPillText}>{tag}</Text>
                 </View>
@@ -338,7 +588,10 @@ export function NetworkDesktopDetailsPanel({
 
         <View style={styles.mainCol}>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Company profile</Text>
+            <CardHeader
+              title="Company profile"
+              onEdit={() => setProfileEditSection("contact")}
+            />
 
             <Text style={styles.sectionHeading}>Headquarter</Text>
             <View style={styles.headquarterRow}>
@@ -346,36 +599,50 @@ export function NetworkDesktopDetailsPanel({
                 orgName={orgName}
                 addressLabel={officeAddress}
                 coordinate={officeCoordinate}
-                loading={officeMapQ.isLoading}
+                loading={officeMapQ.isLoading || profileQ.isLoading}
               />
               <View style={styles.contactList}>
-                <NetworkLinkRow
-                  icon={Globe}
-                  value={`https://${slug || "workspace"}.pulse`}
-                />
+                <NetworkLinkRow icon={Globe} value={derived.website} />
+                {derived.facebook ? (
+                  <NetworkLinkRow icon={Globe} value={derived.facebook} />
+                ) : null}
+                {derived.youtube ? (
+                  <NetworkLinkRow icon={Globe} value={derived.youtube} />
+                ) : null}
                 <NetworkLinkRow icon={Mail} value={email} />
                 <NetworkLinkRow icon={Phone} value={phoneDisplay} />
                 <NetworkLinkRow icon={MapPin} value={officeAddress} />
               </View>
             </View>
 
-            <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>About</Text>
-            <Text style={styles.aboutBody}>
-              {orgName} uses Pulse to manage clients, suppliers, and fleet partners on one
-              network. Connect with verified organisations to share trips, indents, and
-              ledger entries across your {modelLabel.toLowerCase()} workspace.
-            </Text>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>
+                About
+              </Text>
+              <Pressable
+                style={styles.cardEditBtn}
+                onPress={() => setProfileEditSection("about")}
+              >
+                <Pencil size={12} color={METRONIC.muted} strokeWidth={2.2} />
+                <Text style={styles.cardEditBtnText}>Edit</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.aboutBody}>{derived.about}</Text>
 
-            <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>Products</Text>
+            <View style={styles.cardHeaderRow}>
+              <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>
+                Products
+              </Text>
+              <Pressable
+                style={styles.cardEditBtn}
+                onPress={() => setProfileEditSection("products")}
+              >
+                <Pencil size={12} color={METRONIC.muted} strokeWidth={2.2} />
+                <Text style={styles.cardEditBtnText}>Edit</Text>
+              </Pressable>
+            </View>
             <View style={styles.tagWrap}>
-              {[
-                "Trip management",
-                canPostLoads ? "Load posting" : "Load viewing",
-                canBid ? "Market bidding" : "Partner matching",
-                canManageAssets ? "Asset fleet" : "Partner fleet",
-                marketplaceOn ? "Marketplace" : "Private network",
-                "Ledger sync",
-              ].map((product) => (
+              {derived.products.map((product) => (
                 <View key={product} style={styles.productPill}>
                   <Text style={styles.productPillText}>{product}</Text>
                 </View>
@@ -384,35 +651,102 @@ export function NetworkDesktopDetailsPanel({
           </View>
 
           <View style={styles.card}>
-            <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>Locations</Text>
-              <Pressable style={styles.offerLocationBtn}>
-                <MapPin size={12} color={Theme.textOnPrimary} strokeWidth={2.4} />
-                <Text style={styles.offerLocationBtnText}>Offer location</Text>
-              </Pressable>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.locationsScroll}
-            >
-              {LOCATION_GRADIENTS.map((loc, i) => (
-                <View key={loc.label} style={styles.locationCard}>
-                  <View style={[styles.locationImage, { backgroundColor: loc.bg }]}>
-                    <Briefcase size={28} color={loc.accent} strokeWidth={1.8} />
-                  </View>
-                  <Text style={styles.locationTitle}>
-                    {orgName} {loc.label}
-                  </Text>
-                  <Text style={styles.locationAddress}>
-                    Hub {i + 1} · Operations & dispatch
-                  </Text>
-                  <Text style={styles.locationAddress}>
-                    India · Verified workspace
-                  </Text>
+            <CardHeader
+              title="Locations & offices"
+              action={
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <Pressable
+                    style={[styles.offerLocationBtn, { backgroundColor: METRONIC.text }]}
+                    onPress={() => openAddLocation("registered_office")}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add registered office"
+                  >
+                    <Plus size={12} color="#fff" strokeWidth={2.6} />
+                    <Text style={[styles.offerLocationBtnText]}>Reg. Office</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.offerLocationBtn}
+                    onPress={() => openAddLocation("branch_office")}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add branch"
+                  >
+                    <Plus size={12} color={Theme.textOnPrimary} strokeWidth={2.6} />
+                    <Text style={styles.offerLocationBtnText}>Branch</Text>
+                  </Pressable>
                 </View>
-              ))}
-            </ScrollView>
+              }
+            />
+            {locationsQ.isLoading ? (
+              <View style={styles.locationsEmpty}>
+                <ActivityIndicator color={METRONIC.muted} />
+              </View>
+            ) : locationCards.length === 0 ? (
+              <View style={styles.locationsEmpty}>
+                <Text style={styles.locationsEmptyText}>
+                  No locations yet. Add your registered office or branch.
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                  <Pressable style={[styles.offerLocationBtn, { backgroundColor: METRONIC.text }]} onPress={() => openAddLocation("registered_office")}>
+                    <Plus size={12} color="#fff" strokeWidth={2.6} />
+                    <Text style={styles.offerLocationBtnText}>Registered office</Text>
+                  </Pressable>
+                  <Pressable style={styles.offerLocationBtn} onPress={() => openAddLocation("branch_office")}>
+                    <Plus size={12} color={Theme.textOnPrimary} strokeWidth={2.6} />
+                    <Text style={styles.offerLocationBtnText}>Branch office</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.locationsGrid}>
+                {locationCards.map((card, i) => {
+                  const gradient = LOCATION_TYPE_GRADIENTS[card.locationType];
+                  const { line1, line2 } = formatLocationSubtitle(
+                    i + 1,
+                    card.department,
+                    card.city,
+                    card.state,
+                    card.verified,
+                    card.locationType,
+                  );
+                  return (
+                    <Pressable
+                      key={card.id}
+                      style={({ pressed }) => [
+                        styles.locationCard,
+                        styles.locationCardPressable,
+                        Platform.OS === "web"
+                          ? ({ cursor: "pointer" } as ViewStyle)
+                          : null,
+                        pressed && { opacity: 0.92 },
+                      ]}
+                      onPress={() => openLocationDetail(card)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${card.name}`}
+                    >
+                      <View
+                        style={[styles.locationImage, { backgroundColor: gradient.bg }]}
+                      >
+                        <Briefcase size={28} color={gradient.accent} strokeWidth={1.8} />
+                      </View>
+                      <Text style={styles.locationTitle} numberOfLines={2}>
+                        {card.name}
+                      </Text>
+                      <Text style={styles.locationAddress} numberOfLines={1}>
+                        {line1}
+                      </Text>
+                      <Text style={styles.locationAddress} numberOfLines={1}>
+                        {line2}
+                      </Text>
+                      {!card.persisted ? (
+                        <Text style={styles.locationLinkHint}>Tap to save details</Text>
+                      ) : (
+                        <Text style={styles.locationLinkHint}>Tap to edit</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           <View style={styles.card}>
@@ -438,7 +772,10 @@ export function NetworkDesktopDetailsPanel({
             {projectRows.map((row, idx) => (
               <View
                 key={row.name}
-                style={[styles.projectsRow, idx === projectRows.length - 1 && styles.projectsRowLast]}
+                style={[
+                  styles.projectsRow,
+                  idx === projectRows.length - 1 && styles.projectsRowLast,
+                ]}
               >
                 <Text style={[styles.projectsCell, styles.projectsColName]} numberOfLines={1}>
                   {row.name}
@@ -523,6 +860,60 @@ export function NetworkDesktopDetailsPanel({
           />
         </View>
       </View>
+
+      <NetworkDesktopLocationModal
+        visible={locationModalOpen}
+        orgId={orgId}
+        orgName={orgName}
+        location={editingLocation}
+        initialDraft={locationDraft}
+        onClose={() => {
+          setLocationModalOpen(false);
+          setEditingLocation(null);
+          setLocationDraft(undefined);
+        }}
+      />
+
+      {profileEditSection ? (
+        profileQ.data ? (
+          <NetworkDesktopWorkspaceProfileModal
+            visible
+            orgId={orgId}
+            section={profileEditSection}
+            profile={profileQ.data}
+            email={email}
+            phone={phone}
+            onClose={() => setProfileEditSection(null)}
+          />
+        ) : profileQ.isError ? (
+          <NetworkDesktopWorkspaceProfileModal
+            visible
+            orgId={orgId}
+            section={profileEditSection}
+            profile={{
+              id: orgId,
+              name: orgName,
+              address_line: derived.addressLine || null,
+              city: derived.city || null,
+              state: derived.state || null,
+              zone: null,
+              created_at: new Date().toISOString(),
+              profile_about: derived.about,
+              profile_website: derived.website,
+              profile_ceo_name: derived.ceo,
+              profile_sector: derived.sector,
+              profile_area: derived.area,
+              founded_year: parseInt(derived.foundedYear, 10) || null,
+              profile_facebook: derived.facebook || null,
+              profile_youtube: derived.youtube || null,
+              profile_products: derived.products,
+            }}
+            email={email}
+            phone={phone}
+            onClose={() => setProfileEditSection(null)}
+          />
+        ) : null
+      ) : null}
     </View>
   );
 }

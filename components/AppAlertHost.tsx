@@ -1,5 +1,5 @@
 import Theme from '@/constants/Theme';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { tGlobal } from '@/contexts/LanguageContext';
 import { registerAppAlertImplementation } from '@/lib/appAlert';
 import { Clock } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
@@ -17,7 +17,6 @@ import {
  * Single themed alert modal for `showAppAlert`, aligned with Network profile modal styling.
  */
 export function AppAlertHost() {
-  const { t } = useLanguage();
   const { width } = useWindowDimensions();
   const isCompact = width < 420;
 
@@ -60,7 +59,7 @@ export function AppAlertHost() {
             style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
             accessibilityRole="button"
           >
-            <Text style={styles.buttonLabel}>{t('dismiss')}</Text>
+            <Text style={styles.buttonLabel}>{tGlobal('dismiss')}</Text>
           </Pressable>
         </View>
       </View>

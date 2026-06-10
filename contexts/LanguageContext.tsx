@@ -39,6 +39,21 @@ export function useLanguage() {
   return ctx;
 }
 
+/** Safe for boot shells / global hosts that may render before the provider tree mounts. */
+export function useOptionalLanguage() {
+  const ctx = useContext(LanguageContext);
+  return useMemo(
+    () => ({
+      locale: ctx?.locale ?? DEFAULT_LOCALE,
+      setLocale: ctx?.setLocale ?? (() => {}),
+      t: (key: string) => (ctx ? ctx.t(key) : tGlobal(key)),
+      localeOptions: ctx?.localeOptions ?? LOCALE_OPTIONS,
+      hydrated: ctx?.hydrated ?? true,
+    }),
+    [ctx],
+  );
+}
+
 /** Translation function for use outside components (e.g. in non-React code). Prefer useLanguage().t inside components. */
 let globalLocale: AppLocale = DEFAULT_LOCALE;
 export function setGlobalLocale(locale: AppLocale) {

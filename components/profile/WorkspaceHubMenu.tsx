@@ -1,10 +1,9 @@
 /**
  * Workspace hub — left pane of the master/detail workspace shell.
  *
- * Layout matches the canonical reference: navy band with workspace name and
- * close button, an overlapping rounded-square logo, three circular quick
- * actions (My Account / Support / Alerts), a single "Workspace Management"
- * list card, and a pinned identity footer with sign-out.
+ * Metronic reference density: navy header, quick actions, Pulse banner,
+ * Preferences (Language / Region), Party directory links, product dock, footer.
+ * Workspace Management lives on the My Account detail panel.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
@@ -14,29 +13,40 @@ import {
   getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { LOCALE_OPTIONS } from "@/lib/i18n";
+import {
+  WORKSPACE_REGION_LABELS,
+  getWorkspaceRegion,
+} from "@/lib/workspaceRegion";
 import { WorkspaceHubProductGrid } from "@/features/organization/components/workspace/WorkspaceHubProductGrid";
-import type { WorkspacePanelId } from "@/features/organization/components/workspace/workspacePanelTypes";
+import { WorkspaceLanguagePanel } from "@/features/organization/components/workspace/WorkspaceLanguagePanel";
+import { WorkspaceRegionPanel } from "@/features/organization/components/workspace/WorkspaceRegionPanel";
+import type {
+  WorkspaceHubInlinePanelId,
+  WorkspacePanelId,
+} from "@/features/organization/components/workspace/workspacePanelTypes";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import type { ProductId } from "@/lib/productRegistry";
 import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import { ROUTES } from "@/lib/routes";
-import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useRouter } from "expo-router";
-import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import {
   Building2,
+  Car,
   ChevronRight,
+  Globe,
   HelpCircle,
   LogOut,
-  Settings2,
+  MapPin,
   Sparkles,
-  Users,
+  Truck,
+  User,
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Image,
   Modal,
   Platform,
@@ -45,7 +55,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -54,6 +63,9 @@ const NAVY_MID = Theme.primaryLight;
 const NAVY_TINT = "rgba(79,70,229,0.08)";
 const NAVY_BORDER_SOFT = "rgba(79,70,229,0.12)";
 const NAVY_ON_DARK_EYEBROW = "rgba(255,255,255,0.78)";
+const MENU_ICON = "#78829D";
+const MENU_ICON_SIZE = 15;
+const MENU_ICON_STROKE = 1.75;
 
 function orgInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -68,22 +80,32 @@ type HubRow = {
   icon: React.ReactNode;
   panelId?: WorkspacePanelId;
   route?: string;
+  valuePill?: string;
 };
 
 type Props = {
   activePanel: WorkspacePanelId | null;
   onSelectPanel: (panel: WorkspacePanelId) => void;
   onExit?: () => void;
+  inlinePanel?: WorkspaceHubInlinePanelId | null;
+  onCloseInlinePanel?: () => void;
 };
 
-export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) {
+export function WorkspaceHubMenu({
+  activePanel,
+  onSelectPanel,
+  onExit,
+  inlinePanel = null,
+  onCloseInlinePanel,
+}: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const isDesktopNetwork = Platform.OS === "web" && width >= 1180;
   const { user, profile, signOut } = useAuth();
+  const { locale } = useLanguage();
   const { currentOrganization } = useOrganization();
-  const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
+  const [workspaceRegion, setWorkspaceRegion] = useState<
+    keyof typeof WORKSPACE_REGION_LABELS
+  >("india");
   const { data: activations = [] } = useWorkspaceProductsQuery();
 
   const activeProductIds = useMemo(() => {
@@ -156,36 +178,124 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
     };
   }, [currentOrganization?.logo_url]);
 
-  const openMyProfile = () => {
-    onSelectPanel("account");
+  useEffect(() => {
+    let mounted = true;
+    void getWorkspaceRegion().then((region) => {
+      if (mounted) setWorkspaceRegion(region);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [activePanel]);
+
+  const openOrgProfileHub = () => {
+    onExit?.();
+    router.replace(
+      ROUTES.networkOrgHub("details") as Parameters<typeof router.replace>[0],
+    );
   };
 
-  const rows: HubRow[] = [
+  const languageLabel =
+    LOCALE_OPTIONS.find((o) => o.value === locale)?.label ?? "English";
+  const regionLabel = WORKSPACE_REGION_LABELS[workspaceRegion];
+
+  const preferenceRows: HubRow[] = [
     {
-      id: "settings",
-      label: "Workspace settings",
-      icon: <Building2 size={14} color={NAVY} strokeWidth={2.2} />,
-      panelId: "settings",
+      id: "language",
+      label: "Language",
+      icon: <Globe size={MENU_ICON_SIZE} color={MENU_ICON} strokeWidth={MENU_ICON_STROKE} />,
+      panelId: "language",
+      valuePill: languageLabel,
     },
     {
-      id: "team",
-      label: "Team members",
-      icon: <Users size={14} color={NAVY} strokeWidth={2.2} />,
-      route: ROUTES.MODALS.TEAM,
-    },
-    {
-      id: "kyc",
-      label: "Org identity & KYC",
-      icon: <Settings2 size={14} color={NAVY} strokeWidth={2.2} />,
-      panelId: "kyc",
-    },
-    {
-      id: "business-pulse",
-      label: "Business Pulse intelligence",
-      icon: <Sparkles size={14} color={NAVY} strokeWidth={2.2} />,
-      route: ROUTES.BUSINESS_PULSE,
+      id: "region",
+      label: "Region",
+      icon: <MapPin size={MENU_ICON_SIZE} color={MENU_ICON} strokeWidth={MENU_ICON_STROKE} />,
+      panelId: "region",
+      valuePill: regionLabel,
     },
   ];
+
+  const partyRows: HubRow[] = [
+    {
+      id: "party-customers",
+      label: "Customer",
+      icon: <Building2 size={MENU_ICON_SIZE} color={MENU_ICON} strokeWidth={MENU_ICON_STROKE} />,
+      route: ROUTES.partyDirectory("customers"),
+    },
+    {
+      id: "party-suppliers",
+      label: "Supplier",
+      icon: <Truck size={MENU_ICON_SIZE} color={MENU_ICON} strokeWidth={MENU_ICON_STROKE} />,
+      route: ROUTES.partyDirectory("suppliers"),
+    },
+    {
+      id: "party-drivers",
+      label: "Driver",
+      icon: <User size={MENU_ICON_SIZE} color={MENU_ICON} strokeWidth={MENU_ICON_STROKE} />,
+      route: ROUTES.partyDirectory("drivers"),
+    },
+    {
+      id: "party-vehicles",
+      label: "Vehicle",
+      icon: <Car size={MENU_ICON_SIZE} color={MENU_ICON} strokeWidth={MENU_ICON_STROKE} />,
+      route: ROUTES.partyDirectory("vehicles"),
+    },
+  ];
+
+  const renderHubSection = (title: string, sectionRows: HubRow[]) => (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionAccent} />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {sectionRows.map((row, idx) => {
+        const selected = !!row.panelId && activePanel === row.panelId;
+        const isFirst = idx === 0;
+        return (
+          <Pressable
+            key={row.id}
+            onPress={() => {
+              if (row.panelId) {
+                onSelectPanel(row.panelId);
+                return;
+              }
+              if (row.route) {
+                onExit?.();
+                navigate(row.route);
+              }
+            }}
+            style={({ pressed }) => [
+              styles.menuRow,
+              isFirst && styles.menuRowFirst,
+              selected && styles.menuRowSelected,
+              pressed && !selected && styles.menuRowPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+          >
+            <View style={styles.menuRowIconPlain}>{row.icon}</View>
+            <Text style={styles.menuRowLabel} numberOfLines={1}>
+              {row.label}
+            </Text>
+            {row.valuePill ? (
+              <View style={styles.valuePill}>
+                <Text style={styles.valuePillText} numberOfLines={1}>
+                  {row.valuePill}
+                </Text>
+              </View>
+            ) : (
+              <ChevronRight
+                size={13}
+                color={selected ? NAVY : Theme.textMuted}
+                strokeWidth={1.8}
+              />
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 
   const navigate = (path: string) => {
     router.replace(path as Parameters<typeof router.replace>[0]);
@@ -237,7 +347,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.quickRow}>
             <Pressable
               style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={openMyProfile}
+              onPress={openOrgProfileHub}
               accessibilityRole="button"
               accessibilityLabel="My account"
             >
@@ -254,16 +364,10 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() =>
-                Alert.alert(
-                  "Support",
-                  "Reach your operations team from Pulse chat or email your account manager.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Open chat", onPress: () => navigate(ROUTES.CHAT) },
-                  ],
-                )
-              }
+              onPress={() => {
+                onExit?.();
+                navigate(ROUTES.CHAT);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Support"
             >
@@ -271,21 +375,6 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                 <HelpCircle size={18} color={NAVY} strokeWidth={2.2} />
               </View>
               <Text style={styles.quickLabel}>Support</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() => navigate("/notifications")}
-              accessibilityRole="button"
-              accessibilityLabel="Alerts"
-            >
-              <View style={styles.quickCircle}>
-                <NotificationBellIcon
-                  size={20}
-                  color={Theme.textPrimaryDark}
-                  showBadge={notificationUnread > 0}
-                />
-              </View>
-              <Text style={styles.quickLabel}>Alerts</Text>
             </Pressable>
           </View>
 
@@ -301,51 +390,8 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
             </View>
           </View>
 
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionAccent} />
-              <Text style={styles.sectionTitle}>Workspace Management</Text>
-            </View>
-            {rows.map((row, idx) => {
-              const selected = !!row.panelId && activePanel === row.panelId;
-              const isFirst = idx === 0;
-              return (
-                <Pressable
-                  key={row.id}
-                  onPress={() => {
-                    if (row.panelId) {
-                      onSelectPanel(row.panelId);
-                      return;
-                    }
-                    if (row.route) {
-                      onExit?.();
-                      navigate(row.route);
-                    }
-                  }}
-                  style={({ pressed }) => [
-                    styles.menuRow,
-                    isFirst && styles.menuRowFirst,
-                    selected && styles.menuRowSelected,
-                    pressed && !selected && styles.menuRowPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                >
-                  <View style={[styles.menuRowIcon, selected && styles.menuRowIconSelected]}>
-                    {row.icon}
-                  </View>
-                  <Text style={styles.menuRowLabel} numberOfLines={1}>
-                    {row.label}
-                  </Text>
-                  <ChevronRight
-                    size={14}
-                    color={selected ? NAVY : Theme.textMuted}
-                    strokeWidth={2}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
+          {renderHubSection("Preferences", preferenceRows)}
+          {renderHubSection("Party", partyRows)}
         </ScrollView>
 
         <WorkspaceHubProductGrid
@@ -357,7 +403,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.footerDivider} />
           <View style={styles.footerRow}>
             <Pressable
-              onPress={openMyProfile}
+              onPress={openOrgProfileHub}
               style={({ pressed }) => [styles.footerIdentity, pressed && { opacity: 0.85 }]}
               accessibilityRole="button"
               accessibilityLabel="Open my account"
@@ -396,6 +442,17 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
             </Pressable>
           </View>
         </View>
+
+        {inlinePanel === "language" && onCloseInlinePanel ? (
+          <WorkspaceLanguagePanel variant="inline" onBack={onCloseInlinePanel} />
+        ) : null}
+        {inlinePanel === "region" && onCloseInlinePanel ? (
+          <WorkspaceRegionPanel
+            variant="inline"
+            onBack={onCloseInlinePanel}
+            onRegionChange={(region) => setWorkspaceRegion(region)}
+          />
+        ) : null}
       </View>
 
       <Modal
@@ -454,7 +511,13 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
  * flex card (`WorkspaceFlexCardShell`) at ~420px on desktop.
  */
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f5f7fb", minWidth: 0 },
+  root: {
+    flex: 1,
+    backgroundColor: "#f5f7fb",
+    minWidth: 0,
+    position: "relative",
+    overflow: "hidden",
+  },
 
   // ── Navy band ───────────────────────────────────────────────────────────
   navyBand: {
@@ -508,10 +571,10 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   navyTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
     color: "#fff",
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   closeBtn: {
     width: 30,
@@ -527,9 +590,9 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 18,
-    paddingBottom: 14,
-    gap: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 10,
   },
 
   insightBanner: {
@@ -560,14 +623,14 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   insightTitle: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
+    letterSpacing: -0.15,
   },
   insightBody: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "500",
     color: Theme.textSecondary,
   },
@@ -583,9 +646,9 @@ const styles = StyleSheet.create({
   },
   quickAction: { flex: 1, alignItems: "center", gap: 8, minWidth: 0 },
   quickCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: Theme.screenBackground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
@@ -612,16 +675,15 @@ const styles = StyleSheet.create({
     borderColor: Theme.screenBackground,
   },
   quickLabel: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 8,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.05,
+    letterSpacing: -0.02,
     textAlign: "center",
   },
 
-  // Workspace Management list card
   sectionCard: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#e4e7ef",
     backgroundColor: Theme.cardWhite,
@@ -635,28 +697,28 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 6,
     backgroundColor: Theme.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
   sectionAccent: { width: 2, height: 10, borderRadius: 1, backgroundColor: NAVY },
   sectionTitle: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
     color: Theme.textMuted,
-    letterSpacing: 1.1,
+    letterSpacing: 0.9,
     textTransform: "uppercase",
   },
   menuRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
@@ -665,26 +727,31 @@ const styles = StyleSheet.create({
   menuRowSelected: {
     backgroundColor: "#eef1f8",
   },
-  menuRowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+  menuRowIconPlain: {
+    width: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderMedium,
-  },
-  menuRowIconSelected: {
-    backgroundColor: NAVY_TINT,
-    borderColor: NAVY_BORDER_SOFT,
   },
   menuRowLabel: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.05,
+    letterSpacing: -0.02,
+  },
+  valuePill: {
+    maxWidth: 108,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surface,
+  },
+  valuePillText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
 
   // ── Footer identity ────────────────────────────────────────────────────
@@ -718,8 +785,8 @@ const styles = StyleSheet.create({
   },
   footerAvatarInitials: { fontSize: 12, fontWeight: "800", color: NAVY },
   footerText: { flex: 1, minWidth: 0 },
-  footerName: { fontSize: 12, fontWeight: "800", color: Theme.textPrimaryDark },
-  footerEmail: { fontSize: 9, color: Theme.textMuted, marginTop: 1 },
+  footerName: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark },
+  footerEmail: { fontSize: 8, color: Theme.textMuted, marginTop: 1 },
   signOutBtn: {
     width: 32,
     height: 32,

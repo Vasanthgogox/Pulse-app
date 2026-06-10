@@ -4,7 +4,9 @@ export type WorkspacePanelId =
   | "settings"
   | "team"
   | "kyc"
-  | "products";
+  | "products"
+  | "language"
+  | "region";
 
 export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   account: "My Account",
@@ -13,6 +15,8 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   team: "Team members",
   kyc: "Org identity & KYC",
   products: "Pulse Products",
+  language: "Language",
+  region: "Region",
 };
 
 export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>> = {
@@ -20,6 +24,19 @@ export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>
   "account-edit": "Update your name, photo and status",
   products: "Your logistics business operating system",
 };
+
+export type WorkspaceHubInlinePanelId = "language" | "region";
+
+export const WORKSPACE_HUB_INLINE_PANELS: WorkspaceHubInlinePanelId[] = [
+  "language",
+  "region",
+];
+
+export function isWorkspaceHubInlinePanel(
+  panel: WorkspacePanelId | null,
+): panel is WorkspaceHubInlinePanelId {
+  return panel === "language" || panel === "region";
+}
 
 export function parseWorkspacePanelId(
   raw: string | string[] | undefined,
@@ -31,7 +48,9 @@ export function parseWorkspacePanelId(
     value === "settings" ||
     value === "team" ||
     value === "kyc" ||
-    value === "products"
+    value === "products" ||
+    value === "language" ||
+    value === "region"
   ) {
     return value;
   }

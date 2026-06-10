@@ -13,6 +13,7 @@ import {
     type LeafletMarker,
 } from "@/components/driver/LeafletMap";
 import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
+import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import { JobRequestCard } from "@/components/JobRequestCard";
 import Layout from "@/constants/Layout";
@@ -2198,6 +2199,9 @@ export default function DriverRadarScreen() {
       assignmentFeedback != null,
   );
 
+  /** Idle dashboard map card — preview current area when not in trip map mode. */
+  const showDashboardMapPreview = !shouldShowMap && Boolean(driver);
+
   /** Map-only GPS stream when not in full follow mode (follow mode has its own watch). DB cadence unchanged. */
   useDriverMapLivePositionWatch({
     enabled: Boolean(
@@ -2631,9 +2635,9 @@ export default function DriverRadarScreen() {
     };
   }, [routeFetchKey, activeGuidanceStep, routeContextTrip]);
 
-  // When map is shown (online or active trip), get current position for map center and "You" marker.
+  // When map or dashboard preview is shown, get current position for center and "You" marker.
   useEffect(() => {
-    if (!shouldShowMap) {
+    if (!shouldShowMap && !showDashboardMapPreview) {
       setDriverMapPosition(null);
       return;
     }
@@ -2684,7 +2688,7 @@ export default function DriverRadarScreen() {
     return () => {
       cancelled = true;
     };
-  }, [shouldShowMap]);
+  }, [shouldShowMap, showDashboardMapPreview]);
 
   // Web/permission fallback: recover last known driver position from DB so routing can still render.
   useEffect(() => {
@@ -5309,6 +5313,25 @@ export default function DriverRadarScreen() {
                   />
                 }
               >
+                {showDashboardMapPreview ? (
+                  <DriverDashboardMapPreview
+                    center={
+                      driverMapPosition ?? {
+                        latitude: DEFAULT_MAP_REGION.latitude,
+                        longitude: DEFAULT_MAP_REGION.longitude,
+                      }
+                    }
+                    avatarUri={avatarUri}
+                    avatarSeed={optionalDriverAvatar?.avatarSeed}
+                    isOnline={isOnline}
+                    borderColor={colors.border}
+                    surfaceColor={colors.surface}
+                    textColor={colors.text}
+                    textMuted={colors.textMuted}
+                    locationLabel={locationLabel}
+                    onPressExpand={() => setIsFullMapVisible(true)}
+                  />
+                ) : null}
                 {renderDriverDashboardTripInner(false)}
               </ScrollView>
             )}

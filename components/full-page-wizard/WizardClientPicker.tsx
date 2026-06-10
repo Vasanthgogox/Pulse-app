@@ -15,6 +15,8 @@ export interface WizardClientPickerProps {
   onAddClient?: () => void;
   emptyMessage?: string;
   listMaxHeight?: number;
+  /** Default: {@link WIZARD_PARTY_GRID_COLUMNS}. Use `1` for full-width party tiles. */
+  columns?: number;
 }
 
 function sortClientsByName(clients: ClientRow[]): ClientRow[] {
@@ -35,6 +37,7 @@ export function WizardClientPicker({
   onAddClient,
   emptyMessage = "No clients yet. Add a client to continue.",
   listMaxHeight = 420,
+  columns = WIZARD_PARTY_GRID_COLUMNS,
 }: WizardClientPickerProps) {
   const sortedClients = useMemo(() => sortClientsByName(clients), [clients]);
 
@@ -68,7 +71,7 @@ export function WizardClientPicker({
           emptyMessage={emptyMessage}
           listMaxHeight={listMaxHeight}
           variant="partyCard"
-          columns={WIZARD_PARTY_GRID_COLUMNS}
+          columns={columns}
         />
       </View>
       {onAddClient ? (

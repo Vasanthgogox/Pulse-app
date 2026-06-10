@@ -5,10 +5,11 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { ConnectedOrg } from "@/features/network/components/ConnectionsView";
+import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
 import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
 import { formatPartyContactPhone } from "@/features/network/utils/partyContactDisplay.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import { BadgeCheck } from "lucide-react-native";
+import { BadgeCheck, MessageCircle } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function slugHandle(name: string, id: string): string {
@@ -53,10 +54,20 @@ function formatRating(rating: number | null | undefined): string {
   return rating.toFixed(1);
 }
 
+const INTEGRATED_PILL = {
+  label: "INTEGRATED" as const,
+  backgroundColor: Theme.networkBadgeIntegratedBg,
+  gradientTop: Theme.networkBadgeIntegratedGradientTop,
+  color: Theme.networkBadgeIntegratedText,
+  borderColor: Theme.networkBadgeIntegratedBorder,
+  highlightColor: Theme.networkBadgeIntegratedHighlight,
+};
+
 type Props = {
   item: ConnectedOrg;
   onPress?: () => void;
   onInvite?: () => void;
+  onChat?: () => void;
   actionLoading?: boolean;
 };
 
@@ -64,6 +75,7 @@ export function NetworkDesktopConnectionCard({
   item,
   onPress,
   onInvite,
+  onChat,
   actionLoading = false,
 }: Props) {
   const entityType: PartyEntityType =
@@ -86,13 +98,18 @@ export function NetworkDesktopConnectionCard({
       accessibilityLabel={`Open ${item.name}`}
     >
       <View style={styles.topMetaRow}>
-        <View
-          style={[
-            styles.roleTag,
-            { backgroundColor: tone.bg, borderColor: tone.border },
-          ]}
-        >
-          <Text style={[styles.roleTagText, { color: tone.text }]}>{item.role}</Text>
+        <View style={styles.topMetaLeft}>
+          <View
+            style={[
+              styles.roleTag,
+              { backgroundColor: tone.bg, borderColor: tone.border },
+            ]}
+          >
+            <Text style={[styles.roleTagText, { color: tone.text }]}>{item.role}</Text>
+          </View>
+          {inApp ? (
+            <NetworkHubGlassBadge pill={INTEGRATED_PILL} size="compact" />
+          ) : null}
         </View>
         <View style={styles.ratingWrap}>
           <NetworkDesktopSalesStars filledStars={filledStars} size={10} />
@@ -153,7 +170,24 @@ export function NetworkDesktopConnectionCard({
           </Text>
         </View>
 
-        {inApp ? (
+        {inApp && onChat ? (
+          <Pressable
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              onChat();
+            }}
+            style={({ pressed }) => [
+              styles.actionBtn,
+              styles.actionBtnChat,
+              pressed && styles.actionBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Chat with ${item.name}`}
+          >
+            <MessageCircle size={11} color={Theme.primary} />
+            <Text style={styles.actionBtnChatText}>Chat</Text>
+          </Pressable>
+        ) : inApp ? (
           <View style={[styles.actionBtn, styles.actionBtnConnected]}>
             <Text style={styles.actionBtnConnectedText}>Connected</Text>
           </View>
@@ -212,6 +246,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
     marginBottom: 2,
+  },
+  topMetaLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
   },
   roleTag: {
     paddingHorizontal: 7,
@@ -341,6 +382,20 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
     color: Theme.textOnPrimary,
+    letterSpacing: 0.15,
+  },
+  actionBtnChat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EEF6FF",
+    borderWidth: 1,
+    borderColor: "rgba(0, 158, 247, 0.25)",
+  },
+  actionBtnChatText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.primary,
     letterSpacing: 0.15,
   },
   actionBtnConnected: {
