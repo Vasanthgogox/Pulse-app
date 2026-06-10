@@ -15,6 +15,12 @@ import {
 } from "@/features/clients/services/clientContractAgreements.service";
 import { createClientLaneRate } from "@/features/clients/services/clientLaneRates.service";
 import { upsertClientFinanceProfile } from "@/features/clients/services/clientFinanceProfile.service";
+import { ClientProfileLaneRateCard } from "@/features/clients/components/desktop/ClientProfileLaneRateCard";
+import {
+  INVOICE_FREQUENCY_OPTIONS,
+  LANE_PRICING_MODEL_OPTIONS,
+  PAYMENT_TERMS_OPTIONS,
+} from "@/features/clients/constants/clientReference.constants";
 import { formatWarehouseLaneLabel } from "@/features/clients/utils/clientManagement.util";
 import { formatINR } from "@/lib/format";
 import {
@@ -28,6 +34,8 @@ import {
   X,
 } from "lucide-react-native";
 import { useState } from "react";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
   ActivityIndicator,
   Alert,
@@ -68,6 +76,7 @@ function FormField({
   keyboardType = "default",
   multiline = false,
   required = false,
+  compact = false,
 }: {
   label: string;
   value: string;
@@ -76,9 +85,10 @@ function FormField({
   keyboardType?: "default" | "numeric" | "email-address" | "phone-pad";
   multiline?: boolean;
   required?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <View style={f.fieldGroup}>
+    <View style={[f.fieldGroup, compact && mobile.fieldGroupFull]}>
       <Text style={f.fieldLabel}>
         {label}
         {required ? <Text style={{ color: "#F1416C" }}> *</Text> : null}
@@ -102,16 +112,18 @@ function SelectField({
   value,
   options,
   onChange,
+  compact = false,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
   return (
-    <View style={f.fieldGroup}>
+    <View style={[f.fieldGroup, compact && mobile.fieldGroupFull]}>
       <Text style={f.fieldLabel}>{label}</Text>
       <Pressable
         style={[f.fieldInput, f.selectBtn]}
@@ -154,7 +166,7 @@ function FormCard({
   error,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: import("react").ReactNode;
   onClose: () => void;
   onSave: () => void;
   saving: boolean;
@@ -234,9 +246,40 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   );
 }
 
+function ResponsiveDataTable({
+  headers,
+  rows,
+  compact,
+}: {
+  headers: string[];
+  rows: string[][];
+  compact: boolean;
+}) {
+  if (rows.length === 0) return null;
+  const table = <DataTable headers={headers} rows={rows} />;
+  if (!compact) return table;
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={mobile.tableScroll}
+      contentContainerStyle={mobile.tableScrollInner}
+    >
+      <View style={mobile.tableMinWidth}>{table}</View>
+    </ScrollView>
+  );
+}
+
+function usePanelWrapStyle() {
+  const compact = useProfileHubCompact();
+  return [styles.panel, compact && mobile.panelCompact] as const;
+}
+
 // ── TAB: Contacts ──────────────────────────────────────────────────────────────
 
 export function ClientProfileContactsPanel({ bundle, orgId, clientId, onRefresh }: BaseProps) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -274,7 +317,7 @@ export function ClientProfileContactsPanel({ bundle, orgId, clientId, onRefresh 
   ]);
 
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <View style={f.panelHeaderRow}>
         <Text style={styles.sectionTitle}>Contact directory</Text>
         {!showForm && <AddButton label="Add contact" onPress={() => { reset(); setShowForm(true); }} />}
@@ -282,11 +325,11 @@ export function ClientProfileContactsPanel({ bundle, orgId, clientId, onRefresh 
 
       {showForm && (
         <FormCard title="Add contact" onClose={() => setShowForm(false)} onSave={handleSave} saving={saving} error={error}>
-          <View style={f.formGrid}>
-            <FormField label="Full name" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} required />
-            <FormField label="Designation" value={form.designation} onChangeText={(v) => setForm({ ...form, designation: v })} />
-            <FormField label="Mobile" value={form.mobile} onChangeText={(v) => setForm({ ...form, mobile: v })} keyboardType="phone-pad" />
-            <FormField label="Email" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} keyboardType="email-address" />
+          <View style={[f.formGrid, compact && mobile.formGridCompact]}>
+            <FormField compact={compact} label="Full name" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} required />
+            <FormField compact={compact} label="Designation" value={form.designation} onChangeText={(v) => setForm({ ...form, designation: v })} />
+            <FormField compact={compact} label="Mobile" value={form.mobile} onChangeText={(v) => setForm({ ...form, mobile: v })} keyboardType="phone-pad" />
+            <FormField compact={compact} label="Email" value={form.email} onChangeText={(v) => setForm({ ...form, email: v })} keyboardType="email-address" />
           </View>
           <Text style={f.fieldLabel}>Roles</Text>
           <View style={f.checkGrid}>
@@ -309,7 +352,7 @@ export function ClientProfileContactsPanel({ bundle, orgId, clientId, onRefresh 
       {rows.length === 0 && !showForm ? (
         <Empty message="No contacts yet" sub="Add a contact to track decision makers, billing, and dispatch contacts." />
       ) : (
-        <DataTable headers={["Name", "Designation", "Mobile", "Email", "Primary", "Roles"]} rows={rows} />
+        <ResponsiveDataTable compact={compact} headers={["Name", "Designation", "Mobile", "Email", "Primary", "Roles"]} rows={rows} />
       )}
     </View>
   );
@@ -318,22 +361,58 @@ export function ClientProfileContactsPanel({ bundle, orgId, clientId, onRefresh 
 // ── TAB: Warehouses ────────────────────────────────────────────────────────────
 
 export function ClientProfileWarehousesPanel({ bundle, orgId, clientId, onRefresh }: BaseProps) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    name: "", address: "", city: "", state: "", local_gstin: "", contact_name: "", contact_phone: "",
+    warehouse_code: "",
+    name: "",
+    warehouse_zone: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    local_gstin: "",
+    dock_count: "",
+    capacity_tons: "",
+    manager_name: "",
+    manager_phone: "",
+    contact_name: "",
+    contact_phone: "",
   });
 
-  const reset = () => { setForm({ name: "", address: "", city: "", state: "", local_gstin: "", contact_name: "", contact_phone: "" }); setError(null); };
+  const reset = () => {
+    setForm({
+      warehouse_code: "", name: "", warehouse_zone: "", address: "", city: "", state: "",
+      pincode: "", local_gstin: "", dock_count: "", capacity_tons: "",
+      manager_name: "", manager_phone: "", contact_name: "", contact_phone: "",
+    });
+    setError(null);
+  };
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError("Warehouse name is required."); return; }
+    const docks = form.dock_count.trim() ? parseInt(form.dock_count, 10) : null;
+    const capacity = form.capacity_tons.trim() ? parseFloat(form.capacity_tons) : null;
+    if (form.dock_count.trim() && isNaN(docks!)) { setError("Dock count must be a number."); return; }
+    if (form.capacity_tons.trim() && isNaN(capacity!)) { setError("Capacity must be a number."); return; }
     setSaving(true); setError(null);
     const { error: err } = await createWarehouse(orgId, clientId, {
-      name: form.name.trim(), address: form.address.trim() || null,
-      city: form.city.trim() || null, state: form.state.trim() || null,
-      local_gstin: form.local_gstin.trim() || null, contact_name: form.contact_name.trim() || null,
+      warehouse_code: form.warehouse_code.trim() || null,
+      name: form.name.trim(),
+      warehouse_zone: form.warehouse_zone.trim() || null,
+      address: form.address.trim() || null,
+      city: form.city.trim() || null,
+      state: form.state.trim() || null,
+      pincode: form.pincode.trim() || null,
+      local_gstin: form.local_gstin.trim() || null,
+      dock_count: docks,
+      capacity_tons: capacity,
+      manager_name: form.manager_name.trim() || null,
+      manager_phone: form.manager_phone.trim() || null,
+      contact_name: form.contact_name.trim() || null,
       contact_phone: form.contact_phone.trim() || null,
     });
     setSaving(false);
@@ -342,14 +421,18 @@ export function ClientProfileWarehousesPanel({ bundle, orgId, clientId, onRefres
   };
 
   const rows = bundle.warehouses.map((w) => [
-    w.warehouse_code ?? "—", w.name,
-    [w.city, w.state].filter(Boolean).join(", ") || "—",
-    w.local_gstin ?? "—", w.contact_name ?? "—",
+    w.warehouse_code ?? "—",
+    w.name,
+    [w.warehouse_zone, w.city, w.state].filter(Boolean).join(" · ") || "—",
+    w.local_gstin ?? "—",
+    w.pincode ?? "—",
     w.dock_count != null ? String(w.dock_count) : "—",
+    w.capacity_tons != null ? `${w.capacity_tons}T` : "—",
+    w.manager_name ?? w.contact_name ?? "—",
   ]);
 
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <View style={f.panelHeaderRow}>
         <Text style={styles.sectionTitle}>Warehouse network</Text>
         {!showForm && <AddButton label="Add warehouse" onPress={() => { reset(); setShowForm(true); }} />}
@@ -357,14 +440,21 @@ export function ClientProfileWarehousesPanel({ bundle, orgId, clientId, onRefres
 
       {showForm && (
         <FormCard title="Add warehouse" onClose={() => setShowForm(false)} onSave={handleSave} saving={saving} error={error}>
-          <View style={f.formGrid}>
-            <FormField label="Warehouse name" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} required />
-            <FormField label="Full address" value={form.address} onChangeText={(v) => setForm({ ...form, address: v })} />
-            <FormField label="City" value={form.city} onChangeText={(v) => setForm({ ...form, city: v })} />
-            <FormField label="State" value={form.state} onChangeText={(v) => setForm({ ...form, state: v })} />
-            <FormField label="Local GSTIN" value={form.local_gstin} onChangeText={(v) => setForm({ ...form, local_gstin: v })} />
-            <FormField label="Contact name" value={form.contact_name} onChangeText={(v) => setForm({ ...form, contact_name: v })} />
-            <FormField label="Contact phone" value={form.contact_phone} onChangeText={(v) => setForm({ ...form, contact_phone: v })} keyboardType="phone-pad" />
+          <View style={[f.formGrid, compact && mobile.formGridCompact]}>
+            <FormField compact={compact} label="Warehouse code" value={form.warehouse_code} onChangeText={(v) => setForm({ ...form, warehouse_code: v })} placeholder="WH-001" />
+            <FormField compact={compact} label="Warehouse name" value={form.name} onChangeText={(v) => setForm({ ...form, name: v })} required />
+            <FormField compact={compact} label="Zone" value={form.warehouse_zone} onChangeText={(v) => setForm({ ...form, warehouse_zone: v })} placeholder="e.g. North, Zone A" />
+            <FormField compact={compact} label="Full address" value={form.address} onChangeText={(v) => setForm({ ...form, address: v })} multiline />
+            <FormField compact={compact} label="City" value={form.city} onChangeText={(v) => setForm({ ...form, city: v })} />
+            <FormField compact={compact} label="State" value={form.state} onChangeText={(v) => setForm({ ...form, state: v })} />
+            <FormField compact={compact} label="Pincode" value={form.pincode} onChangeText={(v) => setForm({ ...form, pincode: v })} keyboardType="numeric" />
+            <FormField compact={compact} label="Local GSTIN" value={form.local_gstin} onChangeText={(v) => setForm({ ...form, local_gstin: v })} />
+            <FormField compact={compact} label="Dock count" value={form.dock_count} onChangeText={(v) => setForm({ ...form, dock_count: v })} keyboardType="numeric" />
+            <FormField compact={compact} label="Capacity (tons)" value={form.capacity_tons} onChangeText={(v) => setForm({ ...form, capacity_tons: v })} keyboardType="numeric" />
+            <FormField compact={compact} label="Manager name" value={form.manager_name} onChangeText={(v) => setForm({ ...form, manager_name: v })} />
+            <FormField compact={compact} label="Manager phone" value={form.manager_phone} onChangeText={(v) => setForm({ ...form, manager_phone: v })} keyboardType="phone-pad" />
+            <FormField compact={compact} label="Gate contact" value={form.contact_name} onChangeText={(v) => setForm({ ...form, contact_name: v })} />
+            <FormField compact={compact} label="Gate phone" value={form.contact_phone} onChangeText={(v) => setForm({ ...form, contact_phone: v })} keyboardType="phone-pad" />
           </View>
         </FormCard>
       )}
@@ -372,7 +462,7 @@ export function ClientProfileWarehousesPanel({ bundle, orgId, clientId, onRefres
       {rows.length === 0 && !showForm ? (
         <Empty message="No warehouses yet" sub="Add client warehouse locations to track pickup points, GSTIN, and contacts." />
       ) : (
-        <DataTable headers={["Code", "Name", "Location", "GSTIN", "Contact", "Docks"]} rows={rows} />
+        <ResponsiveDataTable compact={compact} headers={["Code", "Name", "Zone / location", "GSTIN", "Pin", "Docks", "Capacity", "Manager"]} rows={rows} />
       )}
     </View>
   );
@@ -389,18 +479,34 @@ const COMMERCIAL_MODELS = [
 ];
 
 export function ClientProfileContractsPanel({ bundle, orgId, clientId, onRefresh }: BaseProps) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    contract_number: "", commercial_model: "per_trip",
-    effective_date: "", expiry_date: "", general_terms: "",
+    contract_number: "",
+    commercial_model: "per_trip",
+    effective_date: "",
+    expiry_date: "",
+    payment_terms_label: "",
+    invoice_frequency_label: "",
+    credit_days: "",
+    general_terms: "",
   });
 
-  const reset = () => { setForm({ contract_number: "", commercial_model: "per_trip", effective_date: "", expiry_date: "", general_terms: "" }); setError(null); };
+  const reset = () => {
+    setForm({
+      contract_number: "", commercial_model: "per_trip", effective_date: "", expiry_date: "",
+      payment_terms_label: "", invoice_frequency_label: "", credit_days: "", general_terms: "",
+    });
+    setError(null);
+  };
 
   const handleSave = async () => {
     if (!form.contract_number.trim()) { setError("Contract number is required."); return; }
+    const creditDays = form.credit_days.trim() ? parseInt(form.credit_days, 10) : undefined;
+    if (form.credit_days.trim() && isNaN(creditDays!)) { setError("Credit days must be a number."); return; }
     setSaving(true); setError(null);
     const { error: err } = await createClientContractAgreement(orgId, clientId, {
       contract_number: form.contract_number.trim(),
@@ -408,6 +514,11 @@ export function ClientProfileContractsPanel({ bundle, orgId, clientId, onRefresh
       effective_date: form.effective_date.trim() || null,
       expiry_date: form.expiry_date.trim() || null,
       general_terms: form.general_terms.trim() || null,
+      payment_terms: {
+        credit_days: creditDays,
+        billing_cycle: form.payment_terms_label.trim() || undefined,
+        invoice_frequency: form.invoice_frequency_label.trim() || undefined,
+      },
       status: "active",
     });
     setSaving(false);
@@ -416,7 +527,7 @@ export function ClientProfileContractsPanel({ bundle, orgId, clientId, onRefresh
   };
 
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <View style={f.panelHeaderRow}>
         <Text style={styles.sectionTitle}>Contract agreements</Text>
         {!showForm && <AddButton label="Add contract" onPress={() => { reset(); setShowForm(true); }} />}
@@ -424,12 +535,27 @@ export function ClientProfileContractsPanel({ bundle, orgId, clientId, onRefresh
 
       {showForm && (
         <FormCard title="Add contract" onClose={() => setShowForm(false)} onSave={handleSave} saving={saving} error={error}>
-          <View style={f.formGrid}>
-            <FormField label="Contract number" value={form.contract_number} onChangeText={(v) => setForm({ ...form, contract_number: v })} placeholder="e.g. CNT-2026-001" required />
-            <SelectField label="Commercial model" value={form.commercial_model} options={COMMERCIAL_MODELS} onChange={(v) => setForm({ ...form, commercial_model: v })} />
-            <FormField label="Effective date (YYYY-MM-DD)" value={form.effective_date} onChangeText={(v) => setForm({ ...form, effective_date: v })} placeholder="2026-01-01" />
-            <FormField label="Expiry date (YYYY-MM-DD)" value={form.expiry_date} onChangeText={(v) => setForm({ ...form, expiry_date: v })} placeholder="2027-01-01" />
-            <FormField label="General terms" value={form.general_terms} onChangeText={(v) => setForm({ ...form, general_terms: v })} multiline placeholder="Enter commercial terms, conditions, and any special clauses…" />
+          <View style={[f.formGrid, compact && mobile.formGridCompact]}>
+            <FormField compact={compact} label="Contract number" value={form.contract_number} onChangeText={(v) => setForm({ ...form, contract_number: v })} placeholder="e.g. CNT-2026-001" required />
+            <SelectField compact={compact} label="Commercial model" value={form.commercial_model} options={COMMERCIAL_MODELS} onChange={(v) => setForm({ ...form, commercial_model: v })} />
+            <FormField compact={compact} label="Effective date (YYYY-MM-DD)" value={form.effective_date} onChangeText={(v) => setForm({ ...form, effective_date: v })} placeholder="2026-01-01" />
+            <FormField compact={compact} label="Expiry date (YYYY-MM-DD)" value={form.expiry_date} onChangeText={(v) => setForm({ ...form, expiry_date: v })} placeholder="2027-01-01" />
+            <SelectField
+              compact={compact}
+              label="Payment terms"
+              value={form.payment_terms_label}
+              options={[{ value: "", label: "Select…" }, ...PAYMENT_TERMS_OPTIONS.map((o) => ({ value: o, label: o }))]}
+              onChange={(v) => setForm({ ...form, payment_terms_label: v })}
+            />
+            <SelectField
+              compact={compact}
+              label="Invoice frequency"
+              value={form.invoice_frequency_label}
+              options={[{ value: "", label: "Select…" }, ...INVOICE_FREQUENCY_OPTIONS.map((o) => ({ value: o, label: o }))]}
+              onChange={(v) => setForm({ ...form, invoice_frequency_label: v })}
+            />
+            <FormField compact={compact} label="Credit days" value={form.credit_days} onChangeText={(v) => setForm({ ...form, credit_days: v })} keyboardType="numeric" placeholder="30" />
+            <FormField compact={compact} label="General terms" value={form.general_terms} onChangeText={(v) => setForm({ ...form, general_terms: v })} multiline placeholder="Enter commercial terms, conditions, and any special clauses…" />
           </View>
         </FormCard>
       )}
@@ -491,6 +617,8 @@ const RATE_TYPES = [
 ];
 
 export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefresh }: BaseProps) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const warehouses = bundle.warehouses;
   const hasWarehouses = warehouses.length > 0;
 
@@ -501,8 +629,16 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
     origin_warehouse_id: "",
     origin_label: "",
     destination_label: "",
+    destination_gstin: "",
+    destination_address: "",
+    warehouse_zone: "",
+    distance_km: "",
+    pricing_model: "per_mt_km",
     vehicle_type: "",
     rate: "",
+    base_rate: "",
+    per_mt_rate: "",
+    per_km_rate: "",
     rate_type: "per_trip",
     valid_from: "",
     valid_to: "",
@@ -515,12 +651,21 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
   }));
 
   const reset = () => {
+    const first = warehouses[0];
     setForm({
-      origin_warehouse_id: warehouses.length === 1 ? warehouses[0]!.id : "",
+      origin_warehouse_id: warehouses.length === 1 ? first!.id : "",
       origin_label: "",
       destination_label: "",
+      destination_gstin: "",
+      destination_address: "",
+      warehouse_zone: first?.warehouse_zone ?? "",
+      distance_km: "",
+      pricing_model: "per_mt_km",
       vehicle_type: "",
       rate: "",
+      base_rate: "",
+      per_mt_rate: "",
+      per_km_rate: "",
       rate_type: "per_trip",
       valid_from: "",
       valid_to: "",
@@ -553,15 +698,38 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
       );
       return;
     }
-    const rate = parseFloat(form.rate);
-    if (form.rate.trim() && isNaN(rate)) { setError("Rate must be a number."); return; }
+    const parseOpt = (s: string) => {
+      const t = s.trim();
+      if (!t) return null;
+      const n = parseFloat(t);
+      return Number.isFinite(n) ? n : NaN;
+    };
+    const rate = parseOpt(form.rate);
+    const baseRate = parseOpt(form.base_rate);
+    const perMt = parseOpt(form.per_mt_rate);
+    const perKm = parseOpt(form.per_km_rate);
+    const distance = parseOpt(form.distance_km);
+    if (form.rate.trim() && rate !== null && isNaN(rate)) { setError("Rate must be a number."); return; }
+    if (form.base_rate.trim() && baseRate !== null && isNaN(baseRate)) { setError("Base rate must be a number."); return; }
+    if (form.per_mt_rate.trim() && perMt !== null && isNaN(perMt)) { setError("Per MT rate must be a number."); return; }
+    if (form.per_km_rate.trim() && perKm !== null && isNaN(perKm)) { setError("Per KM rate must be a number."); return; }
+    if (form.distance_km.trim() && distance !== null && isNaN(distance)) { setError("Distance must be a number."); return; }
+    const warehouse = warehouses.find((w) => w.id === form.origin_warehouse_id);
     setSaving(true); setError(null);
     const { error: err } = await createClientLaneRate(orgId, clientId, {
       origin_warehouse_id: origin.origin_warehouse_id,
       origin_label: origin.origin_label,
       destination_label: form.destination_label.trim(),
+      destination_gstin: form.destination_gstin.trim() || null,
+      destination_address: form.destination_address.trim() || null,
+      warehouse_zone: form.warehouse_zone.trim() || warehouse?.warehouse_zone || null,
+      distance_km: distance,
+      pricing_model: form.pricing_model || null,
       vehicle_type: form.vehicle_type.trim() || null,
       rate: form.rate.trim() ? rate : null,
+      base_rate: form.base_rate.trim() ? baseRate : null,
+      per_mt_rate: form.per_mt_rate.trim() ? perMt : null,
+      per_km_rate: form.per_km_rate.trim() ? perKm : null,
       rate_type: form.rate_type as "per_trip",
       valid_from: form.valid_from.trim() || null,
       valid_to: form.valid_to.trim() || null,
@@ -572,16 +740,10 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
     reset(); setShowForm(false); onRefresh();
   };
 
-  const rows = bundle.lane_rates.map((r) => [
-    r.origin_label, r.destination_label, r.vehicle_type ?? "—",
-    r.rate != null ? formatINR(r.rate) : "—",
-    r.rate_type.replace(/_/g, " "),
-    r.is_spot_rate ? "Spot" : "Contract",
-    r.valid_from ?? "—",
-  ]);
+  const warehouseById = new Map(warehouses.map((w) => [w.id, w]));
 
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <View style={f.panelHeaderRow}>
         <Text style={styles.sectionTitle}>Lane rates & commercials</Text>
         {!showForm && <AddButton label="Add lane rate" onPress={() => { reset(); setShowForm(true); }} />}
@@ -594,9 +756,10 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
               Add a warehouse under the Warehouses tab first — lane origins are picked from the client warehouse network.
             </Text>
           ) : null}
-          <View style={f.formGrid}>
+          <View style={[f.formGrid, compact && mobile.formGridCompact]}>
             {hasWarehouses ? (
               <SelectField
+                compact={compact}
                 label="Origin warehouse"
                 value={form.origin_warehouse_id}
                 options={[{ value: "", label: "Select warehouse…" }, ...warehouseOptions]}
@@ -606,11 +769,13 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
                     ...form,
                     origin_warehouse_id: warehouseId,
                     origin_label: warehouse ? formatWarehouseLaneLabel(warehouse) : "",
+                    warehouse_zone: warehouse?.warehouse_zone ?? form.warehouse_zone,
                   });
                 }}
               />
             ) : (
               <FormField
+                compact={compact}
                 label="Origin"
                 value={form.origin_label}
                 onChangeText={(v) => setForm({ ...form, origin_label: v })}
@@ -618,12 +783,26 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
                 required
               />
             )}
-            <FormField label="Destination" value={form.destination_label} onChangeText={(v) => setForm({ ...form, destination_label: v })} placeholder="e.g. Bangalore" required />
-            <FormField label="Vehicle type" value={form.vehicle_type} onChangeText={(v) => setForm({ ...form, vehicle_type: v })} placeholder="e.g. 24ft, 10T" />
-            <FormField label="Rate (₹)" value={form.rate} onChangeText={(v) => setForm({ ...form, rate: v })} keyboardType="numeric" placeholder="0" />
-            <SelectField label="Rate type" value={form.rate_type} options={RATE_TYPES} onChange={(v) => setForm({ ...form, rate_type: v })} />
-            <FormField label="Valid from (YYYY-MM-DD)" value={form.valid_from} onChangeText={(v) => setForm({ ...form, valid_from: v })} placeholder="2026-01-01" />
-            <FormField label="Valid to (YYYY-MM-DD)" value={form.valid_to} onChangeText={(v) => setForm({ ...form, valid_to: v })} placeholder="2027-01-01" />
+            <FormField compact={compact} label="Warehouse zone" value={form.warehouse_zone} onChangeText={(v) => setForm({ ...form, warehouse_zone: v })} placeholder="e.g. Zone A" />
+            <FormField compact={compact} label="Destination" value={form.destination_label} onChangeText={(v) => setForm({ ...form, destination_label: v })} placeholder="e.g. Bangalore" required />
+            <FormField compact={compact} label="Destination GSTIN" value={form.destination_gstin} onChangeText={(v) => setForm({ ...form, destination_gstin: v })} placeholder="29AAAAA0000A1Z5" />
+            <FormField compact={compact} label="Destination address" value={form.destination_address} onChangeText={(v) => setForm({ ...form, destination_address: v })} multiline />
+            <FormField compact={compact} label="Distance (km)" value={form.distance_km} onChangeText={(v) => setForm({ ...form, distance_km: v })} keyboardType="numeric" />
+            <SelectField
+              compact={compact}
+              label="Pricing model"
+              value={form.pricing_model}
+              options={LANE_PRICING_MODEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => setForm({ ...form, pricing_model: v })}
+            />
+            <FormField compact={compact} label="Vehicle type" value={form.vehicle_type} onChangeText={(v) => setForm({ ...form, vehicle_type: v })} placeholder="e.g. 24ft, 10T" />
+            <FormField compact={compact} label="Base rate (₹)" value={form.base_rate} onChangeText={(v) => setForm({ ...form, base_rate: v })} keyboardType="numeric" placeholder="0" />
+            <FormField compact={compact} label="Per MT rate (₹)" value={form.per_mt_rate} onChangeText={(v) => setForm({ ...form, per_mt_rate: v })} keyboardType="numeric" />
+            <FormField compact={compact} label="Per KM rate (₹)" value={form.per_km_rate} onChangeText={(v) => setForm({ ...form, per_km_rate: v })} keyboardType="numeric" />
+            <FormField compact={compact} label="Lane rate (₹)" value={form.rate} onChangeText={(v) => setForm({ ...form, rate: v })} keyboardType="numeric" placeholder="Optional flat rate" />
+            <SelectField compact={compact} label="Rate type" value={form.rate_type} options={RATE_TYPES} onChange={(v) => setForm({ ...form, rate_type: v })} />
+            <FormField compact={compact} label="Valid from (YYYY-MM-DD)" value={form.valid_from} onChangeText={(v) => setForm({ ...form, valid_from: v })} placeholder="2026-01-01" />
+            <FormField compact={compact} label="Valid to (YYYY-MM-DD)" value={form.valid_to} onChangeText={(v) => setForm({ ...form, valid_to: v })} placeholder="2027-01-01" />
           </View>
           <Pressable onPress={() => setForm({ ...form, is_spot_rate: !form.is_spot_rate })} style={f.checkRow}>
             <View style={[f.checkbox, form.is_spot_rate && f.checkboxOn]}>
@@ -634,10 +813,18 @@ export function ClientProfileCommercialsPanel({ bundle, orgId, clientId, onRefre
         </FormCard>
       )}
 
-      {rows.length === 0 && !showForm ? (
-        <Empty message="No lane rates yet" sub="Define trip rates by lane, vehicle type, and billing model." />
+      {bundle.lane_rates.length === 0 && !showForm ? (
+        <Empty message="No lane rates yet" sub="Define contract lanes with warehouse origin, destination GSTIN, and per MT/KM pricing." />
       ) : (
-        <DataTable headers={["Origin", "Destination", "Vehicle", "Rate", "Type", "Model", "From"]} rows={rows} />
+        <View style={cpStyles.laneCardGrid}>
+          {bundle.lane_rates.map((lane) => (
+            <ClientProfileLaneRateCard
+              key={lane.id}
+              lane={lane}
+              originWarehouse={lane.origin_warehouse_id ? warehouseById.get(lane.origin_warehouse_id) : null}
+            />
+          ))}
+        </View>
       )}
     </View>
   );
@@ -660,6 +847,8 @@ const INVOICE_FREQUENCIES = [
 ];
 
 export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }: BaseProps) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const fp = bundle.finance_profile;
   const [editing, setEditing] = useState(!fp);  // open form immediately if not configured
   const [saving, setSaving] = useState(false);
@@ -691,8 +880,16 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
     onRefresh();
   };
 
+  const financeStatCellStyle = (idx: number) => {
+    if (!compact) return idx === 3 ? styles.statCellLast : undefined;
+    if (idx === 1) return mobile.statCellGridTopRight;
+    if (idx === 2) return mobile.statCellGridBottomLeft;
+    if (idx === 3) return mobile.statCellGridBottomRight;
+    return undefined;
+  };
+
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <View style={f.panelHeaderRow}>
         <Text style={styles.sectionTitle}>Finance & credit</Text>
         {fp && !editing ? (
@@ -714,8 +911,9 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
           saving={saving}
           error={error}
         >
-          <View style={f.formGrid}>
+          <View style={[f.formGrid, compact && mobile.formGridCompact]}>
             <FormField
+              compact={compact}
               label="Opening balance (₹)"
               value={form.opening_balance}
               onChangeText={(v) => setForm({ ...form, opening_balance: v })}
@@ -723,6 +921,7 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
               placeholder="0"
             />
             <FormField
+              compact={compact}
               label="Credit limit (₹)"
               value={form.credit_limit}
               onChangeText={(v) => setForm({ ...form, credit_limit: v })}
@@ -730,6 +929,7 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
               placeholder="Leave blank for unlimited"
             />
             <FormField
+              compact={compact}
               label="Credit days"
               value={form.credit_days}
               onChangeText={(v) => setForm({ ...form, credit_days: v })}
@@ -737,18 +937,21 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
               placeholder="30"
             />
             <SelectField
+              compact={compact}
               label="Billing cycle"
               value={form.billing_cycle}
               options={BILLING_CYCLES}
               onChange={(v) => setForm({ ...form, billing_cycle: v })}
             />
             <SelectField
+              compact={compact}
               label="Invoice frequency"
               value={form.invoice_frequency}
               options={INVOICE_FREQUENCIES}
               onChange={(v) => setForm({ ...form, invoice_frequency: v })}
             />
             <FormField
+              compact={compact}
               label="DSO target (days)"
               value={form.dso_target_days}
               onChangeText={(v) => setForm({ ...form, dso_target_days: v })}
@@ -756,6 +959,7 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
               placeholder="Days Sales Outstanding target"
             />
             <FormField
+              compact={compact}
               label="Notes"
               value={form.notes}
               onChangeText={(v) => setForm({ ...form, notes: v })}
@@ -767,22 +971,29 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
       ) : fp ? (
         <>
           {/* Stats bar */}
-          <View style={styles.statsBar}>
+          <View style={[styles.statsBar, compact && mobile.statsBarGrid]}>
             {[
               { value: formatINR(fp.opening_balance), label: "OPENING" },
               { value: fp.credit_limit != null ? formatINR(fp.credit_limit) : "Unlimited", label: "CREDIT LIMIT" },
               { value: String(fp.credit_days) + "d", label: "CREDIT DAYS" },
               { value: fp.dso_target_days != null ? String(fp.dso_target_days) + "d" : "—", label: "DSO TARGET" },
-            ].map((s, idx, arr) => (
-              <View key={s.label} style={[styles.statCell, idx === arr.length - 1 && styles.statCellLast]}>
-                <Text style={styles.statValue}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
+            ].map((s, idx) => (
+              <View
+                key={s.label}
+                style={[
+                  styles.statCell,
+                  compact && mobile.statCellGrid,
+                  financeStatCellStyle(idx),
+                ]}
+              >
+                <Text style={[styles.statValue, compact && mobile.statValueCompact]}>{s.value}</Text>
+                <Text style={[styles.statLabel, compact && mobile.statLabelCompact]}>{s.label}</Text>
               </View>
             ))}
           </View>
 
           {/* Terms row */}
-          <View style={f.termsRow}>
+          <View style={[f.termsRow, compact && { flexDirection: "column" }]}>
             <View style={f.termItem}>
               <Text style={f.termLabel}>Billing cycle</Text>
               <Text style={f.termValue}>{fp.billing_cycle.replace(/_/g, " ")}</Text>
@@ -824,16 +1035,18 @@ export function ClientProfileFinancePanel({ bundle, orgId, clientId, onRefresh }
 // ── TAB: Document vault ────────────────────────────────────────────────────────
 
 export function ClientProfileVaultPanel({ bundle }: { bundle: ClientManagementBundle }) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const rows = bundle.documents.map((d) => [
     d.folder, d.title, d.doc_type, `v${d.version_number}`, d.expiry_date ?? "—",
   ]);
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <Text style={styles.sectionTitle}>Document vault</Text>
       {rows.length === 0 ? (
         <Empty message="No documents uploaded" sub="Upload contracts, rate cards, certificates, and other files." />
       ) : (
-        <DataTable headers={["Folder", "Title", "Type", "Version", "Expiry"]} rows={rows} />
+        <ResponsiveDataTable compact={compact} headers={["Folder", "Title", "Type", "Version", "Expiry"]} rows={rows} />
       )}
     </View>
   );
@@ -842,17 +1055,19 @@ export function ClientProfileVaultPanel({ bundle }: { bundle: ClientManagementBu
 // ── TAB: Audit log ─────────────────────────────────────────────────────────────
 
 export function ClientProfileAuditPanel({ bundle }: { bundle: ClientManagementBundle }) {
+  const compact = useProfileHubCompact();
+  const panelWrapStyle = usePanelWrapStyle();
   const rows = bundle.audit_log.map((a) => [
     new Date(a.created_at).toLocaleString("en-IN"),
     a.entity_type, a.action, a.field_name ?? "—", a.old_value ?? "—", a.new_value ?? "—",
   ]);
   return (
-    <View style={styles.panel}>
+    <View style={panelWrapStyle}>
       <Text style={styles.sectionTitle}>Audit log</Text>
       {rows.length === 0 ? (
         <Empty message="No audit events yet" sub="Every change to this client profile is recorded here automatically." />
       ) : (
-        <DataTable headers={["When", "Entity", "Action", "Field", "Old", "New"]} rows={rows} />
+        <ResponsiveDataTable compact={compact} headers={["When", "Entity", "Action", "Field", "Old", "New"]} rows={rows} />
       )}
     </View>
   );
@@ -865,6 +1080,8 @@ const f = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 10,
     marginBottom: 16,
   },
   emptyWrap: {

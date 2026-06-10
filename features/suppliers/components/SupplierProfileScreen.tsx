@@ -71,7 +71,7 @@ export function SupplierProfileScreen({ supplierId, onBack }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: Theme.screenBackground, paddingTop: insets.top }}>
-      <SupplierProfileHub bundle={bundle} onBack={onBack} />
+      <SupplierProfileHub bundle={bundle} onBack={onBack} onRefresh={() => void load()} />
     </View>
   );
 }

@@ -24,6 +24,7 @@ import { NetworkDesktopHub } from "@/features/network/components/desktop/Network
 import type { NetworkDesktopTab } from "@/features/network/components/desktop/NetworkDesktopHub";
 import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { NetworkPhoneAndContactsPanel } from "@/features/network/components/NetworkPhoneAndContactsPanel";
+import { NetworkSupportHelpCards } from "@/features/network/components/NetworkSupportHelpCards";
 import { discoverSearchTermForOrgs } from "@/lib/networkPhoneSearch";
 import { MutualConnectionsModal } from "@/features/network/components/MutualConnectionsModal";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
@@ -1230,6 +1231,7 @@ function NetworkScreenInner() {
                 orgId={orgId}
                 search={discoverSearch}
                 connectedOrgIds={integratedPartnerOrgIds}
+                totalConnections={totalConnections}
                 inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
                 onSearchChange={setDiscoverSearch}
                 onOpenProfile={handleOpenProfileFromDiscover}
@@ -1252,6 +1254,7 @@ function NetworkScreenInner() {
             </View>
           </View>
         </View>
+        <NetworkSupportHelpCards />
       </>
     </ScrollView>
   );
@@ -1384,6 +1387,7 @@ function NetworkScreenInner() {
                   <View
                     style={[
                       styles.profileCtaStack,
+                      isMobileLayout && styles.profileCtaStackMobile,
                       isWideNetwork && styles.profileCtaStackDesktop,
                     ]}
                   >
@@ -1396,7 +1400,12 @@ function NetworkScreenInner() {
                          *  the left mirrors the discover card so the
                          *  user remembers whether they invited as a
                          *  CLIENT or SUPPLIER. */
-                        <View style={styles.profileRequestSentRow}>
+                        <View
+                          style={[
+                            styles.profileRequestSentRow,
+                            isMobileLayout && styles.profileRequestSentRowMobile,
+                          ]}
+                        >
                           {profileLivePending?.role ? (
                             <View style={styles.profilePendingRolePill}>
                               <Text
@@ -1412,6 +1421,7 @@ function NetworkScreenInner() {
                           <Pressable
                             style={({ pressed }) => [
                               styles.profileRequestSentBtn,
+                              isMobileLayout && styles.profileRequestSentBtnMobile,
                               protocolCancelling &&
                                 styles.profileRequestSentBtnDisabled,
                               pressed && { opacity: 0.85 },
@@ -1459,12 +1469,20 @@ function NetworkScreenInner() {
                     <Pressable
                       style={({ pressed }) => [
                         styles.profileSecondaryBtn,
+                        isMobileLayout && styles.profileSecondaryBtnMobile,
                         pressed && { opacity: 0.88 },
                       ]}
                       onPress={() => void handleOpenDirectMessage()}
                     >
                       <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
-                      <Text style={styles.profileSecondaryBtnText}>Direct message</Text>
+                      <Text
+                        style={[
+                          styles.profileSecondaryBtnText,
+                          isMobileLayout && styles.profileSecondaryBtnTextMobile,
+                        ]}
+                      >
+                        Direct message
+                      </Text>
                     </Pressable>
                   </View>
                 </ScrollView>
@@ -1871,8 +1889,8 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   profileModalScrollMobile: {
-    paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingHorizontal: 0,
+    paddingTop: 0,
     gap: 0,
   },
   profileIdentityCardModalMobile: {
@@ -2194,6 +2212,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 4,
   },
+  profileCtaStackMobile: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 10,
+  },
   profileCtaStackDesktop: {
     paddingHorizontal: 24,
     paddingTop: 8,
@@ -2249,6 +2272,11 @@ const styles = StyleSheet.create({
     gap: 6,
     width: "100%",
   },
+  profileRequestSentRowMobile: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+  },
   profileRequestSentBtn: {
     flex: 1,
     minHeight: 32,
@@ -2261,6 +2289,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     paddingHorizontal: 10,
+  },
+  profileRequestSentBtnMobile: {
+    minHeight: 44,
+    width: "100%",
+    flex: undefined,
   },
   profileRequestSentBtnDisabled: {
     opacity: 0.6,
@@ -2276,13 +2309,23 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.primary + "1A",
     borderWidth: 1,
     borderColor: Theme.primary + "33",
+    alignSelf: "flex-start",
   },
   profilePendingRolePillText: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "600",
     color: Theme.primary,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    letterSpacing: 0.2,
+    textTransform: "capitalize",
+  },
+  profileSecondaryBtnMobile: {
+    minHeight: 48,
+    borderRadius: 12,
+  },
+  profileSecondaryBtnTextMobile: {
+    fontWeight: "600",
+    letterSpacing: 0,
+    textTransform: "none",
   },
   profileOpsCard: {
     borderRadius: 22,

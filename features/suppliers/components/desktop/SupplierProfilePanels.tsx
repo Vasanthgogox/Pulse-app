@@ -55,9 +55,26 @@ import {
   Wallet,
   Zap,
 } from "lucide-react-native";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import {
+  updateSupplierOnboarding,
+  type OnboardingAgreementStatus,
+} from "@/features/suppliers/services/supplierProfile.service";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
-type BundleProps = { bundle: SupplierManagementBundle };
+type BundleProps = {
+  bundle: SupplierManagementBundle;
+  orgId?: string;
+  onRefresh?: () => void;
+};
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
 
@@ -170,6 +187,9 @@ export function SupplierProfileOverviewPanel({ bundle }: BundleProps) {
               ["GST Number", supplier.gst_number ?? "—"],
               ["Address", supplier.address ?? "—"],
               ["Type", supplier.supplier_type ?? "offline"],
+              ["Vehicle types", (supplier.vehicle_types ?? []).join(", ") || "—"],
+              ["Operating areas", (supplier.operating_areas ?? []).join(", ") || "—"],
+              ["Onboarding", supplier.onboarding_agreement_status ?? "pending"],
               ["Verified", supplier.is_verified ? "Yes" : "No"],
             ].map(([l, v]) => <InfoRow key={l} label={l} value={v} />)}
           </View>
@@ -394,7 +414,147 @@ export function SupplierProfileCompliancePanel({ bundle }: BundleProps) {
 
 // ── TAB 4: Contracts ──────────────────────────────────────────────────────────
 
-export function SupplierProfileContractsPanel({ bundle }: BundleProps) {
+const ONBOARDING_STATUS_OPTIONS: { value: OnboardingAgreementStatus; label: string }[] = [
+  { value: "pending", label: "Pending" },
+  { value: "draft", label: "Draft" },
+  { value: "signed", label: "Signed" },
+  { value: "expired", label: "Expired" },
+  { value: "terminated", label: "Terminated" },
+];
+
+function SupplierOnboardingAgreementCard({
+  bundle,
+  orgId,
+  onRefresh,
+}: BundleProps) {
+  const { supplier } = bundle;
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<OnboardingAgreementStatus>(
+    (supplier.onboarding_agreement_status as OnboardingAgreementStatus) ?? "pending",
+  );
+  const [signedAt, setSignedAt] = useState(
+    supplier.onboarding_agreement_signed_at
+      ? supplier.onboarding_agreement_signed_at.slice(0, 10)
+      : "",
+  );
+  const [notes, setNotes] = useState(supplier.onboarding_agreement_notes ?? "");
+
+  const canEdit = Boolean(orgId && onRefresh);
+  const statusColors: Record<string, { bg: string; text: string }> = {
+    signed: { bg: "#E8FFF3", text: "#50CD89" },
+    pending: { bg: "#FFF8DD", text: "#F6C000" },
+    draft: { bg: "#EEF6FF", text: "#3E97FF" },
+    expired: { bg: "#FFF1F2", text: "#F1416C" },
+    terminated: { bg: "#F1F1F4", text: METRONIC.subtle },
+  };
+  const tone = statusColors[status] ?? statusColors.pending;
+
+  const handleSave = async () => {
+    if (!orgId || !onRefresh) return;
+    setSaving(true);
+    const { error } = await updateSupplierOnboarding(orgId, supplier.id, {
+      onboarding_agreement_status: status,
+      onboarding_agreement_signed_at: signedAt.trim() ? `${signedAt.trim()}T00:00:00.000Z` : null,
+      onboarding_agreement_notes: notes.trim() || null,
+    });
+    setSaving(false);
+    if (error) {
+      Alert.alert("Save failed", error.message);
+      return;
+    }
+    setEditing(false);
+    onRefresh();
+  };
+
+  return (
+    <View style={[spStyles.dataCard, { marginBottom: 20 }]}>
+      <View style={spStyles.contractsHeaderRow}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.sectionTitle, { marginBottom: 4 }]}>Onboarding agreement</Text>
+          <Text style={spStyles.emptyActionSub}>
+            Supplier onboarding terms — aligned with Add Supplier wizard review step.
+          </Text>
+        </View>
+        <View style={[spStyles.contractStatusPill, { backgroundColor: tone.bg }]}>
+          <Text style={{ fontSize: 10, fontWeight: "700", color: tone.text }}>
+            {(status ?? "pending").toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      {editing ? (
+        <View style={{ gap: 10, marginTop: 12 }}>
+          <Text style={spStyles.infoLabel}>Status</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {ONBOARDING_STATUS_OPTIONS.map((o) => (
+              <Pressable
+                key={o.value}
+                onPress={() => setStatus(o.value)}
+                style={[
+                  spStyles.slaChip,
+                  status === o.value && { backgroundColor: "#EEF6FF", borderColor: METRONIC.link },
+                ]}
+              >
+                <Text style={spStyles.slaChipText}>{o.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={spStyles.infoLabel}>Signed date (YYYY-MM-DD)</Text>
+          <TextInput
+            style={spStyles.onboardingInput}
+            value={signedAt}
+            onChangeText={setSignedAt}
+            placeholder="2026-06-01"
+            placeholderTextColor={METRONIC.muted}
+          />
+          <Text style={spStyles.infoLabel}>Notes</Text>
+          <TextInput
+            style={[spStyles.onboardingInput, { minHeight: 72 }]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Agreement reference, signatory, special clauses…"
+            placeholderTextColor={METRONIC.muted}
+            multiline
+          />
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Pressable onPress={() => setEditing(false)} style={spStyles.onboardingCancelBtn} disabled={saving}>
+              <Text style={spStyles.onboardingCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable onPress={handleSave} style={spStyles.addBtn} disabled={saving}>
+              {saving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={spStyles.addBtnText}>Save agreement</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <>
+          <InfoRow
+            label="Signed on"
+            value={
+              supplier.onboarding_agreement_signed_at
+                ? new Date(supplier.onboarding_agreement_signed_at).toLocaleDateString("en-IN")
+                : "—"
+            }
+          />
+          <InfoRow label="Document" value={supplier.onboarding_agreement_storage_path ? "Uploaded" : "Not uploaded"} />
+          <InfoRow label="Notes" value={supplier.onboarding_agreement_notes?.trim() || "—"} />
+          {canEdit ? (
+            <Pressable onPress={() => setEditing(true)} style={[spStyles.addBtn, { alignSelf: "flex-start", marginTop: 12 }]}>
+              <FileCheck size={14} color="#fff" strokeWidth={2} />
+              <Text style={spStyles.addBtnText}>Update agreement</Text>
+            </Pressable>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
+
+export function SupplierProfileContractsPanel({ bundle, orgId, onRefresh }: BundleProps) {
   const { contracts } = bundle;
   const active = contracts.filter((c) => c.status === "active");
   const expired = contracts.filter((c) => c.status === "expired");
@@ -402,9 +562,10 @@ export function SupplierProfileContractsPanel({ bundle }: BundleProps) {
   if (contracts.length === 0) {
     return (
       <View style={styles.panel}>
+        <SupplierOnboardingAgreementCard bundle={bundle} orgId={orgId} onRefresh={onRefresh} />
         <View style={spStyles.emptyActionCard}>
           <FileText size={36} color={METRONIC.muted} strokeWidth={1.5} />
-          <Text style={spStyles.emptyActionTitle}>No contracts yet</Text>
+          <Text style={spStyles.emptyActionTitle}>No rate contracts yet</Text>
           <Text style={spStyles.emptyActionSub}>Create a rate contract to manage lanes, SLA, and penalty terms.</Text>
           <Pressable style={spStyles.addBtn}>
             <Plus size={14} color="#fff" strokeWidth={2} />
@@ -417,6 +578,7 @@ export function SupplierProfileContractsPanel({ bundle }: BundleProps) {
 
   return (
     <View style={styles.panel}>
+      <SupplierOnboardingAgreementCard bundle={bundle} orgId={orgId} onRefresh={onRefresh} />
       <View style={spStyles.contractsHeaderRow}>
         <Text style={styles.sectionTitle}>{active.length} active contract{active.length !== 1 ? "s" : ""}</Text>
         <Pressable style={spStyles.addBtn}>

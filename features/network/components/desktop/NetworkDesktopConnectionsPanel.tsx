@@ -119,7 +119,6 @@ export function NetworkDesktopConnectionsPanel({
           embedded
           hubMode
           desktopMetronicGrid
-          desktopMetronicHorizontalScroll
           onChatIntegrated={onChatIntegrated}
           hubSearch={connSearch}
           hubFilter={connFilter}

@@ -2,6 +2,7 @@
  * Unified shell footer + bottom nav (pulse-unified-base aligned).
  */
 import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
+import { WebNavMirrorToggle } from "@/components/demo/WebNavMirrorToggle";
 import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
@@ -77,11 +78,8 @@ import {
 } from "react-native";
 import Animated, {
     Easing,
-    interpolate,
     useAnimatedStyle,
-    useDerivedValue,
     useSharedValue,
-    withSpring,
     withTiming,
 } from "react-native-reanimated";
 import {
@@ -133,97 +131,6 @@ function AnimatedPress({
         {children}
       </TouchableOpacity>
     </Animated.View>
-  );
-}
-
-function AnimatedNavPill({
-  active,
-  onPress,
-  onHoverInExtra,
-  icon,
-  title,
-  subtitle,
-}: {
-  active: boolean;
-  onPress?: () => void;
-  /** Web: prefetch lazy tab chunk / finance queries before click. */
-  onHoverInExtra?: () => void;
-  icon: React.ComponentProps<typeof FontAwesome5>["name"];
-  title: string;
-  subtitle?: string;
-}) {
-  const hoverProgress = useSharedValue(0);
-  const activeProgress = useSharedValue(active ? 1 : 0);
-
-  const springCfg = { damping: 24, stiffness: 200, mass: 1 };
-
-  useEffect(() => {
-    activeProgress.value = withSpring(active ? 1 : 0, springCfg);
-    if (active) hoverProgress.value = withSpring(0, springCfg);
-  }, [active, activeProgress]);
-
-  // Single derived value — active always wins, hover fills in when idle.
-  // Both useAnimatedStyle hooks read this; no duplicate Math.max on the UI thread.
-  const expansionProgress = useDerivedValue(() =>
-    Math.max(activeProgress.value, hoverProgress.value)
-  );
-
-  const pillStyle = useAnimatedStyle(() => {
-    const p = expansionProgress.value;
-    const bgAlpha = activeProgress.value > hoverProgress.value
-      ? activeProgress.value          // active → full dark
-      : hoverProgress.value * 0.05;   // hover only → very subtle tint
-    const borderAlpha = activeProgress.value * 0.6 + hoverProgress.value * 0.08;
-    return {
-      width: interpolate(p, [0, 1], [44, 160]),
-      backgroundColor: `rgba(15,23,42,${bgAlpha})`,
-      borderColor: `rgba(15,23,42,${borderAlpha})`,
-    };
-  });
-
-  const textStyle = useAnimatedStyle(() => {
-    const p = expansionProgress.value;
-    return {
-      opacity: p,
-      transform: [{ translateX: interpolate(p, [0, 1], [-12, 0]) }],
-    };
-  });
-
-  return (
-    <Pressable
-      onPress={onPress}
-      onHoverIn={() => {
-        if (!active) hoverProgress.value = withSpring(1, springCfg);
-        onHoverInExtra?.();
-      }}
-      onHoverOut={() => {
-        if (!active) hoverProgress.value = withSpring(0, springCfg);
-      }}
-      style={styles.webNavPressable}
-    >
-      <Animated.View style={[styles.webNavPill, pillStyle]}>
-        {/* Fixed-width icon box — never shifts during expansion */}
-        <View style={styles.webNavIconBox}>
-          <FontAwesome5
-            name={icon}
-            size={16}
-            color={active ? Theme.textOnPrimary : Theme.textMutedDemo}
-            solid={active}
-          />
-        </View>
-        {/* Absolutely positioned text — revealed by the pill mask */}
-        <Animated.View style={[styles.webNavTextAbs, textStyle]}>
-          <Text numberOfLines={1} style={[styles.webNavTitle, active && styles.webNavTitleActive]}>
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text numberOfLines={1} style={[styles.webNavSub, active && styles.webNavSubActive]}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </Animated.View>
-      </Animated.View>
-    </Pressable>
   );
 }
 
@@ -789,19 +696,21 @@ export function DemoTabBar({
             </View>
           </Pressable>
 
-          <View style={styles.webNavPillGroup}>
-            {navItems.map((item) => (
-              <AnimatedNavPill
-                key={`${item.id}-${item.title}`}
-                active={item.active}
-                onPress={() => onTabChange(item.id)}
-                onHoverInExtra={() => onWarmTab(item.id)}
-                icon={item.icon}
-                title={item.title}
-                subtitle={item.subtitle}
-              />
-            ))}
-          </View>
+          <WebNavMirrorToggle
+            items={navItems}
+            activeIndex={Math.max(
+              0,
+              navItems.findIndex((item) => item.active),
+            )}
+            onSelect={(index) => {
+              const item = navItems[index];
+              if (item) onTabChange(item.id);
+            }}
+            onWarmAt={(index) => {
+              const item = navItems[index];
+              if (item) onWarmTab(item.id);
+            }}
+          />
 
           <View
             style={[

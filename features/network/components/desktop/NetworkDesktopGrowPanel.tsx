@@ -22,7 +22,8 @@ import {
   ConnectionRoleModal,
   type ConnectionInviteRole,
 } from "@/features/network/components/ConnectionRoleModal";
-import { NetworkDesktopGrowOrgCard } from "@/features/network/components/desktop/NetworkDesktopGrowOrgCard";
+import { NetworkGrowSummaryCard } from "@/features/network/components/NetworkGrowSummaryCard";
+import { NetworkDesktopGrowConnectionCard } from "@/features/network/components/desktop/NetworkDesktopGrowConnectionCard";
 import {
   METRONIC,
   networkDesktopHubStyles as styles,
@@ -31,6 +32,7 @@ import { useNetworkDiscovery } from "@/features/network/hooks/useNetworkDiscover
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import {
+  getDiscoverOrgLocation,
   isConnectableDiscoverOrg,
   scoreDiscoverOrg,
   type ScoredDiscoverOrg,
@@ -45,11 +47,8 @@ import { queryKeys } from "@/lib/queryKeys";
 import {
   ChevronDown,
   Filter,
-  LayoutGrid,
-  List,
   MoreVertical,
   Search,
-  Sparkles,
   UserPlus,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -83,7 +82,7 @@ type Props = {
 type GrowSortMode = "recommended" | "latest" | "active";
 type GrowSignalFilter = "mutual" | "location" | "lane";
 
-const RECOMMENDATION_LIMIT = 9;
+const RECOMMENDATION_LIMIT = 8;
 
 function matchesOrgNameSearch(org: DiscoverOrg, term: string): boolean {
   const q = term.trim().toLowerCase();
@@ -202,7 +201,6 @@ export function NetworkDesktopGrowPanel({
   const [signalFilters, setSignalFilters] = useState<Set<GrowSignalFilter>>(
     () => new Set(),
   );
-  const [gridView, setGridView] = useState(true);
 
   useEffect(() => {
     setSentRequestRoles({});
@@ -266,6 +264,15 @@ export function NetworkDesktopGrowPanel({
     [filteredOrgs, pendingSentOrgIds],
   );
 
+  const discoverableCount = useMemo(
+    () =>
+      searchMatchedOrgs
+        .map(scoreDiscoverOrg)
+        .filter(isConnectableDiscoverOrg)
+        .filter((o) => !pendingSentOrgIds.has(o.id)).length,
+    [searchMatchedOrgs, pendingSentOrgIds],
+  );
+
   const growRecommendations = useMemo(
     () =>
       pickLimitedRecommendations(
@@ -275,32 +282,25 @@ export function NetworkDesktopGrowPanel({
     [recommendationCandidates],
   );
 
-  const renderGrowOrgCard = (
-    org: ScoredDiscoverOrg,
-    variant: "grid" | "list",
-  ) => {
+  const renderGrowOrgCard = (org: ScoredDiscoverOrg) => {
     const pendingRole =
       sentRequestRoles[org.id] ?? pendingRoleByOrgId.get(org.id) ?? null;
     const pending =
       Boolean(pendingRole) ||
       String(org.connection_status ?? "").toLowerCase() === "pending";
+    const location = getDiscoverOrgLocation(org) ?? "Location not set";
     return (
-      <NetworkDesktopGrowOrgCard
+      <NetworkDesktopGrowConnectionCard
         key={org.id}
         org={org}
-        variant={variant}
-        viewerOrgId={orgId}
+        locationLabel={location}
+        ratingValue={org.average_rating ?? org.rating ?? null}
+        mutualCount={org.mutual_count ?? org.mutual_connections_count ?? 0}
         pendingRole={pending ? pendingRole : null}
         connecting={connectingId === org.id}
         onOpenProfile={() => onOpenProfile(org)}
         onConnect={() => tryBeginConnectionRequest(org)}
         onCancel={() => void handleCancel(org)}
-        onPressMutuals={
-          (org.mutual_count ?? 0) > 0
-            ? () => onPressMutuals({ id: org.id, name: org.name })
-            : undefined
-        }
-        onPressMutual={onOpenMutualProfile}
         onDismiss={
           pending
             ? undefined
@@ -316,11 +316,6 @@ export function NetworkDesktopGrowPanel({
         .filter((c) => c.is_integrated && c.role !== "DRIVER")
         .slice(0, 4),
     [connections],
-  );
-
-  const invitePct = Math.min(
-    100,
-    Math.round((todayInviteCount / DAILY_CONNECTION_INVITE_LIMIT) * 100),
   );
 
   const filtersActive = signalFilters.size > 0;
@@ -425,24 +420,11 @@ export function NetworkDesktopGrowPanel({
     <View style={styles.salesBody}>
       <View style={styles.splitRow}>
         <View style={styles.sidebar}>
-          <View style={[styles.salesCard, styles.salesCardPad, styles.growInviteBanner]}>
-            <View style={styles.growInviteBannerHead}>
-              <Sparkles size={14} color={METRONIC.link} />
-              <Text style={styles.growInviteBannerTitle}>Grow your network</Text>
-            </View>
-            <Text style={styles.growInviteBannerSub}>
-              {recommendationCandidates.length} organisations to discover ·{" "}
-              {totalConnections} connected
-            </Text>
-            <View style={styles.growInviteProgressTrack}>
-              <View
-                style={[styles.growInviteProgressFill, { width: `${invitePct}%` }]}
-              />
-            </View>
-            <Text style={styles.growInviteBannerMeta}>
-              {todayInviteCount}/{DAILY_CONNECTION_INVITE_LIMIT} invites sent today
-            </Text>
-          </View>
+          <NetworkGrowSummaryCard
+            discoverCount={discoverableCount}
+            totalConnections={totalConnections}
+            todayInviteCount={todayInviteCount}
+          />
 
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Intelligent filters</Text>
@@ -583,32 +565,6 @@ export function NetworkDesktopGrowPanel({
             <Text style={styles.growTeamsCount}>
               {growRecommendations.length} Partners
             </Text>
-            <View style={styles.growViewToggle}>
-              <Pressable
-                onPress={() => setGridView(true)}
-                style={[
-                  styles.growViewToggleBtn,
-                  gridView && styles.growViewToggleBtnOn,
-                ]}
-              >
-                <LayoutGrid
-                  size={15}
-                  color={gridView ? METRONIC.link : METRONIC.muted}
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => setGridView(false)}
-                style={[
-                  styles.growViewToggleBtn,
-                  !gridView && styles.growViewToggleBtnOn,
-                ]}
-              >
-                <List
-                  size={15}
-                  color={!gridView ? METRONIC.link : METRONIC.muted}
-                />
-              </Pressable>
-            </View>
           </View>
 
           <View style={[styles.salesCard, styles.growToolbarCard]}>
@@ -676,13 +632,9 @@ export function NetworkDesktopGrowPanel({
                   : "No organisations match your filters. Try clearing filters."}
               </Text>
             </View>
-          ) : gridView ? (
-            <View style={styles.growCardGrid}>
-              {growRecommendations.map((org) => renderGrowOrgCard(org, "grid"))}
-            </View>
           ) : (
-            <View style={styles.growListStack}>
-              {growRecommendations.map((org) => renderGrowOrgCard(org, "list"))}
+            <View style={styles.growCardGrid}>
+              {growRecommendations.map((org) => renderGrowOrgCard(org))}
             </View>
           )}
         </View>

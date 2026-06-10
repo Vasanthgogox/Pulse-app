@@ -25,6 +25,7 @@ import { NetworkDesktopHubHero } from "@/features/network/components/desktop/Net
 import { NetworkDesktopProfilePanel } from "@/features/network/components/desktop/NetworkDesktopProfilePanel";
 import { NetworkDesktopTeamPanel } from "@/features/network/components/desktop/NetworkDesktopTeamPanel";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
+import { NetworkSupportHelpCards } from "@/features/network/components/NetworkSupportHelpCards";
 import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
 import { exportConnectionsExcel } from "@/features/network/lib/networkExport.util";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
@@ -232,6 +233,7 @@ export function NetworkDesktopHub({
   const selectTab = (next: NetworkDesktopTab) => {
     onInvitationsOpenChange(false);
     if (next === "chat") {
+      setChatPartnerOrgId(null);
       setTab("chat");
       setChatOpen(true);
       return;
@@ -458,7 +460,7 @@ export function NetworkDesktopHub({
                 if (tab === "chat") setTab("connections");
                 return;
               }
-              openChatWithPartner(chatPartnerOrgId);
+              openChatWithPartner(null);
             }}
             accessibilityRole="button"
             accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
@@ -490,6 +492,7 @@ export function NetworkDesktopHub({
       </View>
 
       {panel}
+      <NetworkSupportHelpCards />
     </ScrollView>
   );
 

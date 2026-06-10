@@ -95,6 +95,7 @@ export interface ClientWarehouseExtended {
   organization_id: string;
   client_id: string;
   warehouse_code: string | null;
+  warehouse_zone: string | null;
   name: string;
   address: string | null;
   city: string | null;
@@ -184,6 +185,14 @@ export interface ClientLaneRate {
   destination_warehouse_id: string | null;
   origin_label: string;
   destination_label: string;
+  destination_gstin: string | null;
+  destination_address: string | null;
+  warehouse_zone: string | null;
+  distance_km: number | null;
+  pricing_model: string | null;
+  base_rate: number | null;
+  per_mt_rate: number | null;
+  per_km_rate: number | null;
   vehicle_type: string | null;
   rate: number | null;
   rate_type: LaneRateType;
