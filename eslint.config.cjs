@@ -1,4 +1,4 @@
-// ESLint flat config for q-mobile
+// ESLint flat config for pulse
 
 const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
@@ -6,7 +6,7 @@ const importPlugin = require('eslint-plugin-import');
 const boundariesPlugin = require('eslint-plugin-boundaries');
 
 // Custom project-specific rules
-const qmobile = {
+const pulse = {
   rules: {
     'file-naming': {
       meta: {
@@ -78,14 +78,14 @@ module.exports = [
     plugins: {
       '@typescript-eslint': tsPlugin,
       import: importPlugin,
-      qmobile,
+      pulse,
     },
     rules: {
       // Basic recommended TypeScript rules
       ...tsPlugin.configs.recommended.rules,
 
       // Enforce feature-level file naming for services and utils
-      'qmobile/file-naming': 'error',
+      'pulse/file-naming': 'error',
 
       // Enforce architectural dependency direction:
       // app -> features -> lib

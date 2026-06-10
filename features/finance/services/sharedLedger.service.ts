@@ -1,6 +1,6 @@
 /**
  * Shared Ledger service — verified balances, connections, shared entries, disputes.
- * Single bounded context; calls Supabase RPC/tables defined in Q-unified-base.
+ * Single bounded context; calls Supabase RPC/tables defined in pulse-unified-base.
  * See docs/SHARED_LEDGER_BACKEND_CONTRACT.md for backend contract.
  */
 import { supabase } from '@/lib/supabase';

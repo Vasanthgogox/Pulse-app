@@ -1,4 +1,4 @@
-# Q Mobile: Enterprise Security Checklist
+# Pulse: Enterprise Security Checklist
 
 System-level security audit for the React Native/Expo logistics app. Organized by **phase**, with **priority** (P1 critical, P2 high), **automation status**, and **evidence** for stakeholder audits. Aligned with OWASP Mobile Top 10 and enterprise release gates. **Rating:** see [How we rate our security measures](#how-we-rate-our-security-measures) for self-assessment and grade (current: **A**).
 
@@ -36,7 +36,7 @@ System-level security audit for the React Native/Expo logistics app. Organized b
 | **Network** | HTTPS for production API | P1 | ✅ | Manual | Supabase URL https | |
 | **Network** | Cleartext disabled for production Android | P1 | ✅ | CI / Config | `app.config.js` env-based | OWASP M1: usesCleartextTraffic false when URL is https |
 | **Network** | Request timeout and retry | P2 | ✅ | Manual | `lib/supabase.ts` fetchWithTimeoutAndRetry | |
-| **AuthZ** | RLS as enforcement layer | P1 | ✅ | Manual | Q-unified-base migrations; anon only | |
+| **AuthZ** | RLS as enforcement layer | P1 | ✅ | Manual | pulse-unified-base migrations; anon only | |
 | **AuthZ** | Capability-based UI permissions | P2 | ✅ | Manual | `lib/capabilities.ts` | |
 | **Dependencies** | No high/critical npm vulnerabilities | P1 | ✅ | CI | `npm audit --audit-level=high` | `.github/workflows/security.yml` |
 | **Dependencies** | Lock file committed | P1 | ✅ | CI | `package-lock.json` | |
@@ -169,7 +169,7 @@ Use this to self-assess and to communicate posture to auditors or stakeholders. 
 
 | Check | Priority | Status | Automation | Evidence | OWASP ID |
 |-------|----------|--------|------------|----------|----------|
-| RLS as enforcement layer | P1 | ✅ | Manual | Q-unified-base migrations; anon key | M6 |
+| RLS as enforcement layer | P1 | ✅ | Manual | pulse-unified-base migrations; anon key | M6 |
 | Capability-based UI permissions | P2 | ✅ | Manual | lib/capabilities.ts | M6 |
 | No client-side–only access control | P1 | ✅ | Manual | All access via Supabase; RLS | M6 |
 | Sensitive operations require auth | P1 | ✅ | Manual | supabase() session; RLS/RPC | M6 |
@@ -228,7 +228,7 @@ Use this to self-assess and to communicate posture to auditors or stakeholders. 
 
 ### 3.3 RLS audit (logistics)
 
-- **Script:** In Q-unified-base, verify policies: `supabase db dump --schema-only` and review RLS policies on tables used by the app.
+- **Script:** In pulse-unified-base, verify policies: `supabase db dump --schema-only` and review RLS policies on tables used by the app.
 - **Evidence:** Document which tables have RLS and org/driver scope.
 
 ---
@@ -247,7 +247,7 @@ Use this to self-assess and to communicate posture to auditors or stakeholders. 
 
 ## 5. Pro tips (logistics apps)
 
-- **RLS audit:** Use `supabase db dump --schema-only` (in Q-unified-base) to verify and document RLS policies.
+- **RLS audit:** Use `supabase db dump --schema-only` (in pulse-unified-base) to verify and document RLS policies.
 - **PII flows:** Mark screens with regulated data (e.g. driver docs, finance); consider disabling screenshots via `expo-screen-capture` for sensitive screens.
 - **Compliance:** For fleet/HR data, add a GDPR checklist (consent, data export, retention).
 
@@ -287,9 +287,9 @@ Items below help close gaps and strengthen audits. Implemented items have eviden
 ## References
 
 - Supabase Auth: https://supabase.com/docs/guides/auth
-- RLS: `docs/LOCAL_SUPABASE.md`, Q-unified-base `supabase/migrations/`
+- RLS: `docs/LOCAL_SUPABASE.md`, pulse-unified-base `supabase/migrations/`
 - Avatar storage: `docs/AVATAR_STORAGE_RLS.md`
-- Capabilities: `lib/capabilities.ts`, `.cursor/rules/q-mobile-standards.mdc`
+- Capabilities: `lib/capabilities.ts`, `.cursor/rules/pulse-standards.mdc`
 - OWASP Mobile Top 10: https://owasp.org/www-project-mobile-top-10/
 - Security workflow: `.github/workflows/security.yml`
 - Pre-release script: `scripts/pre-release-security-check.sh`

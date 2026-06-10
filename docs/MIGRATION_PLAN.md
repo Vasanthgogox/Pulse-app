@@ -1,4 +1,4 @@
-# Q-Web TMS Migration Plan
+# Pulse TMS Migration Plan
 ## Separate Apps + Shared Logic (Monorepo)
 
 > **Decision:** Option B — Vite (web) + React Native (mobile) with shared `/packages`
@@ -9,9 +9,9 @@
 ## Target Folder Structure
 
 ```
-q-monorepo/
+pulse-monorepo/
 ├── apps/
-│   ├── mobile/          ← current q-web repo (RN + Expo)
+│   ├── mobile/          ← current pulse repo (RN + Expo)
 │   └── web/             ← new Vite + React app (dispatcher web UI)
 ├── packages/
 │   ├── core/            ← Supabase client, services, business logic
@@ -156,7 +156,7 @@ Only share components that work on both platforms:
 **Root `package.json`:**
 ```json
 {
-  "name": "q-monorepo",
+  "name": "pulse-monorepo",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {

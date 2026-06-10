@@ -1,5 +1,5 @@
 /**
- * Truck type images (from Q-unified-base src/trucks/). Each vehicle type maps to a PNG.
+ * Truck type images (from pulse-unified-base src/trucks/). Each vehicle type maps to a PNG.
  * Used for vehicle list and detail to show truck image instead of initial letter.
  */
 import type { ImageSourcePropType } from 'react-native';

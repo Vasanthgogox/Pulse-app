@@ -1,5 +1,5 @@
 /**
- * Suppliers service — Supabase only (mobile). Same DB as Q-unified-base.
+ * Suppliers service — Supabase only (mobile). Same DB as pulse-unified-base.
  */
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';
 import { syncDomainRows } from '@/lib/cache/domainSync';
@@ -233,7 +233,7 @@ export async function getLinkedOrgProfileForSupplier(
   };
 }
 
-/** Create supplier payload — matches SupplierFormData from Q-unified-base AddSupplierWizard */
+/** Create supplier payload — matches SupplierFormData from pulse-unified-base AddSupplierWizard */
 export interface CreateSupplierData {
   company_name?: string;
   contact_person?: string;

@@ -1,5 +1,5 @@
 /**
- * Unified mobile header style (aligned with Q-unified-base):
+ * Unified mobile header style (aligned with pulse-unified-base):
  * branded left lockup + contextual title/subtitle, and right utility cluster (bell, profile).
  */
 import Theme from "@/constants/Theme";

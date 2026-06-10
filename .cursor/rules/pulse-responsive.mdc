@@ -1,9 +1,9 @@
 ---
-description: Q Mobile — responsive layout and safe area compliance for all devices
+description: Pulse — responsive layout and safe area compliance for all devices
 alwaysApply: true
 ---
 
-# Q Mobile: Responsive & Safe Area
+# Pulse: Responsive & Safe Area
 
 All screens and modals must respect **safe area** (notch, status bar, home indicator) and work across **device sizes** (compact phones, standard/large phones, tablets). See `docs/RESPONSIVE_AND_SAFE_AREA.md` for the full guide.
 

@@ -19,9 +19,9 @@ let tripSubcontractsRpcAvailable: boolean | null = null;
 let upsertTripSubcontractRpcAvailable: boolean | null = null;
 
 const TRIP_SUBCONTRACTS_RPC_UNAVAILABLE_KEY =
-  "qweb:trip_subcontracts_rpc_unavailable";
+  "pulse:trip_subcontracts_rpc_unavailable";
 const UPSERT_TRIP_SUBCONTRACT_RPC_UNAVAILABLE_KEY =
-  "qweb:upsert_trip_subcontract_rpc_unavailable";
+  "pulse:upsert_trip_subcontract_rpc_unavailable";
 
 function readTripSubcontractsStickyUnavailable(key: string): boolean {
   if (typeof window === "undefined") return false;

@@ -1,4 +1,4 @@
-package com.qmobile.app  // Replace with your app's package name
+package com.pulse.app  // Replace with your app's package name
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -1,5 +1,5 @@
 # PULSE — PRINCIPAL ENGINEER EXECUTION PLAN
-**Production Implementation Document | Q-Web | 2026-05-24**
+**Production Implementation Document | Pulse | 2026-05-24**
 **Status: AUTHORITATIVE — supersedes all prior planning docs**
 
 ---

@@ -1,6 +1,6 @@
 # AI System — Schema & Backend Requirements
 
-This document defines the **backend schema, events, and services** required for the AI Decision Layer, Optimization Engine, Learning Loop, and Impact Metrics. **Migrations and tables live in Q-unified-base** `supabase/migrations/`. The mobile app (q-mobile) consumes this data via Supabase client and optional RPCs.
+This document defines the **backend schema, events, and services** required for the AI Decision Layer, Optimization Engine, Learning Loop, and Impact Metrics. **Migrations and tables live in pulse-unified-base** `supabase/migrations/`. The mobile app (pulse) consumes this data via Supabase client and optional RPCs.
 
 ---
 
@@ -156,7 +156,7 @@ Suggested table or materialized view for **impact_metrics** (optional):
 
 ---
 
-## RPCs / API for Mobile (q-mobile)
+## RPCs / API for Mobile (pulse)
 
 The app will call Supabase from the **ai.service** (features/ai):
 
@@ -173,7 +173,7 @@ If tables do not exist yet, the mobile app will receive errors and show "—" or
 
 ## Backend Implementation Notes
 
-- **Event bus**: In Q-unified-base (or backend service), on trip create/complete, transaction create, payment overdue, expense add, etc., insert into `events`.
+- **Event bus**: In pulse-unified-base (or backend service), on trip create/complete, transaction create, payment overdue, expense add, etc., insert into `events`.
 - **Decision models**: Implement in Python (e.g. FastAPI + sklearn) or Node + lightweight ML (e.g. simple-regression, simple-statistics). Models: linear/logistic regression, isolation forest for anomaly, moving average for trends.
 - **Optimization service**: On trip create UI request, backend can return `suggested_freight`, `min_profitable_rate`, `expected_margin_pct` (from RPC or Edge Function).
 - **Retraining**: Weekly cron to recompute risk weights, pricing formula weights from `ai_feedback`.

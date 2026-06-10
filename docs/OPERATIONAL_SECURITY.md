@@ -75,7 +75,7 @@ Supabase Auth uses access and refresh tokens. Shorter access token lifetime redu
 
 ## 4. Database security audit (RLS)
 
-Your main data protection is **Row Level Security (RLS)**. Policies live in **Q-unified-base** migrations; this app is a client. Audit periodically so no table or policy is misconfigured.
+Your main data protection is **Row Level Security (RLS)**. Policies live in **pulse-unified-base** migrations; this app is a client. Audit periodically so no table or policy is misconfigured.
 
 ### Checklist (per table used by the app)
 
@@ -88,7 +88,7 @@ Your main data protection is **Row Level Security (RLS)**. Policies live in **Q-
 
 ### How to audit
 
-From **Q-unified-base** (where migrations live):
+From **pulse-unified-base** (where migrations live):
 
 ```bash
 supabase db dump --schema-only
@@ -163,7 +163,7 @@ Run **at least quarterly** (see §10); document results and fix any finding.
 | Frequency | Task | Where |
 |-----------|------|--------|
 | **Weekly** | `npm audit` (CI already runs on PR; run locally before release) | `npm audit --audit-level=high` |
-| **Monthly** | RLS review (dump schema, review policies) | Q-unified-base; §4 above |
+| **Monthly** | RLS review (dump schema, review policies) | pulse-unified-base; §4 above |
 | **Monthly** | Dependency updates (Dependabot + manual review) | GitHub; `npm update` / upgrade |
 | **Quarterly** | Penetration test (SQLi, token, rate limit, RLS) | §8; ADVERSARIAL_ATTACK_SIMULATION.md |
 | **Yearly** | Full security audit (code + infra + ops) | e.g. SECURITY_AUDIT_ADVERSARIAL.md style |

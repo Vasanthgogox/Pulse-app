@@ -125,7 +125,7 @@ export async function getPendingOtpClaimCount(): Promise<{ error: Error | null; 
 
 /**
  * List of trips pre-assigned to the current user's phone (tracking-only driver) that
- * are waiting for OTP claim. Backed by RPC get_pending_otp_trips (defined in Q-unified-base).
+ * are waiting for OTP claim. Backed by RPC get_pending_otp_trips (defined in pulse-unified-base).
  * O(n) over that driver's pending aggregate trips; typically very small.
  */
 export async function getPendingOtpTrips(): Promise<{

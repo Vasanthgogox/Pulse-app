@@ -1,6 +1,6 @@
-# Shared Ledger — Backend contract (Q-unified-base)
+# Shared Ledger — Backend contract (pulse-unified-base)
 
-This document describes the API and table contract that q-mobile expects from the backend (Q-unified-base). Schema and migrations live in Q-unified-base; q-mobile only consumes Supabase RPC/Edge and tables.
+This document describes the API and table contract that pulse expects from the backend (pulse-unified-base). Schema and migrations live in pulse-unified-base; pulse only consumes Supabase RPC/Edge and tables.
 
 ## Tables
 
@@ -69,4 +69,4 @@ This document describes the API and table contract that q-mobile expects from th
 ### accept_partner_view(org_id, trip_id, partner_sales, partner_paid)
 
 - Self-correction: the org (raiser side) accepts the partner’s numbers and updates *their own* ledger for that trip to match `partner_sales` / `partner_paid`. No dispute is created. Used for "Update My Book" so the row can become MATCHED without raising a dispute.
-- **Required for mobile:** If this RPC is not deployed, the app shows "Update failed" and asks the user to contact their administrator. Create the function in Q-unified-base migrations and deploy for "Update my book" to work.
+- **Required for mobile:** If this RPC is not deployed, the app shows "Update failed" and asks the user to contact their administrator. Create the function in pulse-unified-base migrations and deploy for "Update my book" to work.

@@ -64,7 +64,7 @@ def build_document(output_path: str):
 
     section = doc.sections[0]
     header = section.header.paragraphs[0]
-    header.text = "Q Mobile End-to-End Documentation"
+    header.text = "Pulse End-to-End Documentation"
     header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     footer = section.footer.paragraphs[0]
@@ -73,7 +73,7 @@ def build_document(output_path: str):
 
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title.add_run("Q Mobile\nEnd-to-End System Documentation")
+    run = title.add_run("Pulse\nEnd-to-End System Documentation")
     run.bold = True
     run.font.size = Pt(20)
 
@@ -94,7 +94,7 @@ def build_document(output_path: str):
 
     doc.add_heading("1. Overview and Purpose", level=1)
     doc.add_paragraph(
-        "Q Mobile is a React Native (Expo) logistics operations application that shares the same Supabase backend as the Q-unified-base platform. "
+        "Pulse is a React Native (Expo) logistics operations application that shares the same Supabase backend as the pulse-unified-base platform. "
         "It supports dispatcher/fleet workflows, finance and ledger operations, network collaboration, load marketplace operations, and a dedicated driver experience."
     )
     add_bullets(
@@ -433,7 +433,7 @@ def build_document(output_path: str):
 
     doc.add_heading("12. FAQs", level=1)
     faq = [
-        ("Is this app standalone from Q-unified-base?", "No. It is a mobile client using the same Supabase backend and standards."),
+        ("Is this app standalone from pulse-unified-base?", "No. It is a mobile client using the same Supabase backend and standards."),
         ("How are permissions controlled?", "Capabilities are derived from profile role and aggregated/asset flags, then enforced in UI and service usage."),
         ("Can drivers see dispatcher screens?", "No. Driver accounts are routed to dedicated driver routes with separate UI and flows."),
         ("How is real-time sync handled?", "TanStack Query caches data and realtime invalidation hooks refresh domain queries when backend data changes."),
@@ -495,6 +495,6 @@ def build_document(output_path: str):
 
 
 if __name__ == "__main__":
-    OUTPUT = "docs/Q-Mobile_End_to_End_Documentation.docx"
+    OUTPUT = "docs/Pulse_End_to_End_Documentation.docx"
     build_document(OUTPUT)
     print(f"Generated: {OUTPUT}")

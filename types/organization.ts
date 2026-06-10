@@ -1,4 +1,4 @@
-/** Current org shape for list/detail screens. Aligned with Q-unified-base. */
+/** Current org shape for list/detail screens. Aligned with pulse-unified-base. */
 export interface CurrentOrganization {
   id: string;
   name: string;

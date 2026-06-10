@@ -2,7 +2,7 @@
 
 ## 1) Executive Summary
 
-The **Shared Ledger by Trip and Transaction** feature provides a unified reconciliation layer across all Q pages where money movement is shown: Finance ledger, trip finance, compare/verify, entity detail, and driver passbook/wallet.
+The **Shared Ledger by Trip and Transaction** feature provides a unified reconciliation layer across all Pulse pages where money movement is shown: Finance ledger, trip finance, compare/verify, entity detail, and driver passbook/wallet.
 
 It allows users to:
 - View **internal vs partner** books at trip level and transaction level.
@@ -25,7 +25,7 @@ Business outcome: lower reconciliation delay, fewer payment disputes, clearer ow
 - Unified labels and statuses across dispatcher/fleet and driver apps.
 
 ### Out of Scope
-- Core schema migration authoring in this repo (owned by Q-unified-base).
+- Core schema migration authoring in this repo (owned by pulse-unified-base).
 - Third-party payout rails (bank API execution).
 - Billing/commercial invoicing workflows.
 
@@ -200,7 +200,7 @@ Driver settlement policy dependency:
 
 ## 12) UX and Design Requirements
 
-- Keep visual language aligned with current Q dark-cinematic finance style.
+- Keep visual language aligned with current Pulse dark-cinematic finance style.
 - Typography should remain compact, high-density, and consistent with existing ledger cards.
 - High-priority actions (`Verify & update payment`, `Raise Dispute`) must be clearly visible but confirm-gated.
 - Detail page should prioritize:

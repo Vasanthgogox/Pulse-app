@@ -1,5 +1,5 @@
 /**
- * App language (i18n). Persisted to AsyncStorage (@qmobile/locale); use t(key) for global translations.
+ * App language (i18n). Persisted to AsyncStorage (@pulse/locale); use t(key) for global translations.
  * Default order: 1) User selected (stored), 2) Device language (expo-localization if available), 3) English.
  * To sync with backend: when API supports users.language_preference, persist setLocale() there too.
  */
@@ -21,7 +21,7 @@ import {
   LOCALE_OPTIONS,
 } from "@/lib/i18n";
 
-const STORAGE_KEY = "@qmobile/locale";
+const STORAGE_KEY = "@pulse/locale";
 
 type LanguageContextType = {
   locale: AppLocale;

@@ -1,11 +1,11 @@
 ---
-description: Q Mobile — align with Q-unified-base standards; same Supabase, capabilities, env-based config
+description: Pulse — align with pulse-unified-base standards; same Supabase, capabilities, env-based config
 alwaysApply: true
 ---
 
-# Q Mobile: Standards
+# Pulse: Standards
 
-**This app is the mobile version of Q-unified-base.** Follow Q-unified-base standards where they apply; see `Q-unified-base/docs/ENTERPRISE_MICROSERVICES_STANDARDS.md` and `Q-unified-base/.cursor/rules/enterprise-microservices-standards.mdc`.
+**This app is the mobile version of pulse-unified-base.** Follow pulse-unified-base standards where they apply; see `pulse-unified-base/docs/ENTERPRISE_MICROSERVICES_STANDARDS.md` and `pulse-unified-base/.cursor/rules/enterprise-microservices-standards.mdc`.
 
 ## Quick reference (mobile)
 
@@ -13,9 +13,9 @@ alwaysApply: true
 
 - **Services = microservices (one per domain):** When adding or editing backend/API logic, use **one service file per bounded context**. Example: `tripsService.ts` (trips only), `clientsService.ts` (clients only), `driversService.ts` (drivers only). Do not combine multiple domains in a single service (e.g. no `tripsAndClientsService.ts`). Each service in `services/` should own a single domain: its types, Supabase table(s), and functions for that entity. New features that need API access get a new `*Service.ts` in `services/` (e.g. `invoicesService.ts`, `paymentsService.ts`).
 - **Colors:** All UI colors come from `@/constants/Theme`. Import `Theme` and use e.g. `Theme.primary`, `Theme.textSecondary`, `Theme.screenBackground`. Do not hardcode hex/rgba in components; add new keys to `Theme` if needed so changing a color in one place updates the app globally.
-- **Backend:** Same Supabase project as Q-unified-base. All API base URLs from env: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Document in `.env.example`.
-- **Permissions:** Use capability-based access from `lib/capabilities.ts` only (aligned with Q-unified-base). Unified dispatcher & fleet owner: same user, `profiles.aggregated` / `profiles.asset`; do not treat dispatcher and fleet owner as separate roles.
-- **Schema/RLS:** Do not add migrations in this repo. Schema lives in Q-unified-base `supabase/migrations/`; this app is a client of the same DB.
+- **Backend:** Same Supabase project as pulse-unified-base. All API base URLs from env: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Document in `.env.example`.
+- **Permissions:** Use capability-based access from `lib/capabilities.ts` only (aligned with pulse-unified-base). Unified dispatcher & fleet owner: same user, `profiles.aggregated` / `profiles.asset`; do not treat dispatcher and fleet owner as separate roles.
+- **Schema/RLS:** Do not add migrations in this repo. Schema lives in pulse-unified-base `supabase/migrations/`; this app is a client of the same DB.
 
 - **Navigation:** Bottom tab bar has only **Home** and **Resources**. Home uses top tabs (same UI as reference): **Customers**, **Suppliers**, **Trips**. Resources uses top tabs: **Drivers**, **Vehicles**, **More**. Use `TopTabsHeader` from `@/components/TopTabsHeader` for this styling; list content below with `ListBody` from `@/components/ListBody`. Trips, Indents, Finance, Settings, etc. are reachable via these tabs or from Resources > More.
 
@@ -48,6 +48,6 @@ All screens must respect safe area (notch, status bar, home indicator) so layout
 5. **Loading states:** Use `CenteredLoadingView` from `@/components/CenteredLoadingView` so full-screen spinners respect safe area.
 6. **Layout constants:** Prefer `Layout` from `@/constants/Layout` for spacing (e.g. `Layout.screenPaddingHorizontal`, `Layout.fabBottomOffset`).
 
-This keeps every screen responsive and consistent across devices. Full checklist and device matrix: `docs/RESPONSIVE_AND_SAFE_AREA.md`. Cursor rule: `.cursor/rules/q-mobile-responsive.mdc`.
+This keeps every screen responsive and consistent across devices. Full checklist and device matrix: `docs/RESPONSIVE_AND_SAFE_AREA.md`. Cursor rule: `.cursor/rules/pulse-responsive.mdc`.
 
-When in doubt, open Q-unified-base docs and apply the relevant section.
+When in doubt, open pulse-unified-base docs and apply the relevant section.

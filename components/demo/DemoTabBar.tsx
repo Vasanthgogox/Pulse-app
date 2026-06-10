@@ -1,5 +1,5 @@
 /**
- * Unified shell footer + bottom nav (Q-unified-base aligned).
+ * Unified shell footer + bottom nav (pulse-unified-base aligned).
  */
 import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
 import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";

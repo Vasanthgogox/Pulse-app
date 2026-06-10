@@ -87,7 +87,7 @@ app/(tabs)/trips.tsx
 
 ### Access Control
 
-- `lib/capabilities.ts` — capability-based feature flags aligned with Q-unified-base
+- `lib/capabilities.ts` — capability-based feature flags aligned with pulse-unified-base
 - Roles: `driver` | `user` (dispatcher/admin)
 - Operating models: `ASSET_BASED` | `NON_ASSET` | `HYBRID`
 - Feature visibility tied to capabilities, not hardcoded role checks

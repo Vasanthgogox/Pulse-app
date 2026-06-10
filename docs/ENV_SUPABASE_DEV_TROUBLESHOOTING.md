@@ -56,12 +56,12 @@ npm does **not** forward flags after the script name unless you use `--`. So `--
 
 Metro uses `FileStore` under the OS temp directory:
 
-`$(node -p "require('path').join(require('os').tmpdir(), 'q-web-metro-cache')")`
+`$(node -p "require('path').join(require('os').tmpdir(), 'pulse-metro-cache')")`
 
 If the UI still shows an old Supabase host after `--clear`, delete that folder, then start again with `--clear`:
 
 ```bash
-rm -rf "$(node -p "require('path').join(require('os').tmpdir(), 'q-web-metro-cache')")"
+rm -rf "$(node -p "require('path').join(require('os').tmpdir(), 'pulse-metro-cache')")"
 ```
 
 **zsh note:** avoid nested `"` inside `"$(...)"` for `node -e "..."`; use `node -p '...'` with single-quoted JS strings, or you can get `dquote cmdsubst>` (stuck prompt) — **Ctrl+C** to abort.
@@ -93,7 +93,7 @@ Unset or align them with `.env` for local dev.
 
 In dev, the app logs the host once the client is created, e.g.:
 
-`[q-mobile] Supabase URL host: <project-ref>.supabase.co`
+`[pulse] Supabase URL host: <project-ref>.supabase.co`
 
 That host should match the **active** (uncommented) `EXPO_PUBLIC_SUPABASE_URL` in `.env` / `.env.local` after a clean restart.
 

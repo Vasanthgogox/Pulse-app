@@ -1,10 +1,10 @@
-Q-Web Platform — Deep Technical Audit Report (v2)
+Pulse Platform — Deep Technical Audit Report (v2)
 
 Auditor: Senior DB Architect + Supabase Security Auditor
 Date: 2026-05-18 (v2 — follow-up to initial audit) | Updated: 2026-07-28 (all v2 fixes applied)
 Project: nafxpivddesgsrthmosv — nihas-gogox's Project (ap-south-1, Postgres 17.6)
 DB Objects Inspected: 45 public tables, 7 views, 60+ triggers on 20 tables, ~150+ functions/RPCs, 100+ RLS policies
-Previous Audit: qweb-platform-supabase-technical-audit-2026-05-18.md (score: 42/100)
+Previous Audit: pulse-platform-supabase-technical-audit-2026-05-18.md (score: 42/100)
 
 ---
 1. Summary & Production Readiness Score

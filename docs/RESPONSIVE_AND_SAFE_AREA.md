@@ -1,6 +1,6 @@
 # Responsive Design & Safe Area Compliance
 
-This document defines how Q Mobile stays consistent and safe-area compliant across all device types and orientations. Follow it for app store approval and a professional UX.
+This document defines how Pulse stays consistent and safe-area compliant across all device types and orientations. Follow it for app store approval and a professional UX.
 
 ## 1. Safe area (required on every screen)
 
@@ -89,7 +89,7 @@ Never assume a fixed status bar height or home indicator height. Always use `rea
 | `DetailPageLayout` | `@/components/DetailPageLayout` — detail screens with back + insets |
 | `FAB` | `@/components/FAB` — FAB with `bottom: 24 + insets.bottom` |
 | `Layout` | `@/constants/Layout` — spacing and layout constants |
-| `.cursor/rules/q-mobile-responsive.mdc` | Cursor rule for ongoing compliance |
+| `.cursor/rules/pulse-responsive.mdc` | Cursor rule for ongoing compliance |
 
 ---
 

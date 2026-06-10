@@ -1,5 +1,5 @@
 /**
- * Add Driver modal — fields match Q-unified-base AddDriverWizard 100%.
+ * Add Driver modal — fields match pulse-unified-base AddDriverWizard 100%.
  * Steps: Driver Info (driver source, phone*, name), Contact (email, emergency), Documents (license), Review.
  * Driver Source: Organization Driver | Partner Driver (clean, scalable terminology).
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).

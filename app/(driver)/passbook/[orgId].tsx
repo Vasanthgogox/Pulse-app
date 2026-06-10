@@ -146,7 +146,7 @@ function buildCashReceiptHtml(p: {
           <div class="row"><div class="k">Settled to</div><div class="v">${safe(settledTo)}</div></div>
           ${route ? `<div class="row"><div class="k">Route</div><div class="v">${safe(route)}</div></div>` : ``}
         </div>
-        <div class="footer">Generated from Q Driver · ${safe(capturedAt)}</div>
+        <div class="footer">Generated from Pulse Driver · ${safe(capturedAt)}</div>
       </div>
     </div>
   </body>
@@ -232,7 +232,7 @@ function buildBulkClaimHtml(p: {
         <p class="sub">Generated at ${safe(p.generatedAt)}</p>
       </div>
       ${groupsHtml}
-      <div class="footer">Generated from Q Driver · ${safe(p.generatedAt)}</div>
+      <div class="footer">Generated from Pulse Driver · ${safe(p.generatedAt)}</div>
     </div>
   </body>
 </html>`;

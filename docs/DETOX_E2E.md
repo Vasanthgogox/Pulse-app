@@ -20,7 +20,7 @@ E2E tests run on the **iOS Simulator**: the simulator opens, the app launches, a
    ```bash
    npx expo prebuild
    ```
-   This creates `ios/q-mobile.xcworkspace` and wires in `expo-detox-config-plugin` (Expo 54–compatible).
+   This creates `ios/pulse.xcworkspace` and wires in `expo-detox-config-plugin` (Expo 54–compatible).
 
 3. **Build the app for the simulator** (first time and after native changes):
    ```bash

@@ -1,6 +1,6 @@
   Code Organization Audit & Top 1% Structure Proposal                                                                            
                                                                                                                                  
-  Q Mobile — React Native + Expo + Supabase                                                                                      
+  Pulse — React Native + Expo + Supabase                                                                                      
                                                                                                                                  
   ---                                                                                                                            
   Section 1: Current State Scorecard                                                                                             
@@ -180,7 +180,7 @@
   ---                                                                                                                            
   Section 4: The Ideal Structure
                                                                                                                                  
-  q-web/
+  pulse/
   │                                                                                                                              
   ├── app/                           ← UNCHANGED — Expo Router thin routes only
   │   ├── (auth)/                    ← MOVE sign-in, sign-up, driver-signup, auth/callback here

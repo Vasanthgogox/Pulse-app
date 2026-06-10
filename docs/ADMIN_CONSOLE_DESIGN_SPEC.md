@@ -1,6 +1,6 @@
 # Admin Console — Design Specification
 
-**Purpose:** God-level control panel for platform operators and developers to manage configuration, users, and operations across the entire Q mobile / Q-unified-base ecosystem—modeled on how Uber, Rapido, and similar platforms run their systems at scale.
+**Purpose:** God-level control panel for platform operators and developers to manage configuration, users, and operations across the entire Pulse / pulse-unified-base ecosystem—modeled on how Uber, Rapido, and similar platforms run their systems at scale.
 
 **Audience:** Senior product/UX reference and implementation blueprint for the admin console (separate from the mobile app; typically a web app or dedicated admin surface).
 
@@ -15,7 +15,7 @@ The **Admin Console** is a **platform-level** control plane that sits **above** 
 | Layer | Who | Scope |
 |-------|-----|--------|
 | **Platform (Admin Console)** | Platform ops, developers, super-admins | All orgs, all users, global config, compliance, money flow |
-| **Organization (Q mobile app)** | Dispatcher, fleet owner (unified role) | One org: trips, drivers, clients, suppliers, finance (via capabilities) |
+| **Organization (Pulse app)** | Dispatcher, fleet owner (unified role) | One org: trips, drivers, clients, suppliers, finance (via capabilities) |
 
 The console enables:
 
@@ -390,11 +390,11 @@ These are **separate** from in-app capabilities (e.g. `dispatch`, `fleet_managem
 
 ---
 
-## 9. Visual Design and Theme (Tesla-Inspired, Aligned with Q Mobile)
+## 9. Visual Design and Theme (Tesla-Inspired, Aligned with Pulse)
 
-The admin console MUST use the same visual language as the q-mobile application: **Tesla-inspired**, with a **white, black, and red** palette. All colors and layout tokens MUST be derived from the single source of truth used in the mobile app so the brand and experience stay consistent across platforms.
+The admin console MUST use the same visual language as the pulse application: **Tesla-inspired**, with a **white, black, and red** palette. All colors and layout tokens MUST be derived from the single source of truth used in the mobile app so the brand and experience stay consistent across platforms.
 
-### 9.1 Source of Truth (q-mobile)
+### 9.1 Source of Truth (pulse)
 
 - **Colors:** `constants/Theme.ts` — single source for all UI colors; no hardcoded hex in admin components.
 - **Layout:** `constants/Layout.ts` — spacing, padding, touch targets (where applicable for web).
@@ -444,22 +444,22 @@ The admin console MUST use the same visual language as the q-mobile application:
 
 ---
 
-## 10. Alignment with Q Mobile and Q-Unified-Base
+## 10. Alignment with Pulse and Pulse-Unified-Base
 
 ### 10.1 Where This Lives
 
-- **Admin Console:** Separate application (e.g. Next.js or React SPA) that calls the same Supabase project and (where needed) backend services. It is **not** a tab inside the existing Q mobile app.
-- **Schema:** New tables in Q-unified-base (e.g. `admin_users`, `admin_roles`, `admin_audit_log`, `platform_config`, `feature_flags`) and RLS so only service role or admin API can write; migrations stay in Q-unified-base.
+- **Admin Console:** Separate application (e.g. Next.js or React SPA) that calls the same Supabase project and (where needed) backend services. It is **not** a tab inside the existing Pulse app.
+- **Schema:** New tables in pulse-unified-base (e.g. `admin_users`, `admin_roles`, `admin_audit_log`, `platform_config`, `feature_flags`) and RLS so only service role or admin API can write; migrations stay in pulse-unified-base.
 - **Mobile app:** Reads config (e.g. feature flags, pricing) via existing or new read-only APIs; no “admin UI” in the app except perhaps a small “debug/config version” for developers.
 
 ### 10.2 Capabilities vs Admin Roles
 
-- **`lib/capabilities.ts`** in Q mobile: Stays as **in-app** permissions (dispatch, fleet_management, finance_view, etc.) for the **organization** user.
+- **`lib/capabilities.ts`** in Pulse: Stays as **in-app** permissions (dispatch, fleet_management, finance_view, etc.) for the **organization** user.
 - **Admin roles** in this spec: **Platform-level** only; stored and enforced in the admin console and its backend. Optionally, an admin user can also have an org account with capabilities for testing or support.
 
 ### 10.3 Services and Domains
 
-- New **admin**-related services in Q-unified-base (or in admin-backend): e.g. `adminUserService`, `platformConfigService`, `auditLogService`, `disputeService` (if not already domain-owned). In q-mobile, no new “admin” service is required unless the app ever gets a minimal “view config version” or “view my org’s admin-assigned settings” read-only screen.
+- New **admin**-related services in pulse-unified-base (or in admin-backend): e.g. `adminUserService`, `platformConfigService`, `auditLogService`, `disputeService` (if not already domain-owned). In pulse, no new “admin” service is required unless the app ever gets a minimal “view config version” or “view my org’s admin-assigned settings” read-only screen.
 - **One service per domain** rule: Keep admin-specific logic in admin services; reuse existing `tripsService`, `driversService`, `clientsService`, etc. for data that the admin console needs to display or act on (via server-side or service-role APIs).
 
 ---
@@ -477,4 +477,4 @@ The admin console MUST use the same visual language as the q-mobile application:
 
 ---
 
-This spec gives you a single reference for what the admin console does, how it’s structured, and how it fits with Q mobile and Q-unified-base. You can slice implementation by module (e.g. “Phase 1 + User management only”) and iterate toward the full god-level control panel over time.
+This spec gives you a single reference for what the admin console does, how it’s structured, and how it fits with Pulse mobile and pulse-unified-base. You can slice implementation by module (e.g. “Phase 1 + User management only”) and iterate toward the full god-level control panel over time.

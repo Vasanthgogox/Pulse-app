@@ -21,7 +21,7 @@ The migration uses `CREATE TABLE` (no `IF NOT EXISTS`), so the remote database m
 From the repo root run:
 
 ```powershell
-cd c:\Driverapp\q-mobile
+cd c:\Driverapp\pulse
 .\supabase\scripts\reset-preprod.ps1
 ```
 
@@ -37,7 +37,7 @@ After this, preprod will have only the schema from that migration.
 If you prefer not to use the script:
 
 ```powershell
-cd c:\Driverapp\q-mobile
+cd c:\Driverapp\pulse
 
 # 1. Mark remote migration history as reverted (use the full version list from the script)
 npx supabase migration repair --status reverted 001 002 003 ... 087 20260216151000 ... 20260225130000

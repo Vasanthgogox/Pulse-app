@@ -1,7 +1,7 @@
 /**
  * AI Decision Layer — service to fetch risk scores, trip predictions, vehicle health, cashflow, settings.
  * Tables (client_risk_scores, trip_predictions, vehicle_health_scores, cashflow_forecast, ai_settings)
- * are defined in Q-unified-base; see docs/AI_SYSTEM_SCHEMA_AND_BACKEND.md.
+ * are defined in pulse-unified-base; see docs/AI_SYSTEM_SCHEMA_AND_BACKEND.md.
  * When tables do not exist yet, calls return null/empty and UI shows "—".
  */
 import { supabase } from '@/lib/supabase';

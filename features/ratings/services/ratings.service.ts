@@ -1,6 +1,6 @@
 /**
  * Ratings service — Client→Supplier, Supplier→Driver.
- * Uses public.ratings table (create via docs/RATINGS_MIGRATION.sql in Q-unified-base).
+ * Uses public.ratings table (create via docs/RATINGS_MIGRATION.sql in pulse-unified-base).
  */
 import { getClientsByOrganization } from '@/features/clients/services/clients.service';
 import { supabase } from '@/lib/supabase';

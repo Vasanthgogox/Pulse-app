@@ -1,9 +1,9 @@
-# Shared Ledger Notifications — Backend Contract (Q-unified-base)
+# Shared Ledger Notifications — Backend Contract (pulse-unified-base)
 
-This document defines the backend contract required by q-mobile to surface
+This document defines the backend contract required by pulse to surface
 Shared Ledger notifications in the dispatcher notification center and bell badge.
 
-Schema and migrations must be implemented in Q-unified-base. This mobile repo only
+Schema and migrations must be implemented in pulse-unified-base. This mobile repo only
 consumes the contract.
 
 ## Goals

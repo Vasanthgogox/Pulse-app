@@ -5,7 +5,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { TripConversation } from "../types/chat.types";
 
-const STORAGE_KEY = "q-chat-bootstrap-summaries-v1";
+const STORAGE_KEY = "pulse-chat-bootstrap-summaries-v1";
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface ChatBootstrapPersistPayload {

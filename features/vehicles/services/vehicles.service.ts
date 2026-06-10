@@ -1,5 +1,5 @@
 /**
- * Vehicles service — Supabase only (mobile). Same DB as Q-unified-base.
+ * Vehicles service — Supabase only (mobile). Same DB as pulse-unified-base.
  */
 import { supabase } from '@/lib/supabase';
 import { DEFAULT_PAGE_SIZE, type PageOpts } from '@/lib/pagination';

@@ -2097,7 +2097,7 @@ export function SharedLedgerContent({
 
   const handleInviteToApp = useCallback(() => {
     const message = `Join me on Pulse to sync our ledger and compare books with ${entity.name}. Download Pulse to get started.`;
-    Share.share({ message, title: "Invite to Q" }).catch(() => {});
+    Share.share({ message, title: "Invite to Pulse" }).catch(() => {});
   }, [entity.name]);
 
   const modalEscalationKind = selectedDispute

@@ -10,7 +10,7 @@ All logs use the tag **`SmsReceiver`**. Example in code: `Log.d("SmsReceiver", "
 - **zsh users:** use quotes so `*` is not expanded: `adb logcat '*:I' | grep -i SmsReceiver`
 - If you see system SMS logs but never "SmsReceiver", show only your app’s logs by PID (open the app first, then in another terminal):
   ```bash
-  adb shell pidof com.qmobile.app
+  adb shell pidof com.pulse.app
   ```
   then (replace 12345 with the number printed):
   ```bash
@@ -55,19 +55,19 @@ If you see those lines, parsing works via the inbox observer. You will not see `
 npx expo run:android
 ```
 
-The app is now built with `RECEIVE_SMS` and `SmsReceiver` in the manifest. Use **this dev client** for SMS parsing (not Expo Go). When you run `npx expo start`, Metro should say "Using development build" and open `exp+q-mobile://expo-development-client/...` on the device — that is the correct build.
+The app is now built with `RECEIVE_SMS` and `SmsReceiver` in the manifest. Use **this dev client** for SMS parsing (not Expo Go). When you run `npx expo start`, Metro should say "Using development build" and open `exp+pulse://expo-development-client/...` on the device — that is the correct build.
 
 ## 2. Grant SMS permission
 
 On the device/emulator:
 
-- **Settings → Apps → Q Mobile (or your app name) → Permissions**
+- **Settings → Apps → Pulse (or your app name) → Permissions**
 - Turn **SMS** (or “Receive SMS”) **ON**.
 
 Or from a terminal (device connected via USB):
 
 ```bash
-adb shell pm grant com.qmobile.app android.permission.RECEIVE_SMS
+adb shell pm grant com.pulse.app android.permission.RECEIVE_SMS
 ```
 
 ## 3. Send a test SMS

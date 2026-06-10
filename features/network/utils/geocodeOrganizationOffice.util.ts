@@ -5,7 +5,7 @@ import { buildOrganizationOfficeGeocodeQuery } from "@/features/network/utils/or
 const MAPBOX_GEOCODING_BASE =
   "https://api.mapbox.com/geocoding/v5/mapbox.places";
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search";
-const NOMINATIM_USER_AGENT = "Q-Mobile-Logistics/1.0 (office HQ geocode)";
+const NOMINATIM_USER_AGENT = "Pulse-Logistics/1.0 (office HQ geocode)";
 
 function readMapboxToken(): string {
   if (typeof process === "undefined") return "";

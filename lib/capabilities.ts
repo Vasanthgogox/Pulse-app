@@ -1,6 +1,6 @@
 /**
  * Capability-based access for unified user role.
- * Aligned with Q-unified-base src/lib/capabilities.ts.
+ * Aligned with pulse-unified-base src/lib/capabilities.ts.
  */
 
 export type Capability =

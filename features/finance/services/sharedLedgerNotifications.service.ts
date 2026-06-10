@@ -69,13 +69,13 @@ let sharedLedgerRpcMarkReadAvailable: boolean | null = null;
 let sharedLedgerRpcMarkHandledAvailable: boolean | null = null;
 let sharedLedgerTableAvailable: boolean | null = null;
 
-const SHARED_LEDGER_RPC_READ_FLAG_KEY = "qweb:shared_ledger_rpc_read_unavailable";
-const SHARED_LEDGER_RPC_COUNT_FLAG_KEY = "qweb:shared_ledger_rpc_count_unavailable";
+const SHARED_LEDGER_RPC_READ_FLAG_KEY = "pulse:shared_ledger_rpc_read_unavailable";
+const SHARED_LEDGER_RPC_COUNT_FLAG_KEY = "pulse:shared_ledger_rpc_count_unavailable";
 const SHARED_LEDGER_RPC_MARK_READ_FLAG_KEY =
-  "qweb:shared_ledger_rpc_mark_read_unavailable";
+  "pulse:shared_ledger_rpc_mark_read_unavailable";
 const SHARED_LEDGER_RPC_MARK_HANDLED_FLAG_KEY =
-  "qweb:shared_ledger_rpc_mark_handled_unavailable";
-const SHARED_LEDGER_TABLE_FLAG_KEY = "qweb:shared_ledger_table_unavailable";
+  "pulse:shared_ledger_rpc_mark_handled_unavailable";
+const SHARED_LEDGER_TABLE_FLAG_KEY = "pulse:shared_ledger_table_unavailable";
 
 function readStickyUnavailableFlag(key: string): boolean {
   if (typeof window === "undefined") return false;

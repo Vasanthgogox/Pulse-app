@@ -1,5 +1,5 @@
--- Initial schema for q-mobile (local Supabase).
--- Same logical schema as Q-unified-base; use for local dev or as reference.
+-- Initial schema for pulse (local Supabase).
+-- Same logical schema as pulse-unified-base; use for local dev or as reference.
 
 -- Generic trigger to set updated_at on row change (only when row actually changes; INSERT uses column default)
 CREATE OR REPLACE FUNCTION public.set_updated_at()

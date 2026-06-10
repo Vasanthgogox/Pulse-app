@@ -4,7 +4,7 @@
  * `renderRootComponent` breaks StyleSheet and other exports (see index.js).
  */
 
-const RELOAD_GUARD_KEY = 'q_web_deploy_reload_v1';
+const RELOAD_GUARD_KEY = 'pulse_deploy_reload_v1';
 
 declare global {
   // eslint-disable-next-line no-var

@@ -1,6 +1,6 @@
 /**
  * Invoicing execute service — maps to cashflow InvoicingCenter / api.ts.
- * Same DB as Q-unified-base; RLS applies.
+ * Same DB as pulse-unified-base; RLS applies.
  */
 import {
   getTripsWhereOrgIsSupplier,
@@ -387,7 +387,7 @@ export async function executeInvoiceCreation(
       }
     }
 
-    // Note: Due to Q-mobile standards preventing schema changes in this repo,
+    // Note: Due to Pulse standards preventing schema changes in this repo,
     // the full payload (taxes, fuel surcharge, additional charges) is securely persisted
     // as a structured JSON object in the activity_logs table via the log_activity RPC.
     const { error } = await supabase()

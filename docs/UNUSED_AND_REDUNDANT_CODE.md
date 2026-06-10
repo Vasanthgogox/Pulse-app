@@ -1,6 +1,6 @@
 # Unused and Redundant Code — Audit
 
-This document lists **unused code**, **redundant/duplicate code**, and **TODO/placeholder code** identified across the q-mobile workspace. Use it for cleanup sprints or before releases.
+This document lists **unused code**, **redundant/duplicate code**, and **TODO/placeholder code** identified across the pulse workspace. Use it for cleanup sprints or before releases.
 
 **Cleanup completed (see git history):** Unused styles removed from FinanceScreen.styles; unused exports removed (validation, AllowedUrls, demo index); dead files deleted (useRefetchOnFocus, RealtimeInvalidationSubscriber); finance components now use `@/lib/format`; `computeTripSummary` consolidated in `lib/totals.util.ts`.
 
@@ -55,7 +55,7 @@ Other files (e.g. `app/(driver)/trips.tsx`, `features/ratings/components/TripRat
 | File | Location | Comment |
 |------|----------|--------|
 | **app/(tabs)/report.tsx** | ~40–68 | `// TODO: Open date picker` (×2), `// TODO: Open filter modal`, `// TODO: Implement download`, `// TODO: Implement share`. |
-| **contexts/WalletContext.tsx** | ~27 | `// TODO: fetch from wallet API (same source as Q-unified-base); placeholder for UI`. |
+| **contexts/WalletContext.tsx** | ~27 | `// TODO: fetch from wallet API (same source as pulse-unified-base); placeholder for UI`. |
 
 **Action:** Implement or remove placeholders; track in backlog if deferred.
 

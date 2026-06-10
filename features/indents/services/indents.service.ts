@@ -1,5 +1,5 @@
 /**
- * Indents service — Supabase only (mobile). Same DB as Q-unified-base.
+ * Indents service — Supabase only (mobile). Same DB as pulse-unified-base.
  * Service-layer validation: single pass over inputs before insert.
  */
 import { getClientById } from "@/features/clients/services/clients.service";

@@ -1,4 +1,4 @@
-Q-Web Full Technical Audit                             
+Pulse Full Technical Audit                             
                                                                                                                   
  ▎ Compiled from deep codebase exploration: AuthContext, Supabase client, RLS migrations, performance hooks,
  ▎ services, DevOps config.                                                                                       

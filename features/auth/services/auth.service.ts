@@ -1,7 +1,7 @@
 /**
  * Auth service — Supabase Auth only (mobile).
  * Single bounded context: auth (sign-in, sign-up, session, role).
- * One service per domain (microservices). Same DB as Q-unified-base.
+ * One service per domain (microservices). Same DB as pulse-unified-base.
  * Service-layer validation: single pass over inputs before Supabase calls.
  */
 import { validateEmail } from "@/lib/emailValidation";
@@ -174,7 +174,7 @@ export interface PendingOAuthOnboardingMetadata {
   skipOrgCreation?: boolean;
 }
 
-const PENDING_OAUTH_METADATA_KEY = "@q_mobile_pending_oauth_metadata_v1";
+const PENDING_OAUTH_METADATA_KEY = "@pulse_pending_oauth_metadata_v1";
 
 export async function signUp({
   email,

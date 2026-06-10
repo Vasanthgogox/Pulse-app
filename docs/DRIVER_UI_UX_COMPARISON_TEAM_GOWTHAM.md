@@ -1,7 +1,7 @@
 # Driver UI/UX: Current (Phase1) vs Team Gowtham
 
 Comparison based on `git diff HEAD team/gowtham` for driver app routes.  
-**Remotes:** `team` = `https://github.com/deepak-0659/q-mobile.git`, branch `gowtham`.
+**Remotes:** `team` = `https://github.com/deepak-0659/pulse.git`, branch `gowtham`.
 
 ---
 

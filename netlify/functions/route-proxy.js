@@ -19,7 +19,7 @@ async function fetchOsrm(from, to) {
   const url = `${OSRM_DIRECTIONS_BASE}/${coords}?overview=full&geometries=geojson`;
   const res = await fetch(url, {
     headers: {
-      "User-Agent": "Q-Web-Routing-Proxy/1.0",
+      "User-Agent": "Pulse-Routing-Proxy/1.0",
     },
   });
   if (!res.ok) return null;

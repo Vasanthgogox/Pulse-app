@@ -303,7 +303,7 @@ export function InviteMemberFlow({
           </View>
           <Text style={ui.sectionDesc}>
             Enter the phone number of the person you'd like to invite. They must already
-            have a Q account.
+            have a Pulse account.
           </Text>
 
           <View style={ui.inputWrap}>

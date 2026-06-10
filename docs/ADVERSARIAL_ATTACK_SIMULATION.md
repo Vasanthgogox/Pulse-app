@@ -44,7 +44,7 @@ curl -X GET "https://YOUR_PROJECT.supabase.co/rest/v1/clients?select=*" \
 - Attacker tries to call a privileged RPC or to update `organization_members.role` to gain more capabilities.
 - **Outcome:** Only RPCs and tables that exist and are allowed to anon/authenticated are exposed. RLS and function `SECURITY DEFINER` logic enforce who can do what. No “superuser” from the anon key.
 
-**Conclusion:** RLS is the main protection. Bypass would require a bug in **policies or RPCs** (in Q-unified-base), not in this app.
+**Conclusion:** RLS is the main protection. Bypass would require a bug in **policies or RPCs** (in pulse-unified-base), not in this app.
 
 ---
 
@@ -156,7 +156,7 @@ curl -X POST "https://YOUR_PROJECT.supabase.co/functions/v1/ops-agent-chat" \
 
 ## 8. Suggested Next Steps (Operational)
 
-1. **Periodic RLS audit** (in Q-unified-base): Review policies for tables used by the app; ensure no missing or over-permissive policies.
+1. **Periodic RLS audit** (in pulse-unified-base): Review policies for tables used by the app; ensure no missing or over-permissive policies.
 2. **Monitor proxy usage:** Log 401/429 and high request counts per user in the Edge Function or in Supabase logs to spot abuse or stolen tokens.
 3. **Incident playbook:** Keep `docs/INCIDENT_RESPONSE.md` and key rotation (`docs/KEY_ROTATION.md`) up to date; practice revoking a user and rotating secrets once.
 4. **Optional:** Stricter password policy and generic sign-in error message to reduce account takeover and enumeration.

@@ -19,7 +19,7 @@ Unused files removed:
 | File | Notes |
 |------|--------|
 | `components/AddTripModal.tsx` | (Deleted) Re-export only; all imports use `@/components/add-trip`. |
-| `migrations/001_initial_schema_consolidated.sql` | Schema lives in Q-unified-base; keep only if you use it as local reference. |
+| `migrations/001_initial_schema_consolidated.sql` | Schema lives in pulse-unified-base; keep only if you use it as local reference. |
 | `constants/Colors.ts` | Only used by `Themed.tsx` and `EditScreenInfo.tsx`. Delete after migrating modal, settings, +not-found to `Theme`. |
 | `components/Themed.tsx` | Used by `app/modal.tsx`, `app/+not-found.tsx`. Settings now uses Theme + plain View/Text. Remove after modal and +not-found use Theme. |
 | `components/EditScreenInfo.tsx` | Used only by `app/modal.tsx`. Remove when modal content is updated. |

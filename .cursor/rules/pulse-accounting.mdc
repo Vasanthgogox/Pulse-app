@@ -1,10 +1,10 @@
 ---
-description: Q Mobile — core accounting model; double-entry logic for ledger and finance
+description: Pulse — core accounting model; double-entry logic for ledger and finance
 alwaysApply: false
 globs: app/(tabs)/finance.tsx, features/finance/**/*.ts, features/finance/**/*.tsx, components/AddTransactionModal.tsx
 ---
 
-# Q Mobile: Core Accounting Model
+# Pulse: Core Accounting Model
 
 All ledger and in/out entry logic must follow the **double-entry accounting model**. Full spec: `docs/CORE_ACCOUNTING_MODEL.md`.
 

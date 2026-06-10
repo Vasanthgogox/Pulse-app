@@ -334,7 +334,7 @@ function GridCard({ item }: { item: ConnectedOrg }) {
               style={[styles.gridMiniDot, { backgroundColor: Theme.iconSlate }]}
             />
             <Text style={styles.gridMutualText} numberOfLines={1}>
-              In your Q network
+              In your Pulse network
             </Text>
           </View>
           <View

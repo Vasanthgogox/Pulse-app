@@ -1,6 +1,6 @@
 /**
  * Organization service — Supabase only (mobile).
- * Same DB as Q-unified-base; RLS restricts to own memberships.
+ * Same DB as pulse-unified-base; RLS restricts to own memberships.
  * Uses membership-based query first (RLS on organization_members + organizations).
  * If that returns nothing and the DB has get_organizations_for_user() RPC, tries RPC to backfill owner memberships.
  */

@@ -8,7 +8,7 @@
  *
  * Design notes:
  *   - No new tables/migrations here; we reuse the shared-ledger RPC contract already
- *     shipped in Q-unified-base.
+ *     shipped in pulse-unified-base.
  *   - Duplicate detection is deliberately light: same trip_id + amount within
  *     a 7-day window counts as a strong match; amount-only on same trip is a soft match.
  *   - Local "already actioned" state (Added / Linked / Ignored / Disputed) is kept in

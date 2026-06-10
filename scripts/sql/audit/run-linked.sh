@@ -18,7 +18,7 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_FILE="$OUT_DIR/audit-linked-${STAMP}.txt"
 
 {
-  echo "q-web catalog audit (linked Supabase)"
+  echo "pulse catalog audit (linked Supabase)"
   echo "captured_utc: ${STAMP}"
   echo "repo_root: ${ROOT}"
   echo "supabase: $(command -v supabase || echo 'supabase not in PATH')"

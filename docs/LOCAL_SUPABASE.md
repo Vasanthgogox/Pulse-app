@@ -1,6 +1,6 @@
-# Local Supabase for q-mobile
+# Local Supabase for pulse
 
-This project has a local Supabase setup. Use it for development without touching the shared Q-unified-base project.
+This project has a local Supabase setup. Use it for development without touching the shared pulse-unified-base project.
 
 ## Prerequisites
 
@@ -105,7 +105,7 @@ After sign-up (so an organization exists), you can populate test clients, suppli
 
 - **Initial schema** lives in this repo: `supabase/migrations/20250227120000_initial_schema.sql`. It creates organizations (with operating_model: ASSET_BASED / NON_ASSET / HYBRID), organization_members, organization_links (org-to-org as client/supplier), clients and suppliers (optional linked_organization_id), drivers, vehicles, indents, trips, transactions, with RLS so org members see only their data and drivers can read their own row.
 - **Sign-up creates all required entries**: the initial schema includes RLS so new users can create their default org. On sign-up the app creates: (1) one **organization** (name: “{Full name}'s organization”, owner = user), (2) one **organization_members** row (owner), (3) if driver one **drivers** row. User sign-up includes business model choice (Asset / Aggregate / Both). Connect two orgs via **organization_links** (link_type: client or supplier).
-- After `npx supabase db reset`, migrations run in order; then `supabase/seed.sql` runs if present (e.g. demo org). For parity with **Q-unified-base**, ensure the same INSERT policies exist there so sign-up works; or run this repo’s migrations against that DB.
+- After `npx supabase db reset`, migrations run in order; then `supabase/seed.sql` runs if present (e.g. demo org). For parity with **pulse-unified-base**, ensure the same INSERT policies exist there so sign-up works; or run this repo’s migrations against that DB.
 - **Studio**: open http://127.0.0.1:54323 to inspect and edit data.
 
 ## Preprod seed: "permission denied" fix
@@ -179,7 +179,7 @@ If Add Client (or other org-scoped screens) shows "No organization loaded" even 
    The app reads orgs by ids from memberships. A typical policy uses a helper, e.g. `is_org_member(id)`, so users can read orgs they belong to. If the schema uses that, ensure `is_org_member` exists and is granted to `authenticated`.
 
 4. **Optional RPC**  
-   If the schema includes `get_organizations_for_user()` (e.g. from Q-unified-base), the app will call it when the membership-based query returns no orgs (e.g. to backfill owner memberships). If your DB does not have this RPC, the app still works as long as membership + org RLS are correct.
+   If the schema includes `get_organizations_for_user()` (e.g. from pulse-unified-base), the app will call it when the membership-based query returns no orgs (e.g. to backfill owner memberships). If your DB does not have this RPC, the app still works as long as membership + org RLS are correct.
 
 ## Stopping
 

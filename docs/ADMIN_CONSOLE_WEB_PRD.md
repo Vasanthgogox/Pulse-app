@@ -1,8 +1,8 @@
-# Q Admin Console Web Application - Product Requirements Document
+# Pulse Admin Console Web Application - Product Requirements Document
 
 ## 1) Executive Summary
 
-The **Q Admin Console** is a **SaaS platform admin console** for the Q logistics ecosystem. It gives platform operators and tenant administrators a single place to manage **platform traffic**, **tenants**, **usage**, and **health**, plus full **tenant-level operations** (finance, trips, network, disputes, team access). Think of it like a SaaS product console where you manage traffic, tenants, and configuration—and where each tenant’s admins can manage their own org’s operations.
+The **Pulse Admin Console** is a **SaaS platform admin console** for the Pulse logistics ecosystem. It gives platform operators and tenant administrators a single place to manage **platform traffic**, **tenants**, **usage**, and **health**, plus full **tenant-level operations** (finance, trips, network, disputes, team access). Think of it like a SaaS product console where you manage traffic, tenants, and configuration—and where each tenant’s admins can manage their own org’s operations.
 
 **Business value (platform):**
 - **Traffic management:** View and manage API/service traffic (volume, rate limits, throttling, traffic by tenant or endpoint) so the platform stays healthy and fair.
@@ -19,7 +19,7 @@ The **Q Admin Console** is a **SaaS platform admin console** for the Q logistics
 
 ### What the product is
 
-A **SaaS-style platform admin console** for Q: one web application with two layers.
+A **SaaS-style platform admin console** for Pulse: one web application with two layers.
 
 1. **Platform layer (SaaS operator)**  
    For platform/ops teams who run the product:
@@ -30,7 +30,7 @@ A **SaaS-style platform admin console** for Q: one web application with two laye
    - **Configuration:** Feature flags, global limits, maintenance windows.
 
 2. **Tenant layer (org admin)**  
-   For admins inside a single organization (same as today’s q-mobile domains):
+   For admins inside a single organization (same as today’s pulse domains):
    - Organization and team management
    - Clients, suppliers, drivers, vehicles; trips and indents
    - Finance ledger and reporting; network and shared-ledger disputes
@@ -48,20 +48,20 @@ The console is a multi-tenant web app on Pulse’s shared Supabase backend. Plat
 
 ### Why it exists
 
-- **Platform:** To run Q as a SaaS product: control traffic, manage tenants, see usage and health, and fix issues at the platform level.
+- **Platform:** To run Pulse as a SaaS product: control traffic, manage tenants, see usage and health, and fix issues at the platform level.
 - **Tenant:** Mobile is for field and quick actions; the console is for oversight, bulk operations, policy, and high-density data (finance, trips, network, disputes) in a desktop-first way.
 
 ### Product boundaries
 
 In scope:
 - **Platform:** Traffic management, tenant list/health/usage, platform health, usage analytics, platform-level config.
-- **Tenant:** All existing Q domains (org, team, entities, trips, finance, network, disputes, AI) with capability-based access.
+- **Tenant:** All existing Pulse domains (org, team, entities, trips, finance, network, disputes, AI) with capability-based access.
 - Single codebase; platform vs tenant scope enforced by role and data boundaries.
 
 Out of scope for MVP:
 - Replacing mobile dispatcher/driver UX.
 - Separate billing/payments UI (usage data only).
-- Schema migration lifecycle (remains in Q-unified-base).
+- Schema migration lifecycle (remains in pulse-unified-base).
 
 ## 3) Current Workspace Context and Constraints
 
@@ -134,7 +134,7 @@ Primary domain contracts reflected in current code:
 
 ### Persona G - Platform / SaaS Admin
 
-- Goals: run the Q product as a platform—manage traffic, tenants, usage, and health.
+- Goals: run the Pulse product as a platform—manage traffic, tenants, usage, and health.
 - Frequency: daily monitoring; incident and release-driven for config/throttling.
 - Key tasks: view and tune traffic (rate limits, throttling), manage tenant list and health, monitor usage and errors, set feature flags or global limits, respond to platform incidents.
 - Success criteria: stable traffic and latency, clear tenant and usage visibility, fast platform incident response.
@@ -511,11 +511,11 @@ The console is structured like a **SaaS platform console**: platform-level secti
 - Mutating forms: inline validation + review step + reason capture (for sensitive actions).
 - Error surfaces: actionable messages, retry controls, support reference id.
 
-### Visual design and theme (Tesla-inspired, aligned with q-mobile)
+### Visual design and theme (Tesla-inspired, aligned with pulse)
 
-The admin console MUST use the same visual language as the q-mobile application: **Tesla-inspired**, with a **white, black, and red** palette. All colors and layout tokens MUST be derived from the single source of truth used in the mobile app so the brand and experience stay consistent across platforms.
+The admin console MUST use the same visual language as the pulse application: **Tesla-inspired**, with a **white, black, and red** palette. All colors and layout tokens MUST be derived from the single source of truth used in the mobile app so the brand and experience stay consistent across platforms.
 
-**Source of truth (q-mobile):**
+**Source of truth (pulse):**
 
 - Colors: [`constants/Theme.ts`](../constants/Theme.ts) — single source for all UI colors; no hardcoded hex in components.
 - Layout: [`constants/Layout.ts`](../constants/Layout.ts) — spacing, padding, touch targets.
@@ -670,7 +670,7 @@ Web application:
 - Next.js + TypeScript for admin web frontend.
 - Shared domain types via `packages/shared-types`.
 - Supabase JS for auth/session and selected read flows.
-- **Design system:** Theme and colors MUST align with q-mobile; use the same token values from `constants/Theme.ts` (e.g. export as JSON/CSS vars or import in a shared package). Tesla-inspired palette: white backgrounds, black primary text, Tesla red (`#E82127`) for accent and primary actions. See §9 Visual design and theme.
+- **Design system:** Theme and colors MUST align with pulse; use the same token values from `constants/Theme.ts` (e.g. export as JSON/CSS vars or import in a shared package). Tesla-inspired palette: white backgrounds, black primary text, Tesla red (`#E82127`) for accent and primary actions. See §9 Visual design and theme.
 
 Backend/API layer:
 - Preferred: server-side API facade (Next.js route handlers or dedicated service) to centralize authorization, validation, and audit.

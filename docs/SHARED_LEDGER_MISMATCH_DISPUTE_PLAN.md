@@ -17,7 +17,7 @@
 
 **Why you see "Wait" today:** Partner numbers come from the backend RPC `get_shared_ledger_entries(org_id, partner_key)`. The app calls it with `partner_key = entity.id` (the contact_id of the other party). If the RPC returns no entries for that trip, or the connection is missing, the app shows "Wait" and status **PENDING**.
 
-**What the backend must do (Q-unified-base):**
+**What the backend must do (pulse-unified-base):**
 
 - When Org A and Org B have an active `shared_ledger_connection` and a shared contact (e.g. client/supplier link), the RPC **get_shared_ledger_entries(org_id, partner_key)** must return the **partner org’s** ledger view for trips involving both parties.
 - Example: Nihas (supplier org) opens Compare & Verify for Mukunt (client). The app calls `get_shared_ledger_entries(Nihas_org_id, Mukunt_contact_id)`. The backend should return entries that represent **Mukunt’s org’s** view of those trips (e.g. for TRP002: sales 30,000, paid 20,000), with `reference_id` = trip_id so the app can aggregate by trip into `extSales` and `extPaid`.
@@ -79,7 +79,7 @@
 
 ---
 
-## 6. Backend checklist (Q-unified-base)
+## 6. Backend checklist (pulse-unified-base)
 
 - [ ] **get_shared_ledger_entries(org_id, partner_key)** returns the **partner org’s** ledger entries for shared trips, with `reference_id` = trip_id and amounts that allow the app to derive partner sales/paid per trip.
 - [ ] **shared_ledger_connection** links the two orgs (and optionally contact_id) so the app knows they are “integrated”.

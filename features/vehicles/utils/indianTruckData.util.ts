@@ -1,4 +1,4 @@
-/** Indian commercial vehicle list — matches Q-unified-base for Add Vehicle. */
+/** Indian commercial vehicle list — matches pulse-unified-base for Add Vehicle. */
 export interface IndianTruckSpec {
   brand: string;
   model: string;

@@ -1,4 +1,4 @@
-# Q Mobile — Comprehensive Product Requirements Document
+# Pulse — Comprehensive Product Requirements Document
 
 **Version:** 1.0 | **Date:** 2026-04-20 | **Branch analyzed:** `vasanth`
 
@@ -8,7 +8,7 @@
 
 ## 1.1 Purpose
 
-**Q Mobile** is a cross-platform (iOS, Android, Web) logistics operations management application built with React Native (Expo). It serves as the mobile companion to the `q-unified-base` web platform. The application enables freight logistics companies to manage their end-to-end supply chain operations — from creating load requirements (indents), to assigning and tracking trips, to reconciling finances across business partners.
+**Pulse** is a cross-platform (iOS, Android, Web) logistics operations management application built with React Native (Expo). It serves as the mobile companion to the `pulse-unified-base` web platform. The application enables freight logistics companies to manage their end-to-end supply chain operations — from creating load requirements (indents), to assigning and tracking trips, to reconciling finances across business partners.
 
 ## 1.2 Core Value Proposition
 
@@ -2131,7 +2131,7 @@ DISPATCHER SIDE:
 
 The following were **not found** in the codebase and are out of scope for this application:
 
-- Web-only admin portal (separate `q-unified-base` project)
+- Web-only admin portal (separate `pulse-unified-base` project)
 - Payment gateway integration (payments tracked in ledger; no direct payment API found)
 - Automated route optimization algorithm (distance/duration shown; no client-side optimization engine)
 - Customer-facing booking portal (ops/logistics tool only; no customer self-service)
@@ -3066,4 +3066,4 @@ The following were found during gap analysis and are confirmed as fully or parti
 
 ---
 
-*Gap analysis performed 2026-04-20. All additions traceable to source files in `/Users/ggx/Desktop/q-web` on branch `vasanth`. Original document sections 1–8 remain unchanged.*
+*Gap analysis performed 2026-04-20. All additions traceable to source files in `/Users/ggx/Desktop/pulse` on branch `vasanth`. Original document sections 1–8 remain unchanged.*

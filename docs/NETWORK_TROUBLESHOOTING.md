@@ -66,7 +66,7 @@ The emulator often has **no working internet**. Try:
 In Metro logs you should see:
 
 ```text
-[q-mobile] Supabase URL host: mhedvagyuplkbrfaoctl.supabase.co
+[pulse] Supabase URL host: mhedvagyuplkbrfaoctl.supabase.co
 ```
 
 If you see that, config is correct and the issue is device/emulator network only.

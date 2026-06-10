@@ -23,16 +23,16 @@ So “private” = your assignments; “shared” = assignments made by others i
    - Assignment and reassignment are recorded in `trip_assignment_audit` (when the table exists), with `changed_by` = user who made the change (profiles.id / auth.uid()).  
    - “Last assigner” is derived from the latest assignment/reassignment event per trip.
 
-## Schema (Q-unified-base)
+## Schema (pulse-unified-base)
 
-Schema lives in **Q-unified-base**; this repo does not add migrations.
+Schema lives in **pulse-unified-base**; this repo does not add migrations.
 
 - **`trip_assignment_audit`** (consolidated schema):  
   - `trip_id`, `event_type` ('assignment' | 'reassignment' | 'completed'),  
   - `driver_id_prev` / `driver_id_new`, `vehicle_id_prev` / `vehicle_id_new`,  
   - `changed_at`, **`changed_by`** (references `profiles.id`).  
 
-- In Q-unified-base, `profiles.id` is set from `auth.uid()` on signup, so the app passes `auth.uid()` as `changed_by`.
+- In pulse-unified-base, `profiles.id` is set from `auth.uid()` on signup, so the app passes `auth.uid()` as `changed_by`.
 
 If `trip_assignment_audit` is missing (e.g. minimal local schema):
 

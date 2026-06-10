@@ -1,12 +1,12 @@
-# Tesla Logistics OS → Q-Mobile Integration Plan
+# Tesla Logistics OS → Pulse Integration Plan
 
-This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Financial Summary adjustments, Treasury summary, Network handshake) into **q-mobile** while following `.cursor/rules/q-mobile-standards.mdc` and using `@/constants/Theme`.
+This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Financial Summary adjustments, Treasury summary, Network handshake) into **pulse** while following `.cursor/rules/pulse-standards.mdc` and using `@/constants/Theme`.
 
 ---
 
-## 1. Feature mapping (Canvas → q-mobile)
+## 1. Feature mapping (Canvas → pulse)
 
-| Canvas feature | q-mobile target | Notes |
+| Canvas feature | pulse target | Notes |
 |----------------|-----------------|--------|
 | **Mission Telemetry** (trip tracking + timeline) | `app/trip/[id].tsx` | Add Tracking vs Finance tabs; telemetry-style route + mission log timeline |
 | **Financial Summary (trip P&L + adjustments)** | `app/trip/[id].tsx` (Finance tab) | Revenue/Due summary, base sale value, credit/deduct adjustments, commit ledger |
@@ -107,11 +107,11 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fina
 
 ---
 
-## 3. Technical constraints (from q-mobile standards)
+## 3. Technical constraints (from pulse standards)
 
 - **Colors:** Only `@/constants/Theme` (e.g. `Theme.teslaRed`, `Theme.darkGreen`, `Theme.darkBackground`, `Theme.positive`, `Theme.negative`).
 - **Safe area:** All new screens/overlays use `useSafeAreaInsets()` or existing layout components (e.g. `DetailPageLayout`, `ListScreenLayout`).
-- **Data:** No new migrations; use existing `tripsService`, `financeService`, etc. New API calls only if Q-unified-base already exposes them (e.g. date-filtered ledger).
+- **Data:** No new migrations; use existing `tripsService`, `financeService`, etc. New API calls only if pulse-unified-base already exposes them (e.g. date-filtered ledger).
 - **Services:** Keep one service per domain; trip finance “commit” uses `financeService.createLedgerEntry` with `trip_id` and amounts.
 - **Navigation:** Trip detail remains `app/trip/[id].tsx`; Finance remains under `(tabs)`; no new bottom tabs.
 
@@ -129,14 +129,14 @@ This plan maps the **Canvas Tesla Logistics OS** update (Mission Telemetry, Fina
 ## 5. Reference assets
 
 - **Canvas:** The provided React (web) component with `TeslaHeader`, `FinancialRow`, trip detail modals, Load Board, and network notification.
-- **Existing q-mobile:** `app/trip/[id].tsx`, `app/(tabs)/finance.tsx`, `components/finance/*`, `components/LoadBoardModal.tsx`, `components/DetailPageLayout.tsx`, `constants/Theme.ts`.
+- **Existing pulse:** `app/trip/[id].tsx`, `app/(tabs)/finance.tsx`, `components/finance/*`, `components/LoadBoardModal.tsx`, `components/DetailPageLayout.tsx`, `constants/Theme.ts`.
 - **Optional reference in repo:** Draft file was removed after implementation; logic lives in `app/(tabs)/finance.tsx` and `components/finance/TreasurySummaryBanner.tsx`.
 
 ---
 
 ## 6. Out of scope (for this plan)
 
-- New Supabase migrations or RLS changes (schema lives in Q-unified-base).
+- New Supabase migrations or RLS changes (schema lives in pulse-unified-base).
 - A dedicated “Network Registry” screen (only the handshake overlay is in scope).
 - Real-time telemetry (e.g. live GPS); only static/timestamp-based mission log from existing trip fields.
 - Changing bottom tab structure (Home / Resources only per standards).

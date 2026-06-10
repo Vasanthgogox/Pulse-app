@@ -15,7 +15,7 @@
 2. **@mapcn/map is for web/shadcn, not React Native**  
    [Mapcn](https://mapcn.dev/) is a **React (web)** map component built for **shadcn/ui**: MapLibre GL + Tailwind. It targets DOM/browser, not native iOS/Android views. It also **requires** Tailwind and shadcn already set up.
 
-## What to use in q-mobile instead
+## What to use in pulse instead
 
 - **Native driver/app maps:** Use **react-native-maps** (already in `package.json`). It renders real native map views (Apple MapKit / Google Maps) and is the right choice for the driver dashboard and trip screens.
 - **Do not add** Tailwind/NativeWind or shadcn just to use @mapcn/map in this app; that would be a large, unnecessary stack change and mapcn still wouldn’t run in native views.

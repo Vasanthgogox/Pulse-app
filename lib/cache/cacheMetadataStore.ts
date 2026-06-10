@@ -67,7 +67,7 @@ export async function clearDomainCacheMeta(domain: CacheDomain, orgId: string): 
 
 export async function clearAllDomainCacheMetaForOrg(orgId: string): Promise<void> {
   const keys = await AsyncStorage.getAllKeys();
-  const prefix = `q-cache-meta-v2:`;
+  const prefix = `pulse-cache-meta-v2:`;
   const targets = keys.filter((k) => k.startsWith(prefix) && k.endsWith(`:${orgId}`));
   if (targets.length === 0) return;
   await AsyncStorage.multiRemove(targets);

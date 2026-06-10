@@ -1,6 +1,6 @@
 /**
  * POD Reconciliation service — maps to cashflow PodReconciliation.tsx.
- * Same DB as Q-unified-base; RLS applies.
+ * Same DB as pulse-unified-base; RLS applies.
  *
  * Trip scope: selected org only — merge owner trips + supplier-linked + client-linked RPCs
  * so list counts match metrics (plain `from('trips')` + RLS can include other orgs).

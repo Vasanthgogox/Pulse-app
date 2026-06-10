@@ -1,5 +1,5 @@
 -- Ratings: trip-scoped rows (Client→Supplier, Supplier→Driver, Org→Driver, Supplier/Org→Client).
--- Copy to Q-unified-base supabase/migrations/ and run there.
+-- Copy to pulse-unified-base supabase/migrations/ and run there.
 -- Existing DBs without rated_type client: run supabase/migrations/20260503100000_ratings_add_client_rated_type.sql.
 
 CREATE TABLE IF NOT EXISTS public.ratings (

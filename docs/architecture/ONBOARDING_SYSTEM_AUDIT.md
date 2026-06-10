@@ -121,7 +121,7 @@ Pulse today has **two parallel self-serve wizards** (business + driver) plus **p
 
 ### 6.4 Public invite link
 
-- `public/invite/index.html` sets `q_invite_ref` in sessionStorage — **no app reader found**
+- `public/invite/index.html` sets `pulse_invite_ref` in sessionStorage — **no app reader found**
 
 ---
 
@@ -190,7 +190,7 @@ auth.users INSERT
 |---------|----------------|
 | Storage | `expo-secure-store` (native), AsyncStorage (web/Expo Go) |
 | Session restore | `AuthContext` + Supabase client |
-| Pending OAuth | `@q_mobile_pending_oauth_metadata_v1` AsyncStorage |
+| Pending OAuth | `@pulse_pending_oauth_metadata_v1` AsyncStorage |
 | Boot gate | `AppBootGate` — blocks until auth restored |
 | Degraded mode | JWT metadata without DB profile (`applyDegradedAuthSession`) |
 | Post-signup | Business success → `/` without waiting for email confirm (config-dependent) |

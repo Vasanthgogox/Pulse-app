@@ -1,6 +1,6 @@
 # Architecture Boundaries
 
-This document defines the domain boundary rules for the Q codebase.
+This document defines the domain boundary rules for the Pulse codebase.
 Violations are caught by `eslint-plugin-boundaries` and the CI `architecture-check` workflow.
 
 ## Directory Ownership

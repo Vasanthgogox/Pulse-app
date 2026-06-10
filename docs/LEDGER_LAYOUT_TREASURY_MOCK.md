@@ -1,6 +1,6 @@
 # Ledger layout: Treasury-style mock → app mapping
 
-This doc maps the **Treasury / Financial Summary** web mock (dark header + light table) to the current q-mobile Finance tab so we can plan or adopt the layout.
+This doc maps the **Treasury / Financial Summary** web mock (dark header + light table) to the current pulse Finance tab so we can plan or adopt the layout.
 
 ## Mock structure (summary)
 
@@ -60,7 +60,7 @@ Use it in a demo route to compare with the real Finance tab. It uses `Theme`, `L
 
 **To view the demo:** add a route (e.g. `app/(modals)/treasury-demo.tsx`) that renders `<TreasuryLedgerLayoutDemo />` and navigate to it from the Finance tab or a dev menu.
 
-## Rules (from q-mobile-accounting.mdc)
+## Rules (from pulse-accounting.mdc)
 
 - Do not change existing Finance tab layout; new work should preserve current UI and only adjust data flow and entry logic when needed.
 - Adopting the Treasury-style look is optional and can be done via small visual tweaks (header title, dark top section, light table) without altering the existing structure of `LedgerTab`, `FinancialRow`, or the accounting model.

@@ -1,6 +1,6 @@
 import type { CacheDomain } from '@/lib/cache/deltaTypes';
 
-const CACHE_PREFIX = 'q-cache-meta-v2';
+const CACHE_PREFIX = 'pulse-cache-meta-v2';
 
 export function cacheMetaKey(domain: CacheDomain, orgId: string): string {
   return `${CACHE_PREFIX}:${domain}:${orgId}`;

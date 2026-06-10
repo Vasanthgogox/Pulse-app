@@ -1,7 +1,7 @@
 /**
  * Connection requests service — org-to-org invitations (client/supplier).
  * Single bounded context: connection_requests (invite by phone, list received/sent, approve/reject).
- * Same DB as Q-unified-base; schema and RPCs live there. No driver-invite logic here.
+ * Same DB as pulse-unified-base; schema and RPCs live there. No driver-invite logic here.
  *
  * Data model (phone is on the person, not the org):
  * - organizations = company/org (name, slug, owner_id, etc.). No phone column.

@@ -140,8 +140,8 @@ const DEFAULT_MAP_REGION = {
   longitudeDelta: 0.5,
 };
 
-const DRIVER_MAP_BOOT_KEY = "@q-mobile/driver-map-native-booting";
-const DRIVER_MAP_BOOT_TS_KEY = "@q-mobile/driver-map-native-boot-ts";
+const DRIVER_MAP_BOOT_KEY = "@pulse/driver-map-native-booting";
+const DRIVER_MAP_BOOT_TS_KEY = "@pulse/driver-map-native-boot-ts";
 
 const MAP_CONTROLS_BAR_HEIGHT = 32;
 const MAP_CONTROLS_BELOW_TOP = 6;

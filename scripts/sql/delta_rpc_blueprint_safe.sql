@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- DELTA RPC BLUEPRINT (SAFE / IDEMPOTENT)
--- Target repo for apply: Q-unified-base (shared Supabase schema)
+-- Target repo for apply: pulse-unified-base (shared Supabase schema)
 -- ==============================================================================
 --
 -- Purpose:

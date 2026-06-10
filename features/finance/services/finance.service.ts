@@ -1,7 +1,7 @@
 /**
  * Finance / ledger service — Supabase.
- * Uses public.transactions table (q-mobile schema: amount_in, amount_out, party_name, transaction_date).
- * When connected to Q-unified-base DB with cash_entries, that table can be used instead; this keeps compatibility with q-mobile migrations.
+ * Uses public.transactions table (pulse schema: amount_in, amount_out, party_name, transaction_date).
+ * When connected to pulse-unified-base DB with cash_entries, that table can be used instead; this keeps compatibility with pulse migrations.
  *
  * Double-entry interpretation: every row maps to a debit/credit pair per docs/CORE_ACCOUNTING_MODEL.md.
  * Use getDoubleEntryFromLedgerRow (features/finance/accounting/accountingModel.ts) for consistent interpretation.
@@ -185,7 +185,7 @@ export interface CreateLedgerEntryData {
   trip_id?: string | null;
   trip_number?: string | null;
   /**
-   * When true (Ledger Sync only): use q-unified-base / qunifiedbase-style write — no
+   * When true (Ledger Sync only): use pulse-unified-base / qunifiedbase-style write — no
    * `resolveTripContextForLedgerWrite`, no trip-id retry, description not augmented with QMETA.
    * For cross-org integrated getLoad (indent) flows where the DB expects the owner trip UUID as sent from the UI.
    */

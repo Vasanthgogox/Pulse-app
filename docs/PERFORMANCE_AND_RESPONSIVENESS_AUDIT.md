@@ -1,4 +1,4 @@
-# Q Mobile: Performance, Responsiveness & Data Loading Audit
+# Pulse: Performance, Responsiveness & Data Loading Audit
 
 Quick assessment of **application speed**, **responsiveness**, **performance**, **data loading speed**, and **cache/update** behavior.
 

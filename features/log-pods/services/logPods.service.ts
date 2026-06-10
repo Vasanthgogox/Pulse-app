@@ -1,6 +1,6 @@
 /**
  * Log incoming PODs — Supabase operations aligned with cashflow LogIncomingPodsPage.
- * Same DB as Q-unified-base; RLS applies.
+ * Same DB as pulse-unified-base; RLS applies.
  */
 import {
     getTripsWhereOrgIsClient,

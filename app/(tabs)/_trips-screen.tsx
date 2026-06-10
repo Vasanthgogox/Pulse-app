@@ -126,7 +126,7 @@ type TripsListLayout = "cards" | "table";
 type ActiveMetricTabId = TripMetricId | "all";
 /** Mobile hub list — light page; white ticket cards only (no list shell). */
 const TRIPS_PAGE_BG = "#eef2f6";
-const TRIPS_LIST_LAYOUT_KEY = "@q-mobile/trips-list-layout";
+const TRIPS_LIST_LAYOUT_KEY = "@pulse/trips-list-layout";
 /** Mobile hub accent — matches filter sheet / Pulse indigo. */
 const TRIPS_HUB_ACCENT = Theme.pulseIndigo;
 /** Native mobile: render trips in batches so the hub stays responsive at scale. */

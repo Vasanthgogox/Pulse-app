@@ -1,10 +1,10 @@
 /**
  * "Keep me signed in" preference — persisted so we can sign out on app background when unchecked.
- * Key: @q-mobile/keep-signed-in; value: "true" | "false". Default (missing) = true (keep session).
+ * Key: @pulse/keep-signed-in; value: "true" | "false". Default (missing) = true (keep session).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = '@q-mobile/keep-signed-in';
+const KEY = '@pulse/keep-signed-in';
 
 export async function getKeepSignedIn(): Promise<boolean> {
   try {

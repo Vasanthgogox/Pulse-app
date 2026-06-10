@@ -1,4 +1,4 @@
-# Q Mobile: Comprehensive Adversarial Security Audit
+# Pulse: Comprehensive Adversarial Security Audit
 
 **Date:** March 2025  
 **Scope:** Architecture, infrastructure, backend, frontend, database, data flows  
@@ -48,7 +48,7 @@
 - **Auth:** Supabase Auth only (`features/auth/services/auth.service.ts`). Sign-in/sign-up use `signInWithPassword` / `signUp` with validated email/password. No custom auth or password storage.
 - **Session:** Stored in SecureStore when available (iOS Keychain / Android Keystore); fallback to AsyncStorage on web or when Expo SecureStore is unavailable (e.g. Expo Go). Session validated with server via `getUser()` (not only local `getSession()`).
 - **Token refresh:** `autoRefreshToken: true`; `onAuthStateChange` clears local session on invalid refresh.
-- **Authorization:** RLS is the enforcement layer (Q-unified-base migrations). App uses anon key only; capability-based UI in `lib/capabilities.ts` (no client-only access control for data—RLS enforced server-side).
+- **Authorization:** RLS is the enforcement layer (pulse-unified-base migrations). App uses anon key only; capability-based UI in `lib/capabilities.ts` (no client-only access control for data—RLS enforced server-side).
 
 **Gap:** **Critical — ops-agent-chat Edge Function does not verify the JWT.** It only checks `Authorization` header starts with `Bearer `. Any caller (including unauthenticated) can send `Bearer dummy` and the function will call Gemini, consuming quota and allowing prompt injection / abuse. See §7 and §8 for fix.
 
@@ -104,7 +104,7 @@
 
 ### 3.1 Overall Architecture Posture
 
-- Single backend: Supabase (Postgres + Auth + Storage + Edge Functions). Same DB as Q-unified-base; schema/migrations in Q-unified-base; app is client.
+- Single backend: Supabase (Postgres + Auth + Storage + Edge Functions). Same DB as pulse-unified-base; schema/migrations in pulse-unified-base; app is client.
 - Trust boundaries: App (anon key) → Supabase API (RLS) → Postgres. Edge Function (ops-agent-chat) holds Gemini key; app sends session token but **function does not verify it** (see §1.2, §8).
 
 ### 3.2 Trust Boundaries and Service Isolation
@@ -160,7 +160,7 @@
 
 ### 5.2 Data Theft, Privilege Escalation, Lateral Movement
 
-- **Data theft:** RLS limits rows by org/user/driver. Bypass would require RLS misconfiguration (in Q-unified-base), not in this repo.
+- **Data theft:** RLS limits rows by org/user/driver. Bypass would require RLS misconfiguration (in pulse-unified-base), not in this repo.
 - **Privilege escalation:** Capabilities derived from profile (aggregated/asset/role); RLS enforces at DB. No client-side-only privilege grant.
 - **Lateral movement:** No secondary services or internal APIs in app; Supabase is the single backend. Edge Function does not access DB with caller identity (only forwards to Gemini)—so no lateral DB access via function, but unverified caller can still abuse Gemini.
 
@@ -196,7 +196,7 @@
 
 - **Unverified JWT:** Attacker can call `POST /functions/v1/ops-agent-chat` with `Authorization: Bearer x` and arbitrary body. Result: Gemini API is called; quota/cost impact; attacker could send prompts that trigger tool calls—but tool calls are executed **in the app** with the **app’s** Supabase client (session). So the Edge Function itself does not execute tool calls; it only returns Gemini’s response (text + function calls). The app would need to be the one calling the proxy with a valid session to perform creates. So direct unauthenticated call to the function: **quota/cost abuse and prompt injection to Gemini**, not direct DB or app actions. If an attacker also obtained a valid user JWT (e.g. phishing), they could use the proxy to run tool-calling flows as that user. **Mitigation:** Verify JWT in the Edge Function so only authenticated users can use the proxy; add rate limiting to limit quota abuse.
 
-### 7.2 If RLS Is Bypassed (e.g. Misconfiguration in Q-unified-base)
+### 7.2 If RLS Is Bypassed (e.g. Misconfiguration in pulse-unified-base)
 
 - Blast radius: All data under affected tables (clients, trips, drivers, etc.). App uses anon key only; RLS is the sole enforcement. Recommendation: Periodic RLS audit (e.g. `supabase db dump --schema-only` and review policies) as in checklist.
 
@@ -302,7 +302,7 @@ Ensure `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or publishable key) are available
 
 **High H1: Restrict CORS (after JWT verification)**
 
-- Keep `*` only if you need any origin (e.g. web app on unknown domain). Otherwise restrict to your app’s origins, e.g. `https://your-app-domain.com` and custom scheme for native (e.g. `qmobile://`). Example: `Access-Control-Allow-Origin: req.headers.get('Origin') || '*'` with an allowlist check.
+- Keep `*` only if you need any origin (e.g. web app on unknown domain). Otherwise restrict to your app’s origins, e.g. `https://your-app-domain.com` and custom scheme for native (e.g. `pulse://`). Example: `Access-Control-Allow-Origin: req.headers.get('Origin') || '*'` with an allowlist check.
 
 **High H2: Do not embed Gemini key in production**
 
@@ -325,7 +325,7 @@ Ensure `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or publishable key) are available
 
 1. **Implement JWT verification in ops-agent-chat** (critical) and deploy; then tighten CORS and add rate limiting.
 2. **Ensure production builds never embed Gemini key:** Config change + EAS/env discipline; document in KEY_ROTATION and SECURITY_CHECKLIST.
-3. **RLS audit:** Periodically review RLS policies (e.g. in Q-unified-base) for tables used by the app; document in checklist.
+3. **RLS audit:** Periodically review RLS policies (e.g. in pulse-unified-base) for tables used by the app; document in checklist.
 4. **Optional:** Certificate pinning for Supabase URL (high-assurance); session idle lock (re-auth after N minutes inactive).
 5. **Optional:** Stricter password policy and generic sign-in error message in UI.
 6. Keep current controls: npm audit + TruffleHog in CI, Dependabot, pre-release script, incident response and key rotation docs, PII/screenshot policy, URL allowlist.

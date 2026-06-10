@@ -98,7 +98,7 @@ async function recoverRosterTripAfterConflict(
   vehicleId: string,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   // Ensure quote stores latest roster first, then call idempotent SECURITY DEFINER RPC.
-  // This mirrors q-mobile and avoids supplier-side RLS issues on direct trips UPDATE.
+  // This mirrors pulse and avoids supplier-side RLS issues on direct trips UPDATE.
   const { error: assignErr } = await updateDirectQuoteAssignment(
     quoteId,
     driverId,
@@ -110,7 +110,7 @@ async function recoverRosterTripAfterConflict(
 
 /**
  * Staff Handshake (Asset): persist roster driver + vehicle on the accepted quote and create the
- * load trip using the same two-step flow as q-mobile:
+ * load trip using the same two-step flow as pulse:
  * updateDirectQuoteAssignment + acceptAwardedQuote.
  */
 export async function applyRosterDeployFromDirectQuote(
@@ -122,7 +122,7 @@ export async function applyRosterDeployFromDirectQuote(
   if (existing) return existing;
 
   const run = (async (): Promise<{ error: Error | null; trip: TripRow | null }> => {
-    // Web hotfix: force the proven q-mobile flow and bypass apply_roster RPC.
+    // Web hotfix: force the proven pulse flow and bypass apply_roster RPC.
     // This avoids persistent 409 conflicts observed on web for some environments.
     const legacy = await rosterDeployViaQuoteUpdateAndCreate(
       quoteId,

@@ -1,12 +1,12 @@
-# Q Mobile
+# Pulse
 
-Mobile app for Q — same Supabase backend as **Q-unified-base**. Built with **React Native (Expo)** and TypeScript for a runnable, long-running, and scalable mobile experience.
+Mobile app for Pulse — same Supabase backend as **pulse-unified-base**. Built with **React Native (Expo)** and TypeScript for a runnable, long-running, and scalable mobile experience.
 
 ## Stack
 
 - **Expo (SDK 54)** — React Native with TypeScript, Expo Router
-- **Supabase** — Same DB and Auth as Q-unified-base (`@supabase/supabase-js` + `AsyncStorage` for session)
-- **Capability-based access** — `lib/capabilities.ts` aligned with Q-unified-base
+- **Supabase** — Same DB and Auth as pulse-unified-base (`@supabase/supabase-js` + `AsyncStorage` for session)
+- **Capability-based access** — `lib/capabilities.ts` aligned with pulse-unified-base
 
 ## Setup
 
@@ -16,7 +16,7 @@ Mobile app for Q — same Supabase backend as **Q-unified-base**. Built with **R
    npm install
    ```
 
-2. **Configure Supabase (same as Q-unified-base)**
+2. **Configure Supabase (same as pulse-unified-base)**
 
    Copy `.env.example` to `.env` and set:
 
@@ -24,7 +24,7 @@ Mobile app for Q — same Supabase backend as **Q-unified-base**. Built with **R
    cp .env.example .env
    ```
 
-   Use the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Q-unified-base, but with Expo env names:
+   Use the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from pulse-unified-base, but with Expo env names:
 
    - `EXPO_PUBLIC_SUPABASE_URL` — same value as `VITE_SUPABASE_URL`
    - `EXPO_PUBLIC_SUPABASE_ANON_KEY` — same value as `VITE_SUPABASE_ANON_KEY`
@@ -65,7 +65,7 @@ Mobile app for Q — same Supabase backend as **Q-unified-base**. Built with **R
      `eval "$(/opt/homebrew/bin/brew shellenv)"`
    - Then run again: `npx expo run:ios`
 
-## Project structure (aligned with Q-unified-base standards)
+## Project structure (aligned with pulse-unified-base standards)
 
 - **`lib/`** — Shared logic: `supabase.ts`, `capabilities.ts`
 - **`services/`** — API/backend: `authService.ts` (Supabase Auth)
@@ -83,11 +83,11 @@ No business logic in screens; pages compose and call `lib/` or `services/`. All 
 
 ## Roadmap
 
-- Trips list and create (reuse Q-unified-base services/types where possible)
+- Trips list and create (reuse pulse-unified-base services/types where possible)
 - Indents, Vehicles, Drivers, Clients (mobile views)
 - Capability-based tabs (show Trips/Indents only if user has permission)
 
 ## References
 
-- **Q-unified-base** — Web app and standards: `docs/ENTERPRISE_MICROSERVICES_STANDARDS.md`, `.cursor/rules/enterprise-microservices-standards.mdc`
+- **pulse-unified-base** — Web app and standards: `docs/ENTERPRISE_MICROSERVICES_STANDARDS.md`, `.cursor/rules/enterprise-microservices-standards.mdc`
 - **Supabase** — [Supabase + React Native](https://supabase.com/docs/guides/getting-started/tutorials/with-expo-react-native)

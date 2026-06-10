@@ -1,6 +1,6 @@
 /**
  * Full-screen detail page: back button, title, scrollable body. Safe area applied.
- * Aligns with Q-unified-base detail panels (client, supplier, trip, driver, vehicle).
+ * Aligns with pulse-unified-base detail panels (client, supplier, trip, driver, vehicle).
  */
 import type { ReactNode } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, RefreshControl } from 'react-native';

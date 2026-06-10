@@ -1,7 +1,7 @@
 /**
  * Trip assignment audit — optional. Used for Private Book vs Shared Network.
- * Table trip_assignment_audit lives in Q-unified-base (consolidated schema); if missing, calls no-op.
- * changed_by references profiles(id); in Q-unified-base profiles.id = auth.uid().
+ * Table trip_assignment_audit lives in pulse-unified-base (consolidated schema); if missing, calls no-op.
+ * changed_by references profiles(id); in pulse-unified-base profiles.id = auth.uid().
  */
 import { supabase } from '@/lib/supabase';
 
@@ -46,7 +46,7 @@ export interface InsertTripAssignmentAuditParams {
   driver_id_new: string | null;
   vehicle_id_prev: string | null;
   vehicle_id_new: string | null;
-  /** profiles.id (same as auth.uid() in Q-unified-base) */
+  /** profiles.id (same as auth.uid() in pulse-unified-base) */
   changed_by: string | null;
 }
 

@@ -53,14 +53,14 @@ let supabaseAnonKey =
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
-    '[q-mobile] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Add them to .env in the project root and restart: npx expo start'
+    '[pulse] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Add them to .env in the project root and restart: npx expo start'
   );
 } else {
   try {
     const host = new URL(supabaseUrl).hostname;
-    console.log('[q-mobile][config] envPath:', envPath);
-    console.log('[q-mobile][config] envLocalPath:', envLocalPath);
-    console.log('[q-mobile][config] resolved Supabase host:', host);
+    console.log('[pulse][config] envPath:', envPath);
+    console.log('[pulse][config] envLocalPath:', envLocalPath);
+    console.log('[pulse][config] resolved Supabase host:', host);
   } catch (_) {
     // no-op
   }
@@ -106,7 +106,7 @@ module.exports = {
         notFound: false,
       },
     },
-    scheme: config.expo?.scheme ?? 'qmobile',
+    scheme: config.expo?.scheme ?? 'pulse',
     android: {
       ...config.expo?.android,
       permissions: ['android.permission.INTERNET'],

@@ -6,7 +6,7 @@
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = '@q-mobile/first-launch-done';
+const KEY = '@pulse/first-launch-done';
 
 /** Prevents React Strict Mode double-mount from running the clear twice in one boot. */
 let firstLaunchClearDoneThisRuntime = false;

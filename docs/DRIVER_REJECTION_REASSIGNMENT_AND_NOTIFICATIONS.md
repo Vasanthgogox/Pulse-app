@@ -49,7 +49,7 @@ To notify **dispatcher and supplier when they are not on the trip screen**:
 - **Option B:** Push notifications (FCM/APNs) with the same targeting and payload (e.g. "Driver rejected trip TRP007").
 - **Option C:** Reuse or extend existing "Notifications" entry point in the driver app for dispatcher/supplier in the main app (same table or a dedicated feed).
 
-Schema and triggers belong in **Q-unified-base** (or shared Supabase migrations); the app consumes the feed and optionally marks as read.
+Schema and triggers belong in **pulse-unified-base** (or shared Supabase migrations); the app consumes the feed and optionally marks as read.
 
 ## Files touched (implementation)
 

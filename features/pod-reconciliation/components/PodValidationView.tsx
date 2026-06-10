@@ -210,7 +210,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       const { error: tripError } = await supabase()
         .from("trips")
         .update({
-          // q-web Supabase schema uses `client_price` as the persisted amount.
+          // pulse Supabase schema uses `client_price` as the persisted amount.
           pod_status: 'Received',
           invoice_status_1: 'Pending',
           pod_received_date: trip.pod_received_date || new Date().toISOString().split('T')[0],
@@ -220,7 +220,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
       if (tripError) throw tripError;
       
-      // Store audit details in activity_logs via log_activity RPC since schema changes are prohibited in q-web
+      // Store audit details in activity_logs via log_activity RPC since schema changes are prohibited in pulse
       await supabase().rpc('log_activity', {
         p_action: 'POD_VALIDATED',
         p_entity_type: 'trip',

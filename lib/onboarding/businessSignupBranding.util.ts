@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BUSINESS_BRANDING_FLAG_KEY = '@q_business_signup_branding_v1';
-const BUSINESS_BRANDING_STEP_KEY = '@q_business_signup_branding_step_v1';
-const DRIVER_SUCCESS_FLAG_KEY = '@q_driver_signup_success_v1';
+const BUSINESS_BRANDING_FLAG_KEY = '@pulse_business_signup_branding_v1';
+const BUSINESS_BRANDING_STEP_KEY = '@pulse_business_signup_branding_step_v1';
+const DRIVER_SUCCESS_FLAG_KEY = '@pulse_driver_signup_success_v1';
 
 /** In-memory mirrors so route guards can read synchronously after hydrate. */
 let businessBrandingActive = false;

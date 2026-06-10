@@ -1,5 +1,5 @@
 /**
- * Trips service — Supabase only (mobile). Same DB as Q-unified-base.
+ * Trips service — Supabase only (mobile). Same DB as pulse-unified-base.
  */
 import {
     DEFAULT_PAGE_SIZE,

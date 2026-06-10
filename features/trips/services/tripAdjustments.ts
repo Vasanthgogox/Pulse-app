@@ -19,7 +19,7 @@ function isMissingAdjustmentColumnError(err: { message?: string; code?: string }
   );
 }
 
-const STORAGE_KEY_PREFIX = "q_mobile_trip_adjustments:";
+const STORAGE_KEY_PREFIX = "pulse_trip_adjustments:";
 
 export type TripAdjustmentType = "revenue" | "cost";
 export type TripAdjustmentImpact = "plus" | "minus";

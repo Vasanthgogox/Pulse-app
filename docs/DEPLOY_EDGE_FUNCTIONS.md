@@ -9,7 +9,7 @@ You deploy Edge Functions from your **local project terminal**, not from inside 
 Navigate to the repo root (where `supabase/` lives):
 
 ```bash
-cd /path/to/q-mobile
+cd /path/to/pulse
 ```
 
 You should see:

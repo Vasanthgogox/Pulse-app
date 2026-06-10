@@ -314,14 +314,14 @@ export default function DriverProfileScreen() {
   };
 
   const buildDriverInviteUrl = () => {
-    const base = 'https://q-web.netlify.app/invite';
+    const base = 'https://pulse.netlify.app/invite';
     const ref = profile?.uid;
     return ref ? `${base}?ref=${ref}` : base;
   };
 
   const handleShareProfile = () => {
     Share.share({
-      message: `${displayName} — Q Driver profile`,
+      message: `${displayName} — Pulse Driver profile`,
       title: 'Share profile',
     }).catch(() => {});
   };
@@ -329,10 +329,10 @@ export default function DriverProfileScreen() {
   const handleInviteDrivers = () => {
     const inviteUrl = buildDriverInviteUrl();
     const message =
-      `Join me on Q Driver! Manage trips, payouts, and network requests.\n\n` +
+      `Join me on Pulse Driver! Manage trips, payouts, and network requests.\n\n` +
       `Sign up here: ${inviteUrl}`;
     Share.share({
-      title: 'Join Q Driver',
+      title: 'Join Pulse Driver',
       message,
       url: inviteUrl,
     }).catch(() => {});

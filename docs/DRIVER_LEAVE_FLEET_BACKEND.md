@@ -1,6 +1,6 @@
-# Driver leave fleet — Backend contract (Q-unified-base)
+# Driver leave fleet — Backend contract (pulse-unified-base)
 
-For “Leave fleet” and passbook history to work, the backend must provide the following. Schema and migrations live in Q-unified-base; q-mobile calls the RPC and reads `drivers.left_at`.
+For “Leave fleet” and passbook history to work, the backend must provide the following. Schema and migrations live in pulse-unified-base; pulse calls the RPC and reads `drivers.left_at`.
 
 ## Schema
 

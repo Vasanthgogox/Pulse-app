@@ -2,7 +2,7 @@
 
 If you see **"new row violates row-level security policy"** when uploading a profile photo in the app, the Supabase Storage bucket `userprofiles` exists but RLS policies are missing or too strict.
 
-Apply the following in your Supabase project (Dashboard → SQL Editor, or add a migration in Q-unified-base).
+Apply the following in your Supabase project (Dashboard → SQL Editor, or add a migration in pulse-unified-base).
 
 ## 1. Ensure the bucket exists
 

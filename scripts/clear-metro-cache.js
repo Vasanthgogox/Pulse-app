@@ -12,7 +12,7 @@ const roots = [
   path.join(__dirname, '..', '.expo'),
   path.join(__dirname, '..', 'node_modules', '.cache', 'metro'),
   path.join(__dirname, '..', 'node_modules', '.cache'),
-  path.join(os.tmpdir(), 'q-web-metro-cache'),
+  path.join(os.tmpdir(), 'pulse-metro-cache'),
   path.join(os.tmpdir(), 'metro-cache'),
 ];
 

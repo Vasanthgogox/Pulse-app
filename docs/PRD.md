@@ -1,8 +1,8 @@
-# Q Mobile — Product Requirements Document (PRD)
+# Pulse — Product Requirements Document (PRD)
 
 ## 1. Scope and roles
 
-**Product:** Q Mobile — mobile client for the Q-unified-base ecosystem (same Supabase DB; capability-based access).
+**Product:** Pulse — mobile client for the pulse-unified-base ecosystem (same Supabase DB; capability-based access).
 
 **Roles:**
 - **Dispatcher / Fleet user** — non-driver; uses (tabs): Finance (Fiscal), Ops Agent, Trips, plus hidden tabs (Network, Indents, Resources, Settings). Capabilities derived from profile `aggregated` / `asset` (see [lib/capabilities.ts](../lib/capabilities.ts)).

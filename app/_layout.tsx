@@ -268,7 +268,7 @@ export default function RootLayout() {
     () =>
       createAsyncStoragePersister({
         storage: AsyncStorage,
-        key: 'q-cache-v1',
+        key: 'pulse-cache-v1',
         throttleTime: 10_000,  // 10s: reduces UI-thread write pressure (was 3s)
       }),
     [],
@@ -282,7 +282,7 @@ export default function RootLayout() {
     if (Platform.OS !== 'web') return;
     if (typeof document === 'undefined') return;
 
-    const styleId = 'q-web-input-focus-reset';
+    const styleId = 'pulse-input-focus-reset';
     if (document.getElementById(styleId)) return;
 
     const style = document.createElement('style');

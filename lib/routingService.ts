@@ -155,7 +155,7 @@ async function getOSRMRoute(from: LatLon, to: LatLon): Promise<RouteResult | nul
         headers: isWebRuntime
           ? undefined
           : {
-              'User-Agent': 'Q-Mobile-Logistics/1.0',
+              'User-Agent': 'Pulse-Logistics/1.0',
             },
         signal: controller.signal,
       });

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 
-const BRANDING_CACHE_KEY = '@q-mobile/invoice-branding-v1';
+const BRANDING_CACHE_KEY = '@pulse/invoice-branding-v1';
 const DEFAULT_COMPANY_NAME = 'GOGOX';
 const MAX_COMPANY_NAME_LENGTH = 48;
 

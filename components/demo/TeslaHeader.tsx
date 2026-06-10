@@ -1,5 +1,5 @@
 /**
- * Demo header aligned to Q-unified-base mobile header language.
+ * Demo header aligned to pulse-unified-base mobile header language.
  * Branded left lockup + right utility cluster (bell, profile).
  */
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';

@@ -1,6 +1,6 @@
 # Ops Agent — UI, Functionality, Logic, Capabilities & Implementation
 
-This document describes the Ops Agent feature in Q Mobile: its files, UI behavior, business logic, capabilities, and how it is implemented end-to-end.
+This document describes the Ops Agent feature in Pulse: its files, UI behavior, business logic, capabilities, and how it is implemented end-to-end.
 
 ---
 
@@ -224,4 +224,4 @@ Each returns `{ success, message?, error?, entity? }`. `entity` is a `CreatedEnt
 - **Tesla / demo:** `docs/TESLA_OS_INTEGRATION_PLAN.md`.
 - **Future extensions:** `docs/AI_CHATBOT_STRUCTURE_PLAN.md` (create trip, create transaction, report tools, OCR module).
 - **Theme:** `@/constants/Theme`; **Layout:** `@/constants/Layout` (e.g. safe area, FAB).
-- **Standards:** `.cursor/rules/q-mobile-standards.mdc`, `docs/RESPONSIVE_AND_SAFE_AREA.md`.
+- **Standards:** `.cursor/rules/pulse-standards.mdc`, `docs/RESPONSIVE_AND_SAFE_AREA.md`.

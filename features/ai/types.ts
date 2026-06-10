@@ -1,6 +1,6 @@
 /**
  * AI Decision Layer — types for risk scores, trip predictions, cashflow, settings.
- * Tables live in Q-unified-base; this app consumes via Supabase.
+ * Tables live in pulse-unified-base; this app consumes via Supabase.
  */
 
 export interface ClientRiskScore {

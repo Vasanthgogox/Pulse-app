@@ -9,4 +9,4 @@ Checks if a phone number is already registered (in `public.profiles`). Used befo
 
 Deploy: `supabase functions deploy check-user-by-phone`
 
-**Scale:** This function currently loads profiles with non-null phone (up to 10k) and normalizes in JS. For large deployments, add in Q-unified-base an RPC that normalizes phone and returns email (with an index on normalized phone), and switch this function to call that RPC. Also add `UNIQUE(phone)` (or unique on normalized phone) in Q-unified-base so duplicate sign-ups are rejected at the DB.
+**Scale:** This function currently loads profiles with non-null phone (up to 10k) and normalizes in JS. For large deployments, add in pulse-unified-base an RPC that normalizes phone and returns email (with an index on normalized phone), and switch this function to call that RPC. Also add `UNIQUE(phone)` (or unique on normalized phone) in pulse-unified-base so duplicate sign-ups are rejected at the DB.

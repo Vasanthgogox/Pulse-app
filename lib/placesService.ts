@@ -12,7 +12,7 @@ export interface PlaceResult {
   lon: number;
 }
 
-const PLACES_CACHE_KEY = 'qmobile_places_cache';
+const PLACES_CACHE_KEY = 'pulse_places_cache';
 const PLACES_CACHE_MAX = 500;
 
 type SearchOpts = {
@@ -25,7 +25,7 @@ function normalizeKey(displayName: string): string {
 }
 
 const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-const USER_AGENT = 'Q-Mobile-Logistics/1.0 (India places; contact@example.com)';
+const USER_AGENT = 'Pulse-Logistics/1.0 (India places; contact@example.com)';
 
 const MAPBOX_GEOCODING_BASE = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
 

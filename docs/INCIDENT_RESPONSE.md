@@ -1,6 +1,6 @@
 # Security incident response
 
-Minimal playbook for reporting and handling security issues in Q Mobile and related services.
+Minimal playbook for reporting and handling security issues in Pulse and related services.
 
 ## Reporting a vulnerability
 
@@ -9,7 +9,7 @@ Minimal playbook for reporting and handling security issues in Q Mobile and rela
 
 ## Steps (on receipt of a report)
 
-1. **Triage:** Confirm the report is valid and scope (Q Mobile app, Supabase/Edge Functions, Q-unified-base, etc.).
+1. **Triage:** Confirm the report is valid and scope (Pulse app, Supabase/Edge Functions, pulse-unified-base, etc.).
 2. **Contain:** If active abuse is suspected, revoke affected tokens/keys, rotate secrets per `docs/KEY_ROTATION.md`, disable affected features if necessary.
 3. **Fix:** Implement a fix in a private branch; do not commit sensitive details in commit messages or PRs.
 4. **Release:** Ship fix via normal release process; consider out-of-band release for critical issues.

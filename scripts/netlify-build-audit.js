@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Netlify Build Audit — q-web (Expo + React Native Web)
+ * Netlify Build Audit — pulse (Expo + React Native Web)
  *
  * Usage:
  *   node scripts/netlify-build-audit.js                  # static project analysis only
@@ -167,7 +167,7 @@ function analyzeProject() {
   const metroConfig = fs.existsSync(path.join(ROOT, 'metro.config.js'))
     ? fs.readFileSync(path.join(ROOT, 'metro.config.js'), 'utf8') : '';
   const metroTmp      = metroConfig.includes('tmpdir') || metroConfig.includes('os.tmpdir');
-  const metroCacheDir = metroTmp ? os.tmpdir() + '/q-web-metro-cache' : null;
+  const metroCacheDir = metroTmp ? os.tmpdir() + '/pulse-metro-cache' : null;
 
   // SVG transformer
   const hasSvgTransformer = metroConfig.includes('svg-transformer');
@@ -395,7 +395,7 @@ function renderChecklist(findings) {
 
   lines.push('');
   lines.push('═══════════════════════════════════════════════════════════════');
-  lines.push('  Q-WEB NETLIFY BUILD AUDIT REPORT');
+  lines.push('  PULSE NETLIFY BUILD AUDIT REPORT');
   lines.push('  Framework: Expo SDK 54 + React Native Web + Expo Router 6');
   lines.push('═══════════════════════════════════════════════════════════════');
   lines.push('');
@@ -520,7 +520,7 @@ function renderMarkdown(project, _log, findings) {
   const sev = { critical: '🔴 CRITICAL', high: '🟠 HIGH', medium: '🟡 MEDIUM', info: '🔵 INFO' };
   let md = '';
 
-  md += '# Netlify Build Audit — q-web\n\n';
+  md += '# Netlify Build Audit — pulse\n\n';
   md += `**Framework:** Expo SDK 54 · React Native Web · Expo Router 6  \n`;
   md += `**Build command:** \`${project.buildCmd}\`  \n`;
   md += `**Generated:** ${new Date().toISOString().slice(0, 10)}\n\n`;

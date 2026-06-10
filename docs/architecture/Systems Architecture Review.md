@@ -1,5 +1,5 @@
 # PULSE PRINCIPAL ENGINEER REVIEW
-**Staff+ Architecture Document | Q-Web | 2026-05-24**
+**Staff+ Architecture Document | Pulse | 2026-05-24**
 
 ---
 

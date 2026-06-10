@@ -1,5 +1,5 @@
 /**
- * Create indent form options — aligned with Q-unified-base create-indent types.
+ * Create indent form options — aligned with pulse-unified-base create-indent types.
  */
 
 import type { CirculationTarget } from "@/features/indents/services/indents.service";

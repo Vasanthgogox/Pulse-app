@@ -3,7 +3,7 @@
  *
  * Why local and not in DB?
  *   The PRD explicitly says "keep backend light" — no new tables/columns, and this repo
- *   is a client of Q-unified-base (migrations live there). Recording who linked/ignored
+ *   is a client of pulse-unified-base (migrations live there). Recording who linked/ignored
  *   which feed entry is a UX convenience and can be rebuilt from the canonical ledger
  *   + dispute table, so we don't need durable multi-device state for v1.
  */
@@ -24,7 +24,7 @@ export interface ClientFeedLocalStatus {
 }
 
 function keyForOrg(orgId: string): string {
-  return `qmobile:client_feed_status:${orgId}`;
+  return `pulse:client_feed_status:${orgId}`;
 }
 
 async function readMap(

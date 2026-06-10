@@ -79,4 +79,4 @@ Subline: trip_number + description/category when present; otherwise description/
 - **FinancialRow** (`features/finance/components/FinancialRow.tsx`): Renders LINK from `missionLabel` (trip number / General) and `tripDetailLine` (route); when `data.vehicleNumber` is set, can show vehicle badge in LINK cell.
 - **finance.tsx**: `getVehicleNumberForTripId` returns `vehicle?.vehicle_number` only when `trip.vehicle_id` is set; `tripDetailsMap` is built from `tripRows` (pickup_area, drop_location, trip_number, etc.).
 
-Schema lives in Q-unified-base; this app is a client. No migrations in q-mobile.
+Schema lives in pulse-unified-base; this app is a client. No migrations in pulse.

@@ -1,4 +1,4 @@
-# Netlify Build Audit — q-web
+# Netlify Build Audit — pulse
 
 **Framework:** Expo SDK 54 · React Native Web · Expo Router 6  
 **Build command:** `expo export --platform web && node scripts/compress-dist.js`  

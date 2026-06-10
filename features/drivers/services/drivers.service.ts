@@ -1,7 +1,7 @@
 /**
  * Drivers service — Supabase only (mobile).
  * Single bounded context: drivers (driver records, invite, linked driver for current user).
- * One service per domain (microservices). Same DB as Q-unified-base.
+ * One service per domain (microservices). Same DB as pulse-unified-base.
  */
 import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
 import { syncDomainRows } from "@/lib/cache/domainSync";
@@ -1528,7 +1528,7 @@ export async function cancelDriverInvite(inviteId: string): Promise<{
 }
 
 /**
- * Leave a fleet (set driver's left_at for that org). Requires RPC leave_fleet in Q-unified-base.
+ * Leave a fleet (set driver's left_at for that org). Requires RPC leave_fleet in pulse-unified-base.
  * Driver must be linked to current user; after success the connection appears in passbook history.
  */
 export async function leaveFleet(
@@ -1543,7 +1543,7 @@ export async function leaveFleet(
 
 /**
  * Link an existing driver row to an app user by phone/email (dispatcher action).
- * Requires RPC attach_driver_by_contact in the DB (Q-unified-base). The driver must
+ * Requires RPC attach_driver_by_contact in the DB (pulse-unified-base). The driver must
  * have signed up first (profile with role=driver and matching phone/email).
  */
 export async function attachDriverByContact(
@@ -1564,7 +1564,7 @@ export async function attachDriverByContact(
   return { error: null, driver: data as DriverRow | null };
 }
 
-/** driver_ledger.type values (CHECK constraint). Add new values via DB migration in Q-unified-base if needed. */
+/** driver_ledger.type values (CHECK constraint). Add new values via DB migration in pulse-unified-base if needed. */
 export const DRIVER_LEDGER_TYPES = [
   "salary",
   "settlement",

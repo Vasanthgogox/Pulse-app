@@ -154,7 +154,7 @@ function metricValueStyle(tone: IndentBidMetricTone) {
   }
 }
 
-function QuoteTicketPerforation() {
+function PulseuoteTicketPerforation() {
   return (
     <View style={styles.perforation} pointerEvents="none">
       <View style={styles.notchLeft} />
@@ -164,7 +164,7 @@ function QuoteTicketPerforation() {
   );
 }
 
-function QuoteFooterMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
+function PulseuoteFooterMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
   const shown = metrics.slice(0, 2);
   return (
     <View style={styles.metricsRow}>

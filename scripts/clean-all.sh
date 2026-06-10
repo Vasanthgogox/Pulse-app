@@ -47,7 +47,7 @@ done
 
 # Legacy / alternate Metro tmp locations
 if [[ -n "${TMPDIR:-}" ]]; then
-  rm -rf "${TMPDIR}/q-web-metro-cache" "${TMPDIR}/metro-"* 2>/dev/null || true
+  rm -rf "${TMPDIR}/pulse-metro-cache" "${TMPDIR}/metro-"* 2>/dev/null || true
 fi
 rm -rf "${TMPDIR:-/tmp}/metro-cache" 2>/dev/null || true
 

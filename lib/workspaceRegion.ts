@@ -4,7 +4,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { LocaleRegion } from "@/lib/i18n";
 
-const STORAGE_KEY = "@qmobile/workspace-region";
+const STORAGE_KEY = "@pulse/workspace-region";
 
 export const WORKSPACE_REGION_LABELS: Record<LocaleRegion, string> = {
   india: "India",

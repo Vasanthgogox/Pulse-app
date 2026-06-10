@@ -1,4 +1,4 @@
-# Q Mobile: Pagination & Cache Analysis for 10x Performance
+# Pulse: Pagination & Cache Analysis for 10x Performance
 
 This document identifies **which pages need pagination**, **which need caching**, and how to prioritize changes to make the app feel **~10x faster**. It complements [PERFORMANCE_AND_RESPONSIVENESS_AUDIT.md](./PERFORMANCE_AND_RESPONSIVENESS_AUDIT.md).
 
@@ -227,4 +227,4 @@ The app now includes a two-layer cache strategy:
 
 - Additive SQL blueprint for `*_delta` RPCs is provided in:
   - `scripts/sql/delta_rpc_blueprint_safe.sql`
-- Apply in Q-unified-base Supabase project, then enable domain-by-domain delta reads without removing legacy full-fetch paths.
+- Apply in pulse-unified-base Supabase project, then enable domain-by-domain delta reads without removing legacy full-fetch paths.

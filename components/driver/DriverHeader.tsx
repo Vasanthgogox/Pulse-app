@@ -99,14 +99,14 @@ export function DriverHeader({
   }));
 
   const handleInviteDrivers = () => {
-    const base = 'https://q-web.netlify.app/invite';
+    const base = 'https://pulse.netlify.app/invite';
     const ref = profile?.uid;
     const inviteUrl = ref ? `${base}?ref=${ref}` : base;
     const message =
-      `Join me on Q Driver! Manage trips, payouts, and network requests.\n\n` +
+      `Join me on Pulse Driver! Manage trips, payouts, and network requests.\n\n` +
       `Sign up here: ${inviteUrl}`;
     Share.share({
-      title: 'Join Q Driver',
+      title: 'Join Pulse Driver',
       message,
       url: inviteUrl,
     }).catch(() => {});

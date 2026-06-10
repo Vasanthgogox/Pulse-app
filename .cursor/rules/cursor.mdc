@@ -11,7 +11,7 @@ Whenever the user asks to **query** data — including short prompts like **"que
 
 ## Command (remote, linked project)
 
-From the repo root (`q-web`), with the project already linked (`supabase link`):
+From the repo root (`pulse`), with the project already linked (`supabase link`):
 
 ```bash
 supabase db query "<SQL>" --linked -o table

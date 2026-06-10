@@ -1,4 +1,4 @@
-calude gave -  Q-Web Platform — Deep Technical Audit Report
+calude gave -  Pulse Platform — Deep Technical Audit Report
   
   Auditor: Senior DB Architect + Supabase Security Auditor
   Date: 2026-05-18

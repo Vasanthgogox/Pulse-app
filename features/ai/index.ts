@@ -1,6 +1,6 @@
 /**
  * AI Decision Layer — risk scores, trip predictions, vehicle health, cashflow, insights.
- * Backend schema: docs/AI_SYSTEM_SCHEMA_AND_BACKEND.md (Q-unified-base migrations).
+ * Backend schema: docs/AI_SYSTEM_SCHEMA_AND_BACKEND.md (pulse-unified-base migrations).
  */
 export { TripAIBadges } from './components/TripAIBadges';
 export { ClientRiskBadge } from './components/ClientRiskBadge';

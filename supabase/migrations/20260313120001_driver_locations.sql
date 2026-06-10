@@ -1,5 +1,5 @@
 -- Driver location history for live trip tracking and tap-to-report.
--- Used by q-mobile driver app: periodic (every 10s dev / 30s prod) when on trip, and on-demand tap.
+-- Used by pulse driver app: periodic (every 10s dev / 30s prod) when on trip, and on-demand tap.
 
 CREATE TABLE IF NOT EXISTS public.driver_locations (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),

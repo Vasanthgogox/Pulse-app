@@ -18,7 +18,7 @@ The **"Keep me signed in"** checkbox is a **client-only preference**. It is not 
 1. **Cold start:** Whether to restore the session from storage when the app opens. If unchecked, we do not restore; the user sees the sign-in screen.
 2. **Background:** If unchecked, when the app goes to background we sign out locally so the next time the app is opened the user sees the sign-in screen.
 
-The preference is stored in AsyncStorage under `@q-mobile/keep-signed-in` ([lib/keepSignedInPreference.ts](../lib/keepSignedInPreference.ts)).
+The preference is stored in AsyncStorage under `@pulse/keep-signed-in` ([lib/keepSignedInPreference.ts](../lib/keepSignedInPreference.ts)).
 
 ## App launch flow
 

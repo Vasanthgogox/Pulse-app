@@ -1,5 +1,5 @@
 /**
- * Clients service — Supabase only (mobile). Same DB as Q-unified-base.
+ * Clients service — Supabase only (mobile). Same DB as pulse-unified-base.
  */
 import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
 import { supabase } from '@/lib/supabase';

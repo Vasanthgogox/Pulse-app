@@ -1,11 +1,11 @@
-# Q-Web Context Index
+# Pulse Context Index
 > Compressed codebase reference for AI systems. Generated 2026-05-06.
 
 ---
 
 ## 1. PROJECT OVERVIEW
 
-**Q** is a multi-tenant logistics SaaS platform for Indian freight operations. Dispatchers manage trips, clients, suppliers, drivers, vehicles, and finances. Drivers get a separate app for trip control, chat, documents, and wallet. Includes a marketplace (load board/indents) and social network layer.
+**Pulse** is a multi-tenant logistics SaaS platform for Indian freight operations. Dispatchers manage trips, clients, suppliers, drivers, vehicles, and finances. Drivers get a separate app for trip control, chat, documents, and wallet. Includes a marketplace (load board/indents) and social network layer.
 
 - **Domain:** Logistics / freight dispatch / fleet management
 - **Stack:** React Native 0.81 + Expo SDK 54 + Expo Router 6 (file-based routing) · TypeScript 5.9 · TanStack Query v5 · Supabase (Postgres + Auth + Realtime + Storage) · Gemini (POD OCR / document chat, client-side)
@@ -321,7 +321,7 @@ services/ (top-level)
 
 ## 10. REUSABLE CONTEXT SUMMARY
 
-**Q** is a React Native + Expo (SDK 54) logistics dispatch platform targeting Indian freight. Single codebase deploys to iOS, Android, and Web. Two user roles: **dispatcher** (tabs: Finance, Trips, Network, Profile) and **driver** (tabs: Control, Documents, Chat, Wallet). Multi-tenant — all data scoped to `organization_id` enforced via Supabase RLS.
+**Pulse** is a React Native + Expo (SDK 54) logistics dispatch platform targeting Indian freight. Single codebase deploys to iOS, Android, and Web. Two user roles: **dispatcher** (tabs: Finance, Trips, Network, Profile) and **driver** (tabs: Control, Documents, Chat, Wallet). Multi-tenant — all data scoped to `organization_id` enforced via Supabase RLS.
 
 **Auth:** Supabase Auth (email/password + Google OAuth). Session stored in SecureStore (native) or AsyncStorage (web). `contexts/AuthContext.tsx` exposes `useAuth()` with `roleVerified` (server-confirmed role). `app/index.tsx` gates routing based on role.
 

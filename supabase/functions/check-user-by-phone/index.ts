@@ -1,6 +1,6 @@
 // Check if a phone is already registered (profiles table). Used before sign-up to redirect
 // existing users to sign-in with email prefilled. No auth required; rate-limited by IP.
-// For scale: add in Q-unified-base an RPC that normalizes phone and returns email (indexed).
+// For scale: add in pulse-unified-base an RPC that normalizes phone and returns email (indexed).
 
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
 

@@ -1,4 +1,4 @@
-/** Vehicle document types — matches Q-unified-base utils/documentExpiry.ts */
+/** Vehicle document types — matches pulse-unified-base utils/documentExpiry.ts */
 export interface DocumentWithExpiry {
   url: string;
   expiryDate: string;

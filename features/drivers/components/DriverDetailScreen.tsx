@@ -1015,7 +1015,7 @@ export default function DriverDetailScreen({
   const lockedPartyName = (driver?.name || t("driver")).trim() || t("driver");
   const handleInviteToApp = useCallback(() => {
     const message = `Join me on Pulse to sync trips and payouts with ${lockedPartyName}. Download Pulse to get started.`;
-    Share.share({ message, title: "Invite to Q" }).catch(() => {});
+    Share.share({ message, title: "Invite to Pulse" }).catch(() => {});
   }, [lockedPartyName]);
 
   if (loading) {

@@ -2,7 +2,7 @@
  * Supabase client for React Native (Expo).
  * Session persistence: expo-secure-store on iOS/Android when the native module
  * is available (e.g. dev/production build); falls back to AsyncStorage on web or
- * when ExpoSecureStore is not available (e.g. some Expo Go). Same DB as Q-unified-base.
+ * when ExpoSecureStore is not available (e.g. some Expo Go). Same DB as pulse-unified-base.
  * RLS applies; do not use service_role key in the app.
  *
  * CONNECTION MODEL — important:
@@ -123,7 +123,7 @@ function createAuthStorage(): {
         if (/native module|ExpoSecureStore|not found/i.test(msg)) {
           useAsyncStorageForAll = true;
         } else if (__DEV__) {
-          console.warn('[q-mobile] SecureStore read error:', msg);
+          console.warn('[pulse] SecureStore read error:', msg);
         }
       }
 
@@ -219,18 +219,18 @@ function getSupabase(): SupabaseClient {
   if (__DEV__) {
     try {
       const host = new URL(supabaseUrl).hostname;
-      console.log('[q-mobile] Supabase config marker:', '2026-05-08-extra-only-v2');
-      console.log('[q-mobile] Supabase URL source (env):', envSupabaseUrl ?? '(missing)');
-      console.log('[q-mobile] Supabase URL source (extra):', supabaseUrl);
-      console.log('[q-mobile] Supabase URL host:', host);
+      console.log('[pulse] Supabase config marker:', '2026-05-08-extra-only-v2');
+      console.log('[pulse] Supabase URL source (env):', envSupabaseUrl ?? '(missing)');
+      console.log('[pulse] Supabase URL source (extra):', supabaseUrl);
+      console.log('[pulse] Supabase URL host:', host);
       if (envSupabaseUrl && extraSupabaseUrl && envSupabaseUrl !== extraSupabaseUrl) {
-        console.warn('[q-mobile] Supabase source mismatch: preferring env over extra', {
+        console.warn('[pulse] Supabase source mismatch: preferring env over extra', {
           envSupabaseUrl,
           extraSupabaseUrl,
         });
       }
     } catch {
-      console.warn('[q-mobile] Supabase URL invalid:', supabaseUrl?.slice(0, 50));
+      console.warn('[pulse] Supabase URL invalid:', supabaseUrl?.slice(0, 50));
     }
   }
   // SecureStore when available (native build); else AsyncStorage (web or Expo Go without native module)

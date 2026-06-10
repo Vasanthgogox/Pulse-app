@@ -2,7 +2,7 @@
 -- Purpose: allow a carrier org (e.g. awarded supplier B) to record a downstream supplier + rate
 -- for a trip they can see (often load-based trips owned by shipper A) WITHOUT writing to public.trips.
 --
--- NOTE: Do not apply in q-web. This is a backend contract intended for Q-unified-base
+-- NOTE: Do not apply in pulse. This is a backend contract intended for pulse-unified-base
 -- supabase/migrations/ (shared DB). Kept here so mobile + backend stay aligned.
 --
 -- Core invariants:

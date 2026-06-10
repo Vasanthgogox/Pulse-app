@@ -7,9 +7,9 @@ module.exports = {
     'ios.debug': {
       type: 'ios.app',
       binaryPath:
-        'ios/build/Build/Products/Debug-iphonesimulator/q-mobile.app',
+        'ios/build/Build/Products/Debug-iphonesimulator/pulse.app',
       build:
-        'xcodebuild -workspace ios/q-mobile.xcworkspace -scheme q-mobile -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build',
+        'xcodebuild -workspace ios/pulse.xcworkspace -scheme pulse -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build',
     },
   },
   devices: {

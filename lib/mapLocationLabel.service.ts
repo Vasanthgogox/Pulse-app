@@ -19,7 +19,7 @@ export type ResolveMapLocationLabelOptions = {
 
 const MAPBOX_REVERSE_BASE = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
 const NOMINATIM_REVERSE_BASE = 'https://nominatim.openstreetmap.org/reverse';
-const NOMINATIM_USER_AGENT = 'Q-Mobile-Logistics/1.0 (India reverse geocode)';
+const NOMINATIM_USER_AGENT = 'Pulse-Logistics/1.0 (India reverse geocode)';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 400;
