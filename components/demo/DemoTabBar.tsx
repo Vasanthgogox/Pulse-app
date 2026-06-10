@@ -5,6 +5,7 @@ import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter
 import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
+import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";

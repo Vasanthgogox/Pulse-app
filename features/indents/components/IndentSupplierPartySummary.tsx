@@ -38,7 +38,9 @@ export const IndentSupplierPartySummary = memo(function IndentSupplierPartySumma
   shipperName,
   awardedQuoteInr,
   trip,
-  driverDisplayName,
+  driverLabel,
+  vehicleLabel,
+  allocationPending,
 }: IndentSupplierPartySummaryProps) {
   const { data: transactions = [] } = useTransactionsQuery(
     trip?.id && orgId ? orgId : null,

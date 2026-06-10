@@ -16,6 +16,7 @@ import {
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { NetworkDesktopAssetSalesPanel } from "@/features/network/components/desktop/NetworkDesktopAssetSalesPanel";
 import { NetworkDesktopConnectionsPanel } from "@/features/network/components/desktop/NetworkDesktopConnectionsPanel";
+import { NetworkDesktopInvitationsPanel } from "@/features/network/components/desktop/NetworkDesktopInvitationsPanel";
 import { NetworkDesktopConnectionSalesPanel } from "@/features/network/components/desktop/NetworkDesktopConnectionSalesPanel";
 import { NetworkDesktopDetailsPanel } from "@/features/network/components/desktop/NetworkDesktopDetailsPanel";
 import { NetworkDesktopGoalsPanel } from "@/features/network/components/desktop/NetworkDesktopGoalsPanel";

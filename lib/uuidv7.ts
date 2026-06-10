@@ -42,7 +42,7 @@ export function uuidv7(): string {
 
   const nowMs = _logicalMs;
   const tsHex = nowMs.toString(16).padStart(12, '0');   // 48-bit timestamp
-  const randAHex = _seqWithinMs.toString(16).padStart(3, '0'); // 12-bit rand_a
+  const randAHex = _seq.toString(16).padStart(3, '0'); // 12-bit rand_a
   const randBHex = _secureRand62hex();                  // 62-bit rand_b (variant applied inside)
 
   // Assemble 32-char hex
