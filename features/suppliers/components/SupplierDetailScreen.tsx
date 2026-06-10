@@ -81,6 +81,8 @@ import { useRouter } from "expo-router";
 import { ROUTES } from "@/lib/routes";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
+import { SupplierProfileHub } from "@/features/suppliers/components/desktop/SupplierProfileHub";
+import { buildDefaultBundle } from "@/features/suppliers/types/supplierManagement.types";
 
 import {
     Alert,
@@ -1280,6 +1282,16 @@ export default function SupplierDetailScreen({
         ],
       }
     : undefined;
+
+  // ── Desktop: render the full Metronic profile hub ────────────────────────────
+  if (isWebDesktop && supplier) {
+    const bundle = buildDefaultBundle(supplier, trips, transactions, orgDrivers);
+    return (
+      <View style={{ flex: 1 }}>
+        <SupplierProfileHub bundle={bundle} onBack={onBack} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>

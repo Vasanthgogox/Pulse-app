@@ -20,7 +20,9 @@ export default function InviteMemberScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(ROUTES.MODALS.TEAM as Parameters<typeof router.replace>[0]);
+      router.replace({
+        pathname: ROUTES.TABS.NETWORK,
+      } as Parameters<typeof router.replace>[0]);
     }
   };
 

@@ -44,9 +44,9 @@ export function computeDriverCommissionForTrip(
 }
 
 export function aggregateDrivers(
-  drivers: DriverLike[],
-  trips: TripForDriver[],
-  transactions: LedgerTx[],
+  drivers: readonly DriverLike[],
+  trips: readonly TripForDriver[],
+  transactions: readonly LedgerTx[],
   offersByDriverId?: Record<string, DriverOfferForAggregation> | null,
   _tripPartyMap?: TripPartyMap | null
 ): { rows: FinancialRowData[]; totals: AggregationTotals } {

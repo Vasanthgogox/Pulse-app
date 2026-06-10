@@ -7,6 +7,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { NetworkPartyRolePill } from "@/features/network/components/NetworkPartyProfileCard";
 import { NetworkPartyHubListCard } from "@/features/network/components/NetworkPartyHubListCard";
+import { NetworkDesktopConnectionCard } from "@/features/network/components/desktop/NetworkDesktopConnectionCard";
 import { NetworkHubConnectionsPagedGrid } from "@/features/network/components/NetworkHubConnectionsPagedGrid";
 import {
   getNetworkHubConnectionsLayout,
@@ -82,6 +83,10 @@ interface ConnectionsViewProps {
   hubMode?: boolean;
   hubSearch?: string;
   hubFilter?: ConnectionFilterTab;
+  /** Desktop Metronic hub — 4-column user-directory cards. */
+  desktopMetronicGrid?: boolean;
+  /** Desktop Metronic — single row, 4 visible, horizontal scroll. */
+  desktopMetronicHorizontalScroll?: boolean;
 }
 
 const COVER_TOKENS = [
@@ -426,6 +431,8 @@ export function ConnectionsView({
   hubMode = false,
   hubSearch,
   hubFilter,
+  desktopMetronicGrid = false,
+  desktopMetronicHorizontalScroll = false,
 }: ConnectionsViewProps) {
   const { width: windowWidth } = useWindowDimensions();
   const [search, setSearch] = useState("");
@@ -1002,15 +1009,95 @@ export function ConnectionsView({
     />
   );
 
-  const renderHubConnectionsBody = () => (
-    <NetworkHubConnectionsPagedGrid
-      items={connections}
-      layout={hubConnectionsLayout}
-      resetKey={connectionsPaginationKey}
-      keyExtractor={(item) => `${item.role}-${item.id}`}
-      renderItem={renderHubConnectionListCard}
-    />
+  const metronicRows = useMemo(() => {
+    const cols = 4;
+    const rows: ConnectedOrg[][] = [];
+    for (let i = 0; i < connections.length; i += cols) {
+      rows.push(connections.slice(i, i + cols));
+    }
+    return rows;
+  }, [connections]);
+
+  const renderMetronicGridBody = () => (
+    <View style={styles.metronicGridRoot}>
+      {metronicRows.map((row, ri) => (
+        <View key={`metronic-row-${ri}`} style={styles.metronicGridRow}>
+          {row.map((item) => (
+            <View key={`${item.role}-${item.id}`} style={styles.metronicGridCell}>
+              <NetworkDesktopConnectionCard
+                item={item}
+                onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
+                onInvite={() => void inviteOffAppParty(item)}
+                actionLoading={invitingId === item.id}
+              />
+            </View>
+          ))}
+          {row.length < 4
+            ? Array.from({ length: 4 - row.length }).map((_, pad) => (
+                <View key={`metronic-pad-${ri}-${pad}`} style={styles.metronicGridCell} />
+              ))
+            : null}
+        </View>
+      ))}
+    </View>
   );
+
+  const metronicHorizontalCardWidth = useMemo(() => {
+    const visibleCols = 4;
+    const gap = 12;
+    const pad = NETWORK_HUB_GRID_ROW_PADDING_H * 2;
+    return Math.max(
+      160,
+      Math.floor((windowWidth - pad - gap * (visibleCols - 1)) / visibleCols),
+    );
+  }, [windowWidth]);
+
+  const renderMetronicHorizontalScrollBody = () => (
+    <View style={styles.metronicHorizontalScrollWrap}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.metronicHorizontalScroll}
+        contentContainerStyle={styles.metronicHorizontalScrollContent}
+      >
+        {connections.map((item) => (
+          <View
+            key={`${item.role}-${item.id}`}
+            style={[
+              styles.metronicHorizontalCard,
+              { width: metronicHorizontalCardWidth },
+            ]}
+          >
+            <NetworkDesktopConnectionCard
+              item={item}
+              onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
+              onInvite={() => void inviteOffAppParty(item)}
+              actionLoading={invitingId === item.id}
+            />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderHubConnectionsBody = () =>
+    desktopMetronicGrid ? (
+      desktopMetronicHorizontalScroll ? (
+        renderMetronicHorizontalScrollBody()
+      ) : (
+        renderMetronicGridBody()
+      )
+    ) : (
+      <NetworkHubConnectionsPagedGrid
+        items={connections}
+        layout={hubConnectionsLayout}
+        resetKey={connectionsPaginationKey}
+        keyExtractor={(item) => `${item.role}-${item.id}`}
+        renderItem={renderHubConnectionListCard}
+      />
+    );
 
   const embeddedBody = useHubLayout ? (
     isLoading ? (
@@ -1270,7 +1357,46 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     backgroundColor: "transparent",
     paddingTop: 4,
-    paddingBottom: 6,
+    paddingBottom: 10,
+    overflow: "visible",
+  },
+  metronicGridRoot: {
+    width: "100%",
+    gap: 12,
+    paddingBottom: 8,
+  },
+  metronicGridRow: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  metronicGridCell: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "25%",
+  },
+  metronicHorizontalScrollWrap: {
+    width: "100%",
+    minHeight: 200,
+    overflow: "visible",
+  },
+  metronicHorizontalScroll: {
+    width: "100%",
+    minHeight: 200,
+    flexGrow: 0,
+  },
+  metronicHorizontalScrollContent: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingBottom: 8,
+    minHeight: 200,
+  },
+  metronicHorizontalCard: {
+    flexShrink: 0,
+    minWidth: 0,
+    alignSelf: "stretch",
   },
   embeddedGridRoot: { paddingBottom: 8 },
   gridRowEmbedded: {

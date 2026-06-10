@@ -405,12 +405,21 @@ function EmptyMembers({ onInvite }: { onInvite?: () => void }) {
   );
 }
 
-function EmptyPending() {
+function EmptyPending({ onInvite }: { onInvite?: () => void }) {
   return (
     <View style={styles.emptyWrap}>
       <UserCheck size={32} color={Theme.textSection} strokeWidth={1.5} />
       <Text style={styles.emptyTitle}>No pending invites</Text>
       <Text style={styles.emptySub}>Sent invitations will appear here.</Text>
+      {onInvite ? (
+        <Pressable
+          onPress={onInvite}
+          style={({ pressed }) => [styles.emptyInviteBtn, pressed && { opacity: 0.8 }]}
+        >
+          <UserPlus2 size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
+          <Text style={styles.emptyInviteBtnText}>Invite member</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -422,16 +431,31 @@ export function TeamMembersView({
   currentUserId,
   canManage,
   onInvite,
+  embedded = false,
+  desktopMetronic = false,
+  initialSubTab,
 }: {
   orgId: string;
   currentUserId: string | null;
   canManage: boolean;
   onInvite?: () => void;
+  /** When true, omit outer ScrollView (parent scrolls). */
+  embedded?: boolean;
+  /** Metronic desktop hub — underline sub-tabs, tighter padding. */
+  desktopMetronic?: boolean;
+  /** After inline invite, open on pending tab. */
+  initialSubTab?: "members" | "pending";
 }) {
-  const [tab, setTab] = useState<"members" | "pending">("members");
+  const [tab, setTab] = useState<"members" | "pending">(
+    () => initialSubTab ?? "members",
+  );
   const [search, setSearch] = useState("");
   const [actionId, setActionId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  React.useEffect(() => {
+    if (initialSubTab) setTab(initialSubTab);
+  }, [initialSubTab]);
 
   const query = useOrgMembersQuery(orgId);
   const invalidate = useInvalidateOrgMembers(orgId);
@@ -516,45 +540,64 @@ export function TeamMembersView({
     );
   }
 
-  const numColumns = 2;
+  const numColumns = desktopMetronic ? 3 : 2;
   const rows: OrgMember[][] = [];
   for (let i = 0; i < displayList.length; i += numColumns) {
     rows.push(displayList.slice(i, i + numColumns));
   }
 
-  return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.teslaRed} />
-      }
-    >
-      {/* Sub-tabs */}
-      <View style={styles.tabRow}>
+  const body = (
+    <>
+      <View
+        style={[
+          styles.tabRow,
+          desktopMetronic && styles.tabRowMetronic,
+          embedded && styles.tabRowEmbedded,
+        ]}
+      >
         {(["members", "pending"] as const).map((k) => {
           const on = tab === k;
           const count = k === "members" ? activeMembers.length : pendingMembers.length;
           return (
-            <Pressable key={k} onPress={() => setTab(k)} style={[styles.tab, on && styles.tabOn]}>
-              <Text style={[styles.tabText, on && styles.tabTextOn]}>
-                {k === "members" ? "MEMBERS" : "PENDING"}
+            <Pressable
+              key={k}
+              onPress={() => setTab(k)}
+              style={[
+                styles.tab,
+                desktopMetronic && styles.tabMetronic,
+                on && styles.tabOn,
+                on && desktopMetronic && styles.tabOnMetronic,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  desktopMetronic && styles.tabTextMetronic,
+                  on && styles.tabTextOn,
+                  on && desktopMetronic && styles.tabTextOnMetronic,
+                ]}
+              >
+                {k === "members" ? "Members" : "Pending"}
               </Text>
-              {count > 0 && (
+              {count > 0 ? (
                 <View style={[styles.tabBadge, on && styles.tabBadgeOn]}>
                   <Text style={[styles.tabBadgeText, on && styles.tabBadgeTextOn]}>
                     {count}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </Pressable>
           );
         })}
       </View>
 
-      {/* Search */}
-      <View style={styles.searchRow}>
+      <View
+        style={[
+          styles.searchRow,
+          desktopMetronic && styles.searchRowMetronic,
+          embedded && styles.searchRowEmbedded,
+        ]}
+      >
         <Search size={15} color={Theme.textSecondary} strokeWidth={2} />
         <TextInput
           style={styles.searchInput}
@@ -567,15 +610,14 @@ export function TeamMembersView({
         />
       </View>
 
-      {/* Grid */}
       {displayList.length === 0 ? (
         tab === "members" ? (
           <EmptyMembers onInvite={canManage ? onInvite : undefined} />
         ) : (
-          <EmptyPending />
+          <EmptyPending onInvite={canManage ? onInvite : undefined} />
         )
       ) : (
-        <View style={styles.grid}>
+        <View style={[styles.grid, embedded && styles.gridEmbedded]}>
           {rows.map((row, ri) => (
             <View key={`row-${ri}`} style={styles.gridRow}>
               {row.map((m) => (
@@ -605,23 +647,39 @@ export function TeamMembersView({
         </View>
       )}
 
-      {/* Stats footer */}
-      {all.length > 0 && (
-        <View style={styles.statsRow}>
+      {all.length > 0 ? (
+        <View style={[styles.statsRow, embedded && styles.statsRowEmbedded]}>
           <View style={styles.statChip}>
             <UserCheck size={11} color={Theme.darkGreen} strokeWidth={2.2} />
             <Text style={styles.statText}>{activeMembers.length} active</Text>
           </View>
-          {pendingMembers.length > 0 && (
+          {pendingMembers.length > 0 ? (
             <View style={styles.statChip}>
               <UserMinus size={11} color={Theme.warning} strokeWidth={2.2} />
               <Text style={[styles.statText, { color: Theme.warning }]}>
                 {pendingMembers.length} pending
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
-      )}
+      ) : null}
+    </>
+  );
+
+  if (embedded) {
+    return <View style={styles.embeddedRoot}>{body}</View>;
+  }
+
+  return (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.teslaRed} />
+      }
+    >
+      {body}
     </ScrollView>
   );
 }
@@ -740,4 +798,52 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   statText: { fontSize: 11, fontWeight: "600", color: Theme.textSecondary },
+
+  embeddedRoot: {
+    width: "100%",
+  },
+  tabRowMetronic: {
+    gap: 24,
+    paddingHorizontal: 20,
+    borderBottomColor: "#EFF2F5",
+  },
+  tabRowEmbedded: {
+    marginBottom: 10,
+  },
+  tabMetronic: {
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+    marginBottom: -1,
+  },
+  tabOnMetronic: {
+    borderBottomColor: Theme.primary,
+  },
+  tabTextMetronic: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#A1A5B7",
+    letterSpacing: 0,
+  },
+  tabTextOnMetronic: {
+    color: "#181C32",
+    fontWeight: "600",
+  },
+  searchRowMetronic: {
+    marginHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#EFF2F5",
+    backgroundColor: "#FAFBFC",
+  },
+  searchRowEmbedded: {
+    marginBottom: 16,
+  },
+  gridEmbedded: {
+    paddingHorizontal: 20,
+  },
+  statsRowEmbedded: {
+    paddingHorizontal: 20,
+    marginTop: 16,
+    paddingBottom: 16,
+  },
 });

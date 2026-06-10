@@ -133,6 +133,7 @@ export function MutualConnectionsModal({
                   <PartyAvatar
                     name={row.name}
                     initialsColorSeed={row.id}
+                    avatarUrl={row.avatar_url}
                     avatarSeed={row.avatar_seed}
                     entityType="client"
                     size={40}

@@ -26,7 +26,7 @@ import {
 
 export type { InboundProtocolInviteItem };
 
-export type InboundProtocolPanelLayout = "popover" | "fullscreen" | "drawer";
+export type InboundProtocolPanelLayout = "popover" | "fullscreen" | "drawer" | "embedded";
 
 export type InboundProtocolPanelProps = {
   tab: "received" | "sent";
@@ -45,6 +45,8 @@ export type InboundProtocolPanelProps = {
   topInset?: number;
   bottomInset?: number;
   showFooter?: boolean;
+  /** Hide title row (embedded hub panel supplies its own chrome). */
+  showHeader?: boolean;
 };
 
 const METRONIC = {
@@ -262,7 +264,9 @@ function InviteGridCard({
       </View>
 
       <View style={styles.gridFooter}>
-        <RegistryStatusPill label={statusLabel} tone={statusTone} />
+        <View style={styles.gridFooterLeft}>
+          <RegistryStatusPill label={statusLabel} tone={statusTone} />
+        </View>
         <View style={styles.gridActions}>
           {tab === "received" ? (
             <>
@@ -355,9 +359,11 @@ export function InboundProtocolPanel({
   topInset = 0,
   bottomInset = 0,
   showFooter = true,
+  showHeader = true,
 }: InboundProtocolPanelProps) {
   const isFullscreen = layout === "fullscreen";
   const isDrawer = layout === "drawer";
+  const isEmbedded = layout === "embedded";
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const list = tab === "received" ? receivedItems : sentItems;
   const gridColumns = inviteGridColumns(windowWidth);
@@ -405,22 +411,68 @@ export function InboundProtocolPanel({
       }
     : undefined;
 
-  return (
-    <View style={[styles.shell, fullscreenShell, popoverShell, drawerShell]}>
-      <View style={[styles.header, isFullscreen && { paddingTop: 16 + topInset }]}>
-        <Text style={styles.headerTitle}>Invitations</Text>
-        <Pressable
-          onPress={onClose}
-          style={styles.closeBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Close invitations"
-          hitSlop={8}
-        >
-          <X size={16} color={METRONIC.muted} strokeWidth={2} />
-        </Pressable>
-      </View>
+  const embeddedShell: ViewStyle | undefined = isEmbedded
+    ? {
+        width: "100%",
+        maxWidth: "100%",
+        borderRadius: 0,
+        borderWidth: 0,
+        backgroundColor: "transparent",
+        ...Platform.select({
+          web: { boxShadow: "none" as unknown as undefined },
+        }),
+      }
+    : undefined;
 
-      <View style={styles.tabBar}>
+  const useGrid = isFullscreen || isEmbedded;
+
+  const listBody =
+    list.length === 0 ? (
+      <EmptyInvitationsState tab={tab} />
+    ) : useGrid ? (
+      <InviteGrid
+        items={list}
+        tab={tab}
+        columns={gridColumns}
+        busyId={busyId}
+        onApprove={onApprove}
+        onReject={onReject}
+        onCancel={onCancel}
+        onOpenInviteDetail={onOpenInviteDetail}
+      />
+    ) : (
+      list.map((item) => (
+        <InviteSignalRow
+          key={item.id}
+          item={item}
+          tab={tab}
+          busyId={busyId}
+          onApprove={onApprove}
+          onReject={onReject}
+          onCancel={onCancel}
+          onOpenInviteDetail={onOpenInviteDetail}
+        />
+      ))
+    );
+
+  return (
+    <View style={[styles.shell, fullscreenShell, popoverShell, drawerShell, embeddedShell]}>
+      {showHeader ? (
+        <View style={[styles.header, isFullscreen && { paddingTop: 16 + topInset }]}>
+          <Text style={styles.headerTitle}>Invitations</Text>
+          <Pressable
+            onPress={onClose}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close invitations"
+            hitSlop={8}
+          >
+            <X size={16} color={METRONIC.muted} strokeWidth={2} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={[styles.tabBar, isEmbedded && styles.tabBarEmbedded]}>
         <View style={styles.tabList}>
           {TABS.map((t) => {
             const selected = tab === t.id;
@@ -447,52 +499,32 @@ export function InboundProtocolPanel({
         </View>
       </View>
 
-      <ScrollView
-        style={[
-          styles.scroll,
-          (isFullscreen || layout === "popover" || isDrawer) && {
-            flex: 1,
-            maxHeight: undefined,
-          },
-        ]}
-        contentContainerStyle={[
-          styles.scrollContent,
-          isFullscreen && styles.scrollContentFullscreen,
-          isFullscreen && { paddingBottom: bottomInset + 16 },
-        ]}
-        showsVerticalScrollIndicator
-        nestedScrollEnabled
-      >
-        {list.length === 0 ? (
-          <EmptyInvitationsState tab={tab} />
-        ) : isFullscreen ? (
-          <InviteGrid
-            items={list}
-            tab={tab}
-            columns={gridColumns}
-            busyId={busyId}
-            onApprove={onApprove}
-            onReject={onReject}
-            onCancel={onCancel}
-            onOpenInviteDetail={onOpenInviteDetail}
-          />
-        ) : (
-          list.map((item) => (
-            <InviteSignalRow
-              key={item.id}
-              item={item}
-              tab={tab}
-              busyId={busyId}
-              onApprove={onApprove}
-              onReject={onReject}
-              onCancel={onCancel}
-              onOpenInviteDetail={onOpenInviteDetail}
-            />
-          ))
-        )}
-      </ScrollView>
+      {isEmbedded ? (
+        <View style={[styles.scrollContent, styles.scrollContentEmbedded]}>
+          {listBody}
+        </View>
+      ) : (
+        <ScrollView
+          style={[
+            styles.scroll,
+            (isFullscreen || layout === "popover" || isDrawer) && {
+              flex: 1,
+              maxHeight: undefined,
+            },
+          ]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isFullscreen && styles.scrollContentFullscreen,
+            isFullscreen && { paddingBottom: bottomInset + 16 },
+          ]}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+        >
+          {listBody}
+        </ScrollView>
+      )}
 
-      {showFooter ? (
+      {showFooter && !isEmbedded ? (
         <View
           style={[
             styles.footer,
@@ -568,6 +600,10 @@ const styles = StyleSheet.create({
     borderBottomColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
   },
+  tabBarEmbedded: {
+    paddingHorizontal: 20,
+    backgroundColor: "transparent",
+  },
   tabList: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -627,6 +663,12 @@ const styles = StyleSheet.create({
   scrollContentFullscreen: {
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  scrollContentEmbedded: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
+    width: "100%",
   },
   gridList: {
     flexDirection: "row",
@@ -738,15 +780,23 @@ const styles = StyleSheet.create({
     color: "#78829D",
   },
   gridFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
     marginTop: "auto",
+  },
+  gridFooterLeft: {
+    flexShrink: 0,
   },
   gridActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 8,
+    flexShrink: 0,
+    marginLeft: "auto",
   },
   emptyWrap: {
     paddingHorizontal: 16,

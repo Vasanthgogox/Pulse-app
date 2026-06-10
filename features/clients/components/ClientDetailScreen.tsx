@@ -330,6 +330,13 @@ export default function ClientDetailScreen({
   const { width: windowWidth } = useWindowDimensions();
   /** Full trip grid only on wide web; narrow web uses the compact column set (matches finance shared ledger). */
   const isWebDesktop = Platform.OS === "web" && windowWidth >= 1024;
+  const openClientFullProfile = useCallback(() => {
+    if (isWebDesktop) {
+      router.push(ROUTES.clientProfile(clientId) as Parameters<typeof router.push>[0]);
+      return;
+    }
+    setShowProfileModal(true);
+  }, [clientId, isWebDesktop, router]);
   const webContentGutter =
     Platform.OS === "web"
       ? windowWidth >= 1600
@@ -362,8 +369,8 @@ export default function ClientDetailScreen({
 
 
   useEffect(() => {
-    if (autoOpenProfile) setShowProfileModal(true);
-  }, [autoOpenProfile]);
+    if (autoOpenProfile) openClientFullProfile();
+  }, [autoOpenProfile, openClientFullProfile]);
 
   useEffect(() => {
     if (openSharedFromNotification) setDetailSubTab("shared");
@@ -1873,7 +1880,7 @@ export default function ClientDetailScreen({
                 </View>
                 <TouchableOpacity
                   style={styles.profilePreviewTopAction}
-                  onPress={() => setShowProfileModal(true)}
+                  onPress={openClientFullProfile}
                   activeOpacity={0.85}
                   accessibilityLabel="Open client full profile"
                 >
@@ -1889,7 +1896,7 @@ export default function ClientDetailScreen({
               </View>
               <TouchableOpacity
                 style={ecc.dossierIdentity}
-                onPress={() => setShowProfileModal(true)}
+                onPress={openClientFullProfile}
                 activeOpacity={0.85}
                 accessibilityLabel="Open client full profile"
               >

@@ -32,7 +32,13 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  METRONIC,
+  networkDesktopHubStyles as hubStyles,
+} from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+export type InviteMemberLayout = "modal" | "embedded";
 
 // ─── Role option ───────────────────────────────────────────────────────────────
 
@@ -177,14 +183,22 @@ const previewStyles = StyleSheet.create({
 
 type Step = "phone" | "role";
 
-export interface InviteMemberModalProps {
+export interface InviteMemberFlowProps {
   orgId: string;
   onClose: () => void;
   onInvited: () => void;
+  layout?: InviteMemberLayout;
 }
 
-export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberModalProps) {
+export function InviteMemberFlow({
+  orgId,
+  onClose,
+  onInvited,
+  layout = "modal",
+}: InviteMemberFlowProps) {
+  const embedded = layout === "embedded";
   const insets = useSafeAreaInsets();
+  const ui = embedded ? embeddedFlow : modal;
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [searching, setSearching] = useState(false);
@@ -251,7 +265,7 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
       setSuccess(true);
       setTimeout(() => {
         onInvited();
-      }, 900);
+      }, embedded ? 600 : 900);
     }
   };
 
@@ -264,6 +278,196 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
       onClose();
     }
   };
+
+  const stepContent = (
+    <>
+      {success ? (
+        <View style={ui.successWrap}>
+          <View style={ui.successCircle}>
+            <Check size={embedded ? 22 : 28} color={Theme.textOnPrimary} strokeWidth={2.8} />
+          </View>
+          <Text style={ui.successTitle}>Invitation sent</Text>
+          <Text style={ui.successSub}>
+            {foundProfile?.full_name || foundProfile?.phone} has been invited as{" "}
+            <Text style={{ fontWeight: "700" }}>
+              {selectedRole === "admin" ? "Admin" : "Member"}
+            </Text>
+            . They'll need to accept the invite to access the org.
+          </Text>
+        </View>
+      ) : step === "phone" ? (
+        <>
+          <View style={ui.sectionHeader}>
+            <Phone size={16} color={Theme.textSecondary} strokeWidth={2} />
+            <Text style={ui.sectionTitle}>Phone number</Text>
+          </View>
+          <Text style={ui.sectionDesc}>
+            Enter the phone number of the person you'd like to invite. They must already
+            have a Q account.
+          </Text>
+
+          <View style={ui.inputWrap}>
+            <TextInput
+              style={ui.input}
+              placeholder="+91 98765 43210"
+              placeholderTextColor={Theme.textMuted}
+              value={phone}
+              onChangeText={(v) => {
+                setPhone(v);
+                setSearchError(null);
+              }}
+              keyboardType="phone-pad"
+              returnKeyType="search"
+              onSubmitEditing={handleSearch}
+              autoFocus={!embedded}
+            />
+          </View>
+
+          {!!searchError && (
+            <View style={ui.errorRow}>
+              <X size={13} color={Theme.destructive} strokeWidth={2.5} />
+              <Text style={ui.errorText}>{searchError}</Text>
+            </View>
+          )}
+
+          <Pressable
+            onPress={handleSearch}
+            disabled={searching}
+            style={({ pressed }) => [
+              ui.primaryBtn,
+              embedded && hubStyles.teamInviteBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {searching ? (
+              <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+            ) : (
+              <>
+                <Search size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                <Text style={[ui.primaryBtnText, embedded && hubStyles.teamInviteBtnText]}>
+                  Search
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </>
+      ) : (
+        <>
+          {foundProfile && <UserPreviewCard profile={foundProfile} />}
+
+          <View style={ui.sectionHeader}>
+            <Shield size={16} color={Theme.textSecondary} strokeWidth={2} />
+            <Text style={ui.sectionTitle}>Access role</Text>
+          </View>
+          <Text style={[ui.sectionDesc, { marginBottom: 14 }]}>
+            Choose what level of access this person should have in your organisation.
+          </Text>
+
+          {ROLE_OPTIONS.map((opt) => (
+            <RoleOption
+              key={opt.value}
+              option={opt}
+              selected={selectedRole === opt.value}
+              onSelect={() => setSelectedRole(opt.value)}
+            />
+          ))}
+
+          {!!submitError && (
+            <View style={ui.errorRow}>
+              <X size={13} color={Theme.destructive} strokeWidth={2.5} />
+              <Text style={ui.errorText}>{submitError}</Text>
+            </View>
+          )}
+
+          <Pressable
+            onPress={handleInvite}
+            disabled={submitting}
+            style={({ pressed }) => [
+              ui.primaryBtn,
+              { marginTop: 8 },
+              embedded && hubStyles.teamInviteBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            {submitting ? (
+              <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+            ) : (
+              <>
+                <UserPlus2 size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
+                <Text style={[ui.primaryBtnText, embedded && hubStyles.teamInviteBtnText]}>
+                  Send invitation
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <View style={embeddedFlow.root}>
+        <View style={embeddedFlow.stepRow}>
+          {(["phone", "role"] as const).map((s, i) => {
+            const done = (step === "role" && s === "phone") || success;
+            const active = step === s;
+            return (
+              <React.Fragment key={s}>
+                <View
+                  style={[
+                    embeddedFlow.stepDot,
+                    active && embeddedFlow.stepDotActive,
+                    done && embeddedFlow.stepDotDone,
+                  ]}
+                >
+                  {done ? (
+                    <Check size={10} color={Theme.textOnPrimary} strokeWidth={3} />
+                  ) : (
+                    <Text
+                      style={[embeddedFlow.stepNum, active && embeddedFlow.stepNumActive]}
+                    >
+                      {i + 1}
+                    </Text>
+                  )}
+                </View>
+                {i < 1 ? (
+                  <View
+                    style={[
+                      embeddedFlow.stepLine,
+                      (active || done) && { backgroundColor: METRONIC.link },
+                    ]}
+                  />
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </View>
+
+        {step === "role" && !success ? (
+          <Pressable
+            onPress={goBack}
+            style={embeddedFlow.backLink}
+            accessibilityRole="button"
+            accessibilityLabel="Back to phone search"
+          >
+            <ChevronLeft size={14} color={METRONIC.link} strokeWidth={2.4} />
+            <Text style={embeddedFlow.backLinkText}>Back to phone search</Text>
+          </Pressable>
+        ) : null}
+
+        <ScrollView
+          style={embeddedFlow.scroll}
+          contentContainerStyle={embeddedFlow.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+        >
+          {stepContent}
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={[modal.safe, { paddingBottom: insets.bottom }]}>
@@ -319,119 +523,171 @@ export function InviteMemberModal({ orgId, onClose, onInvited }: InviteMemberMod
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {success ? (
-            <View style={modal.successWrap}>
-              <View style={modal.successCircle}>
-                <Check size={28} color={Theme.textOnPrimary} strokeWidth={2.8} />
-              </View>
-              <Text style={modal.successTitle}>Invitation Sent</Text>
-              <Text style={modal.successSub}>
-                {foundProfile?.full_name || foundProfile?.phone} has been invited as{" "}
-                <Text style={{ fontWeight: "700" }}>
-                  {selectedRole === "admin" ? "Admin" : "Member"}
-                </Text>
-                . They'll need to accept the invite to access the org.
-              </Text>
-            </View>
-          ) : step === "phone" ? (
-            <>
-              <View style={modal.sectionHeader}>
-                <Phone size={16} color={Theme.textSecondary} strokeWidth={2} />
-                <Text style={modal.sectionTitle}>Phone Number</Text>
-              </View>
-              <Text style={modal.sectionDesc}>
-                Enter the phone number of the person you'd like to invite. They must already have a
-                Q account.
-              </Text>
-
-              <View style={modal.inputWrap}>
-                <TextInput
-                  style={modal.input}
-                  placeholder="+91 98765 43210"
-                  placeholderTextColor={Theme.textMuted}
-                  value={phone}
-                  onChangeText={(v) => {
-                    setPhone(v);
-                    setSearchError(null);
-                  }}
-                  keyboardType="phone-pad"
-                  returnKeyType="search"
-                  onSubmitEditing={handleSearch}
-                  autoFocus
-                />
-              </View>
-
-              {!!searchError && (
-                <View style={modal.errorRow}>
-                  <X size={13} color={Theme.destructive} strokeWidth={2.5} />
-                  <Text style={modal.errorText}>{searchError}</Text>
-                </View>
-              )}
-
-              <Pressable
-                onPress={handleSearch}
-                disabled={searching}
-                style={({ pressed }) => [modal.primaryBtn, pressed && { opacity: 0.85 }]}
-              >
-                {searching ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                ) : (
-                  <>
-                    <Search size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
-                    <Text style={modal.primaryBtnText}>Search</Text>
-                  </>
-                )}
-              </Pressable>
-            </>
-          ) : (
-            <>
-              {foundProfile && <UserPreviewCard profile={foundProfile} />}
-
-              <View style={modal.sectionHeader}>
-                <Shield size={16} color={Theme.textSecondary} strokeWidth={2} />
-                <Text style={modal.sectionTitle}>Access Role</Text>
-              </View>
-              <Text style={[modal.sectionDesc, { marginBottom: 14 }]}>
-                Choose what level of access this person should have in your organisation.
-              </Text>
-
-              {ROLE_OPTIONS.map((opt) => (
-                <RoleOption
-                  key={opt.value}
-                  option={opt}
-                  selected={selectedRole === opt.value}
-                  onSelect={() => setSelectedRole(opt.value)}
-                />
-              ))}
-
-              {!!submitError && (
-                <View style={modal.errorRow}>
-                  <X size={13} color={Theme.destructive} strokeWidth={2.5} />
-                  <Text style={modal.errorText}>{submitError}</Text>
-                </View>
-              )}
-
-              <Pressable
-                onPress={handleInvite}
-                disabled={submitting}
-                style={({ pressed }) => [modal.primaryBtn, { marginTop: 8 }, pressed && { opacity: 0.85 }]}
-              >
-                {submitting ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                ) : (
-                  <>
-                    <UserPlus2 size={16} color={Theme.textOnPrimary} strokeWidth={2.4} />
-                    <Text style={modal.primaryBtnText}>Send Invitation</Text>
-                  </>
-                )}
-              </Pressable>
-            </>
-          )}
+          {stepContent}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+export function InviteMemberModal(props: InviteMemberFlowProps) {
+  return <InviteMemberFlow {...props} layout="modal" />;
+}
+
+const embeddedFlow = StyleSheet.create({
+  root: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 20,
+    minHeight: 320,
+  },
+  scroll: {
+    flexGrow: 0,
+  },
+  body: {
+    paddingBottom: 8,
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 14,
+    gap: 0,
+  },
+  stepDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#F5F8FA",
+    borderWidth: 2,
+    borderColor: METRONIC.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepDotActive: {
+    backgroundColor: METRONIC.link,
+    borderColor: METRONIC.link,
+  },
+  stepDotDone: {
+    backgroundColor: METRONIC.heroRing,
+    borderColor: METRONIC.heroRing,
+  },
+  stepNum: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: METRONIC.muted,
+  },
+  stepNumActive: {
+    color: Theme.textOnPrimary,
+  },
+  stepLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: METRONIC.border,
+    marginHorizontal: 4,
+  },
+  backLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginBottom: 10,
+  },
+  backLinkText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: METRONIC.link,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: METRONIC.text,
+    letterSpacing: 0.1,
+  },
+  sectionDesc: {
+    fontSize: 12,
+    color: METRONIC.muted,
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  inputWrap: {
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: Theme.cardWhite,
+    marginBottom: 12,
+  },
+  input: {
+    fontSize: 15,
+    color: METRONIC.text,
+    fontWeight: "500",
+  },
+  errorRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginBottom: 14,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: "rgba(232,33,39,0.06)",
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: Theme.destructive,
+    lineHeight: 17,
+  },
+  primaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    minWidth: 140,
+  },
+  primaryBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textOnPrimary,
+  },
+  successWrap: {
+    alignItems: "center",
+    paddingVertical: 24,
+    gap: 10,
+  },
+  successCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: METRONIC.heroRing,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  successTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: METRONIC.text,
+  },
+  successSub: {
+    fontSize: 13,
+    color: METRONIC.muted,
+    textAlign: "center",
+    lineHeight: 19,
+    maxWidth: 320,
+  },
+});
 
 const modal = StyleSheet.create({
   safe: {

@@ -47,9 +47,9 @@ function adjustmentsForTrip(
 }
 
 export function aggregateCustomers(
-  clients: ClientLike[],
-  trips: TripForCustomer[],
-  transactions: LedgerTx[],
+  clients: readonly ClientLike[],
+  trips: readonly TripForCustomer[],
+  transactions: readonly LedgerTx[],
   tripPartyMap?: TripPartyMap | null,
   indents?: IndentForAggregation[],
   /** When provided, billed amounts match trip detail / Adjustment Registry (revenue adjustments). */

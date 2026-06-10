@@ -39,11 +39,13 @@ import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -77,6 +79,8 @@ type Props = {
 export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktopNetwork = Platform.OS === "web" && width >= 1180;
   const { user, profile, signOut } = useAuth();
   const { currentOrganization } = useOrganization();
   const notificationUnread = useGlobalSyncStore((s) => s.notificationUnreadCount);
@@ -152,6 +156,10 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
     };
   }, [currentOrganization?.logo_url]);
 
+  const openMyProfile = () => {
+    onSelectPanel("account");
+  };
+
   const rows: HubRow[] = [
     {
       id: "settings",
@@ -163,7 +171,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
       id: "team",
       label: "Team members",
       icon: <Users size={14} color={NAVY} strokeWidth={2.2} />,
-      panelId: "team",
+      route: ROUTES.MODALS.TEAM,
     },
     {
       id: "kyc",
@@ -229,7 +237,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.quickRow}>
             <Pressable
               style={({ pressed }) => [styles.quickAction, pressed && { opacity: 0.85 }]}
-              onPress={() => onSelectPanel("account")}
+              onPress={openMyProfile}
               accessibilityRole="button"
               accessibilityLabel="My account"
             >
@@ -309,7 +317,10 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
                       onSelectPanel(row.panelId);
                       return;
                     }
-                    if (row.route) navigate(row.route);
+                    if (row.route) {
+                      onExit?.();
+                      navigate(row.route);
+                    }
                   }}
                   style={({ pressed }) => [
                     styles.menuRow,
@@ -346,7 +357,7 @@ export function WorkspaceHubMenu({ activePanel, onSelectPanel, onExit }: Props) 
           <View style={styles.footerDivider} />
           <View style={styles.footerRow}>
             <Pressable
-              onPress={() => onSelectPanel("account")}
+              onPress={openMyProfile}
               style={({ pressed }) => [styles.footerIdentity, pressed && { opacity: 0.85 }]}
               accessibilityRole="button"
               accessibilityLabel="Open my account"
