@@ -21,8 +21,10 @@ export const CHAT_MOBILE = {
   headerTitleSize: 13,
   headerSubtitleSize: 10,
   listRowPad: 8,
-  listAvatar: 44,
-  listTitleSize: 12,
+  listAvatar: 48,
+  /** Horizontal people strip at top of Slack-style inbox */
+  peopleStripAvatar: 56,
+  listTitleSize: 13,
   listPreviewSize: 11,
   listTimeSize: 9,
   composerMinHeight: 36,
@@ -37,17 +39,23 @@ export const CHAT_MOBILE = {
   eventCardRadius: 10,
   eventCardPadH: 12,
   eventCardPadV: 10,
-  eventTitleSize: 12,
-  eventTitleLine: 16,
-  eventMetaSize: 10,
-  eventMetaLine: 14,
-  eventSubSize: 9,
-  eventAmountSize: 12,
-  eventTimeSize: 9,
+  eventTitleSize: 13,
+  eventTitleLine: 18,
+  eventMetaSize: 11,
+  eventMetaLine: 15,
+  eventSubSize: 10,
+  eventAmountSize: 13,
+  eventTimeSize: 10,
   eventAvatar: 36,
   eventCardGap: 6,
 } as const;
 
+/** Slack-style inbox + thread on phones and mobile web (any viewport under desktop breakpoint). */
+export function isChatMobileLayout(isDesktop: boolean): boolean {
+  return !isDesktop;
+}
+
+/** Native iOS/Android only — excludes mobile web. */
 export function isChatNativeMobile(isDesktop: boolean): boolean {
   return Platform.OS !== "web" && !isDesktop;
 }

@@ -1,6 +1,13 @@
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Clock } from "lucide-react-native";
+import Theme from "@/constants/Theme";
+import {
+  CHAT_ACCENT,
+  CHAT_TEXT_MUTED,
+  CHAT_TEXT_PRIMARY,
+  CHAT_TEXT_SECONDARY,
+} from "@/features/chat/chatTheme";
 import type { TripMessageRow } from "../types/chat.types";
 import {
   buildLongHaulLateDisplay,
@@ -57,11 +64,18 @@ export const LateAlertCard = React.memo(function LateAlertCard({
 
   return (
     <View style={s.card} accessibilityRole="text">
-      <View style={s.iconWrap}>
-        <Clock size={18} color="#5c6bc0" strokeWidth={2.1} />
-      </View>
+      <View style={s.accentRail} />
+      <View style={s.cornerDot} />
       <View style={s.body}>
-        <Text style={s.headline}>Vehicle behind schedule</Text>
+        <View style={s.headerRow}>
+          <View style={s.iconWrap}>
+            <Clock size={14} color={CHAT_ACCENT} strokeWidth={2.1} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.kicker}>ALERT</Text>
+            <Text style={s.headline}>Vehicle behind schedule</Text>
+          </View>
+        </View>
 
         {display.scheduledEtaLabel ? (
           <Text style={s.detail}>
@@ -92,7 +106,13 @@ export const LateAlertCard = React.memo(function LateAlertCard({
           </Text>
         ) : null}
 
-        <Text style={s.time}>{displayTime}</Text>
+        <View style={s.footer}>
+          <View style={s.pill}>
+            <View style={s.pillDot} />
+            <Text style={s.pillText}>{healthReadable ? "ACTIVE" : "LATE"}</Text>
+          </View>
+          <Text style={s.time}>{displayTime}</Text>
+        </View>
       </View>
     </View>
   );
@@ -100,77 +120,137 @@ export const LateAlertCard = React.memo(function LateAlertCard({
 
 const s = StyleSheet.create({
   card: {
-    flexDirection: "row",
-    alignItems: "flex-start",
     alignSelf: "center",
-    gap: 12,
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    maxWidth: "92%",
-    marginVertical: 6,
+    width: "62%",
+    maxWidth: 520,
+    minWidth: 240,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E9EDEF",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginVertical: 4,
     shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+    position: "relative",
+    overflow: "hidden",
+  },
+  accentRail: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: CHAT_ACCENT,
+    opacity: 0.85,
+  },
+  cornerDot: {
+    position: "absolute",
+    right: 7,
+    top: 7,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: CHAT_ACCENT,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "#e8eaf6",
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  body: { flex: 1, minWidth: 0, paddingTop: 1 },
+  body: { flex: 1, minWidth: 0, gap: 2 },
+  kicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: CHAT_ACCENT,
+    letterSpacing: 0.55,
+  },
   headline: {
-    fontSize: 14,
-    color: "#1e293b",
+    fontSize: 12,
+    color: CHAT_TEXT_PRIMARY,
     fontWeight: "600",
-    lineHeight: 20,
-    letterSpacing: -0.1,
-    marginBottom: 4,
+    lineHeight: 16,
+    marginTop: 1,
   },
   detail: {
-    fontSize: 13,
-    color: "#64748b",
-    lineHeight: 19,
+    fontSize: 11,
+    color: CHAT_TEXT_SECONDARY,
+    lineHeight: 15,
     fontWeight: "500",
-    marginTop: 2,
+    marginTop: 1,
   },
   detailStrong: {
-    color: "#334155",
+    color: CHAT_TEXT_PRIMARY,
     fontWeight: "600",
   },
   revisedStrong: {
     color: "#b45309",
   },
   delayLine: {
-    fontSize: 13,
-    color: "#64748b",
-    lineHeight: 19,
+    fontSize: 11,
+    color: CHAT_TEXT_SECONDARY,
+    lineHeight: 15,
     fontWeight: "500",
-    marginTop: 4,
+    marginTop: 1,
   },
   delayStrong: {
     color: "#be123c",
     fontWeight: "700",
   },
   paceHint: {
-    color: "#94a3b8",
+    color: CHAT_TEXT_MUTED,
     fontWeight: "500",
-    fontSize: 12,
+    fontSize: 10,
+  },
+  footer: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E9EDEF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    backgroundColor: Theme.cardWhite,
+  },
+  pillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: CHAT_ACCENT,
+  },
+  pillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: CHAT_ACCENT,
+    letterSpacing: 0.45,
   },
   time: {
-    fontSize: 11,
-    color: "#94a3b8",
-    marginTop: 6,
-    fontWeight: "600",
+    fontSize: 10,
+    color: CHAT_TEXT_MUTED,
+    fontWeight: "500",
     letterSpacing: 0.15,
   },
 });

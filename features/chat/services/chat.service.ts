@@ -585,6 +585,10 @@ export async function sendChatMessage(params: {
   messageType?: MessageType;
   /** Required for `feedback_request` (and other typed system payloads). */
   metadata?: Record<string, unknown> | null;
+  /** ID of the message being replied to. */
+  replyToId?: string | null;
+  /** Snapshot of the replied-to message for inline preview. */
+  replyToPreview?: Record<string, unknown> | null;
 }): Promise<TripMessageRow> {
   const {
     conversationId,
@@ -594,6 +598,8 @@ export async function sendChatMessage(params: {
     senderUserId,
     messageType = "text",
     metadata = null,
+    replyToId = null,
+    replyToPreview = null,
   } = params;
 
   // Preferred path: DB RPC writes source message and mirrors to linked partner org.
@@ -619,7 +625,18 @@ export async function sendChatMessage(params: {
     },
   );
 
-  if (!rpcError && rpcData) return rpcData as TripMessageRow;
+  if (!rpcError && rpcData) {
+    const msg = rpcData as TripMessageRow;
+    // Patch reply fields after send (RPC doesn't yet accept them natively)
+    if (replyToId && msg.id && !msg.id.startsWith("optimistic-")) {
+      await supabase()
+        .from("trip_messages")
+        .update({ reply_to_id: replyToId, reply_to_preview: replyToPreview })
+        .eq("id", msg.id);
+      return { ...msg, reply_to_id: replyToId, reply_to_preview: replyToPreview } as TripMessageRow;
+    }
+    return msg;
+  }
 
   throw rpcError ?? new Error("Trip chat RPC did not return a message.");
 }
@@ -1819,4 +1836,27 @@ export async function changeTripStatus(params: {
   if (error) throw error;
   const result = data as { ok: boolean; previous_status: string; changed_at: string };
   return { previousStatus: result.previous_status, changedAt: result.changed_at };
+}
+
+// ── Emoji reactions ─────────────────────────────────────────────────────────
+
+/**
+ * Toggle an emoji reaction on a message.
+ * Calls the `toggle_trip_message_reaction` RPC (SECURITY DEFINER, org-scoped).
+ * Returns the updated reactions map: { "👍": ["uid1", "uid2"], ... }
+ */
+export async function toggleMessageReaction(params: {
+  messageId:      string;
+  userId:         string;
+  organizationId: string;
+  emoji:          string;
+}): Promise<Record<string, string[]>> {
+  const { data, error } = await supabase().rpc('toggle_trip_message_reaction', {
+    p_message_id: params.messageId,
+    p_user_id:    params.userId,
+    p_emoji:      params.emoji,
+    p_org_id:     params.organizationId,
+  });
+  if (error) throw error;
+  return (data ?? {}) as Record<string, string[]>;
 }

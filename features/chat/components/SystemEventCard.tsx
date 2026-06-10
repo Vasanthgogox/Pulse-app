@@ -27,6 +27,7 @@ import type {
   TripMessageRow,
 } from '../types/chat.types';
 import { OptimizedChatImage } from './OptimizedChatImage';
+import { CHAT_ACCENT } from '@/features/chat/chatTheme';
 import {
   ChatSystemEventCard,
   TripProgressEventCard,
@@ -133,29 +134,23 @@ function StatusChangeCard({
 
   const dateUpper = formatTripEventSheetDate(message.created_at);
   const metaLine = `${dateUpper} · ${statusLabel.toUpperCase()}`;
-  const rawActor = meta?.changed_by_name?.trim();
-  const subLine =
-    rawActor && !isGenericStatusActor(rawActor)
-      ? String(rawActor).toUpperCase()
-      : null;
-  const seedMatch = bodyText.match(/\b(TRP[-A-Z0-9]+)\b/i);
-  const seed = seedMatch?.[1]?.toUpperCase() ?? "Trip";
   const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
+  const seed =
+    driverAvatar?.displayName?.trim() ||
+    composeTrip?.driver_display_name?.trim() ||
+    bodyText.match(/\b(TRP[-A-Z0-9]+)\b/i)?.[1]?.toUpperCase() ||
+    "Trip";
 
   return (
     <TripProgressEventCard
       avatarSeed={seed}
       avatarIdentity={driverAvatar}
-      avatarDotColor={sheet.rightColor}
       kicker="SYSTEM UPDATE"
       title={bodyText}
       metaLine={metaLine}
-      subLine={subLine}
       rightPrimary={sheet.rightWord}
       rightPrimaryColor={sheet.rightColor}
       time={displayTime}
-      routeContext={routeContext}
-      isMobile={isMobile}
     />
   );
 }
@@ -220,20 +215,21 @@ function TrackingCard({
   const metaLine = `${dateUpper} · DRIVER LOCATION`;
   const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
 
+  const avatarSeed =
+    driverAvatar?.displayName?.trim() ||
+    composeTrip?.driver_display_name?.trim() ||
+    "Location";
+
   return (
     <TripProgressEventCard
-      avatarSeed="Location ping"
+      avatarSeed={avatarSeed}
       avatarIdentity={driverAvatar}
-      avatarDotColor="#2563eb"
       kicker="SYSTEM UPDATE"
       title={title}
       metaLine={metaLine}
-      subLine={null}
       rightPrimary={(eta ?? "LOCATION").toUpperCase()}
-      rightPrimaryColor="#2563eb"
+      rightPrimaryColor={CHAT_ACCENT}
       time={displayTime}
-      routeContext={routeContext}
-      isMobile={isMobile}
     />
   );
 }

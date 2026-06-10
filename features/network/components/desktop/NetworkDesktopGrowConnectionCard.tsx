@@ -96,7 +96,6 @@ export function NetworkDesktopGrowConnectionCard({
         growStyles.card,
         pressed && onOpenProfile && styles.cardPressed,
       ]}
-      accessibilityRole="button"
       accessibilityLabel={`Open ${org.name}`}
     >
       {onDismiss ? (

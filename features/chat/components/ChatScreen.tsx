@@ -30,6 +30,7 @@ import {
 } from "@/features/chat/chatTheme";
 import {
   CHAT_MOBILE,
+  isChatMobileLayout,
   isChatNativeMobile,
   mobileWebComposerReservePx,
 } from "@/features/chat/chatMobileLayout";
@@ -39,12 +40,55 @@ import {
   useKeyboardVisible,
 } from "@/lib/hooks/useKeyboardVisible";
 import { ChatMobileComposer } from "@/features/chat/components/ChatMobileComposer";
+import { ChatSlackMirrorToggle } from "@/features/chat/components/shared/ChatSlackMirrorToggle";
+import { SLACK_STREAM_TABS } from "@/features/chat/components/shared/chatSlackStreamTabs";
+import {
+  buildSlackMessageGroupMap,
+  isSlackGroupableTripMessage,
+  type SlackMessageGroupMeta,
+} from "@/features/chat/utils/slackMessageGroup.util";
+import { buildSupabaseRenderImagePublicUrl } from "@/features/chat/utils/storageRenderImageUrl";
+import {
+  ChatSlackInboxToolbar,
+  ChatSlackListHeader,
+  ChatSlackListRow,
+  ChatSlackListSeparator,
+  ChatSlackBottomNav,
+  CHAT_SLACK_BOTTOM_NAV_BAR,
+  ChatSlackThreadHeader,
+  type SlackFilterChipDef,
+  type SlackPeopleItem,
+  type SlackStreamTabId,
+} from "@/features/chat/components/mobile/ChatSlackMobileChrome";
+import { StoryReel } from "@/features/network/components/StoryReel";
+import { ChatSlackMessageRow } from "@/features/chat/components/mobile/ChatSlackMessageRow";
+import {
+  SLACK_CHAT_LIST_PROPS,
+  slackMobileStyles as slackSt,
+} from "@/features/chat/components/mobile/chatSlackMobile.styles";
+import { ChatSlackDesktopComposer } from "@/features/chat/components/desktop/ChatSlackDesktopComposer";
+import {
+  ChatSlackDesktopSidebarChrome,
+  ChatSlackDesktopSidebarRow,
+  ChatSlackDesktopThreadHeader,
+} from "@/features/chat/components/desktop/ChatSlackDesktopChrome";
+import {
+  slackDesktopStyles as deskSt,
+  SLACK_DESKTOP,
+} from "@/features/chat/components/desktop/chatSlackDesktop.styles";
+import { ChatDateDivider } from "@/features/chat/components/shared/ChatDateDivider";
+import { ChatUnreadDivider } from "@/features/chat/components/shared/ChatUnreadDivider";
+import { ChatTypingIndicator } from "@/features/chat/components/shared/ChatTypingIndicator";
+import type { ReplyPreviewData } from "@/features/chat/components/shared/ChatReplyPreview";
+import type { ChatReactions } from "@/features/chat/components/shared/ChatReactionsRow";
+import { useChatTypingPresence } from "@/features/chat/hooks/useChatTypingPresence";
+import { toggleMessageReaction } from "@/features/chat/services/chat.service";
 import { MessageTick } from "@/features/chat/components/MessageTick";
 import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
 import {
   INTEGRATED_QUICK_MESSAGES,
   IntegratedChat,
-  useIntegratedChat,
+  useOptionalIntegratedChat,
   type NetworkPartner,
 } from "@/features/chat/contexts/IntegratedChatContext";
 import {
@@ -88,6 +132,7 @@ import {
 } from "@/features/trips/services/trips.service";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
+import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
@@ -223,6 +268,199 @@ function partyLabel(type: ConversationPartyType) {
   return type === "client" ? "CLIENT" : type === "supplier" ? "SUPPLIER" : "DRIVER";
 }
 
+function trimPreviewText(raw: string | null | undefined): string {
+  return String(raw ?? "").trim();
+}
+
+type ConversationPreviewKind = "default" | "system" | "image" | "document" | "data" | "html";
+
+type ConversationPreviewModel = {
+  text: string;
+  kind: ConversationPreviewKind;
+  imageUrl?: string | null;
+};
+
+function compactPreviewText(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+function stripHtmlForPreview(raw: string): string {
+  return compactPreviewText(raw.replace(/<[^>]*>/g, " "));
+}
+
+function isLikelyHtml(raw: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(raw);
+}
+
+function normalizePreviewText(raw: string): string {
+  const clean = trimPreviewText(raw);
+  if (!clean) return "";
+  return isLikelyHtml(clean) ? stripHtmlForPreview(clean) : compactPreviewText(clean);
+}
+
+function isLikelyDataPayload(raw: string): boolean {
+  const value = trimPreviewText(raw);
+  if (!value) return false;
+  if (value.startsWith("{") || value.startsWith("[")) return true;
+  return false;
+}
+
+function summarizeDataPayload(raw: string): string {
+  const value = trimPreviewText(raw);
+  if (!value) return "Data update";
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const keys = Object.keys(parsed as Record<string, unknown>).slice(0, 3);
+      if (keys.length > 0) return `Data update · ${keys.join(" · ")}`;
+      return "Data update";
+    }
+    if (Array.isArray(parsed)) return `Data update · ${parsed.length} items`;
+  } catch {
+    // Keep non-fatal: raw text fallback is used below.
+  }
+  const normalized = normalizePreviewText(value);
+  return normalized || "Data update";
+}
+
+function resolveTripImagePreviewUrl(message: TripMessageRow | null | undefined): string | null {
+  if (!message || message.message_type !== "image") return null;
+  const metadata =
+    message.metadata && typeof message.metadata === "object"
+      ? (message.metadata as Record<string, unknown>)
+      : null;
+  const storagePath = typeof metadata?.["storage_path"] === "string" ? metadata.storage_path : "";
+  if (storagePath) {
+    return (
+      buildSupabaseRenderImagePublicUrl({
+        storagePath,
+        width: 96,
+        quality: 52,
+      }) ?? null
+    );
+  }
+  const rawContent = trimPreviewText(message.content);
+  if (/^https?:\/\//i.test(rawContent)) return rawContent;
+  return null;
+}
+
+function previewFromTripMessage(
+  message: TripMessageRow | null | undefined,
+): ConversationPreviewModel {
+  if (!message) return { text: "", kind: "default" };
+  const fallback = normalizePreviewText(message.content);
+  switch (message.message_type) {
+    case "image":
+      return {
+        text: fallback || "Photo preview",
+        kind: "image",
+        imageUrl: resolveTripImagePreviewUrl(message),
+      };
+    case "document_share":
+    case "document_upload":
+      return { text: fallback || "Document shared", kind: "document" };
+    case "ledger_event":
+    case "ledger":
+    case "ledger_update":
+    case "payment":
+      return { text: fallback || "Payment data updated", kind: "data" };
+    case "tracking":
+    case "location_log":
+      return {
+        text: fallback ? `Location data · ${fallback}` : "Location data update",
+        kind: "data",
+      };
+    case "assignment_update":
+      return { text: fallback || "Assignment data updated", kind: "data" };
+    case "status_change":
+    case "system":
+    case "update":
+    case "system_log":
+      if (fallback && isLikelyHtml(message.content)) {
+        return { text: fallback, kind: "html" };
+      }
+      return { text: fallback || "System update", kind: "system" };
+    default:
+      if (fallback && isLikelyHtml(message.content)) return { text: fallback, kind: "html" };
+      if (isLikelyDataPayload(message.content)) {
+        return { text: summarizeDataPayload(message.content), kind: "data" };
+      }
+      return { text: fallback, kind: "default" };
+  }
+}
+
+function isManualDriverSummaryMessage(message: TripMessageRow): boolean {
+  const mt = String(message.message_type ?? "").toLowerCase();
+  if (
+    mt === "feedback_request" ||
+    mt === "feedback" ||
+    mt === "status_change" ||
+    mt === "assignment_update" ||
+    mt === "system" ||
+    mt === "update" ||
+    mt === "system_log" ||
+    mt === "location_log" ||
+    mt === "tracking" ||
+    mt === "ledger_event" ||
+    mt === "ledger" ||
+    mt === "payment" ||
+    mt === "ledger_update"
+  ) {
+    return false;
+  }
+  const senderRole = String(message.sender_role ?? "").toLowerCase();
+  if (senderRole === "client" || senderRole === "supplier") return false;
+  return true;
+}
+
+function latestTripConversationPreview(
+  item: TripConversation,
+  options?: { manualDriverOnly?: boolean },
+): ConversationPreviewModel {
+  const manualDriverOnly = options?.manualDriverOnly === true;
+  let latest: TripMessageRow | null = null;
+  for (let i = item.messages.length - 1; i >= 0; i -= 1) {
+    const candidate = item.messages[i] as TripMessageRow;
+    if (!candidate) continue;
+    if (candidate.message_type === "feedback_request" || candidate.message_type === "feedback") {
+      continue;
+    }
+    if (!isMessageVisibleInTab(candidate.message_type, item.party_type)) continue;
+    if (manualDriverOnly && !isManualDriverSummaryMessage(candidate)) continue;
+    latest = candidate;
+    break;
+  }
+  const fromMessage = previewFromTripMessage(latest);
+  if (fromMessage.text) {
+    return fromMessage;
+  }
+  const fallback = trimPreviewText(item.last_message_preview);
+  if (!manualDriverOnly) {
+    if (isLikelyHtml(fallback)) return { text: stripHtmlForPreview(fallback), kind: "html" };
+    if (isLikelyDataPayload(fallback)) return { text: summarizeDataPayload(fallback), kind: "data" };
+    return { text: fallback, kind: "default" };
+  }
+  if (!fallback) return { text: "Driver chat", kind: "default" };
+  const startsWithOrgRole = /^(client|supplier)\b[:\s·-]/i.test(fallback);
+  const safeFallback = startsWithOrgRole ? "Driver chat" : fallback;
+  return { text: normalizePreviewText(safeFallback), kind: "default" };
+}
+
+function previewFromNetworkContent(content: string | null | undefined): ConversationPreviewModel {
+  const raw = trimPreviewText(content);
+  if (!raw) return { text: "", kind: "default" };
+  if (/\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(raw) || /^https?:\/\/.+\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(raw)) {
+    return { text: "Photo preview", kind: "image", imageUrl: raw };
+  }
+  if (isLikelyHtml(raw)) return { text: stripHtmlForPreview(raw), kind: "html" };
+  if (isLikelyDataPayload(raw)) return { text: summarizeDataPayload(raw), kind: "data" };
+  return { text: normalizePreviewText(raw), kind: "default" };
+}
+
+function partyLabelReadable(type: ConversationPartyType) {
+  return type === "client" ? "Client" : type === "supplier" ? "Supplier" : "Driver";
+}
+
 function partyFilterSheetLabel(type: ConversationPartyType): string {
   return type === "client" ? "Client" : type === "supplier" ? "Supplier" : "Driver";
 }
@@ -238,6 +476,30 @@ function formatTripStatusLabel(status: string | null | undefined): string {
   const raw = String(status ?? "").trim();
   if (!raw) return "ACTIVE";
   return raw.replace(/_/g, " ").toUpperCase();
+}
+
+/**
+ * Driver-chat eligible statuses: trip already has driver assignment/acceptance.
+ * Used by active scope + manual trip stream + compose list.
+ */
+function isDriverAssignedOrAcceptedStatus(status: string | null | undefined): boolean {
+  const s = String(status ?? "").trim().toLowerCase();
+  return (
+    s === "assigned" ||
+    s === "driver_assigned" ||
+    s === "accepted" ||
+    s === "in_progress" ||
+    s === "started" ||
+    s === "at_pickup" ||
+    s === "picked_up" ||
+    s === "in_transit" ||
+    s === "at_drop" ||
+    s === "heading_to_pickup"
+  );
+}
+
+function isTripCurrentlyActiveStatus(status: string | null | undefined): boolean {
+  return isDriverAssignedOrAcceptedStatus(status);
 }
 
 /** Trip `created_at` for hub + detail chrome (e.g. `3 May 2026`). */
@@ -328,10 +590,16 @@ function manualHubTripHasAssignedDriver(
   conv: TripConversation,
   trips: Record<string, TripEntry>,
 ): boolean {
-  return (
+  const status = String(conv.trip_status ?? trips[conv.trip_id]?.status ?? "")
+    .trim()
+    .toLowerCase();
+  const driverAccepted = isDriverAssignedOrAcceptedStatus(status);
+  if (!driverAccepted) return false;
+  const hasDriver =
     Boolean(String(conv.trip_driver_id ?? "").trim()) ||
-    Boolean(String(trips[conv.trip_id]?.driverId ?? "").trim())
-  );
+    Boolean(String(trips[conv.trip_id]?.driverId ?? "").trim());
+  // Manual trips chat lane is driver-only.
+  return hasDriver && conv.party_type === "driver";
 }
 
 const HUB_PARTY_ORDER: ConversationPartyType[] = ["client", "supplier", "driver"];
@@ -724,6 +992,10 @@ function getComposePartyRows(trip: TripForCompose): ComposePartyRow[] {
   return rows;
 }
 
+function manualTripDriverAccepted(status: string | null | undefined): boolean {
+  return isDriverAssignedOrAcceptedStatus(status);
+}
+
 function tripHasSelectableComposeParty(trip: TripForCompose): boolean {
   return getComposePartyRows(trip).some((r) => r.kind === "selectable");
 }
@@ -741,6 +1013,7 @@ export function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const isMobileChatUi = isChatMobileLayout(isDesktop);
   const isNativeMobile = isChatNativeMobile(isDesktop);
   /** Trip hub cards (alerts + party row) on every viewport — one list UX for native + web. */
   const useGroupedTripHub = true;
@@ -756,6 +1029,10 @@ export function ChatScreen() {
   const [messageInput, setMessageInput] = useState("");
   const messagesRef = useRef<FlatList>(null);
   const tripHubMobileAutoPageGateRef = useRef(false);
+
+  // ── Slack-style: reply context ─────────────────────────────────────────
+  const [replyContext, setReplyContext] = useState<ReplyPreviewData | null>(null);
+  const clearReply = useCallback(() => setReplyContext(null), []);
 
   const [showEmoji, setShowEmoji] = useState(false);
   const [showScripts, setShowScripts] = useState(false);
@@ -801,12 +1078,23 @@ export function ChatScreen() {
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");
   const [tripChatScope, setTripChatScope] = useState<"active" | "history">("active");
+  const [slackUnreadOnly, setSlackUnreadOnly] = useState(false);
+  const [desktopActiveCollapsed, setDesktopActiveCollapsed] = useState(false);
+  const [desktopHistoryCollapsed, setDesktopHistoryCollapsed] = useState(true);
+  const [desktopActiveShowAll, setDesktopActiveShowAll] = useState(false);
+  const [desktopHistoryShowAll, setDesktopHistoryShowAll] = useState(false);
+  const [desktopDmCollapsed, setDesktopDmCollapsed] = useState(false);
+  const [desktopDmShowAll, setDesktopDmShowAll] = useState(false);
   /** Web desktop: bubble LATE_RISK / indent-linked trips in the hub list. */
   const [webCommandPriorityFilter, setWebCommandPriorityFilter] = useState(false);
   const activeTripsForCommandPriority = useGlobalSyncStore((s) => s.activeTrips);
   const [visibleTripCount, setVisibleTripCount] = useState(10);
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
+  const [netSidebarSearch, setNetSidebarSearch] = useState("");
+  const [showStoriesSheet, setShowStoriesSheet] = useState(false);
   const [hubSearchOpen, setHubSearchOpen] = useState(false);
+  const tripSearchInputRef = useRef<TextInput>(null);
+  const netSearchInputRef = useRef<TextInput>(null);
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
   const detailEnterProgress = useRef(new Animated.Value(1)).current;
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
@@ -834,15 +1122,20 @@ export function ChatScreen() {
   const isAppendingBootstrap = useChatStore((s) => s.isAppendingBootstrap);
   const ensureHubHistoryBootstrap = useChatStore((s) => s.ensureHubHistoryBootstrap);
 
-  const {
-    chats: netChats,
-    partners: netPartners,
-    isLoading: netLoading,
-    sendMessage: sendNet,
-    markAsRead: markNetRead,
-    getTotalUnreadCount: netTotal,
-    initiateNetworkConversation,
-  } = useIntegratedChat();
+  const integratedChatCtx = useOptionalIntegratedChat();
+  const netChats = integratedChatCtx?.chats ?? [];
+  const netPartners = integratedChatCtx?.partners ?? [];
+  const netLoading = integratedChatCtx?.isLoading ?? false;
+  const sendNet =
+    integratedChatCtx?.sendMessage ??
+    (() => {
+      // No provider mounted; ignore DM send attempts in this host.
+    });
+  const markNetRead = integratedChatCtx?.markAsRead ?? (() => {});
+  const netTotal = integratedChatCtx?.getTotalUnreadCount ?? (() => 0);
+  const initiateNetworkConversation =
+    integratedChatCtx?.initiateNetworkConversation ??
+    (async () => null);
 
   const netUnread = netTotal();
 
@@ -969,6 +1262,16 @@ export function ChatScreen() {
     // Re-fetch only when the organisation switches.
   }, [organizationId]);
 
+  const effectiveConversationTripStatus = useCallback(
+    (conv: Pick<TripConversation, "trip_id" | "trip_status">): string | null => {
+      const fromConv = String(conv.trip_status ?? "").trim();
+      if (fromConv) return fromConv;
+      const fromStore = String(chatTrips[conv.trip_id]?.status ?? "").trim();
+      return fromStore || null;
+    },
+    [chatTrips],
+  );
+
   const baseFilteredSortedTripConversations = useMemo(() => {
     const trimmedSearch = tripSidebarSearch.trim().toLowerCase();
     const hasSearch = trimmedSearch.length > 0;
@@ -987,8 +1290,8 @@ export function ChatScreen() {
       })
       .sort((a, b) => {
         // Active trips always above terminal (hard boundary, like WhatsApp pinned groups)
-        const aTerminal = isTerminalTripStatus(a.trip_status) ? 1 : 0;
-        const bTerminal = isTerminalTripStatus(b.trip_status) ? 1 : 0;
+        const aTerminal = isTerminalTripStatus(effectiveConversationTripStatus(a)) ? 1 : 0;
+        const bTerminal = isTerminalTripStatus(effectiveConversationTripStatus(b)) ? 1 : 0;
         if (aTerminal !== bTerminal) return aTerminal - bTerminal;
 
         // Within each group: unread conversations first (WhatsApp style)
@@ -1002,7 +1305,7 @@ export function ChatScreen() {
           new Date(a.last_message_at ?? 0).getTime()
         );
       });
-  }, [conversations, tripPartyFilters, tripSidebarSearch]);
+  }, [conversations, tripPartyFilters, tripSidebarSearch, effectiveConversationTripStatus]);
 
   const tripStreamConversations = useMemo(
     () =>
@@ -1037,35 +1340,54 @@ export function ChatScreen() {
     const seen = new Set<string>();
     let n = 0;
     for (const c of tripStreamConversations) {
-      if (isTerminalTripStatus(String(c.trip_status ?? ""))) continue;
+      if (isTerminalTripStatus(effectiveConversationTripStatus(c))) continue;
       if (seen.has(c.trip_id)) continue;
       seen.add(c.trip_id);
       if (chatTrips[c.trip_id]?.trackingStatus === "RUNNING_LATE") n += 1;
     }
     return n;
-  }, [tripStreamConversations, chatTrips]);
+  }, [tripStreamConversations, chatTrips, effectiveConversationTripStatus]);
 
   const integratedRunningLateActiveCount = useMemo(() => {
     const seen = new Set<string>();
     let n = 0;
     for (const c of indentStreamConversations) {
-      if (isTerminalTripStatus(String(c.trip_status ?? ""))) continue;
+      if (isTerminalTripStatus(effectiveConversationTripStatus(c))) continue;
       if (seen.has(c.trip_id)) continue;
       seen.add(c.trip_id);
       if (chatTrips[c.trip_id]?.trackingStatus === "RUNNING_LATE") n += 1;
     }
     return n;
-  }, [indentStreamConversations, chatTrips]);
+  }, [indentStreamConversations, chatTrips, effectiveConversationTripStatus]);
 
   const sortedNetChats = useMemo(() => {
-    return [...netChats].sort((a, b) => {
+    return [...netChats]
+      .filter((c) => c.messages.length > 0)
+      .sort((a, b) => {
       const unreadDiff = (b.unreadCount ?? 0) - (a.unreadCount ?? 0);
       if (unreadDiff !== 0) return unreadDiff;
       const aLast = a.messages[a.messages.length - 1]?.timestamp ?? "";
       const bLast = b.messages[b.messages.length - 1]?.timestamp ?? "";
       return new Date(bLast || 0).getTime() - new Date(aLast || 0).getTime();
-    });
+      });
   }, [netChats]);
+  const shouldLoadStoryFeed =
+    Boolean(currentOrgId) && isMobileChatUi && (activeTab === "network" || showStoriesSheet);
+  const { data: networkFeedPosts = [], isLoading: storiesLoading } = useNetworkFeedQuery(
+    shouldLoadStoryFeed ? currentOrgId : null,
+  );
+  const integratedNetworkStories = useMemo(() => {
+    if (!shouldLoadStoryFeed || networkFeedPosts.length === 0) return [];
+    const integratedOrgIds = new Set<string>([
+      currentOrgId,
+      ...sortedNetChats.map((row) => row.partnerId).filter(Boolean),
+    ]);
+    return networkFeedPosts.filter(
+      (post) =>
+        (post.type === "LOAD" || post.type === "VEHICLE_AVAILABILITY") &&
+        integratedOrgIds.has(post.organization_id),
+    );
+  }, [currentOrgId, networkFeedPosts, shouldLoadStoryFeed, sortedNetChats]);
 
   const tripHubTrackingByTripId = useMemo(() => {
     const m: Record<string, string | null> = {};
@@ -1135,10 +1457,128 @@ export function ChatScreen() {
 
   const tripChatFilteredConversations = useMemo(() => {
     return tripStreamForActiveHubTab.filter((conv) => {
-      const terminal = isTerminalTripStatus(conv.trip_status);
-      return tripChatScope === "history" ? terminal : !terminal;
+      const status = effectiveConversationTripStatus(conv);
+      const terminal = isTerminalTripStatus(status);
+      return tripChatScope === "history"
+        ? terminal
+        : isTripCurrentlyActiveStatus(status);
     });
-  }, [tripStreamForActiveHubTab, tripChatScope]);
+  }, [tripStreamForActiveHubTab, tripChatScope, effectiveConversationTripStatus]);
+
+  const desktopActiveTripConversations = useMemo(
+    () =>
+      tripStreamForActiveHubTab.filter((conv) =>
+        isTripCurrentlyActiveStatus(effectiveConversationTripStatus(conv)),
+      ),
+    [tripStreamForActiveHubTab, effectiveConversationTripStatus],
+  );
+  const desktopHistoryTripConversations = useMemo(
+    () =>
+      tripStreamForActiveHubTab.filter((conv) =>
+        isTerminalTripStatus(effectiveConversationTripStatus(conv)),
+      ),
+    [tripStreamForActiveHubTab, effectiveConversationTripStatus],
+  );
+
+  useEffect(() => {
+    if (!isDesktop || !selectedConvId) return;
+    const activeIndex = desktopActiveTripConversations.findIndex((c) => c.id === selectedConvId);
+    if (activeIndex >= 0) {
+      if (desktopActiveCollapsed) setDesktopActiveCollapsed(false);
+      if (activeIndex >= 5 && !desktopActiveShowAll) setDesktopActiveShowAll(true);
+      return;
+    }
+    const historyIndex = desktopHistoryTripConversations.findIndex((c) => c.id === selectedConvId);
+    if (historyIndex >= 0) {
+      if (desktopHistoryCollapsed) setDesktopHistoryCollapsed(false);
+      if (historyIndex >= 5 && !desktopHistoryShowAll) setDesktopHistoryShowAll(true);
+    }
+  }, [
+    isDesktop,
+    selectedConvId,
+    desktopActiveTripConversations,
+    desktopHistoryTripConversations,
+    desktopActiveCollapsed,
+    desktopHistoryCollapsed,
+    desktopActiveShowAll,
+    desktopHistoryShowAll,
+  ]);
+
+  const slackFilteredTripConversations = useMemo(() => {
+    if (!slackUnreadOnly) return tripChatFilteredConversations;
+    return tripChatFilteredConversations.filter((c) => (c.unread_dispatcher_count ?? 0) > 0);
+  }, [tripChatFilteredConversations, slackUnreadOnly]);
+
+  const slackFilteredNetChats = useMemo(() => {
+    let rows = slackUnreadOnly
+      ? sortedNetChats.filter((c) => (c.unreadCount ?? 0) > 0)
+      : sortedNetChats;
+    const q = netSidebarSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (c) =>
+        c.partnerName.toLowerCase().includes(q) ||
+        (c.organization ?? "").toLowerCase().includes(q),
+    );
+  }, [sortedNetChats, slackUnreadOnly, netSidebarSearch]);
+
+  useEffect(() => {
+    if (!isDesktop || !selectedNetId) return;
+    const idx = slackFilteredNetChats.findIndex((c) => c.id === selectedNetId);
+    if (idx < 0) return;
+    if (desktopDmCollapsed) setDesktopDmCollapsed(false);
+    if (idx >= 8 && !desktopDmShowAll) setDesktopDmShowAll(true);
+  }, [isDesktop, selectedNetId, slackFilteredNetChats, desktopDmCollapsed, desktopDmShowAll]);
+
+  const slackFilterChips = useMemo((): SlackFilterChipDef[] => {
+    if (activeTab === "network") {
+      return [
+        {
+          id: "all",
+          label: "All",
+          active: !slackUnreadOnly,
+          onPress: () => setSlackUnreadOnly(false),
+        },
+        {
+          id: "unreads",
+          label: "Unreads",
+          active: slackUnreadOnly,
+          onPress: () => setSlackUnreadOnly(true),
+        },
+      ];
+    }
+    const tripMirrorId = slackUnreadOnly
+      ? "unreads"
+      : tripChatScope === "history"
+        ? "history"
+        : "active";
+    return [
+      {
+        id: "active",
+        label: "Active",
+        active: tripMirrorId === "active",
+        onPress: () => {
+          setSlackUnreadOnly(false);
+          setTripChatScope("active");
+        },
+      },
+      {
+        id: "unreads",
+        label: "Unreads",
+        active: tripMirrorId === "unreads",
+        onPress: () => setSlackUnreadOnly(true),
+      },
+      {
+        id: "history",
+        label: "History",
+        active: tripMirrorId === "history",
+        onPress: () => {
+          setSlackUnreadOnly(false);
+          setTripChatScope("history");
+        },
+      },
+    ];
+  }, [activeTab, slackUnreadOnly, tripChatScope]);
 
   const tripListDisambiguatedLabels = useMemo(() => {
     const byTrip = new Map<string, TripLabelDisambiguationRow>();
@@ -1326,6 +1766,19 @@ export function ChatScreen() {
     setShowScripts(false);
   };
 
+  const handleSlackTabSelect = useCallback(
+    (tab: SlackStreamTabId) => {
+      setActiveTab(tab);
+      if (isMobileDetail) closeDetail();
+    },
+    [isMobileDetail],
+  );
+
+  const handleSlackBottomStories = useCallback(() => {
+    if (isMobileDetail) closeDetail();
+    setShowStoriesSheet(true);
+  }, [isMobileDetail]);
+
   const openConversation = useCallback(
     async (conv: TripConversation) => {
       await useChatStore.getState().hydrateTripMessagesIfNeeded(conv.trip_id, {
@@ -1366,12 +1819,22 @@ export function ChatScreen() {
     const text = messageInput.trim();
     if (!text) return;
     isSendingRef.current = true;
+    const pendingReply = replyContext;
     setMessageInput("");
     setShowEmoji(false);
     setShowScripts(false);
+    clearReply();
     try {
       if (isTripStreamTab(activeTab) && selectedConvId) {
-        await sendMessage(selectedConvId, text);
+        await sendMessage(
+          selectedConvId,
+          text,
+          "text",
+          pendingReply?.messageId ?? null,
+          pendingReply
+            ? { senderName: pendingReply.senderName, content: pendingReply.content, messageType: pendingReply.messageType ?? null }
+            : null,
+        );
         setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
       } else if (activeTab === "network" && selectedNetId) {
         sendNet(selectedNetId, text, "dispatcher");
@@ -1583,7 +2046,12 @@ export function ChatScreen() {
     if (activeTab === "indent") {
       list = list.filter((t) => isAggregateTrip(t) && Boolean(String(t.indent_id ?? "").trim()));
     } else if (activeTab === "trips") {
-      list = list.filter((t) => !isAggregateTrip(t) || !String(t.indent_id ?? "").trim());
+      list = list.filter(
+        (t) =>
+          (!isAggregateTrip(t) || !String(t.indent_id ?? "").trim()) &&
+          Boolean(String(t.driver_id ?? "").trim()) &&
+          manualTripDriverAccepted(t.status),
+      );
     }
     return list;
   }, [filteredComposeTrips, activeTab]);
@@ -1617,13 +2085,103 @@ export function ChatScreen() {
     if (!isDesktop) setIsMobileDetail(true);
   };
 
+  const slackPeopleItems = useMemo((): SlackPeopleItem[] => {
+    if (activeTab === "network") {
+      const items: SlackPeopleItem[] = [];
+      const seen = new Set<string>();
+      for (const chat of sortedNetChats) {
+        if (seen.has(chat.partnerId) || items.length >= 14) continue;
+        seen.add(chat.partnerId);
+        const shortName =
+          chat.partnerName.trim().split(/\s+/)[0] ?? chat.partnerName;
+        items.push({
+          id: chat.partnerId,
+          name: shortName,
+          identity: resolveNetworkPartnerAvatar(chat),
+          unread: chat.unreadCount,
+          online: chat.unreadCount > 0,
+          onPress: () => {
+            setSelectedNetId(chat.id);
+            markNetRead(chat.id);
+            openDetail();
+          },
+        });
+      }
+      for (const partner of netPartners) {
+        if (seen.has(partner.org_id) || items.length >= 14) continue;
+        const shortName = partner.name.trim().split(/\s+/)[0] ?? partner.name;
+        items.push({
+          id: partner.org_id,
+          name: shortName,
+          identity: {
+            displayName: partner.name,
+            entityType: "client",
+          },
+          onPress: () => {
+            const existing = netChats.find((c) => c.partnerId === partner.org_id);
+            if (existing) {
+              setSelectedNetId(existing.id);
+              markNetRead(existing.id);
+              openDetail();
+              return;
+            }
+            void handleNetworkInitiate(partner);
+          },
+        });
+      }
+      return items;
+    }
+
+    const convs = tripStreamForActiveHubTab.slice(0, 20);
+    const items: SlackPeopleItem[] = [];
+    const seen = new Set<string>();
+    for (const conv of convs) {
+      const key = `${conv.party_type}:${conv.party_name ?? conv.id}`;
+      if (seen.has(key) || items.length >= 14) continue;
+      seen.add(key);
+      const composeTrip = hubComposeTrips.find((t) => t.id === conv.trip_id) ?? null;
+      const lastMsgSeed =
+        conv.messages.length > 0
+          ? (conv.messages[conv.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
+          : null;
+      const identity = resolveTripConversationAvatar(
+        conv,
+        composeTrip,
+        tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
+        lastMsgSeed,
+      );
+      const shortName =
+        formatChatPartyName(conv.party_name)?.split(/\s+/)[0] ??
+        partyLabelReadable(conv.party_type);
+      items.push({
+        id: conv.id,
+        name: shortName,
+        identity,
+        unread: conv.unread_dispatcher_count,
+        onPress: () => {
+          void openConversation(conv);
+        },
+      });
+    }
+    return items;
+  }, [
+    activeTab,
+    sortedNetChats,
+    netPartners,
+    netChats,
+    tripStreamForActiveHubTab,
+    hubComposeTrips,
+    tripLinkedOrgBranding,
+    markNetRead,
+    openConversation,
+  ]);
+
   // ── List items ───────────────────────────────────────────────────────────────
 
   const renderConvItem = useCallback(({ item }: { item: TripConversation }) => {
     const active = selectedConvId === item.id;
     const displayTripId =
       tripListDisambiguatedLabels.get(item.trip_id) ?? getConversationTripLabel(item);
-    const partyLine = formatChatPartyName(item.party_name);
     const isActiveTrip = !isTerminalTripStatus(item.trip_status);
     const time = item.last_message_at
       ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
@@ -1637,28 +2195,67 @@ export function ChatScreen() {
     const lastMsgSeed = item.messages.length > 0
       ? (item.messages[item.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
       : null;
-    const laneAvatar = resolveTripConversationAvatar(
-      item,
-      composeTrip,
-      tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
-      lastMsgSeed,
-    );
+    const laneAvatar =
+      activeTab === "trips"
+        ? ({
+            displayName:
+              composeTrip?.driver_display_name?.trim() ||
+              formatChatPartyName(item.party_name) ||
+              "Driver",
+            entityType: "driver",
+          } as ResolvedPartyAvatarIdentity)
+        : resolveTripConversationAvatar(
+            item,
+            composeTrip,
+            tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
+            lastMsgSeed,
+          );
+    const partySubtitle = partyLabelReadable(item.party_type);
+    const latestPreview = latestTripConversationPreview(item, {
+        manualDriverOnly: activeTab === "trips" && item.party_type === "driver",
+      });
+    const latestPreviewText = latestPreview.text || partySubtitle;
+    const mobilePreviewKind =
+      latestPreview.kind === "data" || latestPreview.kind === "html" ? "system" : latestPreview.kind;
+
+    if (isMobileChatUi) {
+      return (
+        <ChatSlackListRow
+          identity={laneAvatar}
+          title={displayTripId}
+          time={time}
+          preview={latestPreviewText}
+          previewKind={mobilePreviewKind}
+          active={active}
+          unread={item.unread_dispatcher_count}
+          onPress={() => void openConversation(item)}
+        />
+      );
+    }
+
+    if (isDesktop) {
+      return (
+        <ChatSlackDesktopSidebarRow
+          identity={laneAvatar}
+          title={displayTripId}
+          time={time}
+          preview={latestPreviewText}
+          previewKind={latestPreview.kind}
+          previewImageUrl={latestPreview.imageUrl}
+          active={active}
+          onPress={() => void openConversation(item)}
+        />
+      );
+    }
+
     return (
       <TouchableOpacity
-        style={[
-          s.chatItem,
-          isNativeMobile && s.chatItemMobile,
-          active && !isNativeMobile && s.chatItemActive,
-          isNativeMobile && active && s.chatItemActiveMobile,
-        ]}
+        style={[s.chatItem, active && s.chatItemActive]}
         onPress={() => void openConversation(item)}
         activeOpacity={0.8}
       >
         <View style={s.chatAvatarWrap}>
-          <ChatPartyAvatar
-            identity={laneAvatar}
-            size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
-          />
+          <ChatPartyAvatar identity={laneAvatar} size={56} />
           {item.unread_dispatcher_count > 0 && !active && (
             <View style={s.chatAvatarUnreadDot} />
           )}
@@ -1666,51 +2263,19 @@ export function ChatScreen() {
         <View style={s.chatBody}>
           <View style={s.chatRow}>
             <View style={s.chatTitleRow}>
-              <Text
-                style={[
-                  s.chatTitle,
-                  isNativeMobile && s.chatTitleMobile,
-                  active && !isNativeMobile && s.chatTitleActive,
-                  isNativeMobile && active && s.chatTitleActiveMobile,
-                ]}
-                numberOfLines={1}
-              >
+              <Text style={[s.chatTitle, active && s.chatTitleActive]} numberOfLines={1}>
                 {displayTripId}
               </Text>
               {isActiveTrip ? <View style={[s.activeTripDot, active && s.activeTripDotActive]} /> : null}
             </View>
-            <Text
-              style={[
-                s.chatTime,
-                isNativeMobile && s.chatTimeMobile,
-                active && !isNativeMobile && s.chatTimeActive,
-                isNativeMobile && active && s.chatTimeActiveMobile,
-              ]}
-            >
-              {time}
-            </Text>
+            <Text style={[s.chatTime, active && s.chatTimeActive]}>{time}</Text>
           </View>
-          <Text
-            style={[
-              s.chatPartyLabel,
-              isNativeMobile && s.chatPartyLabelMobile,
-              active && !isNativeMobile && s.chatPartyLabelActive,
-              isNativeMobile && active && s.chatPartyActiveMobile,
-            ]}
-          >
-            {partyLine ? `${partyLabel(item.party_type)} · ${partyLine}` : partyLabel(item.party_type)}
+          <Text style={[s.chatPartyLabel, active && s.chatPartyLabelActive]}>
+            {partySubtitle}
           </Text>
-          {item.last_message_preview ? (
-            <Text
-              style={[
-                s.chatSub,
-                isNativeMobile && s.chatSubMobile,
-                active && !isNativeMobile && s.chatSubActive,
-                isNativeMobile && active && s.chatSubActiveMobile,
-              ]}
-              numberOfLines={1}
-            >
-              {item.last_message_preview}
+          {latestPreviewText ? (
+            <Text style={[s.chatSub, active && s.chatSubActive]} numberOfLines={1}>
+              {latestPreviewText}
             </Text>
           ) : null}
         </View>
@@ -1722,9 +2287,9 @@ export function ChatScreen() {
   }, [
     selectedConvId,
     openConversation,
+    activeTab,
     isDesktop,
-    isNativeMobile,
-    currentOrgId,
+    isMobileChatUi,
     tripListDisambiguatedLabels,
     hubComposeTrips,
     tripLinkedOrgBranding,
@@ -1733,66 +2298,66 @@ export function ChatScreen() {
   const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
     const partnerAvatar = resolveNetworkPartnerAvatar(item);
     const last = item.messages[item.messages.length - 1];
+    const networkPreview = previewFromNetworkContent(last?.content);
     const active = selectedNetId === item.id;
+    const openNet = () => {
+      setSelectedNetId(item.id);
+      markNetRead(item.id);
+      openDetail();
+    };
+
+    if (isMobileChatUi) {
+      return (
+        <ChatSlackListRow
+          identity={partnerAvatar}
+          title={item.partnerName}
+          time={item.lastActivity}
+          preview={networkPreview.text}
+          previewKind={networkPreview.kind === "data" || networkPreview.kind === "html" ? "system" : networkPreview.kind}
+          active={active}
+          unread={item.unreadCount}
+          onPress={openNet}
+        />
+      );
+    }
+
+    if (isDesktop) {
+      return (
+        <ChatSlackDesktopSidebarRow
+          identity={partnerAvatar}
+          title={item.partnerName}
+          time={item.lastActivity}
+          preview={networkPreview.text}
+          previewKind={networkPreview.kind}
+          previewImageUrl={networkPreview.imageUrl}
+          active={active}
+          onPress={openNet}
+        />
+      );
+    }
+
     return (
       <TouchableOpacity
-        style={[
-          s.chatItem,
-          isNativeMobile && s.chatItemMobile,
-          active && !isNativeMobile && s.chatItemActive,
-          isNativeMobile && active && s.chatItemActiveMobile,
-        ]}
-        onPress={() => {
-          setSelectedNetId(item.id);
-          markNetRead(item.id);
-          openDetail();
-        }}
+        style={[s.chatItem, active && s.chatItemActive]}
+        onPress={openNet}
         activeOpacity={0.8}
       >
-        <ChatPartyAvatar
-          identity={partnerAvatar}
-          size={isNativeMobile ? CHAT_MOBILE.listAvatar : 56}
-        />
+        <ChatPartyAvatar identity={partnerAvatar} size={56} />
         <View style={s.chatBody}>
           <View style={s.chatRow}>
-            <Text
-              style={[
-                s.chatTitle,
-                isNativeMobile && s.chatTitleMobile,
-                active && !isNativeMobile && s.chatTitleActive,
-                isNativeMobile && active && s.chatTitleActiveMobile,
-              ]}
-              numberOfLines={1}
-            >
+            <Text style={[s.chatTitle, active && s.chatTitleActive]} numberOfLines={1}>
               {item.partnerName}
             </Text>
-            <Text
-              style={[
-                s.chatTime,
-                isNativeMobile && s.chatTimeMobile,
-                active && !isNativeMobile && s.chatTimeActive,
-                isNativeMobile && active && s.chatTimeActiveMobile,
-              ]}
-            >
-              {item.lastActivity}
-            </Text>
+            <Text style={[s.chatTime, active && s.chatTimeActive]}>{item.lastActivity}</Text>
           </View>
-          <Text
-            style={[
-              s.chatSub,
-              isNativeMobile && s.chatSubMobile,
-              active && !isNativeMobile && s.chatSubActive,
-              isNativeMobile && active && s.chatSubActiveMobile,
-            ]}
-            numberOfLines={1}
-          >
+          <Text style={[s.chatSub, active && s.chatSubActive]} numberOfLines={1}>
             {last?.content ?? ""}
           </Text>
         </View>
         {item.unreadCount > 0 && !active && <Badge count={item.unreadCount} />}
       </TouchableOpacity>
     );
-  }, [selectedNetId, markNetRead, openDetail, isNativeMobile]);
+  }, [selectedNetId, markNetRead, openDetail, isMobileChatUi, isDesktop]);
 
   // ── Panels ───────────────────────────────────────────────────────────────────
 
@@ -1815,165 +2380,186 @@ export function ChatScreen() {
       { id: "network", label: "NETWORK DM", lateCount: 0, unread: netUnread, Icon: Users },
     ];
 
+    const slackListTitle =
+      activeTab === "network" ? "DMs" : activeTab === "indent" ? "Integrated" : "Trips";
+    const slackListBottomPad = CHAT_SLACK_BOTTOM_NAV_BAR + 16;
+    const slackFabOnPress = () => {
+      if (activeTab === "network") {
+        setShowNetCompose(true);
+        return;
+      }
+      void openCompose();
+    };
+
     return (
-      <View style={[s.listPanel, isNativeMobile && s.listPanelMobile]}>
-        <View style={[s.listHeader, isNativeMobile && s.listHeaderMobile]}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-            <TouchableOpacity
-              onPress={() =>
+      <View style={[s.listPanel, isMobileChatUi && s.listPanelMobile]}>
+        {isMobileChatUi ? (
+          <>
+            <ChatSlackListHeader
+              streamLabel={slackListTitle}
+              orgName={currentOrganization?.name ?? undefined}
+              topInset={insets.top}
+              onBack={() =>
                 router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
               }
-              hitSlop={10}
-              style={s.backBtn}
-            >
-              <ArrowLeft size={18} color="#fff" />
-            </TouchableOpacity>
-            <Text style={s.brandTitle} numberOfLines={1}>
-              pulse chat
-              <Text style={s.brandDot}>.</Text>
-            </Text>
-          </View>
-          {!isDesktop && isTripStreamTab(activeTab) ? (
-            <TouchableOpacity
-              onPress={() => {
-                if (hubSearchOpen) {
-                  setHubSearchOpen(false);
-                  setTripSidebarSearch("");
-                } else {
-                  setHubSearchOpen(true);
-                }
-              }}
-              hitSlop={10}
-              style={[
-                s.headerSearchBtn,
-                (hubSearchOpen || tripSidebarSearch.length > 0) && s.headerSearchBtnActive,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={hubSearchOpen ? "Close search" : "Search trips"}
-            >
-              {hubSearchOpen ? (
-                <X size={16} color="#fff" />
-              ) : (
-                <Search size={16} color="#94a3b8" />
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View />
-          )}
-        </View>
-
-        <View style={s.tabRow}>
-          {TABS.map((t) => {
-            const active = activeTab === t.id;
-            return (
-              <TouchableOpacity
-                key={t.id}
-                style={[s.tabPill, active && s.tabPillActive]}
-                onPress={() => setActiveTab(t.id)}
-                activeOpacity={0.75}
-              >
-                <t.Icon size={12} color={active ? "#ffffff" : CHAT_ICON_MUTED} strokeWidth={active ? 2.25 : 2} />
-                <View style={s.tabPillLabelWrap}>
-                  <Text
-                    style={[s.tabPillLabel, active && s.tabPillLabelActive]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {t.lateCount > 0 ? `${t.label} (${t.lateCount})` : t.label}
-                  </Text>
-                </View>
-                {t.unread > 0 && (
-                  <View style={[s.tabUnreadBadge, active && s.tabUnreadBadgeActive]}>
-                    <Text style={[s.tabUnreadText, active && s.tabUnreadTextActive]}>
-                      {t.unread > 9 ? "9+" : String(t.unread)}
-                    </Text>
+              onCompose={slackFabOnPress}
+              profileName={profile?.full_name ?? profile?.displayName ?? undefined}
+              profileAvatarUrl={profile?.avatar_url}
+              profileAvatarSeed={profile?.avatar_seed}
+              profileOrgLogoUrl={currentOrganization?.logo_url}
+            />
+            <ChatSlackInboxToolbar
+              peopleItems={slackPeopleItems}
+              selectedPeopleId={
+                activeTab === "network"
+                  ? (selectedNet?.partnerId ?? null)
+                  : (selectedConvId ?? null)
+              }
+              peopleSectionLabel={
+                activeTab === "network"
+                  ? "Partners"
+                  : activeTab === "indent"
+                    ? "Integrated"
+                    : "On trip"
+              }
+              networkStoryStrip={
+                activeTab === "network" ? (
+                  <View style={s.chatStoryInlineWrap}>
+                    <StoryReel
+                      posts={integratedNetworkStories}
+                      orgId={currentOrgId || undefined}
+                      orgName={currentOrganization?.name ?? undefined}
+                      onCreatePost={() => router.push("/(modals)/create-post")}
+                    />
+                    {storiesLoading && integratedNetworkStories.length === 0 ? (
+                      <View style={s.chatStoryLoadingRow}>
+                        <LoadingIndicator size="small" color={CHAT_ACCENT} />
+                        <Text style={s.chatStoryLoadingText}>Syncing stories…</Text>
+                      </View>
+                    ) : null}
                   </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {isTripStreamTab(activeTab) &&
-          (isDesktop ? (
-            <View style={s.tripSearchScopeStrip}>
-              <View style={s.tripSearchScopeSearchWrap}>
-                <Search size={12} color="#94a3b8" style={{ marginRight: 5 }} />
-                <TextInput
-                  style={s.sidebarSearchInput}
-                  value={tripSidebarSearch}
-                  onChangeText={setTripSidebarSearch}
-                  placeholder="Search trip, route…"
-                  placeholderTextColor="#94a3b8"
-                  autoCapitalize="none"
-                />
-                {tripSidebarSearch.length > 0 && (
-                  <TouchableOpacity onPress={() => setTripSidebarSearch("")} hitSlop={8}>
-                    <X size={12} color="#94a3b8" />
-                  </TouchableOpacity>
-                )}
-              </View>
-              <View style={s.tripSearchScopeSegment}>
+                ) : undefined
+              }
+              onCompose={slackFabOnPress}
+              filterChips={slackFilterChips}
+              showSearch={isTripStreamTab(activeTab) || activeTab === "network"}
+              searchValue={isTripStreamTab(activeTab) ? tripSidebarSearch : netSidebarSearch}
+              onSearchChange={
+                isTripStreamTab(activeTab) ? setTripSidebarSearch : setNetSidebarSearch
+              }
+              onSearchClear={() => {
+                if (isTripStreamTab(activeTab)) setTripSidebarSearch("");
+                else setNetSidebarSearch("");
+              }}
+              searchPlaceholder={
+                isTripStreamTab(activeTab)
+                  ? "Search trips, routes…"
+                  : "Search direct messages…"
+              }
+              searchInputRef={
+                isTripStreamTab(activeTab) ? tripSearchInputRef : netSearchInputRef
+              }
+            />
+          </>
+        ) : isDesktop ? (
+          <ChatSlackDesktopSidebarChrome
+            workspaceName={currentOrganization?.name ?? "Pulse Chat"}
+            searchValue={activeTab === "network" ? netSidebarSearch : tripSidebarSearch}
+            onSearchChange={activeTab === "network" ? setNetSidebarSearch : setTripSidebarSearch}
+            onClearSearch={() => {
+              if (activeTab === "network") setNetSidebarSearch("");
+              else setTripSidebarSearch("");
+            }}
+            onCompose={() => {
+              if (activeTab === "network") setShowNetCompose(true);
+              else void openCompose();
+            }}
+            onClose={() =>
+              router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
+            }
+          />
+        ) : (
+          <>
+            <View style={[s.listHeader, isMobileChatUi && s.listHeaderMobile]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
                 <TouchableOpacity
-                  style={[
-                    s.tripChatScopePillStrip,
-                    tripChatScope === "active" && s.tripChatScopePillOn,
-                  ]}
-                  onPress={() => setTripChatScope("active")}
-                  activeOpacity={0.82}
+                  onPress={() =>
+                    router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
+                  }
+                  hitSlop={10}
+                  style={s.backBtn}
                 >
-                  <Text
-                    style={[
-                      s.tripChatScopePillTextStrip,
-                      tripChatScope === "active" && s.tripChatScopePillTextOn,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    Active
-                  </Text>
+                  <ArrowLeft size={18} color="#fff" />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    s.tripChatScopePillStrip,
-                    tripChatScope === "history" && s.tripChatScopePillOn,
-                  ]}
-                  onPress={() => setTripChatScope("history")}
-                  activeOpacity={0.82}
-                >
-                  <Text
-                    style={[
-                      s.tripChatScopePillTextStrip,
-                      tripChatScope === "history" && s.tripChatScopePillTextOn,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    History
-                  </Text>
-                </TouchableOpacity>
-                {Platform.OS === "web" ? (
-                  <TouchableOpacity
-                    style={[
-                      s.tripChatScopePillStrip,
-                      webCommandPriorityFilter && s.tripChatScopePillOn,
-                      { marginLeft: 8 },
-                    ]}
-                    onPress={() => setWebCommandPriorityFilter((v) => !v)}
-                    activeOpacity={0.82}
-                  >
-                    <Text
-                      style={[
-                        s.tripChatScopePillTextStrip,
-                        webCommandPriorityFilter && s.tripChatScopePillTextOn,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      Priority
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
+                <Text style={s.brandTitle} numberOfLines={1}>
+                  pulse chat
+                  <Text style={s.brandDot}>.</Text>
+                </Text>
               </View>
+              {!isDesktop && isTripStreamTab(activeTab) ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (hubSearchOpen) {
+                      setHubSearchOpen(false);
+                      setTripSidebarSearch("");
+                    } else {
+                      setHubSearchOpen(true);
+                    }
+                  }}
+                  hitSlop={10}
+                  style={[
+                    s.headerSearchBtn,
+                    (hubSearchOpen || tripSidebarSearch.length > 0) && s.headerSearchBtnActive,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={hubSearchOpen ? "Close search" : "Search trips"}
+                >
+                  {hubSearchOpen ? (
+                    <X size={16} color="#fff" />
+                  ) : (
+                    <Search size={16} color="#94a3b8" />
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View />
+              )}
             </View>
-          ) : (
+
+            <View style={s.tabRow}>
+              {TABS.map((t) => {
+                const active = activeTab === t.id;
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[s.tabPill, active && s.tabPillActive]}
+                    onPress={() => setActiveTab(t.id)}
+                    activeOpacity={0.75}
+                  >
+                    <t.Icon size={12} color={active ? "#ffffff" : CHAT_ICON_MUTED} strokeWidth={active ? 2.25 : 2} />
+                    <View style={s.tabPillLabelWrap}>
+                      <Text
+                        style={[s.tabPillLabel, active && s.tabPillLabelActive]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {t.lateCount > 0 ? `${t.label} (${t.lateCount})` : t.label}
+                      </Text>
+                    </View>
+                    {t.unread > 0 && (
+                      <View style={[s.tabUnreadBadge, active && s.tabUnreadBadgeActive]}>
+                        <Text style={[s.tabUnreadText, active && s.tabUnreadTextActive]}>
+                          {t.unread > 9 ? "9+" : String(t.unread)}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {isTripStreamTab(activeTab) && !isMobileChatUi && !isDesktop ? (
             <View style={s.tripSearchScopeBlock}>
               {hubSearchOpen ? (
                 <View style={[chatFilterChromeStyles.searchWrap, s.tripSearchScopeSearchMobile]}>
@@ -2035,7 +2621,7 @@ export function ChatScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
+        ) : null}
 
         {isTripStreamTab(activeTab) && isWebAnchoredPanels && showCompose && (
           <View style={[s.composePopoverLayer, pe("box-none")]}>
@@ -2102,6 +2688,136 @@ export function ChatScreen() {
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <LoadingIndicator color={CHAT_ACCENT} />
             </View>
+          ) : isMobileChatUi ? (
+            <FlatList
+              style={slackSt.listScroll}
+              data={slackFilteredTripConversations}
+              keyExtractor={(i) => i.id}
+              renderItem={renderConvItem}
+              {...SLACK_CHAT_LIST_PROPS}
+              ListEmptyComponent={
+                <EmptyList
+                  label={
+                    tripChatScope === "history"
+                      ? activeTab === "indent"
+                        ? "No integrated trips in history"
+                        : "No manual trips in history"
+                      : activeTab === "indent"
+                        ? "No active integrated trip conversations"
+                        : "No active manual trip conversations"
+                  }
+                  actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
+                  onAction={tripChatScope === "active" ? openCompose : undefined}
+                />
+              }
+              ItemSeparatorComponent={isMobileChatUi ? ChatSlackListSeparator : undefined}
+              contentContainerStyle={{
+                paddingBottom: isMobileChatUi ? slackListBottomPad : 12,
+              }}
+              scrollEventThrottle={16}
+              onScroll={onTripStreamListScroll}
+            />
+          ) : isDesktop ? (
+            <ScrollView
+              style={deskSt.listScroll}
+              contentContainerStyle={deskSt.sidebarCategoriesContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={onTripStreamListScroll}
+            >
+              <View style={deskSt.sidebarCategoryWrap}>
+                <TouchableOpacity
+                  style={deskSt.sidebarCategoryHeader}
+                  onPress={() => setDesktopActiveCollapsed((v) => !v)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={deskSt.sidebarCategoryTitle}>Active conversations</Text>
+                  <View style={deskSt.sidebarCategoryHeaderRight}>
+                    <Text style={deskSt.sidebarCategoryCount}>
+                      {desktopActiveTripConversations.length}
+                    </Text>
+                    {desktopActiveCollapsed ? (
+                      <ChevronRight size={14} color="#9CA3AF" />
+                    ) : (
+                      <ChevronDown size={14} color="#9CA3AF" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                {!desktopActiveCollapsed ? (
+                  <>
+                    {(desktopActiveShowAll
+                      ? desktopActiveTripConversations
+                      : desktopActiveTripConversations.slice(0, 5)
+                    ).map((conv) => (
+                      <View key={conv.id}>{renderConvItem({ item: conv })}</View>
+                    ))}
+                    {desktopActiveTripConversations.length > 5 ? (
+                      <TouchableOpacity
+                        style={deskSt.sidebarCategoryMoreBtn}
+                        onPress={() => setDesktopActiveShowAll((v) => !v)}
+                        activeOpacity={0.82}
+                      >
+                        <Text style={deskSt.sidebarCategoryMoreText}>
+                          {desktopActiveShowAll ? "Collapse" : "View more"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {desktopActiveTripConversations.length === 0 ? (
+                      <Text style={deskSt.sidebarCategoryEmptyText}>
+                        No active conversations
+                      </Text>
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+
+              <View style={deskSt.sidebarCategoryWrap}>
+                <TouchableOpacity
+                  style={deskSt.sidebarCategoryHeader}
+                  onPress={() => setDesktopHistoryCollapsed((v) => !v)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={deskSt.sidebarCategoryTitle}>History</Text>
+                  <View style={deskSt.sidebarCategoryHeaderRight}>
+                    <Text style={deskSt.sidebarCategoryCount}>
+                      {desktopHistoryTripConversations.length}
+                    </Text>
+                    {desktopHistoryCollapsed ? (
+                      <ChevronRight size={14} color="#9CA3AF" />
+                    ) : (
+                      <ChevronDown size={14} color="#9CA3AF" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                {!desktopHistoryCollapsed ? (
+                  <>
+                    {(desktopHistoryShowAll
+                      ? desktopHistoryTripConversations
+                      : desktopHistoryTripConversations.slice(0, 5)
+                    ).map((conv) => (
+                      <View key={conv.id}>{renderConvItem({ item: conv })}</View>
+                    ))}
+                    {desktopHistoryTripConversations.length > 5 ? (
+                      <TouchableOpacity
+                        style={deskSt.sidebarCategoryMoreBtn}
+                        onPress={() => setDesktopHistoryShowAll((v) => !v)}
+                        activeOpacity={0.82}
+                      >
+                        <Text style={deskSt.sidebarCategoryMoreText}>
+                          {desktopHistoryShowAll ? "Collapse" : "View more"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {desktopHistoryTripConversations.length === 0 ? (
+                      <Text style={deskSt.sidebarCategoryEmptyText}>
+                        No conversations in history
+                      </Text>
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+            </ScrollView>
           ) : useGroupedTripHub ? (
             <ScrollView
               style={{ flex: 1, minHeight: 0 }}
@@ -2382,11 +3098,72 @@ export function ChatScreen() {
             <View style={{ paddingTop: 40, alignItems: "center" }}>
               <LoadingIndicator color={CHAT_ACCENT} />
             </View>
+          ) : isDesktop ? (
+            <ScrollView
+              style={deskSt.listScroll}
+              contentContainerStyle={deskSt.sidebarCategoriesContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={deskSt.sidebarCategoryWrap}>
+                <TouchableOpacity
+                  style={deskSt.sidebarCategoryHeader}
+                  onPress={() => setDesktopDmCollapsed((v) => !v)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={deskSt.sidebarCategoryTitle}>Direct messages</Text>
+                  <View style={deskSt.sidebarCategoryHeaderRight}>
+                    <Text style={deskSt.sidebarCategoryCount}>
+                      {slackFilteredNetChats.length}
+                    </Text>
+                    {desktopDmCollapsed ? (
+                      <ChevronRight size={14} color="#9CA3AF" />
+                    ) : (
+                      <ChevronDown size={14} color="#9CA3AF" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                {!desktopDmCollapsed ? (
+                  <>
+                    {(desktopDmShowAll
+                      ? slackFilteredNetChats
+                      : slackFilteredNetChats.slice(0, 8)
+                    ).map((chat) => (
+                      <View key={chat.id}>{renderNetItem({ item: chat })}</View>
+                    ))}
+                    {slackFilteredNetChats.length > 8 ? (
+                      <TouchableOpacity
+                        style={deskSt.sidebarCategoryMoreBtn}
+                        onPress={() => setDesktopDmShowAll((v) => !v)}
+                        activeOpacity={0.82}
+                      >
+                        <Text style={deskSt.sidebarCategoryMoreText}>
+                          {desktopDmShowAll ? "Collapse" : "View more"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {slackFilteredNetChats.length === 0 ? (
+                      <Text style={deskSt.sidebarCategoryEmptyText}>
+                        No direct messages found
+                      </Text>
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+            </ScrollView>
           ) : (
             <FlatList
-              data={sortedNetChats}
+              style={isMobileChatUi ? slackSt.listScroll : isDesktop ? deskSt.listScroll : undefined}
+              data={isMobileChatUi ? slackFilteredNetChats : sortedNetChats}
               keyExtractor={(i) => i.id}
               renderItem={renderNetItem}
+              {...(isMobileChatUi ? SLACK_CHAT_LIST_PROPS : isDesktop ? {
+                initialNumToRender: 18,
+                maxToRenderPerBatch: 10,
+                windowSize: 7,
+                keyboardShouldPersistTaps: "handled" as const,
+                showsVerticalScrollIndicator: false,
+              } : {})}
               ListEmptyComponent={
                 <EmptyList
                   label="No network conversations"
@@ -2394,9 +3171,37 @@ export function ChatScreen() {
                   onAction={netPartners.length > 0 ? () => setShowNetCompose(true) : undefined}
                 />
               }
-              contentContainerStyle={{ padding: 10, paddingBottom: 24, gap: 4 }}
+              ItemSeparatorComponent={isMobileChatUi ? ChatSlackListSeparator : undefined}
+              contentContainerStyle={
+                isMobileChatUi
+                  ? { paddingBottom: slackListBottomPad }
+                  : { padding: 10, paddingBottom: 24, gap: 4 }
+              }
             />
           ))}
+
+        {isDesktop ? (
+          <View style={deskSt.sidebarBottomTabsWrap}>
+            <ChatSlackMirrorToggle
+              variant="bottomNav"
+              style={deskSt.sidebarBottomMirrorToggle}
+              activeId={activeTab as SlackStreamTabId}
+              onSelect={(id) => setActiveTab(id as TabId)}
+              items={SLACK_STREAM_TABS.map((tab) => ({
+                id: tab.id,
+                label: tab.shortLabel,
+                Icon: tab.Icon,
+                badge:
+                  tab.id === "network"
+                    ? netUnread
+                    : tab.id === "trips"
+                      ? tripsChatUnread
+                      : indentChatUnread,
+              }))}
+            />
+          </View>
+        ) : null}
+
       </View>
     );
   }
@@ -2412,30 +3217,30 @@ export function ChatScreen() {
         onRequestClose={() => setShowNetCompose(false)}
       >
         <View style={cm.backdrop}>
-          <View style={cm.sheet}>
-            <View style={cm.header}>
+          <View style={[cm.sheet, cm.netSheet]}>
+            <View style={[cm.header, cm.netHeader]}>
               <View>
-                <Text style={cm.title}>Message a Partner</Text>
-                <Text style={cm.subtitle}>Select a connected organization to start a conversation.</Text>
+                <Text style={cm.netTitle}>Message a Partner</Text>
+                <Text style={cm.netSubtitle}>Select a connected organization to start a conversation.</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowNetCompose(false)} hitSlop={8} style={cm.closeBtn}>
-                <X size={20} color="#94a3b8" />
+              <TouchableOpacity onPress={() => setShowNetCompose(false)} hitSlop={8} style={cm.netCloseBtn}>
+                <X size={18} color="#8EA0C2" />
               </TouchableOpacity>
             </View>
 
-            <View style={cm.searchRow}>
-              <Search size={15} color="#94a3b8" style={{ marginRight: 8 }} />
+            <View style={cm.netSearchRow}>
+              <Search size={15} color="#8EA0C2" style={{ marginRight: 8 }} />
               <TextInput
-                style={cm.searchInput}
+                style={cm.netSearchInput}
                 value={netComposeSearch}
                 onChangeText={setNetComposeSearch}
                 placeholder="Search partners…"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#8EA0C2"
                 autoFocus
               />
               {netComposeSearch.length > 0 && (
                 <TouchableOpacity onPress={() => setNetComposeSearch("")} hitSlop={8}>
-                  <X size={14} color="#94a3b8" />
+                  <X size={14} color="#8EA0C2" />
                 </TouchableOpacity>
               )}
             </View>
@@ -2445,7 +3250,7 @@ export function ChatScreen() {
               {filteredNetPartners.filter((p) => existingPartnerOrgIds.has(p.org_id)).map((p) => (
                 <TouchableOpacity
                   key={p.org_id}
-                  style={[cm.tripCard, { marginBottom: 8 }]}
+                  style={cm.netPartnerRow}
                   onPress={() => {
                     const conv = netChats.find((c) => c.partnerId === p.org_id);
                     if (conv) {
@@ -2456,14 +3261,17 @@ export function ChatScreen() {
                   }}
                   activeOpacity={0.75}
                 >
-                  <View style={[cm.tripRow, { justifyContent: "space-between" }]}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                      <View style={cm.partyIconWrap}>
-                        <Users size={14} color={CHAT_ACCENT} />
+                  <View style={cm.netPartnerRowMain}>
+                    <View style={cm.netPartnerIdentityWrap}>
+                      <View style={cm.netPartnerAvatarWrap}>
+                        <ChatPartyAvatar
+                          identity={{ displayName: p.name, entityType: "supplier" }}
+                          size={30}
+                        />
                       </View>
-                      <Text style={cm.tripNumber}>{p.name}</Text>
+                      <Text style={cm.netPartnerName} numberOfLines={1}>{p.name}</Text>
                     </View>
-                    <Text style={{ fontSize: 10, color: "#94a3b8", fontWeight: "600" }}>OPEN CHAT →</Text>
+                    <Text style={cm.netPartnerAction} numberOfLines={1}>Open chat</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -2472,29 +3280,32 @@ export function ChatScreen() {
               {newPartners.length > 0 && (
                 <>
                   {filteredNetPartners.filter((p) => existingPartnerOrgIds.has(p.org_id)).length > 0 && (
-                    <Text style={{ fontSize: 9, fontWeight: "800", color: "#94a3b8", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
+                    <Text style={cm.netSectionLabel}>
                       NEW CONVERSATION
                     </Text>
                   )}
                   {newPartners.map((p) => (
                     <TouchableOpacity
                       key={p.org_id}
-                      style={[cm.tripCard, { marginBottom: 8 }]}
+                      style={cm.netPartnerRow}
                       onPress={() => handleNetworkInitiate(p)}
                       disabled={initiating}
                       activeOpacity={0.75}
                     >
-                      <View style={[cm.tripRow, { justifyContent: "space-between" }]}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                          <View style={cm.partyIconWrap}>
-                            <Users size={14} color={CHAT_ACCENT} />
+                      <View style={cm.netPartnerRowMain}>
+                        <View style={cm.netPartnerIdentityWrap}>
+                          <View style={cm.netPartnerAvatarWrap}>
+                            <ChatPartyAvatar
+                              identity={{ displayName: p.name, entityType: "supplier" }}
+                              size={30}
+                            />
                           </View>
-                          <Text style={cm.tripNumber}>{p.name}</Text>
+                          <Text style={cm.netPartnerName} numberOfLines={1}>{p.name}</Text>
                         </View>
                         {initiating ? (
                           <LoadingIndicator size="small" color={CHAT_ACCENT} />
                         ) : (
-                          <Plus size={14} color={CHAT_ACCENT} />
+                          <Plus size={15} color={CHAT_ACCENT} />
                         )}
                       </View>
                     </TouchableOpacity>
@@ -2503,13 +3314,13 @@ export function ChatScreen() {
               )}
 
               {filteredNetPartners.length === 0 && (
-                <View style={{ paddingTop: 32, alignItems: "center", gap: 8 }}>
+                <View style={cm.netEmptyWrap}>
                   <Users size={28} color="#e2e8f0" />
-                  <Text style={{ fontSize: 13, color: "#94a3b8" }}>
+                  <Text style={cm.netEmptyTitle}>
                     {netComposeSearch ? "No matching partners" : "No connected partners found"}
                   </Text>
                   {!netComposeSearch && (
-                    <Text style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", paddingHorizontal: 20, lineHeight: 18 }}>
+                    <Text style={cm.netEmptySubtitle}>
                       Connect with suppliers or clients on the platform to message them here.
                     </Text>
                   )}
@@ -2569,6 +3380,51 @@ export function ChatScreen() {
             >
               <Text style={s.filterResetText}>Reset to all parties</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  function StoriesModal() {
+    if (!isMobileChatUi) return null;
+    return (
+      <Modal
+        visible={showStoriesSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowStoriesSheet(false)}
+      >
+        <View style={cm.backdrop}>
+          <View style={cm.sheet}>
+            <View style={cm.header}>
+              <View>
+                <Text style={cm.title}>Stories</Text>
+                <Text style={cm.subtitle}>Integrated network updates</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowStoriesSheet(false)} hitSlop={8} style={cm.closeBtn}>
+                <X size={20} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+            {storiesLoading && integratedNetworkStories.length === 0 ? (
+              <View style={s.chatStoriesModalLoading}>
+                <LoadingIndicator color={CHAT_ACCENT} />
+                <Text style={s.chatStoriesModalLoadingText}>Syncing stories…</Text>
+              </View>
+            ) : integratedNetworkStories.length === 0 ? (
+              <View style={s.chatStoriesModalLoading}>
+                <Text style={s.chatStoriesModalLoadingText}>
+                  No active stories from integrated network yet.
+                </Text>
+              </View>
+            ) : (
+              <StoryReel
+                posts={integratedNetworkStories}
+                orgId={currentOrgId || undefined}
+                orgName={currentOrganization?.name ?? undefined}
+                onCreatePost={() => router.push("/(modals)/create-post")}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -2656,7 +3512,10 @@ export function ChatScreen() {
                 trip_number: trip["trip_number"] ?? null,
               });
 
-              const partyRows = getComposePartyRows(trip);
+              const partyRows = getComposePartyRows(trip).filter((row) => {
+                if (activeTab !== "trips") return true;
+                return row.kind === "selectable" ? row.partyType === "driver" : false;
+              });
               const selectablePartyCount = partyRows.filter((row) => row.kind === "selectable").length;
 
               return (
@@ -2791,6 +3650,9 @@ export function ChatScreen() {
         onDispute={handleDispute}
         onSelectConversation={setSelectedConvId}
         onOpenCompose={openCompose}
+        replyContext={replyContext}
+        onCancelReply={clearReply}
+        onSetReply={setReplyContext}
       />
     ) : (
       <NetworkDetailPanel
@@ -2834,24 +3696,19 @@ export function ChatScreen() {
 
   if (isDesktop) {
     return (
-      <LinearGradient
-        colors={["#FFFFFF", "#F9F9F9", "#F5F8FA"]}
-        locations={[0, 0.5, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[s.root, { paddingTop: insets.top }]}
-      >
-        <View style={s.desktop}>
-          <View style={s.desktopList}>
+      <View style={[deskSt.root, s.root, { paddingTop: insets.top }]}>
+        <View style={deskSt.shell}>
+          <View style={deskSt.sidebar}>
             {ChatList()}
           </View>
-          <Animated.View style={[s.desktopDetail, s.detailTransitionShell, detailEnterStyle]}>
+          <View style={deskSt.main}>
             {detailPanel}
-          </Animated.View>
+          </View>
         </View>
         <ComposeModal />
         <NetworkComposeModal />
         <TripFilterModal />
+        <StoriesModal />
         <DocumentShareSheet
           visible={showDocShare}
           vehicleId={selectedConv?.trip_id ? null : null}
@@ -2865,9 +3722,60 @@ export function ChatScreen() {
           </View>
         ) : null}
         {tripFeedbackOverlay}
-      </LinearGradient>
+      </View>
     );
   }
+
+  const mobileShell = isMobileChatUi ? (
+    <View
+      style={[
+        s.root,
+        s.mobileSlackRoot,
+        {
+          paddingTop: !isMobileDetail ? 0 : insets.top,
+          paddingBottom: isMobileDetail ? 0 : 0,
+        },
+      ]}
+    >
+      <View style={s.mobileRootFill}>
+        {!isMobileDetail ? (
+          ChatList()
+        ) : (
+          <Animated.View
+            style={[s.detailTransitionShell, detailEnterStyle]}
+            collapsable={false}
+          >
+            {detailPanel}
+          </Animated.View>
+        )}
+      </View>
+      <ChatSlackBottomNav
+        activeTab={activeTab as SlackStreamTabId}
+        unreadByTab={{
+          network: netUnread,
+          trips: tripsChatUnread,
+          indent: indentChatUnread,
+        }}
+        onSelect={handleSlackTabSelect}
+        bottomInset={insets.bottom}
+        onOpenStories={handleSlackBottomStories}
+      />
+      <ComposeModal />
+      <NetworkComposeModal />
+      <TripFilterModal />
+      <StoriesModal />
+      <DocumentShareSheet
+        visible={showDocShare}
+        vehicleId={null}
+        driverId={null}
+        onClose={() => setShowDocShare(false)}
+        onShare={handleDocShare}
+      />
+      {tripFeedbackOverlay}
+    </View>
+  ) : null;
+
+  if (mobileShell) return mobileShell;
 
   return (
     <LinearGradient
@@ -2879,7 +3787,7 @@ export function ChatScreen() {
         s.root,
         {
           paddingTop: insets.top,
-          paddingBottom: isMobileDetail ? 0 : insets.bottom,
+          paddingBottom: insets.bottom,
         },
       ]}
     >
@@ -2898,6 +3806,7 @@ export function ChatScreen() {
       <ComposeModal />
       <NetworkComposeModal />
       <TripFilterModal />
+      <StoriesModal />
       <DocumentShareSheet
         visible={showDocShare}
         vehicleId={null}
@@ -2943,7 +3852,18 @@ function EmptyList({
   );
 }
 
-function EmptyDetail() {
+function EmptyDetail({ isDesktop = false }: { isDesktop?: boolean }) {
+  if (isDesktop) {
+    return (
+      <View style={deskSt.emptyWrap}>
+        <MessageSquare size={28} color={SLACK_DESKTOP.textTertiary} strokeWidth={1.5} />
+        <Text style={deskSt.emptyTitle}>Select a conversation</Text>
+        <Text style={deskSt.emptySub}>
+          Pick a trip or direct message from the sidebar to start messaging.
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14 }}>
       <View
@@ -2980,6 +3900,10 @@ function EmptyDetail() {
 
 const s = StyleSheet.create({
   root: { flex: 1 },
+  mobileSlackRoot: {
+    backgroundColor: "#FFFFFF",
+    flexDirection: "column",
+  },
   /** Web flex + RN web: keep list/detail from growing past viewport. */
   mobileRootFill: { flex: 1, minHeight: 0, width: "100%" },
   desktop: { flex: 1, flexDirection: "row" },
@@ -3809,7 +4733,10 @@ const s = StyleSheet.create({
     borderBottomColor: "#E9EDEF",
   },
   listPanelMobile: {
+    flex: 1,
+    minHeight: 0,
     backgroundColor: "#FFFFFF",
+    position: "relative",
   },
   chatTitleMobile: {
     fontSize: CHAT_MOBILE.listTitleSize,
@@ -4405,6 +5332,33 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   filterResetText: { color: "#334155", fontSize: 14, fontWeight: "700" },
+  chatStoryInlineWrap: {
+    paddingVertical: 2,
+  },
+  chatStoryLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  chatStoryLoadingText: {
+    fontSize: 11,
+    color: CHAT_TEXT_SECONDARY,
+    fontWeight: "500",
+  },
+  chatStoriesModalLoading: {
+    paddingVertical: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  chatStoriesModalLoadingText: {
+    fontSize: 12,
+    color: CHAT_TEXT_SECONDARY,
+    fontWeight: "500",
+    textAlign: "center",
+  },
   tripFilterPopoverLayer: {
     position: "absolute",
     top: 0,
@@ -4526,6 +5480,125 @@ const cm = StyleSheet.create({
   },
   subtitle: { fontSize: 13, color: "#94a3b8", marginTop: 3 },
   closeBtn: { padding: 4 },
+  netSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 18,
+    paddingHorizontal: 14,
+    paddingBottom: 18,
+    maxHeight: "78%",
+  },
+  netHeader: {
+    marginBottom: 12,
+    paddingHorizontal: 2,
+  },
+  netTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: SLACK_DESKTOP.textPrimary,
+    letterSpacing: -0.2,
+  },
+  netSubtitle: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: SLACK_DESKTOP.textTertiary,
+    marginTop: 2,
+  },
+  netCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  netSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: SLACK_DESKTOP.searchBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    paddingHorizontal: 12,
+    minHeight: 38,
+    marginBottom: 10,
+  },
+  netSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    lineHeight: 18,
+    color: SLACK_DESKTOP.textPrimary,
+    paddingVertical: 8,
+  },
+  netSectionLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#94a3b8",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginTop: 8,
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  netPartnerRow: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E8E8E8",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  netPartnerRowMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  netPartnerIdentityWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  netPartnerAvatarWrap: {
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  netPartnerName: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: "600",
+    color: SLACK_DESKTOP.textPrimary,
+  },
+  netPartnerAction: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "700",
+    letterSpacing: 0.25,
+    textTransform: "uppercase",
+  },
+  netEmptyWrap: {
+    paddingTop: 28,
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+  },
+  netEmptyTitle: {
+    fontSize: 13,
+    color: "#94a3b8",
+    fontWeight: "500",
+  },
+  netEmptySubtitle: {
+    fontSize: 12,
+    color: "#94a3b8",
+    textAlign: "center",
+    paddingHorizontal: 20,
+    lineHeight: 18,
+  },
 
   searchRow: {
     flexDirection: "row",
@@ -4645,19 +5718,28 @@ function ChatConversationLayout({
   header,
   messages,
   inputBar,
+  reserveBottomNav = false,
 }: {
   isDesktop: boolean;
   header: React.ReactNode;
   messages: React.ReactNode;
   inputBar: React.ReactNode;
+  /** Room for Slack-style bottom tab bar above the composer. */
+  reserveBottomNav?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const nativeMobile = isChatNativeMobile(isDesktop);
   const mobileWeb = Platform.OS === "web" && !isDesktop;
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  const slackNavPad =
+    reserveBottomNav && !keyboardVisible
+      ? CHAT_SLACK_BOTTOM_NAV_BAR + insets.bottom
+      : 0;
   const dockBottomPad = isDesktop
     ? 10
-    : dockPaddingBottom(insets.bottom, keyboardVisible);
+    : slackNavPad > 0
+      ? slackNavPad
+      : dockPaddingBottom(insets.bottom, keyboardVisible);
   const webComposerReserve = mobileWebComposerReservePx();
   const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight);
 
@@ -4684,12 +5766,13 @@ function ChatConversationLayout({
       const open = measured >= 48 || focusedEditable;
       const keyboardH = effectiveKeyboardInset(open, measured);
       const safeB = keyboardH > 0 ? 4 : insets.bottom;
+      const navLift = open ? 0 : slackNavPad;
       // setNativeProps → direct DOM style write, zero React reconciler overhead.
       (composerWebRef.current as any)?.setNativeProps?.({
-        style: { bottom: keyboardH, paddingBottom: safeB },
+        style: { bottom: keyboardH + navLift, paddingBottom: safeB },
       });
       (msgsWebRef.current as any)?.setNativeProps?.({
-        style: { paddingBottom: webComposerReserve + safeB + keyboardH },
+        style: { paddingBottom: webComposerReserve + safeB + keyboardH + navLift },
       });
     };
 
@@ -4700,7 +5783,7 @@ function ChatConversationLayout({
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
     };
-  }, [mobileWeb, insets.bottom, webComposerReserve]);
+  }, [mobileWeb, insets.bottom, webComposerReserve, slackNavPad]);
 
   const messagesPane = (
     <>
@@ -4713,8 +5796,9 @@ function ChatConversationLayout({
     <View
       style={[
         s.chatInputDock,
+        isDesktop && { borderTopWidth: 0, backgroundColor: SLACK_DESKTOP.mainBg, paddingBottom: 0 },
         nativeMobile && s.chatInputDockMobile,
-        { paddingBottom: dockBottomPad },
+        !isDesktop && { paddingBottom: dockBottomPad },
         nativeMobile &&
           Platform.OS === "android" &&
           keyboardInset > 0 && { marginBottom: keyboardInset },
@@ -4728,6 +5812,7 @@ function ChatConversationLayout({
     <View
       style={[
         s.conversationBody,
+        isDesktop && { backgroundColor: SLACK_DESKTOP.mainBg },
         nativeMobile && { backgroundColor: CHAT_MOBILE.wallpaper },
       ]}
     >
@@ -4738,7 +5823,7 @@ function ChatConversationLayout({
 
   if (isDesktop) {
     return (
-      <View style={s.detailPanel}>
+      <View style={[s.detailPanel, { backgroundColor: SLACK_DESKTOP.mainBg }]}>
         {conversationBody}
       </View>
     );
@@ -4769,7 +5854,10 @@ function ChatConversationLayout({
             s.chatInputDock,
             nativeMobile && s.chatInputDockMobile,
             // Initial position; setNativeProps overrides each visualViewport frame.
-            { bottom: keyboardInset, paddingBottom: dockBottomPad },
+            {
+              bottom: keyboardInset + (keyboardVisible ? 0 : slackNavPad),
+              paddingBottom: dockBottomPad,
+            },
           ]}
         >
           {inputBar}
@@ -4801,6 +5889,11 @@ function ChatDetailHeader({
   isDesktop,
   onCloseDetail,
   middleContent,
+  slackAvatarIdentity,
+  slackPartyTabsRow,
+  slackCompactRoleTag,
+  slackPartyDetailLabel,
+  onOpenFilters,
 }: {
   title: string;
   subtitle?: string;
@@ -4811,9 +5904,44 @@ function ChatDetailHeader({
   onCloseDetail: () => void;
   /** Route, date, party tabs — rendered inline between title and actions (trip detail). */
   middleContent?: React.ReactNode;
+  slackAvatarIdentity?: ResolvedPartyAvatarIdentity;
+  slackPartyTabsRow?: React.ReactNode;
+  slackCompactRoleTag?: string;
+  slackPartyDetailLabel?: string;
+  onOpenFilters?: () => void;
 }) {
+  const mobileChatUi = isChatMobileLayout(isDesktop);
   const nativeMobile = isChatNativeMobile(isDesktop);
   const dualLane = Boolean(partyType && counterpartyType);
+
+  if (isDesktop && slackAvatarIdentity) {
+    const tabSubtitle = slackPartyDetailLabel || subtitle;
+    return (
+      <ChatSlackDesktopThreadHeader
+        title={title}
+        subtitle={tabSubtitle}
+        avatarIdentity={slackAvatarIdentity}
+        partyTabsRow={slackPartyTabsRow}
+        compactRoleTag={slackCompactRoleTag}
+      />
+    );
+  }
+
+  if (mobileChatUi && slackAvatarIdentity) {
+    const tabSubtitle = slackPartyDetailLabel || subtitle;
+    return (
+      <ChatSlackThreadHeader
+        title={title}
+        subtitle={tabSubtitle}
+        avatarIdentity={slackAvatarIdentity}
+        onBack={onCloseDetail}
+        partyTabsRow={slackPartyTabsRow}
+        compactRoleTag={slackCompactRoleTag}
+        onOpenFilters={onOpenFilters}
+      />
+    );
+  }
+
   return (
     <View
       style={[
@@ -4841,7 +5969,7 @@ function ChatDetailHeader({
       <View
         style={[
           middleContent ? s.detailHeaderTripCol : { flex: 1, minWidth: 0 },
-          middleContent && nativeMobile && s.detailHeaderTripColMobile,
+          middleContent != null && nativeMobile ? s.detailHeaderTripColMobile : null,
         ]}
       >
         <Text
@@ -4876,7 +6004,35 @@ function ChatDetailHeader({
   );
 }
 
-function ChatSystemMsg({ label, isMobile = false }: { label: string; isMobile?: boolean }) {
+function ChatSystemMsg({
+  label,
+  isMobile = false,
+  slackLayout = false,
+  isDesktop = false,
+}: {
+  label: string;
+  isMobile?: boolean;
+  slackLayout?: boolean;
+  isDesktop?: boolean;
+}) {
+  if (slackLayout && isDesktop) {
+    return (
+      <View style={deskSt.threadSysMsg}>
+        <Text style={deskSt.threadSysMsgText} numberOfLines={4}>
+          {label}
+        </Text>
+      </View>
+    );
+  }
+  if (slackLayout) {
+    return (
+      <View style={slackSt.threadSysMsg}>
+        <Text style={slackSt.threadSysMsgText} numberOfLines={4}>
+          {label}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={[s.sysMsg, isMobile && s.sysMsgMobile]}>
       <Text style={[s.sysMsgText, isMobile && s.sysMsgTextMobile]} numberOfLines={3}>
@@ -4895,7 +6051,15 @@ function ChatBubble({
   deliveryStatus,
   isNew,
   isMobile,
+  slackLayout = false,
+  slackVariant = "mobile",
+  slackGroup,
   onAvatarPress,
+  reactions,
+  selfUserId,
+  onReact,
+  replyPreview,
+  onReply,
 }: {
   isOwn: boolean;
   content: string;
@@ -4908,12 +6072,53 @@ function ChatBubble({
    *  Bootstrap messages start fully visible to avoid the "flash of invisible" blink. */
   isNew?: boolean;
   isMobile?: boolean;
+  slackLayout?: boolean;
+  slackVariant?: "mobile" | "desktop";
+  slackGroup?: SlackMessageGroupMeta;
   onAvatarPress?: () => void;
+  reactions?: ChatReactions | null;
+  selfUserId?: string | null;
+  onReact?: (emoji: string) => void;
+  replyPreview?: ReplyPreviewData | null;
+  onReply?: () => void;
 }) {
-  const avatarSize = isMobile ? CHAT_MOBILE.avatarSize : 44;
-  const bubbleMaxWidth = isMobile ? CHAT_MOBILE.bubbleMaxWidthPct : "72%";
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
+
+  if (slackLayout) {
+    const ownAvatar: ResolvedPartyAvatarIdentity = {
+      displayName: profile?.full_name || profile?.displayName || "You",
+      entityType: "client",
+    };
+    const rowAvatar = isOwn
+      ? ownAvatar
+      : peerAvatar ?? { displayName: senderName ?? "User", entityType: "client" };
+    return (
+      <ChatSlackMessageRow
+        senderName={isOwn ? (profile?.full_name || profile?.displayName || "You") : senderName ?? "User"}
+        content={content}
+        timestamp={timestamp}
+        avatar={rowAvatar}
+        isOwn={isOwn}
+        userName={profile?.full_name || profile?.displayName || "You"}
+        userAvatarUrl={profile?.avatar_url ?? null}
+        userAvatarSeed={profile?.avatar_seed ?? null}
+        userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+        onAvatarPress={onAvatarPress}
+        variant={slackVariant}
+        group={slackGroup}
+        isNew={isNew}
+        reactions={reactions}
+        selfUserId={selfUserId}
+        onReact={onReact}
+        replyPreview={replyPreview}
+        onReply={onReply}
+      />
+    );
+  }
+
+  const avatarSize = isMobile ? CHAT_MOBILE.avatarSize : 44;
+  const bubbleMaxWidth = isMobile ? CHAT_MOBILE.bubbleMaxWidthPct : "72%";
   let displayTime = timestamp;
   try {
     displayTime = new Date(timestamp).toLocaleTimeString("en-IN", {
@@ -5040,6 +6245,11 @@ function ChatInputBar({
   inputOverlayMaxWidth,
   compact,
   minimalChrome,
+  isDesktop = true,
+  composerPlaceholder,
+  replyContext,
+  onCancelReply,
+  onUserTyping,
 }: {
   quickMsgs: string[];
   messageInput: string;
@@ -5056,6 +6266,11 @@ function ChatInputBar({
   compact?: boolean;
   /** Mobile: hide emoji/scripts row buttons (WhatsApp-style composer). */
   minimalChrome?: boolean;
+  isDesktop?: boolean;
+  composerPlaceholder?: string;
+  replyContext?: ReplyPreviewData | null;
+  onCancelReply?: () => void;
+  onUserTyping?: () => void;
 }) {
   const overlayW = inputOverlayMaxWidth ?? 300;
   const canSend = messageInput.trim().length > 0;
@@ -5075,6 +6290,22 @@ function ChatInputBar({
     onSend();
   }, [messageInput, onSend]);
 
+  if (isDesktop) {
+    return (
+      <ChatSlackDesktopComposer
+        value={messageInput}
+        onChangeText={onChangeMessage}
+        onSend={onSend}
+        onOpenAttach={onOpenDocShare}
+        quickMessages={quickMsgs}
+        placeholder={composerPlaceholder ?? "Message"}
+        replyContext={replyContext}
+        onCancelReply={onCancelReply}
+        onUserTyping={onUserTyping}
+      />
+    );
+  }
+
   if (minimalChrome) {
     return (
       <ChatMobileComposer
@@ -5084,7 +6315,11 @@ function ChatInputBar({
         onOpenAttach={onOpenDocShare}
         quickMessages={quickMsgs}
         hideQuickChips={compact}
-        placeholder="Message"
+        placeholder={composerPlaceholder ?? "Message"}
+        variant={isChatMobileLayout(isDesktop) ? "slack" : "default"}
+        replyContext={replyContext}
+        onCancelReply={onCancelReply}
+        onUserTyping={onUserTyping}
       />
     );
   }
@@ -5270,6 +6505,9 @@ function TripConversationDetailPanel({
   onDispute,
   onSelectConversation,
   onOpenCompose,
+  replyContext,
+  onCancelReply,
+  onSetReply,
 }: {
   selectedConv: TripConversation | null;
   conversations: TripConversation[];
@@ -5292,8 +6530,11 @@ function TripConversationDetailPanel({
   onDispute: (message: TripMessageRow) => void;
   onSelectConversation: (id: string) => void;
   onOpenCompose: () => void | Promise<void>;
+  replyContext?: ReplyPreviewData | null;
+  onCancelReply?: () => void;
+  onSetReply?: (reply: ReplyPreviewData) => void;
 }) {
-  if (!selectedConv) return <EmptyDetail />;
+  if (!selectedConv) return <EmptyDetail isDesktop={isDesktop} />;
   return (
     <TripConversationDetailLoaded
       selectedConv={selectedConv}
@@ -5317,6 +6558,9 @@ function TripConversationDetailPanel({
       onDispute={onDispute}
       onSelectConversation={onSelectConversation}
       onOpenCompose={onOpenCompose}
+      replyContext={replyContext}
+      onCancelReply={onCancelReply}
+      onSetReply={onSetReply}
     />
   );
 }
@@ -5343,6 +6587,9 @@ function TripConversationDetailLoaded({
   onDispute,
   onSelectConversation,
   onOpenCompose: _onOpenCompose,
+  replyContext,
+  onCancelReply,
+  onSetReply,
 }: {
   selectedConv: TripConversation;
   conversations: TripConversation[];
@@ -5359,6 +6606,9 @@ function TripConversationDetailLoaded({
   onOpenDocShare: () => void;
   isDesktop: boolean;
   inputOverlayMaxWidth: number;
+  replyContext?: ReplyPreviewData | null;
+  onCancelReply?: () => void;
+  onSetReply?: (reply: ReplyPreviewData) => void;
   onCloseDetail: () => void;
   currentOrgId: string;
   onAddToBook: (message: TripMessageRow) => void;
@@ -5369,6 +6619,8 @@ function TripConversationDetailLoaded({
   const router = useRouter();
   const { profile } = useAuth();
   const selfUid = (profile as any)?.uid ?? null;
+  const selfName =
+    (profile as any)?.full_name ?? (profile as any)?.displayName ?? "You";
   const { currentOrganization } = useOrganization();
   /** Outgoing bubble side / "YOU" — must use auth uid, not sender_role (linked clients see dispatcher messages as incoming). */
   const isMessageFromSelf = useCallback(
@@ -5381,6 +6633,13 @@ function TripConversationDetailLoaded({
   // Subscribe directly to this conversation for live message updates.
   // Re-renders only when THIS conversation changes, not the full list.
   const liveConv = useConversation(selectedConv.id) ?? selectedConv;
+
+  // ── Slack-style: typing indicator ────────────────────────────────────
+  const { typingNames, onUserTyping } = useChatTypingPresence(
+    liveConv.id,
+    selfUid,
+    selfName,
+  );
   const liveTripEntry = useChatStore((s) =>
     liveConv.trip_id ? s.trips[liveConv.trip_id] ?? null : null,
   );
@@ -5637,6 +6896,82 @@ function TripConversationDetailLoaded({
     return info;
   }, [displayMessages]);
 
+  const slackTripGroupMeta = useMemo(
+    () =>
+      buildSlackMessageGroupMap(displayMessages, {
+        isGroupable: (m) =>
+          isSlackGroupableTripMessage(m) &&
+          isMessageVisibleInTab(m.message_type, liveConv.party_type),
+        senderKey: (m) =>
+          isMessageFromSelf(m)
+            ? "__self__"
+            : `${m.sender_role ?? ""}:${m.sender_id ?? ""}:${m.sender_name ?? ""}`,
+        createdAt: (m) => m.created_at,
+      }),
+    [displayMessages, liveConv.party_type, isMessageFromSelf],
+  );
+
+  // ── Slack-style: emoji reactions ─────────────────────────────────────
+  const handleToggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!selfUid || !currentOrgId) return;
+      try {
+        await toggleMessageReaction({
+          messageId,
+          userId:         selfUid,
+          organizationId: currentOrgId,
+          emoji,
+        });
+        // Supabase Realtime will propagate the UPDATE back to all listeners;
+        // no local store mutation needed (the UPDATE event patches the row).
+      } catch {
+        // Non-critical: reaction failure is silent
+      }
+    },
+    [selfUid, currentOrgId],
+  );
+
+  // ── Slack-style: date dividers in message list ──────────────────────
+  type ThreadListItem =
+    | TripMessageRow
+    | { __dateDivider: true; dateStr: string; id: string }
+    | { __unreadDivider: true; id: string };
+
+  const threadListItems = useMemo((): ThreadListItem[] => {
+    const items: ThreadListItem[] = [];
+    let lastDateStr = "";
+    const mountMs = Date.now() - 5_000; // treat messages < 5s old as "new"
+    let unreadInserted = false;
+
+    for (const m of displayMessages) {
+      const msgDate = m.created_at ? m.created_at.slice(0, 10) : "";
+
+      // Date divider
+      if (msgDate && msgDate !== lastDateStr) {
+        items.push({
+          __dateDivider: true,
+          dateStr: m.created_at,
+          id: `__date__${msgDate}`,
+        });
+        lastDateStr = msgDate;
+      }
+
+      // Unread divider: insert before first unread message we haven't seen
+      if (
+        !unreadInserted &&
+        !m.is_read &&
+        !isMessageFromSelf(m) &&
+        Date.parse(m.created_at) > mountMs
+      ) {
+        items.push({ __unreadDivider: true, id: "__unread__" });
+        unreadInserted = true;
+      }
+
+      items.push(m);
+    }
+    return items;
+  }, [displayMessages, isMessageFromSelf]);
+
   const scrollToEndCooldownRef = useRef(0);
   const onMessagesContentSizeChange = useCallback(() => {
     if (displayMessages.length === 0) return;
@@ -5805,6 +7140,27 @@ function TripConversationDetailLoaded({
     linkedSupplierSuppressSupplierTab,
     detailVisiblePartyTypes,
   ]);
+  const partyToggleTabs = useMemo((): HubPartyTab[] => {
+    const deduped = missionBarPartyTypes.filter(
+      (tab, idx, arr) => arr.findIndex((p) => p.rowType === tab.rowType) === idx,
+    );
+    if (deduped.length <= 2) return deduped;
+
+    const active = deduped.find((tab) => tab.rowType === liveConv.party_type);
+    const driver = deduped.find((tab) => tab.rowType === "driver");
+    const commercial = deduped.find((tab) => tab.rowType !== "driver");
+
+    // Integrated detail should remain a compact two-party toggle.
+    if (active && driver && commercial) {
+      if (active.rowType === "driver") return [commercial, driver];
+      return [active, driver];
+    }
+    if (active) {
+      const secondary = deduped.find((tab) => tab.rowType !== active.rowType);
+      return secondary ? [active, secondary] : [active];
+    }
+    return deduped.slice(0, 2);
+  }, [missionBarPartyTypes, liveConv.party_type]);
 
   const displayPartyName = useCallback(
     (partyType: ConversationPartyType): string => {
@@ -5958,7 +7314,21 @@ function TripConversationDetailLoaded({
     (info: Parameters<typeof onViewableItemsChanged>[0]) => _viewableRef.current(info)
   ).current;
 
-  const renderMessage = useCallback(({ item: m }: { item: TripMessageRow }) => {
+  const renderMessage = useCallback(({ item }: { item: ThreadListItem }) => {
+    // ── Virtual dividers ─────────────────────────────────────────────
+    if ("__dateDivider" in item && item.__dateDivider) {
+      return (
+        <ChatDateDivider
+          dateStr={item.dateStr}
+          variant={isDesktop ? "desktop" : "mobile"}
+        />
+      );
+    }
+    if ("__unreadDivider" in item && item.__unreadDivider) {
+      return <ChatUnreadDivider />;
+    }
+
+    const m = item as TripMessageRow;
     if (String(m.conversation_id ?? "") !== liveConv.id) return null;
     // Tab visibility filter — zero DB calls; pure memory filter on party_type.
     // Ledger events only appear in Client/Supplier tabs; tracking in Driver tab.
@@ -6123,6 +7493,9 @@ function TripConversationDetailLoaded({
           fallbackName: peerLabel,
         });
 
+    const msgReactions = (m as any).reactions as ChatReactions | null | undefined;
+    const msgReplyPreview = (m as any).reply_to_preview as ReplyPreviewData | null | undefined;
+
     return (
       <ChatBubble
         isOwn={own}
@@ -6133,14 +7506,34 @@ function TripConversationDetailLoaded({
         deliveryStatus={own ? resolveOutgoingDeliveryStatus(m) : undefined}
         isNew={Date.parse(m.created_at) > mountedAtMs}
         isMobile={!isDesktop}
+        slackLayout={isDesktop || isChatMobileLayout(isDesktop)}
+        slackVariant={isDesktop ? "desktop" : "mobile"}
+        slackGroup={slackTripGroupMeta.get(m.id)}
         onAvatarPress={onAvatarPress}
+        reactions={msgReactions}
+        selfUserId={selfUid}
+        onReact={(emoji) => handleToggleReaction(m.id, emoji)}
+        replyPreview={msgReplyPreview}
+        onReply={() =>
+          onSetReply?.({
+            messageId: m.id,
+            senderName: own ? selfName : peerLabel,
+            content: m.content,
+            messageType: m.message_type,
+          })
+        }
       />
     );
   }, [
     router,
+    selfUid,
+    selfName,
+    handleToggleReaction,
+    onSetReply,
     currentOrgId,
     liveConv,
     isDesktop,
+    slackTripGroupMeta,
     viewerIsDriver,
     allowFinancialCards,
     allowLedgerActions,
@@ -6216,23 +7609,56 @@ function TripConversationDetailLoaded({
     return () => clearTimeout(t);
   }, [isDesktop, keyboardOpen, messagesRef]);
 
-  const tripHeaderMiddle = (
-    <>
-      {missionDateLabel ? (
-        <Text style={s.detailMissionDate} numberOfLines={1}>
-          {missionDateLabel}
-        </Text>
-      ) : null}
-      {allowFinancialCards &&
-      paymentBalance != null &&
-      (liveConv.party_type === "client" || liveConv.party_type === "supplier") ? (
-        <View style={s.detailMissionUnread}>
-          <Text style={s.detailMissionUnreadText}>
-            {paymentBalance >= 0 ? "+" : "−"}₹{Math.abs(paymentBalance).toLocaleString("en-IN")}
-          </Text>
-        </View>
-      ) : null}
-      {missionBarPartyTypes.length > 0 ? (
+  const nativeMobileDetail = isChatMobileLayout(isDesktop);
+  const slackThreadUi = isDesktop || nativeMobileDetail;
+  const singleLaneRoleTag =
+    partyToggleTabs.length === 1
+      ? partyLabelReadable(partyToggleTabs[0].displayType)
+      : undefined;
+  const tripPartyTabsScroller =
+    partyToggleTabs.length > 1 ? (
+      slackThreadUi ? (
+        <ChatSlackMirrorToggle
+          variant="party"
+          activeId={liveConv.party_type}
+          onSelect={(id) => {
+            void switchConversation(id as ConversationPartyType);
+          }}
+          items={partyToggleTabs.map((tab) => {
+            const relabeledClientTab = tab.displayType !== tab.rowType;
+            const partyLine = relabeledClientTab
+              ? formatChatPartyName(
+                  indentShipperDisplayName || liveConv.trip_organization_name || null,
+                )
+              : tab.rowType === "client" &&
+                  supplierFleetOwnsTrip &&
+                  indentShipperDisplayName
+                ? formatChatPartyName(indentShipperDisplayName)
+                : formatChatPartyName(displayPartyName(tab.rowType));
+            const roleLabel = partyLabelReadable(tab.displayType);
+            const partyName = partyLine ?? roleLabel;
+            const tabConversation = partyConversationMap[tab.rowType];
+            const tabAvatarIdentity = resolveTripConversationAvatar(
+              {
+                party_type: tab.rowType,
+                party_name: (tabConversation?.party_name ?? "").trim() || partyName,
+                client_id: tabConversation?.client_id ?? liveConv.client_id ?? null,
+                supplier_id: tabConversation?.supplier_id ?? liveConv.supplier_id ?? null,
+              },
+              tripCompose,
+              linkedOrgBranding,
+            );
+            return {
+              id: tab.rowType,
+              label: partyName,
+              subLabel: roleLabel,
+              avatarIdentity: tabAvatarIdentity,
+              disabled: !partyConversationMap[tab.rowType],
+            };
+          })}
+          style={slackThreadUi && isDesktop ? deskSt.threadPartyToggle : undefined}
+        />
+      ) : (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -6287,46 +7713,114 @@ function TripConversationDetailLoaded({
                     ]}
                     numberOfLines={1}
                   >
-                    {partyLabel(tab.displayType)}
+                    {partyLabelReadable(tab.displayType)}
                   </Text>
                 </View>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
+      )
+    ) : null;
+
+  const tripHeaderMiddle = (
+    <>
+      {missionDateLabel ? (
+        <Text style={s.detailMissionDate} numberOfLines={1}>
+          {missionDateLabel}
+        </Text>
       ) : null}
+      {allowFinancialCards &&
+      paymentBalance != null &&
+      (liveConv.party_type === "client" || liveConv.party_type === "supplier") ? (
+        <View style={s.detailMissionUnread}>
+          <Text style={s.detailMissionUnreadText}>
+            {paymentBalance >= 0 ? "+" : "−"}₹{Math.abs(paymentBalance).toLocaleString("en-IN")}
+          </Text>
+        </View>
+      ) : null}
+      {tripPartyTabsScroller}
     </>
   );
+
+  const slackThreadTitle =
+    formatChatPartyName(liveConv.party_name) ||
+    formatChatPartyName(displayPartyName(liveConv.party_type)) ||
+    viewerRelativeConvPartyLabel;
+  const activeLaneDisplayType =
+    missionBarPartyTypes.find((tab) => tab.rowType === liveConv.party_type)?.displayType ??
+    liveConv.party_type;
+  const chatDetailPartyTypeLabel =
+    formatChatPartyName(partyLabelReadable(activeLaneDisplayType)) ?? chatDetailSubtitle;
+  const slackThreadAvatarSeed =
+    liveConv.messages.length > 0
+      ? (liveConv.messages[liveConv.messages.length - 1] as TripMessageRow).sender_avatar_seed ??
+        null
+      : null;
+  const slackThreadAvatarResolved = resolveTripConversationAvatar(
+    liveConv,
+    tripCompose,
+    linkedOrgBranding,
+    slackThreadAvatarSeed,
+  );
+  const selfDisplayName = formatChatPartyName(selfName) ?? "You";
+  const useSelfThreadAvatar =
+    normalizePartyLabelKey(slackThreadTitle) === normalizePartyLabelKey(selfDisplayName);
+  const slackThreadAvatar = useSelfThreadAvatar
+    ? {
+        displayName: selfDisplayName,
+        entityType: liveConv.party_type,
+        avatarUrl: profile?.avatar_url ?? null,
+        avatarSeed: profile?.avatar_seed ?? null,
+      }
+    : slackThreadAvatarResolved;
 
   return (
     <ChatConversationLayout
       isDesktop={isDesktop}
+      reserveBottomNav={!isDesktop}
       header={
         <ChatDetailHeader
-          title={`${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`}
-          subtitle={chatDetailSubtitle}
+          title={
+            slackThreadUi
+              ? slackThreadTitle
+              : `${getConversationTripLabel(liveConv)} · ${viewerRelativeConvPartyLabel}`
+          }
+          subtitle={chatDetailPartyTypeLabel}
           partyType={liveConv.party_type}
           counterpartyType={headerCounterparty}
           isDesktop={isDesktop}
           onCloseDetail={onCloseDetail}
-          middleContent={tripHeaderMiddle}
+          middleContent={slackThreadUi ? undefined : tripHeaderMiddle}
+          slackAvatarIdentity={slackThreadUi ? slackThreadAvatar : undefined}
+          slackPartyTabsRow={slackThreadUi ? tripPartyTabsScroller : undefined}
+          slackCompactRoleTag={undefined}
+          slackPartyDetailLabel={
+            slackThreadUi ? chatDetailPartyTypeLabel : undefined
+          }
         />
       }
       messages={
       <FlatList
         ref={messagesRef}
         style={s.msgs}
-        contentContainerStyle={[s.msgsContent, !isDesktop && s.msgsContentMobile]}
-        data={displayMessages}
-        keyExtractor={(m) => m.id}
-        renderItem={renderMessage}
+        contentContainerStyle={
+          isDesktop
+            ? deskSt.threadMsgsContent
+            : [s.msgsContent, slackSt.threadMsgsContent]
+        }
+        data={threadListItems as unknown as TripMessageRow[]}
+        keyExtractor={(item) => ("id" in item ? (item as { id: string }).id : Math.random().toString())}
+        renderItem={renderMessage as any}
         extraData={liveConv}
         getItemLayout={isDesktop ? getMessageItemLayout : undefined}
-        removeClippedSubviews={Platform.OS === "android"}
-        windowSize={9}
-        maxToRenderPerBatch={12}
+        removeClippedSubviews
+        windowSize={!isDesktop ? 7 : 9}
+        maxToRenderPerBatch={!isDesktop ? 10 : 12}
+        initialNumToRender={!isDesktop ? 16 : undefined}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
+        showsVerticalScrollIndicator={false}
         onViewableItemsChanged={stableOnViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onContentSizeChange={onMessagesContentSizeChange}
@@ -6337,6 +7831,8 @@ function TripConversationDetailLoaded({
             <ChatSystemMsg
               label={`${liveConv.pickup_area} → ${liveConv.drop_location} · Today`}
               isMobile={!isDesktop}
+              slackLayout={slackThreadUi}
+              isDesktop={isDesktop}
             />
             {loadingOlder ? (
               <View style={{ paddingVertical: 10, alignItems: "center" }}>
@@ -6379,20 +7875,32 @@ function TripConversationDetailLoaded({
       />
       }
       inputBar={
-        <ChatInputBar
-          quickMsgs={quickMsgs}
-          messageInput={messageInput}
-          onChangeMessage={setMessageInput}
-          showEmoji={showEmoji}
-          setShowEmoji={setShowEmoji}
-          showScripts={showScripts}
-          setShowScripts={setShowScripts}
-          onSend={onSend}
-          onOpenDocShare={onOpenDocShare}
-          inputOverlayMaxWidth={inputOverlayMaxWidth}
-          compact={keyboardOpen}
-          minimalChrome={!isDesktop}
-        />
+        <>
+          {/* Typing indicator — shown above the composer */}
+          <ChatTypingIndicator
+            typingNames={typingNames}
+            variant={isDesktop ? "desktop" : "mobile"}
+          />
+          <ChatInputBar
+            quickMsgs={quickMsgs}
+            messageInput={messageInput}
+            onChangeMessage={setMessageInput}
+            showEmoji={showEmoji}
+            setShowEmoji={setShowEmoji}
+            showScripts={showScripts}
+            setShowScripts={setShowScripts}
+            onSend={onSend}
+            onOpenDocShare={onOpenDocShare}
+            inputOverlayMaxWidth={inputOverlayMaxWidth}
+            compact={keyboardOpen}
+            minimalChrome={!isDesktop}
+            isDesktop={isDesktop}
+            composerPlaceholder={`Message ${slackThreadTitle}`}
+            replyContext={replyContext}
+            onCancelReply={onCancelReply}
+            onUserTyping={onUserTyping}
+          />
+        </>
       }
     />
   );
@@ -6426,65 +7934,193 @@ function NetworkDetailPanel({
   onCloseDetail: () => void;
 }) {
   const { keyboardVisible: keyboardOpen } = useKeyboardVisible();
+  const { profile } = useAuth();
+  const selfUid = (profile as any)?.uid ?? null;
+  const selfName = (profile as any)?.full_name ?? (profile as any)?.displayName ?? "You";
+  const nativeMobileDetail = isChatMobileLayout(isDesktop);
+  const slackThreadUi = isDesktop || nativeMobileDetail;
 
-  if (!selectedNet) return <EmptyDetail />;
+  const [netReplyContext, setNetReplyContext] = useState<ReplyPreviewData | null>(null);
+  const clearNetReply = useCallback(() => setNetReplyContext(null), []);
+  const [netReactionsByMessageId, setNetReactionsByMessageId] = useState<
+    Record<string, ChatReactions>
+  >({});
+
+  const { typingNames: netTypingNames, onUserTyping: netOnUserTyping } = useChatTypingPresence(
+    selectedNet?.id ?? null,
+    selfUid,
+    selfName,
+  );
+
+  const slackNetGroupMeta = useMemo(
+    () =>
+      selectedNet
+        ? buildSlackMessageGroupMap(selectedNet.messages, {
+            isGroupable: () => true,
+            senderKey: (m) =>
+              m.senderId === "dispatcher-1" ? "__self__" : selectedNet.partnerId,
+            createdAt: (m) => m.timestamp,
+          })
+        : new Map(),
+    [selectedNet],
+  );
+  type NetThreadListItem =
+    | IntegratedChat["messages"][number]
+    | { __dateDivider: true; dateStr: string; id: string };
+  const netThreadListItems = useMemo((): NetThreadListItem[] => {
+    if (!selectedNet) return [];
+    const items: NetThreadListItem[] = [];
+    let lastDateStr = "";
+    for (const m of selectedNet.messages) {
+      const msgDate = m.timestamp ? m.timestamp.slice(0, 10) : "";
+      if (msgDate && msgDate !== lastDateStr) {
+        items.push({
+          __dateDivider: true,
+          dateStr: m.timestamp,
+          id: `__net_date__${msgDate}`,
+        });
+        lastDateStr = msgDate;
+      }
+      items.push(m);
+    }
+    return items;
+  }, [selectedNet]);
+
+  useEffect(() => {
+    setNetReactionsByMessageId({});
+  }, [selectedNet?.id]);
+
+  const toggleNetReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      const reactorId = selfUid || "__self__";
+      setNetReactionsByMessageId((prev) => {
+        const byMsg = prev[messageId] ?? {};
+        const current = byMsg[emoji] ?? [];
+        const hasMine = current.includes(reactorId);
+        const nextEmojiUsers = hasMine
+          ? current.filter((u) => u !== reactorId)
+          : [...current, reactorId];
+        const nextByMsg: ChatReactions = { ...byMsg };
+        if (nextEmojiUsers.length > 0) nextByMsg[emoji] = nextEmojiUsers;
+        else delete nextByMsg[emoji];
+
+        const out = { ...prev };
+        if (Object.keys(nextByMsg).length > 0) out[messageId] = nextByMsg;
+        else delete out[messageId];
+        return out;
+      });
+    },
+    [selfUid],
+  );
+
+  if (!selectedNet) return <EmptyDetail isDesktop={isDesktop} />;
+  const netThreadAvatar = resolveNetworkPartnerAvatar(selectedNet);
   return (
     <ChatConversationLayout
       isDesktop={isDesktop}
+      reserveBottomNav={!isDesktop}
       header={
         <ChatDetailHeader
           title={selectedNet.partnerName}
-          subtitle={formatChatPartyName(selectedNet.organization) ?? undefined}
+          subtitle={formatChatPartyName("PARTNER") ?? undefined}
           isDesktop={isDesktop}
           onCloseDetail={onCloseDetail}
+          slackAvatarIdentity={slackThreadUi ? netThreadAvatar : undefined}
         />
       }
       messages={
         <FlatList
           ref={messagesRef}
           style={s.msgs}
-          contentContainerStyle={[s.msgsContent, !isDesktop && s.msgsContentMobile]}
-          data={selectedNet.messages}
-          keyExtractor={(m) => m.id}
+          contentContainerStyle={
+            isDesktop
+              ? deskSt.threadMsgsContent
+              : [s.msgsContent, slackSt.threadMsgsContent]
+          }
+          data={netThreadListItems}
+          keyExtractor={(m) => ("__dateDivider" in m ? m.id : m.id)}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
-          renderItem={({ item: m }) => (
-            <ChatBubble
-              isOwn={m.senderId === "dispatcher-1"}
-              content={m.content}
-              timestamp={m.timestamp}
-              senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
-              peerAvatar={
-                m.senderId !== "dispatcher-1"
-                  ? resolveNetworkPartnerAvatar(selectedNet)
-                  : null
-              }
-              isMobile={!isDesktop}
-            />
-          )}
+          removeClippedSubviews={!isDesktop}
+          windowSize={!isDesktop ? 7 : undefined}
+          maxToRenderPerBatch={!isDesktop ? 10 : undefined}
+          initialNumToRender={!isDesktop ? 16 : undefined}
+          showsVerticalScrollIndicator={!isDesktop ? false : undefined}
+          renderItem={({ item }) => {
+            if ("__dateDivider" in item && item.__dateDivider) {
+              return (
+                <ChatDateDivider
+                  dateStr={item.dateStr}
+                  variant={isDesktop ? "desktop" : "mobile"}
+                />
+              );
+            }
+            const m = item;
+            return (
+              <ChatBubble
+                isOwn={m.senderId === "dispatcher-1"}
+                content={m.content}
+                timestamp={m.timestamp}
+                senderName={m.senderId !== "dispatcher-1" ? selectedNet.partnerName : undefined}
+                peerAvatar={
+                  m.senderId !== "dispatcher-1"
+                    ? resolveNetworkPartnerAvatar(selectedNet)
+                    : null
+                }
+                isMobile={!isDesktop}
+                slackLayout={slackThreadUi}
+                slackVariant={isDesktop ? "desktop" : "mobile"}
+                slackGroup={slackNetGroupMeta.get(m.id)}
+                selfUserId={selfUid}
+                reactions={netReactionsByMessageId[m.id] ?? null}
+                onReact={(emoji) => toggleNetReaction(m.id, emoji)}
+                onReply={() =>
+                  setNetReplyContext({
+                    messageId: m.id,
+                    senderName:
+                      m.senderId !== "dispatcher-1" ? selectedNet.partnerName : selfName,
+                    content: m.content,
+                  })
+                }
+              />
+            );
+          }}
           ListHeaderComponent={
             <ChatSystemMsg
               label="Secure channel · Today"
               isMobile={!isDesktop}
+              slackLayout={slackThreadUi}
+              isDesktop={isDesktop}
             />
           }
           onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
         />
       }
       inputBar={
-        <ChatInputBar
-          quickMsgs={INTEGRATED_QUICK_MESSAGES}
-          messageInput={messageInput}
-          onChangeMessage={setMessageInput}
-          showEmoji={showEmoji}
-          setShowEmoji={setShowEmoji}
-          showScripts={showScripts}
-          setShowScripts={setShowScripts}
-          onSend={onSend}
-          inputOverlayMaxWidth={inputOverlayMaxWidth}
-          compact={keyboardOpen}
-          minimalChrome={!isDesktop}
-        />
+        <>
+          <ChatTypingIndicator
+            typingNames={netTypingNames}
+            variant={isDesktop ? "desktop" : "mobile"}
+          />
+          <ChatInputBar
+            quickMsgs={INTEGRATED_QUICK_MESSAGES}
+            messageInput={messageInput}
+            onChangeMessage={setMessageInput}
+            showEmoji={showEmoji}
+            setShowEmoji={setShowEmoji}
+            showScripts={showScripts}
+            setShowScripts={setShowScripts}
+            onSend={() => { clearNetReply(); onSend(); }}
+            inputOverlayMaxWidth={inputOverlayMaxWidth}
+            compact={keyboardOpen}
+            minimalChrome={!isDesktop}
+            isDesktop={isDesktop}
+            composerPlaceholder={`Message ${selectedNet.partnerName}`}
+            replyContext={netReplyContext}
+            onCancelReply={clearNetReply}
+            onUserTyping={netOnUserTyping}
+          />
+        </>
       }
     />
   );
