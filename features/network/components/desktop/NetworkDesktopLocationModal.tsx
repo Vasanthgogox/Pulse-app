@@ -31,9 +31,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 
 const LOCATION_TYPES: { value: OrganizationLocationType; label: string }[] = [
+  { value: 'registered_office', label: 'Registered office' },
+  { value: 'branch_office', label: 'Branch office' },
   { value: 'primary_hub', label: 'Primary hub' },
   { value: 'regional_office', label: 'Regional office' },
   { value: 'dispatch_center', label: 'Dispatch center' },
+  { value: 'warehouse', label: 'Warehouse' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -82,7 +85,7 @@ export function NetworkDesktopLocationModal({
       return;
     }
     setName(initialDraft?.name ?? `${orgName} hub`);
-    setLocationType(initialDraft?.location_type ?? 'primary_hub');
+    setLocationType(initialDraft?.location_type ?? 'registered_office');
     setDepartment(initialDraft?.department ?? 'Operations & dispatch');
     setAddressLine(initialDraft?.address_line ?? '');
     setCity(initialDraft?.city ?? '');

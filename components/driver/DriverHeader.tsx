@@ -2,7 +2,9 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOptionalLanguage } from '@/contexts/LanguageContext';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
+import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
@@ -43,6 +45,7 @@ type Props = {
   variant?: DriverHeaderVariant;
   onPressOtpClaim?: () => void;
   onPressNotifications?: () => void;
+  onPressLanguage?: () => void;
   /** Number of pending fleet invitations — shows a badge on the invite icon. */
   pendingInviteCount?: number;
   onPressInvites?: () => void;
@@ -56,6 +59,7 @@ export function DriverHeader({
   isOnline,
   variant = 'default',
   onPressNotifications,
+  onPressLanguage,
   pendingInviteCount = 0,
   onPressInvites,
   style,
@@ -63,6 +67,10 @@ export function DriverHeader({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
+  const { localeOptions, locale } = useOptionalLanguage();
+  const languageCode = (localeOptions.find((o) => o.value === locale)?.label ?? 'EN')
+    .slice(0, 2)
+    .toUpperCase();
 
   const title =
     variant === 'assigned' ? driverName : `Welcome, ${driverName}`;
@@ -172,6 +180,32 @@ export function DriverHeader({
       </View>
 
       <View style={styles.headerRight}>
+        <TouchableOpacity
+          onPress={
+            onPressLanguage ??
+            (() =>
+              router.push(
+                ROUTES.MODALS.LANGUAGE_SETTINGS as Parameters<typeof router.push>[0],
+              ))
+          }
+          style={[
+            styles.languageBtn,
+            { backgroundColor: colors.whiteMuted, borderColor: colors.border },
+          ]}
+          activeOpacity={0.8}
+          accessibilityLabel="Language"
+          accessibilityHint="Change app display language"
+        >
+          <FontAwesome
+            name="globe"
+            size={Layout.driverHeaderActionIconSize - 1}
+            color={colors.text}
+          />
+          <Text style={[styles.languageCode, { color: colors.textMuted }]}>
+            {languageCode}
+          </Text>
+        </TouchableOpacity>
+
         {/* Fleet invitation icon — badge shows pending count */}
         <TouchableOpacity
           onPress={onPressInvites ?? handleInviteDrivers}
@@ -286,7 +320,24 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+  },
+  languageBtn: {
+    minWidth: Layout.driverHeaderActionSize,
+    height: Layout.driverHeaderActionSize,
+    paddingHorizontal: 8,
+    borderRadius: Layout.driverHeaderActionSize / 2,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  languageCode: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    lineHeight: 11,
   },
   notificationBtn: {
     width: Layout.driverHeaderActionSize,

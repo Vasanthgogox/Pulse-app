@@ -1,5 +1,19 @@
 export type PartyKind = "customers" | "suppliers" | "drivers" | "vehicles";
 
+export const PARTY_DIRECTORY_TAB_ORDER: PartyKind[] = [
+  "customers",
+  "suppliers",
+  "drivers",
+  "vehicles",
+];
+
+export const PARTY_TAB_LABELS: Record<PartyKind, string> = {
+  customers: "Customer",
+  suppliers: "Supplier",
+  drivers: "Driver",
+  vehicles: "Vehicle",
+};
+
 export const PARTY_KIND_ENTITY_LABEL: Record<PartyKind, string> = {
   customers: "SHIPPER",
   suppliers: "SUPPLIER",

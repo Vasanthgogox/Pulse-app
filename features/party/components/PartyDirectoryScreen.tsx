@@ -1,5 +1,5 @@
 /**
- * Party directory — pick a customer, supplier, driver, or vehicle → profile hub.
+ * Party directory — tabbed customers / suppliers / drivers / vehicles → profile hub.
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { WizardEntityPartyCell } from "@/components/full-page-wizard/WizardEntityPartyCell";
@@ -11,8 +11,10 @@ import {
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import {
+  PARTY_DIRECTORY_TAB_ORDER,
   PARTY_KIND_ENTITY_LABEL,
   PARTY_KIND_META,
+  PARTY_TAB_LABELS,
   type PartyKind,
 } from "@/features/party/types/partyDirectory.types";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -24,7 +26,15 @@ import {
 } from "@/lib/queries";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Search } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Building2,
+  Car,
+  Search,
+  Truck,
+  User,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   Platform,
@@ -47,6 +57,52 @@ type PartyRow = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   href: string;
+};
+
+type TabTone = {
+  bg: string;
+  bgActive: string;
+  text: string;
+  border: string;
+  accent: string;
+};
+
+const TAB_TONES: Record<PartyKind, TabTone> = {
+  customers: {
+    bg: Theme.networkBadgeClientBg,
+    bgActive: "#E8EAFF",
+    text: Theme.networkBadgeClientText,
+    border: "rgba(67, 56, 202, 0.22)",
+    accent: Theme.networkBadgeClientText,
+  },
+  suppliers: {
+    bg: Theme.networkBadgeSupplierBg,
+    bgActive: "#DCFCE7",
+    text: Theme.networkBadgeSupplierText,
+    border: "rgba(22, 101, 52, 0.22)",
+    accent: Theme.networkBadgeSupplierText,
+  },
+  drivers: {
+    bg: Theme.networkBadgeDriverBg,
+    bgActive: "#FFEDD5",
+    text: Theme.networkBadgeDriverText,
+    border: "rgba(180, 83, 9, 0.22)",
+    accent: Theme.networkBadgeDriverText,
+  },
+  vehicles: {
+    bg: "#EEF2FF",
+    bgActive: "#E0E7FF",
+    text: Theme.primary,
+    border: "rgba(79, 70, 229, 0.22)",
+    accent: Theme.primary,
+  },
+};
+
+const TAB_ICONS: Record<PartyKind, LucideIcon> = {
+  customers: Building2,
+  suppliers: Truck,
+  drivers: User,
+  vehicles: Car,
 };
 
 type Props = {
@@ -74,16 +130,26 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
   const orgId = currentOrganization?.id ?? null;
   const [query, setQuery] = useState("");
 
-  const clientsQ = useClientsQuery(kind === "customers" ? orgId : null);
-  const suppliersQ = useSuppliersQuery(kind === "suppliers" ? orgId : null);
-  const driversQ = useDriversQuery(kind === "drivers" ? orgId : null);
-  const vehiclesQ = useVehiclesQuery(kind === "vehicles" ? orgId : null);
+  const clientsQ = useClientsQuery(orgId);
+  const suppliersQ = useSuppliersQuery(orgId);
+  const driversQ = useDriversQuery(orgId);
+  const vehiclesQ = useVehiclesQuery(orgId);
+
+  const tabCounts = useMemo(
+    () => ({
+      customers: clientsQ.data?.length ?? 0,
+      suppliers: suppliersQ.data?.length ?? 0,
+      drivers: (driversQ.data ?? []).filter((d) => !d.left_at && !d.tracking_only).length,
+      vehicles: vehiclesQ.data?.length ?? 0,
+    }),
+    [clientsQ.data, driversQ.data, suppliersQ.data, vehiclesQ.data],
+  );
 
   const loading =
-    (kind === "customers" && clientsQ.isLoading) ||
-    (kind === "suppliers" && suppliersQ.isLoading) ||
-    (kind === "drivers" && driversQ.isLoading) ||
-    (kind === "vehicles" && vehiclesQ.isLoading);
+    clientsQ.isLoading ||
+    suppliersQ.isLoading ||
+    driversQ.isLoading ||
+    vehiclesQ.isLoading;
 
   const rows: PartyRow[] = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -106,10 +172,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
     if (kind === "suppliers") {
       return (suppliersQ.data ?? [])
         .filter((s) =>
-          match(
-            (s.name ?? s.company_name ?? "").trim(),
-            s.phone?.trim() ?? "",
-          ),
+          match((s.name ?? s.company_name ?? "").trim(), s.phone?.trim() ?? ""),
         )
         .map((s) => ({
           id: s.id,
@@ -152,10 +215,17 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
 
   const meta = PARTY_KIND_META[kind];
   const entityLabel = PARTY_KIND_ENTITY_LABEL[kind];
+  const activeTone = TAB_TONES[kind];
   const gridRows = useMemo(
     () => chunkRows(rows, gridColumns),
     [gridColumns, rows],
   );
+
+  const selectTab = (next: PartyKind) => {
+    if (next === kind) return;
+    setQuery("");
+    router.replace(ROUTES.partyDirectory(next) as Parameters<typeof router.replace>[0]);
+  };
 
   if (!orgId || loading) {
     return <CenteredLoadingView />;
@@ -163,14 +233,85 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+      <View style={styles.hero}>
         <Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
-          <ArrowLeft size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+          <ArrowLeft size={16} color={Theme.textPrimaryDark} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>{meta.title}</Text>
-          <Text style={styles.subtitle}>{meta.subtitle}</Text>
+        <Text style={styles.eyebrow}>PARTY DIRECTORY</Text>
+        <Text style={styles.heroTitle}>Your network parties</Text>
+        <Text style={styles.heroSub}>
+          Shippers, carriers, drivers and fleet assets in one place
+        </Text>
+      </View>
+
+      <View style={styles.tabCard}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabRow}
+        >
+          {PARTY_DIRECTORY_TAB_ORDER.map((tabKind) => {
+            const active = tabKind === kind;
+            const tone = TAB_TONES[tabKind];
+            const Icon = TAB_ICONS[tabKind];
+            const count = tabCounts[tabKind];
+            return (
+              <Pressable
+                key={tabKind}
+                onPress={() => selectTab(tabKind)}
+                style={[
+                  styles.tabPill,
+                  {
+                    backgroundColor: active ? tone.bgActive : Theme.cardWhite,
+                    borderColor: active ? tone.border : Theme.borderLight,
+                  },
+                  active && styles.tabPillActive,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+              >
+                <View
+                  style={[
+                    styles.tabIconWrap,
+                    { backgroundColor: active ? tone.bg : Theme.surface },
+                  ]}
+                >
+                  <Icon
+                    size={14}
+                    color={active ? tone.accent : Theme.textMuted}
+                    strokeWidth={1.9}
+                  />
+                </View>
+                <View style={styles.tabTextCol}>
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      active && { color: tone.text, fontWeight: "700" },
+                    ]}
+                  >
+                    {PARTY_TAB_LABELS[tabKind]}
+                  </Text>
+                  <Text style={styles.tabCount}>{count} listed</Text>
+                </View>
+                {active ? (
+                  <View style={[styles.tabActiveDot, { backgroundColor: tone.accent }]} />
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      <View style={[styles.panelHeader, { borderLeftColor: activeTone.accent }]}>
+        <View style={styles.panelHeaderText}>
+          <Text style={styles.panelTitle}>{meta.title}</Text>
+          <Text style={styles.panelSub}>{meta.subtitle}</Text>
+        </View>
+        <View style={[styles.countBadge, { backgroundColor: activeTone.bg }]}>
+          <Text style={[styles.countBadgeText, { color: activeTone.text }]}>
+            {rows.length}
+          </Text>
         </View>
       </View>
 
@@ -194,7 +335,10 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
         keyboardShouldPersistTaps="handled"
       >
         {rows.length === 0 ? (
-          <Text style={styles.empty}>{meta.empty}</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No {meta.title.toLowerCase()} found</Text>
+            <Text style={styles.empty}>{meta.empty}</Text>
+          </View>
         ) : (
           <View style={wizardStyles.selectionGridWrap}>
             <View style={wizardStyles.selectionGrid}>
@@ -235,9 +379,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
                     </View>
                   ))}
                   {row.length < gridColumns
-                    ? Array.from({
-                        length: gridColumns - row.length,
-                      }).map((_, i) => (
+                    ? Array.from({ length: gridColumns - row.length }).map((_, i) => (
                         <View
                           key={`party-grid-pad-${rowIndex}-${i}`}
                           style={wizardStyles.selectionGridCell}
@@ -257,19 +399,152 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#f5f7fb" },
-  header: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
+  hero: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 6,
+    paddingBottom: 14,
+    gap: 4,
   },
-  backBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 4 },
-  backText: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
-  headerText: { flex: 1, minWidth: 0, gap: 4 },
-  title: { fontSize: 20, fontWeight: "800", color: Theme.textPrimaryDark },
-  subtitle: { fontSize: 12, fontWeight: "500", color: Theme.textSecondary, lineHeight: 17 },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    marginBottom: 6,
+  },
+  backText: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark },
+  eyebrow: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.4,
+    color: Theme.primary,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.4,
+  },
+  heroSub: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 17,
+    maxWidth: 420,
+  },
+  tabCard: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 2px 12px rgba(24, 28, 50, 0.05)" as unknown as undefined,
+      },
+      default: {
+        shadowColor: "#181C32",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
+  },
+  tabRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  tabPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 128,
+    position: "relative",
+  },
+  tabPillActive: {
+    ...Platform.select({
+      web: {
+        boxShadow: "0 2px 8px rgba(24, 28, 50, 0.06)" as unknown as undefined,
+      },
+      default: { elevation: 1 },
+    }),
+  },
+  tabIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabTextCol: { flex: 1, minWidth: 0, gap: 1 },
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
+  tabCount: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+  },
+  tabActiveDot: {
+    position: "absolute",
+    bottom: 4,
+    left: "50%",
+    marginLeft: -3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  panelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  panelHeaderText: { flex: 1, minWidth: 0, gap: 2 },
+  panelTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  panelSub: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 15,
+  },
+  countBadge: {
+    minWidth: 36,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countBadgeText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -285,19 +560,32 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
     padding: 0,
   },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: Layout.screenPaddingHorizontal },
+  emptyCard: {
+    padding: 28,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
   empty: {
-    padding: 24,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 18,
   },
 });

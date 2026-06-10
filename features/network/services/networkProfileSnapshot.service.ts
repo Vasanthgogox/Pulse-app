@@ -26,6 +26,13 @@ export type NetworkProfileSnapshot = {
   avatar_url: string | null;
   avatar_seed: string | null;
   is_integrated: boolean;
+  /** Enriched fields shown in public profile */
+  registered_address: string | null;
+  branch_count: number;
+  sector: string | null;
+  website: string | null;
+  gstin: string | null;
+  operating_model: string | null;
 };
 
 type OrganizationSnapshotRow = {
@@ -203,6 +210,41 @@ export async function getOrgProfileSnapshot(
     mutuals = mutualsRes.error ? 0 : mutualsRes.mutuals.length;
   }
 
+  // 6b) Location count and workspace profile (best-effort).
+  let branchCount = 0;
+  let sector: string | null = null;
+  let website: string | null = null;
+  let gstin: string | null = null;
+  let operatingModel: string | null = null;
+  let registeredAddress: string | null = null;
+
+  const locationsRes = await supabase()
+    .from("organization_locations")
+    .select("id, location_type, address_line, city, state")
+    .eq("organization_id", targetOrgId)
+    .order("sort_order", { ascending: true });
+  if (!locationsRes.error && Array.isArray(locationsRes.data)) {
+    branchCount = locationsRes.data.length;
+    const regOff = (locationsRes.data as Array<{ location_type: string; address_line: string | null; city: string | null; state: string | null }>)
+      .find((l) => l.location_type === "registered_office");
+    if (regOff) {
+      registeredAddress = [regOff.address_line, regOff.city, regOff.state].filter(Boolean).join(", ") || null;
+    }
+  }
+
+  const orgProfileRes = await supabase()
+    .from("organization_workspace_profiles")
+    .select("profile_sector, profile_website, profile_gstin, operating_model")
+    .eq("id", targetOrgId)
+    .maybeSingle();
+  if (!orgProfileRes.error && orgProfileRes.data) {
+    const wp = orgProfileRes.data as { profile_sector?: string | null; profile_website?: string | null; profile_gstin?: string | null; operating_model?: string | null };
+    sector = wp.profile_sector?.trim() || null;
+    website = wp.profile_website?.trim() || null;
+    gstin = wp.profile_gstin?.trim() || null;
+    operatingModel = wp.operating_model?.trim() || null;
+  }
+
   // 6) Rating — average viewer-given scores for this org (best-effort).
   let rating: number | null = null;
   const ratingRes = await supabase()
@@ -228,6 +270,12 @@ export async function getOrgProfileSnapshot(
     avatar_url: resolvedAvatarUrl,
     avatar_seed: orgRow.avatar_seed,
     is_integrated: isIntegrated,
+    registered_address: registeredAddress,
+    branch_count: branchCount,
+    sector,
+    website,
+    gstin,
+    operating_model: operatingModel,
   };
 
   return { error: null, snapshot };

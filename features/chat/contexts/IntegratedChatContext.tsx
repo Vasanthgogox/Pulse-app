@@ -390,13 +390,14 @@ export function IntegratedChatProvider({
 
         setConversations((prev) => {
           if (prev.find((c) => c.id === conv.id)) return prev;
+          const isA = conv.org_a_id === orgId;
           const newConv: NetworkConversation = {
             ...conv,
-            partner_org_id: partner.org_id === conv.org_a_id ? conv.org_b_id : conv.org_a_id,
+            partner_org_id: partner.org_id,
             partner_name: partner.name,
             partner_logo_url: partner.logo_url ?? null,
             partner_avatar_seed: partner.avatar_seed ?? null,
-            unread_count: 0,
+            unread_count: isA ? conv.unread_count_a : conv.unread_count_b,
             messages: [],
           };
           return [newConv, ...prev];

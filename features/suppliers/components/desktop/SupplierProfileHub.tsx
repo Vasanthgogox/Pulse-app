@@ -26,9 +26,14 @@ import type {
   SupplierProfileTab,
   SupplierKycDocType,
 } from "@/features/suppliers/types/supplierManagement.types";
+import {
+  ProfileHubChatSplitLayout,
+  profileHubChatPartnerFromParty,
+} from "@/features/network/components/desktop/ProfileHubChatSplitLayout";
+import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { ROUTES } from "@/lib/routes";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
-import { useEffect, useState } from "react";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { MessageSquare, MoreHorizontal, Plus } from "lucide-react-native";
 
@@ -60,12 +65,65 @@ export function SupplierProfileHub({
 }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<SupplierProfileTab>(initialTab);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     if (initialTab) setTab(initialTab);
   }, [initialTab]);
 
   const { supplier, trips, kyc_documents, performance } = bundle;
+  const displayName =
+    (supplier.name || supplier.company_name || supplier.contact_person || "Supplier").trim();
+  const isIntegrated =
+    supplier.supplier_type === "integrated" || Boolean(supplier.linked_organization_id);
+  const chatPartner = useMemo(
+    () =>
+      profileHubChatPartnerFromParty({
+        linkedOrgId: supplier.linked_organization_id,
+        name: displayName,
+        avatarUrl: supplier.avatar_url,
+        avatarSeed: supplier.avatar_seed,
+        role: "SUPPLIER",
+        isIntegrated,
+      }),
+    [
+      displayName,
+      isIntegrated,
+      supplier.avatar_seed,
+      supplier.avatar_url,
+      supplier.linked_organization_id,
+    ],
+  );
+
+  const openIntegratedChat = () => {
+    if (chatPartner) {
+      setChatOpen(true);
+      return;
+    }
+    const phoneDigits = String(supplier.phone ?? supplier.contact_phone ?? "").replace(/\D/g, "");
+    if (phoneDigits.length >= 8) {
+      Alert.alert(
+        "Direct contact",
+        "This supplier is not on Pulse chat yet. Call or text their registered number, or invite them to connect for in-app messaging.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Text",
+            onPress: () => void Linking.openURL(`sms:${phoneDigits}`),
+          },
+          {
+            text: "Call",
+            onPress: () => void Linking.openURL(`tel:${phoneDigits}`),
+          },
+        ],
+      );
+      return;
+    }
+    Alert.alert(
+      "Chat unavailable",
+      "This supplier is not integrated on Pulse yet. Add a phone number or invite them to connect before using workspace chat.",
+    );
+  };
   const totalTrips = trips.length;
   const totalPayable = bundle.transactions
     .filter((tx) => (tx.amount_out ?? 0) > (tx.amount_in ?? 0))
@@ -117,7 +175,7 @@ export function SupplierProfileHub({
     { value: String(bundle.drivers.length), label: "DRIVERS" },
   ];
 
-  return (
+  const hubScroll = (
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.scrollContent}
@@ -171,13 +229,27 @@ export function SupplierProfileHub({
             </Text>
           </Pressable>
           <Pressable
-            style={styles.tabActionBtn}
-            onPress={() => router.push(ROUTES.CHAT as Parameters<typeof router.push>[0])}
+            style={[
+              styles.tabActionBtn,
+              chatOpen && chatStyles.tabActionIconBtnActive,
+            ]}
+            onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
             accessibilityRole="button"
-            accessibilityLabel="Chat"
+            accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
           >
-            <MessageSquare size={14} color={METRONIC.text} strokeWidth={2} />
-            <Text style={styles.tabActionBtnText}>Chat</Text>
+            <MessageSquare
+              size={14}
+              color={chatOpen ? Theme.primary : METRONIC.text}
+              strokeWidth={2}
+            />
+            <Text
+              style={[
+                styles.tabActionBtnText,
+                chatOpen && { color: Theme.primary, fontWeight: "700" },
+              ]}
+            >
+              Chat
+            </Text>
           </Pressable>
           <Pressable
             style={styles.tabActionBtn}
@@ -206,8 +278,7 @@ export function SupplierProfileHub({
         </View>
       </View>
 
-      {/* Stats bar */}
-      <View style={{ paddingHorizontal: 32, paddingTop: 20, paddingBottom: 4, backgroundColor: "#ffffff" }}>
+      <View style={{ paddingHorizontal: 32, paddingTop: 12, paddingBottom: 0, backgroundColor: "#ffffff" }}>
         <View style={styles.statsBar}>
           {stats.map((s, idx) => (
             <View
@@ -226,5 +297,15 @@ export function SupplierProfileHub({
 
       {panel}
     </ScrollView>
+  );
+
+  return (
+    <ProfileHubChatSplitLayout
+      chatOpen={chatOpen}
+      onCloseChat={() => setChatOpen(false)}
+      partner={chatPartner}
+    >
+      {hubScroll}
+    </ProfileHubChatSplitLayout>
   );
 }

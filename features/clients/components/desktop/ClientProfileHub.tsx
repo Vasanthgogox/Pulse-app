@@ -21,10 +21,16 @@ import {
 import type { ClientManagementBundle, ClientProfileTab } from "@/features/clients/types/clientManagement.types";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import { computeKycScore } from "@/features/clients/utils/clientManagement.util";
+import {
+  ProfileHubChatSplitLayout,
+  profileHubChatPartnerFromParty,
+} from "@/features/network/components/desktop/ProfileHubChatSplitLayout";
+import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
+import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { ROUTES } from "@/lib/routes";
 import { MessageSquare, MoreHorizontal } from "lucide-react-native";
-import { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 const TABS: { id: ClientProfileTab; label: string }[] = [
@@ -56,6 +62,7 @@ export function ClientProfileHub({
 }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<ClientProfileTab>(initialTab);
+  const [chatOpen, setChatOpen] = useState(false);
   const orgId = String((bundle.client as Record<string, unknown>)?.organization_id ?? client.organization_id ?? "");
   const clientId = client.id;
   const kyc = computeKycScore(bundle.kyc_documents);
@@ -63,6 +70,56 @@ export function ClientProfileHub({
     [bundle.client?.state, bundle.client?.country].filter(Boolean).join(", ") ||
     bundle.warehouses[0]?.city ||
     null;
+  const isIntegrated =
+    client.is_integrated ?? Boolean(client.linked_organization_id);
+  const chatPartner = useMemo(
+    () =>
+      profileHubChatPartnerFromParty({
+        linkedOrgId: client.linked_organization_id,
+        name: client.name?.trim() || "Client",
+        avatarUrl: client.avatar_url,
+        avatarSeed: client.avatar_seed,
+        role: "CLIENT",
+        isIntegrated,
+      }),
+    [
+      client.avatar_seed,
+      client.avatar_url,
+      client.linked_organization_id,
+      client.name,
+      isIntegrated,
+    ],
+  );
+
+  const openIntegratedChat = () => {
+    if (chatPartner) {
+      setChatOpen(true);
+      return;
+    }
+    const phoneDigits = String(client.phone ?? "").replace(/\D/g, "");
+    if (phoneDigits.length >= 8) {
+      Alert.alert(
+        "Direct contact",
+        "This client is not on Pulse chat yet. Call or text their registered number, or invite them to connect for in-app messaging.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Text",
+            onPress: () => void Linking.openURL(`sms:${phoneDigits}`),
+          },
+          {
+            text: "Call",
+            onPress: () => void Linking.openURL(`tel:${phoneDigits}`),
+          },
+        ],
+      );
+      return;
+    }
+    Alert.alert(
+      "Chat unavailable",
+      "This client is not integrated on Pulse yet. Add a phone number or invite them to connect before using workspace chat.",
+    );
+  };
 
   useEffect(() => {
     if (initialTab) setTab(initialTab);
@@ -109,8 +166,12 @@ export function ClientProfileHub({
     { value: String(bundle.contacts.length), label: "CONTACTS" },
   ];
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+  const hubScroll = (
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       <ClientProfileHubHero
         client={client}
         locationLabel={locationLabel}
@@ -146,10 +207,32 @@ export function ClientProfileHub({
             <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>Create trip</Text>
           </Pressable>
           <Pressable
-            style={styles.tabActionBtn}
-            onPress={() => router.push(ROUTES.clientDetail(client.id) as Parameters<typeof router.push>[0])}
+            style={[
+              styles.tabActionBtn,
+              chatOpen && chatStyles.tabActionIconBtnActive,
+            ]}
+            onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
+            accessibilityRole="button"
+            accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
           >
-            <MessageSquare size={14} color={Theme.textSecondary} strokeWidth={2} />
+            <MessageSquare
+              size={14}
+              color={chatOpen ? Theme.primary : Theme.textSecondary}
+              strokeWidth={2}
+            />
+            <Text
+              style={[
+                styles.tabActionBtnText,
+                chatOpen && { color: Theme.primary, fontWeight: "700" },
+              ]}
+            >
+              Chat
+            </Text>
+          </Pressable>
+          <Pressable
+            style={styles.tabActionBtn}
+            onPress={() => setTab("finance")}
+          >
             <Text style={styles.tabActionBtnText}>Ledger</Text>
           </Pressable>
           <Pressable style={styles.tabActionBtn} hitSlop={8}>
@@ -178,5 +261,15 @@ export function ClientProfileHub({
 
       {panel}
     </ScrollView>
+  );
+
+  return (
+    <ProfileHubChatSplitLayout
+      chatOpen={chatOpen}
+      onCloseChat={() => setChatOpen(false)}
+      partner={chatPartner}
+    >
+      {hubScroll}
+    </ProfileHubChatSplitLayout>
   );
 }

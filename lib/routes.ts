@@ -47,6 +47,7 @@ export const ROUTES = {
   MODALS: {
     TEAM:           '/(modals)/team'           as const,
     INVITE_MEMBER:  '/(modals)/invite-member'  as const,
+    LANGUAGE_SETTINGS: '/(modals)/language-settings' as const,
     /** @deprecated Use {@link ROUTES.CHAT}; kept for deep links — redirects to `/chat`. */
     CHAT:           '/(modals)/chat'           as const,
   },
@@ -56,6 +57,22 @@ export const ROUTES = {
   BRANDING_SETTINGS: '/branding-settings' as const,
   /** Canonical org hub: logo, name, KYC, team, invoice branding. */
   WORKSPACE:         '/workspace'         as const,
+  /** Own-org network profile hub (Details / Team / My Profile tabs on desktop). */
+  networkOrgHub: (
+    tab:
+      | "details"
+      | "team"
+      | "profile"
+      | "sales"
+      | "goals"
+      | "asset"
+      | "connections"
+      | "grow"
+      | "chat" = "details",
+  ) => {
+    const q = new URLSearchParams({ hub: "1", hubTab: tab });
+    return `/(tabs)/network?${q.toString()}` as const;
+  },
   /** Business intelligence command center with cross-filter analytics. */
   BUSINESS_PULSE:    '/business-pulse'    as const,
   /** Personal identity: name, email, phone, personal avatar */

@@ -311,7 +311,9 @@ export default function RootLayout() {
   if (!loaded && Platform.OS !== 'web') {
     return (
       <SafeAreaProvider>
-        <AppLoadingSplash variant="preparing" useGlobalI18n />
+        <LanguageProvider>
+          <AppLoadingSplash variant="preparing" useGlobalI18n />
+        </LanguageProvider>
       </SafeAreaProvider>
     );
   }
@@ -320,7 +322,9 @@ export default function RootLayout() {
   if (!hasSupabaseConfig()) {
     return (
       <SafeAreaProvider>
-        <ConfigErrorScreen />
+        <LanguageProvider>
+          <ConfigErrorScreen />
+        </LanguageProvider>
       </SafeAreaProvider>
     );
   }
@@ -329,28 +333,28 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <GestureHandlerRootView style={styles.ghRoot}>
-        <PersistQueryClientProvider
-          client={queryClient}
-          onSuccess={() => {
-            purgeEmptyEntityQueriesFromCache(queryClient);
-          }}
-          persistOptions={{
-            persister,
-            maxAge: 6 * 60 * 60 * 1000,  // 6h: balances cold-start speed vs memory on long-shift devices
-            dehydrateOptions: {
-              shouldDehydrateQuery: (query) => {
-                if (query.state.status !== 'success') return false;
-                const data = query.state.data;
-                // Never persist empty entity lists — they block refetch on cold start.
-                if (Array.isArray(data) && data.length === 0) return false;
-                return true;
+      <LanguageProvider>
+        <GestureHandlerRootView style={styles.ghRoot}>
+          <PersistQueryClientProvider
+            client={queryClient}
+            onSuccess={() => {
+              purgeEmptyEntityQueriesFromCache(queryClient);
+            }}
+            persistOptions={{
+              persister,
+              maxAge: 6 * 60 * 60 * 1000,  // 6h: balances cold-start speed vs memory on long-shift devices
+              dehydrateOptions: {
+                shouldDehydrateQuery: (query) => {
+                  if (query.state.status !== 'success') return false;
+                  const data = query.state.data;
+                  // Never persist empty entity lists — they block refetch on cold start.
+                  if (Array.isArray(data) && data.length === 0) return false;
+                  return true;
+                },
               },
-            },
-          }}
-        >
-          <NetworkProvider>
-            <LanguageProvider>
+            }}
+          >
+            <NetworkProvider>
               <AuthProvider>
                 <OrganizationProvider>
                   <ActiveWorkspaceProvider>
@@ -366,10 +370,10 @@ export default function RootLayout() {
                   </ActiveWorkspaceProvider>
                 </OrganizationProvider>
               </AuthProvider>
-            </LanguageProvider>
-          </NetworkProvider>
-        </PersistQueryClientProvider>
-      </GestureHandlerRootView>
+            </NetworkProvider>
+          </PersistQueryClientProvider>
+        </GestureHandlerRootView>
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }

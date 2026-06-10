@@ -11,6 +11,7 @@ import { WorkspaceOrgKycPanel } from "@/features/organization/components/workspa
 import { WorkspaceProductsPanel } from "@/features/organization/components/workspace/WorkspaceProductsPanel";
 import { WorkspaceSettingsPanel } from "@/features/organization/components/workspace/WorkspaceSettingsPanel";
 import {
+  isWorkspaceHubInlinePanel,
   parseWorkspacePanelId,
   type WorkspacePanelId,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
@@ -56,6 +57,11 @@ export default function WorkspaceScreen() {
         <WorkspaceAccountPanel
           onBack={closePanel}
           onEdit={() => openPanel("account-edit")}
+          onOpenPanel={openPanel}
+          onOpenRoute={(path) => {
+            closeOverlay();
+            router.replace(path as Parameters<typeof router.replace>[0]);
+          }}
         />
       );
     }
@@ -72,13 +78,17 @@ export default function WorkspaceScreen() {
       return <WorkspaceProductsPanel onBack={closePanel} />;
     }
     return null;
-  }, [activePanel, closePanel, openPanel]);
+  }, [activePanel, closeOverlay, closePanel, openPanel, router]);
+
+  const shellPanelOpen = !!activePanel && !isWorkspaceHubInlinePanel(activePanel);
 
   const hub = (
     <WorkspaceHubMenu
       activePanel={activePanel}
       onSelectPanel={openPanel}
       onExit={closeOverlay}
+      inlinePanel={isWorkspaceHubInlinePanel(activePanel) ? activePanel : null}
+      onCloseInlinePanel={closePanel}
     />
   );
 
@@ -88,7 +98,7 @@ export default function WorkspaceScreen() {
         <WorkspaceFlexCardShell
           hub={hub}
           panel={panelContent}
-          panelOpen={!!activePanel}
+          panelOpen={shellPanelOpen}
           onDismiss={closeOverlay}
           onClosePanel={closePanel}
         />

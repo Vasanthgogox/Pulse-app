@@ -87,6 +87,8 @@ interface ConnectionsViewProps {
   desktopMetronicGrid?: boolean;
   /** Desktop Metronic — single row, 4 visible, horizontal scroll. */
   desktopMetronicHorizontalScroll?: boolean;
+  /** Open integrated partner chat (desktop hub flex panel). */
+  onChatIntegrated?: (item: ConnectedOrg) => void;
 }
 
 const COVER_TOKENS = [
@@ -433,6 +435,7 @@ export function ConnectionsView({
   hubFilter,
   desktopMetronicGrid = false,
   desktopMetronicHorizontalScroll = false,
+  onChatIntegrated,
 }: ConnectionsViewProps) {
   const { width: windowWidth } = useWindowDimensions();
   const [search, setSearch] = useState("");
@@ -1028,6 +1031,11 @@ export function ConnectionsView({
                 item={item}
                 onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
                 onInvite={() => void inviteOffAppParty(item)}
+                onChat={
+                  item.is_integrated && item.linked_organization_id && onChatIntegrated
+                    ? () => onChatIntegrated(item)
+                    : undefined
+                }
                 actionLoading={invitingId === item.id}
               />
             </View>
@@ -1074,6 +1082,11 @@ export function ConnectionsView({
               item={item}
               onPress={onOpenProfile ? () => onOpenProfile(item) : undefined}
               onInvite={() => void inviteOffAppParty(item)}
+              onChat={
+                item.is_integrated && item.linked_organization_id && onChatIntegrated
+                  ? () => onChatIntegrated(item)
+                  : undefined
+              }
               actionLoading={invitingId === item.id}
             />
           </View>

@@ -1,26 +1,32 @@
 /**
- * Language Settings — proper UI for selecting app language.
- * Grouped by region (India / Southeast Asia). No hardcoded text; all t(key).
+ * Language Settings — clean white card design with left accent bar for selection.
+ * Matches the reference design: grouped sections, thin dividers, circle checkmark.
  */
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { LocaleOption } from "@/lib/i18n";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
+import { ArrowLeft, Check, Search } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Theme from "@/constants/Theme";
 
 const INDIA: LocaleOption["region"] = "india";
 const SOUTHEAST_ASIA: LocaleOption["region"] = "southeast_asia";
 const OTHER: LocaleOption["region"] = "other";
+
+const ACCENT = "#4f46e5";
+const TEXT = "#0f172a";
+const MUTED = "#94a3b8";
+const BORDER = "#e5e7eb";
+const BG = "#ffffff";
+const SECTION_BG = "#f8fafc";
 
 export default function LanguageSettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -35,17 +41,15 @@ export default function LanguageSettingsScreen() {
       opt.label.toLowerCase().includes(q) ||
       opt.labelNative.toLowerCase().includes(q);
     const india = localeOptions.filter((o) => o.region === INDIA && filter(o));
-    const sea = localeOptions.filter(
-      (o) => o.region === SOUTHEAST_ASIA && filter(o)
-    );
+    const sea = localeOptions.filter((o) => o.region === SOUTHEAST_ASIA && filter(o));
     const other = localeOptions.filter((o) => o.region === OTHER && filter(o));
     return { india, sea, other };
   }, [localeOptions, search]);
 
-  const sections: { title: string; data: LocaleOption[] }[] = [
-    { title: t("regionIndia"), data: filteredByRegion.india },
-    { title: t("regionSoutheastAsia"), data: filteredByRegion.sea },
-    { title: t("regionOther"), data: filteredByRegion.other },
+  const sections: { title: string; data: LocaleOption[]; color: string }[] = [
+    { title: t("regionIndia"), data: filteredByRegion.india, color: ACCENT },
+    { title: t("regionSoutheastAsia"), data: filteredByRegion.sea, color: "#0891b2" },
+    { title: t("regionOther"), data: filteredByRegion.other, color: "#64748b" },
   ].filter((s) => s.data.length > 0);
 
   const handleSelect = (value: LocaleOption["value"]) => {
@@ -54,146 +58,262 @@ export default function LanguageSettingsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity
+    <View style={[s.container, { paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={s.header}>
+        <Pressable
           onPress={() => router.back()}
-          style={styles.backBtn}
-          activeOpacity={0.7}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={({ pressed }) => [s.backBtn, pressed && { opacity: 0.7 }]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
-          <FontAwesome name="arrow-left" size={20} color={Theme.textOnDark} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t("languageSettings")}</Text>
-        <View style={styles.backBtn} />
+          <ArrowLeft size={18} color={TEXT} strokeWidth={2.2} />
+        </Pressable>
+        <View style={s.headerText}>
+          <Text style={s.headerTitle}>{t("languageSettings")}</Text>
+          <Text style={s.headerSub}>APP DISPLAY LANGUAGE</Text>
+        </View>
+        <View style={s.backBtn} />
       </View>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder={t("searchLanguage")}
-        placeholderTextColor={Theme.textMutedDemo}
-        value={search}
-        onChangeText={setSearch}
-      />
+      {/* Search */}
+      <View style={s.searchWrap}>
+        <Search size={16} color={MUTED} strokeWidth={2} style={{ flexShrink: 0 }} />
+        <TextInput
+          style={s.searchInput}
+          placeholder={t("searchLanguage")}
+          placeholderTextColor={MUTED}
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+      </View>
 
       <FlatList
         data={sections}
         keyExtractor={(item) => item.title}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 + insets.bottom, gap: 16 }}
         renderItem={({ item: section }) => (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            {section.data.map((opt) => {
-              const selected = locale === opt.value;
-              return (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={styles.row}
-                  onPress={() => handleSelect(opt.value)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.rowText}>
-                    <Text style={styles.rowLabelNative}>{opt.labelNative}</Text>
-                    <Text style={styles.rowLabel}>{opt.label}</Text>
-                  </View>
-                  {selected && (
-                    <FontAwesome
-                      name="check"
-                      size={18}
-                      color={Theme.primary}
-                      style={styles.check}
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+          <View>
+            {/* Section header */}
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: section.color }]} />
+              <Text style={[s.sectionTitle, { color: section.color }]}>
+                {section.title.toUpperCase()}
+              </Text>
+            </View>
+
+            {/* Language items */}
+            <View style={s.sectionCard}>
+              {section.data.map((opt, idx) => {
+                const selected = locale === opt.value;
+                const isLast = idx === section.data.length - 1;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => handleSelect(opt.value)}
+                    style={({ pressed }) => [
+                      s.row,
+                      selected && s.rowSelected,
+                      pressed && !selected && { backgroundColor: "#f8fafc" },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={`${opt.label} — ${opt.labelNative}`}
+                  >
+                    {/* Left accent bar */}
+                    {selected ? <View style={s.rowAccent} /> : <View style={s.rowAccentPlaceholder} />}
+
+                    {/* Text */}
+                    <View style={s.rowBody}>
+                      <Text style={[s.rowNative, selected && s.rowNativeSelected]}>
+                        {opt.label}
+                      </Text>
+                      <Text style={[s.rowLabel, selected && s.rowLabelSelected]}>
+                        {opt.labelNative}
+                      </Text>
+                    </View>
+
+                    {/* Checkmark */}
+                    {selected ? (
+                      <View style={s.checkCircle}>
+                        <Check size={12} color="#fff" strokeWidth={3} />
+                      </View>
+                    ) : null}
+
+                    {/* Divider */}
+                    {!isLast && !selected ? <View style={s.divider} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         )}
-        contentContainerStyle={{
-          paddingBottom: 24 + insets.bottom,
-          paddingHorizontal: 16,
-        }}
-        showsVerticalScrollIndicator={false}
+        style={s.list}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: SECTION_BG,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Theme.darkBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.separatorDark,
+    paddingVertical: 14,
+    backgroundColor: BG,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: BORDER,
   },
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: BG,
+  },
+  headerText: {
+    alignItems: "center",
+    gap: 1,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: Theme.textOnDark,
+    fontSize: 16,
+    fontWeight: "700",
+    color: TEXT,
+    letterSpacing: -0.2,
+  },
+  headerSub: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: MUTED,
+    letterSpacing: 1.0,
+    textTransform: "uppercase",
+  },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: BG,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
   },
   searchInput: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: Theme.text,
-    backgroundColor: Theme.backgroundInput,
-    borderRadius: 10,
-    borderWidth: 0,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    color: TEXT,
+    padding: 0,
   },
-  section: {
-    marginTop: 20,
+  list: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  sectionDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+  sectionCard: {
+    backgroundColor: BG,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    overflow: "hidden",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    backgroundColor: Theme.screenBackground,
-    borderRadius: 10,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: Theme.borderInput,
+    paddingVertical: 12,
+    paddingRight: 14,
+    backgroundColor: BG,
+    minHeight: 56,
+    position: "relative",
   },
-  rowText: {
+  rowSelected: {
+    backgroundColor: "#eef2ff",
+  },
+  rowAccent: {
+    width: 3,
+    alignSelf: "stretch",
+    backgroundColor: ACCENT,
+    marginRight: 12,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  rowAccentPlaceholder: {
+    width: 3,
+    marginRight: 12,
+  },
+  rowBody: {
     flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
-  rowLabelNative: {
-    fontSize: 17,
+  rowNative: {
+    fontSize: 14,
     fontWeight: "600",
-    color: Theme.text,
+    color: TEXT,
+    lineHeight: 20,
+  },
+  rowNativeSelected: {
+    color: ACCENT,
+    fontWeight: "700",
   },
   rowLabel: {
-    fontSize: 14,
-    color: Theme.textSecondary,
-    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "500",
+    color: MUTED,
+    lineHeight: 17,
   },
-  check: {
-    marginLeft: 8,
+  rowLabelSelected: {
+    color: "#818cf8",
+  },
+  checkCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: ACCENT,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  divider: {
+    position: "absolute",
+    bottom: 0,
+    left: 15,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: BORDER,
   },
 });

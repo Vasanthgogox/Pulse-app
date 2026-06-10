@@ -27,11 +27,14 @@ import type { MutualConnectionRow } from "@/features/network/services/mutual-con
 import { NetworkExportMenu } from "@/features/network/components/desktop/NetworkExportMenu";
 import { exportConnectionsExcel } from "@/features/network/lib/networkExport.util";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
+import type { NetworkChatPartner } from "@/features/network/components/desktop/NetworkDesktopChatFlexPanel";
+import { NetworkDesktopChatOverlay } from "@/features/network/components/desktop/NetworkDesktopChatOverlay";
+import { NetworkDesktopChatIntroPanel } from "@/features/network/components/desktop/NetworkDesktopChatIntroPanel";
+import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
+import { useClientsQuery, useSuppliersQuery } from "@/lib/queries";
 import { MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { useRouter } from "expo-router";
-import { ROUTES } from "@/lib/routes";
 
 export type NetworkDesktopTab =
   | "details"
@@ -41,7 +44,8 @@ export type NetworkDesktopTab =
   | "goals"
   | "asset"
   | "connections"
-  | "grow";
+  | "grow"
+  | "chat";
 
 const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "details", label: "Details" },
@@ -52,6 +56,7 @@ const TABS: { id: NetworkDesktopTab; label: string }[] = [
   { id: "asset", label: "Asset sales" },
   { id: "connections", label: "Your connections" },
   { id: "grow", label: "Grow your network" },
+  { id: "chat", label: "Chat" },
 ];
 
 function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
@@ -63,7 +68,8 @@ function parseHubTab(raw: string | undefined): NetworkDesktopTab | null {
     raw === "goals" ||
     raw === "asset" ||
     raw === "connections" ||
-    raw === "grow"
+    raw === "grow" ||
+    raw === "chat"
   ) {
     return raw;
   }
@@ -148,11 +154,14 @@ export function NetworkDesktopHub({
   initialTab,
 }: Props) {
   const { user, profile } = useAuth();
-  const router = useRouter();
+  const clientsQ = useClientsQuery(orgId);
+  const suppliersQ = useSuppliersQuery(orgId);
   const [tab, setTab] = useState<NetworkDesktopTab>(
     () => parseHubTab(initialTab) ?? "details",
   );
+  const [chatOpen, setChatOpen] = useState(() => parseHubTab(initialTab) === "chat");
   const [allConnections, setAllConnections] = useState<ConnectedOrg[]>([]);
+  const [chatPartnerOrgId, setChatPartnerOrgId] = useState<string | null>(null);
   const orgName = organization?.name?.trim() || "Your workspace";
   const email = profile?.email?.trim() || "—";
   const modelLabel =
@@ -164,10 +173,85 @@ export function NetworkDesktopHub({
     if (parsed) setTab(parsed);
   }, [initialTab]);
 
+  const integratedChatPartners = useMemo((): NetworkChatPartner[] => {
+    const map = new Map<string, NetworkChatPartner>();
+    for (const item of allConnections) {
+      if (!item.is_integrated || !item.linked_organization_id) continue;
+      map.set(item.linked_organization_id, {
+        orgId: item.linked_organization_id,
+        name: item.name,
+        logoUrl: item.avatar_url ?? null,
+        avatarSeed: item.avatar_seed ?? null,
+        role: item.role,
+      });
+    }
+    for (const client of clientsQ.data ?? []) {
+      const linkedOrgId = client.linked_organization_id?.trim();
+      const integrated = client.is_integrated ?? Boolean(linkedOrgId);
+      if (!integrated || !linkedOrgId || map.has(linkedOrgId)) continue;
+      map.set(linkedOrgId, {
+        orgId: linkedOrgId,
+        name: client.name?.trim() || "Client",
+        logoUrl: client.avatar_url ?? null,
+        avatarSeed: client.avatar_seed ?? null,
+        role: "CLIENT",
+      });
+    }
+    for (const supplier of suppliersQ.data ?? []) {
+      const linkedOrgId = supplier.linked_organization_id?.trim();
+      const integrated =
+        supplier.is_integrated ??
+        (supplier.supplier_type === "integrated" || Boolean(linkedOrgId));
+      if (!integrated || !linkedOrgId || map.has(linkedOrgId)) continue;
+      map.set(linkedOrgId, {
+        orgId: linkedOrgId,
+        name: supplier.company_name?.trim() || supplier.name?.trim() || "Supplier",
+        logoUrl: supplier.avatar_url ?? null,
+        avatarSeed: supplier.avatar_seed ?? null,
+        role: "SUPPLIER",
+      });
+    }
+    for (const partnerOrgId of integratedPartnerOrgIds) {
+      if (map.has(partnerOrgId)) continue;
+      map.set(partnerOrgId, {
+        orgId: partnerOrgId,
+        name: "Integrated partner",
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allConnections, clientsQ.data, integratedPartnerOrgIds, suppliersQ.data]);
+
+  const openChatWithPartner = (partnerOrgId: string | null) => {
+    onInvitationsOpenChange(false);
+    setChatPartnerOrgId(partnerOrgId);
+    setTab("chat");
+    setChatOpen(true);
+  };
+
   const selectTab = (next: NetworkDesktopTab) => {
     onInvitationsOpenChange(false);
+    if (next === "chat") {
+      setTab("chat");
+      setChatOpen(true);
+      return;
+    }
+    setChatOpen(false);
     setTab(next);
   };
+
+  const pendingJoinInvite = useMemo(() => {
+    const item = receivedInviteItems[0];
+    if (!item) return null;
+    return {
+      id: item.id,
+      name: item.name?.trim() || "Connection request",
+      meta: item.subtitle?.trim() || `${item.type} · Pending`,
+      avatarUrl: item.avatarUri ?? item.logoUrl ?? null,
+      avatarSeed: item.senderAvatarSeed ?? item.orgAvatarSeed ?? null,
+      onAccept: () => onInviteApprove(item),
+      onDecline: () => onInviteReject(item),
+    };
+  }, [onInviteApprove, onInviteReject, receivedInviteItems]);
 
   const panel = (() => {
     if (!orgId) {
@@ -260,6 +344,21 @@ export function NetworkDesktopHub({
           onConnFilterChange={onConnFilterChange}
           onOpenProfile={onOpenProfileFromConnection}
           onConnectionsComputed={setAllConnections}
+          onChatIntegrated={(item) => {
+            if (item.linked_organization_id) {
+              openChatWithPartner(item.linked_organization_id);
+            }
+          }}
+        />
+      );
+    }
+
+    if (tab === "chat") {
+      return (
+        <NetworkDesktopChatIntroPanel
+          partners={integratedChatPartners}
+          selectedOrgId={chatPartnerOrgId}
+          onSelectPartner={(orgId) => setChatPartnerOrgId(orgId)}
         />
       );
     }
@@ -283,7 +382,7 @@ export function NetworkDesktopHub({
     );
   })();
 
-  return (
+  const hubScroll = (
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.scrollContent}
@@ -348,12 +447,25 @@ export function NetworkDesktopHub({
             </Text>
           </Pressable>
           <Pressable
-            style={styles.tabActionIconBtn}
-            onPress={() => router.push(ROUTES.CHAT as never)}
+            style={[
+              styles.tabActionIconBtn,
+              (chatOpen || tab === "chat") && chatStyles.tabActionIconBtnActive,
+            ]}
+            onPress={() => {
+              if (chatOpen || tab === "chat") {
+                setChatOpen(false);
+                if (tab === "chat") setTab("connections");
+                return;
+              }
+              openChatWithPartner(chatPartnerOrgId);
+            }}
             accessibilityRole="button"
-            accessibilityLabel="Open chat"
+            accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
           >
-            <MessageSquare size={16} color={METRONIC.text} />
+            <MessageSquare
+              size={16}
+              color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
+            />
           </Pressable>
           <NetworkExportMenu
             actions={[
@@ -378,5 +490,25 @@ export function NetworkDesktopHub({
 
       {panel}
     </ScrollView>
+  );
+
+  return (
+    <>
+      {hubScroll}
+      {chatOpen && orgId ? (
+        <NetworkDesktopChatOverlay
+          visible
+          orgId={orgId}
+          orgName={orgName}
+          onClose={() => {
+            setChatOpen(false);
+            if (tab === "chat") setTab("connections");
+          }}
+          joinRequest={pendingJoinInvite}
+          integratedPartners={integratedChatPartners}
+          initialPartnerOrgId={chatPartnerOrgId}
+        />
+      ) : null}
+    </>
   );
 }

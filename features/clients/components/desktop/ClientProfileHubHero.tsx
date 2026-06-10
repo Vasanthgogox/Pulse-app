@@ -116,7 +116,7 @@ export function ClientProfileHubHero({
           <View style={cpStyles.heroTagRow}>
             <StatusPill label="CLIENT" />
             <StatusPill
-              label={inApp ? "IN APP" : "NOT IN APP"}
+              label={inApp ? "INTEGRATED" : "NOT IN APP"}
               tone={inApp ? "green" : "muted"}
             />
             <StatusPill label={status.toUpperCase()} tone="warn" />

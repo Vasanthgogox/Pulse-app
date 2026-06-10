@@ -10,11 +10,11 @@ import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 
-const DRAWER_WIDTH = 480;
+const DEFAULT_DRAWER_WIDTH = 480;
 /** Inset from viewport edges — floating panel, not flush to the corner. */
-const DRAWER_INSET_RIGHT = 20;
-const DRAWER_INSET_TOP = 16;
-const DRAWER_INSET_BOTTOM = 16;
+const DEFAULT_DRAWER_INSET_RIGHT = 20;
+const DEFAULT_DRAWER_INSET_TOP = 16;
+const DEFAULT_DRAWER_INSET_BOTTOM = 16;
 /** Above app chrome (tab bar shell ~100) and below drawer panel. */
 const BACKDROP_Z = 5000;
 const DRAWER_Z = 5001;
@@ -24,11 +24,25 @@ type Props = {
   onClose: () => void;
   children: ReactNode;
   hostRef?: RefObject<View | null>;
+  /** Drawer width in px (default 480). */
+  width?: number;
+  insetRight?: number;
+  insetTop?: number;
+  insetBottom?: number;
 };
 
 const webFixed = Platform.OS === "web" ? ({ position: "fixed" } as ViewStyle) : {};
 
-export function RegistryWebDrawer({ visible, onClose, children, hostRef }: Props) {
+export function RegistryWebDrawer({
+  visible,
+  onClose,
+  children,
+  hostRef,
+  width = DEFAULT_DRAWER_WIDTH,
+  insetRight = DEFAULT_DRAWER_INSET_RIGHT,
+  insetTop = DEFAULT_DRAWER_INSET_TOP,
+  insetBottom = DEFAULT_DRAWER_INSET_BOTTOM,
+}: Props) {
   const [portalReady, setPortalReady] = useState(false);
 
   useEffect(() => {
@@ -56,7 +70,17 @@ export function RegistryWebDrawer({ visible, onClose, children, hostRef }: Props
       />
       <View
         ref={hostRef}
-        style={[styles.drawer, webFixed, { zIndex: DRAWER_Z }]}
+        style={[
+          styles.drawer,
+          webFixed,
+          {
+            zIndex: DRAWER_Z,
+            top: insetTop,
+            right: insetRight,
+            bottom: insetBottom,
+            width,
+          },
+        ]}
         accessibilityViewIsModal
       >
         <View style={styles.drawerInner}>{children}</View>
@@ -82,10 +106,6 @@ const styles = StyleSheet.create({
     }),
   },
   drawer: {
-    top: DRAWER_INSET_TOP,
-    right: DRAWER_INSET_RIGHT,
-    bottom: DRAWER_INSET_BOTTOM,
-    width: DRAWER_WIDTH,
     maxWidth: "96vw" as unknown as number,
     backgroundColor: Theme.cardWhite,
     borderRadius: 18,
@@ -115,4 +135,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export const REGISTRY_DRAWER_WIDTH = DRAWER_WIDTH;
+export const REGISTRY_DRAWER_WIDTH = DEFAULT_DRAWER_WIDTH;

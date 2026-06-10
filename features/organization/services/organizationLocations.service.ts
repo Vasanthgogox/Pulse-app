@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase';
 
 export type OrganizationLocationType =
+  | 'registered_office'
+  | 'branch_office'
   | 'primary_hub'
   | 'regional_office'
   | 'dispatch_center'
+  | 'warehouse'
   | 'other';
 
 export interface OrganizationWorkspaceLocation {

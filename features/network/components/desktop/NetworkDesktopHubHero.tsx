@@ -26,7 +26,7 @@ import {
   Sparkles,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 type Props = {
   orgId: string | null;
@@ -61,6 +61,8 @@ export function NetworkDesktopHubHero({
   onProfilePress,
 }: Props) {
   const { profile } = useAuth();
+  const { width } = useWindowDimensions();
+  const isNarrow = width < 720;
   const officeMapQ = useOrganizationOfficeMap(orgId);
   const { logoUri, logoStoragePath, uploading, canEdit, onLogoPress } =
     useWorkspaceOrgLogo();
@@ -103,98 +105,143 @@ export function NetworkDesktopHubHero({
     ? shortOfficeLocation(officeMapQ.data.addressLabel)
     : "Network hub";
 
+  const avatarNode = (
+    <Pressable
+      onPress={onLogoPress}
+      disabled={uploading}
+      style={({ pressed }) => [
+        styles.heroAvatarPressable,
+        pressed && canEdit && { opacity: 0.9 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={canEdit ? "Change workspace logo" : `${orgName} workspace logo`}
+    >
+      <View style={styles.heroAvatarRing}>
+        {logoUri ? (
+          <Image source={{ uri: logoUri }} style={styles.heroAvatarImage} />
+        ) : (
+          <PartyAvatar
+            name={orgName}
+            entityType="client"
+            organizationImageUrl={logoStoragePath}
+            size={62}
+            shape="circle"
+          />
+        )}
+      </View>
+      {canEdit ? (
+        <View style={styles.heroCameraBadge}>
+          {uploading ? (
+            <LoadingIndicator size="small" color={Theme.textOnPrimary} />
+          ) : (
+            <Camera size={10} color={Theme.textOnPrimary} strokeWidth={2.4} />
+          )}
+        </View>
+      ) : null}
+    </Pressable>
+  );
+
+  if (isNarrow) {
+    // Mobile: compact horizontal strip
+    return (
+      <View style={[styles.hero, heroLocal.heroNarrow]}>
+        <View style={styles.heroHexOverlay} pointerEvents="none" />
+        <View style={heroLocal.narrowInner}>
+          {avatarNode}
+          <View style={heroLocal.narrowTextCol}>
+            <View style={heroLocal.narrowNameRow}>
+              <Text style={heroLocal.narrowName} numberOfLines={1}>{orgName}</Text>
+              <BadgeCheck size={13} color={METRONIC.link} strokeWidth={2.2} />
+            </View>
+            <View style={heroLocal.narrowMeta}>
+              <View style={styles.heroMetaItem}>
+                <Building2 size={11} color={METRONIC.subtle} strokeWidth={2} />
+                <Text style={heroLocal.narrowMetaText}>{modelLabel}</Text>
+              </View>
+              <Text style={styles.heroStatDivider}>·</Text>
+              <View style={styles.heroMetaItem}>
+                <MapPin size={11} color={METRONIC.subtle} strokeWidth={2} />
+                <Text style={heroLocal.narrowMetaText}>{locationLabel}</Text>
+              </View>
+            </View>
+            <View style={heroLocal.narrowStats}>
+              <Text style={heroLocal.narrowStatText}>
+                <Text style={heroLocal.narrowStatVal}>{totalConnections}</Text>
+                <Text style={heroLocal.narrowStatLabel}> connections</Text>
+              </Text>
+              <Text style={styles.heroStatDivider}>·</Text>
+              <Text style={heroLocal.narrowStatText}>
+                <Text style={heroLocal.narrowStatVal}>{clientCount}</Text>
+                <Text style={heroLocal.narrowStatLabel}> clients</Text>
+              </Text>
+              <Text style={styles.heroStatDivider}>·</Text>
+              <Text style={heroLocal.narrowStatText}>
+                <Text style={heroLocal.narrowStatVal}>{supplierCount}</Text>
+                <Text style={heroLocal.narrowStatLabel}> suppliers</Text>
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={onProfilePress}
+            style={({ pressed }) => [heroLocal.narrowWelcome, pressed && { opacity: 0.8 }]}
+          >
+            <View style={styles.heroUserRingSm}>
+              {userAvatarUri ? (
+                <Image source={{ uri: userAvatarUri }} style={styles.heroUserImageSm} />
+              ) : (
+                <PartyAvatar name={userDisplayName} avatarUrl={profile?.avatar_url ?? null} avatarSeed={profile?.avatar_seed ?? null} size={24} shape="circle" />
+              )}
+            </View>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.hero}>
       <View style={styles.heroHexOverlay} pointerEvents="none" />
       <View style={styles.heroInner}>
         <Pressable
           onPress={onProfilePress}
-          style={({ pressed }) => [
-            styles.heroWelcomeCorner,
-            pressed && { opacity: 0.9 },
-          ]}
+          style={({ pressed }) => [styles.heroWelcomeCorner, pressed && { opacity: 0.9 }]}
           accessibilityRole="button"
-          accessibilityLabel={`Welcome ${welcomeFirstName}, open my profile`}
+          accessibilityLabel={`Welcome ${welcomeFirstName}`}
         >
           <View style={styles.heroWelcomeTextWrap}>
-            <Sparkles size={12} color={METRONIC.link} strokeWidth={2.2} />
+            <Sparkles size={11} color={METRONIC.link} strokeWidth={2.2} />
             <Text style={styles.heroWelcomeText}>
-              Welcome,{" "}
-              <Text style={styles.heroWelcomeName}>{welcomeFirstName}</Text>
+              Welcome, <Text style={styles.heroWelcomeName}>{welcomeFirstName}</Text>
             </Text>
           </View>
           <View style={styles.heroUserRingSm}>
             {userAvatarUri ? (
               <Image source={{ uri: userAvatarUri }} style={styles.heroUserImageSm} />
             ) : (
-              <PartyAvatar
-                name={userDisplayName}
-                avatarUrl={profile?.avatar_url ?? null}
-                avatarSeed={profile?.avatar_seed ?? null}
-                size={24}
-                shape="circle"
-              />
+              <PartyAvatar name={userDisplayName} avatarUrl={profile?.avatar_url ?? null} avatarSeed={profile?.avatar_seed ?? null} size={24} shape="circle" />
             )}
           </View>
         </Pressable>
 
         <View style={styles.heroCenter}>
-          <Pressable
-            onPress={onLogoPress}
-            disabled={uploading}
-            style={({ pressed }) => [
-              styles.heroAvatarPressable,
-              pressed && canEdit && { opacity: 0.9 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              canEdit ? "Change workspace logo" : `${orgName} workspace logo`
-            }
-          >
-            <View style={styles.heroAvatarRing}>
-              {logoUri ? (
-                <Image source={{ uri: logoUri }} style={styles.heroAvatarImage} />
-              ) : (
-                <PartyAvatar
-                  name={orgName}
-                  entityType="client"
-                  organizationImageUrl={logoStoragePath}
-                  size={88}
-                  shape="circle"
-                />
-              )}
-            </View>
-            {canEdit ? (
-              <View style={styles.heroCameraBadge}>
-                {uploading ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                ) : (
-                  <Camera
-                    size={13}
-                    color={Theme.textOnPrimary}
-                    strokeWidth={2.4}
-                  />
-                )}
-              </View>
-            ) : null}
-          </Pressable>
+          {avatarNode}
 
           <View style={styles.heroNameRow}>
             <Text style={styles.heroName}>{orgName}</Text>
-            <BadgeCheck size={18} color={METRONIC.link} strokeWidth={2.2} />
+            <BadgeCheck size={15} color={METRONIC.link} strokeWidth={2.2} />
           </View>
 
           <View style={styles.heroMetaRow}>
             <View style={styles.heroMetaItem}>
-              <Building2 size={14} color={METRONIC.subtle} strokeWidth={2} />
+              <Building2 size={12} color={METRONIC.subtle} strokeWidth={2} />
               <Text style={styles.heroMetaText}>{modelLabel}</Text>
             </View>
             <View style={styles.heroMetaItem}>
-              <MapPin size={14} color={METRONIC.subtle} strokeWidth={2} />
+              <MapPin size={12} color={METRONIC.subtle} strokeWidth={2} />
               <Text style={styles.heroMetaText}>{locationLabel}</Text>
             </View>
             <View style={styles.heroMetaItem}>
-              <Mail size={14} color={METRONIC.subtle} strokeWidth={2} />
+              <Mail size={12} color={METRONIC.subtle} strokeWidth={2} />
               <Text style={styles.heroMetaText}>{email}</Text>
             </View>
           </View>
@@ -217,12 +264,73 @@ export function NetworkDesktopHubHero({
           </View>
 
           {canEdit ? (
-            <Text style={styles.heroLogoHint}>
-              Tap logo to update workspace branding
-            </Text>
+            <Text style={styles.heroLogoHint}>Tap logo to update workspace branding</Text>
           ) : null}
         </View>
       </View>
     </View>
   );
 }
+
+const heroLocal = StyleSheet.create({
+  heroNarrow: {
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+  },
+  narrowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    zIndex: 1,
+  },
+  narrowTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  narrowNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  narrowName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: METRONIC.text,
+    letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  narrowMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  narrowMetaText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: METRONIC.subtle,
+  },
+  narrowStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexWrap: "wrap",
+  },
+  narrowStatText: {
+    fontSize: 10,
+    color: METRONIC.subtle,
+  },
+  narrowStatVal: {
+    fontWeight: "700",
+    color: METRONIC.text,
+  },
+  narrowStatLabel: {
+    fontWeight: "500",
+    color: METRONIC.muted,
+  },
+  narrowWelcome: {
+    flexShrink: 0,
+  },
+});
