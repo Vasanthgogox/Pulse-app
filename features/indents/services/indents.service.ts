@@ -25,6 +25,9 @@ import {
     required,
     runValidators,
 } from "@/lib/validation";
+import { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
+
+export { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
 
 export type CirculationTarget =
   | "marketplace"
@@ -567,10 +570,6 @@ export async function getIndentById(
   const indent: IndentRow | null = raw ? normalizeIndentRow(raw) : null;
   return { error: null, indent };
 }
-
-import { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
-
-export { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
 
 export type GetVisibleIndentByIdOptions = {
   /** Cached Find Work / Claimed rows — skips `market_indents_for_org` when the indent is present. */

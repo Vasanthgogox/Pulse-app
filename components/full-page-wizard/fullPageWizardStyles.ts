@@ -36,7 +36,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   /** Enterprise desktop — denser chrome, scrollable multi-section form. */
   pageRootDesktopForm: {
     gap: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 0,
   },
   pageRootKeypad: {
     gap: 8,
@@ -843,7 +843,6 @@ export const fullPageWizardStyles = StyleSheet.create({
   desktopFrameMain: {
     flex: 1,
     minWidth: 0,
-    maxWidth: 680,
     alignSelf: "stretch",
   },
   desktopInsightRail: {

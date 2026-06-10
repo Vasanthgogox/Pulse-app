@@ -350,12 +350,14 @@ export default function CreateIndentScreen() {
     [cancelActionHintBlurTimer],
   );
 
+  /** Stepped wizard below desktop grid width; wide screens use enterprise multi-card form. */
+  const isDesktopEnterprise = isDesktopWizardForm(windowWidth);
+  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
+
   const isWide = windowWidth >= 720;
   const isCompactMobile = windowWidth < 480;
   /** Stepped wizard — no multi-card desktop grid. */
   const desktopFormGrid = isDesktopEnterprise;
-  const desktopFormMaxWidth = Math.min(windowWidth - 28, 1680);
-
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const pickerCardMaxW = Math.min(windowWidth - 32, 440);
@@ -408,9 +410,6 @@ export default function CreateIndentScreen() {
     : params.draftId;
   const routeDraftId = isUuid(routeDraftIdRaw) ? routeDraftIdRaw : null;
 
-  /** Stepped wizard below desktop grid width; wide screens use enterprise multi-card form. */
-  const isDesktopEnterprise = isDesktopWizardForm(windowWidth);
-  const isMobileWizard = !isDesktopEnterprise && WIZARD_FULL_PAGE_STEPPED;
   const isDenseForm =
     isMobileWizard || windowWidth < Layout.wizardSteppedMaxWidth;
   const [wizardStep, setWizardStep] = useState<IndentWizardStep>("route");
@@ -1200,12 +1199,12 @@ export default function CreateIndentScreen() {
                 styles.contentMax,
                 {
                   maxWidth: desktopFormGrid
-                    ? desktopFormMaxWidth
+                    ? "100%"
                     : isWide
                       ? 1000
                       : 960,
                   paddingHorizontal: desktopFormGrid
-                    ? 24
+                    ? 0
                     : isWide
                       ? 16
                       : isCompactMobile
