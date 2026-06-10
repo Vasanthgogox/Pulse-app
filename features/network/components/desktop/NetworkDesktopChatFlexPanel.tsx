@@ -20,20 +20,29 @@ import {
   sortNetworkChatPartnerRecommendations,
   type NetworkChatPartnerRecommendation,
 } from "@/features/network/utils/networkChatPartnerSort.util";
-import { CheckCheck, MoreVertical, Upload, X } from "lucide-react-native";
+import {
+  CheckCheck,
+  ChevronLeft,
+  MoreVertical,
+  Search,
+  Upload,
+  X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type ListRenderItem,
   type ViewStyle,
 } from "react-native";
+
+const CHAT_INBOX_SPLIT_MIN = 680;
 
 export type NetworkChatPartner = {
   orgId: string;
@@ -175,6 +184,13 @@ function NetworkDesktopChatFlexPanelBody({
   const attemptedPartnerRef = useRef(new Set<string>());
   const [conversationInitFailed, setConversationInitFailed] = useState(false);
   const [conversationInitBusy, setConversationInitBusy] = useState(false);
+  const [partnerSearch, setPartnerSearch] = useState("");
+  const [inboxMobilePane, setInboxMobilePane] = useState<"list" | "thread">(
+    initialPartnerOrgId ? "thread" : "list",
+  );
+  const { width: windowWidth } = useWindowDimensions();
+  const useInboxSplit = !singlePartnerMode && windowWidth >= CHAT_INBOX_SPLIT_MIN;
+  const useInboxMobileNav = !singlePartnerMode && !useInboxSplit;
 
   const integratedList = useMemo(
     () =>
@@ -188,15 +204,42 @@ function NetworkDesktopChatFlexPanelBody({
   useEffect(() => {
     if (initialPartnerOrgId) {
       setSelectedPartnerOrgId(initialPartnerOrgId);
+      if (!singlePartnerMode) {
+        setInboxMobilePane("thread");
+      }
     }
-  }, [initialPartnerOrgId]);
+  }, [initialPartnerOrgId, singlePartnerMode]);
+
+  const filteredPartners = useMemo(() => {
+    const q = partnerSearch.trim().toLowerCase();
+    if (!q) return integratedList;
+    return integratedList.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.role?.toLowerCase().includes(q) ?? false),
+    );
+  }, [integratedList, partnerSearch]);
+
+  const selectPartner = useCallback(
+    (orgId: string) => {
+      setSelectedPartnerOrgId(orgId);
+      if (useInboxMobileNav) {
+        setInboxMobilePane("thread");
+      }
+    },
+    [useInboxMobileNav],
+  );
 
   useEffect(() => {
     if (selectedPartnerOrgId) return;
-    if (integratedList[0]?.orgId) {
+    if (singlePartnerMode && integratedList[0]?.orgId) {
+      setSelectedPartnerOrgId(integratedList[0].orgId);
+      return;
+    }
+    if (useInboxSplit && integratedList[0]?.orgId) {
       setSelectedPartnerOrgId(integratedList[0].orgId);
     }
-  }, [integratedList, selectedPartnerOrgId]);
+  }, [integratedList, selectedPartnerOrgId, singlePartnerMode, useInboxSplit]);
 
   const selectedPartner = useMemo(
     () => integratedList.find((p) => p.orgId === selectedPartnerOrgId) ?? null,
@@ -288,156 +331,208 @@ function NetworkDesktopChatFlexPanelBody({
 
   const messages = activeChat?.messages ?? [];
   const orgLogoUrl = currentOrganization?.logo_url ?? null;
-  const showPartnerPicker =
-    integratedList.length > 0 && !(singlePartnerMode && integratedList.length <= 1);
+  const showInboxList =
+    !singlePartnerMode &&
+    integratedList.length > 0 &&
+    (useInboxSplit || (useInboxMobileNav && inboxMobilePane === "list"));
+  const showThreadPane =
+    singlePartnerMode ||
+    useInboxSplit ||
+    (useInboxMobileNav && inboxMobilePane === "thread");
 
-  return (
-    <View style={[styles.mobileCard, embedded && styles.mobileCardEmbedded]}>
-      <View style={styles.topBar}>
-        <Text style={styles.topBarTitle}>Chat</Text>
-        <Pressable
-          onPress={onClose}
-          style={styles.closeBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Close chat"
-        >
-          <X size={16} color={Theme.textPrimaryDark} />
-        </Pressable>
-      </View>
-
-      {showPartnerPicker ? (
-        <ScrollView
-          style={styles.partnerPickerScroll}
-          contentContainerStyle={styles.partnerPickerContent}
-          showsVerticalScrollIndicator={false}
-          nestedScrollEnabled
-        >
-          {integratedList.map((partner: NetworkChatPartnerRecommendation) => {
-            const active = partner.orgId === selectedPartnerOrgId;
-            const hasUnread = partner.unreadCount > 0 && !active;
-            return (
-              <Pressable
-                key={partner.orgId}
-                onPress={() => setSelectedPartnerOrgId(partner.orgId)}
-                style={({ pressed }) => [
-                  styles.partnerRecRow,
-                  active && styles.partnerRecRowActive,
-                  pressed && !active && styles.partnerRecRowPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Chat with ${partner.name}${
-                  hasUnread ? `, ${partner.unreadCount} unread` : ""
-                }`}
-              >
-                <PartyAvatar
-                  name={partner.name}
-                  avatarUrl={partner.logoUrl}
-                  avatarSeed={partner.avatarSeed}
-                  entityType="client"
-                  size={40}
-                />
-                <View style={styles.partnerRecBody}>
-                  <View style={styles.partnerRecTop}>
-                    <Text
-                      style={[
-                        styles.partnerRecName,
-                        active && styles.partnerRecNameActive,
-                        hasUnread && styles.partnerRecNameUnread,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {partner.name}
-                    </Text>
-                    {partner.lastActivity ? (
-                      <Text
-                        style={[
-                          styles.partnerRecTime,
-                          hasUnread && styles.partnerRecTimeUnread,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {partner.lastActivity}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Text
-                    style={[
-                      styles.partnerRecPreview,
-                      hasUnread && styles.partnerRecPreviewUnread,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {partner.lastPreview || "Say hello on Pulse"}
-                  </Text>
-                </View>
-                {hasUnread ? (
-                  <View style={styles.partnerRecBadge}>
-                    <Text style={styles.partnerRecBadgeText}>
-                      {partner.unreadCount > 9 ? "9+" : String(partner.unreadCount)}
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
-      <View style={styles.threadHeader}>
+  const renderPartnerRow = (partner: NetworkChatPartnerRecommendation) => {
+    const active = partner.orgId === selectedPartnerOrgId;
+    const hasUnread = partner.unreadCount > 0 && !active;
+    return (
+      <Pressable
+        key={partner.orgId}
+        onPress={() => selectPartner(partner.orgId)}
+        style={({ pressed }) => [
+          styles.partnerRecRow,
+          active && styles.partnerRecRowActive,
+          pressed && !active && styles.partnerRecRowPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={`Chat with ${partner.name}${
+          hasUnread ? `, ${partner.unreadCount} unread` : ""
+        }`}
+      >
         <PartyAvatar
-          name={threadTitle}
-          avatarUrl={selectedPartner?.logoUrl ?? activeChat?.partnerLogoUrl}
-          avatarSeed={selectedPartner?.avatarSeed ?? activeChat?.partnerAvatarSeed}
+          name={partner.name}
+          avatarUrl={partner.logoUrl}
+          avatarSeed={partner.avatarSeed}
           entityType="client"
-          size={36}
+          size={40}
         />
-        <View style={styles.threadHeaderText}>
-          <View style={styles.threadTitleRow}>
-            <Text style={styles.threadTitle} numberOfLines={1}>
-              {threadTitle}
+        <View style={styles.partnerRecBody}>
+          <View style={styles.partnerRecTop}>
+            <Text
+              style={[
+                styles.partnerRecName,
+                active && styles.partnerRecNameActive,
+                hasUnread && styles.partnerRecNameUnread,
+              ]}
+              numberOfLines={1}
+            >
+              {partner.name}
             </Text>
-            {selectedPartner || activeChat ? (
-              <View style={styles.integratedTag}>
-                <Text style={styles.integratedTagText}>INTEGRATED</Text>
-              </View>
+            {partner.lastActivity ? (
+              <Text
+                style={[
+                  styles.partnerRecTime,
+                  hasUnread && styles.partnerRecTimeUnread,
+                ]}
+                numberOfLines={1}
+              >
+                {partner.lastActivity}
+              </Text>
             ) : null}
           </View>
-          <Text style={styles.threadSubtitle} numberOfLines={1}>
-            {threadSubtitle}
+          <Text
+            style={[
+              styles.partnerRecPreview,
+              hasUnread && styles.partnerRecPreviewUnread,
+            ]}
+            numberOfLines={1}
+          >
+            {partner.lastPreview || "Say hello on Pulse"}
           </Text>
         </View>
-        <Pressable hitSlop={8}>
-          <MoreVertical size={16} color={METRONIC_MUTED} />
-        </Pressable>
-      </View>
+        {hasUnread ? (
+          <View style={styles.partnerRecBadge}>
+            <Text style={styles.partnerRecBadgeText}>
+              {partner.unreadCount > 9 ? "9+" : String(partner.unreadCount)}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  };
 
-      {isLoading ? (
+  const renderSearchBar = () => (
+    <View style={styles.inboxSearchWrap}>
+      <Search size={15} color={METRONIC_MUTED} strokeWidth={2.2} />
+      <TextInput
+        style={styles.inboxSearchInput}
+        value={partnerSearch}
+        onChangeText={setPartnerSearch}
+        placeholder="Search integrated partners"
+        placeholderTextColor={Theme.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="while-editing"
+      />
+    </View>
+  );
+
+  const renderPartnerInbox = () => (
+    <View
+      style={[
+        styles.inboxSidebar,
+        useInboxMobileNav && styles.inboxSidebarMobile,
+      ]}
+    >
+      {renderSearchBar()}
+      <FlatList
+        style={styles.inboxList}
+        contentContainerStyle={styles.inboxListContent}
+        data={filteredPartners}
+        keyExtractor={(p) => p.orgId}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item }) => renderPartnerRow(item)}
+        ListEmptyComponent={
+          <Text style={styles.inboxEmptySearch}>
+            {partnerSearch.trim()
+              ? "No partners match your search"
+              : "No integrated partners yet"}
+          </Text>
+        }
+      />
+    </View>
+  );
+
+  const renderThreadHeader = (showBack: boolean) => (
+    <View style={styles.threadHeader}>
+      {showBack ? (
+        <Pressable
+          onPress={() => setInboxMobilePane("list")}
+          style={styles.threadBackBtn}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Back to chats"
+        >
+          <ChevronLeft size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
+      <PartyAvatar
+        name={threadTitle}
+        avatarUrl={selectedPartner?.logoUrl ?? activeChat?.partnerLogoUrl}
+        avatarSeed={selectedPartner?.avatarSeed ?? activeChat?.partnerAvatarSeed}
+        entityType="client"
+        size={36}
+      />
+      <View style={styles.threadHeaderText}>
+        <View style={styles.threadTitleRow}>
+          <Text style={styles.threadTitle} numberOfLines={1}>
+            {threadTitle}
+          </Text>
+          {selectedPartner || activeChat ? (
+            <View style={styles.integratedTag}>
+              <Text style={styles.integratedTagText}>INTEGRATED</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.threadSubtitle} numberOfLines={1}>
+          {threadSubtitle}
+        </Text>
+      </View>
+      <Pressable hitSlop={8}>
+        <MoreVertical size={16} color={METRONIC_MUTED} />
+      </Pressable>
+    </View>
+  );
+
+  const renderMessagesBody = () => {
+    if (isLoading) {
+      return (
         <View style={styles.messagesArea}>
           <ActivityIndicator color={Theme.primary} />
         </View>
-      ) : integratedList.length === 0 ? (
+      );
+    }
+    if (!singlePartnerMode && integratedList.length === 0) {
+      return (
         <View style={styles.messagesArea}>
           <Text style={styles.emptyTitle}>No integrated partners yet</Text>
           <Text style={styles.emptySub}>
-            Connect with organisations on Pulse from Your connections or Grow your network.
-            Only integrated parties can use workspace chat.
+            Connect with organisations on Pulse from Your connections or Grow your
+            network. Only integrated parties can use workspace chat.
           </Text>
         </View>
-      ) : !selectedPartnerOrgId ? (
+      );
+    }
+    if (!selectedPartnerOrgId) {
+      return (
         <View style={styles.messagesArea}>
-          <Text style={styles.emptySub}>Select an integrated partner above to start chatting.</Text>
+          <Text style={styles.emptySub}>
+            Select an integrated partner from the list to start chatting.
+          </Text>
         </View>
-      ) : conversationInitBusy && !activeChat ? (
+      );
+    }
+    if (conversationInitBusy && !activeChat) {
+      return (
         <View style={styles.messagesArea}>
           <ActivityIndicator color={Theme.primary} />
           <Text style={styles.emptySub}>Opening secure channel…</Text>
         </View>
-      ) : conversationInitFailed && !activeChat ? (
+      );
+    }
+    if (conversationInitFailed && !activeChat) {
+      return (
         <View style={styles.messagesArea}>
           <Text style={styles.emptyTitle}>Could not open chat</Text>
-          <Text style={styles.emptySub}>
-            Check your connection and try again.
-          </Text>
+          <Text style={styles.emptySub}>Check your connection and try again.</Text>
           <Pressable
             style={styles.retryBtn}
             onPress={() => {
@@ -464,101 +559,145 @@ function NetworkDesktopChatFlexPanelBody({
             <Text style={styles.retryBtnText}>Retry</Text>
           </Pressable>
         </View>
-      ) : (
-        <FlatList
-          ref={listRef}
-          style={styles.messages}
-          contentContainerStyle={[
-            styles.messagesContent,
-            messages.length === 0 && styles.messagesContentEmpty,
-          ]}
-          data={messages}
-          keyExtractor={(m) => m.id}
-          renderItem={renderMessage}
-          keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-          ListHeaderComponent={
-            messages.length > 0 ? (
-              <Text style={styles.channelHint}>Secure channel · {orgName}</Text>
-            ) : null
-          }
-          ListEmptyComponent={
-            <Text style={styles.emptySub}>
-              Say hello to {selectedPartner?.name ?? "your partner"}
-            </Text>
-          }
+      );
+    }
+    return (
+      <FlatList
+        ref={listRef}
+        style={styles.messages}
+        contentContainerStyle={[
+          styles.messagesContent,
+          messages.length === 0 && styles.messagesContentEmpty,
+        ]}
+        data={messages}
+        keyExtractor={(m) => m.id}
+        renderItem={renderMessage}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        ListHeaderComponent={
+          messages.length > 0 ? (
+            <Text style={styles.channelHint}>Secure channel · {orgName}</Text>
+          ) : null
+        }
+        ListEmptyComponent={
+          <Text style={styles.emptySub}>
+            Say hello to {selectedPartner?.name ?? "your partner"}
+          </Text>
+        }
+      />
+    );
+  };
+
+  const renderJoinBar = () =>
+    joinRequest ? (
+      <View style={styles.joinBar}>
+        <PartyAvatar
+          name={joinRequest.name}
+          avatarUrl={joinRequest.avatarUrl}
+          avatarSeed={joinRequest.avatarSeed}
+          entityType="client"
+          size={36}
         />
-      )}
-
-      {joinRequest ? (
-        <View style={styles.joinBar}>
-          <PartyAvatar
-            name={joinRequest.name}
-            avatarUrl={joinRequest.avatarUrl}
-            avatarSeed={joinRequest.avatarSeed}
-            entityType="client"
-            size={36}
-          />
-          <View style={styles.joinTextCol}>
-            <Text style={styles.joinTitle} numberOfLines={1}>
-              {joinRequest.name} wants to join chat
-            </Text>
-            <Text style={styles.joinMeta} numberOfLines={1}>
-              {joinRequest.meta}
-            </Text>
-          </View>
-          <View style={styles.joinActions}>
-            <Pressable style={styles.declineBtn} onPress={joinRequest.onDecline}>
-              <Text style={styles.declineText}>Decline</Text>
-            </Pressable>
-            <Pressable style={styles.acceptBtn} onPress={joinRequest.onAccept}>
-              <Text style={styles.acceptText}>Accept</Text>
-            </Pressable>
-          </View>
+        <View style={styles.joinTextCol}>
+          <Text style={styles.joinTitle} numberOfLines={1}>
+            {joinRequest.name} wants to join chat
+          </Text>
+          <Text style={styles.joinMeta} numberOfLines={1}>
+            {joinRequest.meta}
+          </Text>
         </View>
-      ) : null}
-
-      <View style={styles.composer}>
-        <View style={styles.composerInputWrap}>
-          <ChatPartyAvatar
-            identity={{
-              displayName: profile?.full_name ?? profile?.displayName ?? "You",
-              entityType: "client",
-            }}
-            isOwnUser
-            userName={profile?.full_name ?? profile?.displayName ?? "You"}
-            userAvatarUrl={profile?.avatar_url ?? null}
-            userAvatarSeed={profile?.avatar_seed ?? null}
-            userOrgLogoUrl={orgLogoUrl}
-            userOrgOwnerAvatarSeed={profile?.avatar_seed ?? null}
-            size={28}
-          />
-          <TextInput
-            style={styles.composerInput}
-            value={messageInput}
-            onChangeText={setMessageInput}
-            placeholder="Write a message..."
-            placeholderTextColor={Theme.textMuted}
-            multiline
-            editable={Boolean(activeChat && selectedPartnerOrgId)}
-            onSubmitEditing={handleSend}
-          />
-          <Pressable hitSlop={8} disabled={!activeChat}>
-            <Upload size={16} color={METRONIC_MUTED} />
+        <View style={styles.joinActions}>
+          <Pressable style={styles.declineBtn} onPress={joinRequest.onDecline}>
+            <Text style={styles.declineText}>Decline</Text>
+          </Pressable>
+          <Pressable style={styles.acceptBtn} onPress={joinRequest.onAccept}>
+            <Text style={styles.acceptText}>Accept</Text>
           </Pressable>
         </View>
-        <Pressable
-          style={[
-            styles.sendBtn,
-            (!messageInput.trim() || !activeChat) && styles.sendBtnDisabled,
-            Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
-          ]}
-          onPress={handleSend}
-          disabled={!messageInput.trim() || !activeChat}
-        >
-          <Text style={styles.sendText}>Send</Text>
+      </View>
+    ) : null;
+
+  const renderComposer = () => (
+    <View style={styles.composer}>
+      <View style={styles.composerInputWrap}>
+        <ChatPartyAvatar
+          identity={{
+            displayName: profile?.full_name ?? profile?.displayName ?? "You",
+            entityType: "client",
+          }}
+          isOwnUser
+          userName={profile?.full_name ?? profile?.displayName ?? "You"}
+          userAvatarUrl={profile?.avatar_url ?? null}
+          userAvatarSeed={profile?.avatar_seed ?? null}
+          userOrgLogoUrl={orgLogoUrl}
+          userOrgOwnerAvatarSeed={profile?.avatar_seed ?? null}
+          size={28}
+        />
+        <TextInput
+          style={styles.composerInput}
+          value={messageInput}
+          onChangeText={setMessageInput}
+          placeholder="Write a message..."
+          placeholderTextColor={Theme.textMuted}
+          multiline
+          editable={Boolean(activeChat && selectedPartnerOrgId)}
+          onSubmitEditing={handleSend}
+        />
+        <Pressable hitSlop={8} disabled={!activeChat}>
+          <Upload size={16} color={METRONIC_MUTED} />
         </Pressable>
       </View>
+      <Pressable
+        style={[
+          styles.sendBtn,
+          (!messageInput.trim() || !activeChat) && styles.sendBtnDisabled,
+          Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null,
+        ]}
+        onPress={handleSend}
+        disabled={!messageInput.trim() || !activeChat}
+      >
+        <Text style={styles.sendText}>Send</Text>
+      </Pressable>
+    </View>
+  );
+
+  const renderThreadPane = () => (
+    <View style={styles.inboxThreadColumn}>
+      {renderThreadHeader(useInboxMobileNav)}
+      {renderMessagesBody()}
+      {renderJoinBar()}
+      {renderComposer()}
+    </View>
+  );
+
+  const topBarTitle = singlePartnerMode ? threadTitle : "Chats";
+
+  return (
+    <View style={[styles.mobileCard, embedded && styles.mobileCardEmbedded]}>
+      <View style={styles.topBar}>
+        <Text style={[styles.topBarTitle, { flex: 1 }]} numberOfLines={1}>
+          {topBarTitle}
+        </Text>
+        <Pressable
+          onPress={onClose}
+          style={styles.closeBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close chat"
+        >
+          <X size={16} color={Theme.textPrimaryDark} />
+        </Pressable>
+      </View>
+
+      {useInboxSplit ? (
+        <View style={styles.splitRoot}>
+          {showInboxList ? renderPartnerInbox() : null}
+          {showThreadPane ? renderThreadPane() : null}
+        </View>
+      ) : showInboxList ? (
+        renderPartnerInbox()
+      ) : showThreadPane ? (
+        renderThreadPane()
+      ) : null}
     </View>
   );
 }

@@ -1,5 +1,7 @@
 /** Shared hub layout for Network tab (connections + discover). */
 export const NETWORK_HUB_GRID_COLUMNS = 3;
+/** Grow your network — desktop Metronic grid (matches Your connections). */
+export const NETWORK_HUB_GROW_GRID_COLUMNS = 4;
 export const NETWORK_HUB_GRID_GAP_PX = 10;
 /** Vertical gap between native full-width hub cards (page shows through gap). */
 export const NETWORK_HUB_NATIVE_LIST_GAP_PX = 10;
@@ -175,6 +177,15 @@ export function hubSplitPaneCardWidth(
 
 export function isNetworkHubSplitStacked(windowWidth: number): boolean {
   return windowWidth < SPLIT_STACK_BREAKPOINT;
+}
+
+/** Grow / discover recommendation grid column count (4-across on desktop). */
+export function getNetworkHubGrowGridColumns(windowWidth: number): number {
+  if (windowWidth < 480) return 1;
+  if (windowWidth < 640) return 2;
+  if (windowWidth < SPLIT_STACK_BREAKPOINT) return 2;
+  if (windowWidth < 1100) return 3;
+  return NETWORK_HUB_GROW_GRID_COLUMNS;
 }
 
 export function chunkIntoTwoRowColumns<T>(items: T[]): T[][] {

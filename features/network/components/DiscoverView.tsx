@@ -11,19 +11,17 @@ import {
   ConnectionRoleModal,
   type ConnectionInviteRole,
 } from "@/features/network/components/ConnectionRoleModal";
-import { NetworkPartyDiscoverListCard } from "@/features/network/components/NetworkPartyDiscoverListCard";
+import { NetworkDesktopGrowConnectionCard } from "@/features/network/components/desktop/NetworkDesktopGrowConnectionCard";
 import {
   NetworkLoadMoreButton,
   useNetworkListPagination,
 } from '@/features/network/components/NetworkCompactRows';
 import {
-  NetworkHubSplitLayout,
   networkHubSplitStyles,
 } from "@/features/network/components/NetworkHubSplitLayout";
 import {
-  getNetworkHubSplitPaneLayout,
+  getNetworkHubGrowGridColumns,
   isNetworkHubSplitStacked,
-  NETWORK_HUB_SPLIT_GRID_COLUMNS,
   NETWORK_HUB_GRID_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
 } from "@/features/network/constants/networkHubGrid";
@@ -236,30 +234,17 @@ function OrgCard({
   const { t } = useLanguage();
   const mutuals = org.mutual_count ?? org.mutual_connections_count ?? 0;
   const businessLocation = getBusinessLocation(org, locationFallback);
-  const locationUnset = !businessLocation;
 
   return (
     <View style={styles.discoverListItemShell}>
-      <NetworkPartyDiscoverListCard
-        orgId={org.id}
-        name={org.name}
-        avatarSeed={org.avatar_seed}
+      <NetworkDesktopGrowConnectionCard
+        org={org}
         locationLabel={businessLocation || t("networkDiscoverLocationNotSet")}
-        locationUnset={locationUnset}
-        totalTrips={totalTrips}
         ratingValue={ratingValue ?? org.rating ?? org.average_rating ?? null}
         mutualCount={mutuals}
-        connectionStatus={org.connection_status}
         pendingRole={pendingRole}
-        loading={loading}
-        compact={compact}
-        desktopPane={desktopPane}
-        mobileGrid={mobileGrid}
-        nativeListRow={nativeListRow}
+        connecting={loading}
         onOpenProfile={onOpenProfile}
-        onPressMutuals={onPressMutuals}
-        onPressMutual={onPressMutual}
-        viewerOrgId={viewerOrgId}
         onConnect={onConnect}
         onCancel={onCancel}
         onDismiss={onDismiss}
@@ -311,6 +296,7 @@ export function DiscoverView({
 }: DiscoverViewProps) {
   const { t } = useLanguage();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isNativeApp = Platform.OS !== "web";
   const [internalSearch, setInternalSearch] = useState("");
   const [connecting, setConnecting] = useState<string | null>(null);
   const [requestRoleModalOrg, setRequestRoleModalOrg] = useState<ScoredOrg | null>(null);
@@ -390,21 +376,21 @@ export function DiscoverView({
   );
   const rest = connectableOrgs.filter((o) => o.score <= 0);
 
-  const isNativeApp = Platform.OS !== "web";
-  const splitPaneLayout = useMemo(
-    () => getNetworkHubSplitPaneLayout(windowWidth, { nativeApp: isNativeApp }),
-    [windowWidth, isNativeApp],
+  const growGridColumns = useMemo(
+    () => getNetworkHubGrowGridColumns(windowWidth),
+    [windowWidth],
   );
+  const growSectionLimit = growGridColumns * 2;
 
   const growNetworkRecommendations = useMemo(() => {
     const slots: ScoredOrg[] = [];
     for (const org of recommendationPool) {
       if (dismissedRecommendationIds.has(org.id)) continue;
       slots.push(org);
-      if (slots.length >= splitPaneLayout.slotLimit) break;
+      if (slots.length >= growSectionLimit) break;
     }
     return slots;
-  }, [recommendationPool, dismissedRecommendationIds, splitPaneLayout.slotLimit]);
+  }, [recommendationPool, dismissedRecommendationIds, growSectionLimit]);
 
   const peopleYouMayKnow = useMemo(() => {
     const growIds = new Set(growNetworkRecommendations.map((o) => o.id));
@@ -413,14 +399,14 @@ export function DiscoverView({
       if (dismissedRecommendationIds.has(org.id)) continue;
       if (growIds.has(org.id)) continue;
       slots.push(org);
-      if (slots.length >= splitPaneLayout.slotLimit) break;
+      if (slots.length >= growSectionLimit) break;
     }
     return slots;
   }, [
     recommendationPool,
     dismissedRecommendationIds,
     growNetworkRecommendations,
-    splitPaneLayout.slotLimit,
+    growSectionLimit,
   ]);
 
   const handleDismissRecommendation = useCallback((targetOrgId: string) => {
@@ -715,66 +701,33 @@ export function DiscoverView({
 
   const splitStacked = isNetworkHubSplitStacked(windowWidth);
 
-  const splitPaneGridOptions: PaneListGridOptions = {
-    columns: splitPaneLayout.columns,
-    compact: splitPaneLayout.compact && !isMobileHub,
-    desktopPane: splitPaneLayout.columns === 1,
-    mobileGrid: isMobileHub && splitPaneLayout.columns > 1,
-    nativeListRow: splitPaneLayout.columns === 1,
+  const growGridOptions: PaneListGridOptions = {
+    columns: growGridColumns,
+    compact: false,
+    desktopPane: false,
+    mobileGrid: growGridColumns > 1,
+    nativeListRow: false,
   };
 
-  const embeddedHubSplitBody = (
-    <NetworkHubSplitLayout
-      windowWidth={windowWidth}
-      leftHeader={
-        !splitStacked && growNetworkRecommendations.length > 0 ? (
-          <Text style={styles.mayKnowHeading}>{t("networkDiscoverRecommended")}</Text>
-        ) : null
-      }
-      left={
-        growNetworkRecommendations.length > 0
-          ? renderEmbeddedPaneListGrid(
-              growNetworkRecommendations,
-              "grow",
-              undefined,
-              splitPaneGridOptions,
-            )
-          : null
-      }
-      rightHeader={
-        peopleYouMayKnow.length > 0 ? (
-          <>
-            <Text style={styles.mayKnowKicker}>{t("networkDiscoverSuggestions")}</Text>
-            <Text style={styles.mayKnowHeading}>{t("networkPeopleYouMayKnow")}</Text>
-          </>
-        ) : null
-      }
-      right={
-        peopleYouMayKnow.length > 0
-          ? renderEmbeddedPaneListGrid(
-              peopleYouMayKnow,
-              "may-know",
-              undefined,
-              splitPaneGridOptions,
-            )
-          : null
-      }
-    />
-  );
-
-  const embeddedHubMobileListBody = (
+  const embeddedHubGridBody = (
     <View style={styles.hubMobileListRoot}>
       {growNetworkRecommendations.length > 0 ? (
         <View style={styles.hubMobileListSection}>
           <View style={styles.hubMobileListSectionHeader}>
-            <Text style={styles.mayKnowKicker}>{t("networkDiscoverAlliesKicker")}</Text>
-            <Text style={styles.mayKnowHeading}>{t("networkDiscoverGrowSlots")}</Text>
+            {splitStacked ? (
+              <>
+                <Text style={styles.mayKnowKicker}>{t("networkDiscoverAlliesKicker")}</Text>
+                <Text style={styles.mayKnowHeading}>{t("networkDiscoverGrowSlots")}</Text>
+              </>
+            ) : (
+              <Text style={styles.mayKnowHeading}>{t("networkDiscoverRecommended")}</Text>
+            )}
           </View>
           {renderEmbeddedPaneListGrid(
             growNetworkRecommendations,
             "grow",
             styles.hubMobileListPane,
-            splitPaneGridOptions,
+            growGridOptions,
           )}
         </View>
       ) : null}
@@ -788,7 +741,7 @@ export function DiscoverView({
             peopleYouMayKnow,
             "may-know",
             styles.hubMobileListPane,
-            splitPaneGridOptions,
+            growGridOptions,
           )}
         </View>
       ) : null}
@@ -798,7 +751,7 @@ export function DiscoverView({
   const embeddedHubSearchBody = (
     <View style={styles.hubListFull}>
       {renderEmbeddedPaneListGrid(visibleDiscoverOrgs, "discover-search", undefined, {
-        columns: NETWORK_HUB_SPLIT_GRID_COLUMNS,
+        columns: growGridColumns,
         compact: discoverListCompact,
       })}
       {hasMoreDiscover ? (
@@ -814,9 +767,7 @@ export function DiscoverView({
 
   const embeddedHubBody =
     embedded && !search
-      ? splitStacked
-        ? embeddedHubMobileListBody
-        : embeddedHubSplitBody
+      ? embeddedHubGridBody
       : embedded && search
         ? embeddedHubSearchBody
         : null;

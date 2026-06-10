@@ -2,7 +2,6 @@
  * Client Profile Hub — Metronic tabbed layout (Overview, KYC, Warehouses, Contracts, etc.)
  */
 import Theme from "@/constants/Theme";
-import { ClientProfileHubHero } from "@/features/clients/components/desktop/ClientProfileHubHero";
 import { ClientProfileOverviewPanel } from "@/features/clients/components/desktop/ClientProfileOverviewPanel";
 import { ClientProfileKycPanel } from "@/features/clients/components/desktop/ClientProfileKycPanel";
 import {
@@ -21,14 +20,17 @@ import {
 import type { ClientManagementBundle, ClientProfileTab } from "@/features/clients/types/clientManagement.types";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import { computeKycScore } from "@/features/clients/utils/clientManagement.util";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
   ProfileHubChatSplitLayout,
   profileHubChatPartnerFromParty,
 } from "@/features/network/components/desktop/ProfileHubChatSplitLayout";
 import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
-import { MessageSquare, MoreHorizontal } from "lucide-react-native";
+import { ArrowLeft, MessageSquare, MoreHorizontal, Plus } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -61,6 +63,8 @@ export function ClientProfileHub({
   onRefresh,
 }: Props) {
   const router = useRouter();
+  const compact = useProfileHubCompact();
+  const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<ClientProfileTab>(initialTab);
   const [chatOpen, setChatOpen] = useState(false);
   const orgId = String((bundle.client as Record<string, unknown>)?.organization_id ?? client.organization_id ?? "");
@@ -70,6 +74,7 @@ export function ClientProfileHub({
     [bundle.client?.state, bundle.client?.country].filter(Boolean).join(", ") ||
     bundle.warehouses[0]?.city ||
     null;
+  const contactPerson = client.contact_person?.trim();
   const isIntegrated =
     client.is_integrated ?? Boolean(client.linked_organization_id);
   const chatPartner = useMemo(
@@ -130,7 +135,14 @@ export function ClientProfileHub({
   const panel = (() => {
     switch (tab) {
       case "overview":
-        return <ClientProfileOverviewPanel bundle={bundle} />;
+        return (
+          <ClientProfileOverviewPanel
+            bundle={bundle}
+            orgId={orgId}
+            clientId={clientId}
+            onRefresh={onRefresh}
+          />
+        );
       case "contacts":
         return <ClientProfileContactsPanel {...sharedProps} />;
       case "kyc":
@@ -155,7 +167,14 @@ export function ClientProfileHub({
       case "audit":
         return <ClientProfileAuditPanel bundle={bundle} />;
       default:
-        return <ClientProfileOverviewPanel bundle={bundle} />;
+        return (
+          <ClientProfileOverviewPanel
+            bundle={bundle}
+            orgId={orgId}
+            clientId={clientId}
+            onRefresh={onRefresh}
+          />
+        );
     }
   })();
 
@@ -166,94 +185,235 @@ export function ClientProfileHub({
     { value: String(bundle.contacts.length), label: "CONTACTS" },
   ];
 
+  const statCellCompactStyle = (idx: number) => {
+    if (!compact) return undefined;
+    if (idx === 1) return mobile.statCellGridTopRight;
+    if (idx === 2) return mobile.statCellGridBottomLeft;
+    if (idx === 3) return mobile.statCellGridBottomRight;
+    return undefined;
+  };
+
   const hubScroll = (
     <ScrollView
       style={styles.root}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[
+        styles.scrollContent,
+        compact && mobile.scrollContentCompact,
+        { paddingBottom: layoutInsets.scrollBottomPadding(compact ? 16 : 24) },
+      ]}
       showsVerticalScrollIndicator={false}
     >
-      <ClientProfileHubHero
-        client={client}
-        locationLabel={locationLabel}
-        kycScore={kyc.score}
-        onBack={onBack}
-      />
+      {compact ? (
+        <View style={mobile.pageChrome}>
+          <View style={mobile.chromeTopRow}>
+            {onBack ? (
+              <Pressable
+                onPress={onBack}
+                style={mobile.chromeBackBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <ArrowLeft size={20} color={METRONIC.text} strokeWidth={2.2} />
+              </Pressable>
+            ) : null}
+            <View style={mobile.chromeTitleBlock}>
+              <Text style={mobile.chromeTitle} numberOfLines={2}>
+                {client.name?.trim() || "Client"}
+              </Text>
+              {(contactPerson || locationLabel) ? (
+                <Text style={mobile.chromeSubtitle} numberOfLines={1}>
+                  {[contactPerson, locationLabel].filter(Boolean).join(" · ")}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={mobile.chromePillsScroll}
+            contentContainerStyle={mobile.chromePillsContent}
+          >
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>CLIENT</Text>
+            </View>
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>
+                {isIntegrated ? "INTEGRATED" : "NOT IN APP"}
+              </Text>
+            </View>
+            <View style={[mobile.chromePill, mobile.chromePillWarn]}>
+              <Text style={[mobile.chromePillText, mobile.chromePillTextWarn]}>
+                KYC {kyc.score}%
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      ) : (
+        <View style={cpStyles.backBar}>
+          {onBack ? (
+            <Pressable onPress={onBack} style={styles.tabActionBtn} hitSlop={8}>
+              <ArrowLeft size={16} color={METRONIC.text} strokeWidth={2.2} />
+              <Text style={cpStyles.backBarText}>Back</Text>
+            </Pressable>
+          ) : null}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={cpStyles.hubChromeTitle} numberOfLines={1}>
+              {(client.name ?? "Client").toUpperCase()}
+            </Text>
+            <View style={cpStyles.hubChromePills}>
+              <View style={cpStyles.hubChromePill}>
+                <Text style={cpStyles.hubChromePillText}>CLIENT</Text>
+              </View>
+              <View style={cpStyles.hubChromePill}>
+                <Text style={cpStyles.hubChromePillText}>
+                  {isIntegrated ? "INTEGRATED" : "NOT IN APP"}
+                </Text>
+              </View>
+              {locationLabel ? (
+                <View style={cpStyles.hubChromePill}>
+                  <Text style={cpStyles.hubChromePillText}>{locationLabel}</Text>
+                </View>
+              ) : null}
+              <View style={cpStyles.hubChromePill}>
+                <Text style={cpStyles.hubChromePillText}>KYC {kyc.score}%</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
 
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, compact && mobile.tabBarCompact]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.tabScroll}
-          contentContainerStyle={styles.tabScrollContent}
+          style={compact ? mobile.tabScrollCompact : styles.tabScroll}
+          contentContainerStyle={compact ? mobile.tabScrollContentCompact : styles.tabScrollContent}
         >
           {TABS.map((t) => {
             const active = tab === t.id;
             return (
               <Pressable
                 key={t.id}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                style={[
+                  styles.tabBtn,
+                  compact && mobile.tabBtnCompact,
+                  active && styles.tabBtnActive,
+                ]}
                 onPress={() => setTab(t.id)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
               >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.label}</Text>
+                <Text
+                  style={[
+                    styles.tabText,
+                    compact && mobile.tabTextCompact,
+                    active && styles.tabTextActive,
+                  ]}
+                >
+                  {t.label}
+                </Text>
               </Pressable>
             );
           })}
         </ScrollView>
-        <View style={styles.tabActions}>
-          <Pressable
-            style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
-            onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
-          >
-            <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>Create trip</Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.tabActionBtn,
-              chatOpen && chatStyles.tabActionIconBtnActive,
-            ]}
-            onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
-            accessibilityRole="button"
-            accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
-          >
-            <MessageSquare
-              size={14}
-              color={chatOpen ? Theme.primary : Theme.textSecondary}
-              strokeWidth={2}
-            />
-            <Text
-              style={[
-                styles.tabActionBtnText,
-                chatOpen && { color: Theme.primary, fontWeight: "700" },
-              ]}
+
+        {compact ? (
+          <View style={mobile.tabActionsRow}>
+            <Pressable
+              style={mobile.tabActionPrimary}
+              onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
+              accessibilityRole="button"
+              accessibilityLabel="Create trip"
             >
-              Chat
-            </Text>
-          </Pressable>
-          <Pressable
-            style={styles.tabActionBtn}
-            onPress={() => setTab("finance")}
-          >
-            <Text style={styles.tabActionBtnText}>Ledger</Text>
-          </Pressable>
-          <Pressable style={styles.tabActionBtn} hitSlop={8}>
-            <MoreHorizontal size={16} color={Theme.textSecondary} strokeWidth={2} />
-          </Pressable>
-        </View>
+              <Plus size={16} color={Theme.textOnPrimary} strokeWidth={2.5} />
+              <Text style={mobile.tabActionPrimaryText}>Create trip</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                mobile.tabActionIcon,
+                chatOpen && mobile.tabActionIconActive,
+              ]}
+              onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
+              accessibilityRole="button"
+              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+            >
+              <MessageSquare
+                size={18}
+                color={chatOpen ? Theme.primary : METRONIC.text}
+                strokeWidth={2}
+              />
+            </Pressable>
+            <Pressable
+              style={mobile.tabActionIcon}
+              onPress={() => setTab("finance")}
+              accessibilityRole="button"
+              accessibilityLabel="Ledger"
+            >
+              <Text style={{ fontSize: 11, fontWeight: "800", color: METRONIC.text }}>₹</Text>
+            </Pressable>
+            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
+              <MoreHorizontal size={18} color={METRONIC.text} strokeWidth={2} />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.tabActions}>
+            <Pressable
+              style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
+              onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
+            >
+              <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>Create trip</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.tabActionBtn,
+                chatOpen && chatStyles.tabActionIconBtnActive,
+              ]}
+              onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
+              accessibilityRole="button"
+              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+            >
+              <MessageSquare
+                size={14}
+                color={chatOpen ? Theme.primary : Theme.textSecondary}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.tabActionBtnText,
+                  chatOpen && { color: Theme.primary, fontWeight: "700" },
+                ]}
+              >
+                Chat
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.tabActionBtn}
+              onPress={() => setTab("finance")}
+            >
+              <Text style={styles.tabActionBtnText}>Ledger</Text>
+            </Pressable>
+            <Pressable style={styles.tabActionBtn} hitSlop={8}>
+              <MoreHorizontal size={16} color={Theme.textSecondary} strokeWidth={2} />
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      <View style={cpStyles.metricsWrap}>
-        <View style={styles.statsBar}>
+      <View style={[cpStyles.metricsWrap, compact && mobile.metricsWrapCompact]}>
+        <View style={[styles.statsBar, compact && mobile.statsBarGrid]}>
           {stats.map((s, idx) => (
             <View
               key={s.label}
               style={[
                 styles.statCell,
-                cpStyles.statCellCompact,
-                idx === stats.length - 1 && styles.statCellLast,
+                !compact && cpStyles.statCellCompact,
+                !compact && idx === stats.length - 1 && styles.statCellLast,
+                compact && mobile.statCellGrid,
+                statCellCompactStyle(idx),
               ]}
             >
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={[styles.statValue, compact && mobile.statValueCompact]}>{s.value}</Text>
+              <Text style={[styles.statLabel, compact && mobile.statLabelCompact]}>{s.label}</Text>
             </View>
           ))}
         </View>

@@ -8,7 +8,13 @@ import {
   ConnectionRoleModal,
   type ConnectionInviteRole,
 } from "@/features/network/components/ConnectionRoleModal";
+import { NetworkGrowSummaryCard } from "@/features/network/components/NetworkGrowSummaryCard";
 import { NetworkPartyDiscoverListCard } from "@/features/network/components/NetworkPartyDiscoverListCard";
+import { useNetworkDiscovery } from "@/features/network/hooks/useNetworkDiscovery";
+import {
+  isConnectableDiscoverOrg,
+  scoreDiscoverOrg,
+} from "@/features/network/utils/discoverRecommendations.util";
 import {
   NETWORK_HUB_GRID_ROW_PADDING_H,
   SPLIT_STACK_BREAKPOINT,
@@ -69,6 +75,7 @@ type NetworkPhoneAndContactsPanelProps = {
   orgId: string;
   search: string;
   connectedOrgIds: ReadonlySet<string>;
+  totalConnections?: number;
   inviteDailyCapReached?: boolean;
   onSearchChange?: (value: string) => void;
   onOpenProfile?: (org: {
@@ -159,6 +166,7 @@ export function NetworkPhoneAndContactsPanel({
   orgId,
   search,
   connectedOrgIds,
+  totalConnections = 0,
   inviteDailyCapReached = false,
   onSearchChange,
   onOpenProfile,
@@ -167,6 +175,7 @@ export function NetworkPhoneAndContactsPanel({
   const queryClient = useQueryClient();
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
+  const { orgs: discoverOrgs } = useNetworkDiscovery({ orgId, search: "" });
   const phoneLookup = useNetworkPhoneLookup(search);
   const phoneSearchActive = isPhoneLikeNetworkSearch(search);
   const contactRecs = useNetworkContactRecommendations({
@@ -198,6 +207,30 @@ export function NetworkPhoneAndContactsPanel({
     [currentOrganization?.name, orgId],
   );
   const inviteUrl = useMemo(() => buildInviteUrl(inviteSlug), [inviteSlug]);
+
+  const todayInviteCount = useMemo(
+    () => todayPendingInviteCountFromSent(sentQ.data ?? []),
+    [sentQ.data],
+  );
+
+  const pendingSentOrgIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of sentQ.data ?? []) {
+      if (row.status === "pending" && row.to_organization_id) {
+        ids.add(row.to_organization_id);
+      }
+    }
+    return ids;
+  }, [sentQ.data]);
+
+  const discoverCount = useMemo(
+    () =>
+      discoverOrgs
+        .map(scoreDiscoverOrg)
+        .filter(isConnectableDiscoverOrg)
+        .filter((o) => !pendingSentOrgIds.has(o.id)).length,
+    [discoverOrgs, pendingSentOrgIds],
+  );
 
   const handleCopyInvite = useCallback(async () => {
     try {
@@ -281,10 +314,6 @@ export function NetworkPhoneAndContactsPanel({
     return () => sub.remove();
   }, [contactRecs.refresh]);
 
-  const todayInviteCount = useMemo(
-    () => todayPendingInviteCountFromSent(sentQ.data ?? []),
-    [sentQ.data],
-  );
   const atDailyLimit = useMemo(
     () =>
       todayInviteCount >= DAILY_CONNECTION_INVITE_LIMIT || inviteDailyCapReached === true,
@@ -816,37 +845,49 @@ export function NetworkPhoneAndContactsPanel({
         </View>
       ) : null}
 
-      {/* INVITE VIA LINK CARD — navy CTA matching the workspace invite spec. */}
-      <View style={styles.inviteCard}>
-        <View style={styles.inviteGlow} pointerEvents="none" />
-        <View style={styles.inviteHeaderRow}>
-          <View style={styles.inviteIconWrap}>
-            <LinkIcon size={14} color={Theme.actionAccent} strokeWidth={2.2} />
+      {/* Grow summary + Invite via Link — side-by-side on wide, stacked on narrow. */}
+      <View
+        style={[
+          styles.inviteRow,
+          !heroBannerHorizontal && styles.inviteRowStacked,
+        ]}
+      >
+        <NetworkGrowSummaryCard
+          discoverCount={discoverCount}
+          totalConnections={totalConnections}
+          todayInviteCount={todayInviteCount}
+        />
+        <View style={styles.inviteCard}>
+          <View style={styles.inviteGlow} pointerEvents="none" />
+          <View style={styles.inviteHeaderRow}>
+            <View style={styles.inviteIconWrap}>
+              <LinkIcon size={14} color={Theme.actionAccent} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
           </View>
-          <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
-        </View>
-        <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
-        <View style={styles.inviteCopyRow}>
-          <Text style={styles.inviteUrlText} numberOfLines={1}>
-            {inviteUrl.display}
-          </Text>
-          <Pressable
-            onPress={() => void handleCopyInvite()}
-            style={({ pressed }) => [
-              styles.inviteCopyBtn,
-              pressed && styles.inviteCopyBtnPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={
-              inviteCopied
-                ? t("networkInviteCopied")
-                : t("networkInviteCopy")
-            }
-          >
-            <Text style={styles.inviteCopyBtnText}>
-              {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
+          <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
+          <View style={styles.inviteCopyRow}>
+            <Text style={styles.inviteUrlText} numberOfLines={1}>
+              {inviteUrl.display}
             </Text>
-          </Pressable>
+            <Pressable
+              onPress={() => void handleCopyInvite()}
+              style={({ pressed }) => [
+                styles.inviteCopyBtn,
+                pressed && styles.inviteCopyBtnPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                inviteCopied
+                  ? t("networkInviteCopied")
+                  : t("networkInviteCopy")
+              }
+            >
+              <Text style={styles.inviteCopyBtnText}>
+                {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -1117,8 +1158,18 @@ const styles = StyleSheet.create({
    *  with white text. The decorative top-right glow goes from translucent
    *  white to a faint indigo wash so it still adds depth on the light bg.
    */
-  inviteCard: {
+  inviteRow: {
     width: "100%",
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  inviteRowStacked: {
+    flexDirection: "column",
+  },
+  inviteCard: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -1166,8 +1217,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(99, 102, 241, 0.14)",
   },
   inviteCardTitle: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.15,
   },
@@ -1226,8 +1279,8 @@ const styles = StyleSheet.create({
   },
   inviteCopyBtnText: {
     fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
+    fontWeight: "600",
+    letterSpacing: 0.3,
     color: Theme.cardWhite,
   },
 

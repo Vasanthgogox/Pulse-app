@@ -35,6 +35,8 @@ type Props = {
   connectionStatus?: string;
   stats: NetworkProfileHubHeroStat[];
   onClose?: () => void;
+  /** Profile modal on narrow viewports — stacked meta, stat grid, lighter type. */
+  compact?: boolean;
 };
 
 function roleDisplayLabel(role: string): string {
@@ -57,21 +59,42 @@ export function NetworkProfileHubHero({
   connectionStatus,
   stats,
   onClose,
+  compact = false,
 }: Props) {
   const locationLabel =
     location?.trim() && location.trim() !== "Not available"
       ? location.trim()
       : "Location not set";
   const phoneLabel = phone?.trim() || "No phone on file";
+  const roleText = roleDisplayLabel(roleLabel);
+  const avatarSize = compact ? 72 : 88;
+
+  const metaItems = [
+    {
+      key: "role",
+      icon: <Building2 size={14} color={METRONIC.subtle} strokeWidth={2} />,
+      text: compact ? roleText : roleText.toUpperCase(),
+    },
+    {
+      key: "location",
+      icon: <MapPin size={14} color={METRONIC.subtle} strokeWidth={2} />,
+      text: locationLabel,
+    },
+    {
+      key: "phone",
+      icon: <Phone size={14} color={METRONIC.subtle} strokeWidth={2} />,
+      text: phoneLabel,
+    },
+  ] as const;
 
   return (
-    <View style={hubStyles.hero}>
+    <View style={[hubStyles.hero, compact && styles.heroCompact]}>
       <View style={hubStyles.heroHexOverlay} pointerEvents="none" />
 
       {onClose ? (
         <Pressable
           onPress={onClose}
-          style={styles.closeBtn}
+          style={[styles.closeBtn, compact && styles.closeBtnCompact]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Close profile"
@@ -80,69 +103,107 @@ export function NetworkProfileHubHero({
         </Pressable>
       ) : null}
 
-      <View style={hubStyles.heroInner}>
-        <View style={hubStyles.heroAvatarPressable}>
-          <View style={hubStyles.heroAvatarRing}>
+      <View style={[hubStyles.heroInner, compact && styles.heroInnerCompact]}>
+        <View
+          style={[
+            hubStyles.heroAvatarPressable,
+            compact && styles.heroAvatarPressableCompact,
+          ]}
+        >
+          <View
+            style={[
+              hubStyles.heroAvatarRing,
+              compact && styles.heroAvatarRingCompact,
+            ]}
+          >
             <PartyAvatar
               name={name}
               entityType={entityType}
               avatarUrl={avatarUrl}
               avatarSeed={avatarSeed}
-              size={88}
+              size={avatarSize}
               shape="circle"
             />
           </View>
         </View>
 
         <View style={hubStyles.heroNameRow}>
-          <Text style={hubStyles.heroName} numberOfLines={2}>
+          <Text
+            style={[hubStyles.heroName, compact && styles.heroNameCompact]}
+            numberOfLines={2}
+          >
             {name}
           </Text>
           {showVerified || inApp ? (
-            <BadgeCheck size={18} color={METRONIC.link} strokeWidth={2.2} />
+            <BadgeCheck
+              size={compact ? 16 : 18}
+              color={METRONIC.link}
+              strokeWidth={2.2}
+            />
           ) : null}
         </View>
 
-        <View style={hubStyles.heroMetaRow}>
-          <View style={hubStyles.heroMetaItem}>
-            <Building2 size={14} color={METRONIC.subtle} strokeWidth={2} />
-            <Text style={hubStyles.heroMetaText}>
-              {roleDisplayLabel(roleLabel).toUpperCase()}
-            </Text>
+        {compact ? (
+          <View style={styles.metaColumn}>
+            {metaItems.map((item) => (
+              <View key={item.key} style={styles.metaColumnRow}>
+                {item.icon}
+                <Text style={styles.metaColumnText} numberOfLines={2}>
+                  {item.text}
+                </Text>
+              </View>
+            ))}
           </View>
-          <View style={hubStyles.heroMetaItem}>
-            <MapPin size={14} color={METRONIC.subtle} strokeWidth={2} />
-            <Text style={hubStyles.heroMetaText} numberOfLines={1}>
-              {locationLabel}
-            </Text>
+        ) : (
+          <View style={hubStyles.heroMetaRow}>
+            {metaItems.map((item) => (
+              <View key={item.key} style={hubStyles.heroMetaItem}>
+                {item.icon}
+                <Text style={hubStyles.heroMetaText} numberOfLines={1}>
+                  {item.text}
+                </Text>
+              </View>
+            ))}
           </View>
-          <View style={hubStyles.heroMetaItem}>
-            <Phone size={14} color={METRONIC.subtle} strokeWidth={2} />
-            <Text style={hubStyles.heroMetaText} numberOfLines={1}>
-              {phoneLabel}
-            </Text>
-          </View>
-        </View>
+        )}
 
-        <View style={hubStyles.heroStatsRow}>
-          {stats.map((stat, idx) => (
-            <View key={stat.label} style={styles.statGroup}>
-              <Text style={hubStyles.heroStatChip}>
-                <Text style={hubStyles.heroStatValue}>{stat.value}</Text>
-                <Text style={hubStyles.heroStatLabel}> {stat.label}</Text>
-              </Text>
-              {idx < stats.length - 1 ? (
-                <Text style={hubStyles.heroStatDivider}>·</Text>
-              ) : null}
-            </View>
-          ))}
-        </View>
+        {compact ? (
+          <View style={styles.statsGrid}>
+            {stats.map((stat, idx) => (
+              <View
+                key={stat.label}
+                style={[
+                  styles.statsGridCell,
+                  idx > 0 && styles.statsGridCellBorder,
+                ]}
+              >
+                <Text style={styles.statsGridValue}>{stat.value}</Text>
+                <Text style={styles.statsGridLabel}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={hubStyles.heroStatsRow}>
+            {stats.map((stat, idx) => (
+              <View key={stat.label} style={styles.statGroup}>
+                <Text style={hubStyles.heroStatChip}>
+                  <Text style={hubStyles.heroStatValue}>{stat.value}</Text>
+                  <Text style={hubStyles.heroStatLabel}> {stat.label}</Text>
+                </Text>
+                {idx < stats.length - 1 ? (
+                  <Text style={hubStyles.heroStatDivider}>·</Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        )}
 
-        <View style={styles.statusRow}>
+        <View style={[styles.statusRow, compact && styles.statusRowCompact]}>
           <View
             style={[
               styles.presenceTag,
               inApp ? styles.presenceTagOn : styles.presenceTagOff,
+              compact && styles.presenceTagCompact,
             ]}
           >
             <View
@@ -154,6 +215,7 @@ export function NetworkProfileHubHero({
             <Text
               style={[
                 styles.presenceText,
+                compact && styles.presenceTextCompact,
                 inApp ? styles.presenceTextOn : styles.presenceTextOff,
               ]}
             >
@@ -161,8 +223,15 @@ export function NetworkProfileHubHero({
             </Text>
           </View>
           {connectionStatus ? (
-            <View style={styles.connectionTag}>
-              <Text style={styles.connectionTagText}>{connectionStatus}</Text>
+            <View style={[styles.connectionTag, compact && styles.connectionTagCompact]}>
+              <Text
+                style={[
+                  styles.connectionTagText,
+                  compact && styles.connectionTagTextCompact,
+                ]}
+              >
+                {connectionStatus}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -172,6 +241,110 @@ export function NetworkProfileHubHero({
 }
 
 const styles = StyleSheet.create({
+  heroCompact: {
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  heroInnerCompact: {
+    alignItems: "stretch",
+    gap: 8,
+  },
+  heroAvatarPressableCompact: {
+    alignSelf: "center",
+  },
+  heroAvatarRingCompact: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+  },
+  heroNameCompact: {
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: -0.2,
+    textAlign: "center",
+    alignSelf: "center",
+  },
+  closeBtnCompact: {
+    top: 10,
+    right: 10,
+  },
+  metaColumn: {
+    alignSelf: "stretch",
+    gap: 8,
+    paddingHorizontal: 4,
+    marginTop: 2,
+  },
+  metaColumnRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    minWidth: 0,
+  },
+  metaColumnText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "400",
+    color: METRONIC.subtle,
+    lineHeight: 17,
+  },
+  statsGrid: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "rgba(255, 255, 255, 0.72)",
+    overflow: "hidden",
+  },
+  statsGridCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    gap: 2,
+  },
+  statsGridCellBorder: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: METRONIC.border,
+  },
+  statsGridValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: METRONIC.text,
+    letterSpacing: -0.2,
+  },
+  statsGridLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: METRONIC.muted,
+    textTransform: "lowercase",
+  },
+  statusRowCompact: {
+    alignSelf: "stretch",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  presenceTagCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  presenceTextCompact: {
+    fontWeight: "600",
+  },
+  connectionTagCompact: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  connectionTagTextCompact: {
+    fontWeight: "600",
+    letterSpacing: 0,
+    textTransform: "capitalize",
+  },
   closeBtn: {
     position: "absolute",
     top: 14,

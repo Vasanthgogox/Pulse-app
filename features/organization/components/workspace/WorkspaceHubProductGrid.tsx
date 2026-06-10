@@ -1,19 +1,10 @@
 import { memo, useMemo } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
-import Theme from "@/constants/Theme";
+import { HUB_PURPLE } from "@/components/profile/workspaceHubMenu.styles";
 import { ProductLogo } from "@/features/organization/components/workspace/ProductLogo";
-import {
-  getProductsInDisplayOrder,
-  type ProductDefinition,
-  type ProductId,
-} from "@/lib/productRegistry";
+import { productDockStyles as styles } from "@/features/organization/components/workspace/workspaceHubProductGrid.styles";
+import { getProductsInDisplayOrder, type ProductId } from "@/lib/productRegistry";
 import { ChevronRight } from "lucide-react-native";
 
 function shortProductName(name: string): string {
@@ -67,7 +58,7 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
         </View>
         <View style={styles.catalogueLink}>
           <Text style={styles.catalogueLinkText}>Catalogue</Text>
-          <ChevronRight size={12} color={Theme.primary} strokeWidth={2.2} />
+          <ChevronRight size={12} color={HUB_PURPLE} strokeWidth={2.2} />
         </View>
       </Pressable>
 
@@ -85,6 +76,7 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
               key={product.id}
               style={({ pressed }) => [
                 styles.chip,
+                isActive && styles.chipActive,
                 pressed && isActive && styles.chipPressed,
               ]}
               onPress={
@@ -106,7 +98,10 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
                 showActiveDot={isActive}
               />
               <Text
-                style={[styles.chipName, isActive && styles.chipNameActive]}
+                style={[
+                  styles.chipName,
+                  isActive ? styles.chipNameActive : styles.chipNameLocked,
+                ]}
                 numberOfLines={1}
               >
                 {shortProductName(product.name)}
@@ -117,83 +112,4 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
       </ScrollView>
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  dock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    paddingTop: 10,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  dockHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingHorizontal: 16,
-  },
-  dockHeaderPressed: {
-    opacity: 0.88,
-  },
-  dockHeaderLeft: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  dockEyebrow: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.15,
-  },
-  dockMeta: {
-    fontSize: 10,
-    fontWeight: "400",
-    color: Theme.textMuted,
-    lineHeight: 14,
-  },
-  catalogueLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    flexShrink: 0,
-    paddingVertical: 4,
-    paddingHorizontal: 2,
-  },
-  catalogueLinkText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.primary,
-  },
-  scrollContent: {
-    paddingHorizontal: 12,
-    gap: 2,
-    paddingBottom: 2,
-  },
-  chip: {
-    width: 62,
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 2,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  chipPressed: {
-    backgroundColor: "#f4f6fa",
-  },
-  chipName: {
-    fontSize: 9,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    textAlign: "center",
-    lineHeight: 12,
-    width: "100%",
-  },
-  chipNameActive: {
-    color: Theme.textPrimaryDark,
-    fontWeight: "600",
-  },
 });

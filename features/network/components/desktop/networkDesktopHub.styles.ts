@@ -1,5 +1,5 @@
 import Theme from "@/constants/Theme";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 export const METRONIC = {
   border: "#EFF2F5",
@@ -41,15 +41,20 @@ export const networkDesktopHubStyles = StyleSheet.create({
     ...METRONIC_HEX_BACKGROUND,
   },
   heroHexOverlay: {
-    ...({
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background:
-        "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.55) 55%, rgba(255,255,255,0.2) 100%)",
-    } as object),
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    ...Platform.select({
+      web: {
+        backgroundImage:
+          "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.55) 55%, rgba(255,255,255,0.2) 100%)",
+      },
+      default: {
+        backgroundColor: "rgba(255, 255, 255, 0.72)",
+      },
+    }),
   },
   heroInner: {
     width: "100%",
@@ -2364,8 +2369,8 @@ export const networkDesktopHubStyles = StyleSheet.create({
     width: "100%",
     ...({
       display: "grid",
-      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-      gap: 16,
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+      gap: 12,
       alignItems: "stretch",
     } as object),
   },

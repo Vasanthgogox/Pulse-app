@@ -1,20 +1,61 @@
 /**
- * Overview tab — company info, addresses, business metrics.
+ * Overview tab — company, KAM/billing, commercial snapshot (dispatcher-portal-pro reference).
  */
+import {
+  INVOICE_FREQUENCY_OPTIONS,
+  PAYMENT_TERMS_OPTIONS,
+} from "@/features/clients/constants/clientReference.constants";
+import { updateClientHubProfile } from "@/features/clients/services/clientProfile.service";
 import type { ClientManagementBundle } from "@/features/clients/types/clientManagement.types";
 import { formatClientPhoneDisplay } from "@/features/clients/utils/clientManagement.util";
 import { NetworkDesktopHeadquarterMap } from "@/features/network/components/desktop/NetworkDesktopHeadquarterMap";
 import { hubStyles as styles, METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
-import { Globe, Mail, MapPin, Phone } from "lucide-react-native";
-import { Text, View } from "react-native";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { formatINR } from "@/lib/format";
+import { CheckCircle2, ChevronDown, Globe, Mail, MapPin, Phone, Save, X } from "lucide-react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
-type Props = { bundle: ClientManagementBundle };
+type Props = {
+  bundle: ClientManagementBundle;
+  orgId?: string;
+  clientId?: string;
+  onRefresh?: () => void;
+};
 
-function HighlightRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
+function HighlightRow({
+  label,
+  value,
+  last,
+  compact,
+}: {
+  label: string;
+  value: string;
+  last?: boolean;
+  compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <View style={[mobile.kvRowStacked, last && styles.kvRowLast]}>
+        <Text style={mobile.kvLabelStacked}>{label}</Text>
+        <Text style={mobile.kvValueStacked} numberOfLines={4}>
+          {value === "—" ? "Not set" : value}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={[styles.kvRow, last && styles.kvRowLast]}>
       <Text style={styles.kvLabel}>{label}</Text>
-      <Text style={styles.kvValue} numberOfLines={2}>{value}</Text>
+      <Text style={styles.kvValue} numberOfLines={3}>{value}</Text>
     </View>
   );
 }
@@ -28,50 +69,279 @@ function LinkRow({ icon: Icon, value }: { icon: typeof Globe; value: string }) {
   );
 }
 
-export function ClientProfileOverviewPanel({ bundle }: Props) {
+function str(v: unknown): string {
+  if (v == null || v === "") return "—";
+  return String(v);
+}
+
+function numINR(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  return Number.isFinite(n) ? formatINR(n) : "—";
+}
+
+function SelectInline({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={ov.fieldGroup}>
+      <Text style={ov.fieldLabel}>{label}</Text>
+      <Pressable style={ov.fieldInput} onPress={() => setOpen((v) => !v)}>
+        <Text style={ov.fieldInputText}>{value || "Select…"}</Text>
+        <ChevronDown size={14} color={METRONIC.subtle} strokeWidth={2} />
+      </Pressable>
+      {open ? (
+        <View style={ov.dropdown}>
+          {options.map((o) => (
+            <Pressable
+              key={o}
+              style={[ov.dropdownItem, o === value && ov.dropdownItemActive]}
+              onPress={() => { onChange(o); setOpen(false); }}
+            >
+              <Text style={ov.dropdownItemText}>{o}</Text>
+              {o === value ? <CheckCircle2 size={12} color={METRONIC.link} strokeWidth={2.5} /> : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh }: Props) {
+  const compact = useProfileHubCompact();
   const c = bundle.client ?? {};
   const tradeName = String(c.trade_name ?? c.name ?? "Client");
   const registered = String(c.registered_address ?? c.address ?? "—");
   const billing = String(c.billing_address ?? "—");
   const corporate = String(c.corporate_address ?? c.hq_address ?? "—");
   const mapAddress = registered !== "—" ? registered : corporate !== "—" ? corporate : tradeName;
+  const regions = Array.isArray(c.operating_regions)
+    ? (c.operating_regions as string[]).filter(Boolean).join(", ")
+    : "—";
+  const billingContacts = bundle.contacts.filter((ct) => ct.is_billing);
+
+  const canEdit = Boolean(orgId && clientId && onRefresh);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    kam_name: str(c.kam_name) === "—" ? "" : str(c.kam_name),
+    kam_email: str(c.kam_email) === "—" ? "" : str(c.kam_email),
+    kam_phone: str(c.kam_phone) === "—" ? "" : str(c.kam_phone),
+    billing_contact_name: str(c.billing_contact_name) === "—" ? "" : str(c.billing_contact_name),
+    billing_contact_email: str(c.billing_contact_email) === "—" ? "" : str(c.billing_contact_email),
+    billing_contact_phone: str(c.billing_contact_phone) === "—" ? "" : str(c.billing_contact_phone),
+    potential_volume: c.potential_volume != null ? String(c.potential_volume) : "",
+    projected_contract_revenue: c.projected_contract_revenue != null ? String(c.projected_contract_revenue) : "",
+    payment_terms_label: str(c.payment_terms_label) === "—" ? "" : str(c.payment_terms_label),
+    invoice_frequency_label: str(c.invoice_frequency_label) === "—" ? "" : str(c.invoice_frequency_label),
+    client_code: str(c.client_code) === "—" ? "" : str(c.client_code),
+    iec_number: str(c.iec_number) === "—" ? "" : str(c.iec_number),
+    tan_number: str(c.tan_number) === "—" ? "" : str(c.tan_number),
+    remarks: str(c.notes) === "—" ? "" : str(c.notes),
+  });
+
+  const handleSave = async () => {
+    if (!orgId || !clientId || !onRefresh) return;
+    setSaving(true);
+    const parseNum = (s: string) => {
+      const t = s.trim();
+      if (!t) return null;
+      const n = parseFloat(t);
+      return Number.isFinite(n) ? n : null;
+    };
+    const { error } = await updateClientHubProfile(orgId, clientId, {
+      kam_name: form.kam_name,
+      kam_email: form.kam_email,
+      kam_phone: form.kam_phone,
+      billing_contact_name: form.billing_contact_name,
+      billing_contact_email: form.billing_contact_email,
+      billing_contact_phone: form.billing_contact_phone,
+      potential_volume: parseNum(form.potential_volume),
+      projected_contract_revenue: parseNum(form.projected_contract_revenue),
+      payment_terms_label: form.payment_terms_label || null,
+      invoice_frequency_label: form.invoice_frequency_label || null,
+      client_code: form.client_code || null,
+      iec_number: form.iec_number || null,
+      tan_number: form.tan_number || null,
+      remarks: form.remarks || null,
+    });
+    setSaving(false);
+    if (error) {
+      Alert.alert("Save failed", error.message);
+      return;
+    }
+    setEditing(false);
+    onRefresh();
+  };
+
+  const rowProps = { compact };
 
   return (
-    <View style={styles.detailsBody}>
-      <View style={styles.splitRow}>
-        <View style={styles.sidebar}>
+    <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
+      <View style={[styles.splitRow, compact && mobile.splitColumn]}>
+        <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Highlights</Text>
-            <HighlightRow label="Legal name" value={String(c.legal_name ?? c.name ?? "—")} />
-            <HighlightRow label="Trade name" value={tradeName} />
-            <HighlightRow label="GST" value={String(c.gstin ?? "—")} />
-            <HighlightRow label="PAN" value={String(c.pan_number ?? "—")} />
-            <HighlightRow label="CIN" value={String(c.cin ?? "—")} />
-            <HighlightRow label="MSME" value={String(c.msme_number ?? "—")} />
-            <HighlightRow label="Industry" value={String(c.industry ?? "—")} />
-            <HighlightRow label="Status" value={String(c.client_status ?? c.status ?? "—").toUpperCase()} last />
+            <HighlightRow {...rowProps} label="Legal name" value={String(c.legal_name ?? c.name ?? "—")} />
+            <HighlightRow {...rowProps} label="Trade name" value={tradeName} />
+            <HighlightRow {...rowProps} label="Client code" value={str(c.client_code)} />
+            <HighlightRow {...rowProps} label="GST" value={String(c.gstin ?? "—")} />
+            <HighlightRow {...rowProps} label="PAN" value={String(c.pan_number ?? "—")} />
+            <HighlightRow {...rowProps} label="TAN" value={str(c.tan_number)} />
+            <HighlightRow {...rowProps} label="CIN" value={String(c.cin ?? "—")} />
+            <HighlightRow {...rowProps} label="IEC" value={str(c.iec_number)} />
+            <HighlightRow {...rowProps} label="MSME" value={String(c.msme_number ?? "—")} />
+            <HighlightRow {...rowProps} label="Industry" value={String(c.industry ?? "—")} />
+            <HighlightRow {...rowProps} label="Regions" value={regions} />
+            <HighlightRow {...rowProps} label="Status" value={String(c.client_status ?? c.status ?? "—").toUpperCase()} last />
           </View>
+
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Addresses</Text>
-            <HighlightRow label="Registered" value={registered} />
-            <HighlightRow label="Billing" value={billing} />
-            <HighlightRow label="Corporate" value={corporate} last />
+            <HighlightRow {...rowProps} label="Registered" value={registered} />
+            <HighlightRow {...rowProps} label="Billing" value={billing} />
+            <HighlightRow {...rowProps} label="Corporate" value={corporate} last />
           </View>
+
+          <View style={styles.card}>
+            <View style={ov.cardTitleRow}>
+              <Text style={styles.cardTitle}>KAM & billing</Text>
+              {canEdit && !editing ? (
+                <Pressable onPress={() => setEditing(true)} hitSlop={8}>
+                  <Text style={ov.editLink}>Edit</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {editing ? (
+              <View style={ov.editBlock}>
+                <Text style={ov.sectionLabel}>Key account manager</Text>
+                <TextInput style={ov.fieldInput} value={form.kam_name} onChangeText={(v) => setForm({ ...form, kam_name: v })} placeholder="KAM name" placeholderTextColor={METRONIC.muted} />
+                <TextInput style={ov.fieldInput} value={form.kam_email} onChangeText={(v) => setForm({ ...form, kam_email: v })} placeholder="KAM email" placeholderTextColor={METRONIC.muted} keyboardType="email-address" />
+                <TextInput style={ov.fieldInput} value={form.kam_phone} onChangeText={(v) => setForm({ ...form, kam_phone: v })} placeholder="KAM phone" placeholderTextColor={METRONIC.muted} keyboardType="phone-pad" />
+                <Text style={ov.sectionLabel}>Billing contact</Text>
+                <TextInput style={ov.fieldInput} value={form.billing_contact_name} onChangeText={(v) => setForm({ ...form, billing_contact_name: v })} placeholder="Billing contact name" placeholderTextColor={METRONIC.muted} />
+                <TextInput style={ov.fieldInput} value={form.billing_contact_email} onChangeText={(v) => setForm({ ...form, billing_contact_email: v })} placeholder="Billing email" placeholderTextColor={METRONIC.muted} keyboardType="email-address" />
+                <TextInput style={ov.fieldInput} value={form.billing_contact_phone} onChangeText={(v) => setForm({ ...form, billing_contact_phone: v })} placeholder="Billing phone" placeholderTextColor={METRONIC.muted} keyboardType="phone-pad" />
+                <View style={ov.editActions}>
+                  <Pressable onPress={() => setEditing(false)} style={ov.cancelBtn} disabled={saving}>
+                    <X size={13} color={METRONIC.subtle} strokeWidth={2} />
+                    <Text style={ov.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={handleSave} style={ov.saveBtn} disabled={saving}>
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Save size={13} color="#fff" strokeWidth={2} />}
+                    <Text style={ov.saveBtnText}>Save</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <>
+                <HighlightRow {...rowProps} label="KAM" value={[str(c.kam_name), str(c.kam_email)].filter((x) => x !== "—").join(" · ") || "—"} />
+                <HighlightRow {...rowProps} label="KAM phone" value={formatClientPhoneDisplay(str(c.kam_phone))} />
+                <HighlightRow {...rowProps} label="Billing contact" value={str(c.billing_contact_name)} />
+                <HighlightRow {...rowProps} label="Billing email" value={str(c.billing_contact_email)} />
+                <HighlightRow {...rowProps} label="Billing phone" value={formatClientPhoneDisplay(str(c.billing_contact_phone))} last />
+              </>
+            )}
+          </View>
+
+          {billingContacts.length > 0 ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Billing contacts (directory)</Text>
+              {billingContacts.map((ct, i) => (
+                <HighlightRow
+                  key={ct.id}
+                  {...rowProps}
+                  label={ct.name}
+                  value={[ct.designation, ct.email, ct.mobile].filter(Boolean).join(" · ") || "—"}
+                  last={i === billingContacts.length - 1}
+                />
+              ))}
+            </View>
+          ) : null}
         </View>
 
-        <View style={styles.mainCol}>
+        <View style={[styles.mainCol, compact && mobile.mainColFull]}>
+          <View style={styles.card}>
+            <View style={ov.cardTitleRow}>
+              <Text style={styles.cardTitle}>Commercial snapshot</Text>
+              {canEdit && !editing ? (
+                <Pressable onPress={() => setEditing(true)} hitSlop={8}>
+                  <Text style={ov.editLink}>Edit</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {editing ? (
+              <View style={ov.editBlock}>
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Potential volume (₹)</Text>
+                    <TextInput style={ov.fieldInput} value={form.potential_volume} onChangeText={(v) => setForm({ ...form, potential_volume: v })} placeholder="0" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Projected contract revenue (₹)</Text>
+                    <TextInput style={ov.fieldInput} value={form.projected_contract_revenue} onChangeText={(v) => setForm({ ...form, projected_contract_revenue: v })} placeholder="0" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+                  </View>
+                </View>
+                <SelectInline label="Payment terms" value={form.payment_terms_label} options={PAYMENT_TERMS_OPTIONS} onChange={(v) => setForm({ ...form, payment_terms_label: v })} />
+                <SelectInline label="Invoice frequency" value={form.invoice_frequency_label} options={INVOICE_FREQUENCY_OPTIONS} onChange={(v) => setForm({ ...form, invoice_frequency_label: v })} />
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Client code</Text>
+                    <TextInput style={ov.fieldInput} value={form.client_code} onChangeText={(v) => setForm({ ...form, client_code: v })} placeholder="Internal code" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>TAN</Text>
+                    <TextInput style={ov.fieldInput} value={form.tan_number} onChangeText={(v) => setForm({ ...form, tan_number: v })} placeholder="ABCD12345E" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                </View>
+                <View style={ov.fieldGroup}>
+                  <Text style={ov.fieldLabel}>IEC</Text>
+                  <TextInput style={ov.fieldInput} value={form.iec_number} onChangeText={(v) => setForm({ ...form, iec_number: v })} placeholder="Import export code" placeholderTextColor={METRONIC.muted} />
+                </View>
+                <View style={ov.fieldGroup}>
+                  <Text style={ov.fieldLabel}>Remarks</Text>
+                  <TextInput style={[ov.fieldInput, ov.fieldInputMulti]} value={form.remarks} onChangeText={(v) => setForm({ ...form, remarks: v })} placeholder="Onboarding notes…" placeholderTextColor={METRONIC.muted} multiline numberOfLines={3} />
+                </View>
+              </View>
+            ) : (
+              <View style={[ov.snapshotGrid, compact && mobile.snapshotGridCompact]}>
+                {[
+                  { label: "Potential volume", value: numINR(c.potential_volume) },
+                  { label: "Projected revenue", value: numINR(c.projected_contract_revenue) },
+                  { label: "Payment terms", value: str(c.payment_terms_label) },
+                  { label: "Invoice frequency", value: str(c.invoice_frequency_label) },
+                ].map((item) => (
+                  <View key={item.label} style={[ov.snapshotCell, compact && mobile.snapshotCellFull]}>
+                    <Text style={ov.snapshotLabel}>{item.label}</Text>
+                    <Text style={ov.snapshotValue}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Company profile</Text>
             <Text style={styles.sectionHeading}>Headquarter</Text>
-            <View style={styles.headquarterRow}>
-              <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={[styles.headquarterRow, compact && mobile.headquarterStack]}>
+              <View style={[{ flex: 1, minWidth: 0 }, compact && mobile.mapFrameFull]}>
                 <NetworkDesktopHeadquarterMap
                   orgName={tradeName}
                   addressLabel={mapAddress}
                   coordinate={null}
                 />
               </View>
-              <View style={styles.contactList}>
+              <View style={[styles.contactList, compact && mobile.contactListFull]}>
                 <LinkRow icon={Globe} value={String(c.website ?? "—")} />
                 <LinkRow icon={Mail} value={String(c.email ?? "—")} />
                 <LinkRow icon={Phone} value={formatClientPhoneDisplay(String(c.phone ?? ""))} />
@@ -89,3 +359,135 @@ export function ClientProfileOverviewPanel({ bundle }: Props) {
     </View>
   );
 }
+
+const ov = {
+  cardTitleRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    marginBottom: 4,
+  },
+  editLink: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: METRONIC.link,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: METRONIC.muted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.4,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  editBlock: { gap: 8 },
+  fieldGroup: { gap: 5, marginBottom: 4, flex: 1, minWidth: 160 },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: METRONIC.muted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.4,
+  },
+  fieldInput: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "#FAFAFA",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: METRONIC.text,
+    minHeight: 40,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
+  fieldInputText: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: METRONIC.text,
+    flex: 1,
+  },
+  fieldInputMulti: {
+    minHeight: 72,
+    textAlignVertical: "top" as const,
+    alignItems: "flex-start" as const,
+  },
+  dropdown: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "#fff",
+    marginTop: 4,
+    overflow: "hidden" as const,
+  },
+  dropdownItem: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dropdownItemActive: { backgroundColor: "#EEF6FF" },
+  dropdownItemText: { fontSize: 13, fontWeight: "500" as const, color: METRONIC.text },
+  twoCol: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 12 },
+  editActions: {
+    flexDirection: "row" as const,
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "#FAFAFA",
+  },
+  cancelBtnText: { fontSize: 12, fontWeight: "700" as const, color: METRONIC.subtle },
+  saveBtn: {
+    flex: 2,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: METRONIC.text,
+  },
+  saveBtnText: { fontSize: 12, fontWeight: "700" as const, color: "#fff" },
+  snapshotGrid: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 10,
+  },
+  snapshotCell: {
+    flex: 1,
+    minWidth: 140,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "#F9FAFB",
+    gap: 4,
+  },
+  snapshotLabel: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: METRONIC.muted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.4,
+  },
+  snapshotValue: {
+    fontSize: 15,
+    fontWeight: "800" as const,
+    color: METRONIC.text,
+  },
+};

@@ -1,15 +1,16 @@
 /**
- * Party directory — tabbed customers / suppliers / drivers / vehicles → profile hub.
+ * Party directory — tabbed customers / suppliers / drivers / vehicles (Metronic Teams grid).
+ * No profile hero — compact chrome + tab strip + card grid only.
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
-import { WizardEntityPartyCell } from "@/components/full-page-wizard/WizardEntityPartyCell";
-import {
-  fullPageWizardStyles as wizardStyles,
-  WIZARD_PARTY_GRID_COLUMNS,
-  WIZARD_PARTY_GRID_COLUMNS_DESKTOP,
-} from "@/components/full-page-wizard/fullPageWizardStyles";
 import Layout from "@/constants/Layout";
-import Theme from "@/constants/Theme";
+import { PartyDirectoryPartyCard } from "@/features/party/components/PartyDirectoryPartyCard";
+import {
+  HUB_PURPLE_VIVID,
+  partyDirectoryStyles as styles,
+  PARTY_GRID_COLUMNS,
+  PARTY_GRID_COLUMNS_DESKTOP,
+} from "@/features/party/components/partyDirectory.styles";
 import {
   PARTY_DIRECTORY_TAB_ORDER,
   PARTY_KIND_ENTITY_LABEL,
@@ -37,17 +38,15 @@ import {
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
-  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { METRONIC } from "@/components/profile/workspaceHubMenu.styles";
 
 type PartyRow = {
   id: string;
@@ -57,45 +56,6 @@ type PartyRow = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   href: string;
-};
-
-type TabTone = {
-  bg: string;
-  bgActive: string;
-  text: string;
-  border: string;
-  accent: string;
-};
-
-const TAB_TONES: Record<PartyKind, TabTone> = {
-  customers: {
-    bg: Theme.networkBadgeClientBg,
-    bgActive: "#E8EAFF",
-    text: Theme.networkBadgeClientText,
-    border: "rgba(67, 56, 202, 0.22)",
-    accent: Theme.networkBadgeClientText,
-  },
-  suppliers: {
-    bg: Theme.networkBadgeSupplierBg,
-    bgActive: "#DCFCE7",
-    text: Theme.networkBadgeSupplierText,
-    border: "rgba(22, 101, 52, 0.22)",
-    accent: Theme.networkBadgeSupplierText,
-  },
-  drivers: {
-    bg: Theme.networkBadgeDriverBg,
-    bgActive: "#FFEDD5",
-    text: Theme.networkBadgeDriverText,
-    border: "rgba(180, 83, 9, 0.22)",
-    accent: Theme.networkBadgeDriverText,
-  },
-  vehicles: {
-    bg: "#EEF2FF",
-    bgActive: "#E0E7FF",
-    text: Theme.primary,
-    border: "rgba(79, 70, 229, 0.22)",
-    accent: Theme.primary,
-  },
 };
 
 const TAB_ICONS: Record<PartyKind, LucideIcon> = {
@@ -123,8 +83,8 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
   const { width } = useWindowDimensions();
   const gridColumns =
     width >= Layout.wizardSteppedMaxWidth
-      ? WIZARD_PARTY_GRID_COLUMNS_DESKTOP
-      : WIZARD_PARTY_GRID_COLUMNS;
+      ? PARTY_GRID_COLUMNS_DESKTOP
+      : PARTY_GRID_COLUMNS;
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
@@ -215,7 +175,6 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
 
   const meta = PARTY_KIND_META[kind];
   const entityLabel = PARTY_KIND_ENTITY_LABEL[kind];
-  const activeTone = TAB_TONES[kind];
   const gridRows = useMemo(
     () => chunkRows(rows, gridColumns),
     [gridColumns, rows],
@@ -233,96 +192,84 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.hero}>
+      <View style={styles.pageChrome}>
         <Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
-          <ArrowLeft size={16} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+          <ArrowLeft size={15} color={METRONIC.subtle} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
         </Pressable>
-        <Text style={styles.eyebrow}>PARTY DIRECTORY</Text>
-        <Text style={styles.heroTitle}>Your network parties</Text>
-        <Text style={styles.heroSub}>
+        <Text style={styles.eyebrow}>Party Directory</Text>
+        <Text style={styles.pageTitle}>Your network parties</Text>
+        <Text style={styles.pageSub}>
           Shippers, carriers, drivers and fleet assets in one place
         </Text>
       </View>
 
-      <View style={styles.tabCard}>
+      <View style={styles.tabCardStrip}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabRow}
+          contentContainerStyle={styles.tabCardRow}
         >
           {PARTY_DIRECTORY_TAB_ORDER.map((tabKind) => {
             const active = tabKind === kind;
-            const tone = TAB_TONES[tabKind];
             const Icon = TAB_ICONS[tabKind];
             const count = tabCounts[tabKind];
             return (
               <Pressable
                 key={tabKind}
                 onPress={() => selectTab(tabKind)}
-                style={[
-                  styles.tabPill,
-                  {
-                    backgroundColor: active ? tone.bgActive : Theme.cardWhite,
-                    borderColor: active ? tone.border : Theme.borderLight,
-                  },
-                  active && styles.tabPillActive,
-                ]}
+                style={[styles.tabCard, active && styles.tabCardActive]}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
               >
                 <View
                   style={[
-                    styles.tabIconWrap,
-                    { backgroundColor: active ? tone.bg : Theme.surface },
+                    styles.tabCardIconWrap,
+                    active && styles.tabCardIconWrapActive,
                   ]}
                 >
                   <Icon
                     size={14}
-                    color={active ? tone.accent : Theme.textMuted}
+                    color={active ? HUB_PURPLE_VIVID : METRONIC.muted}
                     strokeWidth={1.9}
                   />
                 </View>
-                <View style={styles.tabTextCol}>
+                <View style={styles.tabCardTextCol}>
                   <Text
                     style={[
-                      styles.tabLabel,
-                      active && { color: tone.text, fontWeight: "700" },
+                      styles.tabCardLabel,
+                      active && styles.tabCardLabelActive,
                     ]}
                   >
                     {PARTY_TAB_LABELS[tabKind]}
                   </Text>
-                  <Text style={styles.tabCount}>{count} listed</Text>
+                  <Text style={styles.tabCardCount}>{count} listed</Text>
                 </View>
-                {active ? (
-                  <View style={[styles.tabActiveDot, { backgroundColor: tone.accent }]} />
-                ) : null}
+                {active ? <View style={styles.tabCardDot} /> : null}
               </Pressable>
             );
           })}
         </ScrollView>
       </View>
 
-      <View style={[styles.panelHeader, { borderLeftColor: activeTone.accent }]}>
-        <View style={styles.panelHeaderText}>
-          <Text style={styles.panelTitle}>{meta.title}</Text>
-          <Text style={styles.panelSub}>{meta.subtitle}</Text>
+      <View style={styles.sectionToolbar}>
+        <View style={styles.sectionToolbarLeft}>
+          <Text style={styles.sectionToolbarTitle}>{meta.title}</Text>
+          <Text style={styles.sectionToolbarSub}>{meta.subtitle}</Text>
         </View>
-        <View style={[styles.countBadge, { backgroundColor: activeTone.bg }]}>
-          <Text style={[styles.countBadgeText, { color: activeTone.text }]}>
-            {rows.length}
-          </Text>
+        <View style={styles.countBadge}>
+          <Text style={styles.countBadgeText}>{rows.length}</Text>
         </View>
       </View>
 
       <View style={styles.searchWrap}>
-        <Search size={14} color={Theme.textMuted} strokeWidth={2} />
+        <Search size={14} color={METRONIC.muted} strokeWidth={2} />
         <TextInput
           style={styles.searchInput}
           value={query}
           onChangeText={setQuery}
           placeholder={`Search ${meta.title.toLowerCase()}…`}
-          placeholderTextColor={Theme.textMuted}
+          placeholderTextColor={METRONIC.muted}
         />
       </View>
 
@@ -337,255 +284,41 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
         {rows.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No {meta.title.toLowerCase()} found</Text>
-            <Text style={styles.empty}>{meta.empty}</Text>
+            <Text style={styles.emptyBody}>{meta.empty}</Text>
           </View>
         ) : (
-          <View style={wizardStyles.selectionGridWrap}>
-            <View style={wizardStyles.selectionGrid}>
-              {gridRows.map((row, rowIndex) => (
-                <View
-                  key={`party-grid-row-${rowIndex}`}
-                  style={wizardStyles.selectionGridRow}
-                >
-                  {row.map((item) => (
-                    <View
-                      key={item.id}
-                      style={[
-                        wizardStyles.selectionGridCell,
-                        Platform.OS === "web"
-                          ? ({ cursor: "default" } as ViewStyle)
-                          : null,
-                      ]}
-                    >
-                      <WizardEntityPartyCell
-                        label={entityLabel}
-                        name={item.name}
-                        subtitle={item.meta}
-                        entityType={item.entityType}
-                        avatarUrl={item.avatarUrl}
-                        avatarSeed={item.avatarSeed}
-                        onPress={() =>
-                          router.push(
-                            item.href as Parameters<typeof router.push>[0],
-                          )
-                        }
-                        style={[
-                          wizardStyles.partyCardSelectable,
-                          Platform.OS === "web"
-                            ? ({ cursor: "pointer" } as ViewStyle)
-                            : null,
-                        ]}
+          <View style={styles.grid}>
+            {gridRows.map((row, rowIndex) => (
+              <View key={`party-row-${rowIndex}`} style={styles.gridRow}>
+                {row.map((item) => (
+                  <View key={item.id} style={styles.gridCell}>
+                    <PartyDirectoryPartyCard
+                      entityLabel={entityLabel}
+                      name={item.name}
+                      meta={item.meta}
+                      entityType={item.entityType}
+                      avatarUrl={item.avatarUrl}
+                      avatarSeed={item.avatarSeed}
+                      onPress={() =>
+                        router.push(item.href as Parameters<typeof router.push>[0])
+                      }
+                    />
+                  </View>
+                ))}
+                {row.length < gridColumns
+                  ? Array.from({ length: gridColumns - row.length }).map((_, i) => (
+                      <View
+                        key={`party-pad-${rowIndex}-${i}`}
+                        style={styles.gridCell}
+                        pointerEvents="none"
                       />
-                    </View>
-                  ))}
-                  {row.length < gridColumns
-                    ? Array.from({ length: gridColumns - row.length }).map((_, i) => (
-                        <View
-                          key={`party-grid-pad-${rowIndex}-${i}`}
-                          style={wizardStyles.selectionGridCell}
-                          pointerEvents="none"
-                        />
-                      ))
-                    : null}
-                </View>
-              ))}
-            </View>
+                    ))
+                  : null}
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f5f7fb" },
-  hero: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 6,
-    paddingBottom: 14,
-    gap: 4,
-  },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    marginBottom: 6,
-  },
-  backText: { fontSize: 11, fontWeight: "700", color: Theme.textPrimaryDark },
-  eyebrow: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    color: Theme.primary,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
-  },
-  heroSub: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 17,
-    maxWidth: 420,
-  },
-  tabCard: {
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 12,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 2px 12px rgba(24, 28, 50, 0.05)" as unknown as undefined,
-      },
-      default: {
-        shadowColor: "#181C32",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-      },
-    }),
-  },
-  tabRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  tabPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    minWidth: 128,
-    position: "relative",
-  },
-  tabPillActive: {
-    ...Platform.select({
-      web: {
-        boxShadow: "0 2px 8px rgba(24, 28, 50, 0.06)" as unknown as undefined,
-      },
-      default: { elevation: 1 },
-    }),
-  },
-  tabIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabTextCol: { flex: 1, minWidth: 0, gap: 1 },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-  },
-  tabCount: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
-  },
-  tabActiveDot: {
-    position: "absolute",
-    bottom: 4,
-    left: "50%",
-    marginLeft: -3,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  panelHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderLeftWidth: 3,
-    backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  panelHeaderText: { flex: 1, minWidth: 0, gap: 2 },
-  panelTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.2,
-  },
-  panelSub: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 15,
-  },
-  countBadge: {
-    minWidth: 36,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  countBadgeText: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  searchWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: Layout.screenPaddingHorizontal,
-    marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
-    padding: 0,
-  },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: Layout.screenPaddingHorizontal },
-  emptyCard: {
-    padding: 28,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    alignItems: "center",
-    gap: 8,
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
-  empty: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-});

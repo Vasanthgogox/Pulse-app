@@ -42,7 +42,10 @@ export type NetworkProfileModalBodyProps = {
 };
 
 function formatConnectionStatus(status: NetworkProfileModalNode["status"]): string {
-  return status.replace(/_/g, " ");
+  return status
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function entityTypeFromRole(
@@ -55,6 +58,7 @@ function entityTypeFromRole(
 
 export function NetworkProfileModalBody({
   node,
+  isMobile = false,
   profileStatsLoading,
   totalTrips,
   onClose,
@@ -89,6 +93,7 @@ export function NetworkProfileModalBody({
         inApp={inApp}
         connectionStatus={connectionLabel}
         onClose={onClose}
+        compact={isMobile}
         stats={[
           { value: tripsValue, label: "trips" },
           { value: ratingValue, label: "rating" },

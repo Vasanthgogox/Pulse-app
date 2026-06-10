@@ -34,14 +34,44 @@ export interface SupplierRow {
   avatar_url?: string | null;
   avatar_seed?: string | null;
   owner_full_name?: string | null;
+  vehicle_types?: string[] | null;
+  operating_areas?: string[] | null;
+  onboarding_agreement_status?: 'pending' | 'draft' | 'signed' | 'expired' | 'terminated' | null;
+  onboarding_agreement_signed_at?: string | null;
+  onboarding_agreement_storage_path?: string | null;
+  onboarding_agreement_notes?: string | null;
 }
 
-const SUPPLIER_COLUMNS = [
+const SUPPLIER_CORE_COLUMNS = [
   "id", "organization_id", "name", "contact", "company_name", "contact_person",
   "phone", "email", "address", "gst_number", "is_active", "is_verified",
   "created_at", "updated_at", "supplier_type", "linked_organization_id",
   "avatar_url", "avatar_seed", "owner_full_name",
+  "vehicle_types", "operating_areas",
 ].join(",");
+
+const SUPPLIER_ONBOARDING_COLUMNS = [
+  "onboarding_agreement_status",
+  "onboarding_agreement_signed_at",
+  "onboarding_agreement_storage_path",
+  "onboarding_agreement_notes",
+].join(",");
+
+const SUPPLIER_COLUMNS = `${SUPPLIER_CORE_COLUMNS},${SUPPLIER_ONBOARDING_COLUMNS}`;
+
+function isMissingOnboardingColumnError(message: string): boolean {
+  return /onboarding_agreement_/i.test(message) && /does not exist/i.test(message);
+}
+
+function withDefaultOnboardingFields(row: SupplierRow): SupplierRow {
+  return {
+    ...row,
+    onboarding_agreement_status: row.onboarding_agreement_status ?? "pending",
+    onboarding_agreement_signed_at: row.onboarding_agreement_signed_at ?? null,
+    onboarding_agreement_storage_path: row.onboarding_agreement_storage_path ?? null,
+    onboarding_agreement_notes: row.onboarding_agreement_notes ?? null,
+  };
+}
 
 export async function getSuppliersByOrganization(
   orgId: string,
@@ -71,19 +101,22 @@ export async function getSuppliersByOrganization(
   }
 
   // Fallback to standard select if RPC fails or is missing
-  const base = () =>
+  const base = (columns: string) =>
     supabase()
       .from('suppliers')
-      .select(SUPPLIER_COLUMNS)
+      .select(columns)
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false });
 
   if (opts != null) {
     const limit = opts.limit ?? DEFAULT_PAGE_SIZE;
     const offset = opts.offset ?? 0;
-    const { data, error } = await base().range(offset, offset + limit);
+    let { data, error } = await base(SUPPLIER_COLUMNS).range(offset, offset + limit);
+    if (error && isMissingOnboardingColumnError(error.message)) {
+      ({ data, error } = await base(SUPPLIER_CORE_COLUMNS).range(offset, offset + limit));
+    }
     if (error) return { error: new Error(error.message), suppliers: [] };
-    const raw = (data ?? []) as unknown as SupplierRow[];
+    const raw = ((data ?? []) as unknown as SupplierRow[]).map(withDefaultOnboardingFields);
     const hasMore = raw.length > limit;
     const page = hasMore ? raw.slice(0, limit) : raw;
     return {
@@ -96,9 +129,12 @@ export async function getSuppliersByOrganization(
       hasMore,
     };
   }
-  const { data, error } = await base();
+  let { data, error } = await base(SUPPLIER_COLUMNS);
+  if (error && isMissingOnboardingColumnError(error.message)) {
+    ({ data, error } = await base(SUPPLIER_CORE_COLUMNS));
+  }
   if (error) return { error: new Error(error.message), suppliers: [] };
-  const rows = (data ?? []) as unknown as SupplierRow[];
+  const rows = ((data ?? []) as unknown as SupplierRow[]).map(withDefaultOnboardingFields);
   return {
     error: null,
     suppliers: await enrichConnectionPartnerAvatars(
@@ -174,14 +210,23 @@ export async function getSupplierById(
   orgId: string,
   supplierId: string
 ): Promise<{ error: Error | null; supplier: SupplierRow | null }> {
-  const { data, error } = await supabase()
+  let { data, error } = await supabase()
     .from('suppliers')
     .select(SUPPLIER_COLUMNS)
     .eq('organization_id', orgId)
     .eq('id', supplierId)
     .maybeSingle();
+  if (error && isMissingOnboardingColumnError(error.message)) {
+    ({ data, error } = await supabase()
+      .from('suppliers')
+      .select(SUPPLIER_CORE_COLUMNS)
+      .eq('organization_id', orgId)
+      .eq('id', supplierId)
+      .maybeSingle());
+  }
   if (error) return { error: new Error(error.message), supplier: null };
-  return { error: null, supplier: data as SupplierRow | null };
+  if (data == null) return { error: null, supplier: null };
+  return { error: null, supplier: withDefaultOnboardingFields(data as SupplierRow) };
 }
 
 /**

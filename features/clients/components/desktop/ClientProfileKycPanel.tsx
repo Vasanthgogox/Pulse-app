@@ -13,6 +13,8 @@ import {
   clientProfileStyles as cpStyles,
   hubStyles as styles,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { AlertCircle, CheckCircle2, FileText, Upload } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
@@ -28,11 +30,12 @@ function docForType(docs: ClientKycDocumentRow[], type: ClientKycDocType) {
 }
 
 export function ClientProfileKycPanel({ bundle, onUploadDoc }: Props) {
+  const compact = useProfileHubCompact();
   const { score, verified, total, missing } = computeKycScore(bundle.kyc_documents);
   const missingLabels = kycMissingLabels(missing);
 
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, compact && mobile.panelCompact]}>
       <View style={cpStyles.kycScoreBanner}>
         <View style={cpStyles.kycScoreRing}>
           <Text style={cpStyles.kycScoreValue}>{score}%</Text>
@@ -59,7 +62,7 @@ export function ClientProfileKycPanel({ bundle, onUploadDoc }: Props) {
           const uploaded = Boolean(doc?.storage_path);
           const verifiedDoc = doc?.status === "verified";
           return (
-            <View key={type} style={cpStyles.kycDocCard}>
+            <View key={type} style={[cpStyles.kycDocCard, compact && { width: "100%", minWidth: undefined }]}>
               <View style={cpStyles.kycDocCardHead}>
                 <FileText size={18} color={Theme.primary} strokeWidth={2} />
                 <Text style={cpStyles.kycDocTitle}>{KYC_DOC_LABELS[type]}</Text>
