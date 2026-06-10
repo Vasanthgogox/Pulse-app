@@ -1,5 +1,6 @@
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
+import { LinearGradient } from "expo-linear-gradient";
 import { ChevronDown, PenLine, Search, Settings, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -35,8 +36,21 @@ export function ChatSlackDesktopSidebarChrome({
   return (
     <>
       <View style={st.sidebarTopBrandRow}>
+        <LinearGradient
+          pointerEvents="none"
+          colors={[
+            "rgba(255, 255, 255, 0.12)",
+            "rgba(255, 255, 255, 0.03)",
+            "rgba(255, 255, 255, 0)",
+          ]}
+          locations={[0, 0.4, 0.75]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={st.sidebarTopMirrorSheen}
+        />
+        <View style={st.sidebarTopMirrorGlow} pointerEvents="none" />
         <View style={st.sidebarBrandTitleRow}>
-          <Text style={st.sidebarBrandTitle}>pulsechat</Text>
+          <Text style={st.sidebarBrandTitle}>pulse chat</Text>
           <Text style={st.sidebarBrandDot}>.</Text>
         </View>
         {onClose ? (
@@ -47,7 +61,7 @@ export function ChatSlackDesktopSidebarChrome({
             accessibilityRole="button"
             accessibilityLabel="Close chat"
           >
-            <X size={16} color="#CBD5E1" strokeWidth={1.9} />
+            <X size={18} color="#F8FAFC" strokeWidth={2.25} />
           </TouchableOpacity>
         ) : null}
       </View>

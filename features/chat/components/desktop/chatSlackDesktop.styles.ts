@@ -1,5 +1,6 @@
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { Theme } from "@/constants/Theme";
+import { SLACK_DESKTOP_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
 
 /** Slack desktop — compact type scale aligned with mobile. */
 export const SLACK_DESKTOP_TYPE = {
@@ -34,11 +35,7 @@ export const SLACK_DESKTOP = {
   activeBar: Theme.primary,
 } as const;
 
-export const SLACK_DESKTOP_AVATAR = {
-  sidebar: 24,
-  thread: 26,
-  message: 32,
-} as const;
+export const SLACK_DESKTOP_AVATAR = SLACK_DESKTOP_CHAT_AVATAR;
 
 export const slackDesktopStyles = StyleSheet.create({
   root: {
@@ -73,41 +70,68 @@ export const slackDesktopStyles = StyleSheet.create({
     borderBottomColor: "rgba(148, 163, 184, 0.2)",
   },
   sidebarTopBrandRow: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 12,
+    paddingBottom: 10,
     backgroundColor: "#13171D",
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(255, 255, 255, 0.12)",
+    overflow: "hidden",
+  },
+  sidebarTopMirrorSheen: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: "none",
+  },
+  sidebarTopMirrorGlow: {
+    position: "absolute",
+    left: "10%",
+    right: "10%",
+    top: 0,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 1,
   },
   sidebarBrandTitleRow: {
     flexDirection: "row",
     alignItems: "baseline",
   },
   sidebarBrandTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#E2E8F0",
-    letterSpacing: -0.25,
+    fontSize: 17,
+    fontWeight: "900",
+    color: "#F8FAFC",
+    letterSpacing: -0.35,
   },
   sidebarBrandDot: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "900",
     color: "#6366F1",
-    letterSpacing: -0.25,
+    letterSpacing: -0.35,
+    ...(Platform.OS === "web"
+      ? { textShadow: "0px 0px 8px rgba(99, 102, 241, 0.45)" }
+      : {
+          textShadowColor: "rgba(99, 102, 241, 0.45)",
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 8,
+        }),
   },
   sidebarTopCloseBtn: {
-    width: 28,
-    height: 28,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
-    backgroundColor: "rgba(148, 163, 184, 0.14)",
+    borderRadius: 17,
+    backgroundColor: "rgba(255, 255, 255, 0.09)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.14)",
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
   workspaceNameWrap: {
     flex: 1,
@@ -216,6 +240,14 @@ export const slackDesktopStyles = StyleSheet.create({
     minHeight: 0,
     backgroundColor: SLACK_DESKTOP.sidebarBg,
   },
+  sidebarPeopleStrip: {
+    paddingHorizontal: 10,
+    paddingTop: 4,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(100, 116, 139, 0.18)",
+    backgroundColor: SLACK_DESKTOP.sidebarBg,
+  },
   sidebarCategoriesContent: {
     paddingBottom: 14,
     paddingHorizontal: 10,
@@ -292,10 +324,10 @@ export const slackDesktopStyles = StyleSheet.create({
   sidebarRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 11,
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 11,
-    minHeight: 66,
+    paddingVertical: 10,
+    minHeight: 64,
     borderLeftWidth: 2.25,
     borderLeftColor: "transparent",
     backgroundColor: "#FFFFFF",
@@ -353,7 +385,7 @@ export const slackDesktopStyles = StyleSheet.create({
   sidebarRowName: {
     flex: 1,
     fontSize: SLACK_DESKTOP_TYPE.rowName,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#0F172A",
   },
   sidebarRowTime: {
@@ -662,7 +694,7 @@ export const slackDesktopStyles = StyleSheet.create({
   },
   threadMsgName: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     color: "#1E293B",
     flexShrink: 1,
     letterSpacing: -0.1,
@@ -701,6 +733,20 @@ export const slackDesktopStyles = StyleSheet.create({
     borderColor: SLACK_DESKTOP.border,
     borderRadius: 12,
     overflow: "hidden",
+  },
+  threadExpiryNotice: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    alignItems: "center",
+  },
+  threadExpiryNoticeText: {
+    fontSize: 10.5,
+    fontWeight: "400",
+    color: SLACK_DESKTOP.textTertiary,
+    lineHeight: 15,
+    textAlign: "center",
+    maxWidth: 360,
   },
   threadPartyTab: {
     flexDirection: "row",

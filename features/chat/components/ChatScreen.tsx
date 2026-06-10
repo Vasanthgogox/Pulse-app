@@ -55,6 +55,7 @@ import {
   ChatSlackListSeparator,
   ChatSlackBottomNav,
   CHAT_SLACK_BOTTOM_NAV_BAR,
+  ChatSlackPeopleStrip,
   ChatSlackThreadHeader,
   type SlackFilterChipDef,
   type SlackPeopleItem,
@@ -77,6 +78,7 @@ import {
   SLACK_DESKTOP,
 } from "@/features/chat/components/desktop/chatSlackDesktop.styles";
 import { ChatDateDivider } from "@/features/chat/components/shared/ChatDateDivider";
+import { ChatHistoryExpiryNotice } from "@/features/chat/components/shared/ChatHistoryExpiryNotice";
 import { ChatUnreadDivider } from "@/features/chat/components/shared/ChatUnreadDivider";
 import { ChatTypingIndicator } from "@/features/chat/components/shared/ChatTypingIndicator";
 import type { ReplyPreviewData } from "@/features/chat/components/shared/ChatReplyPreview";
@@ -180,6 +182,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -1015,6 +1018,7 @@ export function ChatScreen() {
   const isDesktop = width >= 1024;
   const isMobileChatUi = isChatMobileLayout(isDesktop);
   const isNativeMobile = isChatNativeMobile(isDesktop);
+  const { keyboardVisible: mobileKeyboardOpen } = useKeyboardVisible();
   /** Trip hub cards (alerts + party row) on every viewport — one list UX for native + web. */
   const useGroupedTripHub = true;
   const allowNewTripConversation = false;
@@ -2382,7 +2386,9 @@ export function ChatScreen() {
 
     const slackListTitle =
       activeTab === "network" ? "DMs" : activeTab === "indent" ? "Integrated" : "Trips";
-    const slackListBottomPad = CHAT_SLACK_BOTTOM_NAV_BAR + 16;
+    const slackListBottomPad = mobileKeyboardOpen
+      ? Math.max(insets.bottom, 12)
+      : CHAT_SLACK_BOTTOM_NAV_BAR + Math.max(insets.bottom, 6) + 16;
     const slackFabOnPress = () => {
       if (activeTab === "network") {
         setShowNetCompose(true);
@@ -2462,6 +2468,7 @@ export function ChatScreen() {
             />
           </>
         ) : isDesktop ? (
+          <>
           <ChatSlackDesktopSidebarChrome
             workspaceName={currentOrganization?.name ?? "Pulse Chat"}
             searchValue={activeTab === "network" ? netSidebarSearch : tripSidebarSearch}
@@ -2478,6 +2485,30 @@ export function ChatScreen() {
               router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
             }
           />
+          {(slackPeopleItems.length > 0 || activeTab === "network") ? (
+            <View style={deskSt.sidebarPeopleStrip}>
+              <ChatSlackPeopleStrip
+                items={slackPeopleItems}
+                selectedId={
+                  activeTab === "network"
+                    ? (selectedNet?.partnerId ?? null)
+                    : (selectedConvId ?? null)
+                }
+                sectionLabel={
+                  activeTab === "network"
+                    ? "Partners"
+                    : activeTab === "indent"
+                      ? "Integrated"
+                      : "On trip"
+                }
+                onCompose={() => {
+                  if (activeTab === "network") setShowNetCompose(true);
+                  else void openCompose();
+                }}
+              />
+            </View>
+          ) : null}
+          </>
         ) : (
           <>
             <View style={[s.listHeader, isMobileChatUi && s.listHeaderMobile]}>
@@ -3749,17 +3780,19 @@ export function ChatScreen() {
           </Animated.View>
         )}
       </View>
-      <ChatSlackBottomNav
-        activeTab={activeTab as SlackStreamTabId}
-        unreadByTab={{
-          network: netUnread,
-          trips: tripsChatUnread,
-          indent: indentChatUnread,
-        }}
-        onSelect={handleSlackTabSelect}
-        bottomInset={insets.bottom}
-        onOpenStories={handleSlackBottomStories}
-      />
+      {!isMobileDetail && !mobileKeyboardOpen ? (
+        <ChatSlackBottomNav
+          activeTab={activeTab as SlackStreamTabId}
+          unreadByTab={{
+            network: netUnread,
+            trips: tripsChatUnread,
+            indent: indentChatUnread,
+          }}
+          onSelect={handleSlackTabSelect}
+          bottomInset={insets.bottom}
+          onOpenStories={handleSlackBottomStories}
+        />
+      ) : null}
       <ComposeModal />
       <NetworkComposeModal />
       <TripFilterModal />
@@ -5018,7 +5051,7 @@ const s = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.22)",
   },
 
-  detailPanel: { flex: 1, minHeight: 0, backgroundColor: "transparent" },
+  detailPanel: { flex: 1, minHeight: 0, backgroundColor: "transparent", overflow: "hidden" },
   detailTransitionShell: { flex: 1, minHeight: 0, width: "100%" },
   conversationBody: { flex: 1, minHeight: 0 },
   chatMessagesFlex: { flex: 1, minHeight: 0 },
@@ -5040,6 +5073,7 @@ const s = StyleSheet.create({
     backgroundColor: CHAT_MOBILE.composerBar,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: CHAT_MOBILE.headerBorder,
+    maxWidth: "100%",
   },
   msgs: { flex: 1, backgroundColor: "transparent" },
   msgsContent: { paddingHorizontal: 12, paddingTop: 10, gap: 8, paddingBottom: 10 },
@@ -5718,33 +5752,30 @@ function ChatConversationLayout({
   header,
   messages,
   inputBar,
-  reserveBottomNav = false,
 }: {
   isDesktop: boolean;
   header: React.ReactNode;
   messages: React.ReactNode;
   inputBar: React.ReactNode;
-  /** Room for Slack-style bottom tab bar above the composer. */
-  reserveBottomNav?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const nativeMobile = isChatNativeMobile(isDesktop);
   const mobileWeb = Platform.OS === "web" && !isDesktop;
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  const slackNavPad =
-    reserveBottomNav && !keyboardVisible
-      ? CHAT_SLACK_BOTTOM_NAV_BAR + insets.bottom
-      : 0;
+  const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight);
   const dockBottomPad = isDesktop
     ? 10
-    : slackNavPad > 0
-      ? slackNavPad
-      : dockPaddingBottom(insets.bottom, keyboardVisible);
-  const webComposerReserve = mobileWebComposerReservePx();
-  const keyboardInset = effectiveKeyboardInset(keyboardVisible, keyboardHeight);
+    : dockPaddingBottom(insets.bottom, keyboardVisible);
+  const webComposerReserveFallback = mobileWebComposerReservePx();
+  const [composerDockHeight, setComposerDockHeight] = useState(
+    webComposerReserveFallback,
+  );
 
-  // Refs for direct DOM style mutation on mobile web — bypasses React re-render lag
-  // so keyboard position tracks the visual viewport synchronously (frame-perfect).
+  const onComposerLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = Math.ceil(e.nativeEvent.layout.height);
+    if (h > 0) setComposerDockHeight(h);
+  }, []);
+
   const composerWebRef = useRef<View>(null);
   const msgsWebRef = useRef<View>(null);
 
@@ -5754,7 +5785,6 @@ function ChatConversationLayout({
     if (!vv) return;
 
     const update = () => {
-      // Keyboard height = gap between layout viewport bottom and visual viewport bottom.
       const measured = Math.max(
         0,
         Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)),
@@ -5766,24 +5796,27 @@ function ChatConversationLayout({
       const open = measured >= 48 || focusedEditable;
       const keyboardH = effectiveKeyboardInset(open, measured);
       const safeB = keyboardH > 0 ? 4 : insets.bottom;
-      const navLift = open ? 0 : slackNavPad;
-      // setNativeProps → direct DOM style write, zero React reconciler overhead.
-      (composerWebRef.current as any)?.setNativeProps?.({
-        style: { bottom: keyboardH + navLift, paddingBottom: safeB },
+      const reserve = composerDockHeight + safeB + keyboardH;
+      (composerWebRef.current as View & { setNativeProps?: (p: object) => void })
+        ?.setNativeProps?.({
+        style: { bottom: keyboardH, paddingBottom: safeB },
       });
-      (msgsWebRef.current as any)?.setNativeProps?.({
-        style: { paddingBottom: webComposerReserve + safeB + keyboardH + navLift },
+      (msgsWebRef.current as View & { setNativeProps?: (p: object) => void })
+        ?.setNativeProps?.({
+        style: { paddingBottom: reserve },
       });
     };
 
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
     return () => {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
     };
-  }, [mobileWeb, insets.bottom, webComposerReserve, slackNavPad]);
+  }, [mobileWeb, insets.bottom, composerDockHeight]);
 
   const messagesPane = (
     <>
@@ -5794,14 +5827,12 @@ function ChatConversationLayout({
 
   const composerDock = (
     <View
+      onLayout={mobileWeb ? onComposerLayout : undefined}
       style={[
         s.chatInputDock,
         isDesktop && { borderTopWidth: 0, backgroundColor: SLACK_DESKTOP.mainBg, paddingBottom: 0 },
         nativeMobile && s.chatInputDockMobile,
         !isDesktop && { paddingBottom: dockBottomPad },
-        nativeMobile &&
-          Platform.OS === "android" &&
-          keyboardInset > 0 && { marginBottom: keyboardInset },
       ]}
     >
       {inputBar}
@@ -5830,6 +5861,8 @@ function ChatConversationLayout({
   }
 
   if (mobileWeb) {
+    const webMsgsPad =
+      composerDockHeight + dockBottomPad + keyboardInset;
     return (
       <View style={s.detailPanel}>
         <View
@@ -5840,8 +5873,7 @@ function ChatConversationLayout({
               flex: 1,
               minHeight: 0,
               backgroundColor: CHAT_MOBILE.wallpaper,
-              // Initial padding before first visualViewport event; setNativeProps takes over.
-              paddingBottom: webComposerReserve + dockBottomPad + keyboardInset,
+              paddingBottom: webMsgsPad,
             },
           ]}
         >
@@ -5849,13 +5881,13 @@ function ChatConversationLayout({
         </View>
         <View
           ref={composerWebRef}
+          onLayout={onComposerLayout}
           style={[
             s.chatInputDockWebFixed,
             s.chatInputDock,
-            nativeMobile && s.chatInputDockMobile,
-            // Initial position; setNativeProps overrides each visualViewport frame.
+            s.chatInputDockMobile,
             {
-              bottom: keyboardInset + (keyboardVisible ? 0 : slackNavPad),
+              bottom: keyboardInset,
               paddingBottom: dockBottomPad,
             },
           ]}
@@ -5866,19 +5898,24 @@ function ChatConversationLayout({
     );
   }
 
-  if (Platform.OS === "ios") {
-    return (
-      <KeyboardAvoidingView
-        style={s.detailPanel}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
-        {conversationBody}
-      </KeyboardAvoidingView>
-    );
-  }
-
-  return <View style={s.detailPanel}>{conversationBody}</View>;
+  return Platform.OS === "ios" ? (
+    <KeyboardAvoidingView
+      style={s.detailPanel}
+      behavior="padding"
+      keyboardVerticalOffset={0}
+    >
+      {conversationBody}
+    </KeyboardAvoidingView>
+  ) : (
+    <View
+      style={[
+        s.detailPanel,
+        keyboardInset > 0 && { paddingBottom: keyboardInset },
+      ]}
+    >
+      {conversationBody}
+    </View>
+  );
 }
 
 function ChatDetailHeader({
@@ -7778,7 +7815,6 @@ function TripConversationDetailLoaded({
   return (
     <ChatConversationLayout
       isDesktop={isDesktop}
-      reserveBottomNav={!isDesktop}
       header={
         <ChatDetailHeader
           title={
@@ -7872,6 +7908,12 @@ function TripConversationDetailLoaded({
             )}
           </>
         }
+        ListFooterComponent={
+          <ChatHistoryExpiryNotice
+            variant={isDesktop ? "desktop" : "mobile"}
+            slackLayout={slackThreadUi}
+          />
+        }
       />
       }
       inputBar={
@@ -7934,6 +7976,15 @@ function NetworkDetailPanel({
   onCloseDetail: () => void;
 }) {
   const { keyboardVisible: keyboardOpen } = useKeyboardVisible();
+  useEffect(() => {
+    if (isDesktop || !keyboardOpen) return;
+    const delay = Platform.OS === "ios" ? 80 : Platform.OS === "web" ? 50 : 120;
+    const t = setTimeout(
+      () => messagesRef.current?.scrollToEnd({ animated: true }),
+      delay,
+    );
+    return () => clearTimeout(t);
+  }, [isDesktop, keyboardOpen, messagesRef]);
   const { profile } = useAuth();
   const selfUid = (profile as any)?.uid ?? null;
   const selfName = (profile as any)?.full_name ?? (profile as any)?.displayName ?? "You";
@@ -8018,7 +8069,6 @@ function NetworkDetailPanel({
   return (
     <ChatConversationLayout
       isDesktop={isDesktop}
-      reserveBottomNav={!isDesktop}
       header={
         <ChatDetailHeader
           title={selectedNet.partnerName}
@@ -8091,6 +8141,12 @@ function NetworkDetailPanel({
               isMobile={!isDesktop}
               slackLayout={slackThreadUi}
               isDesktop={isDesktop}
+            />
+          }
+          ListFooterComponent={
+            <ChatHistoryExpiryNotice
+              variant={isDesktop ? "desktop" : "mobile"}
+              slackLayout={slackThreadUi}
             />
           }
           onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}

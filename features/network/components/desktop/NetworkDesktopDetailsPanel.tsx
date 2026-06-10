@@ -17,6 +17,8 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import {
   buildHeadquarterLocationCard,
   formatLocationSubtitle,
@@ -83,15 +85,25 @@ function CardHeader({
   onEdit,
   editLabel = "Edit",
   action,
+  compact,
 }: {
   title: string;
   onEdit?: () => void;
   editLabel?: string;
   action?: ReactNode;
+  compact?: boolean;
 }) {
   return (
     <View style={styles.cardHeaderRow}>
-      <Text style={[styles.cardTitle, styles.cardTitleInline]}>{title}</Text>
+      <Text
+        style={[
+          styles.cardTitle,
+          styles.cardTitleInline,
+          compact && mobile.cardTitleCompact,
+        ]}
+      >
+        {title}
+      </Text>
       {action}
       {onEdit ? (
         <Pressable
@@ -104,8 +116,10 @@ function CardHeader({
           accessibilityRole="button"
           accessibilityLabel={`${editLabel} ${title}`}
         >
-          <Pencil size={12} color={METRONIC.muted} strokeWidth={2.2} />
-          <Text style={styles.cardEditBtnText}>{editLabel}</Text>
+          <Pencil size={compact ? 11 : 12} color={METRONIC.muted} strokeWidth={2.2} />
+          <Text style={[styles.cardEditBtnText, compact && { fontSize: 10 }]}>
+            {editLabel}
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -118,13 +132,30 @@ function HighlightRow({
   valueNode,
   link,
   last,
+  compact,
 }: {
   label: string;
   value?: string;
   valueNode?: ReactNode;
   link?: boolean;
   last?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <View style={[mobile.kvRowStacked, last && styles.kvRowLast]}>
+        <Text style={mobile.kvLabelStacked}>{label}</Text>
+        {valueNode ?? (
+          <Text
+            style={[mobile.kvValueStacked, link && styles.kvValueLink]}
+            numberOfLines={3}
+          >
+            {value}
+          </Text>
+        )}
+      </View>
+    );
+  }
   return (
     <View style={[styles.kvRow, last && styles.kvRowLast]}>
       <Text style={styles.kvLabel}>{label}</Text>
@@ -140,15 +171,20 @@ function HighlightRow({
 function NetworkLinkRow({
   icon: Icon,
   value,
+  compact,
 }: {
   icon: typeof Globe;
   value: string;
+  compact?: boolean;
 }) {
   if (!value || value === "—") return null;
   return (
     <View style={styles.networkLinkRow}>
-      <Icon size={15} color={METRONIC.muted} strokeWidth={2} />
-      <Text style={styles.networkLinkText} numberOfLines={2}>
+      <Icon size={compact ? 13 : 15} color={METRONIC.muted} strokeWidth={2} />
+      <Text
+        style={[styles.networkLinkText, compact && mobile.networkLinkTextCompact]}
+        numberOfLines={2}
+      >
         {value}
       </Text>
     </View>
@@ -294,6 +330,8 @@ export function NetworkDesktopDetailsPanel({
   driverCount,
   pendingInviteCount,
 }: Props) {
+  const layout = useProfileHubCompactLayout();
+  const compact = layout.compact;
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] =
     useState<OrganizationWorkspaceLocation | null>(null);
@@ -503,43 +541,54 @@ export function NetworkDesktopDetailsPanel({
 
   if (!orgId) {
     return (
-      <View style={styles.detailsBody}>
+      <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
         <ActivityIndicator color={METRONIC.muted} />
       </View>
     );
   }
 
-  return (
-    <View style={styles.detailsBody}>
-      <View style={styles.statsBar}>
-        {stats.map((stat, idx, arr) => (
-          <View
-            key={stat.label}
-            style={[styles.statCell, idx === arr.length - 1 && styles.statCellLast]}
-          >
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statLabel}>{stat.label}</Text>
-          </View>
-        ))}
-      </View>
+  const rowProps = { compact };
 
-      <View style={styles.splitRow}>
-        <View style={styles.sidebar}>
-          <View style={styles.card}>
+  return (
+    <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
+      {!compact ? (
+        <View style={styles.statsBar}>
+          {stats.map((stat, idx, arr) => (
+            <View
+              key={stat.label}
+              style={[styles.statCell, idx === arr.length - 1 && styles.statCellLast]}
+            >
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <View style={[styles.splitRow, compact && mobile.splitColumn]}>
+        <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
             <CardHeader
               title="Highlights"
               onEdit={() => setProfileEditSection("highlights")}
+              compact={compact}
             />
-            <HighlightRow label="Locations" value={locationCountLabel} />
-            <HighlightRow label="Founded" value={derived.foundedYear} />
-            <HighlightRow label="Status" valueNode={<StatusPill label="Subscribed" />} />
-            <HighlightRow label="Area" value={derived.area} />
-            <HighlightRow label="CEO" value={derived.ceo} link />
-            <HighlightRow label="Sector" value={derived.sector} last />
+            <HighlightRow label="Locations" value={locationCountLabel} {...rowProps} />
+            <HighlightRow label="Founded" value={derived.foundedYear} {...rowProps} />
+            <HighlightRow
+              label="Status"
+              valueNode={<StatusPill label="Subscribed" />}
+              {...rowProps}
+            />
+            <HighlightRow label="Area" value={derived.area} {...rowProps} />
+            <HighlightRow label="CEO" value={derived.ceo} link {...rowProps} />
+            <HighlightRow label="Sector" value={derived.sector} last {...rowProps} />
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Open protocols</Text>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
+            <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+              Open protocols
+            </Text>
             <OpenProtocolRow
               icon={UserPlus}
               category="Client"
@@ -564,95 +613,122 @@ export function NetworkDesktopDetailsPanel({
             </Pressable>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
             <CardHeader
               title="Network"
               onEdit={() => setProfileEditSection("contact")}
+              compact={compact}
             />
-            <NetworkLinkRow icon={Globe} value={derived.website} />
-            <NetworkLinkRow icon={Mail} value={email} />
-            <NetworkLinkRow icon={Phone} value={phoneDisplay} />
+            <NetworkLinkRow icon={Globe} value={derived.website} compact={compact} />
+            <NetworkLinkRow icon={Mail} value={email} compact={compact} />
+            <NetworkLinkRow icon={Phone} value={phoneDisplay} compact={compact} />
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Tags</Text>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
+            <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>Tags</Text>
             <View style={styles.tagWrap}>
               {activeCapabilityTags.map((tag) => (
                 <View key={tag} style={styles.tagPill}>
-                  <Text style={styles.tagPillText}>{tag}</Text>
+                  <Text style={[styles.tagPillText, compact && mobile.tagPillTextCompact]}>
+                    {tag}
+                  </Text>
                 </View>
               ))}
             </View>
           </View>
         </View>
 
-        <View style={styles.mainCol}>
-          <View style={styles.card}>
+        <View style={[styles.mainCol, compact && mobile.mainColFull]}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
             <CardHeader
               title="Company profile"
               onEdit={() => setProfileEditSection("contact")}
+              compact={compact}
             />
 
-            <Text style={styles.sectionHeading}>Headquarter</Text>
-            <View style={styles.headquarterRow}>
-              <NetworkDesktopHeadquarterMap
-                orgName={orgName}
-                addressLabel={officeAddress}
-                coordinate={officeCoordinate}
-                loading={officeMapQ.isLoading || profileQ.isLoading}
-              />
-              <View style={styles.contactList}>
-                <NetworkLinkRow icon={Globe} value={derived.website} />
+            <Text style={[styles.sectionHeading, compact && mobile.sectionHeadingCompact]}>
+              Headquarter
+            </Text>
+            <View style={[styles.headquarterRow, compact && mobile.headquarterStack]}>
+              <View style={[{ flex: 1, minWidth: 0 }, compact && mobile.mapFrameFull]}>
+                <NetworkDesktopHeadquarterMap
+                  orgName={orgName}
+                  addressLabel={officeAddress}
+                  coordinate={officeCoordinate}
+                  loading={officeMapQ.isLoading || profileQ.isLoading}
+                />
+              </View>
+              <View style={[styles.contactList, compact && mobile.contactListFull]}>
+                <NetworkLinkRow icon={Globe} value={derived.website} compact={compact} />
                 {derived.facebook ? (
-                  <NetworkLinkRow icon={Globe} value={derived.facebook} />
+                  <NetworkLinkRow icon={Globe} value={derived.facebook} compact={compact} />
                 ) : null}
                 {derived.youtube ? (
-                  <NetworkLinkRow icon={Globe} value={derived.youtube} />
+                  <NetworkLinkRow icon={Globe} value={derived.youtube} compact={compact} />
                 ) : null}
-                <NetworkLinkRow icon={Mail} value={email} />
-                <NetworkLinkRow icon={Phone} value={phoneDisplay} />
-                <NetworkLinkRow icon={MapPin} value={officeAddress} />
+                <NetworkLinkRow icon={Mail} value={email} compact={compact} />
+                <NetworkLinkRow icon={Phone} value={phoneDisplay} compact={compact} />
+                <NetworkLinkRow icon={MapPin} value={officeAddress} compact={compact} />
               </View>
             </View>
 
             <View style={styles.cardHeaderRow}>
-              <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>
+              <Text
+                style={[
+                  styles.sectionHeading,
+                  styles.sectionHeadingSpaced,
+                  compact && mobile.sectionHeadingCompact,
+                  compact && mobile.sectionHeadingSpacedCompact,
+                ]}
+              >
                 About
               </Text>
               <Pressable
                 style={styles.cardEditBtn}
                 onPress={() => setProfileEditSection("about")}
               >
-                <Pencil size={12} color={METRONIC.muted} strokeWidth={2.2} />
-                <Text style={styles.cardEditBtnText}>Edit</Text>
+                <Pencil size={compact ? 11 : 12} color={METRONIC.muted} strokeWidth={2.2} />
+                <Text style={[styles.cardEditBtnText, compact && { fontSize: 10 }]}>Edit</Text>
               </Pressable>
             </View>
-            <Text style={styles.aboutBody}>{derived.about}</Text>
+            <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
+              {derived.about}
+            </Text>
 
             <View style={styles.cardHeaderRow}>
-              <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>
+              <Text
+                style={[
+                  styles.sectionHeading,
+                  styles.sectionHeadingSpaced,
+                  compact && mobile.sectionHeadingCompact,
+                  compact && mobile.sectionHeadingSpacedCompact,
+                ]}
+              >
                 Products
               </Text>
               <Pressable
                 style={styles.cardEditBtn}
                 onPress={() => setProfileEditSection("products")}
               >
-                <Pencil size={12} color={METRONIC.muted} strokeWidth={2.2} />
-                <Text style={styles.cardEditBtnText}>Edit</Text>
+                <Pencil size={compact ? 11 : 12} color={METRONIC.muted} strokeWidth={2.2} />
+                <Text style={[styles.cardEditBtnText, compact && { fontSize: 10 }]}>Edit</Text>
               </Pressable>
             </View>
             <View style={styles.tagWrap}>
               {derived.products.map((product) => (
                 <View key={product} style={styles.productPill}>
-                  <Text style={styles.productPillText}>{product}</Text>
+                  <Text style={[styles.productPillText, compact && mobile.tagPillTextCompact]}>
+                    {product}
+                  </Text>
                 </View>
               ))}
             </View>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
             <CardHeader
               title="Locations & offices"
+              compact={compact}
               action={
                 <View style={{ flexDirection: "row", gap: 6 }}>
                   <Pressable
@@ -697,7 +773,7 @@ export function NetworkDesktopDetailsPanel({
                 </View>
               </View>
             ) : (
-              <View style={styles.locationsGrid}>
+              <View style={[styles.locationsGrid, compact && mobile.locationsGridCompact]}>
                 {locationCards.map((card, i) => {
                   const gradient = LOCATION_TYPE_GRADIENTS[card.locationType];
                   const { line1, line2 } = formatLocationSubtitle(
@@ -714,6 +790,7 @@ export function NetworkDesktopDetailsPanel({
                       style={({ pressed }) => [
                         styles.locationCard,
                         styles.locationCardPressable,
+                        compact && mobile.locationCardCompact,
                         Platform.OS === "web"
                           ? ({ cursor: "pointer" } as ViewStyle)
                           : null,
@@ -749,13 +826,49 @@ export function NetworkDesktopDetailsPanel({
             )}
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
             <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle}>Projects</Text>
+              <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+                Projects
+              </Text>
               <Pressable hitSlop={8}>
-                <MoreHorizontal size={16} color={METRONIC.muted} />
+                <MoreHorizontal size={compact ? 14 : 16} color={METRONIC.muted} />
               </Pressable>
             </View>
+            {compact ? (
+              <View style={{ gap: 8 }}>
+                {projectRows.map((row) => (
+                  <View key={row.name} style={{ gap: 4, paddingVertical: 6 }}>
+                    <Text
+                      style={[styles.projectsCell, compact && { fontSize: 12 }]}
+                      numberOfLines={1}
+                    >
+                      {row.name}
+                    </Text>
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${row.progress}%` }]} />
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <NetworkDesktopPeopleStack
+                        faces={row.people.faces}
+                        overflow={row.people.overflow}
+                        total={row.people.total}
+                      />
+                      <Text style={[styles.projectsCellMuted, { fontSize: 10 }]}>
+                        {row.due}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <>
             <View style={styles.projectsTableHead}>
               <Text style={[styles.projectsHeadCell, styles.projectsColName]}>
                 Project name
@@ -800,13 +913,17 @@ export function NetworkDesktopDetailsPanel({
                 </View>
               </View>
             ))}
+              </>
+            )}
           </View>
         </View>
       </View>
 
-      <View style={styles.activityCard}>
+      <View style={[styles.activityCard, layout.activityCard]}>
         <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle}>Recent activity</Text>
+          <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+            Recent activity
+          </Text>
           <View style={styles.autoRefreshPill}>
             <Text style={styles.autoRefreshText}>Auto refresh: Off</Text>
           </View>

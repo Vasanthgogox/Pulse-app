@@ -21,7 +21,7 @@ const args = process.argv.slice(2);
 
 const child = spawn(
   process.execPath,
-  ['-r', 'dotenv/config', expoBin, ...args],
+  ['--max-old-space-size=8192', '-r', 'dotenv/config', expoBin, ...args],
   {
     cwd: projectRoot,
     stdio: 'inherit',
@@ -32,9 +32,9 @@ const child = spawn(
 child.on('exit', (code, signal) => {
   if (code === 134 || signal === 'SIGABRT') {
     console.error(
-      '\n[expo] Process aborted (OOM or native crash). Try:\n' +
+      '\n[expo] Process aborted (OOM or native crash). Use npm scripts (not raw npx expo):\n' +
         '  npm run start:clean\n' +
-        '  NODE_OPTIONS=--max-old-space-size=8192 METRO_MAX_WORKERS=4 npm start\n',
+        '  npm start\n',
     );
   }
   process.exit(code ?? (signal ? 1 : 0));

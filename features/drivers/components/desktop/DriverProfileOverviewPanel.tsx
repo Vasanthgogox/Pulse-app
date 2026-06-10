@@ -1,5 +1,7 @@
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { hubStyles as styles } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { formatINRChip } from "@/lib/format";
 import { Text, View } from "react-native";
 
@@ -13,11 +15,23 @@ function HighlightRow({
   label,
   value,
   last,
+  compact,
 }: {
   label: string;
   value: string;
   last?: boolean;
+  compact?: boolean;
 }) {
+  if (compact) {
+    return (
+      <View style={[mobile.kvRowStacked, last && styles.kvRowLast]}>
+        <Text style={mobile.kvLabelStacked}>{label}</Text>
+        <Text style={mobile.kvValueStacked} numberOfLines={3}>
+          {value === "—" ? "Not set" : value}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={[styles.kvRow, last && styles.kvRowLast]}>
       <Text style={styles.kvLabel}>{label}</Text>
@@ -29,6 +43,9 @@ function HighlightRow({
 }
 
 export function DriverProfileOverviewPanel({ driver, tripCount, vehicleLabel }: Props) {
+  const compact = useProfileHubCompact();
+  const rowProps = { compact };
+
   const compParts = [
     driver.payable_amount != null && driver.payable_amount > 0
       ? `Salary ${formatINRChip(driver.payable_amount)}`
@@ -42,54 +59,91 @@ export function DriverProfileOverviewPanel({ driver, tripCount, vehicleLabel }: 
   ].filter(Boolean);
 
   return (
-    <View style={styles.detailsBody}>
-      <View style={styles.splitRow}>
-        <View style={styles.sidebar}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Highlights</Text>
-            <HighlightRow label="Full name" value={driver.name?.trim() || "—"} />
-            <HighlightRow label="Phone" value={driver.phone?.trim() || "—"} />
-            <HighlightRow label="Email" value={driver.email?.trim() || "—"} />
-            <HighlightRow label="Licence" value={driver.license_number?.trim() || "—"} />
+    <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
+      <View style={[styles.splitRow, compact && mobile.splitColumn]}>
+        <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
+            <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+              Highlights
+            </Text>
+            <HighlightRow label="Full name" value={driver.name?.trim() || "—"} {...rowProps} />
+            <HighlightRow label="Phone" value={driver.phone?.trim() || "—"} {...rowProps} />
+            <HighlightRow label="Email" value={driver.email?.trim() || "—"} {...rowProps} />
+            <HighlightRow
+              label="Licence"
+              value={driver.license_number?.trim() || "—"}
+              {...rowProps}
+            />
             <HighlightRow
               label="Status"
               value={(driver.status ?? "active").toUpperCase()}
+              {...rowProps}
             />
-            <HighlightRow label="Assigned vehicle" value={vehicleLabel ?? "—"} last />
+            <HighlightRow
+              label="Assigned vehicle"
+              value={vehicleLabel ?? "—"}
+              last
+              {...rowProps}
+            />
           </View>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Emergency</Text>
-            <HighlightRow label="Contact name" value={driver.emergency_name?.trim() || "—"} />
+          <View style={[styles.card, compact && mobile.cardCompact]}>
+            <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+              Emergency
+            </Text>
+            <HighlightRow
+              label="Contact name"
+              value={driver.emergency_name?.trim() || "—"}
+              {...rowProps}
+            />
             <HighlightRow
               label="Contact phone"
               value={driver.emergency_contact?.trim() || "—"}
               last
+              {...rowProps}
             />
           </View>
         </View>
-        <View style={styles.mainCol}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Driver profile</Text>
-            <Text style={styles.sectionHeading}>Compensation</Text>
-            <Text style={styles.aboutBody}>
+        <View style={[styles.mainCol, compact && mobile.mainColFull]}>
+          <View style={[styles.card, compact && mobile.cardCompact]}>
+            <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
+              Driver profile
+            </Text>
+            <Text style={[styles.sectionHeading, compact && mobile.sectionHeadingCompact]}>
+              Compensation
+            </Text>
+            <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
               {compParts.length > 0
                 ? compParts.join(" · ")
                 : "No salary or commission terms saved yet. Set payable amount and commission in driver settings."}
             </Text>
-            <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>
+            <Text
+              style={[
+                styles.sectionHeading,
+                styles.sectionHeadingSpaced,
+                compact && mobile.sectionHeadingCompact,
+                compact && mobile.sectionHeadingSpacedCompact,
+              ]}
+            >
               Operations
             </Text>
-            <Text style={styles.aboutBody}>
+            <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
               {tripCount > 0
                 ? `${tripCount} trips recorded for this driver in your workspace. Use Finance and Trips for ledger and execution history.`
                 : "No trips assigned yet. Deploy this driver from trip allocation or indent award."}
             </Text>
             {driver.left_at ? (
               <>
-                <Text style={[styles.sectionHeading, styles.sectionHeadingSpaced]}>
+                <Text
+                  style={[
+                    styles.sectionHeading,
+                    styles.sectionHeadingSpaced,
+                    compact && mobile.sectionHeadingCompact,
+                    compact && mobile.sectionHeadingSpacedCompact,
+                  ]}
+                >
                   Fleet history
                 </Text>
-                <Text style={styles.aboutBody}>
+                <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
                   Driver left fleet on {new Date(driver.left_at).toLocaleDateString("en-IN")}.
                 </Text>
               </>

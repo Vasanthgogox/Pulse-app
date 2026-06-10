@@ -4,10 +4,14 @@ import { DriverProfileOverviewPanel } from "@/features/drivers/components/deskto
 import {
   clientProfileStyles as cpStyles,
   hubStyles as styles,
+  METRONIC,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
-import { MoreHorizontal, Wallet } from "lucide-react-native";
+import { ArrowLeft, MoreHorizontal, Wallet } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -38,7 +42,11 @@ export function DriverProfileHub({
   onBack,
 }: Props) {
   const router = useRouter();
+  const compact = useProfileHubCompact();
+  const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<DriverProfileTab>("overview");
+
+  const displayName = driver.name?.trim() || "Driver";
 
   const stats = [
     { value: String(tripCount), label: "TRIPS" },
@@ -50,6 +58,14 @@ export function DriverProfileHub({
     },
   ];
 
+  const statCellCompactStyle = (idx: number) => {
+    if (!compact) return undefined;
+    if (idx === 1) return mobile.statCellGridTopRight;
+    if (idx === 2) return mobile.statCellGridBottomLeft;
+    if (idx === 3) return mobile.statCellGridBottomRight;
+    return undefined;
+  };
+
   const panel =
     tab === "overview" ? (
       <DriverProfileOverviewPanel
@@ -58,22 +74,26 @@ export function DriverProfileHub({
         vehicleLabel={vehicleLabel}
       />
     ) : tab === "compliance" ? (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Compliance</Text>
-        <Text style={styles.aboutBody}>
+      <View style={[styles.card, compact && mobile.cardCompact]}>
+        <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>Compliance</Text>
+        <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
           Licence: {driver.license_number?.trim() || "Not on file"}
           {"\n"}Emergency: {driver.emergency_name?.trim() || "—"} ·{" "}
           {driver.emergency_contact?.trim() || "—"}
         </Text>
       </View>
     ) : (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Finance</Text>
-        <Text style={styles.aboutBody}>
+      <View style={[styles.card, compact && mobile.cardCompact]}>
+        <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>Finance</Text>
+        <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
           Open the driver ledger for payable balance, salary requests, and trip settlements.
         </Text>
         <Pressable
-          style={[cpStyles.quickActionBtn, cpStyles.quickActionBtnPrimary, { alignSelf: "flex-start", marginTop: 12 }]}
+          style={[
+            cpStyles.quickActionBtn,
+            cpStyles.quickActionBtnPrimary,
+            { alignSelf: "flex-start", marginTop: 12 },
+          ]}
           onPress={() =>
             router.push(`/driver/${driver.id}` as Parameters<typeof router.push>[0])
           }
@@ -89,61 +109,148 @@ export function DriverProfileHub({
   return (
     <ScrollView
       style={styles.root}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[
+        styles.scrollContent,
+        compact && mobile.scrollContentCompact,
+        { paddingBottom: layoutInsets.scrollBottomPadding(compact ? 16 : 24) },
+      ]}
       showsVerticalScrollIndicator={false}
     >
-      <DriverProfileHubHero driver={driver} tripCount={tripCount} onBack={onBack} />
+      {compact ? (
+        <View style={mobile.pageChrome}>
+          <View style={mobile.chromeTopRow}>
+            {onBack ? (
+              <Pressable
+                onPress={onBack}
+                style={mobile.chromeBackBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <ArrowLeft size={20} color={METRONIC.text} strokeWidth={2.2} />
+              </Pressable>
+            ) : null}
+            <View style={mobile.chromeTitleBlock}>
+              <Text style={mobile.chromeTitle} numberOfLines={2}>
+                {displayName}
+              </Text>
+              <Text style={mobile.chromeSubtitle} numberOfLines={1}>
+                {[vehicleLabel, driver.phone?.trim()].filter(Boolean).join(" · ") ||
+                  "Driver profile"}
+              </Text>
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={mobile.chromePillsScroll}
+            contentContainerStyle={mobile.chromePillsContent}
+          >
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>DRIVER</Text>
+            </View>
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>
+                {driver.assigned_vehicle_id ? "ASSIGNED" : "UNASSIGNED"}
+              </Text>
+            </View>
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>{tripCount} TRIPS</Text>
+            </View>
+          </ScrollView>
+        </View>
+      ) : (
+        <DriverProfileHubHero driver={driver} tripCount={tripCount} onBack={onBack} />
+      )}
 
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, compact && mobile.tabBarCompact]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.tabScroll}
-          contentContainerStyle={styles.tabScrollContent}
+          style={compact ? mobile.tabScrollCompact : styles.tabScroll}
+          contentContainerStyle={
+            compact ? mobile.tabScrollContentCompact : styles.tabScrollContent
+          }
         >
           {TABS.map((t) => {
             const active = tab === t.id;
             return (
               <Pressable
                 key={t.id}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                style={[
+                  styles.tabBtn,
+                  compact && mobile.tabBtnCompact,
+                  active && styles.tabBtnActive,
+                ]}
                 onPress={() => setTab(t.id)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
               >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    compact && mobile.tabTextCompact,
+                    active && styles.tabTextActive,
+                  ]}
+                >
                   {t.label}
                 </Text>
               </Pressable>
             );
           })}
         </ScrollView>
-        <View style={styles.tabActions}>
-          <Pressable
-            style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
-            onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
-          >
-            <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>
-              Assign trip
-            </Text>
-          </Pressable>
-          <Pressable style={styles.tabActionBtn} hitSlop={8}>
-            <MoreHorizontal size={16} color={Theme.textSecondary} strokeWidth={2} />
-          </Pressable>
-        </View>
+
+        {compact ? (
+          <View style={mobile.tabActionsRow}>
+            <Pressable
+              style={mobile.tabActionPrimary}
+              onPress={() =>
+                router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])
+              }
+            >
+              <Text style={mobile.tabActionPrimaryText}>Assign trip</Text>
+            </Pressable>
+            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
+              <MoreHorizontal size={18} color={METRONIC.text} strokeWidth={2} />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.tabActions}>
+            <Pressable
+              style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
+              onPress={() =>
+                router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])
+              }
+            >
+              <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>
+                Assign trip
+              </Text>
+            </Pressable>
+            <Pressable style={styles.tabActionBtn} hitSlop={8}>
+              <MoreHorizontal size={16} color={Theme.textSecondary} strokeWidth={2} />
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      <View style={cpStyles.metricsWrap}>
-        <View style={styles.statsBar}>
+      <View style={[cpStyles.metricsWrap, compact && mobile.metricsWrapCompact]}>
+        <View style={[styles.statsBar, compact && mobile.statsBarGrid]}>
           {stats.map((s, idx) => (
             <View
               key={s.label}
               style={[
                 styles.statCell,
-                cpStyles.statCellCompact,
-                idx === stats.length - 1 && styles.statCellLast,
+                !compact && cpStyles.statCellCompact,
+                !compact && idx === stats.length - 1 && styles.statCellLast,
+                compact && mobile.statCellGrid,
+                statCellCompactStyle(idx),
               ]}
             >
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={[styles.statValue, compact && mobile.statValueCompact]}>
+                {s.value}
+              </Text>
+              <Text style={[styles.statLabel, compact && mobile.statLabelCompact]}>
+                {s.label}
+              </Text>
             </View>
           ))}
         </View>

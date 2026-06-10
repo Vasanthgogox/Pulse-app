@@ -1,0 +1,18 @@
+diff --git a/node_modules/expo/bin/cli b/node_modules/expo/bin/cli
+index 1111111..2222222 100755
+--- a/node_modules/expo/bin/cli
++++ b/node_modules/expo/bin/cli
+@@ -1,6 +1,14 @@
+-#!/usr/bin/env node
++#!/usr/bin/env node --max-old-space-size=8192
++
++// q-mobile: bootstrap Metro worker limits before @expo/cli loads (npx expo start path).
++try {
++  require('../../../scripts/expo-env');
++} catch {
++  /* non-q-mobile install layout */
++}
+ 
+ // Execute the CLI using node module resolution, instead of creating a new process.
+ // This avoids resolving issues with pnpm and yarn 2+ package managers.
+ require('@expo/cli');

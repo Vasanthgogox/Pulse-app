@@ -2,6 +2,7 @@ import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import { ChatSlackMirrorToggle } from "@/features/chat/components/shared/ChatSlackMirrorToggle";
 import { SLACK_STREAM_TABS } from "@/features/chat/components/shared/chatSlackStreamTabs";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
   CircleDashed,
@@ -79,12 +80,31 @@ export function ChatSlackListHeader({
   const contextLine = [streamLabel, orgName?.trim()].filter(Boolean).join(" · ");
   return (
     <View style={[st.listHeader, { paddingTop: topInset + 8 }]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={[
+          "rgba(255, 255, 255, 0.14)",
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0)",
+        ]}
+        locations={[0, 0.35, 0.72]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={st.listHeaderMirrorSheen}
+      />
+      <View style={st.listHeaderMirrorGlow} pointerEvents="none" />
       <View style={st.listHeaderAccentLine} pointerEvents="none" />
-      <TouchableOpacity onPress={onBack} hitSlop={10} style={st.listHeaderBack}>
-        <ArrowLeft
-          size={SLACK_ICON.sizeBack}
+      <TouchableOpacity
+        onPress={onBack}
+        hitSlop={10}
+        style={[st.listHeaderMirrorBtn, st.listHeaderCloseBtn]}
+        accessibilityRole="button"
+        accessibilityLabel="Close chat"
+      >
+        <X
+          size={SLACK_ICON.sizeClose}
           color="#FFFFFF"
-          strokeWidth={SLACK_ICON.strokeInactive}
+          strokeWidth={SLACK_ICON.strokeHeader}
         />
       </TouchableOpacity>
       <View style={st.listHeaderTextCol}>
@@ -109,7 +129,7 @@ export function ChatSlackListHeader({
             accessibilityRole="button"
             accessibilityLabel="New message"
           >
-            <PenLine size={15} color="#FFFFFF" strokeWidth={SLACK_ICON.strokeInactive} />
+            <PenLine size={17} color="#FFFFFF" strokeWidth={SLACK_ICON.strokeHeader} />
           </TouchableOpacity>
         ) : null}
         <View style={st.listHeaderAvatarWrap}>
@@ -126,7 +146,7 @@ export function ChatSlackListHeader({
               userAvatarUrl={profileAvatarUrl}
               userAvatarSeed={profileAvatarSeed}
               userOrgLogoUrl={profileOrgLogoUrl}
-              size={SLACK_AVATAR.header}
+              size={SLACK_AVATAR.listHeader}
             />
           </View>
           <View style={st.listHeaderOnlineDot} />
@@ -299,7 +319,7 @@ export function ChatSlackFilterRow({
       style={
         inline
           ? [st.inboxToolbarFilter, st.inboxToolbarFilterInline, { marginHorizontal: 0, marginBottom: 0 }]
-          : undefined
+          : [st.inboxToolbarFilter, st.inboxToolbarFilterStandalone, { marginHorizontal: 12, marginBottom: 8 }]
       }
     />
   );

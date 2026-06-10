@@ -25,6 +25,8 @@ import {
   partyAccentFromConnectionRole,
   type PartyRoleLabel,
 } from "@/lib/partyEntityAccent";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { publicProfileMobileStyles as mobileS } from "@/features/party/components/publicProfileMobile.styles";
 
 import type {
     PublicProfileEntity,
@@ -62,6 +64,7 @@ export default function PublicProfileScreen({
 }: PublicProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const compact = useProfileHubCompact();
 
   if (loading) {
     return <CenteredLoadingView />;
@@ -93,32 +96,34 @@ export default function PublicProfileScreen({
       <ScrollView
         bounces={false}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 64 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + (compact ? 48 : 64) }}
       >
         <Hero
           entity={entity}
           insetsTop={insets.top}
           onBack={onBack}
+          compact={compact}
         />
 
-        <View style={styles.content}>
-          <Section title="Professional Bio">
-            <View style={styles.bioCard}>
-              <Text style={styles.bioQuoteMark}>"</Text>
-              <Text style={styles.bioText}>
+        <View style={[styles.content, compact && mobileS.content]}>
+          <Section title="Professional Bio" compact={compact}>
+            <View style={[styles.bioCard, compact && mobileS.bioCard]}>
+              <Text style={[styles.bioQuoteMark, compact && mobileS.bioQuoteMark]}>"</Text>
+              <Text style={[styles.bioText, compact && mobileS.bioText]}>
                 {asDisplay(entity.bio)}
               </Text>
             </View>
           </Section>
 
-          <Section title="Core Intel">
-            <View style={styles.factList}>
+          <Section title="Core Intel" compact={compact}>
+            <View style={[styles.factList, compact && mobileS.factList]}>
               {entity.facts.length > 0 ? (
                 entity.facts.map((fact, idx) => (
                   <FactRow
                     key={`${fact.icon}-${idx}`}
                     fact={fact}
                     isLast={idx === entity.facts.length - 1}
+                    compact={compact}
                   />
                 ))
               ) : (
@@ -132,13 +137,14 @@ export default function PublicProfileScreen({
           {entity.entityType !== "driver" && entity.synergyHeadline && (
             <SynergyCard
               entity={entity}
+              compact={compact}
               onPress={() => router.push(entity.fullDetailHref as never)}
             />
           )}
 
           {entity.entityType === "driver" && (
             <TouchableOpacity
-              style={styles.fleetCta}
+              style={[styles.fleetCta, compact && mobileS.fleetCta]}
               activeOpacity={0.9}
               onPress={() => router.push(entity.fullDetailHref as never)}
             >
@@ -146,8 +152,10 @@ export default function PublicProfileScreen({
                 <FontAwesome name="truck" size={18} color={Theme.textOnPrimary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.fleetCtaTitle}>{entity.primaryCtaLabel}</Text>
-                <Text style={styles.fleetCtaBody}>
+                <Text style={[styles.fleetCtaTitle, compact && mobileS.fleetCtaTitle]}>
+                  {entity.primaryCtaLabel}
+                </Text>
+                <Text style={[styles.fleetCtaBody, compact && mobileS.fleetCtaBody]}>
                   Trips, settlements, and salary requests live in the full fleet
                   passbook.
                 </Text>
@@ -193,10 +201,12 @@ function Hero({
   entity,
   insetsTop,
   onBack,
+  compact,
 }: {
   entity: PublicProfileEntity;
   insetsTop: number;
   onBack: () => void;
+  compact: boolean;
 }) {
   const roleLabel = entityTypeToRole(entity.entityType);
   const accent = partyAccentFromConnectionRole(roleLabel);
@@ -233,10 +243,10 @@ function Hero({
   }, [entity.isIntegrated]);
 
   return (
-    <View style={[styles.heroShell, { paddingTop: insetsTop + 8 }]}>
-      <View style={styles.heroTopBar}>
+    <View style={[styles.heroShell, { paddingTop: insetsTop + (compact ? 4 : 8) }, compact && mobileS.heroShell]}>
+      <View style={[styles.heroTopBar, compact && mobileS.heroTopBar]}>
         <TouchableOpacity
-          style={styles.heroChipBtnLight}
+          style={[styles.heroChipBtnLight, compact && mobileS.heroChipBtn]}
           onPress={onBack}
           activeOpacity={0.75}
           accessibilityLabel="Back"
@@ -245,7 +255,7 @@ function Hero({
         </TouchableOpacity>
         <View style={styles.heroTopRightGroup}>
           <TouchableOpacity
-            style={styles.heroChipBtnLight}
+            style={[styles.heroChipBtnLight, compact && mobileS.heroChipBtn]}
             onPress={onShare}
             activeOpacity={0.75}
             accessibilityLabel="Share profile"
@@ -253,7 +263,7 @@ function Hero({
             <Share2 size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.heroChipBtnLight}
+            style={[styles.heroChipBtnLight, compact && mobileS.heroChipBtn]}
             onPress={onMore}
             activeOpacity={0.75}
             accessibilityLabel="More options"
@@ -263,7 +273,7 @@ function Hero({
         </View>
       </View>
 
-      <View style={[styles.heroCardWrap, { borderColor: accent.ring }]}>
+      <View style={[styles.heroCardWrap, { borderColor: accent.ring }, compact && mobileS.heroCardWrap]}>
         <NetworkProfileInviteHero
           name={entity.name}
           subtitle={
@@ -280,9 +290,10 @@ function Hero({
           avatarSeed={entity.avatarSeed}
           showVerified={entity.isVerified}
           metaChips={metaChips}
-          avatarSize={86}
+          avatarSize={compact ? 68 : 86}
+          compact={compact}
           style={inviteS.card}
-          footer={<NetworkProfileInviteStats items={statItems} />}
+          footer={<NetworkProfileInviteStats items={statItems} compact={compact} />}
         />
       </View>
     </View>
@@ -294,13 +305,15 @@ function Hero({
 function Section({
   title,
   children,
+  compact,
 }: {
   title: string;
   children: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={[styles.sectionTitle, compact && mobileS.sectionTitle]}>{title}</Text>
       {children}
     </View>
   );
@@ -320,16 +333,24 @@ const FACT_ICON_MAP: Record<
   truck: "truck",
 };
 
-function FactRow({ fact, isLast }: { fact: PublicProfileFact; isLast: boolean }) {
+function FactRow({
+  fact,
+  isLast,
+  compact,
+}: {
+  fact: PublicProfileFact;
+  isLast: boolean;
+  compact?: boolean;
+}) {
   const iconName = FACT_ICON_MAP[fact.icon];
   return (
-    <View style={[styles.factRow, !isLast && styles.factRowDivider]}>
-      <View style={styles.factIconWrap}>
-        <FontAwesome name={iconName} size={16} color={Theme.primary} />
+    <View style={[styles.factRow, !isLast && styles.factRowDivider, compact && mobileS.factRow]}>
+      <View style={[styles.factIconWrap, compact && mobileS.factIconWrap]}>
+        <FontAwesome name={iconName} size={compact ? 14 : 16} color={Theme.primary} />
       </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.factLabel}>{fact.label.toUpperCase()}</Text>
-        <Text style={styles.factValue} numberOfLines={2}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.factLabel, compact && mobileS.factLabel]}>{fact.label.toUpperCase()}</Text>
+        <Text style={[styles.factValue, compact && mobileS.factValue]} numberOfLines={2}>
           {asDisplay(fact.value)}
         </Text>
       </View>
@@ -342,13 +363,15 @@ function FactRow({ fact, isLast }: { fact: PublicProfileFact; isLast: boolean })
 function SynergyCard({
   entity,
   onPress,
+  compact,
 }: {
   entity: PublicProfileEntity;
   onPress: () => void;
+  compact?: boolean;
 }) {
   const handlePress = useMemo(() => onPress, [onPress]);
   return (
-    <View style={styles.synergyCard}>
+    <View style={[styles.synergyCard, compact && mobileS.synergyCard]}>
       <LinearGradient
         colors={["#020617", "#0F172A"]}
         start={{ x: 0, y: 0 }}
@@ -370,17 +393,21 @@ function SynergyCard({
         )}
       </View>
 
-      <Text style={styles.synergyHeadline}>{entity.synergyHeadline}</Text>
+      <Text style={[styles.synergyHeadline, compact && mobileS.synergyHeadline]}>
+        {entity.synergyHeadline}
+      </Text>
       {entity.synergyBody ? (
-        <Text style={styles.synergyBody}>{entity.synergyBody}</Text>
+        <Text style={[styles.synergyBody, compact && mobileS.synergyBody]}>{entity.synergyBody}</Text>
       ) : null}
 
       <TouchableOpacity
-        style={styles.synergyCta}
+        style={[styles.synergyCta, compact && mobileS.synergyCta]}
         onPress={handlePress}
         activeOpacity={0.85}
       >
-        <Text style={styles.synergyCtaText}>{entity.primaryCtaLabel}</Text>
+        <Text style={[styles.synergyCtaText, compact && mobileS.synergyCtaText]}>
+          {entity.primaryCtaLabel}
+        </Text>
         <View style={styles.synergyCtaIconWrap}>
           <FontAwesome
             name="arrow-right"

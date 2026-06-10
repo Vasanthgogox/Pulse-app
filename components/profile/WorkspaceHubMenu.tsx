@@ -350,7 +350,15 @@ export function WorkspaceHubMenu({
           <View style={hubStyles.headerVignette} pointerEvents="none" />
           <View style={hubStyles.headerBottomFade} pointerEvents="none" />
           <View style={hubStyles.headerBandRow}>
-            <View style={hubStyles.headerLogoWrap}>
+            <Pressable
+              onPress={openOrgProfileHub}
+              style={({ pressed }) => [
+                hubStyles.headerLogoWrap,
+                pressed && { opacity: 0.88 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="View public workspace profile"
+            >
               {orgLogoUri ? (
                 <Image source={{ uri: orgLogoUri }} style={hubStyles.headerLogoImage} />
               ) : (
@@ -360,7 +368,7 @@ export function WorkspaceHubMenu({
                   </Text>
                 </View>
               )}
-            </View>
+            </Pressable>
             <View style={hubStyles.headerBandText}>
               <Text style={hubStyles.headerEyebrow}>WORKSPACE</Text>
               <Text style={hubStyles.headerTitle} numberOfLines={1}>

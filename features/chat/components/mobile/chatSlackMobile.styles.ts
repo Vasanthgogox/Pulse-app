@@ -1,5 +1,6 @@
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
-import { StyleSheet } from "react-native";
+import { SLACK_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
+import { Platform, StyleSheet } from "react-native";
 
 /** Pulse Chat — matte black chrome + indigo accent. */
 export const PULSE_CHAT = {
@@ -37,8 +38,8 @@ export const SLACK_MOBILE = {
 
 /** Slack-accurate type scale — compact, not heavy. */
 export const SLACK_TYPE = {
-  headerTitle: 16,
-  brandDot: 16,
+  headerTitle: 18,
+  brandDot: 18,
   listTitle: 12,
   listPreview: 11,
   listTime: 9,
@@ -53,26 +54,23 @@ export const SLACK_TYPE = {
   composerInput: 14,
   bottomNavLabel: 9,
   peopleSection: 10,
-  headerSubtitle: 10,
+  headerSubtitle: 11,
 } as const;
 
 export const SLACK_ICON = {
   strokeInactive: 1.65,
   strokeActive: 2.1,
+  strokeHeader: 2.25,
   sizeTab: 14,
   sizeFilter: 13,
   sizeSearch: 16,
   sizeBack: 22,
+  sizeClose: 20,
   sizeFab: 20,
   sizeBottomNav: 18,
 } as const;
 
-export const SLACK_AVATAR = {
-  header: 34,
-  people: 42,
-  list: 38,
-  thread: 32,
-} as const;
+export const SLACK_AVATAR = SLACK_CHAT_AVATAR;
 
 /** Visible row height of the Slack-style bottom tab bar (excludes safe-area inset). */
 export const CHAT_SLACK_BOTTOM_NAV_BAR = 48;
@@ -96,22 +94,39 @@ export const slackMobileStyles = StyleSheet.create({
     position: "relative",
     backgroundColor: SLACK_MOBILE.headerBg,
     paddingHorizontal: 14,
-    paddingBottom: 16,
+    paddingBottom: 18,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_CHAT.headerHairline,
     overflow: "hidden",
+  },
+  listHeaderMirrorSheen: {
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: "none",
+  },
+  listHeaderMirrorGlow: {
+    position: "absolute",
+    left: "12%",
+    right: "12%",
+    top: 0,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    borderRadius: 1,
   },
   listHeaderAccentLine: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 2,
+    height: 2.5,
     backgroundColor: PULSE_CHAT.accent,
-    opacity: 0.42,
+    opacity: 0.55,
+    shadowColor: PULSE_CHAT.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
   },
   listHeaderTextCol: {
     flex: 1,
@@ -125,58 +140,91 @@ export const slackMobileStyles = StyleSheet.create({
   },
   listHeaderTitle: {
     fontSize: SLACK_TYPE.headerTitle,
-    fontWeight: "800",
+    fontWeight: "900",
     color: SLACK_MOBILE.headerTitleColor,
-    letterSpacing: -0.35,
+    letterSpacing: -0.4,
   },
   listHeaderBrandDot: {
     fontSize: SLACK_TYPE.brandDot,
     fontWeight: "900",
     color: PULSE_CHAT.accent,
-    letterSpacing: -0.35,
+    letterSpacing: -0.4,
+    ...(Platform.OS === "web"
+      ? { textShadow: `0px 0px 8px ${PULSE_CHAT.accentGlow}` }
+      : {
+          textShadowColor: PULSE_CHAT.accentGlow,
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 8,
+        }),
   },
   listHeaderSubtitle: {
     fontSize: SLACK_TYPE.headerSubtitle,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.55)",
-    letterSpacing: 0.6,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.62)",
+    letterSpacing: 0.75,
     textTransform: "uppercase",
   },
   listHeaderActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+  },
+  listHeaderMirrorBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
   },
   listHeaderActionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: PULSE_CHAT.headerActionBg,
+    backgroundColor: "rgba(255, 255, 255, 0.09)",
     borderWidth: 1,
-    borderColor: PULSE_CHAT.headerActionBorder,
+    borderColor: "rgba(255, 255, 255, 0.16)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  listHeaderBack: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: -4,
+  listHeaderCloseBtn: {
+    marginLeft: -2,
   },
   listHeaderAvatarWrap: {
     position: "relative",
     marginRight: 2,
+    borderRadius: 999,
+    padding: 2,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.92)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    shadowColor: PULSE_CHAT.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 3,
   },
   listHeaderOnlineDot: {
     position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 9,
-    height: 9,
+    right: 0,
+    bottom: 0,
+    width: 10,
+    height: 10,
     borderRadius: 5,
     backgroundColor: SLACK_MOBILE.onlineDot,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: PULSE_CHAT.matteBlack,
   },
   bottomNav: {
@@ -279,7 +327,7 @@ export const slackMobileStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 14,
-    paddingTop: 2,
+    paddingTop: 8,
     paddingBottom: 6,
   },
   peopleStripLabel: {
@@ -385,7 +433,7 @@ export const slackMobileStyles = StyleSheet.create({
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     marginTop: -12,
-    paddingTop: 8,
+    paddingTop: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: SLACK_MOBILE.listDivider,
     shadowColor: "#000",
@@ -398,6 +446,7 @@ export const slackMobileStyles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: SLACK_MOBILE.listDivider,
     marginHorizontal: 14,
+    marginTop: 2,
   },
   filterTrack: {
     marginHorizontal: 12,
@@ -463,7 +512,7 @@ export const slackMobileStyles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    minHeight: 60,
+    minHeight: 64,
     backgroundColor: "#FFFFFF",
   },
   listRowSeparator: {
@@ -701,7 +750,7 @@ export const slackMobileStyles = StyleSheet.create({
   threadMsgsContent: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 20,
     gap: 0,
   },
   threadMsgRow: {
@@ -741,7 +790,7 @@ export const slackMobileStyles = StyleSheet.create({
   },
   threadMsgName: {
     fontSize: SLACK_TYPE.msgName,
-    fontWeight: "800",
+    fontWeight: "600",
     color: SLACK_MOBILE.textPrimary,
     flexShrink: 1,
     letterSpacing: -0.1,
@@ -773,6 +822,20 @@ export const slackMobileStyles = StyleSheet.create({
     fontWeight: "400",
     color: SLACK_MOBILE.textSecondary,
     lineHeight: 20,
+  },
+  threadExpiryNotice: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+    alignItems: "center",
+  },
+  threadExpiryNoticeText: {
+    fontSize: SLACK_TYPE.msgTime,
+    fontWeight: "400",
+    color: SLACK_MOBILE.textTertiary,
+    lineHeight: 15,
+    textAlign: "center",
+    maxWidth: 300,
   },
   threadActions: {
     flexDirection: "row",
@@ -838,22 +901,23 @@ export const slackMobileStyles = StyleSheet.create({
   },
   inboxToolbarRow: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "center",
     gap: 10,
     paddingHorizontal: 12,
-    paddingTop: 2,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   inboxToolbarFilter: {
     flexShrink: 0,
   },
   inboxToolbarFilterInline: {
     flexShrink: 0,
-    alignSelf: "stretch",
-    justifyContent: "center",
     minHeight: 38,
-    paddingVertical: 2,
-    borderRadius: 13,
+    justifyContent: "center",
+  },
+  inboxToolbarFilterStandalone: {
+    marginTop: 6,
+    marginBottom: 0,
   },
   inboxToolbarSearch: {
     flex: 1,
@@ -862,7 +926,8 @@ export const slackMobileStyles = StyleSheet.create({
   },
   searchToolbar: {
     paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
   searchToolbarInline: {
     flex: 1,

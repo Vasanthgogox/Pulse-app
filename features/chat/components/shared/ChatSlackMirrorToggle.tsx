@@ -3,7 +3,7 @@ import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { ListFilter } from "lucide-react-native";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   LayoutChangeEvent,
@@ -28,23 +28,24 @@ export type MirrorToggleItem = {
 
 type MirrorVariant = "bottomNav" | "sidebar" | "filter" | "party";
 
-const SPRING = { useNativeDriver: false, speed: 22, bounciness: 4 } as const;
+const SPRING_TRANSLATE = { useNativeDriver: true, speed: 22, bounciness: 4 } as const;
 
 function useMirrorIndicator(activeId: string, axis: "x" | "y") {
   const layouts = useRef<Record<string, { pos: number; size: number }>>({});
   const translate = useRef(new Animated.Value(0)).current;
-  const size = useRef(new Animated.Value(0)).current;
+  const [indicatorSize, setIndicatorSize] = useState(0);
 
   const snapTo = useCallback(
     (id: string) => {
       const layout = layouts.current[id];
       if (!layout) return;
-      Animated.parallel([
-        Animated.spring(translate, { toValue: layout.pos, ...SPRING }),
-        Animated.spring(size, { toValue: layout.size, ...SPRING }),
-      ]).start();
+      setIndicatorSize(layout.size);
+      Animated.spring(translate, {
+        toValue: layout.pos,
+        ...SPRING_TRANSLATE,
+      }).start();
     },
-    [translate, size],
+    [translate],
   );
 
   useEffect(() => {
@@ -63,7 +64,7 @@ function useMirrorIndicator(activeId: string, axis: "x" | "y") {
     [activeId, axis, snapTo],
   );
 
-  return { translate, size, onItemLayout, axis };
+  return { translate, indicatorSize, onItemLayout, axis };
 }
 
 export function ChatSlackMirrorToggle({
@@ -80,7 +81,7 @@ export function ChatSlackMirrorToggle({
   style?: StyleProp<ViewStyle>;
 }) {
   const axis = variant === "sidebar" ? "y" : "x";
-  const { translate, size, onItemLayout } = useMirrorIndicator(activeId, axis);
+  const { translate, indicatorSize, onItemLayout } = useMirrorIndicator(activeId, axis);
   const partyGlow = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
@@ -105,15 +106,17 @@ export function ChatSlackMirrorToggle({
     axis === "x"
       ? {
           transform: [{ translateX: translate }],
-          width: size,
+          width: indicatorSize > 0 ? indicatorSize : 0,
           top: 3,
           bottom: 3,
+          opacity: indicatorSize > 0 ? 1 : 0,
         }
       : {
           transform: [{ translateY: translate }],
-          height: size,
+          height: indicatorSize > 0 ? indicatorSize : 0,
           left: 3,
           right: 3,
+          opacity: indicatorSize > 0 ? 1 : 0,
         };
 
   const trackStyle =
@@ -137,22 +140,23 @@ export function ChatSlackMirrorToggle({
 
   return (
     <View style={[trackStyle, twoPartyMode && styles.partyTrackTwoItem, style]}>
-      {variant === "party" ? (
-        <Animated.View
-          style={[
-            styles.indicatorBase,
-            styles.partyGlow,
-            indicatorStyle,
-            {
-              opacity: partyGlow.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.1, 0.24],
-              }),
-            },
-          ]}
-        />
-      ) : null}
-      <Animated.View style={[styles.indicatorBase, indicatorVariantStyle, indicatorStyle]} />
+      <Animated.View style={[styles.indicatorBase, indicatorVariantStyle, indicatorStyle]}>
+        {variant === "party" ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFillObject,
+              styles.partyGlow,
+              {
+                opacity: partyGlow.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.1, 0.24],
+                }),
+              },
+            ]}
+          />
+        ) : null}
+      </Animated.View>
       {items.map((item) => {
         const active = activeId === item.id;
         const iconColor = active

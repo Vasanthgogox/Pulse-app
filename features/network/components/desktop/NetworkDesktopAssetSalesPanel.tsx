@@ -24,6 +24,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import {
   buildAssetBodyTypeSlices,
   buildAssetDestinationBarItems,
@@ -251,6 +252,7 @@ function PerformanceViewToggle({
 }
 
 export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
+  const layout = useProfileHubCompactLayout();
   const [trendChartWidth, setTrendChartWidth] = useState(320);
   const [originChartWidth, setOriginChartWidth] = useState(200);
   const [destChartWidth, setDestChartWidth] = useState(200);
@@ -453,9 +455,9 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
   };
 
   return (
-    <View style={styles.salesBody}>
-      <View style={styles.splitRow}>
-        <View style={styles.sidebar}>
+    <View style={[styles.salesBody, layout.salesBody]}>
+      <View style={[styles.splitRow, layout.splitRow]}>
+        <View style={[styles.sidebar, layout.sidebar]}>
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Intelligent filters</Text>
             <Text style={styles.salesFilterHint}>
@@ -761,7 +763,7 @@ export function NetworkDesktopAssetSalesPanel({ orgId }: Props) {
           </View>
         </View>
 
-        <View style={styles.mainCol}>
+        <View style={[styles.mainCol, layout.mainCol]}>
           <PerformanceViewToggle
             view={performanceView}
             onChange={setPerformanceView}

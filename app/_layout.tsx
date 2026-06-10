@@ -239,6 +239,7 @@ LogBox.ignoreLogs([
   'No native splash screen registered',
   // RN Web dev noise (harmless on web; native still uses shadow* props).
   '"shadow*" style props are deprecated',
+  '"textShadow*" style props are deprecated',
   'props.pointerEvents is deprecated',
   // Metro allow-list — fixed via direct imports; ignore if a dev chunk still cycles.
   'Require cycle:',

@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 
 const SUPPRESSED_WARN_PREFIXES = [
   '"shadow*" style props are deprecated',
+  '"textShadow*" style props are deprecated',
   'props.pointerEvents is deprecated',
   'Require cycle:',
   'No route named "add-commodity-type"',

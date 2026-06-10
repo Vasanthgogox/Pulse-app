@@ -1,12 +1,11 @@
-import React from "react";
-import { EntityAvatar } from "@/components/EntityAvatar";
-import { OrgAvatar, UserAvatar } from "@/components/Avatar";
+import { Avatar } from "@/components/Avatar";
+import type { AvatarParty } from "@/lib/avatarContext";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 
 export type ChatPartyAvatarProps = {
   identity: ResolvedPartyAvatarIdentity;
   size: number;
-  /** Current viewer's own bubble — org logo in business context. */
+  /** Current viewer's own message — shows personal photo per dual-identity rules. */
   isOwnUser?: boolean;
   userAvatarUrl?: string | null;
   userAvatarSeed?: string | null;
@@ -16,8 +15,12 @@ export type ChatPartyAvatarProps = {
 };
 
 /**
- * Single chat avatar entry point — org logo → contact photo → seed → initials.
- * Used in sidebar rows, detail headers, and message bubbles across all chat tabs.
+ * Chat avatar — routes through the global Avatar system.
+ *
+ * Own user  → personal context (own photo; dual-identity rule: chat = personal, not org logo).
+ * Driver    → driver photo / initials.
+ * Client/Supplier with org branding → org logo / initials.
+ * Client/Supplier without org branding → personal photo / initials.
  */
 export function ChatPartyAvatar({
   identity,
@@ -29,46 +32,53 @@ export function ChatPartyAvatar({
   userOrgOwnerAvatarSeed,
   userName,
 }: ChatPartyAvatarProps) {
+  let party: AvatarParty;
+
   if (isOwnUser) {
-    return (
-      <UserAvatar
-        name={userName ?? identity.displayName}
-        avatarUrl={userAvatarUrl ?? null}
-        avatarSeed={userAvatarSeed ?? null}
-        orgLogoUrl={userOrgLogoUrl ?? null}
-        orgOwnerAvatarSeed={userOrgOwnerAvatarSeed ?? null}
-        context="business"
-        size={size}
-      />
-    );
+    party = {
+      type: "user",
+      name: userName ?? identity.displayName,
+      avatarUrl: userAvatarUrl ?? null,
+      avatarSeed: userAvatarSeed ?? null,
+      orgLogoUrl: userOrgLogoUrl ?? null,
+      orgOwnerAvatarSeed: userOrgOwnerAvatarSeed ?? null,
+    };
+    // personal context: chat always shows own photo, not org logo
+    return <Avatar party={party} context="personal" size={size} shape="circle" />;
   }
 
-  const orgOnly =
-    Boolean((identity.organizationImageUrl ?? "").trim()) ||
-    Boolean((identity.organizationAvatarSeed ?? "").trim());
-
-  if (orgOnly && !identity.avatarUrl && !identity.avatarSeed) {
-    return (
-      <OrgAvatar
-        orgName={identity.displayName}
-        logoUrl={identity.organizationImageUrl ?? null}
-        ownerAvatarSeed={identity.organizationAvatarSeed ?? null}
-        size={size}
-        shape="circle"
-      />
-    );
+  if (identity.entityType === "driver") {
+    party = {
+      type: "driver",
+      name: identity.displayName,
+      avatarUrl: identity.avatarUrl ?? null,
+      avatarSeed: identity.avatarSeed ?? null,
+    };
+    return <Avatar party={party} size={size} shape="circle" />;
   }
 
-  return (
-    <EntityAvatar
-      name={identity.displayName}
-      entityType={identity.entityType}
-      size={size}
-      avatarUrl={identity.avatarUrl ?? null}
-      avatarSeed={identity.avatarSeed ?? null}
-      organizationImageUrl={identity.organizationImageUrl ?? null}
-      organizationAvatarSeed={identity.organizationAvatarSeed ?? null}
-      showIntegrationBadge={false}
-    />
+  // Client or supplier — prefer org logo if available
+  const hasOrgBranding = Boolean(
+    (identity.organizationImageUrl ?? "").trim() ||
+      (identity.organizationAvatarSeed ?? "").trim(),
   );
+
+  if (hasOrgBranding) {
+    party = {
+      type: "organization",
+      name: identity.displayName,
+      logoUrl: identity.organizationImageUrl ?? null,
+      ownerAvatarSeed: identity.organizationAvatarSeed ?? null,
+    };
+    return <Avatar party={party} size={size} shape="circle" />;
+  }
+
+  // No org branding — treat as user with personal photo
+  party = {
+    type: "user",
+    name: identity.displayName,
+    avatarUrl: identity.avatarUrl ?? null,
+    avatarSeed: identity.avatarSeed ?? null,
+  };
+  return <Avatar party={party} context="personal" size={size} shape="circle" />;
 }

@@ -3,8 +3,12 @@
  * your connections / grow network).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWorkspaceOrgLogo } from "@/features/organization/hooks/useWorkspaceOrgLogo";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import type { CurrentOrganization } from "@/types/organization";
 import type {
   ConnectedOrg,
@@ -34,9 +38,10 @@ import { NetworkDesktopChatOverlay } from "@/features/network/components/desktop
 import { NetworkDesktopChatIntroPanel } from "@/features/network/components/desktop/NetworkDesktopChatIntroPanel";
 import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { useClientsQuery, useSuppliersQuery } from "@/lib/queries";
+import { useLayoutInsets } from "@/lib/layoutInsets";
 import { MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 export type NetworkDesktopTab =
   | "details"
@@ -117,6 +122,8 @@ type Props = {
   onInviteCancel: (item: InboundProtocolInviteItem) => void;
   onOpenInviteDetail?: (item: InboundProtocolInviteItem) => void;
   initialTab?: NetworkDesktopTab;
+  /** Extra scroll padding for mobile tab bar / safe area. */
+  bottomScrollInset?: number;
 };
 
 export function NetworkDesktopHub({
@@ -154,8 +161,13 @@ export function NetworkDesktopHub({
   onInviteCancel,
   onOpenInviteDetail,
   initialTab,
+  bottomScrollInset = 0,
 }: Props) {
   const { user, profile } = useAuth();
+  const layout = useProfileHubCompactLayout();
+  const compact = layout.compact;
+  const layoutInsets = useLayoutInsets();
+  const { logoUri } = useWorkspaceOrgLogo();
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(orgId);
   const [tab, setTab] = useState<NetworkDesktopTab>(
@@ -385,29 +397,95 @@ export function NetworkDesktopHub({
     );
   })();
 
+  const hubStats = [
+    { value: String(totalConnections), label: "CONNECTIONS" },
+    { value: String(clientCount), label: "CLIENTS" },
+    { value: String(supplierCount), label: "SUPPLIERS" },
+    { value: String(driverCount), label: "FLEET" },
+  ];
+
+  const statCellCompactStyle = layout.statCellGridCorner;
+
   const hubScroll = (
     <ScrollView
-      style={styles.root}
-      contentContainerStyle={styles.scrollContent}
+      style={[styles.root, layout.hubRoot]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        layout.scrollContent,
+        {
+          paddingBottom:
+            (compact ? layoutInsets.scrollBottomPadding(12) : 24) + bottomScrollInset,
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
-      <NetworkDesktopHubHero
-        orgId={orgId}
-        orgName={orgName}
-        email={email}
-        modelLabel={modelLabel}
-        totalConnections={totalConnections}
-        clientCount={clientCount}
-        supplierCount={supplierCount}
-        onProfilePress={() => selectTab("profile")}
-      />
+      {compact ? (
+        <View style={mobile.pageChrome}>
+          <View style={mobile.chromeTopRow}>
+            <View style={mobile.chromeTitleBlock}>
+              <Text style={mobile.chromeTitle} numberOfLines={2}>
+                {orgName}
+              </Text>
+              <Text style={mobile.chromeSubtitle} numberOfLines={1}>
+                {[modelLabel, email !== "—" ? email : null].filter(Boolean).join(" · ")}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => selectTab("profile")}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="My profile"
+            >
+              {logoUri ? (
+                <Image
+                  source={{ uri: logoUri }}
+                  style={{ width: 40, height: 40, borderRadius: 20 }}
+                />
+              ) : (
+                <PartyAvatar name={orgName} entityType="client" size={40} shape="circle" />
+              )}
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={mobile.chromePillsScroll}
+            contentContainerStyle={mobile.chromePillsContent}
+          >
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>WORKSPACE</Text>
+            </View>
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>{modelLabel.toUpperCase()}</Text>
+            </View>
+            <View style={mobile.chromePill}>
+              <Text style={mobile.chromePillText}>
+                {totalConnections} CONNECTION{totalConnections === 1 ? "" : "S"}
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      ) : (
+        <NetworkDesktopHubHero
+          orgId={orgId}
+          orgName={orgName}
+          email={email}
+          modelLabel={modelLabel}
+          totalConnections={totalConnections}
+          clientCount={clientCount}
+          supplierCount={supplierCount}
+          onProfilePress={() => selectTab("profile")}
+        />
+      )}
 
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, layout.tabBar]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.tabScroll}
-          contentContainerStyle={styles.tabScrollContent}
+          style={compact ? mobile.tabScrollCompact : styles.tabScroll}
+          contentContainerStyle={
+            compact ? mobile.tabScrollContentCompact : styles.tabScrollContent
+          }
         >
           {TABS.map((t) => {
             const active = !invitationsOpen && tab === t.id;
@@ -415,84 +493,161 @@ export function NetworkDesktopHub({
               <Pressable
                 key={t.id}
                 onPress={() => selectTab(t.id)}
-                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                style={[
+                  styles.tabBtn,
+                  layout.tabBtn,
+                  active && styles.tabBtnActive,
+                ]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
               >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    layout.tabText,
+                    active && styles.tabTextActive,
+                  ]}
+                >
                   {t.label}
                 </Text>
               </Pressable>
             );
           })}
         </ScrollView>
-        <View style={styles.tabActions}>
-          <Pressable
-            style={[
-              styles.tabActionBtn,
-              styles.tabActionBtnPrimary,
-              invitationsOpen && styles.tabActionBtnInvitesOn,
-            ]}
-            onPress={() => onInvitationsOpenChange(!invitationsOpen)}
-            accessibilityRole="button"
-            accessibilityLabel="Connection invites"
-          >
-            <UserPlus
-              size={14}
-              color={invitationsOpen ? Theme.textOnPrimary : Theme.textOnPrimary}
-            />
-            <Text
+
+        {compact ? (
+          <View style={mobile.tabActionsRow}>
+            <Pressable
               style={[
-                styles.tabActionBtnText,
-                styles.tabActionBtnTextOn,
-                invitationsOpen && styles.tabActionBtnTextInvitesOn,
+                mobile.tabActionPrimary,
+                invitationsOpen && { backgroundColor: Theme.primary },
               ]}
+              onPress={() => onInvitationsOpenChange(!invitationsOpen)}
+              accessibilityRole="button"
+              accessibilityLabel="Connection invites"
             >
-              {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.tabActionIconBtn,
-              (chatOpen || tab === "chat") && chatStyles.tabActionIconBtnActive,
-            ]}
-            onPress={() => {
-              if (chatOpen || tab === "chat") {
-                setChatOpen(false);
-                if (tab === "chat") setTab("connections");
-                return;
-              }
-              openChatWithPartner(null);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
-          >
-            <MessageSquare
-              size={16}
-              color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
+              <UserPlus size={15} color={Theme.textOnPrimary} strokeWidth={2.2} />
+              <Text style={mobile.tabActionPrimaryText}>
+                {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                mobile.tabActionIcon,
+                (chatOpen || tab === "chat") && mobile.tabActionIconActive,
+              ]}
+              onPress={() => {
+                if (chatOpen || tab === "chat") {
+                  setChatOpen(false);
+                  if (tab === "chat") setTab("connections");
+                  return;
+                }
+                openChatWithPartner(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+            >
+              <MessageSquare
+                size={17}
+                color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
+                strokeWidth={2}
+              />
+            </Pressable>
+            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
+              <MoreHorizontal size={17} color={METRONIC.text} strokeWidth={2} />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.tabActions}>
+            <Pressable
+              style={[
+                styles.tabActionBtn,
+                styles.tabActionBtnPrimary,
+                invitationsOpen && styles.tabActionBtnInvitesOn,
+              ]}
+              onPress={() => onInvitationsOpenChange(!invitationsOpen)}
+              accessibilityRole="button"
+              accessibilityLabel="Connection invites"
+            >
+              <UserPlus
+                size={14}
+                color={invitationsOpen ? Theme.textOnPrimary : Theme.textOnPrimary}
+              />
+              <Text
+                style={[
+                  styles.tabActionBtnText,
+                  styles.tabActionBtnTextOn,
+                  invitationsOpen && styles.tabActionBtnTextInvitesOn,
+                ]}
+              >
+                {pendingInviteCount > 0 ? `Invites (${pendingInviteCount})` : "Invites"}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.tabActionIconBtn,
+                (chatOpen || tab === "chat") && chatStyles.tabActionIconBtnActive,
+              ]}
+              onPress={() => {
+                if (chatOpen || tab === "chat") {
+                  setChatOpen(false);
+                  if (tab === "chat") setTab("connections");
+                  return;
+                }
+                openChatWithPartner(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+            >
+              <MessageSquare
+                size={16}
+                color={chatOpen || tab === "chat" ? Theme.primary : METRONIC.text}
+              />
+            </Pressable>
+            <NetworkExportMenu
+              actions={[
+                {
+                  label: "Export Connections (Excel)",
+                  sublabel: "All clients, suppliers & drivers",
+                  kind: "excel",
+                  onExport: () =>
+                    exportConnectionsExcel(
+                      allConnections,
+                      organization?.name ?? "Workspace",
+                    ),
+                },
+              ]}
+              triggerStyle={styles.tabActionIconBtn}
             />
-          </Pressable>
-          <NetworkExportMenu
-            actions={[
-              {
-                label: "Export Connections (Excel)",
-                sublabel: "All clients, suppliers & drivers",
-                kind: "excel",
-                onExport: () =>
-                  exportConnectionsExcel(
-                    allConnections,
-                    organization?.name ?? "Workspace",
-                  ),
-              },
-            ]}
-            triggerStyle={styles.tabActionIconBtn}
-          />
-          <Pressable style={styles.tabActionIconBtn} hitSlop={8}>
-            <MoreHorizontal size={16} color={METRONIC.text} />
-          </Pressable>
-        </View>
+            <Pressable style={styles.tabActionIconBtn} hitSlop={8}>
+              <MoreHorizontal size={16} color={METRONIC.text} />
+            </Pressable>
+          </View>
+        )}
       </View>
 
+      {compact ? (
+        <View style={layout.metricsWrap}>
+          <View style={[styles.statsBar, layout.statsBar, layout.statsBarGrid]}>
+            {hubStats.map((stat, idx) => (
+              <View
+                key={stat.label}
+                style={[
+                  styles.statCell,
+                  layout.statCellGrid,
+                  statCellCompactStyle(idx),
+                ]}
+              >
+                <Text style={[styles.statValue, layout.statValue]}>{stat.value}</Text>
+                <Text style={[styles.statLabel, layout.statLabel]}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {panel}
-      <NetworkSupportHelpCards />
+      {!compact ? <NetworkSupportHelpCards /> : null}
     </ScrollView>
   );
 

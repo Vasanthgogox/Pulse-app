@@ -11,7 +11,7 @@ export const CHAT_MOBILE = {
   headerBg: "#FFFFFF",
   headerBorder: "#EFF2F5",
   bubbleMaxWidthPct: "78%",
-  avatarSize: 32,
+  avatarSize: 36,
   bubbleFontSize: 12,
   bubbleLineHeight: 17,
   bubblePadH: 10,
@@ -21,9 +21,9 @@ export const CHAT_MOBILE = {
   headerTitleSize: 13,
   headerSubtitleSize: 10,
   listRowPad: 8,
-  listAvatar: 48,
+  listAvatar: 42,
   /** Horizontal people strip at top of Slack-style inbox */
-  peopleStripAvatar: 56,
+  peopleStripAvatar: 46,
   listTitleSize: 13,
   listPreviewSize: 11,
   listTimeSize: 9,
@@ -60,7 +60,15 @@ export function isChatNativeMobile(isDesktop: boolean): boolean {
   return Platform.OS !== "web" && !isDesktop;
 }
 
-/** Space reserved above a fixed mobile-web composer (input row + safe padding). */
+/**
+ * Fallback space above a fixed mobile-web composer before onLayout measures the dock.
+ * Slack variant: input row + formatting bar + borders + optional typing strip.
+ */
 export function mobileWebComposerReservePx(): number {
-  return CHAT_MOBILE.composerMinHeight + CHAT_MOBILE.sendBtnHeight + 28;
+  return (
+    CHAT_MOBILE.composerMinHeight +
+    CHAT_MOBILE.sendBtnHeight +
+    36 + // formatting toolbar
+    24 // padding / hairlines
+  );
 }

@@ -9,6 +9,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import {
   carryForwardGoals,
   DEFAULT_NETWORK_GOALS_STORE,
@@ -313,6 +314,7 @@ function GoalTargetCard({
 }
 
 export function NetworkDesktopGoalsPanel({ orgId }: Props) {
+  const layout = useProfileHubCompactLayout();
   const monthOptions = useMemo(() => getRecentMonthKeys(3), []);
   const [selectedMonthKey, setSelectedMonthKey] = useState(
     () => monthOptions[monthOptions.length - 1] ?? getRecentMonthKeys(1)[0],
@@ -528,9 +530,9 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
   const targetsSetCount = summaryRows.filter((r) => r.target > 0).length;
 
   return (
-    <View style={styles.salesBody}>
-      <View style={styles.splitRow}>
-        <View style={styles.sidebar}>
+    <View style={[styles.salesBody, layout.salesBody]}>
+      <View style={[styles.splitRow, layout.splitRow]}>
+        <View style={[styles.sidebar, layout.sidebar]}>
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Goal filters</Text>
             <Text style={styles.salesFilterHint}>
@@ -645,7 +647,7 @@ export function NetworkDesktopGoalsPanel({ orgId }: Props) {
           </View>
         </View>
 
-        <View style={styles.mainCol}>
+        <View style={[styles.mainCol, layout.mainCol]}>
           {dataLoading || goalsLoading ? (
             <View style={styles.emptyWrap}>
               <ActivityIndicator color={METRONIC.link} />

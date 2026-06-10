@@ -64,9 +64,14 @@ export function useChatTypingPresence(
     channelRef.current = ch;
 
     return () => {
+      if (broadcastTimerRef.current) clearTimeout(broadcastTimerRef.current);
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+      broadcastTimerRef.current = null;
+      stopTimerRef.current = null;
       void ch.unsubscribe();
       channelRef.current = null;
       isTypingRef.current = false;
+      setTypingNames([]);
     };
   }, [conversationId, selfUserId]);
 
