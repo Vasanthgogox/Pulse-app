@@ -23,6 +23,25 @@ export function isTerminalTripStatus(status: string | null | undefined): boolean
   return TERMINAL_TRIP_STATUSES.has(normalized);
 }
 
+/**
+ * Hub "Active" scope — aligned with bootstrap `p_hub_trip_bucket = 'active'`
+ * (any non-terminal trip, including loading / transit / pending_acceptance).
+ */
+export function isHubActiveTripStatus(status: string | null | undefined): boolean {
+  return !isTerminalTripStatus(status);
+}
+
+/**
+ * Driver chat is meaningful: trip left draft/planning but is not finished.
+ * Used for manual-trip driver lanes (requires assigned driver_id separately).
+ */
+export function isOperationalTripChatStatus(status: string | null | undefined): boolean {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (isTerminalTripStatus(normalized)) return false;
+  return normalized !== "draft";
+}
+
 export function isTripFeedbackEligibleStatus(status: string | null | undefined): boolean {
   const normalized = String(status ?? "").trim().toLowerCase();
   if (!normalized) return false;

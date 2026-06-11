@@ -60,7 +60,7 @@ interface DriverChatContextType {
   markAsRead: (conversationId: string) => Promise<void>;
   getTotalUnreadCount: () => number;
   refreshConversations: () => Promise<TripConversation[]>;
-  ensureDriverTripConversation: (tripId: string) => Promise<string | null>;
+  ensureDriverTripConversation: (tripId: string) => Promise<{ convId: string; orgId: string } | null>;
 }
 
 const DriverChatContext = createContext<DriverChatContextType | undefined>(undefined);
@@ -119,7 +119,7 @@ export function DriverChatProvider({
   );
 
   const ensureDriverTripConversation = useCallback(
-    async (tripId: string): Promise<string | null> => {
+    async (tripId: string): Promise<{ convId: string; orgId: string } | null> => {
       const id = String(tripId ?? '').trim();
       if (!id || !uid) return null;
 
@@ -154,10 +154,11 @@ export function DriverChatProvider({
       }
 
       const minimal = buildMinimalDriverTripConversation(trip, created);
+      // Patch both the sorted-key cache (normal path) and any stale empty-key cache
+      // so DriverChatScreen can find the conversation even before driverIds loads.
+      const cacheKey = [...resolvedDriverIds].sort().join(',');
       queryClient.setQueryData<TripConversation[]>(
-        driverChatConversationsQueryKey(
-          [...resolvedDriverIds].sort().join(','),
-        ),
+        driverChatConversationsQueryKey(cacheKey),
         (old) => {
           const list = old ?? [];
           if (list.some((c) => c.id === minimal.id)) {
@@ -168,7 +169,9 @@ export function DriverChatProvider({
       );
 
       void refetchConversations();
-      return created.id;
+      // Return both IDs so callers can render the thread without waiting for the
+      // conversations list query to re-enable (happens when driverIds loads late).
+      return { convId: created.id, orgId: trip.organization_id };
     },
     [driverIds, profile, uid, queryClient, refetchConversations],
   );

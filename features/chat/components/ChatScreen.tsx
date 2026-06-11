@@ -3,10 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import {
+  isDriverSwapPreviewMessage,
+  resolveDriverSwapAvatars,
   resolveNetworkPartnerAvatar,
   resolveTripConversationAvatar,
   resolveTripMessagePeerAvatar,
+  stripChatPreviewEmojiPrefix,
   type ChatOrgBranding,
+  type DriverSwapPair,
 } from "@/features/chat/utils/chatAvatar.util";
 import { queryKeys } from "@/lib/queryKeys";
 import { STALE } from "@/lib/queryClient";
@@ -47,6 +51,18 @@ import {
   isSlackGroupableTripMessage,
   type SlackMessageGroupMeta,
 } from "@/features/chat/utils/slackMessageGroup.util";
+import {
+  buildChatMediaBurstIndex,
+  resolveTrailingMediaBurstSummary,
+  tripChatMessageSenderKey,
+} from "@/features/chat/utils/chatMediaBurst.util";
+import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
+import { ChatMediaBurstRow } from "@/features/chat/components/shared/ChatMediaBurstRow";
+import { CHAT_DESKTOP_COMPOSER_EMOJIS } from "@/features/chat/utils/chatEmojiAnim.util";
+import {
+  collectTrailingImagePreviews,
+  type ConversationImagePreview,
+} from "@/features/chat/utils/conversationImagePreview.util";
 import { buildSupabaseRenderImagePublicUrl } from "@/features/chat/utils/storageRenderImageUrl";
 import {
   ChatSlackInboxToolbar,
@@ -55,6 +71,8 @@ import {
   ChatSlackListSeparator,
   ChatSlackBottomNav,
   CHAT_SLACK_BOTTOM_NAV_BAR,
+  ChatSlackPartyRecommendedDivider,
+  ChatSlackPartyRecommendedHeader,
   ChatSlackPeopleStrip,
   ChatSlackThreadHeader,
   type SlackFilterChipDef,
@@ -123,11 +141,21 @@ import { mergeAssignmentAuditIntoTripMessages } from "@/features/chat/utils/assi
 import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
-import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
+import { formatChatPartyName, formatChatPartyTypeLabel } from "@/features/chat/utils/partyDisplay";
 import {
+  isHubActiveTripStatus,
+  isOperationalTripChatStatus,
   isTerminalTripStatus,
   isTripFeedbackEligibleStatus,
 } from "@/features/chat/utils/tripConversationSort";
+import {
+  buildMobileTripInboxRows,
+  conversationMatchesPartyPeopleKey,
+  partitionTripConversationsByPartyFocus,
+  pickRecommendedTripConversation,
+  tripPartyPeopleKey,
+  type MobileTripInboxRow,
+} from "@/features/chat/utils/tripPartyPeopleKey.util";
 import {
   getTripDisplayNumber,
   type TripRow,
@@ -196,11 +224,16 @@ import { pe } from "@/lib/platformViewStyle.util";
 import { commandPriorityScore } from "../utils/commandPriority.util";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
+import { resolveDocumentShareDisplay } from "../utils/documentShareDisplay.util";
 import { isLocationPingMessage } from "../utils/locationPingChatDisplay.util";
 import { ChatLedgerEventCard, ChatSystemEventCard, buildChatRouteContextLabel } from "./ChatEventCard";
 import { ChatLocationSystemCard } from "./ChatLocationSystemCard";
 import { DocumentShareCard } from "./DocumentShareCard";
-import { DocumentShareSheet } from "./DocumentShareSheet";
+import {
+  DocumentShareSheet,
+  type DocumentSharePayload,
+} from "./DocumentShareSheet";
+import { getTripAssetsForChatHub } from "../services/chatDocumentHub.service";
 import { isLongHaulLateChatMessage, LateAlertCard } from "./LateAlertCard";
 import { TripCard } from "./TripCard";
 
@@ -216,7 +249,6 @@ function isTripStreamTab(tab: TabId): boolean {
   return tab === "trips" || tab === "indent";
 }
 
-const QUICK_EMOJIS = ["👍", "🤝", "🚛", "📍", "✅", "📦", "⚠️", "🕒", "😊", "🙌", "📞", "💯"];
 const TRIP_PARTY_FILTERS: ConversationPartyType[] = ["client", "driver", "supplier"];
 
 function Badge({ count }: { count: number }) {
@@ -275,12 +307,24 @@ function trimPreviewText(raw: string | null | undefined): string {
   return String(raw ?? "").trim();
 }
 
-type ConversationPreviewKind = "default" | "system" | "image" | "document" | "data" | "html";
+type ConversationPreviewKind =
+  | "default"
+  | "system"
+  | "image"
+  | "document"
+  | "data"
+  | "html"
+  | "driver_swap";
 
 type ConversationPreviewModel = {
   text: string;
   kind: ConversationPreviewKind;
   imageUrl?: string | null;
+  imagePreviews?: ConversationImagePreview[];
+  documentName?: string | null;
+  documentExtension?: string | null;
+  documentIsImage?: boolean;
+  driverSwap?: DriverSwapPair | null;
 };
 
 function compactPreviewText(raw: string): string {
@@ -360,8 +404,26 @@ function previewFromTripMessage(
         imageUrl: resolveTripImagePreviewUrl(message),
       };
     case "document_share":
-    case "document_upload":
-      return { text: fallback || "Document shared", kind: "document" };
+    case "document_upload": {
+      const doc = resolveDocumentShareDisplay(message);
+      const name = doc?.documentName || fallback.replace(/^Shared document:\s*/i, "").trim();
+      const imageUrl =
+        doc?.isImage && doc.storagePath
+          ? buildSupabaseRenderImagePublicUrl({
+              storagePath: doc.storagePath,
+              width: 96,
+              quality: 52,
+            })
+          : null;
+      return {
+        text: name || "Document",
+        kind: doc?.isImage ? "image" : "document",
+        imageUrl,
+        documentName: name || null,
+        documentExtension: doc?.extension ?? null,
+        documentIsImage: doc?.isImage ?? false,
+      };
+    }
     case "ledger_event":
     case "ledger":
     case "ledger_update":
@@ -374,7 +436,10 @@ function previewFromTripMessage(
         kind: "data",
       };
     case "assignment_update":
-      return { text: fallback || "Assignment data updated", kind: "data" };
+      return {
+        text: stripChatPreviewEmojiPrefix(fallback) || "Assignment update",
+        kind: "data",
+      };
     case "status_change":
     case "system":
     case "update":
@@ -416,9 +481,44 @@ function isManualDriverSummaryMessage(message: TripMessageRow): boolean {
   return true;
 }
 
+function resolveDriverSwapListPreview(
+  message: TripMessageRow | null,
+  composeTrip: { driver_id?: string | null; driver_display_name?: string | null; driver_avatar_url?: string | null; driver_avatar_seed?: string | null } | null | undefined,
+  fallbackText?: string | null,
+): ConversationPreviewModel | null {
+  const content = stripChatPreviewEmojiPrefix(
+    (message?.content ?? fallbackText ?? "").trim(),
+  );
+  if (!content && !message) return null;
+
+  const probe: Pick<TripMessageRow, "content" | "metadata" | "message_type"> = message ?? {
+    content,
+    metadata: null,
+    message_type: "assignment_update",
+  };
+  if (!isDriverSwapPreviewMessage(probe)) return null;
+
+  const driverSwap = resolveDriverSwapAvatars(probe, { composeTrip });
+  if (!driverSwap) return null;
+
+  return {
+    text: content,
+    kind: "driver_swap",
+    driverSwap,
+  };
+}
+
 function latestTripConversationPreview(
   item: TripConversation,
-  options?: { manualDriverOnly?: boolean },
+  options?: {
+    manualDriverOnly?: boolean;
+    composeTrip?: {
+      driver_id?: string | null;
+      driver_display_name?: string | null;
+      driver_avatar_url?: string | null;
+      driver_avatar_seed?: string | null;
+    } | null;
+  },
 ): ConversationPreviewModel {
   const manualDriverOnly = options?.manualDriverOnly === true;
   let latest: TripMessageRow | null = null;
@@ -434,11 +534,66 @@ function latestTripConversationPreview(
     break;
   }
   const fromMessage = previewFromTripMessage(latest);
+  const burstSummary = resolveTrailingMediaBurstSummary(item.messages, {
+    senderKey: tripChatMessageSenderKey,
+    filterMessage: (candidate) => {
+      if (
+        candidate.message_type === "feedback_request" ||
+        candidate.message_type === "feedback"
+      ) {
+        return false;
+      }
+      if (!isMessageVisibleInTab(candidate.message_type, item.party_type)) return false;
+      if (manualDriverOnly && !isManualDriverSummaryMessage(candidate)) return false;
+      return true;
+    },
+    maxSummaryLines: 3,
+  });
+  if (burstSummary && burstSummary.imagePreviews.length > 0) {
+    const summaryText =
+      burstSummary.summaryText ||
+      fromMessage.text ||
+      trimPreviewText(item.last_message_preview) ||
+      "Photo";
+    return {
+      text: summaryText,
+      kind: "image",
+      imageUrl:
+        burstSummary.imagePreviews[burstSummary.imagePreviews.length - 1]?.url ??
+        fromMessage.imageUrl,
+      imagePreviews: burstSummary.imagePreviews,
+    };
+  }
+  const imagePreviews = collectTrailingImagePreviews(item.messages, {
+    partyType: item.party_type,
+    manualDriverOnly,
+    isMessageVisible: isMessageVisibleInTab,
+    isManualDriverMessage: isManualDriverSummaryMessage,
+  });
+  if (imagePreviews.length > 0) {
+    return {
+      ...fromMessage,
+      text: fromMessage.text || "Photo",
+      kind: "image",
+      imageUrl: imagePreviews[imagePreviews.length - 1]?.url ?? fromMessage.imageUrl,
+      imagePreviews,
+    };
+  }
+
+  const driverSwapPreview = resolveDriverSwapListPreview(
+    latest,
+    options?.composeTrip,
+    fromMessage.text || item.last_message_preview,
+  );
+  if (driverSwapPreview) return driverSwapPreview;
+
   if (fromMessage.text) {
     return fromMessage;
   }
   const fallback = trimPreviewText(item.last_message_preview);
   if (!manualDriverOnly) {
+    const swapFromFallback = resolveDriverSwapListPreview(null, options?.composeTrip, fallback);
+    if (swapFromFallback) return swapFromFallback;
     if (isLikelyHtml(fallback)) return { text: stripHtmlForPreview(fallback), kind: "html" };
     if (isLikelyDataPayload(fallback)) return { text: summarizeDataPayload(fallback), kind: "data" };
     return { text: fallback, kind: "default" };
@@ -481,28 +636,9 @@ function formatTripStatusLabel(status: string | null | undefined): string {
   return raw.replace(/_/g, " ").toUpperCase();
 }
 
-/**
- * Driver-chat eligible statuses: trip already has driver assignment/acceptance.
- * Used by active scope + manual trip stream + compose list.
- */
-function isDriverAssignedOrAcceptedStatus(status: string | null | undefined): boolean {
-  const s = String(status ?? "").trim().toLowerCase();
-  return (
-    s === "assigned" ||
-    s === "driver_assigned" ||
-    s === "accepted" ||
-    s === "in_progress" ||
-    s === "started" ||
-    s === "at_pickup" ||
-    s === "picked_up" ||
-    s === "in_transit" ||
-    s === "at_drop" ||
-    s === "heading_to_pickup"
-  );
-}
-
+/** Hub Active tab — same lifecycle window as DB bootstrap `active` bucket. */
 function isTripCurrentlyActiveStatus(status: string | null | undefined): boolean {
-  return isDriverAssignedOrAcceptedStatus(status);
+  return isHubActiveTripStatus(status);
 }
 
 /** Trip `created_at` for hub + detail chrome (e.g. `3 May 2026`). */
@@ -596,8 +732,7 @@ function manualHubTripHasAssignedDriver(
   const status = String(conv.trip_status ?? trips[conv.trip_id]?.status ?? "")
     .trim()
     .toLowerCase();
-  const driverAccepted = isDriverAssignedOrAcceptedStatus(status);
-  if (!driverAccepted) return false;
+  if (!isOperationalTripChatStatus(status)) return false;
   const hasDriver =
     Boolean(String(conv.trip_driver_id ?? "").trim()) ||
     Boolean(String(trips[conv.trip_id]?.driverId ?? "").trim());
@@ -879,7 +1014,7 @@ function buildGroupedTripHubRows(args: {
 
   list = list.filter((trip) => {
     const st = trip.rows[0]?.trip_status;
-    const terminal = isTerminalTripStatus(st);
+    const terminal = !isHubActiveTripStatus(st);
     return tripChatScope === "history" ? terminal : !terminal;
   });
 
@@ -996,7 +1131,7 @@ function getComposePartyRows(trip: TripForCompose): ComposePartyRow[] {
 }
 
 function manualTripDriverAccepted(status: string | null | undefined): boolean {
-  return isDriverAssignedOrAcceptedStatus(status);
+  return isOperationalTripChatStatus(status);
 }
 
 function tripHasSelectableComposeParty(trip: TripForCompose): boolean {
@@ -1032,7 +1167,10 @@ export function ChatScreen() {
   const [isMobileDetail, setIsMobileDetail] = useState(false);
   const [messageInput, setMessageInput] = useState("");
   const messagesRef = useRef<FlatList>(null);
+  const tripInboxListRef = useRef<FlatList<MobileTripInboxRow>>(null);
   const tripHubMobileAutoPageGateRef = useRef(false);
+  const [focusedTripPartyKey, setFocusedTripPartyKey] = useState<string | null>(null);
+  const [focusedNetPartnerId, setFocusedNetPartnerId] = useState<string | null>(null);
 
   // ── Slack-style: reply context ─────────────────────────────────────────
   const [replyContext, setReplyContext] = useState<ReplyPreviewData | null>(null);
@@ -1041,8 +1179,13 @@ export function ChatScreen() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [showScripts, setShowScripts] = useState(false);
 
-  // Document share sheet
+  // Document hub (in-thread)
   const [showDocShare, setShowDocShare] = useState(false);
+  const [tripHubAssets, setTripHubAssets] = useState<{
+    vehicle_id: string | null;
+    driver_id: string | null;
+    organization_id: string | null;
+  } | null>(null);
   const [ledgerWebToast, setLedgerWebToast] = useState(false);
   /** Sync guard: React state can lag one frame — blocks double-tap duplicate mirrors. */
   const addToBookInFlightRef = useRef(new Set<string>());
@@ -1469,20 +1612,44 @@ export function ChatScreen() {
     });
   }, [tripStreamForActiveHubTab, tripChatScope, effectiveConversationTripStatus]);
 
-  const desktopActiveTripConversations = useMemo(
-    () =>
-      tripStreamForActiveHubTab.filter((conv) =>
-        isTripCurrentlyActiveStatus(effectiveConversationTripStatus(conv)),
-      ),
-    [tripStreamForActiveHubTab, effectiveConversationTripStatus],
-  );
-  const desktopHistoryTripConversations = useMemo(
-    () =>
-      tripStreamForActiveHubTab.filter((conv) =>
-        isTerminalTripStatus(effectiveConversationTripStatus(conv)),
-      ),
-    [tripStreamForActiveHubTab, effectiveConversationTripStatus],
-  );
+  const desktopActiveTripConversations = useMemo(() => {
+    const rows = tripStreamForActiveHubTab.filter((conv) =>
+      isTripCurrentlyActiveStatus(effectiveConversationTripStatus(conv)),
+    );
+    if (!focusedTripPartyKey) return rows;
+    const { recommended, rest } = partitionTripConversationsByPartyFocus(
+      rows,
+      focusedTripPartyKey,
+      {
+        tripStatus: effectiveConversationTripStatus,
+        isTerminal: isTerminalTripStatus,
+      },
+    );
+    return [...recommended, ...rest];
+  }, [
+    tripStreamForActiveHubTab,
+    effectiveConversationTripStatus,
+    focusedTripPartyKey,
+  ]);
+  const desktopHistoryTripConversations = useMemo(() => {
+    const rows = tripStreamForActiveHubTab.filter((conv) =>
+      isTerminalTripStatus(effectiveConversationTripStatus(conv)),
+    );
+    if (!focusedTripPartyKey) return rows;
+    const { recommended, rest } = partitionTripConversationsByPartyFocus(
+      rows,
+      focusedTripPartyKey,
+      {
+        tripStatus: effectiveConversationTripStatus,
+        isTerminal: isTerminalTripStatus,
+      },
+    );
+    return [...recommended, ...rest];
+  }, [
+    tripStreamForActiveHubTab,
+    effectiveConversationTripStatus,
+    focusedTripPartyKey,
+  ]);
 
   useEffect(() => {
     if (!isDesktop || !selectedConvId) return;
@@ -1654,13 +1821,73 @@ export function ChatScreen() {
   }, [tripChatScope, activeTab]);
 
   useEffect(() => {
+    setFocusedTripPartyKey(null);
+    setFocusedNetPartnerId(null);
+  }, [activeTab]);
+
+  const partyFocusSortOptions = useMemo(
+    () => ({
+      tripStatus: effectiveConversationTripStatus,
+      isTerminal: isTerminalTripStatus,
+    }),
+    [effectiveConversationTripStatus],
+  );
+
+  const focusedPartyDisplayName = useMemo(() => {
+    if (!focusedTripPartyKey) return null;
+    const conv = tripStreamForActiveHubTab.find(
+      (c) => tripPartyPeopleKey(c) === focusedTripPartyKey,
+    );
+    if (!conv) return null;
+    return (
+      formatChatPartyName(conv.party_name) ?? partyLabelReadable(conv.party_type)
+    );
+  }, [focusedTripPartyKey, tripStreamForActiveHubTab]);
+
+  const mobileTripInboxRows = useMemo((): MobileTripInboxRow[] => {
+    if (!isMobileChatUi) return [];
+    return buildMobileTripInboxRows(
+      slackFilteredTripConversations,
+      focusedTripPartyKey,
+      focusedPartyDisplayName,
+      partyFocusSortOptions,
+    );
+  }, [
+    isMobileChatUi,
+    slackFilteredTripConversations,
+    focusedTripPartyKey,
+    focusedPartyDisplayName,
+    partyFocusSortOptions,
+  ]);
+
+  const netChatsForInbox = useMemo(() => {
+    const partnerId = (focusedNetPartnerId ?? "").trim();
+    if (!partnerId) return slackFilteredNetChats;
+    const matched = slackFilteredNetChats.filter((c) => c.partnerId === partnerId);
+    const rest = slackFilteredNetChats.filter((c) => c.partnerId !== partnerId);
+    return [...matched, ...rest];
+  }, [slackFilteredNetChats, focusedNetPartnerId]);
+
+  useEffect(() => {
     if (tripSidebarSearch.trim().length > 0) setHubSearchOpen(true);
   }, [tripSidebarSearch]);
 
   useEffect(() => {
-    if (tripChatScope !== "history" || !organizationId || !bootstrapDone) return;
+    if (!organizationId || !bootstrapDone) return;
+    // Mobile: lazy-load when user switches to History scope.
+    // Desktop: sidebar shows Active + History together — always bootstrap history on trip tabs.
+    const needsHistoryBootstrap =
+      tripChatScope === "history" || (isDesktop && isTripStreamTab(activeTab));
+    if (!needsHistoryBootstrap) return;
     void ensureHubHistoryBootstrap(organizationId);
-  }, [tripChatScope, organizationId, bootstrapDone, ensureHubHistoryBootstrap]);
+  }, [
+    tripChatScope,
+    organizationId,
+    bootstrapDone,
+    ensureHubHistoryBootstrap,
+    isDesktop,
+    activeTab,
+  ]);
 
   useEffect(() => {
     if (!isTripStreamTab(activeTab)) return;
@@ -1768,6 +1995,7 @@ export function ChatScreen() {
     setMessageInput("");
     setShowEmoji(false);
     setShowScripts(false);
+    setShowDocShare(false);
   };
 
   const handleSlackTabSelect = useCallback(
@@ -1790,10 +2018,40 @@ export function ChatScreen() {
       });
       chatStore.switchParty(conv.trip_id, conv.party_type);
       setSelectedConvId(conv.id);
+      setFocusedTripPartyKey(tripPartyPeopleKey(conv));
       void markTripThreadsRead(conv.trip_id);
       openDetail();
     },
     [markTripThreadsRead],
+  );
+
+  const handleTripPartyPeoplePress = useCallback(
+    (partyKey: string, partyConversations: TripConversation[]) => {
+      if (focusedTripPartyKey === partyKey) {
+        setFocusedTripPartyKey(null);
+        return;
+      }
+
+      setFocusedTripPartyKey(partyKey);
+
+      if (partyConversations.length === 1) {
+        void openConversation(partyConversations[0]!);
+        return;
+      }
+
+      if (isMobileChatUi) {
+        setIsMobileDetail(false);
+        setSelectedConvId(null);
+        requestAnimationFrame(() => {
+          tripInboxListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        });
+        return;
+      }
+
+      const best = pickRecommendedTripConversation(partyConversations);
+      if (best) void openConversation(best);
+    },
+    [focusedTripPartyKey, openConversation, isMobileChatUi],
   );
 
   useEffect(() => {
@@ -1849,13 +2107,22 @@ export function ChatScreen() {
     }
   };
 
-  const handleDocShare = async (doc: {
-    key: string;
-    label: string;
-    storage_path: string;
-    entity_type: "vehicle" | "driver";
-    entity_id: string;
-  }) => {
+  useEffect(() => {
+    const tripId = selectedConv?.trip_id;
+    if (!tripId) {
+      setTripHubAssets(null);
+      return;
+    }
+    let cancelled = false;
+    void getTripAssetsForChatHub(tripId).then((assets) => {
+      if (!cancelled) setTripHubAssets(assets);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedConv?.trip_id]);
+
+  const handleDocShare = async (doc: DocumentSharePayload) => {
     if (!selectedConv || !organizationId) return;
     setShowDocShare(false);
     const senderProfile = profile as {
@@ -1881,9 +2148,10 @@ export function ChatScreen() {
         senderName,
         senderUserId: senderProfile?.uid ?? null,
         metadata: {
-          document_type: doc.label,
+          document_type: doc.document_type ?? doc.label,
           storage_path: doc.storage_path,
           document_name: doc.label,
+          mime_type: doc.mime_type ?? null,
           entity_type: doc.entity_type,
           entity_id: doc.entity_id,
         },
@@ -2078,6 +2346,13 @@ export function ChatScreen() {
   const existingPartnerOrgIds = new Set(netChats.map((c) => c.partnerId));
   const newPartners = filteredNetPartners.filter((p) => !existingPartnerOrgIds.has(p.org_id));
 
+  const resolveNetChatPartyType = useCallback(
+    (chat: IntegratedChat): "client" | "supplier" | undefined =>
+      chat.partnerPartyType ??
+      netPartners.find((p) => p.org_id === chat.partnerId)?.party_type,
+    [netPartners],
+  );
+
   const handleNetworkInitiate = async (partner: NetworkPartner) => {
     setInitiating(true);
     const convId = await initiateNetworkConversation(partner);
@@ -2105,6 +2380,9 @@ export function ChatScreen() {
           unread: chat.unreadCount,
           online: chat.unreadCount > 0,
           onPress: () => {
+            setFocusedNetPartnerId((prev) =>
+              prev === chat.partnerId ? null : chat.partnerId,
+            );
             setSelectedNetId(chat.id);
             markNetRead(chat.id);
             openDetail();
@@ -2136,38 +2414,60 @@ export function ChatScreen() {
       return items;
     }
 
-    const convs = tripStreamForActiveHubTab.slice(0, 20);
-    const items: SlackPeopleItem[] = [];
-    const seen = new Set<string>();
-    for (const conv of convs) {
-      const key = `${conv.party_type}:${conv.party_name ?? conv.id}`;
-      if (seen.has(key) || items.length >= 14) continue;
-      seen.add(key);
-      const composeTrip = hubComposeTrips.find((t) => t.id === conv.trip_id) ?? null;
-      const lastMsgSeed =
-        conv.messages.length > 0
-          ? (conv.messages[conv.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
-          : null;
-      const identity = resolveTripConversationAvatar(
-        conv,
-        composeTrip,
-        tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
-        lastMsgSeed,
-      );
-      const shortName =
-        formatChatPartyName(conv.party_name)?.split(/\s+/)[0] ??
-        partyLabelReadable(conv.party_type);
-      items.push({
-        id: conv.id,
-        name: shortName,
-        identity,
-        unread: conv.unread_dispatcher_count,
-        onPress: () => {
-          void openConversation(conv);
-        },
-      });
+    type PartyBucket = {
+      key: string;
+      convs: TripConversation[];
+      unread: number;
+      latestAt: number;
+      sample: TripConversation;
+    };
+    const buckets = new Map<string, PartyBucket>();
+    for (const conv of tripStreamForActiveHubTab) {
+      const key = tripPartyPeopleKey(conv);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = {
+          key,
+          convs: [],
+          unread: 0,
+          latestAt: 0,
+          sample: conv,
+        };
+        buckets.set(key, bucket);
+      }
+      bucket.convs.push(conv);
+      bucket.unread += conv.unread_dispatcher_count ?? 0;
+      const at = new Date(conv.last_message_at ?? 0).getTime();
+      if (at >= bucket.latestAt) {
+        bucket.latestAt = at;
+        bucket.sample = conv;
+      }
     }
-    return items;
+
+    return [...buckets.values()]
+      .sort((a, b) => b.latestAt - a.latestAt)
+      .slice(0, 14)
+      .map((bucket) => {
+        const conv = bucket.sample;
+        const composeTrip = hubComposeTrips.find((t) => t.id === conv.trip_id) ?? null;
+        const identity = resolveTripConversationAvatar(
+          conv,
+          composeTrip,
+          tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
+        );
+        const shortName =
+          formatChatPartyName(conv.party_name)?.split(/\s+/)[0] ??
+          partyLabelReadable(conv.party_type);
+        return {
+          id: bucket.key,
+          name: shortName,
+          identity,
+          unread: bucket.unread,
+          onPress: () => {
+            handleTripPartyPeoplePress(bucket.key, bucket.convs);
+          },
+        };
+      });
   }, [
     activeTab,
     sortedNetChats,
@@ -2177,7 +2477,8 @@ export function ChatScreen() {
     hubComposeTrips,
     tripLinkedOrgBranding,
     markNetRead,
-    openConversation,
+    handleTripPartyPeoplePress,
+    openDetail,
   ]);
 
   // ── List items ───────────────────────────────────────────────────────────────
@@ -2196,31 +2497,22 @@ export function ChatScreen() {
       : "";
 
     const composeTrip = hubComposeTrips.find((t) => t.id === item.trip_id) ?? null;
-    const lastMsgSeed = item.messages.length > 0
-      ? (item.messages[item.messages.length - 1] as TripMessageRow).sender_avatar_seed ?? null
-      : null;
-    const laneAvatar =
-      activeTab === "trips"
-        ? ({
-            displayName:
-              composeTrip?.driver_display_name?.trim() ||
-              formatChatPartyName(item.party_name) ||
-              "Driver",
-            entityType: "driver",
-          } as ResolvedPartyAvatarIdentity)
-        : resolveTripConversationAvatar(
-            item,
-            composeTrip,
-            tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
-            lastMsgSeed,
-          );
-    const partySubtitle = partyLabelReadable(item.party_type);
+    const laneAvatar = resolveTripConversationAvatar(
+      item,
+      composeTrip,
+      tripLinkedOrgBranding as Record<string, ChatOrgBranding>,
+    );
+    const partyLine = formatChatPartyTypeLabel(item.party_type);
     const latestPreview = latestTripConversationPreview(item, {
         manualDriverOnly: activeTab === "trips" && item.party_type === "driver",
+        composeTrip,
       });
-    const latestPreviewText = latestPreview.text || partySubtitle;
+    const latestPreviewText = latestPreview.text || null;
     const mobilePreviewKind =
       latestPreview.kind === "data" || latestPreview.kind === "html" ? "system" : latestPreview.kind;
+    const partyRecommended =
+      Boolean(focusedTripPartyKey) &&
+      conversationMatchesPartyPeopleKey(item, focusedTripPartyKey);
 
     if (isMobileChatUi) {
       return (
@@ -2228,9 +2520,15 @@ export function ChatScreen() {
           identity={laneAvatar}
           title={displayTripId}
           time={time}
+          partyLine={partyLine}
           preview={latestPreviewText}
           previewKind={mobilePreviewKind}
+          previewImagePreviews={latestPreview.imagePreviews}
+          previewDriverSwap={latestPreview.driverSwap}
+          documentExtension={latestPreview.documentExtension}
+          documentIsImage={latestPreview.documentIsImage}
           active={active}
+          recommended={partyRecommended}
           unread={item.unread_dispatcher_count}
           onPress={() => void openConversation(item)}
         />
@@ -2243,9 +2541,14 @@ export function ChatScreen() {
           identity={laneAvatar}
           title={displayTripId}
           time={time}
+          partyLine={partyLine}
           preview={latestPreviewText}
           previewKind={latestPreview.kind}
           previewImageUrl={latestPreview.imageUrl}
+          previewImagePreviews={latestPreview.imagePreviews}
+          previewDriverSwap={latestPreview.driverSwap}
+          documentExtension={latestPreview.documentExtension}
+          documentIsImage={latestPreview.documentIsImage}
           active={active}
           onPress={() => void openConversation(item)}
         />
@@ -2275,7 +2578,7 @@ export function ChatScreen() {
             <Text style={[s.chatTime, active && s.chatTimeActive]}>{time}</Text>
           </View>
           <Text style={[s.chatPartyLabel, active && s.chatPartyLabelActive]}>
-            {partySubtitle}
+            {partyLine}
           </Text>
           {latestPreviewText ? (
             <Text style={[s.chatSub, active && s.chatSubActive]} numberOfLines={1}>
@@ -2294,15 +2597,35 @@ export function ChatScreen() {
     activeTab,
     isDesktop,
     isMobileChatUi,
+    focusedTripPartyKey,
     tripListDisambiguatedLabels,
     hubComposeTrips,
     tripLinkedOrgBranding,
   ]);
 
+  const renderTripInboxRow = useCallback(
+    ({ item }: { item: MobileTripInboxRow }) => {
+      if (item.kind === "party_recommended_header") {
+        return (
+          <ChatSlackPartyRecommendedHeader
+            partyName={item.partyName}
+            count={item.count}
+          />
+        );
+      }
+      if (item.kind === "party_recommended_divider") {
+        return <ChatSlackPartyRecommendedDivider />;
+      }
+      return renderConvItem({ item: item.conversation });
+    },
+    [renderConvItem],
+  );
+
   const renderNetItem = useCallback(({ item }: { item: IntegratedChat }) => {
     const partnerAvatar = resolveNetworkPartnerAvatar(item);
     const last = item.messages[item.messages.length - 1];
     const networkPreview = previewFromNetworkContent(last?.content);
+    const netPartyLine = formatChatPartyTypeLabel(resolveNetChatPartyType(item));
     const active = selectedNetId === item.id;
     const openNet = () => {
       setSelectedNetId(item.id);
@@ -2316,6 +2639,7 @@ export function ChatScreen() {
           identity={partnerAvatar}
           title={item.partnerName}
           time={item.lastActivity}
+          partyLine={netPartyLine}
           preview={networkPreview.text}
           previewKind={networkPreview.kind === "data" || networkPreview.kind === "html" ? "system" : networkPreview.kind}
           active={active}
@@ -2331,6 +2655,7 @@ export function ChatScreen() {
           identity={partnerAvatar}
           title={item.partnerName}
           time={item.lastActivity}
+          partyLine={netPartyLine}
           preview={networkPreview.text}
           previewKind={networkPreview.kind}
           previewImageUrl={networkPreview.imageUrl}
@@ -2354,6 +2679,11 @@ export function ChatScreen() {
             </Text>
             <Text style={[s.chatTime, active && s.chatTimeActive]}>{item.lastActivity}</Text>
           </View>
+          {netPartyLine ? (
+            <Text style={[s.chatPartyLabel, active && s.chatPartyLabelActive]} numberOfLines={1}>
+              {netPartyLine}
+            </Text>
+          ) : null}
           <Text style={[s.chatSub, active && s.chatSubActive]} numberOfLines={1}>
             {last?.content ?? ""}
           </Text>
@@ -2361,7 +2691,14 @@ export function ChatScreen() {
         {item.unreadCount > 0 && !active && <Badge count={item.unreadCount} />}
       </TouchableOpacity>
     );
-  }, [selectedNetId, markNetRead, openDetail, isMobileChatUi, isDesktop]);
+  }, [
+    selectedNetId,
+    markNetRead,
+    openDetail,
+    isMobileChatUi,
+    isDesktop,
+    resolveNetChatPartyType,
+  ]);
 
   // ── Panels ───────────────────────────────────────────────────────────────────
 
@@ -2397,6 +2734,86 @@ export function ChatScreen() {
       void openCompose();
     };
 
+    const slackInboxToolbar = isMobileChatUi ? (
+      <ChatSlackInboxToolbar
+        peopleItems={slackPeopleItems}
+        selectedPeopleId={
+          activeTab === "network"
+            ? (focusedNetPartnerId ?? selectedNet?.partnerId ?? null)
+            : focusedTripPartyKey
+        }
+        peopleSectionLabel={
+          activeTab === "network"
+            ? "Partners"
+            : activeTab === "indent"
+              ? "Integrated"
+              : "On trip"
+        }
+        networkStoryStrip={
+          activeTab === "network" ? (
+            <View style={s.chatStoryInlineWrap}>
+              <StoryReel
+                posts={integratedNetworkStories}
+                orgId={currentOrgId || undefined}
+                orgName={currentOrganization?.name ?? undefined}
+                onCreatePost={() => router.push("/(modals)/create-post")}
+              />
+              {storiesLoading && integratedNetworkStories.length === 0 ? (
+                <View style={s.chatStoryLoadingRow}>
+                  <LoadingIndicator size="small" color={CHAT_ACCENT} />
+                  <Text style={s.chatStoryLoadingText}>Syncing stories…</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : undefined
+        }
+        onCompose={slackFabOnPress}
+        filterChips={slackFilterChips}
+        showSearch={isTripStreamTab(activeTab) || activeTab === "network"}
+        searchValue={isTripStreamTab(activeTab) ? tripSidebarSearch : netSidebarSearch}
+        onSearchChange={
+          isTripStreamTab(activeTab) ? setTripSidebarSearch : setNetSidebarSearch
+        }
+        onSearchClear={() => {
+          if (isTripStreamTab(activeTab)) setTripSidebarSearch("");
+          else setNetSidebarSearch("");
+        }}
+        searchPlaceholder={
+          isTripStreamTab(activeTab)
+            ? "Search trips, routes…"
+            : "Search direct messages…"
+        }
+        searchInputRef={
+          isTripStreamTab(activeTab) ? tripSearchInputRef : netSearchInputRef
+        }
+      />
+    ) : null;
+
+    const desktopPeopleStrip =
+      isDesktop && (slackPeopleItems.length > 0 || activeTab === "network") ? (
+        <View style={deskSt.sidebarPeopleStrip}>
+          <ChatSlackPeopleStrip
+            items={slackPeopleItems}
+            selectedId={
+              activeTab === "network"
+                ? (focusedNetPartnerId ?? selectedNet?.partnerId ?? null)
+                : focusedTripPartyKey
+            }
+            sectionLabel={
+              activeTab === "network"
+                ? "Partners"
+                : activeTab === "indent"
+                  ? "Integrated"
+                  : "On trip"
+            }
+            onCompose={() => {
+              if (activeTab === "network") setShowNetCompose(true);
+              else void openCompose();
+            }}
+          />
+        </View>
+      ) : null;
+
     return (
       <View style={[s.listPanel, isMobileChatUi && s.listPanelMobile]}>
         {isMobileChatUi ? (
@@ -2414,63 +2831,14 @@ export function ChatScreen() {
               profileAvatarSeed={profile?.avatar_seed}
               profileOrgLogoUrl={currentOrganization?.logo_url}
             />
-            <ChatSlackInboxToolbar
-              peopleItems={slackPeopleItems}
-              selectedPeopleId={
-                activeTab === "network"
-                  ? (selectedNet?.partnerId ?? null)
-                  : (selectedConvId ?? null)
-              }
-              peopleSectionLabel={
-                activeTab === "network"
-                  ? "Partners"
-                  : activeTab === "indent"
-                    ? "Integrated"
-                    : "On trip"
-              }
-              networkStoryStrip={
-                activeTab === "network" ? (
-                  <View style={s.chatStoryInlineWrap}>
-                    <StoryReel
-                      posts={integratedNetworkStories}
-                      orgId={currentOrgId || undefined}
-                      orgName={currentOrganization?.name ?? undefined}
-                      onCreatePost={() => router.push("/(modals)/create-post")}
-                    />
-                    {storiesLoading && integratedNetworkStories.length === 0 ? (
-                      <View style={s.chatStoryLoadingRow}>
-                        <LoadingIndicator size="small" color={CHAT_ACCENT} />
-                        <Text style={s.chatStoryLoadingText}>Syncing stories…</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : undefined
-              }
-              onCompose={slackFabOnPress}
-              filterChips={slackFilterChips}
-              showSearch={isTripStreamTab(activeTab) || activeTab === "network"}
-              searchValue={isTripStreamTab(activeTab) ? tripSidebarSearch : netSidebarSearch}
-              onSearchChange={
-                isTripStreamTab(activeTab) ? setTripSidebarSearch : setNetSidebarSearch
-              }
-              onSearchClear={() => {
-                if (isTripStreamTab(activeTab)) setTripSidebarSearch("");
-                else setNetSidebarSearch("");
-              }}
-              searchPlaceholder={
-                isTripStreamTab(activeTab)
-                  ? "Search trips, routes…"
-                  : "Search direct messages…"
-              }
-              searchInputRef={
-                isTripStreamTab(activeTab) ? tripSearchInputRef : netSearchInputRef
-              }
-            />
           </>
         ) : isDesktop ? (
           <>
           <ChatSlackDesktopSidebarChrome
             workspaceName={currentOrganization?.name ?? "Pulse Chat"}
+            organizationId={currentOrganization?.id ?? null}
+            organizationLogoUrl={currentOrganization?.logo_url ?? null}
+            organizationOwnerAvatarSeed={profile?.avatar_seed ?? null}
             searchValue={activeTab === "network" ? netSidebarSearch : tripSidebarSearch}
             onSearchChange={activeTab === "network" ? setNetSidebarSearch : setTripSidebarSearch}
             onClearSearch={() => {
@@ -2485,29 +2853,6 @@ export function ChatScreen() {
               router.canGoBack() ? router.back() : router.replace(ROUTES.TABS.TRIPS)
             }
           />
-          {(slackPeopleItems.length > 0 || activeTab === "network") ? (
-            <View style={deskSt.sidebarPeopleStrip}>
-              <ChatSlackPeopleStrip
-                items={slackPeopleItems}
-                selectedId={
-                  activeTab === "network"
-                    ? (selectedNet?.partnerId ?? null)
-                    : (selectedConvId ?? null)
-                }
-                sectionLabel={
-                  activeTab === "network"
-                    ? "Partners"
-                    : activeTab === "indent"
-                      ? "Integrated"
-                      : "On trip"
-                }
-                onCompose={() => {
-                  if (activeTab === "network") setShowNetCompose(true);
-                  else void openCompose();
-                }}
-              />
-            </View>
-          ) : null}
           </>
         ) : (
           <>
@@ -2721,11 +3066,13 @@ export function ChatScreen() {
             </View>
           ) : isMobileChatUi ? (
             <FlatList
+              ref={tripInboxListRef}
               style={slackSt.listScroll}
-              data={slackFilteredTripConversations}
+              data={mobileTripInboxRows}
               keyExtractor={(i) => i.id}
-              renderItem={renderConvItem}
+              renderItem={renderTripInboxRow}
               {...SLACK_CHAT_LIST_PROPS}
+              ListHeaderComponent={slackInboxToolbar}
               ListEmptyComponent={
                 <EmptyList
                   label={
@@ -2741,7 +3088,11 @@ export function ChatScreen() {
                   onAction={tripChatScope === "active" ? openCompose : undefined}
                 />
               }
-              ItemSeparatorComponent={isMobileChatUi ? ChatSlackListSeparator : undefined}
+              ItemSeparatorComponent={({ leadingItem }) =>
+                leadingItem?.kind === "conversation" ? (
+                  <ChatSlackListSeparator />
+                ) : null
+              }
               contentContainerStyle={{
                 paddingBottom: isMobileChatUi ? slackListBottomPad : 12,
               }}
@@ -2757,6 +3108,7 @@ export function ChatScreen() {
               scrollEventThrottle={16}
               onScroll={onTripStreamListScroll}
             >
+              {desktopPeopleStrip}
               <View style={deskSt.sidebarCategoryWrap}>
                 <TouchableOpacity
                   style={deskSt.sidebarCategoryHeader}
@@ -3136,6 +3488,7 @@ export function ChatScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
+              {desktopPeopleStrip}
               <View style={deskSt.sidebarCategoryWrap}>
                 <TouchableOpacity
                   style={deskSt.sidebarCategoryHeader}
@@ -3185,7 +3538,7 @@ export function ChatScreen() {
           ) : (
             <FlatList
               style={isMobileChatUi ? slackSt.listScroll : isDesktop ? deskSt.listScroll : undefined}
-              data={isMobileChatUi ? slackFilteredNetChats : sortedNetChats}
+              data={isMobileChatUi ? netChatsForInbox : sortedNetChats}
               keyExtractor={(i) => i.id}
               renderItem={renderNetItem}
               {...(isMobileChatUi ? SLACK_CHAT_LIST_PROPS : isDesktop ? {
@@ -3203,6 +3556,7 @@ export function ChatScreen() {
                 />
               }
               ItemSeparatorComponent={isMobileChatUi ? ChatSlackListSeparator : undefined}
+              ListHeaderComponent={isMobileChatUi ? slackInboxToolbar : undefined}
               contentContainerStyle={
                 isMobileChatUi
                   ? { paddingBottom: slackListBottomPad }
@@ -3296,11 +3650,16 @@ export function ChatScreen() {
                     <View style={cm.netPartnerIdentityWrap}>
                       <View style={cm.netPartnerAvatarWrap}>
                         <ChatPartyAvatar
-                          identity={{ displayName: p.name, entityType: "supplier" }}
+                          identity={{ displayName: p.name, entityType: p.party_type }}
                           size={30}
                         />
                       </View>
-                      <Text style={cm.netPartnerName} numberOfLines={1}>{p.name}</Text>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={cm.netPartnerName} numberOfLines={1}>{p.name}</Text>
+                        <Text style={cm.netPartnerPartyType} numberOfLines={1}>
+                          {formatChatPartyTypeLabel(p.party_type)}
+                        </Text>
+                      </View>
                     </View>
                     <Text style={cm.netPartnerAction} numberOfLines={1}>Open chat</Text>
                   </View>
@@ -3327,11 +3686,16 @@ export function ChatScreen() {
                         <View style={cm.netPartnerIdentityWrap}>
                           <View style={cm.netPartnerAvatarWrap}>
                             <ChatPartyAvatar
-                              identity={{ displayName: p.name, entityType: "supplier" }}
+                              identity={{ displayName: p.name, entityType: p.party_type }}
                               size={30}
                             />
                           </View>
-                          <Text style={cm.netPartnerName} numberOfLines={1}>{p.name}</Text>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={cm.netPartnerName} numberOfLines={1}>{p.name}</Text>
+                            <Text style={cm.netPartnerPartyType} numberOfLines={1}>
+                              {formatChatPartyTypeLabel(p.party_type)}
+                            </Text>
+                          </View>
                         </View>
                         {initiating ? (
                           <LoadingIndicator size="small" color={CHAT_ACCENT} />
@@ -3673,6 +4037,25 @@ export function ChatScreen() {
         setShowScripts={setShowScripts}
         onSend={handleSend}
         onOpenDocShare={() => setShowDocShare(true)}
+        showDocShare={showDocShare}
+        onCloseDocShare={() => setShowDocShare(false)}
+        onDocShare={handleDocShare}
+        docHubTripId={selectedConv?.trip_id ?? null}
+        docHubVehicleId={tripHubAssets?.vehicle_id ?? null}
+        docHubDriverId={
+          tripHubAssets?.driver_id ??
+          selectedConv?.driver_id ??
+          null
+        }
+        docHubOrgId={
+          tripHubAssets?.organization_id ??
+          selectedConv?.organization_id ??
+          organizationId ??
+          null
+        }
+        docHubUserId={
+          (profile as { uid?: string | null } | null)?.uid ?? null
+        }
         isDesktop={isDesktop}
         inputOverlayMaxWidth={inputOverlayMaxWidth}
         onCloseDetail={closeDetail}
@@ -3688,6 +4071,7 @@ export function ChatScreen() {
     ) : (
       <NetworkDetailPanel
         selectedNet={selectedNet}
+        resolveNetPartyType={resolveNetChatPartyType}
         messagesRef={messagesRef}
         messageInput={messageInput}
         setMessageInput={setMessageInput}
@@ -3740,13 +4124,6 @@ export function ChatScreen() {
         <NetworkComposeModal />
         <TripFilterModal />
         <StoriesModal />
-        <DocumentShareSheet
-          visible={showDocShare}
-          vehicleId={selectedConv?.trip_id ? null : null}
-          driverId={null}
-          onClose={() => setShowDocShare(false)}
-          onShare={handleDocShare}
-        />
         {Platform.OS === "web" && isDesktop && ledgerWebToast ? (
           <View style={[s.ledgerWebToast, pe("none")]}>
             <Text style={s.ledgerWebToastText}>Added to Ledger</Text>
@@ -3797,13 +4174,6 @@ export function ChatScreen() {
       <NetworkComposeModal />
       <TripFilterModal />
       <StoriesModal />
-      <DocumentShareSheet
-        visible={showDocShare}
-        vehicleId={null}
-        driverId={null}
-        onClose={() => setShowDocShare(false)}
-        onShare={handleDocShare}
-      />
       {tripFeedbackOverlay}
     </View>
   ) : null;
@@ -3840,13 +4210,6 @@ export function ChatScreen() {
       <NetworkComposeModal />
       <TripFilterModal />
       <StoriesModal />
-      <DocumentShareSheet
-        visible={showDocShare}
-        vehicleId={null}
-        driverId={null}
-        onClose={() => setShowDocShare(false)}
-        onShare={handleDocShare}
-      />
       {tripFeedbackOverlay}
     </LinearGradient>
   );
@@ -5053,6 +5416,7 @@ const s = StyleSheet.create({
 
   detailPanel: { flex: 1, minHeight: 0, backgroundColor: "transparent", overflow: "hidden" },
   detailTransitionShell: { flex: 1, minHeight: 0, width: "100%" },
+  detailDocHubShell: { flex: 1, minHeight: 0, width: "100%", position: "relative" },
   conversationBody: { flex: 1, minHeight: 0 },
   chatMessagesFlex: { flex: 1, minHeight: 0 },
   chatInputDock: {
@@ -5267,7 +5631,7 @@ const s = StyleSheet.create({
     maxWidth: "100%",
     zIndex: 50,
   },
-  emojiBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 10 },
+  emojiBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 12 },
 
   scriptPopup: {
     position: "absolute",
@@ -5601,6 +5965,14 @@ const cm = StyleSheet.create({
     borderRadius: 999,
     overflow: "hidden",
   },
+  netPartnerPartyType: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#94a3b8",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginTop: 1,
+  },
   netPartnerName: {
     flex: 1,
     minWidth: 0,
@@ -5902,7 +6274,7 @@ function ChatConversationLayout({
     <KeyboardAvoidingView
       style={s.detailPanel}
       behavior="padding"
-      keyboardVerticalOffset={0}
+      keyboardVerticalOffset={insets.top}
     >
       {conversationBody}
     </KeyboardAvoidingView>
@@ -6366,7 +6738,7 @@ function ChatInputBar({
       {showEmoji ? (
         <View style={[s.emojiPopup, { width: Math.min(240, overlayW) }]}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 2 }}>
-            {QUICK_EMOJIS.map((e) => (
+            {CHAT_DESKTOP_COMPOSER_EMOJIS.map((e) => (
               <TouchableOpacity
                 key={e}
                 style={s.emojiBtn}
@@ -6376,7 +6748,7 @@ function ChatInputBar({
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={{ fontSize: 22 }}>{e}</Text>
+                <ChatAnimatedEmoji emoji={e} size="lg" />
               </TouchableOpacity>
             ))}
           </View>
@@ -6534,6 +6906,14 @@ function TripConversationDetailPanel({
   setShowScripts,
   onSend,
   onOpenDocShare,
+  showDocShare,
+  onCloseDocShare,
+  onDocShare,
+  docHubTripId,
+  docHubVehicleId,
+  docHubDriverId,
+  docHubOrgId,
+  docHubUserId,
   isDesktop,
   inputOverlayMaxWidth,
   onCloseDetail,
@@ -6559,6 +6939,14 @@ function TripConversationDetailPanel({
   setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
   onSend: () => void;
   onOpenDocShare: () => void;
+  showDocShare: boolean;
+  onCloseDocShare: () => void;
+  onDocShare: (doc: DocumentSharePayload) => void;
+  docHubTripId: string | null;
+  docHubVehicleId: string | null;
+  docHubDriverId: string | null;
+  docHubOrgId: string | null;
+  docHubUserId: string | null;
   isDesktop: boolean;
   inputOverlayMaxWidth: number;
   onCloseDetail: () => void;
@@ -6587,6 +6975,14 @@ function TripConversationDetailPanel({
       setShowScripts={setShowScripts}
       onSend={onSend}
       onOpenDocShare={onOpenDocShare}
+      showDocShare={showDocShare}
+      onCloseDocShare={onCloseDocShare}
+      onDocShare={onDocShare}
+      docHubTripId={docHubTripId}
+      docHubVehicleId={docHubVehicleId}
+      docHubDriverId={docHubDriverId}
+      docHubOrgId={docHubOrgId}
+      docHubUserId={docHubUserId}
       isDesktop={isDesktop}
       inputOverlayMaxWidth={inputOverlayMaxWidth}
       onCloseDetail={onCloseDetail}
@@ -6616,6 +7012,14 @@ function TripConversationDetailLoaded({
   setShowScripts,
   onSend,
   onOpenDocShare,
+  showDocShare,
+  onCloseDocShare,
+  onDocShare,
+  docHubTripId,
+  docHubVehicleId,
+  docHubDriverId,
+  docHubOrgId,
+  docHubUserId,
   isDesktop,
   inputOverlayMaxWidth,
   onCloseDetail,
@@ -6641,6 +7045,14 @@ function TripConversationDetailLoaded({
   setShowScripts: React.Dispatch<React.SetStateAction<boolean>>;
   onSend: () => void;
   onOpenDocShare: () => void;
+  showDocShare: boolean;
+  onCloseDocShare: () => void;
+  onDocShare: (doc: DocumentSharePayload) => void;
+  docHubTripId: string | null;
+  docHubVehicleId: string | null;
+  docHubDriverId: string | null;
+  docHubOrgId: string | null;
+  docHubUserId: string | null;
   isDesktop: boolean;
   inputOverlayMaxWidth: number;
   replyContext?: ReplyPreviewData | null;
@@ -6948,6 +7360,22 @@ function TripConversationDetailLoaded({
     [displayMessages, liveConv.party_type, isMessageFromSelf],
   );
 
+  const mediaBurstIndex = useMemo(
+    () =>
+      buildChatMediaBurstIndex(displayMessages, {
+        senderKey: (m) =>
+          isMessageFromSelf(m)
+            ? "__self__"
+            : `${m.sender_role ?? ""}:${m.sender_id ?? ""}:${m.sender_name ?? ""}`,
+      }),
+    [displayMessages, isMessageFromSelf],
+  );
+
+  const threadStreamFingerprint = useMemo(() => {
+    const last = displayMessages[displayMessages.length - 1];
+    return `${liveConv.id}:${displayMessages.length}:${last?.id ?? ""}`;
+  }, [liveConv.id, displayMessages]);
+
   // ── Slack-style: emoji reactions ─────────────────────────────────────
   const handleToggleReaction = useCallback(
     async (messageId: string, emoji: string) => {
@@ -7004,12 +7432,15 @@ function TripConversationDetailLoaded({
         unreadInserted = true;
       }
 
+      if (mediaBurstIndex.skipIds.has(m.id)) continue;
+
       items.push(m);
     }
     return items;
-  }, [displayMessages, isMessageFromSelf]);
+  }, [displayMessages, isMessageFromSelf, mediaBurstIndex.skipIds]);
 
   const scrollToEndCooldownRef = useRef(0);
+  const prevThreadTailIdRef = useRef<string | null>(null);
   const onMessagesContentSizeChange = useCallback(() => {
     if (displayMessages.length === 0) return;
     const t = Date.now();
@@ -7017,6 +7448,21 @@ function TripConversationDetailLoaded({
     scrollToEndCooldownRef.current = t;
     messagesRef.current?.scrollToEnd({ animated: false });
   }, [displayMessages.length]);
+
+  const threadTailMessageId =
+    displayMessages[displayMessages.length - 1]?.id ?? null;
+
+  useEffect(() => {
+    const prevTail = prevThreadTailIdRef.current;
+    prevThreadTailIdRef.current = threadTailMessageId;
+    if (!threadTailMessageId || threadTailMessageId === prevTail || prevTail == null) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      messagesRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [threadTailMessageId]);
 
   const messageListLayout = useMemo(
     () => buildTripMessageListLayoutMeta(displayMessages, liveConv.party_type),
@@ -7377,6 +7823,74 @@ function TripConversationDetailLoaded({
       m.created_at,
     );
 
+    const burstLeader = mediaBurstIndex.leaders.get(m.id);
+    if (burstLeader) {
+      const own = isMessageFromSelf(m);
+      const peerLabel =
+        m.sender_name?.trim() ||
+        (m.sender_role === "dispatcher"
+          ? "Dispatcher"
+          : m.sender_role === "client"
+            ? "Client"
+            : m.sender_role === "supplier"
+              ? "Supplier"
+              : m.sender_role === "driver"
+                ? "Driver"
+                : partyLabelReadable(liveConv.party_type));
+      let onAvatarPress: (() => void) | undefined;
+      if (!own) {
+        if (m.sender_role === "client" && clientId) {
+          onAvatarPress = () => router.push(`/public-profile/client/${clientId}`);
+        } else if (m.sender_role === "supplier" && supplierId) {
+          onAvatarPress = () => router.push(`/public-profile/supplier/${supplierId}`);
+        } else if (m.sender_role === "driver" && driverId) {
+          onAvatarPress = () => router.push(`/public-profile/driver/${driverId}`);
+        }
+      }
+      const peerAvatar = own
+        ? null
+        : resolveTripMessagePeerAvatar({
+            message: m,
+            conversationPartyType: liveConv.party_type,
+            composeTrip: tripCompose,
+            brandingMap: linkedOrgBranding,
+            fallbackName: peerLabel,
+            driverId,
+            clientId,
+            supplierId,
+          });
+      const tailMessage = burstLeader.messages[burstLeader.messages.length - 1] ?? m;
+      const msgReactions = (tailMessage as { reactions?: ChatReactions | null }).reactions;
+      const msgReplyPreview = (tailMessage as { reply_to_preview?: ReplyPreviewData | null })
+        .reply_to_preview;
+      const burstIsNew = burstLeader.messages.some(
+        (msg) => Date.parse(msg.created_at) > mountedAtMs,
+      );
+
+      return (
+        <ChatMediaBurstRow
+          burst={burstLeader}
+          senderName={own ? selfName : peerLabel}
+          timestamp={m.created_at}
+          avatar={
+            own
+              ? { displayName: selfName, entityType: "client" }
+              : peerAvatar ?? { displayName: peerLabel, entityType: "client" }
+          }
+          isOwn={own}
+          userName={selfName}
+          onAvatarPress={onAvatarPress}
+          variant={isDesktop ? "desktop" : "mobile"}
+          group={slackTripGroupMeta.get(m.id)}
+          reactions={msgReactions}
+          selfUserId={selfUid}
+          onReact={(emoji) => handleToggleReaction(tailMessage.id, emoji)}
+          replyPreview={msgReplyPreview}
+          isNew={burstIsNew}
+        />
+      );
+    }
+
     if (m.message_type === "tracking") {
       const trackLoc = parseMessageLocationData(m);
       if (trackLoc) {
@@ -7390,6 +7904,10 @@ function TripConversationDetailLoaded({
               dropLocation: liveConv.drop_location,
               status: liveConv.trip_status,
             }}
+            composeTrip={tripCompose}
+            conversationDriverId={
+              liveConv.driver_id ?? tripCompose?.driver_id ?? null
+            }
           />
         );
       }
@@ -7463,6 +7981,9 @@ function TripConversationDetailLoaded({
               status: liveConv.trip_status,
             }}
             composeTrip={tripCompose}
+            conversationDriverId={
+              liveConv.driver_id ?? tripCompose?.driver_id ?? null
+            }
           />
         );
       }
@@ -7509,7 +8030,7 @@ function TripConversationDetailLoaded({
             ? "Supplier"
             : m.sender_role === "driver"
               ? "Driver"
-              : "Partner");
+              : partyLabelReadable(liveConv.party_type));
     let onAvatarPress: (() => void) | undefined;
     if (!own) {
       if (m.sender_role === "client" && clientId) {
@@ -7528,6 +8049,9 @@ function TripConversationDetailLoaded({
           composeTrip: tripCompose,
           brandingMap: linkedOrgBranding,
           fallbackName: peerLabel,
+          driverId,
+          clientId,
+          supplierId,
         });
 
     const msgReactions = (m as any).reactions as ChatReactions | null | undefined;
@@ -7588,6 +8112,8 @@ function TripConversationDetailLoaded({
     locationPingRunInfo,
     tripCompose,
     linkedOrgBranding,
+    mediaBurstIndex.leaders,
+    selfName,
   ]);
 
   const indentShipperDisplayName = useMemo(() => {
@@ -7681,6 +8207,7 @@ function TripConversationDetailLoaded({
                 party_name: (tabConversation?.party_name ?? "").trim() || partyName,
                 client_id: tabConversation?.client_id ?? liveConv.client_id ?? null,
                 supplier_id: tabConversation?.supplier_id ?? liveConv.supplier_id ?? null,
+                driver_id: tabConversation?.driver_id ?? liveConv.driver_id ?? null,
               },
               tripCompose,
               linkedOrgBranding,
@@ -7788,17 +8315,11 @@ function TripConversationDetailLoaded({
     missionBarPartyTypes.find((tab) => tab.rowType === liveConv.party_type)?.displayType ??
     liveConv.party_type;
   const chatDetailPartyTypeLabel =
-    formatChatPartyName(partyLabelReadable(activeLaneDisplayType)) ?? chatDetailSubtitle;
-  const slackThreadAvatarSeed =
-    liveConv.messages.length > 0
-      ? (liveConv.messages[liveConv.messages.length - 1] as TripMessageRow).sender_avatar_seed ??
-        null
-      : null;
+    formatChatPartyTypeLabel(activeLaneDisplayType) ?? chatDetailSubtitle;
   const slackThreadAvatarResolved = resolveTripConversationAvatar(
     liveConv,
     tripCompose,
     linkedOrgBranding,
-    slackThreadAvatarSeed,
   );
   const selfDisplayName = formatChatPartyName(selfName) ?? "You";
   const useSelfThreadAvatar =
@@ -7813,6 +8334,7 @@ function TripConversationDetailLoaded({
     : slackThreadAvatarResolved;
 
   return (
+    <View style={s.detailDocHubShell}>
     <ChatConversationLayout
       isDesktop={isDesktop}
       header={
@@ -7848,7 +8370,7 @@ function TripConversationDetailLoaded({
         data={threadListItems as unknown as TripMessageRow[]}
         keyExtractor={(item) => ("id" in item ? (item as { id: string }).id : Math.random().toString())}
         renderItem={renderMessage as any}
-        extraData={liveConv}
+        extraData={threadStreamFingerprint}
         getItemLayout={isDesktop ? getMessageItemLayout : undefined}
         removeClippedSubviews
         windowSize={!isDesktop ? 7 : 9}
@@ -7945,11 +8467,23 @@ function TripConversationDetailLoaded({
         </>
       }
     />
+    <DocumentShareSheet
+      visible={showDocShare}
+      tripId={docHubTripId}
+      vehicleId={docHubVehicleId}
+      driverId={docHubDriverId}
+      orgId={docHubOrgId}
+      userId={docHubUserId}
+      onClose={onCloseDocShare}
+      onShare={onDocShare}
+    />
+    </View>
   );
 }
 
 function NetworkDetailPanel({
   selectedNet,
+  resolveNetPartyType,
   messagesRef,
   messageInput,
   setMessageInput,
@@ -7963,6 +8497,7 @@ function NetworkDetailPanel({
   onCloseDetail,
 }: {
   selectedNet: IntegratedChat | null;
+  resolveNetPartyType: (chat: IntegratedChat) => "client" | "supplier" | undefined;
   messagesRef: React.RefObject<FlatList | null>;
   messageInput: string;
   setMessageInput: React.Dispatch<React.SetStateAction<string>>;
@@ -8072,7 +8607,7 @@ function NetworkDetailPanel({
       header={
         <ChatDetailHeader
           title={selectedNet.partnerName}
-          subtitle={formatChatPartyName("PARTNER") ?? undefined}
+          subtitle={formatChatPartyTypeLabel(resolveNetPartyType(selectedNet)) ?? undefined}
           isDesktop={isDesktop}
           onCloseDetail={onCloseDetail}
           slackAvatarIdentity={slackThreadUi ? netThreadAvatar : undefined}

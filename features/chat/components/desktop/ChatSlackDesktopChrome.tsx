@@ -1,7 +1,14 @@
+import { OrgAvatar } from "@/components/Avatar";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
+import { ChatDriverSwapInboxPreview } from "@/features/chat/components/shared/ChatDriverSwapInboxPreview";
+import { ChatInboxImagePreviewStrip } from "@/features/chat/components/shared/ChatInboxImagePreviewStrip";
+import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
+import type { DriverSwapPair } from "@/features/chat/utils/chatAvatar.util";
+import { ChatSlackDocumentAttachmentCompact } from "@/features/chat/components/shared/ChatSlackDocumentAttachment";
+import type { ConversationImagePreview } from "@/features/chat/utils/conversationImagePreview.util";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronDown, PenLine, Search, Settings, X } from "lucide-react-native";
+import { ChevronDown, PenLine, Search, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -18,8 +25,13 @@ import {
   SLACK_DESKTOP,
 } from "./chatSlackDesktop.styles";
 
+const WORKSPACE_AVATAR_SIZE = 24;
+
 export function ChatSlackDesktopSidebarChrome({
   workspaceName,
+  organizationId,
+  organizationLogoUrl,
+  organizationOwnerAvatarSeed,
   searchValue,
   onSearchChange,
   onClearSearch,
@@ -27,6 +39,9 @@ export function ChatSlackDesktopSidebarChrome({
   onClose,
 }: {
   workspaceName: string;
+  organizationId?: string | null;
+  organizationLogoUrl?: string | null;
+  organizationOwnerAvatarSeed?: string | null;
   searchValue: string;
   onSearchChange: (v: string) => void;
   onClearSearch: () => void;
@@ -67,35 +82,45 @@ export function ChatSlackDesktopSidebarChrome({
       </View>
       <View style={st.sidebarHeader}>
         <View style={st.workspaceNameWrap}>
+          <OrgAvatar
+            orgId={organizationId ?? undefined}
+            orgName={workspaceName}
+            logoUrl={organizationLogoUrl}
+            ownerAvatarSeed={organizationOwnerAvatarSeed}
+            size={WORKSPACE_AVATAR_SIZE}
+            shape="rounded"
+            style={st.workspaceOrgAvatar}
+          />
           <Text style={st.workspaceName} numberOfLines={1}>
             {workspaceName}
           </Text>
           <ChevronDown size={14} color="#475569" strokeWidth={1.8} />
         </View>
-        <View style={st.headerActions}>
-          <TouchableOpacity style={st.headerIconBtn} hitSlop={8}>
-            <Settings size={16} color="#475569" strokeWidth={1.65} />
-          </TouchableOpacity>
-          {onCompose ? (
-            <TouchableOpacity style={st.headerIconBtn} onPress={onCompose} hitSlop={8}>
-              <PenLine size={16} color="#475569" strokeWidth={1.65} />
+        <View style={st.searchWrapInline}>
+          <Search size={14} color="#64748B" strokeWidth={1.7} />
+          <TextInput
+            style={st.searchInput}
+            value={searchValue}
+            onChangeText={onSearchChange}
+            placeholder="Search conversations"
+            placeholderTextColor="#64748B"
+            autoCapitalize="none"
+          />
+          {searchValue.length > 0 ? (
+            <TouchableOpacity onPress={onClearSearch} hitSlop={8}>
+              <X size={12} color="#64748B" />
             </TouchableOpacity>
           ) : null}
         </View>
-      </View>
-      <View style={st.searchWrap}>
-        <Search size={14} color="#64748B" strokeWidth={1.7} />
-        <TextInput
-          style={st.searchInput}
-          value={searchValue}
-          onChangeText={onSearchChange}
-          placeholder="Search conversations"
-          placeholderTextColor="#64748B"
-          autoCapitalize="none"
-        />
-        {searchValue.length > 0 ? (
-          <TouchableOpacity onPress={onClearSearch} hitSlop={8}>
-            <X size={12} color="#64748B" />
+        {onCompose ? (
+          <TouchableOpacity
+            style={st.headerIconBtn}
+            onPress={onCompose}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="New message"
+          >
+            <PenLine size={16} color="#475569" strokeWidth={1.65} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -108,8 +133,13 @@ export function ChatSlackDesktopSidebarRow({
   identity,
   title,
   preview,
+  partyLine,
   previewKind = "default",
   previewImageUrl,
+  previewImagePreviews,
+  previewDriverSwap,
+  documentExtension,
+  documentIsImage,
   time,
   active,
   onPress,
@@ -117,9 +147,14 @@ export function ChatSlackDesktopSidebarRow({
 }: {
   identity: ResolvedPartyAvatarIdentity;
   title: string;
+  partyLine?: string | null;
   preview?: string | null;
-  previewKind?: "default" | "system" | "image" | "document" | "data" | "html";
+  previewKind?: "default" | "system" | "image" | "document" | "data" | "html" | "driver_swap";
   previewImageUrl?: string | null;
+  previewImagePreviews?: ConversationImagePreview[];
+  previewDriverSwap?: DriverSwapPair | null;
+  documentExtension?: string | null;
+  documentIsImage?: boolean;
   time?: string;
   active?: boolean;
   onPress: () => void;
@@ -139,8 +174,6 @@ export function ChatSlackDesktopSidebarRow({
       ? "System Update"
       : previewKind === "image"
         ? "Image"
-        : previewKind === "document"
-          ? "Document"
       : previewKind === "data"
           ? "Data"
       : previewKind === "html"
@@ -149,8 +182,6 @@ export function ChatSlackDesktopSidebarRow({
   const badgeStyle =
     previewKind === "image"
       ? st.sidebarPreviewBadgeImage
-      : previewKind === "document"
-        ? st.sidebarPreviewBadgeDocument
     : previewKind === "data"
         ? st.sidebarPreviewBadgeData
     : previewKind === "html"
@@ -159,13 +190,15 @@ export function ChatSlackDesktopSidebarRow({
   const badgeTextStyle =
     previewKind === "image"
       ? st.sidebarPreviewBadgeTextImage
-      : previewKind === "document"
-        ? st.sidebarPreviewBadgeTextDocument
     : previewKind === "data"
         ? st.sidebarPreviewBadgeTextData
     : previewKind === "html"
         ? st.sidebarPreviewBadgeTextHtml
         : st.sidebarPreviewBadgeTextSystem;
+  const hasImageStrip =
+    Boolean(previewImagePreviews && previewImagePreviews.length > 0);
+  const hasDriverSwapPreview =
+    previewKind === "driver_swap" && Boolean(previewDriverSwap);
   return (
     <Animated.View
       style={{
@@ -183,6 +216,7 @@ export function ChatSlackDesktopSidebarRow({
         onPress={onPress}
         style={({ pressed, hovered }) => [
           st.sidebarRow,
+          (hasImageStrip || hasDriverSwapPreview) && st.sidebarRowWithMedia,
           active && st.sidebarRowActive,
           hovered && !active && st.sidebarRowHover,
           hovered && active && st.sidebarRowActiveHover,
@@ -205,8 +239,41 @@ export function ChatSlackDesktopSidebarRow({
               </Text>
             ) : null}
           </View>
-          {preview ? (
-            previewKind !== "default" ? (
+          {partyLine ? (
+            <Text style={st.sidebarRowPartyLine} numberOfLines={1}>
+              {partyLine}
+            </Text>
+          ) : null}
+          {hasDriverSwapPreview ? (
+            <ChatDriverSwapInboxPreview
+              swap={previewDriverSwap!}
+              text={preview ?? ""}
+              variant="desktop"
+            />
+          ) : hasImageStrip ? (
+            <>
+              <ChatInboxImagePreviewStrip
+                items={previewImagePreviews!}
+                variant="desktop"
+              />
+              {preview ? (
+                <ChatListPreviewText
+                  text={preview}
+                  style={[st.sidebarRowPreview, st.sidebarRowPreviewBelowMedia]}
+                  numberOfLines={3}
+                />
+              ) : null}
+            </>
+          ) : preview ? (
+            previewKind === "document" ? (
+              <ChatSlackDocumentAttachmentCompact
+                display={{
+                  documentName: preview,
+                  extension: documentExtension ?? "",
+                  isImage: documentIsImage ?? false,
+                }}
+              />
+            ) : previewKind !== "default" ? (
               <View style={st.sidebarSystemPreviewWrap}>
                 <View style={st.sidebarPreviewRichRow}>
                   {previewKind === "image" && previewImageUrl ? (
@@ -218,16 +285,20 @@ export function ChatSlackDesktopSidebarRow({
                     <Text style={[st.sidebarPreviewBadge, badgeStyle, badgeTextStyle]}>
                       {badgeLabel}
                     </Text>
-                    <Text style={st.sidebarRowPreview} numberOfLines={2}>
-                      {preview}
-                    </Text>
+                    <ChatListPreviewText
+                      text={preview}
+                      style={st.sidebarRowPreview}
+                      numberOfLines={2}
+                    />
                   </View>
                 </View>
               </View>
             ) : (
-              <Text style={st.sidebarRowPreview} numberOfLines={2}>
-                {preview}
-              </Text>
+              <ChatListPreviewText
+                text={preview}
+                style={st.sidebarRowPreview}
+                numberOfLines={2}
+              />
             )
           ) : null}
         </View>

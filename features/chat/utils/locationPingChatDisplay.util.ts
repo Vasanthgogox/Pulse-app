@@ -113,6 +113,112 @@ export function buildLocationPingTitle(
   return simulated ? `${base} (simulated)` : `${base}.`;
 }
 
+/** Split reverse-geocode label into area/road vs city/state for card sub-lines. */
+export function resolveLocationPlaceAndCity(
+  location: SystemLogLocationData | null,
+  messageContent?: string | null,
+  tripHint?: LocationPingTripHint,
+): { place: string | null; city: string } {
+  const city = resolveLocationCityLabel(location, messageContent, tripHint);
+  const addr = (location?.address_name ?? "").trim();
+  if (!addr) return { place: null, city };
+
+  const parts = addr
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const cityFromAddr = extractCityFromLocationLabel(addr);
+
+  if (parts.length >= 3) {
+    const stateOrCity = cityFromAddr || city;
+    const stateIdx = parts.findIndex(
+      (p) => p.toLowerCase() === stateOrCity.toLowerCase(),
+    );
+    if (stateIdx > 0) {
+      return {
+        place: parts.slice(0, stateIdx).join(", "),
+        city: parts[stateIdx] || city,
+      };
+    }
+    const placeParts = parts.slice(0, -2);
+    return {
+      place: placeParts.length > 0 ? placeParts.join(", ") : parts[0],
+      city: cityFromAddr || city,
+    };
+  }
+
+  if (parts.length === 2) {
+    return { place: parts[0], city: parts[1] || city };
+  }
+
+  if (addr.toLowerCase() !== city.toLowerCase()) {
+    return { place: addr, city };
+  }
+
+  return { place: null, city };
+}
+
+/** Short clock label for location ping cards (IST). */
+export function formatLocationCaptureClock(
+  recordedAt: string | null | undefined,
+  messageCreatedAt: string,
+): string {
+  const raw = (recordedAt ?? "").trim() || messageCreatedAt;
+  try {
+    return new Date(raw).toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return raw.slice(11, 16) || raw.slice(0, 5);
+  }
+}
+
+export function buildLocationPingCardCopy(params: {
+  location: SystemLogLocationData | null;
+  message: Pick<TripMessageRow, "content" | "created_at">;
+  simulated?: boolean;
+  consolidatedCount?: number;
+  tripHint?: LocationPingTripHint;
+}): {
+  title: string;
+  subLine: string;
+  captureClock: string;
+} {
+  const { place, city } = resolveLocationPlaceAndCity(
+    params.location,
+    params.message.content,
+    params.tripHint,
+  );
+  const captureClock = formatLocationCaptureClock(
+    params.location?.recorded_at,
+    params.message.created_at,
+  );
+  const simulated = params.simulated === true;
+  const consolidatedCount = params.consolidatedCount;
+
+  let title = "Driver location update";
+  if (typeof consolidatedCount === "number" && consolidatedCount > 1) {
+    title = `${consolidatedCount} driver location updates`;
+  } else if (simulated) {
+    title = "Driver location update (simulated)";
+  }
+
+  let subLine = city;
+  if (place && place.toLowerCase() !== city.toLowerCase()) {
+    subLine = `${place} · ${city}`;
+  } else if (
+    typeof consolidatedCount === "number" &&
+    consolidatedCount > 1
+  ) {
+    subLine = `Last near ${city}`;
+  }
+
+  return { title, subLine, captureClock };
+}
+
 export function buildLocationPingPreviewText(
   cityLabel: string,
   simulated: boolean,

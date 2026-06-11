@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Truck,
   MapPin,
+  Navigation,
   XCircle,
   Clock,
   Send,
@@ -36,10 +37,14 @@ import {
 } from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
 import {
+  resolveDriverSwapAvatars,
   resolveSystemUpdateDriverAvatar,
+  type DriverSwapPair,
   type SystemUpdateDriverContext,
 } from "../utils/chatAvatar.util";
 import { ChatPartyAvatar } from "./ChatPartyAvatar";
+import { ChatDriverSwapAvatar } from "./shared/ChatDriverSwapAvatar";
+import { ChatDriverSwapPreviewCopy } from "./shared/ChatDriverSwapPreviewCopy";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import {
@@ -815,6 +820,26 @@ const s = StyleSheet.create({
     elevation: 1,
     overflow: "visible",
   },
+  alertAvatarPingRing: {
+    position: "absolute",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+  },
+  alertAvatarEventBadge: {
+    position: "absolute",
+    left: -3,
+    bottom: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: Theme.cardWhite,
+    zIndex: 2,
+  },
   alertAvatar: {
     width: 28,
     height: 28,
@@ -852,11 +877,62 @@ const s = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 2,
   },
+  alertSimpleBodyLocation: {
+    gap: 0,
+    paddingVertical: 1,
+  },
+  alertCardLocation: {
+    paddingVertical: 8,
+  },
+  alertCardDriverSwap: {
+    backgroundColor: "#FAFBFF",
+    borderColor: "rgba(91, 94, 244, 0.14)",
+  },
   alertSimpleMessage: {
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "400",
     color: CHAT_TEXT_SECONDARY,
+  },
+  alertLocationTitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    color: CHAT_TEXT_PRIMARY,
+    letterSpacing: -0.15,
+  },
+  alertLocationMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+    minWidth: 0,
+  },
+  alertLocationPlace: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10.5,
+    lineHeight: 13,
+    fontWeight: "400",
+    color: CHAT_TEXT_SECONDARY,
+    letterSpacing: -0.05,
+  },
+  alertLocationPlaceSpacer: {
+    flex: 1,
+    minWidth: 0,
+  },
+  alertLocationTime: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    flexShrink: 0,
+  },
+  alertLocationTimeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "500",
+    color: CHAT_TEXT_MUTED,
+    letterSpacing: -0.05,
   },
   alertHeaderRow: {
     flexDirection: "row",
@@ -961,86 +1037,200 @@ const s = StyleSheet.create({
   },
 });
 
-export interface TripProgressEventCardProps {
-  avatarSeed: string;
-  /** When set, renders driver/party photo instead of initials from `avatarSeed`. */
-  avatarIdentity?: ResolvedPartyAvatarIdentity | null;
-  /** @deprecated Status tint no longer applied to avatar; kept for call-site compat. */
-  avatarDotColor?: string;
-  kicker?: string;
-  title: string;
-  metaLine: string;
-  /** @deprecated Sub-line removed from alert layout; kept for call-site compat. */
-  subLine?: string | null;
-  rightPrimary: string;
-  rightPrimaryColor: string;
-  time: string;
-  /** @deprecated Route ribbon removed; kept for call-site compat. */
-  routeContext?: string | null;
-  /** @deprecated Single alert layout on all breakpoints. */
-  isMobile?: boolean;
-}
+export type TripProgressEventKind = "location" | "tracking" | "status" | "default";
 
-/** System update card — compact, aligned with update stream UI. */
-export function TripProgressEventCard({
-  avatarSeed,
-  avatarIdentity = null,
-  avatarDotColor,
-  rightPrimaryColor,
-  title,
-}: TripProgressEventCardProps) {
+type StatusEventVisual = {
+  Icon: StatusIconComponent;
+  color: string;
+  bg: string;
+};
+
+function TripEventAvatarCluster({
+  identity,
+  avatarSeedFallback,
+  eventKind = "default",
+  statusVisual = null,
+  simulated = false,
+  accentColor,
+}: {
+  identity: ResolvedPartyAvatarIdentity | null;
+  avatarSeedFallback: string;
+  eventKind?: TripProgressEventKind;
+  statusVisual?: StatusEventVisual | null;
+  simulated?: boolean;
+  accentColor: string;
+}) {
   const avatarSize = 28;
-  const entrance = useRef(new Animated.Value(0)).current;
   const dotPulse = useRef(new Animated.Value(0)).current;
-  const dotColor = avatarDotColor || rightPrimaryColor || CHAT_ACCENT;
-  const resolvedAvatarIdentity = avatarIdentity
+  const ringPulse = useRef(new Animated.Value(0)).current;
+  const iconPop = useRef(new Animated.Value(0)).current;
+  const trackSpin = useRef(new Animated.Value(0)).current;
+
+  const resolvedIdentity = identity
     ? {
-        ...avatarIdentity,
-        // Keep fallback deterministic when system payload has a name but no seed.
-        avatarSeed: avatarIdentity.avatarSeed ?? avatarSeed,
+        ...identity,
+        avatarSeed: identity.avatarSeed ?? avatarSeedFallback,
       }
     : null;
 
-  useEffect(() => {
-    Animated.timing(entrance, {
-      toValue: 1,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  }, [entrance]);
+  const locationAccent = simulated ? "#D97706" : "#059669";
+  const dotColor =
+    eventKind === "location"
+      ? locationAccent
+      : eventKind === "tracking"
+        ? CHAT_ACCENT
+        : statusVisual?.color || accentColor || CHAT_ACCENT;
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(dotPulse, {
           toValue: 1,
-          duration: 680,
+          duration: eventKind === "location" ? 900 : 680,
           useNativeDriver: true,
         }),
         Animated.timing(dotPulse, {
           toValue: 0,
-          duration: 680,
+          duration: eventKind === "location" ? 900 : 680,
           useNativeDriver: true,
         }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [dotPulse]);
+  }, [dotPulse, eventKind]);
 
-  const avatarEl = (
+  useEffect(() => {
+    if (eventKind !== "location" && eventKind !== "tracking") return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringPulse, {
+          toValue: 1,
+          duration: eventKind === "location" ? 1600 : 2200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringPulse, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [ringPulse, eventKind]);
+
+  useEffect(() => {
+    Animated.spring(iconPop, {
+      toValue: 1,
+      speed: 18,
+      bounciness: eventKind === "status" ? 6 : 3,
+      useNativeDriver: true,
+    }).start();
+  }, [iconPop, eventKind]);
+
+  useEffect(() => {
+    if (eventKind !== "tracking") return;
+    const loop = Animated.loop(
+      Animated.timing(trackSpin, {
+        toValue: 1,
+        duration: 3200,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [trackSpin, eventKind]);
+
+  const BadgeIcon =
+    eventKind === "location"
+      ? MapPin
+      : eventKind === "tracking"
+        ? Navigation
+        : statusVisual?.Icon ?? null;
+  const badgeBg =
+    eventKind === "location"
+      ? simulated
+        ? "#FEF3C7"
+        : "#D1FAE5"
+      : eventKind === "tracking"
+        ? CHAT_ACCENT_SOFT
+        : statusVisual?.bg ?? CHAT_ACCENT_SOFT;
+  const badgeIconColor =
+    eventKind === "location"
+      ? locationAccent
+      : eventKind === "tracking"
+        ? CHAT_ACCENT
+        : statusVisual?.color ?? CHAT_ACCENT;
+
+  return (
     <View style={s.alertAvatarShell}>
-      {resolvedAvatarIdentity ? (
+      {eventKind === "location" || eventKind === "tracking" ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            s.alertAvatarPingRing,
+            {
+              borderColor:
+                eventKind === "location" ? locationAccent : CHAT_ACCENT,
+              opacity: ringPulse.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.42, 0],
+              }),
+              transform: [
+                {
+                  scale: ringPulse.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.55],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      ) : null}
+      {resolvedIdentity ? (
         <View style={[s.alertAvatar, { overflow: "hidden" }]}>
-          <ChatPartyAvatar identity={resolvedAvatarIdentity} size={avatarSize} />
+          <ChatPartyAvatar identity={resolvedIdentity} size={avatarSize} />
         </View>
       ) : (
         <View style={s.alertAvatar}>
           <Text style={s.alertAvatarText}>
-            {partyInitialsFromName(avatarSeed)}
+            {partyInitialsFromName(avatarSeedFallback)}
           </Text>
         </View>
       )}
+      {BadgeIcon ? (
+        <Animated.View
+          style={[
+            s.alertAvatarEventBadge,
+            { backgroundColor: badgeBg },
+            {
+              opacity: iconPop,
+              transform: [
+                {
+                  scale: iconPop.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.72, 1],
+                  }),
+                },
+                ...(eventKind === "tracking"
+                  ? [
+                      {
+                        rotate: trackSpin.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ["0deg", "360deg"],
+                        }),
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          ]}
+        >
+          <BadgeIcon size={10} color={badgeIconColor} strokeWidth={2.4} />
+        </Animated.View>
+      ) : null}
       <Animated.View
         style={[
           s.alertAvatarPresence,
@@ -1054,7 +1244,7 @@ export function TripProgressEventCard({
               {
                 scale: dotPulse.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [1, 1.12],
+                  outputRange: [1, 1.14],
                 }),
               },
             ],
@@ -1062,6 +1252,71 @@ export function TripProgressEventCard({
         ]}
       />
     </View>
+  );
+}
+
+export interface TripProgressEventCardProps {
+  avatarSeed: string;
+  /** When set, renders driver/party photo instead of initials from `avatarSeed`. */
+  avatarIdentity?: ResolvedPartyAvatarIdentity | null;
+  /** Old → new driver avatars with swap animation (assignment updates). */
+  driverSwap?: DriverSwapPair | null;
+  /** @deprecated Status tint no longer applied to avatar; kept for call-site compat. */
+  avatarDotColor?: string;
+  eventKind?: TripProgressEventKind;
+  statusVisual?: StatusEventVisual | null;
+  simulated?: boolean;
+  kicker?: string;
+  title: string;
+  metaLine: string;
+  /** Secondary line — place + city on location cards. */
+  subLine?: string | null;
+  /** GPS capture clock (location cards) — shown with time icon. */
+  captureClock?: string | null;
+  rightPrimary: string;
+  rightPrimaryColor: string;
+  time: string;
+  /** @deprecated Route ribbon removed; kept for call-site compat. */
+  routeContext?: string | null;
+  /** @deprecated Single alert layout on all breakpoints. */
+  isMobile?: boolean;
+}
+
+/** System update card — compact, aligned with update stream UI. */
+export function TripProgressEventCard({
+  avatarSeed,
+  avatarIdentity = null,
+  driverSwap = null,
+  avatarDotColor,
+  eventKind = "default",
+  statusVisual = null,
+  simulated = false,
+  rightPrimaryColor,
+  title,
+  subLine = null,
+  captureClock = null,
+}: TripProgressEventCardProps) {
+  const entrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [entrance]);
+
+  const avatarEl = driverSwap ? (
+    <ChatDriverSwapAvatar swap={driverSwap} />
+  ) : (
+    <TripEventAvatarCluster
+      identity={avatarIdentity}
+      avatarSeedFallback={avatarSeed}
+      eventKind={eventKind}
+      statusVisual={statusVisual}
+      simulated={simulated}
+      accentColor={avatarDotColor || rightPrimaryColor || CHAT_ACCENT}
+    />
   );
 
   return (
@@ -1081,13 +1336,64 @@ export function TripProgressEventCard({
         },
       ]}
     >
-      <View style={s.alertCard}>
+      <View
+        style={[
+          s.alertCard,
+          eventKind === "location" && s.alertCardLocation,
+          driverSwap && s.alertCardDriverSwap,
+        ]}
+      >
         <View style={s.alertTopRow}>
           {avatarEl}
-          <View style={s.alertSimpleBody}>
-            <Text style={s.alertSimpleMessage} numberOfLines={3}>
-              {title}
-            </Text>
+          <View
+            style={[
+              s.alertSimpleBody,
+              eventKind === "location" && s.alertSimpleBodyLocation,
+            ]}
+          >
+            {eventKind === "location" ? (
+              <>
+                <Text style={s.alertLocationTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+                {subLine || captureClock ? (
+                  <View style={s.alertLocationMetaRow}>
+                    {subLine ? (
+                      <Text style={s.alertLocationPlace} numberOfLines={1}>
+                        {subLine}
+                      </Text>
+                    ) : (
+                      <View style={s.alertLocationPlaceSpacer} />
+                    )}
+                    {captureClock ? (
+                      <View
+                        style={s.alertLocationTime}
+                        accessibilityLabel={`Captured at ${captureClock}`}
+                      >
+                        <Clock
+                          size={10}
+                          color={CHAT_TEXT_MUTED}
+                          strokeWidth={2.2}
+                        />
+                        <Text style={s.alertLocationTimeText} numberOfLines={1}>
+                          {captureClock}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+              </>
+            ) : driverSwap ? (
+              <ChatDriverSwapPreviewCopy
+                text={title}
+                style={s.alertSimpleMessage}
+                numberOfLines={3}
+              />
+            ) : (
+              <Text style={s.alertSimpleMessage} numberOfLines={3}>
+                {title}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -1133,8 +1439,12 @@ export function ChatSystemEventCard({
     // keep raw
   }
 
-  const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
+  const driverSwap = resolveDriverSwapAvatars(message, { composeTrip });
+  const driverAvatar = driverSwap
+    ? null
+    : resolveSystemUpdateDriverAvatar(message, { composeTrip });
   const seed =
+    driverSwap?.next.displayName?.trim() ||
     driverAvatar?.displayName?.trim() ||
     composeTrip?.driver_display_name?.trim() ||
     systemSheetAvatarSeed(message.content);
@@ -1143,6 +1453,9 @@ export function ChatSystemEventCard({
     <TripProgressEventCard
       avatarSeed={seed}
       avatarIdentity={driverAvatar}
+      driverSwap={driverSwap}
+      eventKind="status"
+      statusVisual={cfg}
       kicker="SYSTEM UPDATE"
       title={message.content.trim() || "Trip update"}
       metaLine={`${dateUpper} · ${cfg.sheetLabel.toUpperCase()}`}

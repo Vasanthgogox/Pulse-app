@@ -1,24 +1,14 @@
 import { memo, useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { HUB_PURPLE } from "@/components/profile/workspaceHubMenu.styles";
 import { ProductLogo } from "@/features/organization/components/workspace/ProductLogo";
-import { productDockStyles as styles } from "@/features/organization/components/workspace/workspaceHubProductGrid.styles";
+import { productGridStyles as styles } from "@/features/organization/components/workspace/workspaceHubProductGrid.styles";
 import { getProductsInDisplayOrder, type ProductId } from "@/lib/productRegistry";
 import { ChevronRight } from "lucide-react-native";
 
-function shortProductName(name: string): string {
-  const trimmed = name.replace(/^Pulse\s+/i, "").trim() || name;
-  if (trimmed.length <= 11) return trimmed;
-  const aliases: Record<string, string> = {
-    Marketplace: "Market",
-    Compliance: "Comply",
-    "Invoice Pro": "Invoice",
-    "Finance Pro": "Finance",
-    "Fleet Pro": "Fleet",
-    "POD Pro": "POD",
-  };
-  return aliases[trimmed] ?? trimmed;
+function displayProductName(name: string): string {
+  return name.replace(/^Pulse\s+/i, "").trim() || name;
 }
 
 type WorkspaceHubProductGridProps = {
@@ -27,7 +17,7 @@ type WorkspaceHubProductGridProps = {
   onSelectProduct?: (productId: ProductId) => void;
 };
 
-/** Pinned bottom dock — compact product launcher. */
+/** Pulse Products — 3-column grid inside the hub scroll body. */
 export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
   activeProductIds,
   onOpenCatalogue,
@@ -43,18 +33,24 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
   );
 
   return (
-    <View style={styles.dock}>
+    <View style={styles.section}>
       <Pressable
-        style={({ pressed }) => [styles.dockHeader, pressed && styles.dockHeaderPressed]}
+        style={({ pressed }) => [
+          styles.sectionHeader,
+          pressed && styles.sectionHeaderPressed,
+        ]}
         onPress={onOpenCatalogue}
         accessibilityRole="button"
         accessibilityLabel="Open Pulse Products catalogue"
       >
-        <View style={styles.dockHeaderLeft}>
-          <Text style={styles.dockEyebrow}>Pulse Products</Text>
-          <Text style={styles.dockMeta}>
-            {activeCount} connected · {products.length} modules
-          </Text>
+        <View style={styles.sectionHeaderLeft}>
+          <View style={styles.sectionAccent} />
+          <View style={styles.sectionTitleBlock}>
+            <Text style={styles.sectionEyebrow}>Pulse Products</Text>
+            <Text style={styles.sectionMeta}>
+              {activeCount} connected · {products.length} modules
+            </Text>
+          </View>
         </View>
         <View style={styles.catalogueLink}>
           <Text style={styles.catalogueLinkText}>Catalogue</Text>
@@ -62,54 +58,49 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
         </View>
       </Pressable>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.grid}>
         {products.map((product) => {
           const isActive =
             activeProductIds.has(product.id) || product.id === "pulse_core";
           return (
-            <Pressable
-              key={product.id}
-              style={({ pressed }) => [
-                styles.chip,
-                isActive && styles.chipActive,
-                pressed && isActive && styles.chipPressed,
-              ]}
-              onPress={
-                isActive
-                  ? () => {
-                      onSelectProduct?.(product.id);
-                      onOpenCatalogue();
-                    }
-                  : undefined
-              }
-              disabled={!isActive}
-              accessibilityRole="button"
-              accessibilityLabel={`${product.name}${isActive ? ", connected" : ", locked"}`}
-            >
-              <ProductLogo
-                productId={product.id}
-                size={34}
-                active={isActive}
-                showActiveDot={isActive}
-              />
-              <Text
-                style={[
-                  styles.chipName,
-                  isActive ? styles.chipNameActive : styles.chipNameLocked,
+            <View key={product.id} style={styles.gridCell}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.chip,
+                  isActive && styles.chipActive,
+                  pressed && isActive && styles.chipPressed,
                 ]}
-                numberOfLines={1}
+                onPress={
+                  isActive
+                    ? () => {
+                        onSelectProduct?.(product.id);
+                        onOpenCatalogue();
+                      }
+                    : undefined
+                }
+                disabled={!isActive}
+                accessibilityRole="button"
+                accessibilityLabel={`${product.name}${isActive ? ", connected" : ", locked"}`}
               >
-                {shortProductName(product.name)}
-              </Text>
-            </Pressable>
+                <ProductLogo
+                  productId={product.id}
+                  size={36}
+                  active={isActive}
+                />
+                <Text
+                  style={[
+                    styles.chipName,
+                    isActive ? styles.chipNameActive : styles.chipNameLocked,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {displayProductName(product.name)}
+                </Text>
+              </Pressable>
+            </View>
           );
         })}
-      </ScrollView>
+      </View>
     </View>
   );
 });
