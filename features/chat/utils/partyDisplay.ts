@@ -1,3 +1,4 @@
+import type { ConversationPartyType } from "@/features/chat/types/chat.types";
 import { isBlankOrPlaceholderPartyName } from "@/lib/partyAvatarDisplay";
 
 const GENERIC_CHAT_PARTY = new Set([
@@ -35,4 +36,14 @@ export function shouldHideChatPartyName(name: string | null | undefined): boolea
 export function formatChatPartyName(name: string | null | undefined): string | null {
   if (shouldHideChatPartyName(name)) return null;
   return String(name).trim().toUpperCase();
+}
+
+/** Uppercase lane label: CLIENT, SUPPLIER, or DRIVER. */
+export function formatChatPartyTypeLabel(
+  type: ConversationPartyType | "client" | "supplier" | null | undefined,
+): string | null {
+  if (!type) return null;
+  if (type === "client") return "CLIENT";
+  if (type === "supplier") return "SUPPLIER";
+  return "DRIVER";
 }

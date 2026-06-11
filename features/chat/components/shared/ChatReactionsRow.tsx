@@ -1,3 +1,4 @@
+import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { PULSE_CHAT } from "@/features/chat/components/mobile/chatSlackMobile.styles";
 
@@ -29,6 +30,7 @@ export function ChatReactionsRow({
   onToggle,
   avatarOffset = 36,
   variant = "mobile",
+  align = "left",
 }: {
   reactions: ChatReactions | null | undefined;
   selfUserId: string | null | undefined;
@@ -36,12 +38,21 @@ export function ChatReactionsRow({
   /** Left margin to align under message body (after avatar column). */
   avatarOffset?: number;
   variant?: "mobile" | "desktop";
+  /** WhatsApp-style own messages align reactions to the right. */
+  align?: "left" | "right";
 }) {
   const entries = parseReactions(reactions, selfUserId);
   if (entries.length === 0) return null;
 
   return (
-    <View style={[styles.row, { marginLeft: avatarOffset }]}>
+    <View
+      style={[
+        styles.row,
+        align === "right"
+          ? styles.rowRight
+          : { marginLeft: avatarOffset },
+      ]}
+    >
       {entries.map((entry) => (
         <TouchableOpacity
           key={entry.emoji}
@@ -55,7 +66,7 @@ export function ChatReactionsRow({
           accessibilityRole="button"
           accessibilityLabel={`${entry.emoji} ${entry.count} reaction${entry.count > 1 ? "s" : ""}`}
         >
-          <Text style={styles.emoji}>{entry.emoji}</Text>
+          <ChatAnimatedEmoji emoji={entry.emoji} size="sm" loop={entry.hasOwn} />
           <Text
             style={[
               styles.count,
@@ -78,13 +89,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 2,
   },
+  rowRight: {
+    alignSelf: "flex-end",
+    justifyContent: "flex-end",
+    maxWidth: "82%",
+  },
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 12,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     backgroundColor: "#F9FAFB",
@@ -97,10 +113,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
-  },
-  emoji: {
-    fontSize: 13,
-    lineHeight: 17,
   },
   count: {
     fontSize: 11,

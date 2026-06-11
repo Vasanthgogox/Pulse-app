@@ -12,9 +12,8 @@ import {
   View,
   Platform,
 } from "react-native";
-import { PULSE_CHAT } from "@/features/chat/components/mobile/chatSlackMobile.styles";
-
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "🔥", "✅", "🚛"] as const;
+import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
+import { CHAT_QUICK_REACTION_EMOJIS } from "@/features/chat/utils/chatEmojiAnim.util";
 
 export type MessageContextMenuProps = {
   visible: boolean;
@@ -48,7 +47,7 @@ export function ChatMessageContextMenu({
         <Pressable style={styles.menu} onPress={() => {}}>
           {/* Quick reactions row */}
           <View style={styles.reactionsRow}>
-            {QUICK_REACTIONS.map((emoji) => (
+            {CHAT_QUICK_REACTION_EMOJIS.map((emoji) => (
               <TouchableOpacity
                 key={emoji}
                 style={styles.reactionBtn}
@@ -60,7 +59,7 @@ export function ChatMessageContextMenu({
                 accessibilityRole="button"
                 accessibilityLabel={`React with ${emoji}`}
               >
-                <Text style={styles.reactionEmoji}>{emoji}</Text>
+                <ChatAnimatedEmoji emoji={emoji} size="xl" />
               </TouchableOpacity>
             ))}
             {showMoreReactions ? (
@@ -137,14 +136,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 2,
-    borderRadius: 10,
-    minHeight: 42,
-  },
-  reactionEmoji: {
-    fontSize: 22,
-    lineHeight: 28,
+    borderRadius: 12,
+    minHeight: 52,
   },
   moreBtnWrap: {
     backgroundColor: "#F3F4F6",
@@ -198,7 +193,7 @@ export function ChatMessageHoverActions({
   return (
     <View style={hover.wrap} onHoverIn={onHoverIn} onHoverOut={onHoverOut}>
       {/* Quick reaction buttons */}
-      {(["👍", "❤️", "✅"] as const).map((emoji) => (
+      {CHAT_QUICK_REACTION_EMOJIS.slice(0, 3).map((emoji) => (
         <TouchableOpacity
           key={emoji}
           style={[hover.btn, !onReact && hover.btnDisabled]}
@@ -208,7 +203,7 @@ export function ChatMessageHoverActions({
           accessibilityRole="button"
           accessibilityLabel={`React ${emoji}`}
         >
-          <Text style={hover.emoji}>{emoji}</Text>
+          <ChatAnimatedEmoji emoji={emoji} size="sm" />
         </TouchableOpacity>
       ))}
       <View style={hover.sep} />
@@ -257,18 +252,14 @@ const hover = StyleSheet.create({
     zIndex: 10,
   },
   btn: {
-    width: 28,
-    height: 28,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 6,
+    borderRadius: 8,
   },
   btnDisabled: {
     opacity: 0.4,
-  },
-  emoji: {
-    fontSize: 14,
-    lineHeight: 20,
   },
   sep: {
     width: 1,

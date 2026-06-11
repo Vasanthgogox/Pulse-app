@@ -1,4 +1,10 @@
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
+import { ChatDriverSwapInboxPreview } from "@/features/chat/components/shared/ChatDriverSwapInboxPreview";
+import { ChatInboxImagePreviewStrip } from "@/features/chat/components/shared/ChatInboxImagePreviewStrip";
+import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
+import type { DriverSwapPair } from "@/features/chat/utils/chatAvatar.util";
+import { ChatSlackDocumentAttachmentCompact } from "@/features/chat/components/shared/ChatSlackDocumentAttachment";
+import type { ConversationImagePreview } from "@/features/chat/utils/conversationImagePreview.util";
 import { ChatSlackMirrorToggle } from "@/features/chat/components/shared/ChatSlackMirrorToggle";
 import { SLACK_STREAM_TABS } from "@/features/chat/components/shared/chatSlackStreamTabs";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
@@ -333,6 +339,33 @@ export function ChatSlackListSeparator() {
   return <View style={st.listRowSeparator} />;
 }
 
+export function ChatSlackPartyRecommendedHeader({
+  partyName,
+  count,
+}: {
+  partyName: string;
+  count: number;
+}) {
+  return (
+    <View style={st.partyRecommendedHeader}>
+      <Text style={st.partyRecommendedHeaderTitle} numberOfLines={1}>
+        Recommended · {partyName}
+      </Text>
+      <Text style={st.partyRecommendedHeaderMeta}>
+        {count} chat{count === 1 ? "" : "s"}
+      </Text>
+    </View>
+  );
+}
+
+export function ChatSlackPartyRecommendedDivider() {
+  return (
+    <View style={st.partyRecommendedDivider}>
+      <Text style={st.partyRecommendedDividerText}>All conversations</Text>
+    </View>
+  );
+}
+
 export function ChatSlackTripSearchStrip({
   value,
   onChangeText,
@@ -456,8 +489,13 @@ export function ChatSlackListRow({
   time,
   preview,
   previewKind = "default",
+  previewImagePreviews,
+  previewDriverSwap,
+  documentExtension,
+  documentIsImage,
   partyLine,
   active,
+  recommended,
   unread,
   onPress,
 }: {
@@ -465,9 +503,15 @@ export function ChatSlackListRow({
   title: string;
   time?: string;
   preview?: string | null;
-  previewKind?: "default" | "system" | "image" | "document";
+  previewKind?: "default" | "system" | "image" | "document" | "driver_swap";
+  previewImagePreviews?: ConversationImagePreview[];
+  previewDriverSwap?: DriverSwapPair | null;
+  documentExtension?: string | null;
+  documentIsImage?: boolean;
   partyLine?: string | null;
   active?: boolean;
+  /** Highlighted in the party-recommendation section after people-strip selection. */
+  recommended?: boolean;
   unread?: number;
   onPress: () => void;
 }) {
@@ -476,26 +520,26 @@ export function ChatSlackListRow({
       ? "System Update"
       : previewKind === "image"
         ? "Image"
-        : previewKind === "document"
-          ? "Document"
-          : null;
+        : null;
   const badgeStyle =
     previewKind === "image"
       ? st.listRowPreviewBadgeImage
-      : previewKind === "document"
-        ? st.listRowPreviewBadgeDocument
-        : st.listRowPreviewBadgeSystem;
+      : st.listRowPreviewBadgeSystem;
   const badgeTextStyle =
     previewKind === "image"
       ? st.listRowPreviewBadgeTextImage
-      : previewKind === "document"
-        ? st.listRowPreviewBadgeTextDocument
-        : st.listRowPreviewBadgeTextSystem;
+      : st.listRowPreviewBadgeTextSystem;
+  const hasImageStrip =
+    Boolean(previewImagePreviews && previewImagePreviews.length > 0);
+  const hasDriverSwapPreview =
+    previewKind === "driver_swap" && Boolean(previewDriverSwap);
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         st.listRow,
+        (hasImageStrip || hasDriverSwapPreview) && st.listRowWithMedia,
+        recommended && st.listRowRecommended,
         active && st.listRowActive,
         pressed && st.listRowPressed,
       ]}
@@ -517,20 +561,57 @@ export function ChatSlackListRow({
             </Text>
           ) : null}
         </View>
-        {preview || partyLine ? (
-          previewKind !== "default" ? (
+        {partyLine ? (
+          <Text style={st.listRowPartyLine} numberOfLines={1}>
+            {partyLine}
+          </Text>
+        ) : null}
+        {hasDriverSwapPreview ? (
+          <ChatDriverSwapInboxPreview
+            swap={previewDriverSwap!}
+            text={preview ?? ""}
+            variant="mobile"
+          />
+        ) : hasImageStrip ? (
+          <>
+            <ChatInboxImagePreviewStrip
+              items={previewImagePreviews!}
+              variant="mobile"
+            />
+            {preview ? (
+              <ChatListPreviewText
+                text={preview}
+                style={[st.listRowPreview, st.listRowPreviewBelowMedia]}
+                numberOfLines={3}
+              />
+            ) : null}
+          </>
+        ) : preview ? (
+          previewKind === "document" ? (
+            <ChatSlackDocumentAttachmentCompact
+              display={{
+                documentName: preview,
+                extension: documentExtension ?? "",
+                isImage: documentIsImage ?? false,
+              }}
+            />
+          ) : previewKind !== "default" ? (
             <View style={st.listRowSystemPreviewWrap}>
               <Text style={[st.listRowPreviewBadge, badgeStyle, badgeTextStyle]}>
                 {badgeLabel}
               </Text>
-              <Text style={st.listRowPreview} numberOfLines={2}>
-                {preview ?? partyLine}
-              </Text>
+              <ChatListPreviewText
+                text={preview}
+                style={st.listRowPreview}
+                numberOfLines={2}
+              />
             </View>
           ) : (
-            <Text style={st.listRowPreview} numberOfLines={2}>
-              {preview ?? partyLine}
-            </Text>
+            <ChatListPreviewText
+              text={preview}
+              style={st.listRowPreview}
+              numberOfLines={2}
+            />
           )
         ) : null}
       </View>

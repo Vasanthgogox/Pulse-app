@@ -11,6 +11,10 @@
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import { ChatMessageContextMenu, ChatMessageHoverActions } from "@/features/chat/components/shared/ChatMessageContextMenu";
 import { ChatReactionsRow, type ChatReactions } from "@/features/chat/components/shared/ChatReactionsRow";
+import {
+  ChatJumboEmojiMessage,
+  isJumboEmojiMessage,
+} from "@/features/chat/components/shared/ChatJumboEmojiMessage";
 import { ChatReplyThreadStrip, type ReplyPreviewData } from "@/features/chat/components/shared/ChatReplyPreview";
 import type { SlackMessageGroupMeta } from "@/features/chat/utils/slackMessageGroup.util";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
@@ -276,15 +280,19 @@ export function ChatSlackMessageRow({
                 </Text>
               </View>
             ) : null}
-            <Text
-              style={[
-                styles.threadMsgText,
-                isContinuation && styles.threadMsgTextContinuation,
-                !showHeader && styles.threadMsgTextStacked,
-              ]}
-            >
-              {renderMd(content)}
-            </Text>
+            {isJumboEmojiMessage(content) ? (
+              <ChatJumboEmojiMessage content={content} compact={showHeader} />
+            ) : (
+              <Text
+                style={[
+                  styles.threadMsgText,
+                  isContinuation && styles.threadMsgTextContinuation,
+                  !showHeader && styles.threadMsgTextStacked,
+                ]}
+              >
+                {renderMd(content)}
+              </Text>
+            )}
           </View>
 
           {/* Desktop hover toolbar — floats top-right of the row, above the row */}

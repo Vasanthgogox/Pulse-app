@@ -1,5 +1,10 @@
 import { Platform, StyleSheet } from "react-native";
 import { Theme } from "@/constants/Theme";
+import {
+  CHAT_ACCENT,
+  CHAT_INCOMING_BUBBLE,
+  CHAT_TEXT_PRIMARY,
+} from "@/features/chat/chatTheme";
 import { SLACK_DESKTOP_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
 
 /** Slack desktop — compact type scale aligned with mobile. */
@@ -64,8 +69,8 @@ export const slackDesktopStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(148, 163, 184, 0.2)",
   },
@@ -134,11 +139,15 @@ export const slackDesktopStyles = StyleSheet.create({
     elevation: 2,
   },
   workspaceNameWrap: {
-    flex: 1,
+    flexShrink: 1,
+    maxWidth: 132,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  workspaceOrgAvatar: {
+    flexShrink: 0,
   },
   workspaceName: {
     flexShrink: 1,
@@ -146,11 +155,6 @@ export const slackDesktopStyles = StyleSheet.create({
     fontWeight: "700",
     color: "#1F2937",
     letterSpacing: -0.15,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
   },
   headerIconBtn: {
     width: 28,
@@ -162,16 +166,15 @@ export const slackDesktopStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.28)",
   },
-  searchWrap: {
+  searchWrapInline: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginHorizontal: 12,
-    marginTop: 12,
-    marginBottom: 9,
-    paddingHorizontal: 11,
-    minHeight: 38,
-    borderRadius: 11,
+    gap: 7,
+    paddingHorizontal: 10,
+    minHeight: 34,
+    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.92)",
     borderWidth: 1,
     borderColor: "rgba(100, 116, 139, 0.22)",
@@ -241,14 +244,16 @@ export const slackDesktopStyles = StyleSheet.create({
     backgroundColor: SLACK_DESKTOP.sidebarBg,
   },
   sidebarPeopleStrip: {
-    paddingHorizontal: 10,
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingHorizontal: 0,
+    paddingTop: 2,
+    paddingBottom: 10,
+    marginBottom: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(100, 116, 139, 0.18)",
     backgroundColor: SLACK_DESKTOP.sidebarBg,
   },
   sidebarCategoriesContent: {
+    paddingTop: 2,
     paddingBottom: 14,
     paddingHorizontal: 10,
   },
@@ -340,6 +345,10 @@ export const slackDesktopStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
+  sidebarRowWithMedia: {
+    minHeight: 140,
+    paddingVertical: 12,
+  },
   sidebarRowActive: {
     backgroundColor: "#EEF2FF",
     borderLeftColor: SLACK_DESKTOP.activeBar,
@@ -394,11 +403,23 @@ export const slackDesktopStyles = StyleSheet.create({
     flexShrink: 0,
     marginTop: 1,
   },
+  sidebarRowPartyLine: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginTop: 2,
+  },
   sidebarRowPreview: {
     fontSize: SLACK_DESKTOP_TYPE.rowPreview,
     color: "#475569",
     lineHeight: 17,
     marginTop: 3,
+  },
+  sidebarRowPreviewBelowMedia: {
+    marginTop: 5,
+    lineHeight: 18,
   },
   sidebarSystemPreviewWrap: {
     marginTop: 4,
@@ -716,6 +737,68 @@ export const slackDesktopStyles = StyleSheet.create({
   },
   threadMsgTextStacked: {
     marginTop: 1,
+  },
+  waMsgOuterOwn: {
+    width: "100%",
+    alignItems: "flex-end",
+    paddingTop: 2,
+    paddingBottom: 2,
+  },
+  waMsgOuterOwnLead: {
+    paddingTop: 8,
+    paddingBottom: 3,
+  },
+  waMsgOuterOwnContinuation: {
+    paddingTop: 2,
+    paddingBottom: 2,
+  },
+  waMsgOuterOther: {
+    width: "100%",
+    alignItems: "flex-start",
+  },
+  waBubbleColumn: {
+    maxWidth: "72%",
+    minWidth: 0,
+  },
+  waBubbleOwn: {
+    backgroundColor: CHAT_ACCENT,
+    borderRadius: 12,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  waBubbleOther: {
+    backgroundColor: CHAT_INCOMING_BUBBLE,
+    borderRadius: 12,
+    borderBottomLeftRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
+  },
+  waBubbleTextOwn: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#FFFFFF",
+    lineHeight: 19,
+  },
+  waBubbleTextOther: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: CHAT_TEXT_PRIMARY,
+    lineHeight: 19,
+  },
+  waMetaOwn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    marginTop: 3,
+    paddingHorizontal: 2,
+  },
+  waMetaOwnText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#94A3B8",
   },
   threadSysMsg: {
     paddingVertical: 6,

@@ -18,6 +18,8 @@ import {
   CHAT_TEXT_PRIMARY,
 } from "@/features/chat/chatTheme";
 import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
+import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
+import { CHAT_QUICK_PANEL_EMOJIS } from "@/features/chat/utils/chatEmojiAnim.util";
 import { Theme } from "@/constants/Theme";
 import {
   Bold,
@@ -44,8 +46,6 @@ const INPUT_WEB: TextStyle =
   Platform.OS === "web"
     ? ({ outlineStyle: "none" } as unknown as TextStyle)
     : {};
-
-const QUICK_EMOJIS = ["👍", "✅", "🚛", "📍", "🕒", "🤝", "😊", "⚡", "🔥", "❤️"] as const;
 
 export type ChatMobileComposerProps = {
   value: string;
@@ -214,14 +214,14 @@ export function ChatMobileComposer({
             <View style={sl.quickContent}>
               {quickPanelMode === "emoji" ? (
                 <View style={sl.emojiGrid}>
-                  {QUICK_EMOJIS.map((emoji) => (
+                  {CHAT_QUICK_PANEL_EMOJIS.map((emoji) => (
                     <TouchableOpacity
                       key={emoji}
                       style={sl.emojiBtn}
                       onPress={() => applyQuickEmoji(emoji)}
                       activeOpacity={0.75}
                     >
-                      <Text style={sl.emojiText}>{emoji}</Text>
+                      <ChatAnimatedEmoji emoji={emoji} size="lg" />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -500,15 +500,12 @@ const sl = StyleSheet.create({
     gap: 8,
   },
   emojiBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F3F4F6",
-  },
-  emojiText: {
-    fontSize: 20,
   },
   scriptRow: {
     gap: 8,

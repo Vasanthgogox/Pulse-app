@@ -2,7 +2,7 @@
  * Workspace hub — left pane of the master/detail workspace shell.
  *
  * Metronic reference density: purple header, quick actions, Pulse banner,
- * Preferences (Language / Region), Party directory links, product dock, footer.
+ * Preferences (Language / Region), Party directory links, product grid, footer.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
@@ -446,12 +446,12 @@ export function WorkspaceHubMenu({
 
           {renderHubSection("Preferences", preferenceRows)}
           {renderHubSection("Party", partyRows)}
-        </ScrollView>
 
-        <WorkspaceHubProductGrid
-          activeProductIds={activeProductIds}
-          onOpenCatalogue={() => onSelectPanel("products")}
-        />
+          <WorkspaceHubProductGrid
+            activeProductIds={activeProductIds}
+            onOpenCatalogue={() => onSelectPanel("products")}
+          />
+        </ScrollView>
 
         <View style={[hubStyles.footerWrap, { paddingBottom: insets.bottom + 10 }]}>
           <View style={hubStyles.footerDivider} />

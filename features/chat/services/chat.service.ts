@@ -29,6 +29,7 @@ import {
   normalizeServerLanes,
 } from "../utils/laneMultiplexer.util";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 
 export interface TripForCompose {
   id: string;
@@ -47,6 +48,12 @@ export interface TripForCompose {
   supplier_name: string | null;
   driver_id: string | null;
   driver_display_name: string | null;
+  driver_avatar_url?: string | null;
+  driver_avatar_seed?: string | null;
+  client_avatar_url?: string | null;
+  client_avatar_seed?: string | null;
+  supplier_avatar_url?: string | null;
+  supplier_avatar_seed?: string | null;
   client_linked_organization_id: string | null;
   supplier_linked_organization_id: string | null;
   /** From `trips.indent_id` — set only for marketplace/indent-backed trips. */
@@ -109,21 +116,37 @@ export async function getTripsForCompose(
   const supplierIds = Array.from(
     new Set(trips.map((t) => t.supplier_id).filter((v): v is string => !!v)),
   );
-  if (clientIds.length === 0 && supplierIds.length === 0) return trips;
+  const driverIds = Array.from(
+    new Set(trips.map((t) => t.driver_id).filter((v): v is string => !!v)),
+  );
+  if (
+    clientIds.length === 0 &&
+    supplierIds.length === 0 &&
+    driverIds.length === 0
+  ) {
+    return trips;
+  }
 
-  const [clientsResp, suppliersResp] = await Promise.all([
+  const [clientsResp, suppliersResp, driversResp] = await Promise.all([
     clientIds.length
       ? supabase()
           .from("clients")
-          .select("id, linked_organization_id")
+          .select("id, linked_organization_id, avatar_url, avatar_seed")
           .in("id", clientIds)
       : Promise.resolve({
-          data: [] as { id: string; linked_organization_id: string | null }[],
+          data: [] as {
+            id: string;
+            linked_organization_id: string | null;
+            avatar_url: string | null;
+            avatar_seed: string | null;
+          }[],
         }),
     supplierIds.length
       ? supabase()
           .from("suppliers")
-          .select("id, company_name, name, linked_organization_id")
+          .select(
+            "id, company_name, name, linked_organization_id, avatar_url, avatar_seed",
+          )
           .in("id", supplierIds)
       : Promise.resolve({
           data: [] as {
@@ -131,33 +154,97 @@ export async function getTripsForCompose(
             company_name: string | null;
             name: string | null;
             linked_organization_id: string | null;
+            avatar_url: string | null;
+            avatar_seed: string | null;
+          }[],
+        }),
+    driverIds.length
+      ? supabase()
+          .from("drivers")
+          .select("id, avatar_url, avatar_seed")
+          .in("id", driverIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            avatar_url: string | null;
+            avatar_seed: string | null;
           }[],
         }),
   ]);
 
-  const clientLinkedOrgById = new Map<string, string | null>();
+  const clientMetaById = new Map<
+    string,
+    {
+      linked_organization_id: string | null;
+      avatar_url: string | null;
+      avatar_seed: string | null;
+    }
+  >();
   for (const c of clientsResp.data ?? []) {
-    clientLinkedOrgById.set(c.id, c.linked_organization_id ?? null);
+    clientMetaById.set(c.id, {
+      linked_organization_id: c.linked_organization_id ?? null,
+      avatar_url: c.avatar_url ?? null,
+      avatar_seed: c.avatar_seed ?? null,
+    });
   }
 
-  const supplierNameById = new Map<string, string>();
-  const supplierLinkedOrgById = new Map<string, string | null>();
+  const supplierMetaById = new Map<
+    string,
+    {
+      name: string | null;
+      linked_organization_id: string | null;
+      avatar_url: string | null;
+      avatar_seed: string | null;
+    }
+  >();
   for (const s of suppliersResp.data ?? []) {
     const label = (s.company_name ?? "").trim() || (s.name ?? "").trim();
-    if (label) supplierNameById.set(s.id, label);
-    supplierLinkedOrgById.set(s.id, s.linked_organization_id ?? null);
+    supplierMetaById.set(s.id, {
+      name: label || null,
+      linked_organization_id: s.linked_organization_id ?? null,
+      avatar_url: s.avatar_url ?? null,
+      avatar_seed: s.avatar_seed ?? null,
+    });
   }
 
-  return trips.map((t) => ({
-    ...t,
-    supplier_name:
-      t.supplier_name?.trim() ||
-      (t.supplier_id ? (supplierNameById.get(t.supplier_id) ?? null) : null),
-    client_linked_organization_id:
-      t.client_id ? (clientLinkedOrgById.get(t.client_id) ?? null) : null,
-    supplier_linked_organization_id:
-      t.supplier_id ? (supplierLinkedOrgById.get(t.supplier_id) ?? null) : null,
-  }));
+  const driverMetaById = new Map<
+    string,
+    { avatar_url: string | null; avatar_seed: string | null }
+  >();
+  for (const d of driversResp.data ?? []) {
+    driverMetaById.set(d.id, {
+      avatar_url: d.avatar_url ?? null,
+      avatar_seed: d.avatar_seed ?? null,
+    });
+  }
+
+  return trips.map((t) => {
+    const clientMeta = t.client_id ? clientMetaById.get(t.client_id) : undefined;
+    const supplierMeta = t.supplier_id
+      ? supplierMetaById.get(t.supplier_id)
+      : undefined;
+    const driverMeta = t.driver_id ? driverMetaById.get(t.driver_id) : undefined;
+    return {
+      ...t,
+      supplier_name:
+        t.supplier_name?.trim() ||
+        (supplierMeta?.name ?? null),
+      client_linked_organization_id: clientMeta?.linked_organization_id ?? null,
+      supplier_linked_organization_id: supplierMeta?.linked_organization_id ?? null,
+      client_avatar_url: clientMeta
+        ? resolveAvatarPublicUrl(clientMeta.avatar_url)
+        : null,
+      client_avatar_seed: (clientMeta?.avatar_seed ?? "").trim() || null,
+      supplier_avatar_url: supplierMeta
+        ? resolveAvatarPublicUrl(supplierMeta.avatar_url)
+        : null,
+      supplier_avatar_seed: (supplierMeta?.avatar_seed ?? "").trim() || null,
+      driver_avatar_url: driverMeta
+        ? resolveAvatarPublicUrl(driverMeta.avatar_url)
+        : null,
+      driver_avatar_seed: (driverMeta?.avatar_seed ?? "").trim() || null,
+    };
+  });
 }
 
 function isGenericPartyName(name: unknown): boolean {
@@ -1128,6 +1215,7 @@ export async function getIntegratedPartners(
       partners.push({
         org_id: s.linked_organization_id,
         name: s.company_name ?? s.name ?? "Partner",
+        party_type: "supplier",
       });
     }
   }
@@ -1137,6 +1225,7 @@ export async function getIntegratedPartners(
       partners.push({
         org_id: c.linked_organization_id,
         name: c.name ?? "Partner",
+        party_type: "client",
       });
     }
   }
