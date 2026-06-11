@@ -1,8 +1,8 @@
 diff --git a/node_modules/expo/bin/cli b/node_modules/expo/bin/cli
-index 1111111..2222222 100755
+index 6b77a21..a0bfbb6 100755
 --- a/node_modules/expo/bin/cli
 +++ b/node_modules/expo/bin/cli
-@@ -1,6 +1,14 @@
+@@ -1,5 +1,12 @@
 -#!/usr/bin/env node
 +#!/usr/bin/env node --max-old-space-size=8192
 +
