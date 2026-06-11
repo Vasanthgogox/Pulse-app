@@ -1,6 +1,7 @@
-import React, { useSyncExternalStore } from "react";
+import React, { useEffect, useRef, useSyncExternalStore } from "react";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
+  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,7 +18,13 @@ import {
   Send,
   Package,
 } from "lucide-react-native";
-import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
+import {
+  CHAT_ACCENT,
+  CHAT_ACCENT_SOFT,
+  CHAT_TEXT_MUTED,
+  CHAT_TEXT_PRIMARY,
+  CHAT_TEXT_SECONDARY,
+} from "@/features/chat/chatTheme";
 import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
@@ -553,25 +560,25 @@ const s = StyleSheet.create({
     paddingVertical: 1,
   },
   ledgerTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
     letterSpacing: 0.1,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   ledgerMeta: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     color: "#64748b",
     letterSpacing: 0.02,
-    lineHeight: 14,
+    lineHeight: 15,
   },
   ledgerRoute: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "500",
     color: "#94a3b8",
     letterSpacing: 0.1,
-    lineHeight: 13,
+    lineHeight: 14,
   },
   ledgerRight: {
     alignSelf: "stretch",
@@ -587,14 +594,14 @@ const s = StyleSheet.create({
     maxWidth: "36%",
   },
   ledgerAmount: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
     letterSpacing: -0.3,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   ledgerTimeRight: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "600",
     color: "#94a3b8",
     textTransform: "uppercase",
@@ -609,9 +616,9 @@ const s = StyleSheet.create({
   },
   ledgerNotesBelow: {
     marginTop: 6,
-    fontSize: 10,
+    fontSize: 11,
     color: "#64748b",
-    lineHeight: 14,
+    lineHeight: 15,
     fontWeight: "600",
     paddingHorizontal: 2,
   },
@@ -629,7 +636,7 @@ const s = StyleSheet.create({
     alignSelf: "flex-start",
   },
   ledgerFooterStatusText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     color: "#047857",
   },
@@ -648,7 +655,7 @@ const s = StyleSheet.create({
     minHeight: 34,
   },
   ledgerAddBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: "#fff",
   },
@@ -664,7 +671,7 @@ const s = StyleSheet.create({
     minHeight: 34,
   },
   ledgerDisputeBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: "#b45309",
   },
@@ -747,264 +754,210 @@ const s = StyleSheet.create({
     letterSpacing: 0,
   },
 
-  /** ── TripProgressEventCard (modern, txn-card-aligned) ──────────────────
-   *  Visual language mirrors `FinanceKanbanTab`'s `timelineCard` so a
-   *  system update reads as a peer of a transaction row:
-   *    • Soft 18 px rounded card on a near-white background with the
-   *      same hairline border `rgba(0,0,0,0.04)` and ultra-subtle
-   *      shadow (`opacity 0.04`, `radius 8`) the txn rows use.
-   *    • 32 px circular avatar with a *status-tinted* fill +
-   *      1.5 px status-color border — the same trick the txn card
-   *      uses (green-tinted border for cash-in, red-tinted for
-   *      cash-out), but keyed by status color instead of flow.
-   *    • An italic uppercase **kicker** above the narrative title
-   *      ("SYSTEM UPDATE", "TRIP STATUS", "LIVE LOCATION") tinted in
-   *      the status color — this is the direct analogue of the
-   *      txn card's italic uppercase party name (`timelineCardParty`
-   *      → `FinanceTxnTypography.partyTitle`).
-   *    • A pill on the right that copies the txn `tripPillWithCheck`
-   *      shape: rounded 999, very light status-tinted fill, hairline
-   *      border, tiny leading status dot, italic uppercase text in
-   *      the status color (same recipe as `tripPillText` →
-   *      `FinanceTxnTypography.tripId`).
-   *    • Subtle 8 px chevron at the bottom-right at `opacity: 0.3`
-   *      mirroring the txn card's `expandHint`. */
-  progressWrap: {
+  /** Metronic-style system alert — avatar, kicker, body, footer pill + time. */
+  alertWrap: {
     alignSelf: "center",
-    width: "60%",
-    maxWidth: "60%",
-    marginVertical: 6,
-    gap: 6,
+    width: "auto",
+    maxWidth: 520,
+    minWidth: 0,
+    marginVertical: 5,
   },
-  routeContextPill: {
-    alignSelf: "center",
-    maxWidth: "100%",
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "#f8fafc",
+  alertCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#eef2f7",
-  },
-  routeContextText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#cbd5e1",
-    letterSpacing: 0.55,
-    textTransform: "uppercase",
-    textAlign: "center",
-  },
-  progressWrapMobile: {
-    alignSelf: "stretch",
-    width: "100%",
-    maxWidth: "100%",
-    marginVertical: CHAT_MOBILE.eventCardGap / 2,
-  },
-  progressCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#eef2f7",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderColor: "#E9EDEF",
+    paddingHorizontal: 11,
+    paddingVertical: 9,
     shadowColor: "#0f172a",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.055,
+    shadowRadius: 6,
     elevation: 1,
+    position: "relative",
+    overflow: "hidden",
   },
-  progressCardMobile: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: 0,
-    paddingHorizontal: CHAT_MOBILE.eventCardPadH,
-    paddingVertical: CHAT_MOBILE.eventCardPadV,
-    borderRadius: CHAT_MOBILE.eventCardRadius,
-    borderColor: "rgba(0,0,0,0.05)",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+  alertAccentRail: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 2.5,
+    opacity: 0.82,
   },
-  progressTopRowMobile: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  progressAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(79, 70, 229, 0.1)",
-    flexShrink: 0,
-  },
-  progressAvatarMobile: {
-    width: CHAT_MOBILE.eventAvatar,
-    height: CHAT_MOBILE.eventAvatar,
-    borderRadius: CHAT_MOBILE.eventAvatar / 2,
-  },
-  progressAvatarText: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.15,
-  },
-  progressBody: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    gap: 2,
-  },
-  /** Italic uppercase kicker — exact `FinanceTxnTypography.partyTitle`
-   *  recipe but tinted in the status color so it reads as a status
-   *  tag. Sits above the narrative sentence so the eye lands on
-   *  "SYSTEM UPDATE" / "TRIP STATUS" first. */
-  progressKicker: {
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 15,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  progressKickerMobile: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.65,
-    textTransform: "uppercase",
-  },
-  /** Narrative sentence — kept in sentence case (it's prose, not a
-   *  proper noun like the txn party name). Weight + size echo the
-   *  txn `amount` text so it carries the same visual weight in the
-   *  card hierarchy. */
-  progressTitle: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textPrimaryDark,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  progressTitleMobile: {
-    fontSize: CHAT_MOBILE.eventTitleSize,
-    lineHeight: CHAT_MOBILE.eventTitleLine,
-    fontWeight: "500",
-    color: "#111B21",
-    marginTop: 1,
-  },
-  /** Date · meta · status label — direct copy of
-   *  `timelineCardDateVehicle`: 8 px UPPERCASE, slate, letterSpacing
-   *  0.5. */
-  progressMeta: {
-    fontSize: 11,
-    fontWeight: "600",
-    lineHeight: 15,
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginTop: 4,
-  },
-  progressMetaMobile: {
-    fontSize: CHAT_MOBILE.eventMetaSize,
-    lineHeight: CHAT_MOBILE.eventMetaLine,
-    fontWeight: "400",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  /** Optional sub line — italic muted, matches
-   *  `timelineCardRouteWhy`. */
-  progressSub: {
-    fontSize: 8,
-    fontWeight: "400",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-    marginTop: 2,
-    opacity: 0.95,
-  },
-  progressSubMobile: {
-    fontSize: CHAT_MOBILE.eventSubSize,
-    lineHeight: 13,
-    fontWeight: "400",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-    marginTop: 2,
-  },
-  progressRight: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 6,
-    minWidth: 0,
-    flexShrink: 0,
-  },
-  /** Status pill — same chrome as the txn card's
-   *  `tripPillWithCheck` (rounded 999, very light fill, hairline
-   *  border, leading icon + label). The tiny solid dot replaces the
-   *  txn check-circle but keeps the same visual rhythm. */
-  progressPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: Theme.cardWhite,
-  },
-  progressPillDot: {
+  alertCornerDot: {
+    position: "absolute",
+    top: 7,
+    right: 7,
     width: 6,
     height: 6,
     borderRadius: 3,
+    opacity: 0.95,
   },
-  progressPillText: {
-    fontSize: 11,
+  alertTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  alertAvatarShell: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "rgba(91, 94, 244, 0.28)",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#5b5ef4",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 1,
+    overflow: "visible",
+  },
+  alertAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: CHAT_ACCENT_SOFT,
+    flexShrink: 0,
+  },
+  alertAvatarPresence: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    borderWidth: 1.5,
+    borderColor: Theme.cardWhite,
+    backgroundColor: CHAT_ACCENT,
+  },
+  alertAvatarText: {
+    fontSize: 10,
     fontWeight: "700",
-    lineHeight: 15,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    color: CHAT_TEXT_PRIMARY,
+    letterSpacing: 0.15,
   },
-  progressTime: {
-    fontSize: 11,
-    fontWeight: "600",
-    lineHeight: 15,
-    color: Theme.textMuted,
-    letterSpacing: 0.2,
-    textTransform: "uppercase",
+  alertBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
   },
-  progressFooterMobile: {
+  alertSimpleBody: {
+    flexShrink: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    paddingVertical: 2,
+  },
+  alertSimpleMessage: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "400",
+    color: CHAT_TEXT_SECONDARY,
+  },
+  alertHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(0,0,0,0.06)",
     gap: 8,
   },
-  progressPillMobile: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  alertHeaderStatusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: 999,
     borderWidth: 1,
   },
-  progressPillTextMobile: {
-    fontSize: 9,
+  alertHeaderStatusText: {
+    fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.55,
+    letterSpacing: 0.45,
     textTransform: "uppercase",
   },
-  progressTimeMobile: {
-    fontSize: CHAT_MOBILE.eventTimeSize,
-    fontWeight: "700",
-    color: Theme.textMuted,
+  alertHeaderMetaPill: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     flexShrink: 0,
+  },
+  alertKicker: {
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 14,
+    letterSpacing: 0.55,
     textTransform: "uppercase",
+    color: CHAT_ACCENT,
+  },
+  alertTitle: {
+    fontSize: CHAT_MOBILE.eventTitleSize,
+    lineHeight: CHAT_MOBILE.eventTitleLine,
+    fontWeight: "500",
+    color: CHAT_TEXT_PRIMARY,
+    marginTop: 1,
+  },
+  alertMeta: {
+    fontSize: 9,
+    lineHeight: 13,
+    fontWeight: "500",
+    color: CHAT_TEXT_MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.38,
+    marginTop: 0,
+  },
+  alertMessageBox: {
+    marginTop: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E9EDEF",
+    borderRadius: 8,
+    backgroundColor: "#FAFBFC",
+    paddingHorizontal: 8,
+    paddingVertical: 6.5,
+  },
+  alertMessageText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    color: CHAT_TEXT_PRIMARY,
+  },
+  alertFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#E9EDEF",
+    gap: 8,
+  },
+  alertPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: Theme.cardWhite,
+  },
+  alertPillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  alertPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+  },
+  alertTime: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: CHAT_TEXT_MUTED,
+    flexShrink: 0,
+    letterSpacing: 0.1,
   },
 });
 
@@ -1012,191 +965,133 @@ export interface TripProgressEventCardProps {
   avatarSeed: string;
   /** When set, renders driver/party photo instead of initials from `avatarSeed`. */
   avatarIdentity?: ResolvedPartyAvatarIdentity | null;
-  avatarDotColor: string;
+  /** @deprecated Status tint no longer applied to avatar; kept for call-site compat. */
+  avatarDotColor?: string;
   kicker?: string;
   title: string;
   metaLine: string;
+  /** @deprecated Sub-line removed from alert layout; kept for call-site compat. */
   subLine?: string | null;
   rightPrimary: string;
   rightPrimaryColor: string;
   time: string;
+  /** @deprecated Route ribbon removed; kept for call-site compat. */
   routeContext?: string | null;
+  /** @deprecated Single alert layout on all breakpoints. */
   isMobile?: boolean;
 }
 
-/** Pad a #rgb / #rrggbb hex to #rrggbb so we can safely append an
- *  alpha suffix (e.g. `#1234561F`). Non-hex inputs (e.g. `rgb(...)`)
- *  fall back to the literal value — the helper is only used to
- *  derive tinted variants of the STATUS_ICON_MAP rightColors which
- *  are all 6-digit hex literals. */
-function hexWithAlpha(hex: string, alphaHex: string): string {
-  if (typeof hex !== "string" || !hex.startsWith("#")) return hex;
-  if (hex.length === 7) return `${hex}${alphaHex}`;
-  if (hex.length === 4) {
-    const r = hex[1];
-    const g = hex[2];
-    const b = hex[3];
-    return `#${r}${r}${g}${g}${b}${b}${alphaHex}`;
-  }
-  return hex;
-}
-
-/** Split legacy `"Kicker · DATE · Status"` meta strings when no explicit kicker is passed. */
-function splitProgressMetaLine(metaLine: string): {
-  kicker: string;
-  rest: string;
-} {
-  const sep = " · ";
-  const i = metaLine.indexOf(sep);
-  if (i < 0) return { kicker: "", rest: metaLine.trim() };
-  return {
-    kicker: metaLine.slice(0, i).trim(),
-    rest: metaLine.slice(i + sep.length).trim(),
-  };
-}
-
-/**
- * System-update card — Metronic-style ribbon with route context, avatar,
- * kicker, narrative, status pill, and timestamp.
- */
+/** System update card — compact, aligned with update stream UI. */
 export function TripProgressEventCard({
   avatarSeed,
   avatarIdentity = null,
   avatarDotColor,
-  kicker,
-  title,
-  metaLine,
-  subLine,
-  rightPrimary,
   rightPrimaryColor,
-  time,
-  routeContext,
-  isMobile = false,
+  title,
 }: TripProgressEventCardProps) {
-  const parsed = splitProgressMetaLine(metaLine);
-  const kickerText = (kicker ?? parsed.kicker).trim();
-  const dateMeta = kicker ? metaLine.trim() : parsed.rest;
+  const avatarSize = 28;
+  const entrance = useRef(new Animated.Value(0)).current;
+  const dotPulse = useRef(new Animated.Value(0)).current;
+  const dotColor = avatarDotColor || rightPrimaryColor || CHAT_ACCENT;
+  const resolvedAvatarIdentity = avatarIdentity
+    ? {
+        ...avatarIdentity,
+        // Keep fallback deterministic when system payload has a name but no seed.
+        avatarSeed: avatarIdentity.avatarSeed ?? avatarSeed,
+      }
+    : null;
 
-  const pillBorder = hexWithAlpha(rightPrimaryColor, "66");
-  const accent = rightPrimaryColor;
+  useEffect(() => {
+    Animated.timing(entrance, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [entrance]);
 
-  const avatarSize = isMobile ? CHAT_MOBILE.eventAvatar : 40;
-  const avatarEl = avatarIdentity ? (
-    <View
-      style={[
-        s.progressAvatar,
-        isMobile && s.progressAvatarMobile,
-        { backgroundColor: "transparent", overflow: "hidden" },
-      ]}
-    >
-      <ChatPartyAvatar identity={avatarIdentity} size={avatarSize} />
-    </View>
-  ) : (
-    <View style={[s.progressAvatar, isMobile && s.progressAvatarMobile]}>
-      <Text style={[s.progressAvatarText, { color: accent }]}>
-        {partyInitialsFromName(avatarSeed)}
-      </Text>
-    </View>
-  );
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dotPulse, {
+          toValue: 1,
+          duration: 680,
+          useNativeDriver: true,
+        }),
+        Animated.timing(dotPulse, {
+          toValue: 0,
+          duration: 680,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [dotPulse]);
 
-  const bodyEl = (
-    <View style={s.progressBody}>
-      {kickerText ? (
-        <Text
-          style={[
-            isMobile ? s.progressKickerMobile : s.progressKicker,
-            { color: accent },
-          ]}
-          numberOfLines={1}
-        >
-          {kickerText}
-        </Text>
-      ) : null}
-      <Text
-        style={[s.progressTitle, isMobile && s.progressTitleMobile]}
-        numberOfLines={isMobile ? 3 : 2}
-      >
-        {title}
-      </Text>
-      {dateMeta ? (
-        <Text
-          style={[s.progressMeta, isMobile && s.progressMetaMobile]}
-          numberOfLines={1}
-        >
-          {dateMeta}
-        </Text>
-      ) : null}
-      {subLine ? (
-        <Text
-          style={[s.progressSub, isMobile && s.progressSubMobile]}
-          numberOfLines={isMobile ? 2 : 1}
-        >
-          {subLine}
-        </Text>
-      ) : null}
-    </View>
-  );
-
-  const pillEl = (
-    <View
-      style={[
-        isMobile ? s.progressPillMobile : s.progressPill,
-        { borderColor: pillBorder },
-      ]}
-    >
-      <View style={[s.progressPillDot, { backgroundColor: accent }]} />
-      <Text
+  const avatarEl = (
+    <View style={s.alertAvatarShell}>
+      {resolvedAvatarIdentity ? (
+        <View style={[s.alertAvatar, { overflow: "hidden" }]}>
+          <ChatPartyAvatar identity={resolvedAvatarIdentity} size={avatarSize} />
+        </View>
+      ) : (
+        <View style={s.alertAvatar}>
+          <Text style={s.alertAvatarText}>
+            {partyInitialsFromName(avatarSeed)}
+          </Text>
+        </View>
+      )}
+      <Animated.View
         style={[
-          isMobile ? s.progressPillTextMobile : s.progressPillText,
-          { color: accent },
+          s.alertAvatarPresence,
+          {
+            backgroundColor: dotColor,
+            opacity: dotPulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.82, 1],
+            }),
+            transform: [
+              {
+                scale: dotPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.12],
+                }),
+              },
+            ],
+          },
         ]}
-        numberOfLines={1}
-      >
-        {rightPrimary}
-      </Text>
+      />
     </View>
   );
-
-  const routeRibbon =
-    routeContext && routeContext.trim().length > 0 ? (
-      <View style={s.routeContextPill}>
-        <Text style={s.routeContextText} numberOfLines={2}>
-          {routeContext}
-        </Text>
-      </View>
-    ) : null;
 
   return (
-    <View style={[s.progressWrap, isMobile && s.progressWrapMobile]}>
-      {routeRibbon}
-      <View style={[s.progressCard, isMobile && s.progressCardMobile]}>
-        {isMobile ? (
-          <>
-            <View style={s.progressTopRowMobile}>
-              {avatarEl}
-              {bodyEl}
-            </View>
-            <View style={s.progressFooterMobile}>
-              {pillEl}
-              <Text style={s.progressTimeMobile} numberOfLines={1}>
-                {time}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <>
-            {avatarEl}
-            {bodyEl}
-            <View style={s.progressRight}>
-              {pillEl}
-              <Text style={s.progressTime} numberOfLines={1}>
-                {time}
-              </Text>
-            </View>
-          </>
-        )}
+    <Animated.View
+      style={[
+        s.alertWrap,
+        {
+          opacity: entrance,
+          transform: [
+            {
+              translateY: entrance.interpolate({
+                inputRange: [0, 1],
+                outputRange: [4, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <View style={s.alertCard}>
+        <View style={s.alertTopRow}>
+          {avatarEl}
+          <View style={s.alertSimpleBody}>
+            <Text style={s.alertSimpleMessage} numberOfLines={3}>
+              {title}
+            </Text>
+          </View>
+        </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -1214,12 +1109,12 @@ function systemSheetAvatarSeed(content: string): string {
 
 export function ChatSystemEventCard({
   message,
-  isMobile = false,
-  routeContext,
   composeTrip,
 }: {
   message: TripMessageRow;
+  /** @deprecated Single alert layout on all breakpoints. */
   isMobile?: boolean;
+  /** @deprecated Route ribbon removed from alert cards. */
   routeContext?: string | null;
   composeTrip?: SystemUpdateDriverContext["composeTrip"];
 }) {
@@ -1238,23 +1133,22 @@ export function ChatSystemEventCard({
     // keep raw
   }
 
-  const seed = systemSheetAvatarSeed(message.content);
   const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
+  const seed =
+    driverAvatar?.displayName?.trim() ||
+    composeTrip?.driver_display_name?.trim() ||
+    systemSheetAvatarSeed(message.content);
 
   return (
     <TripProgressEventCard
       avatarSeed={seed}
       avatarIdentity={driverAvatar}
-      avatarDotColor={cfg.rightColor}
       kicker="SYSTEM UPDATE"
       title={message.content.trim() || "Trip update"}
       metaLine={`${dateUpper} · ${cfg.sheetLabel.toUpperCase()}`}
-      subLine={null}
       rightPrimary={cfg.rightWord}
       rightPrimaryColor={cfg.rightColor}
       time={displayTime}
-      routeContext={routeContext}
-      isMobile={isMobile}
     />
   );
 }

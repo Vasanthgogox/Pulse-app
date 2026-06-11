@@ -11,6 +11,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import {
   defaultSalesFilters,
   type SalesCrossFilters,
@@ -46,6 +47,7 @@ export function NetworkDesktopConnectionsPanel({
   onConnectionsComputed,
   onChatIntegrated,
 }: Props) {
+  const layout = useProfileHubCompactLayout();
   const [connections, setConnections] = useState<ConnectedOrg[]>([]);
 
   const handleConnectionsComputed = (items: ConnectedOrg[]) => {
@@ -68,13 +70,13 @@ export function NetworkDesktopConnectionsPanel({
   }, [connSearch, connFilter]);
 
   return (
-    <View style={styles.panel}>
-      <View style={styles.sectionToolbar}>
+    <View style={[styles.panel, layout.panel]}>
+      <View style={[styles.sectionToolbar, layout.sectionToolbar]}>
         <View>
-          <Text style={styles.sectionTitle}>
+          <Text style={[styles.sectionTitle, layout.sectionTitle]}>
             Showing {totalConnections} connections
           </Text>
-          <Text style={styles.sectionSub}>Your clients, suppliers, and fleet</Text>
+          <Text style={[styles.sectionSub, layout.sectionSub]}>Your clients, suppliers, and fleet</Text>
         </View>
         <View style={styles.filterRow}>
           <Pressable style={styles.filterPill}>

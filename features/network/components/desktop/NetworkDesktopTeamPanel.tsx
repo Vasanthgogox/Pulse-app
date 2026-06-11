@@ -8,6 +8,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import { useInvalidateOrgMembers } from "@/lib/queries/useOrgMembersQuery";
 import { UserPlus2, X } from "lucide-react-native";
 import { useState } from "react";
@@ -26,6 +27,7 @@ export function NetworkDesktopTeamPanel({
   currentUserId,
   canManage,
 }: Props) {
+  const layout = useProfileHubCompactLayout();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [focusPending, setFocusPending] = useState(false);
   const invalidate = useInvalidateOrgMembers(orgId);
@@ -43,11 +45,11 @@ export function NetworkDesktopTeamPanel({
   };
 
   return (
-    <View style={styles.panel}>
-      <View style={styles.sectionToolbar}>
+    <View style={[styles.panel, layout.panel]}>
+      <View style={[styles.sectionToolbar, layout.sectionToolbar]}>
         <View style={styles.teamPanelTitleCol}>
-          <Text style={styles.sectionTitle}>Team members</Text>
-          <Text style={styles.sectionSub}>
+          <Text style={[styles.sectionTitle, layout.sectionTitle]}>Team members</Text>
+          <Text style={[styles.sectionSub, layout.sectionSub]}>
             {inviteOpen
               ? "Find a colleague by phone and choose their role"
               : `Manage who can access ${orgName || "your organization"}`}

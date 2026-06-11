@@ -5,6 +5,7 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import Theme from "@/constants/Theme";
 import { networkProfileInviteStyles as s } from "@/features/network/components/networkProfileInvite.styles";
+import { publicProfileInviteCompact as compactS } from "@/features/party/components/publicProfileMobile.styles";
 import {
   partyAccentFromConnectionRole,
   type PartyRoleLabel,
@@ -32,6 +33,8 @@ export type NetworkProfileInviteHeroProps = {
   avatarSize?: number;
   style?: StyleProp<ViewStyle>;
   footer?: ReactNode;
+  /** Narrow phones — tighter cover, type, and stat band. */
+  compact?: boolean;
 };
 
 function roleToEntityType(role: PartyRoleLabel): PartyEntityType {
@@ -58,9 +61,11 @@ export function NetworkProfileInviteHero({
   avatarSize = 80,
   style,
   footer,
+  compact = false,
 }: NetworkProfileInviteHeroProps) {
   const accent = partyAccentFromConnectionRole(roleLabel);
   const resolvedEntity = entityType ?? roleToEntityType(roleLabel);
+  const resolvedAvatarSize = compact ? Math.min(avatarSize, 68) : avatarSize;
   const chips =
     metaChips ??
     (subtitle.trim().length > 0
@@ -68,8 +73,8 @@ export function NetworkProfileInviteHero({
       : []);
 
   return (
-    <View style={[s.card, style]}>
-      <View style={s.inviteCover}>
+    <View style={[s.card, compact && compactS.card, style]}>
+      <View style={[s.inviteCover, compact && compactS.inviteCover]}>
         <View style={s.coverOrbLarge} />
         <View style={s.coverOrbSmall} />
         <View style={s.coverPlane} />
@@ -90,23 +95,27 @@ export function NetworkProfileInviteHero({
         </View>
         <View style={s.cardHeader}>
           <View style={s.roleBadge}>
-            <Text style={s.roleBadgeText}>ROLE {roleLabel}</Text>
+            <Text style={[s.roleBadgeText, compact && compactS.roleBadgeText]}>
+              ROLE {roleLabel}
+            </Text>
           </View>
           <View style={[s.statusPill, linkLive && s.statusPillLive]}>
-            <Text style={s.statusPillText}>{linkLabel}</Text>
+            <Text style={[s.statusPillText, compact && compactS.statusPillText]}>
+              {linkLabel}
+            </Text>
           </View>
         </View>
       </View>
 
-      <View style={s.inviteBody}>
-        <View style={[s.avatarLift, { position: "relative" }]}>
-          <PartyEntityAvatarGlow accent={accent} size={avatarSize}>
+      <View style={[s.inviteBody, compact && compactS.inviteBody]}>
+        <View style={[s.avatarLift, compact && compactS.avatarLift, { position: "relative" }]}>
+          <PartyEntityAvatarGlow accent={accent} size={resolvedAvatarSize}>
             <PartyAvatar
               name={name}
               avatarUrl={avatarUrl}
               avatarSeed={avatarSeed}
               entityType={resolvedEntity}
-              size={avatarSize}
+              size={resolvedAvatarSize}
               borderStyle={{ borderWidth: 0 }}
             />
           </PartyEntityAvatarGlow>
@@ -118,13 +127,13 @@ export function NetworkProfileInviteHero({
         </View>
 
         <View style={s.innerText}>
-          <Text style={s.name} numberOfLines={1}>
+          <Text style={[s.name, compact && compactS.name]} numberOfLines={1}>
             {name.toUpperCase()}
           </Text>
           {subtitle ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%" }}>
-              <MapPin size={9} color={Theme.textMutedDemo} strokeWidth={2} />
-              <Text style={s.subtitle} numberOfLines={2}>
+              <MapPin size={compact ? 8 : 9} color={Theme.textMutedDemo} strokeWidth={2} />
+              <Text style={[s.subtitle, compact && compactS.subtitle]} numberOfLines={2}>
                 {subtitle}
               </Text>
             </View>
@@ -133,7 +142,7 @@ export function NetworkProfileInviteHero({
             <View style={s.metaRow}>
               {chips.map((chip) => (
                 <View key={chip.label} style={s.metaChip}>
-                  <Text style={s.metaChipText} numberOfLines={1}>
+                  <Text style={[s.metaChipText, compact && compactS.metaChipText]} numberOfLines={1}>
                     {chip.label}
                   </Text>
                 </View>
@@ -160,7 +169,7 @@ export function NetworkProfileInviteHero({
           </View>
           <View style={s.phoneBandCol}>
             <Text style={s.phoneBandLabel}>PHONE</Text>
-            <Text style={s.phoneBandValue} numberOfLines={1}>
+            <Text style={[s.phoneBandValue, compact && compactS.phoneBandValue]} numberOfLines={1}>
               {phone}
             </Text>
           </View>
@@ -179,18 +188,19 @@ export type NetworkProfileInviteStatsProps = {
 export function NetworkProfileInviteStats({
   items,
   style,
-}: NetworkProfileInviteStatsProps) {
+  compact = false,
+}: NetworkProfileInviteStatsProps & { compact?: boolean }) {
   return (
-    <View style={[s.statsBand, style]}>
+    <View style={[s.statsBand, compact && compactS.statsBand, style]}>
       {items.map((item, idx) => (
         <View key={item.label} style={{ flex: 1, flexDirection: "row", minWidth: 0 }}>
           {idx > 0 ? <View style={s.statCellDivider} /> : null}
-          <View style={s.statCell}>
-            <Text style={s.statLabel} numberOfLines={1}>
+          <View style={[s.statCell, compact && compactS.statCell]}>
+            <Text style={[s.statLabel, compact && compactS.statLabel]} numberOfLines={1}>
               {item.label}
             </Text>
             <Text
-              style={[s.statValue, item.live && s.statValueLive]}
+              style={[s.statValue, compact && compactS.statValue, item.live && s.statValueLive]}
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.8}

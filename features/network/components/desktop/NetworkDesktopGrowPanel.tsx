@@ -22,6 +22,7 @@ import {
   ConnectionRoleModal,
   type ConnectionInviteRole,
 } from "@/features/network/components/ConnectionRoleModal";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import { NetworkGrowSummaryCard } from "@/features/network/components/NetworkGrowSummaryCard";
 import { NetworkDesktopGrowConnectionCard } from "@/features/network/components/desktop/NetworkDesktopGrowConnectionCard";
 import {
@@ -181,6 +182,7 @@ export function NetworkDesktopGrowPanel({
   onPressMutuals,
   onOpenMutualProfile,
 }: Props) {
+  const layout = useProfileHubCompactLayout();
   const queryClient = useQueryClient();
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const { orgs, loading, error, refetch, invalidateCache } = useNetworkDiscovery({
@@ -417,9 +419,9 @@ export function NetworkDesktopGrowPanel({
   };
 
   return (
-    <View style={styles.salesBody}>
-      <View style={styles.splitRow}>
-        <View style={styles.sidebar}>
+    <View style={[styles.salesBody, layout.salesBody]}>
+      <View style={[styles.splitRow, layout.splitRow]}>
+        <View style={[styles.sidebar, layout.sidebar]}>
           <NetworkGrowSummaryCard
             discoverCount={discoverableCount}
             totalConnections={totalConnections}
@@ -560,7 +562,7 @@ export function NetworkDesktopGrowPanel({
           </View>
         </View>
 
-        <View style={styles.mainCol}>
+        <View style={[styles.mainCol, layout.mainCol]}>
           <View style={styles.growTeamsHeader}>
             <Text style={styles.growTeamsCount}>
               {growRecommendations.length} Partners

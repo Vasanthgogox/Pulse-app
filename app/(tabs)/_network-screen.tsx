@@ -313,8 +313,8 @@ function NetworkScreenInner() {
   const totalConnectionsDisplay = String(animatedTotalConnections).padStart(2, "0");
   const hubTabParam = searchParams.hubTab;
   const hubParam = searchParams.hub;
+  /** Metronic org public profile hub — workspace avatar deep-link; all viewports. */
   const showDesktopHub = useMemo(() => {
-    if (!isWideNetwork) return false;
     if (hubParam === "1" || hubParam === "true") return true;
     const tab = hubTabParam;
     return (
@@ -325,9 +325,10 @@ function NetworkScreenInner() {
       tab === "goals" ||
       tab === "asset" ||
       tab === "connections" ||
-      tab === "grow"
+      tab === "grow" ||
+      tab === "chat"
     );
-  }, [isWideNetwork, hubParam, hubTabParam]);
+  }, [hubParam, hubTabParam]);
   const onCreatePost = () => router.push("/(modals)/create-post");
   useEffect(() => {
     if (searchParams.view !== "requests") return;
@@ -1315,12 +1316,13 @@ function NetworkScreenInner() {
         businessConnectionModal?.presentConnectionInvite(item)
       }
       initialTab={initialHubTab}
+      bottomScrollInset={!isWideNetwork ? layout.scrollBottomPadding() : 0}
     />
   ) : null;
 
   return (
     <View style={styles.container}>
-      {showHomePageHeader ? (
+      {showHomePageHeader && !showDesktopHub ? (
         <HomePageHeader
           title={orgDisplayName}
           invitationBadgeCount={pendingCount}

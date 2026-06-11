@@ -96,7 +96,9 @@ interface TripChatContextType {
   sendMessage: (
     conversationId: string,
     content: string,
-    messageType?: MessageType
+    messageType?: MessageType,
+    replyToId?: string | null,
+    replyToPreview?: Record<string, unknown> | null,
   ) => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
   /** Marks every party-lane thread for this trip read (DB + store). */
@@ -453,14 +455,17 @@ export function TripChatProvider({
 
   // ── sendMessage: optimistic + persist + rollback ───────────────────────────
   const sendMessage = useCallback(
-    async (conversationId: string, content: string, messageType: MessageType = "text") => {
+    async (
+      conversationId: string,
+      content: string,
+      messageType: MessageType = "text",
+      replyToId: string | null = null,
+      replyToPreview: Record<string, unknown> | null = null,
+    ) => {
       if (!organizationId || !profile) return;
 
       const conv         = useChatStore.getState().getConversationByConvId(conversationId);
       const messageOrgId = conv?.organization_id ?? organizationId;
-      // Always dispatch from the signed-in org user in this hub. Using `supplier` when
-      // `conversation.organization_id` differed from `organizationId` made fleet messages
-      // render as the counterparty (wrong bubble side).
       const senderRole: TripMessageRow["sender_role"] = "dispatcher";
       const senderName =
         (profile as any).full_name ||
@@ -480,7 +485,8 @@ export function TripChatProvider({
         read_at:         null,
         delivery_status: "sending",
         created_at:      new Date().toISOString(),
-      };
+        ...(replyToId ? { reply_to_id: replyToId, reply_to_preview: replyToPreview } : {}),
+      } as TripMessageRow;
 
       useChatStore.getState().optimisticInsert(conversationId, optimisticMsg);
 
@@ -493,6 +499,8 @@ export function TripChatProvider({
           senderName,
           senderUserId: (profile as any).uid ?? null,
           messageType,
+          replyToId,
+          replyToPreview,
         });
         useChatStore.getState().replaceOptimistic(conversationId, optimisticMsg.id, persisted);
       } catch {

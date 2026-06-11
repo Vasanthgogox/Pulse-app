@@ -1,4 +1,18 @@
-const TERMINAL_TRIP_STATUSES = new Set(["completed", "delivered", "done", "cancelled"]);
+const TERMINAL_TRIP_STATUSES = new Set([
+  "completed",
+  "trip_completed",
+  "delivered",
+  "delivery_completed",
+  "done",
+  "closed",
+  "archived",
+  "cancelled",
+  "canceled",
+  "cancelled_by_dispatcher",
+  "cancelled_by_driver",
+  "cancelled_by_supplier",
+  "cancelled_by_client",
+]);
 
 /** Trip finished successfully — show in-chat mission debrief (not cancelled). */
 const FEEDBACK_ELIGIBLE_TRIP_STATUSES = new Set(["completed", "delivered", "done"]);

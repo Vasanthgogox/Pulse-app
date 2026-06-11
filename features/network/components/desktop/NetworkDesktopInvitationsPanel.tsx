@@ -6,6 +6,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { X } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
@@ -37,8 +38,9 @@ export function NetworkDesktopInvitationsPanel({
   onCancel,
   onOpenInviteDetail,
 }: Props) {
+  const layout = useProfileHubCompactLayout();
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, layout.panel]}>
       <View style={[styles.salesCard, styles.invitationsPanelCard]}>
         <View style={styles.invitationsPanelHead}>
           <View style={styles.invitationsPanelTitleCol}>

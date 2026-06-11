@@ -7,8 +7,8 @@ import {
   resolveLocationCityLabel,
   type LocationPingTripHint,
 } from "../utils/locationPingChatDisplay.util";
-import { formatTripEventSheetDate, TripProgressEventCard, buildChatRouteContextLabel } from "./ChatEventCard";
-import { Theme } from "@/constants/Theme";
+import { formatTripEventSheetDate, TripProgressEventCard } from "./ChatEventCard";
+import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import type { TripForCompose } from "../services/chat.service";
 import { resolveSystemUpdateDriverAvatar } from "../utils/chatAvatar.util";
 
@@ -54,27 +54,22 @@ export function ChatLocationSystemCard({
   const dateUpper = formatTripEventSheetDate(message.created_at);
   const statusLabel = simulated ? "SIMULATED LOCATION" : "DRIVER LOCATION";
   const metaLine = `${dateUpper} · ${statusLabel}`;
-  const routeContext = buildChatRouteContextLabel(
-    tripHint?.pickupArea,
-    tripHint?.dropLocation,
-    message.created_at,
-  );
   const driverAvatar = resolveSystemUpdateDriverAvatar(message, { composeTrip });
+  const avatarSeed =
+    driverAvatar?.displayName?.trim() ||
+    composeTrip?.driver_display_name?.trim() ||
+    "Trip Update";
 
   return (
     <TripProgressEventCard
-      avatarSeed="Trip Update"
+      avatarSeed={avatarSeed}
       avatarIdentity={driverAvatar}
-      avatarDotColor={Theme.primary}
       kicker="SYSTEM UPDATE"
       title={title}
       metaLine={metaLine}
-      subLine={null}
       rightPrimary="NEW"
-      rightPrimaryColor={Theme.primary}
+      rightPrimaryColor={CHAT_ACCENT}
       time={displayTime}
-      routeContext={routeContext}
-      isMobile={isMobile}
     />
   );
 }

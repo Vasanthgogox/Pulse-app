@@ -1,17 +1,23 @@
 /**
- * Shared compact layout tokens for client / supplier / vehicle profile hubs on mobile.
+ * Shared compact layout tokens for client / supplier / vehicle / org profile hubs on mobile.
  */
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { METRONIC } from '@/features/network/components/desktop/networkDesktopHub.styles';
 import { StyleSheet } from 'react-native';
 
+const GUTTER = Layout.screenPaddingHorizontal;
+
 export const profileHubLayoutStyles = StyleSheet.create({
+  hubRootCompact: {
+    backgroundColor: METRONIC.bodyBg,
+  },
+
   pageChrome: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: GUTTER,
     paddingTop: 8,
-    paddingBottom: 10,
-    gap: 8,
+    paddingBottom: 8,
+    gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
@@ -26,13 +32,13 @@ export const profileHubLayoutStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 6,
-    paddingRight: 4,
+    paddingVertical: 4,
+    paddingRight: 2,
     minHeight: Layout.minTouchTargetSize,
     justifyContent: 'center',
   },
   chromeBackText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: METRONIC.text,
   },
@@ -42,29 +48,31 @@ export const profileHubLayoutStyles = StyleSheet.create({
     gap: 2,
   },
   chromeTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
     color: METRONIC.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.25,
+    lineHeight: 19,
   },
   chromeSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: METRONIC.subtle,
+    lineHeight: 14,
   },
   chromePillsScroll: {
-    marginHorizontal: -Layout.screenPaddingHorizontal,
+    marginHorizontal: -GUTTER,
   },
   chromePillsContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: GUTTER,
     gap: 6,
     flexDirection: 'row',
     alignItems: 'center',
   },
   chromePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
     backgroundColor: '#F1F1F4',
     borderWidth: 1,
     borderColor: METRONIC.border,
@@ -74,7 +82,7 @@ export const profileHubLayoutStyles = StyleSheet.create({
     borderColor: '#F6C000',
   },
   chromePillText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     color: METRONIC.subtle,
     letterSpacing: 0.35,
@@ -90,6 +98,7 @@ export const profileHubLayoutStyles = StyleSheet.create({
     paddingTop: 0,
     minHeight: undefined,
     gap: 0,
+    backgroundColor: Theme.cardWhite,
   },
   tabScrollCompact: {
     flexGrow: 0,
@@ -98,28 +107,29 @@ export const profileHubLayoutStyles = StyleSheet.create({
     borderBottomColor: METRONIC.border,
   },
   tabScrollContentCompact: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 4,
-    paddingVertical: 2,
+    paddingHorizontal: GUTTER,
+    gap: 2,
+    paddingVertical: 0,
+    alignItems: 'flex-end',
   },
   tabBtnCompact: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    minHeight: 40,
     justifyContent: 'center',
     marginBottom: 0,
     borderBottomWidth: 2,
   },
   tabTextCompact: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   tabActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 10,
+    paddingHorizontal: GUTTER,
+    paddingVertical: 8,
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
@@ -130,20 +140,20 @@ export const profileHubLayoutStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: Layout.minTouchTargetSize,
-    paddingHorizontal: 14,
-    borderRadius: 10,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 9,
     backgroundColor: METRONIC.text,
   },
   tabActionPrimaryText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: Theme.textOnPrimary,
   },
   tabActionIcon: {
-    width: Layout.minTouchTargetSize,
-    height: Layout.minTouchTargetSize,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: METRONIC.border,
     alignItems: 'center',
@@ -156,22 +166,34 @@ export const profileHubLayoutStyles = StyleSheet.create({
   },
 
   metricsWrapCompact: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 4,
+    paddingHorizontal: GUTTER,
+    paddingTop: 8,
+    paddingBottom: 8,
+    backgroundColor: METRONIC.bodyBg,
+  },
+  statsBarCompact: {
+    width: '100%',
+    alignSelf: 'stretch',
+    borderRadius: 10,
   },
   statsBarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    width: '100%',
   },
   statCellGrid: {
     width: '50%',
-    flex: undefined,
-    paddingVertical: 14,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: '50%',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     borderRightWidth: 1,
     borderBottomWidth: 1,
     borderRightColor: METRONIC.border,
     borderBottomColor: METRONIC.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statCellGridTopRight: {
     borderRightWidth: 0,
@@ -184,75 +206,106 @@ export const profileHubLayoutStyles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   statValueCompact: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
+    lineHeight: 18,
   },
   statLabelCompact: {
-    fontSize: 9,
-    letterSpacing: 0.5,
+    fontSize: 8,
+    letterSpacing: 0.45,
+    lineHeight: 10,
+    textAlign: 'center',
   },
 
   panelCompact: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: GUTTER,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
+    backgroundColor: METRONIC.bodyBg,
+    borderBottomWidth: 0,
   },
   detailsBodyCompact: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 10,
+    paddingHorizontal: GUTTER,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
+    backgroundColor: METRONIC.bodyBg,
+    borderBottomWidth: 0,
+  },
+  salesBodyCompact: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
+    backgroundColor: METRONIC.bodyBg,
+    borderBottomWidth: 0,
   },
   splitColumn: {
     flexDirection: 'column',
-    gap: 10,
+    gap: 8,
+    width: '100%',
+    alignSelf: 'stretch',
+    flexWrap: 'nowrap',
   },
   sidebarFull: {
     width: '100%',
-    minWidth: undefined,
-    maxWidth: undefined,
+    minWidth: 0,
+    maxWidth: '100%',
     flexShrink: 1,
+    gap: 8,
   },
   mainColFull: {
     width: '100%',
-    minWidth: undefined,
-    flex: undefined,
+    minWidth: 0,
+    maxWidth: '100%',
+    flex: 1,
+    gap: 8,
   },
   headquarterStack: {
     flexDirection: 'column',
+    width: '100%',
+    gap: 8,
+    marginTop: 4,
   },
   contactListFull: {
-    minWidth: undefined,
+    minWidth: 0,
     width: '100%',
-    paddingTop: 4,
+    flex: undefined,
+    paddingTop: 0,
+    gap: 7,
   },
   mapFrameFull: {
     width: '100%',
-    minWidth: undefined,
-    height: 140,
-    minHeight: 140,
+    minWidth: 0,
+    maxWidth: '100%',
+    height: 128,
+    minHeight: 128,
+    flex: undefined,
   },
 
   kvRowStacked: {
     flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: 3,
-    paddingVertical: 10,
+    gap: 2,
+    paddingVertical: 8,
+    width: '100%',
   },
   kvLabelStacked: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: METRONIC.muted,
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
+    lineHeight: 13,
   },
   kvValueStacked: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: METRONIC.text,
     textAlign: 'left',
     width: '100%',
-    lineHeight: 20,
+    lineHeight: 18,
   },
 
   snapshotGridCompact: {
@@ -260,25 +313,25 @@ export const profileHubLayoutStyles = StyleSheet.create({
     gap: 8,
   },
   snapshotCellFull: {
-    minWidth: undefined,
+    minWidth: 0,
     width: '100%',
   },
 
   formGridCompact: {
     flexDirection: 'column',
-    gap: 10,
+    gap: 8,
   },
   fieldGroupFull: {
-    minWidth: undefined,
+    minWidth: 0,
     width: '100%',
     flexGrow: 1,
   },
 
   tableScroll: {
-    marginHorizontal: -Layout.screenPaddingHorizontal,
+    marginHorizontal: -GUTTER,
   },
   tableScrollInner: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: GUTTER,
     minWidth: '100%',
   },
   tableMinWidth: {
@@ -286,6 +339,78 @@ export const profileHubLayoutStyles = StyleSheet.create({
   },
 
   scrollContentCompact: {
-    paddingBottom: 32,
+    paddingBottom: 24,
+    backgroundColor: METRONIC.bodyBg,
+  },
+
+  cardCompact: {
+    padding: 10,
+    gap: 6,
+    borderRadius: 10,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  cardTitleCompact: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 0,
+    lineHeight: 16,
+  },
+  aboutBodyCompact: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  sectionHeadingCompact: {
+    fontSize: 11,
+    marginTop: 0,
+    lineHeight: 15,
+  },
+  sectionHeadingSpacedCompact: {
+    marginTop: 6,
+  },
+  networkLinkTextCompact: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  tagPillTextCompact: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  locationCardCompact: {
+    width: '100%',
+    minWidth: 0,
+    maxWidth: '100%',
+    flexBasis: 'auto',
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  locationsGridCompact: {
+    flexDirection: 'column',
+    gap: 8,
+    width: '100%',
+  },
+  activityCardCompact: {
+    padding: 10,
+    gap: 8,
+    borderRadius: 10,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  salesCardPadCompact: {
+    padding: 10,
+  },
+  sectionToolbarCompact: {
+    gap: 8,
+    marginBottom: 2,
+    flexWrap: 'wrap',
+  },
+  sectionTitleCompact: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  sectionSubCompact: {
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 1,
   },
 });

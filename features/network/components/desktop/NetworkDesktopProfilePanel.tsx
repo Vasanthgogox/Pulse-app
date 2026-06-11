@@ -16,6 +16,7 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import { orgInitials } from "@/features/organization/components/workspace/workspacePanelUi";
 import { syncBrandingFromOrg } from "@/features/invoicing/services/invoiceBranding.service";
 import {
@@ -46,6 +47,7 @@ type Props = {
 };
 
 export function NetworkDesktopProfilePanel({ organization }: Props) {
+  const layout = useProfileHubCompactLayout();
   const { profile, user, refreshSession } = useAuth();
   const { refreshOrganization } = useOrganization();
   const { canEdit } = useOrgRole();
@@ -322,11 +324,11 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
   const previewOrgName = orgName.trim() || storedOrgName || "YOUR ORG";
 
   return (
-    <View style={styles.panel}>
-      <View style={styles.sectionToolbar}>
+    <View style={[styles.panel, layout.panel]}>
+      <View style={[styles.sectionToolbar, layout.sectionToolbar]}>
         <View style={styles.teamPanelTitleCol}>
-          <Text style={styles.sectionTitle}>My Profile</Text>
-          <Text style={styles.sectionSub}>
+          <Text style={[styles.sectionTitle, layout.sectionTitle]}>My Profile</Text>
+          <Text style={[styles.sectionSub, layout.sectionSub]}>
             Personal identity and workspace branding
           </Text>
         </View>
