@@ -20,13 +20,18 @@ import type { SlackMessageGroupMeta } from "@/features/chat/utils/slackMessageGr
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Clipboard,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import {
   slackDesktopStyles as deskSt,
@@ -97,6 +102,12 @@ export type ChatSlackMessageRowProps = {
   onReply?: () => void;
   /** Whether this message just arrived via Realtime (triggers slide-in animation) */
   isNew?: boolean;
+  /** Whether the message was edited after sending. */
+  isEdited?: boolean;
+  /** Called when user confirms an edit with new content. */
+  onEdit?: (newContent: string) => void;
+  /** Called when user confirms delete. */
+  onDelete?: () => void;
 };
 
 export function ChatSlackMessageRow({
@@ -119,6 +130,9 @@ export function ChatSlackMessageRow({
   replyPreview,
   onReply,
   isNew,
+  isEdited,
+  onEdit,
+  onDelete,
 }: ChatSlackMessageRowProps) {
   const styles = variant === "desktop" ? deskSt : st;
   const avatarSize = variant === "desktop" ? SLACK_DESKTOP_AVATAR.message : SLACK_AVATAR.thread;
@@ -180,6 +194,39 @@ export function ChatSlackMessageRow({
 
   // ── Mobile: long-press context menu ───────────────────────────────────
   const [menuVisible, setMenuVisible] = useState(false);
+
+  // ── Inline edit mode ──────────────────────────────────────────────────
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(content);
+
+  const handleStartEdit = () => {
+    setEditDraft(content);
+    setEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = editDraft.trim();
+    if (trimmed && trimmed !== content) {
+      onEdit?.(trimmed);
+    }
+    setEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+    setEditDraft(content);
+  };
+
+  const handleDeleteConfirm = () => {
+    Alert.alert(
+      "Delete message",
+      "This message will be removed for everyone. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => onDelete?.() },
+      ],
+    );
+  };
 
   const handleLongPress = () => {
     if (!isDesktop) setMenuVisible(true);
@@ -280,27 +327,52 @@ export function ChatSlackMessageRow({
                 </Text>
               </View>
             ) : null}
-            {isJumboEmojiMessage(content) ? (
+            {editing ? (
+              <View style={inlineEditWrap}>
+                <TextInput
+                  value={editDraft}
+                  onChangeText={setEditDraft}
+                  autoFocus
+                  multiline
+                  style={inlineEditInput}
+                />
+                <View style={inlineEditActions}>
+                  <TouchableOpacity onPress={handleCancelEdit} style={inlineEditCancel}>
+                    <Text style={inlineEditCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSaveEdit} style={inlineEditSave}>
+                    <Text style={inlineEditSaveText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : isJumboEmojiMessage(content) ? (
               <ChatJumboEmojiMessage content={content} compact={showHeader} />
             ) : (
-              <Text
-                style={[
-                  styles.threadMsgText,
-                  isContinuation && styles.threadMsgTextContinuation,
-                  !showHeader && styles.threadMsgTextStacked,
-                ]}
-              >
-                {renderMd(content)}
-              </Text>
+              <View>
+                <Text
+                  style={[
+                    styles.threadMsgText,
+                    isContinuation && styles.threadMsgTextContinuation,
+                    !showHeader && styles.threadMsgTextStacked,
+                  ]}
+                >
+                  {renderMd(content)}
+                </Text>
+                {isEdited ? (
+                  <Text style={editedLabel}>(edited)</Text>
+                ) : null}
+              </View>
             )}
           </View>
 
           {/* Desktop hover toolbar — floats top-right of the row, above the row */}
-          {isDesktop && hovered && onReact && onReply ? (
+          {isDesktop && hovered ? (
             <ChatMessageHoverActions
               onReact={onReact}
               onReply={onReply}
               onCopy={handleCopy}
+              onEdit={isOwn && onEdit ? handleStartEdit : undefined}
+              onDelete={isOwn && onDelete ? handleDeleteConfirm : undefined}
               onHoverIn={showHoverActions}
               onHoverOut={hideHoverActions}
             />
@@ -327,6 +399,9 @@ export function ChatSlackMessageRow({
           onReact={(emoji) => onReact?.(emoji)}
           onReply={() => onReply?.()}
           onCopy={handleCopy}
+          isOwn={isOwn}
+          onEdit={onEdit ? handleStartEdit : undefined}
+          onDelete={onDelete ? handleDeleteConfirm : undefined}
         />
       ) : null}
     </>
@@ -337,3 +412,62 @@ const rowHoverStyle = {
   backgroundColor: "rgba(0,0,0,0.025)",
   borderRadius: 6,
 } as const;
+
+const editSt = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    gap: 6,
+  } as ViewStyle,
+  input: {
+    borderWidth: 1.5,
+    borderColor: "#5b5ef4",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 14,
+    color: "#1D1C1D",
+    lineHeight: 20,
+    minHeight: 40,
+  } as TextStyle,
+  actions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+  } as ViewStyle,
+  cancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#f1f5f9",
+  } as ViewStyle,
+  cancelText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  } as TextStyle,
+  saveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#5b5ef4",
+  } as ViewStyle,
+  saveText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+  } as TextStyle,
+  editedLabel: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginTop: 2,
+  } as TextStyle,
+});
+
+const inlineEditWrap = editSt.wrap;
+const inlineEditInput = editSt.input;
+const inlineEditActions = editSt.actions;
+const inlineEditCancel = editSt.cancelBtn;
+const inlineEditCancelText = editSt.cancelText;
+const inlineEditSave = editSt.saveBtn;
+const inlineEditSaveText = editSt.saveText;
+const editedLabel = editSt.editedLabel;

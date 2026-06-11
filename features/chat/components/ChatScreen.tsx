@@ -68,7 +68,6 @@ import {
   ChatSlackInboxToolbar,
   ChatSlackListHeader,
   ChatSlackListRow,
-  ChatSlackListSeparator,
   ChatSlackBottomNav,
   CHAT_SLACK_BOTTOM_NAV_BAR,
   ChatSlackPartyRecommendedDivider,
@@ -102,8 +101,10 @@ import { ChatTypingIndicator } from "@/features/chat/components/shared/ChatTypin
 import type { ReplyPreviewData } from "@/features/chat/components/shared/ChatReplyPreview";
 import type { ChatReactions } from "@/features/chat/components/shared/ChatReactionsRow";
 import { useChatTypingPresence } from "@/features/chat/hooks/useChatTypingPresence";
-import { toggleMessageReaction } from "@/features/chat/services/chat.service";
+import { toggleMessageReaction, updateChatMessageContent, deleteChatMessage } from "@/features/chat/services/chat.service";
 import { MessageTick } from "@/features/chat/components/MessageTick";
+import { ChatTripRoomInboxSection } from "@/features/chat/components/ChatTripRoomInboxSection";
+import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
 import { SystemEventCard } from "@/features/chat/components/SystemEventCard";
 import {
   INTEGRATED_QUICK_MESSAGES,
@@ -225,6 +226,7 @@ import { commandPriorityScore } from "../utils/commandPriority.util";
 import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
 import { resolveDocumentShareDisplay } from "../utils/documentShareDisplay.util";
+import { normalizeTripDocumentsStoragePath } from "../utils/resolveChatDocumentUrl.util";
 import { isLocationPingMessage } from "../utils/locationPingChatDisplay.util";
 import { ChatLedgerEventCard, ChatSystemEventCard, buildChatRouteContextLabel } from "./ChatEventCard";
 import { ChatLocationSystemCard } from "./ChatLocationSystemCard";
@@ -1242,7 +1244,10 @@ export function ChatScreen() {
   const [hubSearchOpen, setHubSearchOpen] = useState(false);
   const tripSearchInputRef = useRef<TextInput>(null);
   const netSearchInputRef = useRef<TextInput>(null);
+  const desktopSidebarScrollRef = useRef<ScrollView>(null);
+  const desktopActiveRowRef = useRef<View>(null);
   const [showTripFilterModal, setShowTripFilterModal] = useState(false);
+  const [platformTripRoomId, setPlatformTripRoomId] = useState<string | null>(null);
   const detailEnterProgress = useRef(new Animated.Value(1)).current;
   const [tripPartyFilters, setTripPartyFilters] = useState<ConversationPartyType[]>([
     ...TRIP_PARTY_FILTERS,
@@ -1371,6 +1376,14 @@ export function ChatScreen() {
         clientName={feedbackComposeTrip?.client_name ?? null}
       />
     ) : null;
+
+  const platformTripRoomSheet = (
+    <TripChatRoomSheet
+      visible={!!platformTripRoomId}
+      tripId={platformTripRoomId}
+      onClose={() => setPlatformTripRoomId(null)}
+    />
+  );
 
   useEffect(() => {
     if (!isTripStreamTab(activeTab)) {
@@ -1673,6 +1686,52 @@ export function ChatScreen() {
     desktopHistoryCollapsed,
     desktopActiveShowAll,
     desktopHistoryShowAll,
+  ]);
+
+  const scrollDesktopActiveRowIntoView = useCallback(() => {
+    if (!isDesktop) return;
+    const row = desktopActiveRowRef.current;
+    if (!row) return;
+
+    if (Platform.OS === "web") {
+      (row as unknown as { scrollIntoView?: (opts?: ScrollIntoViewOptions) => void }).scrollIntoView?.(
+        { block: "nearest", behavior: "smooth" },
+      );
+      return;
+    }
+
+    const scroll = desktopSidebarScrollRef.current;
+    if (!scroll) return;
+
+    const scrollNative = scroll as ScrollView & { getInnerViewNode?: () => number };
+    const parent = scrollNative.getInnerViewNode?.();
+    if (parent == null) return;
+    row.measureLayout(
+      parent,
+      (_x, y) => {
+        scroll.scrollTo({ y: Math.max(0, y - 48), animated: true });
+      },
+      () => {},
+    );
+  }, [isDesktop]);
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    if (!selectedConvId && !selectedNetId) return;
+    const timer = setTimeout(scrollDesktopActiveRowIntoView, 180);
+    return () => clearTimeout(timer);
+  }, [
+    isDesktop,
+    selectedConvId,
+    selectedNetId,
+    activeTab,
+    desktopActiveShowAll,
+    desktopHistoryShowAll,
+    desktopDmShowAll,
+    desktopActiveCollapsed,
+    desktopHistoryCollapsed,
+    desktopDmCollapsed,
+    scrollDesktopActiveRowIntoView,
   ]);
 
   const slackFilteredTripConversations = useMemo(() => {
@@ -2122,8 +2181,13 @@ export function ChatScreen() {
     };
   }, [selectedConv?.trip_id]);
 
+  const docShareInFlightRef = useRef<string | null>(null);
+
   const handleDocShare = async (doc: DocumentSharePayload) => {
     if (!selectedConv || !organizationId) return;
+    const pathKey = normalizeTripDocumentsStoragePath(doc.storage_path);
+    if (!pathKey || docShareInFlightRef.current === pathKey) return;
+    docShareInFlightRef.current = pathKey;
     setShowDocShare(false);
     const senderProfile = profile as {
       full_name?: string | null;
@@ -2159,6 +2223,8 @@ export function ChatScreen() {
       setTimeout(() => messagesRef.current?.scrollToEnd({ animated: true }), 80);
     } catch {
       // fail silently
+    } finally {
+      docShareInFlightRef.current = null;
     }
   };
 
@@ -2483,8 +2549,13 @@ export function ChatScreen() {
 
   // ── List items ───────────────────────────────────────────────────────────────
 
+  const openTeamTripRoom = useCallback((tripId: string) => {
+    setPlatformTripRoomId(tripId);
+  }, []);
+
   const renderConvItem = useCallback(({ item }: { item: TripConversation }) => {
-    const active = selectedConvId === item.id;
+    const active =
+      platformTripRoomId === item.trip_id || selectedConvId === item.id;
     const displayTripId =
       tripListDisambiguatedLabels.get(item.trip_id) ?? getConversationTripLabel(item);
     const isActiveTrip = !isTerminalTripStatus(item.trip_status);
@@ -2530,7 +2601,7 @@ export function ChatScreen() {
           active={active}
           recommended={partyRecommended}
           unread={item.unread_dispatcher_count}
-          onPress={() => void openConversation(item)}
+          onPress={() => openTeamTripRoom(item.trip_id)}
         />
       );
     }
@@ -2550,7 +2621,8 @@ export function ChatScreen() {
           documentExtension={latestPreview.documentExtension}
           documentIsImage={latestPreview.documentIsImage}
           active={active}
-          onPress={() => void openConversation(item)}
+          anchorRef={active ? desktopActiveRowRef : undefined}
+          onPress={() => openTeamTripRoom(item.trip_id)}
         />
       );
     }
@@ -2558,7 +2630,7 @@ export function ChatScreen() {
     return (
       <TouchableOpacity
         style={[s.chatItem, active && s.chatItemActive]}
-        onPress={() => void openConversation(item)}
+        onPress={() => openTeamTripRoom(item.trip_id)}
         activeOpacity={0.8}
       >
         <View style={s.chatAvatarWrap}>
@@ -2593,7 +2665,8 @@ export function ChatScreen() {
     );
   }, [
     selectedConvId,
-    openConversation,
+    platformTripRoomId,
+    openTeamTripRoom,
     activeTab,
     isDesktop,
     isMobileChatUi,
@@ -2660,6 +2733,7 @@ export function ChatScreen() {
           previewKind={networkPreview.kind}
           previewImageUrl={networkPreview.imageUrl}
           active={active}
+          anchorRef={active ? desktopActiveRowRef : undefined}
           onPress={openNet}
         />
       );
@@ -2788,6 +2862,24 @@ export function ChatScreen() {
         }
       />
     ) : null;
+
+    const tripRoomInboxSection =
+      isTripStreamTab(activeTab) ? (
+        <ChatTripRoomInboxSection
+          organizationId={currentOrgId || organizationId}
+          onOpenTripRoom={setPlatformTripRoomId}
+        />
+      ) : null;
+
+    const tripStreamMobileHeader =
+      isTripStreamTab(activeTab) && isMobileChatUi ? (
+        <>
+          {slackInboxToolbar}
+          {tripRoomInboxSection}
+        </>
+      ) : (
+        slackInboxToolbar
+      );
 
     const desktopPeopleStrip =
       isDesktop && (slackPeopleItems.length > 0 || activeTab === "network") ? (
@@ -3072,7 +3164,7 @@ export function ChatScreen() {
               keyExtractor={(i) => i.id}
               renderItem={renderTripInboxRow}
               {...SLACK_CHAT_LIST_PROPS}
-              ListHeaderComponent={slackInboxToolbar}
+              ListHeaderComponent={tripStreamMobileHeader}
               ListEmptyComponent={
                 <EmptyList
                   label={
@@ -3088,11 +3180,7 @@ export function ChatScreen() {
                   onAction={tripChatScope === "active" ? openCompose : undefined}
                 />
               }
-              ItemSeparatorComponent={({ leadingItem }) =>
-                leadingItem?.kind === "conversation" ? (
-                  <ChatSlackListSeparator />
-                ) : null
-              }
+              ItemSeparatorComponent={undefined}
               contentContainerStyle={{
                 paddingBottom: isMobileChatUi ? slackListBottomPad : 12,
               }}
@@ -3101,6 +3189,7 @@ export function ChatScreen() {
             />
           ) : isDesktop ? (
             <ScrollView
+              ref={desktopSidebarScrollRef}
               style={deskSt.listScroll}
               contentContainerStyle={deskSt.sidebarCategoriesContent}
               keyboardShouldPersistTaps="handled"
@@ -3109,6 +3198,7 @@ export function ChatScreen() {
               onScroll={onTripStreamListScroll}
             >
               {desktopPeopleStrip}
+              {tripRoomInboxSection}
               <View style={deskSt.sidebarCategoryWrap}>
                 <TouchableOpacity
                   style={deskSt.sidebarCategoryHeader}
@@ -3296,19 +3386,8 @@ export function ChatScreen() {
                     tripHostOrgId: tripHostOrgIdForHub,
                     tripIntegrated: tripIntegratedForHub,
                   });
-                  const openFallback = async () => {
-                    if (trip.rows.length === 0) {
-                      void openCompose(trip.tripId);
-                      return;
-                    }
-                    const storedParty = chatStore.getActivePartyType(trip.tripId);
-                    const preferred = storedParty
-                      ? (trip.rows.find((r) => r.party_type === storedParty) ?? trip.rows[0])
-                      : trip.rows[0];
-                    await useChatStore.getState().hydrateTripMessagesIfNeeded(trip.tripId, {
-                      conversationId: preferred.id,
-                    });
-                    await openConversation(preferred);
+                  const openFallback = () => {
+                    openTeamTripRoom(trip.tripId);
                   };
                   const chatEntry = chatTrips[trip.tripId];
                   const partyIconRow = (
@@ -3387,7 +3466,7 @@ export function ChatScreen() {
                       key={trip.tripId}
                       tripActive={tripActive}
                       totalUnread={trip.totalUnread}
-                      onPressHero={() => void openFallback()}
+                      onPressHero={openFallback}
                       tripLabel={trip.tripLabel}
                       pickup={trip.pickup}
                       drop={trip.drop}
@@ -3483,6 +3562,7 @@ export function ChatScreen() {
             </View>
           ) : isDesktop ? (
             <ScrollView
+              ref={desktopSidebarScrollRef}
               style={deskSt.listScroll}
               contentContainerStyle={deskSt.sidebarCategoriesContent}
               keyboardShouldPersistTaps="handled"
@@ -3555,12 +3635,12 @@ export function ChatScreen() {
                   onAction={netPartners.length > 0 ? () => setShowNetCompose(true) : undefined}
                 />
               }
-              ItemSeparatorComponent={isMobileChatUi ? ChatSlackListSeparator : undefined}
+              ItemSeparatorComponent={undefined}
               ListHeaderComponent={isMobileChatUi ? slackInboxToolbar : undefined}
               contentContainerStyle={
                 isMobileChatUi
                   ? { paddingBottom: slackListBottomPad }
-                  : { padding: 10, paddingBottom: 24, gap: 4 }
+                  : { paddingBottom: 24 }
               }
             />
           ))}
@@ -4175,6 +4255,7 @@ export function ChatScreen() {
       <TripFilterModal />
       <StoriesModal />
       {tripFeedbackOverlay}
+      {platformTripRoomSheet}
     </View>
   ) : null;
 
@@ -4211,6 +4292,7 @@ export function ChatScreen() {
       <TripFilterModal />
       <StoriesModal />
       {tripFeedbackOverlay}
+      {platformTripRoomSheet}
     </LinearGradient>
   );
 }
@@ -5839,6 +5921,15 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: "#f8fafc",
   },
+  deletedMsgWrap: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  deletedMsgText: {
+    fontSize: 13,
+    color: "#94a3b8",
+    fontStyle: "italic",
+  },
 });
 
 // ── Compose modal styles ──────────────────────────────────────────────────────
@@ -6469,6 +6560,9 @@ function ChatBubble({
   onReact,
   replyPreview,
   onReply,
+  isEdited,
+  onEdit,
+  onDelete,
 }: {
   isOwn: boolean;
   content: string;
@@ -6490,6 +6584,9 @@ function ChatBubble({
   onReact?: (emoji: string) => void;
   replyPreview?: ReplyPreviewData | null;
   onReply?: () => void;
+  isEdited?: boolean;
+  onEdit?: (newContent: string) => void;
+  onDelete?: () => void;
 }) {
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
@@ -6522,6 +6619,9 @@ function ChatBubble({
         onReact={onReact}
         replyPreview={replyPreview}
         onReply={onReply}
+        isEdited={isEdited}
+        onEdit={isOwn ? onEdit : undefined}
+        onDelete={isOwn ? onDelete : undefined}
       />
     );
   }
@@ -7318,6 +7418,15 @@ function TripConversationDetailLoaded({
     ],
   );
 
+  const alreadySentPaths = useMemo(
+    () =>
+      displayMessages
+        .filter((m) => m.message_type === "document_share")
+        .map((m) => (m.metadata as { storage_path?: string } | undefined)?.storage_path ?? "")
+        .filter(Boolean),
+    [displayMessages],
+  );
+
   /**
    * WhatsApp-style ping collapsing: consecutive location pings in a run are collapsed into ONE card.
    * Maps each message ID → { isLast: whether it's the last ping in a consecutive run, runCount: total in run }.
@@ -7394,6 +7503,28 @@ function TripConversationDetailLoaded({
       }
     },
     [selfUid, currentOrgId],
+  );
+
+  const handleEditMessage = useCallback(
+    async (messageId: string, newContent: string) => {
+      try {
+        await updateChatMessageContent(messageId, newContent);
+      } catch {
+        // Non-critical
+      }
+    },
+    [],
+  );
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await deleteChatMessage(messageId);
+      } catch {
+        // Non-critical
+      }
+    },
+    [],
   );
 
   // ── Slack-style: date dividers in message list ──────────────────────
@@ -8019,6 +8150,13 @@ function TripConversationDetailLoaded({
     if (m.message_type === "document_share") {
       return <DocumentShareCard message={m} isOwn={isMessageFromSelf(m)} />;
     }
+    if (m.is_deleted) {
+      return (
+        <View style={s.deletedMsgWrap}>
+          <Text style={s.deletedMsgText}>This message was deleted.</Text>
+        </View>
+      );
+    }
     const own = isMessageFromSelf(m);
     const peerLabel =
       m.sender_name?.trim() ||
@@ -8083,6 +8221,9 @@ function TripConversationDetailLoaded({
             messageType: m.message_type,
           })
         }
+        isEdited={Boolean(m.edited_at)}
+        onEdit={own ? (newContent) => handleEditMessage(m.id, newContent) : undefined}
+        onDelete={own ? () => handleDeleteMessage(m.id) : undefined}
       />
     );
   }, [
@@ -8090,6 +8231,8 @@ function TripConversationDetailLoaded({
     selfUid,
     selfName,
     handleToggleReaction,
+    handleEditMessage,
+    handleDeleteMessage,
     onSetReply,
     currentOrgId,
     liveConv,
@@ -8476,6 +8619,7 @@ function TripConversationDetailLoaded({
       userId={docHubUserId}
       onClose={onCloseDocShare}
       onShare={onDocShare}
+      alreadySentPaths={alreadySentPaths}
     />
     </View>
   );

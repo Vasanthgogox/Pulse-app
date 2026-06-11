@@ -9,9 +9,8 @@ import type { ConversationImagePreview } from "@/features/chat/utils/conversatio
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronDown, PenLine, Search, X } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useState, type Ref } from "react";
 import {
-  Animated,
   Image,
   Pressable,
   Text,
@@ -142,6 +141,7 @@ export function ChatSlackDesktopSidebarRow({
   documentIsImage,
   time,
   active,
+  anchorRef,
   onPress,
   showAvatar = true,
 }: {
@@ -157,18 +157,10 @@ export function ChatSlackDesktopSidebarRow({
   documentIsImage?: boolean;
   time?: string;
   active?: boolean;
+  anchorRef?: Ref<View>;
   onPress: () => void;
   showAvatar?: boolean;
 }) {
-  const activeAnim = useRef(new Animated.Value(active ? 1 : 0)).current;
-  useEffect(() => {
-    Animated.timing(activeAnim, {
-      toValue: active ? 1 : 0,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
-  }, [active, activeAnim]);
-
   const badgeLabel =
     previewKind === "system"
       ? "System Update"
@@ -200,18 +192,7 @@ export function ChatSlackDesktopSidebarRow({
   const hasDriverSwapPreview =
     previewKind === "driver_swap" && Boolean(previewDriverSwap);
   return (
-    <Animated.View
-      style={{
-        transform: [
-          {
-            scale: activeAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [1, 1.006],
-            }),
-          },
-        ],
-      }}
-    >
+    <View ref={anchorRef} collapsable={false}>
       <Pressable
         onPress={onPress}
         style={({ pressed, hovered }) => [
@@ -223,18 +204,25 @@ export function ChatSlackDesktopSidebarRow({
           pressed && !active && st.sidebarRowPressed,
         ]}
       >
+        {active ? <View style={st.sidebarRowActiveInset} pointerEvents="none" /> : null}
         {showAvatar ? (
-          <View style={st.sidebarRowAvatarWrap}>
+          <View style={[st.sidebarRowAvatarWrap, active && st.sidebarRowContentAboveInset]}>
             <ChatPartyAvatar identity={identity} size={SLACK_DESKTOP_AVATAR.sidebar} />
           </View>
         ) : null}
-        <View style={st.sidebarRowBody}>
+        <View style={[st.sidebarRowBody, active && st.sidebarRowContentAboveInset]}>
           <View style={st.sidebarRowTop}>
-            <Text style={st.sidebarRowName} numberOfLines={1}>
+            <Text
+              style={[st.sidebarRowName, active && st.sidebarRowNameActive]}
+              numberOfLines={1}
+            >
               {title}
             </Text>
             {time ? (
-              <Text style={st.sidebarRowTime} numberOfLines={1}>
+              <Text
+                style={[st.sidebarRowTime, active && st.sidebarRowTimeActive]}
+                numberOfLines={1}
+              >
                 {time}
               </Text>
             ) : null}
@@ -303,7 +291,7 @@ export function ChatSlackDesktopSidebarRow({
           ) : null}
         </View>
       </Pressable>
-    </Animated.View>
+    </View>
   );
 }
 

@@ -51,12 +51,7 @@ export const chatFilterChromeStyles = StyleSheet.create({
   },
   tabPillActive: {
     borderColor: CHAT_FILTER_ACTIVE_BG,
-    backgroundColor: CHAT_FILTER_ACTIVE_BG,
-    shadowColor: CHAT_FILTER_ACTIVE_BG,
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    backgroundColor: Theme.pulseIndigoWash,
   },
   /** Size to label + count — use on Trips / toolbars where equal flex causes truncation. */
   tabPillHug: {
@@ -75,7 +70,7 @@ export const chatFilterChromeStyles = StyleSheet.create({
     textAlign: "center",
   },
   tabPillLabelActive: {
-    color: "#ffffff",
+    color: CHAT_FILTER_ACTIVE_BG,
   },
   tabPillLabelHug: {
     flexShrink: 0,
@@ -127,7 +122,7 @@ export const chatFilterChromeStyles = StyleSheet.create({
     justifyContent: "center",
   },
   scopePillActive: {
-    backgroundColor: CHAT_FILTER_ACTIVE_BG,
+    backgroundColor: Theme.pulseIndigoWash,
     borderColor: CHAT_FILTER_ACTIVE_BG,
   },
   scopePillText: {
@@ -138,7 +133,7 @@ export const chatFilterChromeStyles = StyleSheet.create({
     textTransform: "uppercase",
   },
   scopePillTextActive: {
-    color: "#ffffff",
+    color: CHAT_FILTER_ACTIVE_BG,
   },
   /** Header row: supply tabs left, main tabs + view toggle right. */
   filterHeaderRow: {
@@ -187,11 +182,6 @@ export const chatFilterChromeStyles = StyleSheet.create({
   },
   iconToggleBtnActive: {
     borderColor: CHAT_FILTER_ACTIVE_BG,
-    backgroundColor: CHAT_FILTER_ACTIVE_BG,
-    shadowColor: CHAT_FILTER_ACTIVE_BG,
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    backgroundColor: Theme.pulseIndigoWash,
   },
 });

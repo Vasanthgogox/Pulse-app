@@ -314,8 +314,8 @@ const styles = StyleSheet.create({
     height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
     paddingHorizontal: 3,
     borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
   statusChipWide: {
@@ -357,10 +357,9 @@ const styles = StyleSheet.create({
   },
   statusChipLine1: {
     fontSize: 8,
-    fontWeight: "800",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.2,
+    letterSpacing: 0,
     lineHeight: 10,
   },
   statusChipAmount: {
@@ -376,7 +375,7 @@ const styles = StyleSheet.create({
   statusChipAmountCompact: {
     fontSize: 10,
     lineHeight: 12,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   statusChipLine2: {
     fontSize: 7,

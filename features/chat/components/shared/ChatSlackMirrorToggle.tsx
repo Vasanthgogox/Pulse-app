@@ -3,10 +3,10 @@ import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { ListFilter } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMirrorIndicator } from "@/lib/hooks/useMirrorIndicator";
+import { useEffect, useRef } from "react";
 import {
   Animated,
-  LayoutChangeEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -27,45 +27,6 @@ export type MirrorToggleItem = {
 };
 
 type MirrorVariant = "bottomNav" | "sidebar" | "filter" | "party";
-
-const SPRING_TRANSLATE = { useNativeDriver: true, speed: 22, bounciness: 4 } as const;
-
-function useMirrorIndicator(activeId: string, axis: "x" | "y") {
-  const layouts = useRef<Record<string, { pos: number; size: number }>>({});
-  const translate = useRef(new Animated.Value(0)).current;
-  const [indicatorSize, setIndicatorSize] = useState(0);
-
-  const snapTo = useCallback(
-    (id: string) => {
-      const layout = layouts.current[id];
-      if (!layout) return;
-      setIndicatorSize(layout.size);
-      Animated.spring(translate, {
-        toValue: layout.pos,
-        ...SPRING_TRANSLATE,
-      }).start();
-    },
-    [translate],
-  );
-
-  useEffect(() => {
-    snapTo(activeId);
-  }, [activeId, snapTo]);
-
-  const onItemLayout = useCallback(
-    (id: string, e: LayoutChangeEvent) => {
-      const { x, y, width, height } = e.nativeEvent.layout;
-      layouts.current[id] = {
-        pos: axis === "x" ? x : y,
-        size: axis === "x" ? width : height,
-      };
-      if (id === activeId) snapTo(id);
-    },
-    [activeId, axis, snapTo],
-  );
-
-  return { translate, indicatorSize, onItemLayout, axis };
-}
 
 export function ChatSlackMirrorToggle({
   items,

@@ -12,7 +12,9 @@ import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
 import { setTripUnreadCount } from "@/lib/chatUnreadSignal";
 import { supabase } from "@/lib/supabase";
-import { getActiveTripMessageConversationId } from "../realtime/activeTripMessageScope";
+import { useActiveTripLaneRealtime } from "../hooks/useActiveTripLaneRealtime";
+import { useChatOutboxSync } from "../hooks/useChatOutboxSync";
+import { useTripStatusRealtimeSync } from "../hooks/useTripStatusRealtimeSync";
 import * as chatService from "../services/chat.service";
 import { useConversations, useTotalUnreadCount } from "../store/chatStore";
 import {
@@ -152,6 +154,9 @@ export function TripChatProvider({
   const orgCtx = useOptionalOrganization();
   const organizationId = orgCtx?.currentOrganization?.id ?? null;
 
+  // Offline-first: replay queued unified-platform sends on reconnect/foreground.
+  useChatOutboxSync(!!selfUid);
+
   // ── State from Zustand ────────────────────────────────────────────────────
   const conversations    = useConversations();
   const totalUnreadCount = useTotalUnreadCount();
@@ -176,13 +181,15 @@ export function TripChatProvider({
     [linkedOrgIdsStr],
   );
 
+  // Phase 3: trip row UPDATE → hub status patch (no status_change message fan-out).
+  useTripStatusRealtimeSync(organizationId, linkedOrgIds);
+
+  // Phase 3: open-thread INSERT only (conversation-scoped, not org-wide).
+  useActiveTripLaneRealtime(organizationId, selfUid, isActive);
+
   const bootstrappedOrgRef = useRef<string | null>(null);
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
-  // Queue-and-fetch: holds Realtime rows that arrived before their conversation
-  // was in the store (bootstrap failure, or process_b2b_event for a new thread).
-  const pendingForUnknownConv = useRef(new Map<string, Partial<TripMessageRow>[]>());
-
   // Batch `trip_messages` UPDATE (read/delivery ticks) into one store write per frame
   // so bursty mark_messages_seen / Realtime does not max React update depth.
   const ackBatchRef = useRef<{ convId: string; msgId: string; patch: Partial<TripMessageRow> }[]>([]);
@@ -235,47 +242,14 @@ export function TripChatProvider({
     return () => registerMarkMessagesSeenRpc(null);
   }, []);
 
-  // ── Unknown-conversation recovery ─────────────────────────────────────────
-  const _enqueueUnknownConv = useCallback(
-    (convId: string, row: Partial<TripMessageRow>, mode: 'active' | 'background') => {
-      const queue = pendingForUnknownConv.current.get(convId) ?? [];
-      queue.push(row);
-      pendingForUnknownConv.current.set(convId, queue);
-
-      if (queue.length > 1) return; // fetch already in-flight
-
-      void chatService.getTripConversationById(convId)
-        .then(conv => {
-          if (conv) {
-            useChatStore.getState().upsertConversation(conv);
-            const queued = pendingForUnknownConv.current.get(convId) ?? [];
-            pendingForUnknownConv.current.delete(convId);
-            for (const qRow of queued) {
-              const hubListOnly =
-                getActiveTripMessageConversationId() !== qRow.conversation_id;
-              useChatStore.getState().processIncomingEvent(qRow, mode, { hubListOnly });
-            }
-          } else {
-            pendingForUnknownConv.current.delete(convId);
-          }
-        })
-        .catch(() => { pendingForUnknownConv.current.delete(convId); });
-    },
-    [],
-  );
-
-  // ── Realtime subscription ──────────────────────────────────────────────────
+  // ── Realtime: read-receipt UPDATEs (org-wide — lightweight row patches) ───
+  // Phase 3: INSERT removed — hub preview/unread via `trip_conversations` rows;
+  // open thread INSERT via `useActiveTripLaneRealtime` (conversation-scoped).
   useEffect(() => {
     if (!organizationId || !selfUid) return;
     const unsub = subscribeSharedPostgresChanges(
-      `trip_messages:org:${organizationId}`,
+      `trip_messages:acks:org:${organizationId}`,
       [
-        {
-          event:  "INSERT",
-          schema: "public",
-          table:  "trip_messages",
-          filter: `organization_id=eq.${organizationId}`,
-        },
         {
           event:  "UPDATE",
           schema: "public",
@@ -284,32 +258,7 @@ export function TripChatProvider({
         },
       ],
       (payload) => {
-        // ── INSERT ──────────────────────────────────────────────────────────
-        if (payload.eventType === "INSERT") {
-          const row = payload.new as Partial<TripMessageRow> | null;
-          if (!row?.conversation_id) return;
-
-          // Skip echo from own sends (already optimistically inserted).
-          if (row.sender_user_id && row.sender_user_id === selfUid) return;
-
-          const mode: 'active' | 'background' = isActiveRef.current ? 'active' : 'background';
-          const s = useChatStore.getState();
-
-          if (!s.convToTrip[row.conversation_id]) {
-            // Unknown conversation — fetch once and flush queued rows atomically.
-            _enqueueUnknownConv(row.conversation_id, row, mode);
-            return;
-          }
-
-          const activeCid = getActiveTripMessageConversationId();
-          const hubListOnly = activeCid !== row.conversation_id;
-
-          // onRealtimeInsert handles status_change / tracking state sync internally.
-          s.processIncomingEvent(row, mode, { hubListOnly });
-        }
-
-        // ── UPDATE (delivered / seen ticks) ─────────────────────────────────
-        else if (payload.eventType === "UPDATE") {
+        if (payload.eventType === "UPDATE") {
           const row = payload.new as TripMessageRow | null;
           if (!row?.id || !row.conversation_id) return;
           const patch: Partial<TripMessageRow> = {
@@ -342,7 +291,7 @@ export function TripChatProvider({
       if (pending.length) useChatStore.getState().onRealtimeAckBatch(pending);
       unsub();
     };
-  }, [organizationId, selfUid, _enqueueUnknownConv, flushAckBatch]);
+  }, [organizationId, selfUid, flushAckBatch]);
 
   // ── Realtime: trip_conversations (DB denormalized unread + last preview) ─────
   useEffect(() => {
@@ -387,24 +336,13 @@ export function TripChatProvider({
     };
   }, [organizationId, selfUid]);
 
-  // ── Realtime: linked-org trip_messages (viewer is linked supplier/client) ────
-  // When the viewer belongs to a supplier org (e.g. nihas / aiman logs) and views
-  // a host-org trip (e.g. Deepak's TRP011), the host's messages land with
-  // organization_id = host_org. The viewer's own subscription above only watches
-  // their own org — so host-org messages never fire for the viewer unless we add a
-  // second subscription per linked host org.
+  // ── Linked-org read-receipt UPDATEs (INSERT → active lane subscription) ─────
   useEffect(() => {
     if (!organizationId || !selfUid || linkedOrgIds.length === 0) return;
     const unsubs = linkedOrgIds.map(hostOrgId =>
       subscribeSharedPostgresChanges(
-        `trip_messages:linked:${hostOrgId}:for:${organizationId}`,
+        `trip_messages:acks:linked:${hostOrgId}:for:${organizationId}`,
         [
-          {
-            event:  "INSERT",
-            schema: "public",
-            table:  "trip_messages",
-            filter: `organization_id=eq.${hostOrgId}`,
-          },
           {
             event:  "UPDATE",
             schema: "public",
@@ -413,39 +351,25 @@ export function TripChatProvider({
           },
         ],
         (payload) => {
-          if (payload.eventType === "INSERT") {
-            const row = payload.new as Partial<TripMessageRow> | null;
-            if (!row?.conversation_id) return;
-            // Skip echo from own sends.
-            if (row.sender_user_id && row.sender_user_id === selfUid) return;
-            const s = useChatStore.getState();
-            // Only process if we have this conversation in the store.
-            if (!s.convToTrip[row.conversation_id]) {
-              _enqueueUnknownConv(row.conversation_id, row, isActiveRef.current ? 'active' : 'background');
-              return;
-            }
-            const hubListOnly = getActiveTripMessageConversationId() !== row.conversation_id;
-            s.processIncomingEvent(row, isActiveRef.current ? 'active' : 'background', { hubListOnly });
-          } else if (payload.eventType === "UPDATE") {
-            const row = payload.new as TripMessageRow | null;
-            if (!row?.id || !row.conversation_id) return;
-            const patch: Partial<TripMessageRow> = {
-              is_delivered: row.is_delivered,
-              delivered_at: row.delivered_at,
-              is_read:      row.is_read,
-              read_at:      row.read_at,
-            };
-            if (row.metadata != null) patch.metadata = row.metadata;
-            ackBatchRef.current.push({ convId: row.conversation_id, msgId: row.id, patch });
-            if (ackRafRef.current == null) {
-              ackRafRef.current = requestAnimationFrame(() => { flushAckBatch(); });
-            }
+          if (payload.eventType !== "UPDATE") return;
+          const row = payload.new as TripMessageRow | null;
+          if (!row?.id || !row.conversation_id) return;
+          const patch: Partial<TripMessageRow> = {
+            is_delivered: row.is_delivered,
+            delivered_at: row.delivered_at,
+            is_read:      row.is_read,
+            read_at:      row.read_at,
+          };
+          if (row.metadata != null) patch.metadata = row.metadata;
+          ackBatchRef.current.push({ convId: row.conversation_id, msgId: row.id, patch });
+          if (ackRafRef.current == null) {
+            ackRafRef.current = requestAnimationFrame(() => { flushAckBatch(); });
           }
         },
       )
     );
     return () => { unsubs.forEach(u => u()); };
-  }, [organizationId, selfUid, linkedOrgIds, _enqueueUnknownConv, flushAckBatch]);
+  }, [organizationId, selfUid, linkedOrgIds, flushAckBatch]);
 
   // ── Prune module-level dedupe Maps (prevent unbounded growth in long sessions) ─
   useEffect(() => {

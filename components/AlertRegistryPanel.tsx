@@ -562,7 +562,6 @@ export function AlertRegistryPanel({
   const [visibleCount, setVisibleCount] = useState(REGISTRY_PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const markAllNotificationsRead = useGlobalSyncStore((s) => s.markAllNotificationsRead);
   const salaryRequestsHasMore = useGlobalSyncStore((s) => s.salaryRequestsHasMore);
   const loadMoreSalaryRequests = useGlobalSyncStore((s) => s.loadMoreSalaryRequests);
   const { feed: activeFeed } = useRegistryFeed("active", orgId);
@@ -740,7 +739,11 @@ export function AlertRegistryPanel({
         ]}
         contentContainerStyle={[
           styles.scrollContent,
-          isFullscreen && { paddingBottom: bottomInset + 8 },
+          {
+            paddingBottom:
+              (isDrawer || isFullscreen ? bottomInset + 28 : 24) +
+              (showLoadMore ? 0 : 4),
+          },
         ]}
         showsVerticalScrollIndicator
         nestedScrollEnabled
@@ -769,30 +772,6 @@ export function AlertRegistryPanel({
           </Pressable>
         ) : null}
       </ScrollView>
-
-      <View
-        style={[
-          styles.footer,
-          isFullscreen && { paddingBottom: 12 + bottomInset },
-        ]}
-      >
-        <Pressable
-          onPress={() => onFilterTabChange("archive")}
-          style={styles.footerBtn}
-          accessibilityRole="button"
-          accessibilityLabel="View archive"
-        >
-          <Text style={styles.footerBtnText}>Archive all</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => markAllNotificationsRead()}
-          style={styles.footerBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Mark all as read"
-        >
-          <Text style={styles.footerBtnText}>Mark all as read</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -801,6 +780,8 @@ const styles = StyleSheet.create({
   shell: {
     width: METRONIC.panelWidth,
     maxWidth: Platform.OS === "web" ? ("96vw" as unknown as number) : "100%",
+    flex: 1,
+    minHeight: 0,
     flexDirection: "column",
     borderRadius: 12,
     borderWidth: 1,
@@ -830,7 +811,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   headerTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
     letterSpacing: -0.1,
@@ -885,7 +866,7 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
   tabText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "500",
     color: METRONIC.muted,
   },
@@ -922,12 +903,12 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   scroll: {
-    flexGrow: 1,
-    flexShrink: 1,
+    flex: 1,
+    minHeight: 0,
     backgroundColor: Theme.cardWhite,
   },
   scrollContent: {
-    paddingBottom: 4,
+    paddingBottom: 24,
   },
   emptyWrap: {
     paddingHorizontal: 16,
@@ -936,18 +917,18 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   emptyTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
     textAlign: "center",
   },
   emptyBody: {
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 18,
     fontWeight: "400",
     color: METRONIC.muted,
     textAlign: "center",
-    maxWidth: 260,
+    maxWidth: 280,
   },
   groupHeader: {
     paddingHorizontal: 16,
@@ -955,7 +936,7 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   groupHeaderText: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: "700",
     color: METRONIC.muted,
     letterSpacing: 0.4,
@@ -976,35 +957,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   loadMoreText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: "600",
     color: METRONIC.muted,
-  },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: METRONIC.border,
-    backgroundColor: Theme.cardWhite,
-  },
-  footerBtn: {
-    flex: 1,
-    minHeight: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: METRONIC.ghostBorder,
-    backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  footerBtnText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: METRONIC.primaryBtn,
   },
 });

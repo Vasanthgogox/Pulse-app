@@ -1771,7 +1771,7 @@ export default function TripsScreen() {
                               size={12}
                               color={
                                 listLayout === "cards"
-                                  ? "#ffffff"
+                                  ? Theme.primary
                                   : CHAT_FILTER_MUTED
                               }
                             />
@@ -1797,7 +1797,7 @@ export default function TripsScreen() {
                               size={12}
                               color={
                                 listLayout === "table"
-                                  ? "#ffffff"
+                                  ? Theme.primary
                                   : CHAT_FILTER_MUTED
                               }
                             />
@@ -3048,7 +3048,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 20,
+    borderRadius: 12,
     overflow: "hidden",
   },
   tripsInlineFilterPanelMobileLight: {

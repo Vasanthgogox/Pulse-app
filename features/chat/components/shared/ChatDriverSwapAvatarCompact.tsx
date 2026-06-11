@@ -2,26 +2,32 @@ import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import Theme from "@/constants/Theme";
 import type { DriverSwapPair } from "@/features/chat/utils/chatAvatar.util";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowRight, Truck } from "lucide-react-native";
+import { ArrowRight } from "lucide-react-native";
 import { StyleSheet, View } from "react-native";
 import { ChatPartyAvatar } from "../ChatPartyAvatar";
 
-const PREV_SIZE = 28;
-const NEXT_SIZE = 36;
-const SHELL_W = 102;
-const SHELL_H = 48;
+const PREV_SIZE = 26;
+const NEXT_SIZE = 34;
+const SHELL_W = 96;
+const SHELL_H = 46;
 
 /** Static driver swap cluster for inbox / list previews (no animation). */
 export function ChatDriverSwapAvatarCompact({ swap }: { swap: DriverSwapPair }) {
   return (
     <View style={styles.outer}>
       <LinearGradient
-        colors={["#FFFFFF", "#F4F5FF", "#EEF0FF"]}
-        start={{ x: 0, y: 0.2 }}
+        colors={["#FFFFFF", "#F8F9FF", "#EEF0FF"]}
+        start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.shell}
       >
-        <View style={styles.track} pointerEvents="none" />
+        <LinearGradient
+          colors={["rgba(91, 94, 244, 0.04)", "rgba(91, 94, 244, 0.14)", "rgba(91, 94, 244, 0.04)"]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.track}
+          pointerEvents="none"
+        />
 
         <View style={styles.prevSlot}>
           <View style={[styles.avatarRing, styles.prevRing]}>
@@ -31,19 +37,22 @@ export function ChatDriverSwapAvatarCompact({ swap }: { swap: DriverSwapPair }) 
         </View>
 
         <View style={styles.arrowSlot}>
-          <View style={styles.arrowPill}>
-            <ArrowRight size={11} color={CHAT_ACCENT} strokeWidth={2.8} />
-          </View>
+          <LinearGradient
+            colors={[Theme.cardWhite, CHAT_ACCENT_SOFT]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.arrowPill}
+          >
+            <ArrowRight size={11} color={CHAT_ACCENT} strokeWidth={2.6} />
+          </LinearGradient>
         </View>
 
         <View style={styles.nextSlot}>
-          <View style={styles.nextGlow} pointerEvents="none" />
+          <View style={styles.nextHalo} pointerEvents="none" />
           <View style={[styles.avatarRing, styles.nextRing]}>
             <ChatPartyAvatar identity={swap.next} size={NEXT_SIZE} />
           </View>
-          <View style={styles.truckBadge}>
-            <Truck size={10} color={CHAT_ACCENT} strokeWidth={2.5} />
-          </View>
+          <View style={styles.presenceRing} pointerEvents="none" />
           <View style={styles.presenceDot} />
         </View>
       </LinearGradient>
@@ -53,10 +62,10 @@ export function ChatDriverSwapAvatarCompact({ swap }: { swap: DriverSwapPair }) 
 
 const styles = StyleSheet.create({
   outer: {
-    shadowColor: "#5b5ef4",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowColor: CHAT_ACCENT,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     elevation: 2,
   },
   shell: {
@@ -66,60 +75,58 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: SHELL_H / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(91, 94, 244, 0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(91, 94, 244, 0.16)",
     overflow: "visible",
   },
   track: {
     position: "absolute",
-    left: 18,
-    right: 18,
+    left: 20,
+    right: 22,
     top: SHELL_H / 2 - 1,
     height: 2,
     borderRadius: 1,
-    backgroundColor: "rgba(91, 94, 244, 0.08)",
   },
   prevSlot: {
     position: "absolute",
-    left: 5,
-    top: 8,
+    left: 6,
+    top: 9,
     zIndex: 1,
-    opacity: 0.88,
+    opacity: 0.82,
   },
   arrowSlot: {
     position: "absolute",
-    left: 40,
+    left: 38,
     zIndex: 3,
   },
   arrowPill: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(91, 94, 244, 0.2)",
-    shadowColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(91, 94, 244, 0.18)",
+    shadowColor: CHAT_ACCENT,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
     elevation: 1,
   },
   nextSlot: {
     position: "absolute",
-    right: 4,
+    right: 5,
     top: 5,
     zIndex: 2,
   },
-  nextGlow: {
+  nextHalo: {
     position: "absolute",
-    width: NEXT_SIZE + 8,
-    height: NEXT_SIZE + 8,
-    borderRadius: (NEXT_SIZE + 8) / 2,
-    backgroundColor: "rgba(91, 94, 244, 0.1)",
-    top: -4,
-    left: -4,
+    width: NEXT_SIZE + 10,
+    height: NEXT_SIZE + 10,
+    borderRadius: (NEXT_SIZE + 10) / 2,
+    backgroundColor: "rgba(91, 94, 244, 0.08)",
+    top: -5,
+    left: -5,
   },
   avatarRing: {
     overflow: "hidden",
@@ -132,11 +139,11 @@ const styles = StyleSheet.create({
     height: PREV_SIZE,
     borderRadius: PREV_SIZE / 2,
     borderWidth: 1.5,
-    borderColor: "rgba(148, 163, 184, 0.45)",
+    borderColor: "rgba(148, 163, 184, 0.35)",
   },
   prevFrost: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.42)",
+    backgroundColor: "rgba(255, 255, 255, 0.48)",
     borderRadius: PREV_SIZE / 2,
   },
   nextRing: {
@@ -144,42 +151,33 @@ const styles = StyleSheet.create({
     height: NEXT_SIZE,
     borderRadius: NEXT_SIZE / 2,
     borderWidth: 2,
-    borderColor: "rgba(91, 94, 244, 0.55)",
+    borderColor: "rgba(91, 94, 244, 0.5)",
     shadowColor: CHAT_ACCENT,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
     elevation: 2,
   },
-  truckBadge: {
+  presenceRing: {
     position: "absolute",
-    left: -5,
-    bottom: -3,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
+    right: -2,
+    bottom: -2,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
     borderWidth: 1.5,
-    borderColor: "rgba(91, 94, 244, 0.3)",
-    zIndex: 4,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    borderColor: "rgba(91, 94, 244, 0.35)",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    zIndex: 3,
   },
   presenceDot: {
     position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
+    right: 1,
+    bottom: 1,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: CHAT_ACCENT,
-    borderWidth: 2,
-    borderColor: Theme.cardWhite,
     zIndex: 4,
   },
 });

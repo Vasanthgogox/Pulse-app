@@ -1653,6 +1653,7 @@ const styles = StyleSheet.create({
     top: -96,
   },
   commandMainContent: {
+    width: "100%",
     paddingHorizontal: 20,
     paddingVertical: 18,
     gap: 12,
@@ -1667,6 +1668,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    width: "100%",
+    minWidth: 0,
   },
   commandMainHeadMobile: {
     alignItems: "center",
@@ -1699,6 +1702,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     paddingHorizontal: 10,
+    flexShrink: 0,
   },
   commandGrowthText: {
     fontSize: 12,
@@ -1710,6 +1714,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 16,
+    width: "100%",
+    minWidth: 0,
   },
   commandMainStatsRowCompact: {
     flexDirection: "row",
@@ -1745,9 +1751,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 0,
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
     justifyContent: "flex-end",
   },
   commandMetricGridCompact: {

@@ -4,6 +4,8 @@ import {
   BarChart2,
   Brain,
   FileCheck,
+  MessageSquare,
+  Network,
   Receipt,
   ShieldCheck,
   Store,
@@ -19,6 +21,8 @@ import { PRODUCT_REGISTRY, type ProductId } from "@/lib/productRegistry";
 
 const PRODUCT_ICON: Record<ProductId, LucideIcon> = {
   pulse_core: Zap,
+  pulse_network: Network,
+  pulse_chat: MessageSquare,
   pulse_pod_pro: FileCheck,
   pulse_invoice_pro: Receipt,
   pulse_finance_pro: BarChart2,

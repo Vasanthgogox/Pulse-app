@@ -514,25 +514,28 @@ export const slackMobileStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     minHeight: 64,
     backgroundColor: "#FFFFFF",
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: SLACK_MOBILE.listDivider,
   },
   listRowWithMedia: {
     minHeight: 140,
     paddingVertical: 12,
   },
   listRowSeparator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: SLACK_MOBILE.listDivider,
-    marginLeft: 12 + SLACK_AVATAR.list + 8,
+    height: 0,
   },
   listRowPressed: {
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#F1F5F9",
   },
   listRowActive: {
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "rgba(91, 94, 244, 0.05)",
+    borderLeftColor: PULSE_CHAT.accent,
   },
   listRowAvatarWrap: {
     position: "relative",
@@ -619,7 +622,7 @@ export const slackMobileStyles = StyleSheet.create({
     textTransform: "uppercase",
   },
   listRowRecommended: {
-    backgroundColor: "rgba(91, 94, 244, 0.04)",
+    backgroundColor: "rgba(91, 94, 244, 0.03)",
   },
   listRowPartyLine: {
     fontSize: 9,

@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -97,6 +98,54 @@ export type Database = {
             referencedColumns: ["trip_id"]
           },
         ]
+      }
+      activity_stream: {
+        Row: {
+          activity_type: string
+          actor_id: string
+          actor_name: string | null
+          actor_type: string
+          context_payload: Json
+          created_at: string
+          id: string
+          is_public: boolean
+          org_id: string | null
+          target_id: string
+          target_name: string | null
+          target_ref: string | null
+          target_type: string
+        }
+        Insert: {
+          activity_type: string
+          actor_id: string
+          actor_name?: string | null
+          actor_type: string
+          context_payload?: Json
+          created_at?: string
+          id?: string
+          is_public?: boolean
+          org_id?: string | null
+          target_id: string
+          target_name?: string | null
+          target_ref?: string | null
+          target_type: string
+        }
+        Update: {
+          activity_type?: string
+          actor_id?: string
+          actor_name?: string | null
+          actor_type?: string
+          context_payload?: Json
+          created_at?: string
+          id?: string
+          is_public?: boolean
+          org_id?: string | null
+          target_id?: string
+          target_name?: string | null
+          target_ref?: string | null
+          target_type?: string
+        }
+        Relationships: []
       }
       ai_settings: {
         Row: {
@@ -273,6 +322,883 @@ export type Database = {
           },
         ]
       }
+      chat_attachments: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          metadata: Json
+          mime_type: string | null
+          size_bytes: number | null
+          storage_bucket: string
+          storage_path: string
+          upload_status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          metadata?: Json
+          mime_type?: string | null
+          size_bytes?: number | null
+          storage_bucket?: string
+          storage_path: string
+          upload_status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          metadata?: Json
+          mime_type?: string | null
+          size_bytes?: number | null
+          storage_bucket?: string
+          storage_path?: string
+          upload_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_audit_log: {
+        Row: {
+          action: string
+          actor_user_id: string | null
+          conversation_id: string | null
+          created_at: string
+          id: number
+          message_id: string | null
+          organization_id: string
+          payload: Json
+        }
+        Insert: {
+          action: string
+          actor_user_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: never
+          message_id?: string | null
+          organization_id: string
+          payload?: Json
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          id?: never
+          message_id?: string | null
+          organization_id?: string
+          payload?: Json
+        }
+        Relationships: []
+      }
+      chat_conversations: {
+        Row: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel_key?: string | null
+          client_id?: string | null
+          conversation_type: string
+          created_at?: string
+          created_by?: string | null
+          driver_id?: string | null
+          id?: string
+          is_archived?: boolean
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          legacy_network_conversation_id?: string | null
+          legacy_trip_conversation_id?: string | null
+          message_count?: number
+          metadata?: Json
+          organization_id: string
+          supplier_id?: string | null
+          title?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel_key?: string | null
+          client_id?: string | null
+          conversation_type?: string
+          created_at?: string
+          created_by?: string | null
+          driver_id?: string | null
+          id?: string
+          is_archived?: boolean
+          last_message_at?: string | null
+          last_message_preview?: string | null
+          legacy_network_conversation_id?: string | null
+          legacy_trip_conversation_id?: string | null
+          message_count?: number
+          metadata?: Json
+          organization_id?: string
+          supplier_id?: string | null
+          title?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_conversations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_legacy_network_conversation_id_fkey"
+            columns: ["legacy_network_conversation_id"]
+            isOneToOne: true
+            referencedRelation: "network_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_legacy_trip_conversation_id_fkey"
+            columns: ["legacy_trip_conversation_id"]
+            isOneToOne: true
+            referencedRelation: "trip_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_conversations_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
+      chat_mentions: {
+        Row: {
+          created_at: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          client_message_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          legacy_source: string | null
+          message_type: string
+          metadata: Json
+          organization_id: string
+          reply_to_id: string | null
+          sender_name: string
+          sender_role: string | null
+          sender_type: string
+          sender_user_id: string | null
+        }
+        Insert: {
+          client_message_id?: string | null
+          content?: string
+          conversation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          legacy_source?: string | null
+          message_type?: string
+          metadata?: Json
+          organization_id: string
+          reply_to_id?: string | null
+          sender_name?: string
+          sender_role?: string | null
+          sender_type?: string
+          sender_user_id?: string | null
+        }
+        Update: {
+          client_message_id?: string | null
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          legacy_source?: string | null
+          message_type?: string
+          metadata?: Json
+          organization_id?: string
+          reply_to_id?: string | null
+          sender_name?: string
+          sender_role?: string | null
+          sender_type?: string
+          sender_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages_archive: {
+        Row: {
+          archived_at: string
+          client_message_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          legacy_source: string | null
+          message_type: string
+          metadata: Json
+          organization_id: string
+          reply_to_id: string | null
+          sender_name: string
+          sender_role: string | null
+          sender_type: string
+          sender_user_id: string | null
+        }
+        Insert: {
+          archived_at?: string
+          client_message_id?: string | null
+          content?: string
+          conversation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          legacy_source?: string | null
+          message_type?: string
+          metadata?: Json
+          organization_id: string
+          reply_to_id?: string | null
+          sender_name?: string
+          sender_role?: string | null
+          sender_type?: string
+          sender_user_id?: string | null
+        }
+        Update: {
+          archived_at?: string
+          client_message_id?: string | null
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: string
+          legacy_source?: string | null
+          message_type?: string
+          metadata?: Json
+          organization_id?: string
+          reply_to_id?: string | null
+          sender_name?: string
+          sender_role?: string | null
+          sender_type?: string
+          sender_user_id?: string | null
+        }
+        Relationships: []
+      }
+      chat_participants: {
+        Row: {
+          conversation_id: string
+          joined_at: string
+          last_read_at: string | null
+          muted_until: string | null
+          participant_role: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          joined_at?: string
+          last_read_at?: string | null
+          muted_until?: string | null
+          participant_role?: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          joined_at?: string
+          last_read_at?: string | null
+          muted_until?: string | null
+          participant_role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_participants_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_pins: {
+        Row: {
+          conversation_id: string
+          message_id: string
+          pinned_at: string
+          pinned_by: string | null
+        }
+        Insert: {
+          conversation_id: string
+          message_id: string
+          pinned_at?: string
+          pinned_by?: string | null
+        }
+        Update: {
+          conversation_id?: string
+          message_id?: string
+          pinned_at?: string
+          pinned_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_pins_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_pins_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_push_outbox: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: number
+          message_id: string
+          organization_id: string
+          payload: Json
+          sent_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          conversation_id: string
+          created_at?: string
+          id?: never
+          message_id: string
+          organization_id: string
+          payload?: Json
+          sent_at?: string | null
+          title?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: never
+          message_id?: string
+          organization_id?: string
+          payload?: Json
+          sent_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_push_outbox_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_push_outbox_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_read_receipts: {
+        Row: {
+          delivered_at: string | null
+          message_id: string
+          read_at: string | null
+          user_id: string
+        }
+        Insert: {
+          delivered_at?: string | null
+          message_id: string
+          read_at?: string | null
+          user_id: string
+        }
+        Update: {
+          delivered_at?: string | null
+          message_id?: string
+          read_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_read_receipts_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_name: string | null
+          client_id: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          field_name: string | null
+          id: string
+          new_value: string | null
+          old_value: string | null
+          organization_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_name?: string | null
+          client_id: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          field_name?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          organization_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_name?: string | null
+          client_id?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          field_name?: string | null
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_audit_log_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_audit_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_contacts: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          department: string | null
+          designation: string | null
+          email: string | null
+          id: string
+          is_billing: boolean
+          is_decision_maker: boolean
+          is_dispatch: boolean
+          is_finance: boolean
+          is_operations: boolean
+          is_primary: boolean
+          is_procurement: boolean
+          mobile: string | null
+          name: string
+          notes: string | null
+          organization_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          department?: string | null
+          designation?: string | null
+          email?: string | null
+          id?: string
+          is_billing?: boolean
+          is_decision_maker?: boolean
+          is_dispatch?: boolean
+          is_finance?: boolean
+          is_operations?: boolean
+          is_primary?: boolean
+          is_procurement?: boolean
+          mobile?: string | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          department?: string | null
+          designation?: string | null
+          email?: string | null
+          id?: string
+          is_billing?: boolean
+          is_decision_maker?: boolean
+          is_dispatch?: boolean
+          is_finance?: boolean
+          is_operations?: boolean
+          is_primary?: boolean
+          is_procurement?: boolean
+          mobile?: string | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_contract_agreements: {
+        Row: {
+          claims_terms: Json | null
+          client_id: string
+          commercial_model: string | null
+          contract_number: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          detention_terms: Json | null
+          effective_date: string | null
+          escalation_matrix: Json | null
+          expiry_date: string | null
+          general_terms: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          payment_terms: Json | null
+          penalty_clauses: Json | null
+          renewal_date: string | null
+          signed_storage_path: string | null
+          status: string | null
+          title: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          claims_terms?: Json | null
+          client_id: string
+          commercial_model?: string | null
+          contract_number: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          detention_terms?: Json | null
+          effective_date?: string | null
+          escalation_matrix?: Json | null
+          expiry_date?: string | null
+          general_terms?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          payment_terms?: Json | null
+          penalty_clauses?: Json | null
+          renewal_date?: string | null
+          signed_storage_path?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          claims_terms?: Json | null
+          client_id?: string
+          commercial_model?: string | null
+          contract_number?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          detention_terms?: Json | null
+          effective_date?: string | null
+          escalation_matrix?: Json | null
+          expiry_date?: string | null
+          general_terms?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          payment_terms?: Json | null
+          penalty_clauses?: Json | null
+          renewal_date?: string | null
+          signed_storage_path?: string | null
+          status?: string | null
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contract_agreements_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contract_agreements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contract_agreements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_contract_versions: {
+        Row: {
+          agreement_id: string
+          created_at: string
+          effective_date: string | null
+          file_name: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          storage_path: string
+          uploaded_by: string | null
+          version_number: number
+        }
+        Insert: {
+          agreement_id: string
+          created_at?: string
+          effective_date?: string | null
+          file_name?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          storage_path: string
+          uploaded_by?: string | null
+          version_number?: number
+        }
+        Update: {
+          agreement_id?: string
+          created_at?: string
+          effective_date?: string | null
+          file_name?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          storage_path?: string
+          uploaded_by?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contract_versions_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "client_contract_agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contract_versions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contract_versions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contracts: {
         Row: {
           billing_to_hq: boolean | null
@@ -356,6 +1282,412 @@ export type Database = {
           },
         ]
       }
+      client_documents: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_type: string | null
+          expiry_date: string | null
+          file_name: string | null
+          folder: string | null
+          id: string
+          mime_type: string | null
+          notes: string | null
+          organization_id: string
+          storage_path: string | null
+          title: string
+          updated_at: string
+          updated_by: string | null
+          version_number: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_type?: string | null
+          expiry_date?: string | null
+          file_name?: string | null
+          folder?: string | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          organization_id: string
+          storage_path?: string | null
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+          version_number?: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_type?: string | null
+          expiry_date?: string | null
+          file_name?: string | null
+          folder?: string | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          organization_id?: string
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_finance_profiles: {
+        Row: {
+          aging_0_30: number | null
+          aging_31_60: number | null
+          aging_61_90: number | null
+          aging_90_plus: number | null
+          billing_cycle: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          credit_days: number | null
+          credit_limit: number | null
+          dso_target_days: number | null
+          id: string
+          invoice_frequency: string | null
+          notes: string | null
+          opening_balance: number | null
+          organization_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          aging_0_30?: number | null
+          aging_31_60?: number | null
+          aging_61_90?: number | null
+          aging_90_plus?: number | null
+          billing_cycle?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          credit_days?: number | null
+          credit_limit?: number | null
+          dso_target_days?: number | null
+          id?: string
+          invoice_frequency?: string | null
+          notes?: string | null
+          opening_balance?: number | null
+          organization_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          aging_0_30?: number | null
+          aging_31_60?: number | null
+          aging_61_90?: number | null
+          aging_90_plus?: number | null
+          billing_cycle?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          credit_days?: number | null
+          credit_limit?: number | null
+          dso_target_days?: number | null
+          id?: string
+          invoice_frequency?: string | null
+          notes?: string | null
+          opening_balance?: number | null
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_finance_profiles_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_finance_profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_finance_profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_kyc_documents: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_label: string | null
+          doc_type: string
+          expiry_date: string | null
+          file_name: string | null
+          id: string
+          is_mandatory: boolean
+          mime_type: string | null
+          notes: string | null
+          organization_id: string
+          status: string | null
+          storage_path: string | null
+          updated_at: string
+          updated_by: string | null
+          verified_at: string | null
+          verified_by: string | null
+          version_number: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_label?: string | null
+          doc_type: string
+          expiry_date?: string | null
+          file_name?: string | null
+          id?: string
+          is_mandatory?: boolean
+          mime_type?: string | null
+          notes?: string | null
+          organization_id: string
+          status?: string | null
+          storage_path?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          version_number?: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_label?: string | null
+          doc_type?: string
+          expiry_date?: string | null
+          file_name?: string | null
+          id?: string
+          is_mandatory?: boolean
+          mime_type?: string | null
+          notes?: string | null
+          organization_id?: string
+          status?: string | null
+          storage_path?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_kyc_documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_kyc_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_kyc_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_lane_rates: {
+        Row: {
+          agreement_id: string | null
+          base_rate: number | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          destination_address: string | null
+          destination_gstin: string | null
+          destination_label: string
+          destination_warehouse_id: string | null
+          detention_included: boolean | null
+          distance_km: number | null
+          fuel_clause: string | null
+          id: string
+          is_spot_rate: boolean
+          min_billing: number | null
+          notes: string | null
+          organization_id: string
+          origin_label: string
+          origin_warehouse_id: string | null
+          per_km_rate: number | null
+          per_mt_rate: number | null
+          pricing_model: string | null
+          rate: number | null
+          rate_type: string | null
+          toll_included: boolean | null
+          updated_at: string
+          updated_by: string | null
+          valid_from: string | null
+          valid_to: string | null
+          vehicle_type: string | null
+          warehouse_zone: string | null
+        }
+        Insert: {
+          agreement_id?: string | null
+          base_rate?: number | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          destination_address?: string | null
+          destination_gstin?: string | null
+          destination_label: string
+          destination_warehouse_id?: string | null
+          detention_included?: boolean | null
+          distance_km?: number | null
+          fuel_clause?: string | null
+          id?: string
+          is_spot_rate?: boolean
+          min_billing?: number | null
+          notes?: string | null
+          organization_id: string
+          origin_label: string
+          origin_warehouse_id?: string | null
+          per_km_rate?: number | null
+          per_mt_rate?: number | null
+          pricing_model?: string | null
+          rate?: number | null
+          rate_type?: string | null
+          toll_included?: boolean | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          vehicle_type?: string | null
+          warehouse_zone?: string | null
+        }
+        Update: {
+          agreement_id?: string | null
+          base_rate?: number | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          destination_address?: string | null
+          destination_gstin?: string | null
+          destination_label?: string
+          destination_warehouse_id?: string | null
+          detention_included?: boolean | null
+          distance_km?: number | null
+          fuel_clause?: string | null
+          id?: string
+          is_spot_rate?: boolean
+          min_billing?: number | null
+          notes?: string | null
+          organization_id?: string
+          origin_label?: string
+          origin_warehouse_id?: string | null
+          per_km_rate?: number | null
+          per_mt_rate?: number | null
+          pricing_model?: string | null
+          rate?: number | null
+          rate_type?: string | null
+          toll_included?: boolean | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          vehicle_type?: string | null
+          warehouse_zone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_lane_rates_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "client_contract_agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_lane_rates_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_lane_rates_destination_warehouse_id_fkey"
+            columns: ["destination_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "client_warehouses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_lane_rates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_lane_rates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_lane_rates_origin_warehouse_id_fkey"
+            columns: ["origin_warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "client_warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_risk_scores: {
         Row: {
           client_id: string
@@ -401,48 +1733,102 @@ export type Database = {
       client_warehouses: {
         Row: {
           address: string | null
+          billing_address: string | null
+          capacity_tons: number | null
           city: string | null
           client_id: string
           contact_name: string | null
           contact_phone: string | null
           created_at: string
+          created_by: string | null
           deleted_at: string | null
+          dock_count: number | null
+          handling_equipment: string | null
           id: string
+          latitude: number | null
+          loading_type: string | null
           local_gstin: string | null
+          longitude: number | null
+          manager_name: string | null
+          manager_phone: string | null
           name: string
+          operating_hours: string | null
+          ops_contact: string | null
           organization_id: string
+          pincode: string | null
+          security_contact: string | null
           state: string | null
+          unloading_type: string | null
           updated_at: string
+          updated_by: string | null
+          warehouse_code: string | null
+          warehouse_zone: string | null
         }
         Insert: {
           address?: string | null
+          billing_address?: string | null
+          capacity_tons?: number | null
           city?: string | null
           client_id: string
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
+          dock_count?: number | null
+          handling_equipment?: string | null
           id?: string
+          latitude?: number | null
+          loading_type?: string | null
           local_gstin?: string | null
+          longitude?: number | null
+          manager_name?: string | null
+          manager_phone?: string | null
           name: string
+          operating_hours?: string | null
+          ops_contact?: string | null
           organization_id: string
+          pincode?: string | null
+          security_contact?: string | null
           state?: string | null
+          unloading_type?: string | null
           updated_at?: string
+          updated_by?: string | null
+          warehouse_code?: string | null
+          warehouse_zone?: string | null
         }
         Update: {
           address?: string | null
+          billing_address?: string | null
+          capacity_tons?: number | null
           city?: string | null
           client_id?: string
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
+          dock_count?: number | null
+          handling_equipment?: string | null
           id?: string
+          latitude?: number | null
+          loading_type?: string | null
           local_gstin?: string | null
+          longitude?: number | null
+          manager_name?: string | null
+          manager_phone?: string | null
           name?: string
+          operating_hours?: string | null
+          ops_contact?: string | null
           organization_id?: string
+          pincode?: string | null
+          security_contact?: string | null
           state?: string | null
+          unloading_type?: string | null
           updated_at?: string
+          updated_by?: string | null
+          warehouse_code?: string | null
+          warehouse_zone?: string | null
         }
         Relationships: [
           {
@@ -471,81 +1857,168 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          annual_revenue: number | null
           avatar_seed: string | null
           avatar_url: string | null
           billing_address: string | null
+          billing_contact_email: string | null
+          billing_contact_name: string | null
+          billing_contact_phone: string | null
+          cin: string | null
+          client_code: string | null
+          client_status: string | null
+          commodity_types: string[] | null
           contact_percent: string | null
           contact_person: string | null
+          corporate_address: string | null
+          country: string | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
           display_id: string | null
           email: string | null
+          expected_monthly_loads: number | null
           gstin: string | null
           hq_address: string | null
           id: string
+          iec_number: string | null
+          industry: string | null
+          invoice_frequency_label: string | null
           is_integrated: boolean | null
+          kam_email: string | null
+          kam_name: string | null
+          kam_phone: string | null
+          legal_name: string | null
           linked_organization_id: string | null
+          msme_number: string | null
           name: string
           notes: string | null
+          operating_regions: string[] | null
           organization_id: string
           owner_full_name: string | null
           pan_number: string | null
+          payment_terms_label: string | null
           phone: string
+          potential_volume: number | null
+          projected_contract_revenue: number | null
+          registered_address: string | null
+          state: string | null
           status: string
+          tan_number: string | null
+          trade_name: string | null
           updated_at: string | null
+          updated_by: string | null
+          website: string | null
         }
         Insert: {
           address?: string | null
+          annual_revenue?: number | null
           avatar_seed?: string | null
           avatar_url?: string | null
           billing_address?: string | null
+          billing_contact_email?: string | null
+          billing_contact_name?: string | null
+          billing_contact_phone?: string | null
+          cin?: string | null
+          client_code?: string | null
+          client_status?: string | null
+          commodity_types?: string[] | null
           contact_percent?: string | null
           contact_person?: string | null
+          corporate_address?: string | null
+          country?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
           display_id?: string | null
           email?: string | null
+          expected_monthly_loads?: number | null
           gstin?: string | null
           hq_address?: string | null
           id?: string
+          iec_number?: string | null
+          industry?: string | null
+          invoice_frequency_label?: string | null
           is_integrated?: boolean | null
+          kam_email?: string | null
+          kam_name?: string | null
+          kam_phone?: string | null
+          legal_name?: string | null
           linked_organization_id?: string | null
+          msme_number?: string | null
           name: string
           notes?: string | null
+          operating_regions?: string[] | null
           organization_id: string
           owner_full_name?: string | null
           pan_number?: string | null
+          payment_terms_label?: string | null
           phone: string
+          potential_volume?: number | null
+          projected_contract_revenue?: number | null
+          registered_address?: string | null
+          state?: string | null
           status?: string
+          tan_number?: string | null
+          trade_name?: string | null
           updated_at?: string | null
+          updated_by?: string | null
+          website?: string | null
         }
         Update: {
           address?: string | null
+          annual_revenue?: number | null
           avatar_seed?: string | null
           avatar_url?: string | null
           billing_address?: string | null
+          billing_contact_email?: string | null
+          billing_contact_name?: string | null
+          billing_contact_phone?: string | null
+          cin?: string | null
+          client_code?: string | null
+          client_status?: string | null
+          commodity_types?: string[] | null
           contact_percent?: string | null
           contact_person?: string | null
+          corporate_address?: string | null
+          country?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
           display_id?: string | null
           email?: string | null
+          expected_monthly_loads?: number | null
           gstin?: string | null
           hq_address?: string | null
           id?: string
+          iec_number?: string | null
+          industry?: string | null
+          invoice_frequency_label?: string | null
           is_integrated?: boolean | null
+          kam_email?: string | null
+          kam_name?: string | null
+          kam_phone?: string | null
+          legal_name?: string | null
           linked_organization_id?: string | null
+          msme_number?: string | null
           name?: string
           notes?: string | null
+          operating_regions?: string[] | null
           organization_id?: string
           owner_full_name?: string | null
           pan_number?: string | null
+          payment_terms_label?: string | null
           phone?: string
+          potential_volume?: number | null
+          projected_contract_revenue?: number | null
+          registered_address?: string | null
+          state?: string | null
           status?: string
+          tan_number?: string | null
+          trade_name?: string | null
           updated_at?: string | null
+          updated_by?: string | null
+          website?: string | null
         }
         Relationships: [
           {
@@ -1114,6 +2587,7 @@ export type Database = {
       driver_locations: {
         Row: {
           accuracy: number | null
+          address_label: string | null
           driver_id: string
           id: string
           latitude: number
@@ -1126,6 +2600,7 @@ export type Database = {
         }
         Insert: {
           accuracy?: number | null
+          address_label?: string | null
           driver_id: string
           id?: string
           latitude: number
@@ -1138,6 +2613,7 @@ export type Database = {
         }
         Update: {
           accuracy?: number | null
+          address_label?: string | null
           driver_id?: string
           id?: string
           latitude?: number
@@ -1523,6 +2999,65 @@ export type Database = {
           },
         ]
       }
+      driver_tenures: {
+        Row: {
+          created_at: string
+          driver_id: string
+          id: string
+          joined_at: string
+          left_at: string | null
+          organization_id: string
+          trip_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          driver_id: string
+          id?: string
+          joined_at: string
+          left_at?: string | null
+          organization_id: string
+          trip_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          organization_id?: string
+          trip_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_tenures_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_tenures_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "driver_tenures_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_tenures_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_trip_counters: {
         Row: {
           driver_id: string
@@ -1562,6 +3097,7 @@ export type Database = {
           commission_percent: number | null
           created_at: string | null
           deleted_at: string | null
+          driver_code: string | null
           email: string | null
           emergency_contact: string | null
           emergency_name: string | null
@@ -1586,6 +3122,7 @@ export type Database = {
           commission_percent?: number | null
           created_at?: string | null
           deleted_at?: string | null
+          driver_code?: string | null
           email?: string | null
           emergency_contact?: string | null
           emergency_name?: string | null
@@ -1610,6 +3147,7 @@ export type Database = {
           commission_percent?: number | null
           created_at?: string | null
           deleted_at?: string | null
+          driver_code?: string | null
           email?: string | null
           emergency_contact?: string | null
           emergency_name?: string | null
@@ -1738,6 +3276,209 @@ export type Database = {
           },
         ]
       }
+      entity_identity_anchors: {
+        Row: {
+          created_at: string
+          entity_id: string
+          entity_type: string
+          global_ref: string | null
+          legacy_ref: string | null
+          network_ref: string | null
+          org_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          global_ref?: string | null
+          legacy_ref?: string | null
+          network_ref?: string | null
+          org_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          global_ref?: string | null
+          legacy_ref?: string | null
+          network_ref?: string | null
+          org_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      event_dead_letter: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          destination: string
+          event_id: string
+          failure_reason: string
+          id: string
+          original_id: string
+          payload: Json
+          resolution_note: string | null
+          resolved_at: string | null
+        }
+        Insert: {
+          attempt_count: number
+          created_at?: string
+          destination: string
+          event_id: string
+          failure_reason: string
+          id?: string
+          original_id: string
+          payload: Json
+          resolution_note?: string | null
+          resolved_at?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          destination?: string
+          event_id?: string
+          failure_reason?: string
+          id?: string
+          original_id?: string
+          payload?: Json
+          resolution_note?: string | null
+          resolved_at?: string | null
+        }
+        Relationships: []
+      }
+      event_outbox: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          delivered_at: string | null
+          destination: string
+          event_id: string
+          id: string
+          last_error: string | null
+          max_attempts: number
+          next_attempt_at: string
+          payload: Json
+          status: string
+          topic: string | null
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          delivered_at?: string | null
+          destination: string
+          event_id: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          next_attempt_at?: string
+          payload: Json
+          status?: string
+          topic?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          delivered_at?: string | null
+          destination?: string
+          event_id?: string
+          id?: string
+          last_error?: string | null
+          max_attempts?: number
+          next_attempt_at?: string
+          payload?: Json
+          status?: string
+          topic?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_outbox_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_store"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_schema_registry: {
+        Row: {
+          aggregate_type: string
+          created_at: string
+          description: string | null
+          event_type: string
+          payload_schema: Json | null
+          schema_version: string
+        }
+        Insert: {
+          aggregate_type: string
+          created_at?: string
+          description?: string | null
+          event_type: string
+          payload_schema?: Json | null
+          schema_version?: string
+        }
+        Update: {
+          aggregate_type?: string
+          created_at?: string
+          description?: string | null
+          event_type?: string
+          payload_schema?: Json | null
+          schema_version?: string
+        }
+        Relationships: []
+      }
+      event_store: {
+        Row: {
+          agent_id: string | null
+          aggregate_id: string
+          aggregate_type: string
+          caused_by: string | null
+          correlation_id: string | null
+          emitted_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          org_id: string | null
+          payload: Json
+          schema_version: string
+          user_id: string | null
+          version: number
+        }
+        Insert: {
+          agent_id?: string | null
+          aggregate_id: string
+          aggregate_type: string
+          caused_by?: string | null
+          correlation_id?: string | null
+          emitted_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          org_id?: string | null
+          payload?: Json
+          schema_version?: string
+          user_id?: string | null
+          version?: number
+        }
+        Update: {
+          agent_id?: string | null
+          aggregate_id?: string
+          aggregate_type?: string
+          caused_by?: string | null
+          correlation_id?: string | null
+          emitted_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          org_id?: string | null
+          payload?: Json
+          schema_version?: string
+          user_id?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
       geofence_events: {
         Row: {
           driver_id: string
@@ -1831,6 +3572,117 @@ export type Database = {
           },
         ]
       }
+      global_references: {
+        Row: {
+          entity_id: string
+          entity_type: string
+          id: string
+          issued_at: string
+          issued_by_org: string | null
+          reference: string
+          year: number
+        }
+        Insert: {
+          entity_id: string
+          entity_type: string
+          id?: string
+          issued_at?: string
+          issued_by_org?: string | null
+          reference: string
+          year: number
+        }
+        Update: {
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          issued_at?: string
+          issued_by_org?: string | null
+          reference?: string
+          year?: number
+        }
+        Relationships: []
+      }
+      id_generation_log: {
+        Row: {
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          generated_id: string
+          id: string
+          latency_ms: number | null
+          org_id: string | null
+          path: string
+          reference: string | null
+        }
+        Insert: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          generated_id: string
+          id?: string
+          latency_ms?: number | null
+          org_id?: string | null
+          path?: string
+          reference?: string | null
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          generated_id?: string
+          id?: string
+          latency_ms?: number | null
+          org_id?: string | null
+          path?: string
+          reference?: string | null
+        }
+        Relationships: []
+      }
+      idempotency_keys: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          error_message: string | null
+          expires_at: string
+          key: string
+          org_id: string
+          request_hash: string
+          response_payload: Json | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          error_message?: string | null
+          expires_at?: string
+          key: string
+          org_id: string
+          request_hash: string
+          response_payload?: Json | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          error_message?: string | null
+          expires_at?: string
+          key?: string
+          org_id?: string
+          request_hash?: string
+          response_payload?: Json | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       indents: {
         Row: {
           assigned_supplier_id: string | null
@@ -1841,15 +3693,19 @@ export type Database = {
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
+          display_indent_id: string | null
           drop_location: string
           id: string
+          indent_code: string | null
           indent_number: string
+          indent_operational_code: string | null
           last_saved_at: string | null
           load_type: string | null
           organization_id: string
           owner_user_id: string | null
           pickup_area: string
           pickup_date: string | null
+          sequence_number: number | null
           shared_at: string | null
           status: string
           supplier_target: number
@@ -1866,15 +3722,19 @@ export type Database = {
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
+          display_indent_id?: string | null
           drop_location: string
           id?: string
+          indent_code?: string | null
           indent_number: string
+          indent_operational_code?: string | null
           last_saved_at?: string | null
           load_type?: string | null
           organization_id: string
           owner_user_id?: string | null
           pickup_area: string
           pickup_date?: string | null
+          sequence_number?: number | null
           shared_at?: string | null
           status?: string
           supplier_target?: number
@@ -1891,15 +3751,19 @@ export type Database = {
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
+          display_indent_id?: string | null
           drop_location?: string
           id?: string
+          indent_code?: string | null
           indent_number?: string
+          indent_operational_code?: string | null
           last_saved_at?: string | null
           load_type?: string | null
           organization_id?: string
           owner_user_id?: string | null
           pickup_area?: string
           pickup_date?: string | null
+          sequence_number?: number | null
           shared_at?: string | null
           status?: string
           supplier_target?: number
@@ -1952,6 +3816,136 @@ export type Database = {
           },
         ]
       }
+      invoice_sequences: {
+        Row: {
+          created_at: string
+          financial_year: string
+          last_seq: number
+          org_id: string
+        }
+        Insert: {
+          created_at?: string
+          financial_year: string
+          last_seq?: number
+          org_id: string
+        }
+        Update: {
+          created_at?: string
+          financial_year?: string
+          last_seq?: number
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_sequences_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_sequences_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          cgst_amount: number
+          client_id: string | null
+          client_name: string | null
+          created_at: string
+          created_by: string | null
+          due_date: string | null
+          financial_year: string
+          gst_rate: number
+          id: string
+          igst_amount: number
+          invoice_date: string
+          invoice_number: string
+          notes: string | null
+          org_id: string
+          pdf_storage_path: string | null
+          sgst_amount: number
+          status: string
+          subtotal: number
+          total_amount: number
+          trip_ids: string[]
+          updated_at: string
+        }
+        Insert: {
+          cgst_amount?: number
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          financial_year: string
+          gst_rate?: number
+          id?: string
+          igst_amount?: number
+          invoice_date?: string
+          invoice_number: string
+          notes?: string | null
+          org_id: string
+          pdf_storage_path?: string | null
+          sgst_amount?: number
+          status?: string
+          subtotal?: number
+          total_amount?: number
+          trip_ids?: string[]
+          updated_at?: string
+        }
+        Update: {
+          cgst_amount?: number
+          client_id?: string | null
+          client_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          due_date?: string | null
+          financial_year?: string
+          gst_rate?: number
+          id?: string
+          igst_amount?: number
+          invoice_date?: string
+          invoice_number?: string
+          notes?: string | null
+          org_id?: string
+          pdf_storage_path?: string | null
+          sgst_amount?: number
+          status?: string
+          subtotal?: number
+          total_amount?: number
+          trip_ids?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       network_conversations: {
         Row: {
           created_at: string
@@ -1990,6 +3984,45 @@ export type Database = {
           org_b_name?: string
           unread_count_a?: number
           unread_count_b?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      network_identities: {
+        Row: {
+          created_at: string
+          id: string
+          identity_type: string
+          metadata: Json
+          network_ref: string
+          participant_orgs: string[]
+          primary_entity: string
+          primary_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          identity_type: string
+          metadata?: Json
+          network_ref: string
+          participant_orgs?: string[]
+          primary_entity: string
+          primary_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          identity_type?: string
+          metadata?: Json
+          network_ref?: string
+          participant_orgs?: string[]
+          primary_entity?: string
+          primary_id?: string
+          status?: string
           updated_at?: string
         }
         Relationships: []
@@ -2037,6 +4070,45 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "network_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operational_sequences: {
+        Row: {
+          created_at: string
+          current_value: number
+          entity_type: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_value?: number
+          entity_type: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_value?: number
+          entity_type?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operational_sequences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operational_sequences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -2145,11 +4217,73 @@ export type Database = {
           },
         ]
       }
+      organization_locations: {
+        Row: {
+          address_line: string | null
+          city: string | null
+          created_at: string
+          department: string | null
+          id: string
+          is_verified: boolean
+          location_type: string
+          name: string
+          organization_id: string
+          sort_order: number
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          address_line?: string | null
+          city?: string | null
+          created_at?: string
+          department?: string | null
+          id?: string
+          is_verified?: boolean
+          location_type?: string
+          name: string
+          organization_id: string
+          sort_order?: number
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address_line?: string | null
+          city?: string | null
+          created_at?: string
+          department?: string | null
+          id?: string
+          is_verified?: boolean
+          location_type?: string
+          name?: string
+          organization_id?: string
+          sort_order?: number
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_locations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_locations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           created_at: string | null
           id: string
+          joined_at: string
           organization_id: string
+          permissions: Json
           role: string
           status: string
           updated_at: string | null
@@ -2158,7 +4292,9 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          joined_at?: string
           organization_id: string
+          permissions?: Json
           role?: string
           status?: string
           updated_at?: string | null
@@ -2167,7 +4303,9 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          joined_at?: string
           organization_id?: string
+          permissions?: Json
           role?: string
           status?: string
           updated_at?: string | null
@@ -2252,6 +4390,7 @@ export type Database = {
       organizations: {
         Row: {
           address_line: string | null
+          avatar_seed: string | null
           business_pan: string | null
           business_type: string | null
           cin: string | null
@@ -2259,13 +4398,23 @@ export type Database = {
           created_at: string | null
           deleted_at: string | null
           employee_count: string | null
+          founded_year: number | null
           gstin: string | null
           id: string
           kyc_rejected_reason: string | null
           logo_url: string | null
           name: string
           operating_model: string
+          operational_code: string | null
           owner_id: string | null
+          profile_about: string | null
+          profile_area: string | null
+          profile_ceo_name: string | null
+          profile_facebook: string | null
+          profile_products: string[]
+          profile_sector: string | null
+          profile_website: string | null
+          profile_youtube: string | null
           slug: string | null
           state: string | null
           updated_at: string | null
@@ -2276,6 +4425,7 @@ export type Database = {
         }
         Insert: {
           address_line?: string | null
+          avatar_seed?: string | null
           business_pan?: string | null
           business_type?: string | null
           cin?: string | null
@@ -2283,13 +4433,23 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           employee_count?: string | null
+          founded_year?: number | null
           gstin?: string | null
           id?: string
           kyc_rejected_reason?: string | null
           logo_url?: string | null
           name: string
           operating_model?: string
+          operational_code?: string | null
           owner_id?: string | null
+          profile_about?: string | null
+          profile_area?: string | null
+          profile_ceo_name?: string | null
+          profile_facebook?: string | null
+          profile_products?: string[]
+          profile_sector?: string | null
+          profile_website?: string | null
+          profile_youtube?: string | null
           slug?: string | null
           state?: string | null
           updated_at?: string | null
@@ -2300,6 +4460,7 @@ export type Database = {
         }
         Update: {
           address_line?: string | null
+          avatar_seed?: string | null
           business_pan?: string | null
           business_type?: string | null
           cin?: string | null
@@ -2307,13 +4468,23 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           employee_count?: string | null
+          founded_year?: number | null
           gstin?: string | null
           id?: string
           kyc_rejected_reason?: string | null
           logo_url?: string | null
           name?: string
           operating_model?: string
+          operational_code?: string | null
           owner_id?: string | null
+          profile_about?: string | null
+          profile_area?: string | null
+          profile_ceo_name?: string | null
+          profile_facebook?: string | null
+          profile_products?: string[]
+          profile_sector?: string | null
+          profile_website?: string | null
+          profile_youtube?: string | null
           slug?: string | null
           state?: string | null
           updated_at?: string | null
@@ -2321,6 +4492,30 @@ export type Database = {
           verified_at?: string | null
           verified_by?: string | null
           zone?: string | null
+        }
+        Relationships: []
+      }
+      platform_metrics: {
+        Row: {
+          id: string
+          labels: Json
+          metric_name: string
+          metric_value: number
+          recorded_at: string
+        }
+        Insert: {
+          id?: string
+          labels?: Json
+          metric_name: string
+          metric_value: number
+          recorded_at?: string
+        }
+        Update: {
+          id?: string
+          labels?: Json
+          metric_name?: string
+          metric_value?: number
+          recorded_at?: string
         }
         Relationships: []
       }
@@ -2412,6 +4607,117 @@ export type Database = {
             columns: ["source_indent_id"]
             isOneToOne: false
             referencedRelation: "v_open_indents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_usage: {
+        Row: {
+          id: string
+          metric_key: string
+          org_id: string
+          period_end: string
+          period_start: string
+          product_id: string
+          quantity: number
+          recorded_at: string
+        }
+        Insert: {
+          id?: string
+          metric_key: string
+          org_id: string
+          period_end: string
+          period_start: string
+          product_id: string
+          quantity?: number
+          recorded_at?: string
+        }
+        Update: {
+          id?: string
+          metric_key?: string
+          org_id?: string
+          period_end?: string
+          period_start?: string
+          product_id?: string
+          quantity?: number
+          recorded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_usage_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_usage_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_waitlist: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          email: string
+          fleet_size: string | null
+          full_name: string | null
+          id: string
+          invited_at: string | null
+          org_id: string | null
+          product_id: string
+          referral_source: string | null
+          status: string
+          use_case: string | null
+          user_id: string | null
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          email: string
+          fleet_size?: string | null
+          full_name?: string | null
+          id?: string
+          invited_at?: string | null
+          org_id?: string | null
+          product_id: string
+          referral_source?: string | null
+          status?: string
+          use_case?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          email?: string
+          fleet_size?: string | null
+          full_name?: string | null
+          id?: string
+          invited_at?: string | null
+          org_id?: string | null
+          product_id?: string
+          referral_source?: string | null
+          status?: string
+          use_case?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_waitlist_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_waitlist_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -2621,6 +4927,116 @@ export type Database = {
         }
         Relationships: []
       }
+      search_index: {
+        Row: {
+          display_name: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          location_text: string | null
+          network_ref: string | null
+          org_id: string | null
+          phone: string | null
+          reference: string | null
+          relevance_boost: number
+          search_vector: unknown
+          secondary_ref: string | null
+          tags: string[] | null
+          updated_at: string
+          vehicle_number: string | null
+        }
+        Insert: {
+          display_name?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          location_text?: string | null
+          network_ref?: string | null
+          org_id?: string | null
+          phone?: string | null
+          reference?: string | null
+          relevance_boost?: number
+          search_vector?: unknown
+          secondary_ref?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          vehicle_number?: string | null
+        }
+        Update: {
+          display_name?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          location_text?: string | null
+          network_ref?: string | null
+          org_id?: string | null
+          phone?: string | null
+          reference?: string | null
+          relevance_boost?: number
+          search_vector?: unknown
+          secondary_ref?: string | null
+          tags?: string[] | null
+          updated_at?: string
+          vehicle_number?: string | null
+        }
+        Relationships: []
+      }
+      shared_ledger_connection: {
+        Row: {
+          created_at: string
+          id: string
+          org_a_id: string
+          org_b_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          org_a_id: string
+          org_b_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          org_a_id?: string
+          org_b_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_ledger_connection_org_a_id_fkey"
+            columns: ["org_a_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_ledger_connection_org_a_id_fkey"
+            columns: ["org_a_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_ledger_connection_org_b_id_fkey"
+            columns: ["org_b_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_ledger_connection_org_b_id_fkey"
+            columns: ["org_b_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shared_ledger_notifications: {
         Row: {
           amount_meta: number | null
@@ -2772,6 +5188,97 @@ export type Database = {
           },
         ]
       }
+      supplier_bills: {
+        Row: {
+          advance_paid: number
+          approved_at: string | null
+          approved_by: string | null
+          balance_payable: number | null
+          bill_date: string
+          bill_number: string
+          created_at: string
+          created_by: string | null
+          gross_amount: number
+          id: string
+          net_payable: number
+          notes: string | null
+          org_id: string
+          status: string
+          supplier_id: string | null
+          supplier_name: string | null
+          tds_amount: number
+          tds_percent: number
+          trip_ids: string[]
+          updated_at: string
+        }
+        Insert: {
+          advance_paid?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          balance_payable?: number | null
+          bill_date?: string
+          bill_number: string
+          created_at?: string
+          created_by?: string | null
+          gross_amount?: number
+          id?: string
+          net_payable?: number
+          notes?: string | null
+          org_id: string
+          status?: string
+          supplier_id?: string | null
+          supplier_name?: string | null
+          tds_amount?: number
+          tds_percent?: number
+          trip_ids?: string[]
+          updated_at?: string
+        }
+        Update: {
+          advance_paid?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          balance_payable?: number | null
+          bill_date?: string
+          bill_number?: string
+          created_at?: string
+          created_by?: string | null
+          gross_amount?: number
+          id?: string
+          net_payable?: number
+          notes?: string | null
+          org_id?: string
+          status?: string
+          supplier_id?: string | null
+          supplier_name?: string | null
+          tds_amount?: number
+          tds_percent?: number
+          trip_ids?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_bills_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_bills_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_bills_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
@@ -2789,6 +5296,10 @@ export type Database = {
           is_verified: boolean
           linked_organization_id: string | null
           name: string | null
+          onboarding_agreement_notes: string | null
+          onboarding_agreement_signed_at: string | null
+          onboarding_agreement_status: string | null
+          onboarding_agreement_storage_path: string | null
           operating_areas: string[] | null
           organization_id: string
           owner_full_name: string | null
@@ -2813,6 +5324,10 @@ export type Database = {
           is_verified?: boolean
           linked_organization_id?: string | null
           name?: string | null
+          onboarding_agreement_notes?: string | null
+          onboarding_agreement_signed_at?: string | null
+          onboarding_agreement_status?: string | null
+          onboarding_agreement_storage_path?: string | null
           operating_areas?: string[] | null
           organization_id: string
           owner_full_name?: string | null
@@ -2837,6 +5352,10 @@ export type Database = {
           is_verified?: boolean
           linked_organization_id?: string | null
           name?: string | null
+          onboarding_agreement_notes?: string | null
+          onboarding_agreement_signed_at?: string | null
+          onboarding_agreement_status?: string | null
+          onboarding_agreement_storage_path?: string | null
           operating_areas?: string[] | null
           organization_id?: string
           owner_full_name?: string | null
@@ -2886,6 +5405,7 @@ export type Database = {
           created_at: string | null
           description: string
           id: string
+          is_opening_balance: boolean
           ledger_category: string | null
           ledger_entity_type: string | null
           ledger_flow_type: string | null
@@ -2903,6 +5423,7 @@ export type Database = {
           created_at?: string | null
           description?: string
           id?: string
+          is_opening_balance?: boolean
           ledger_category?: string | null
           ledger_entity_type?: string | null
           ledger_flow_type?: string | null
@@ -2920,6 +5441,7 @@ export type Database = {
           created_at?: string | null
           description?: string
           id?: string
+          is_opening_balance?: boolean
           ledger_category?: string | null
           ledger_entity_type?: string | null
           ledger_flow_type?: string | null
@@ -3355,13 +5877,28 @@ export type Database = {
       trip_fuel_entries: {
         Row: {
           amount_inr: number
+          approval_state: string
+          approved_at: string | null
+          approved_by: string | null
           bill_storage_path: string | null
           entered_at: string
           entered_by: string | null
           fuel_type: string | null
           id: string
+          last_retry_at: string | null
+          ledger_state: string
           liters: number | null
           notes: string | null
+          payment_mode: string | null
+          payment_owner: string
+          posting_error: string | null
+          posting_state: string
+          reimbursed_at: string | null
+          reimbursed_by: string | null
+          reimbursement_notes: string | null
+          reimbursement_state: string
+          reimbursement_updated_at: string | null
+          retry_count: number
           source: string
           station_name: string | null
           status: string
@@ -3370,13 +5907,28 @@ export type Database = {
         }
         Insert: {
           amount_inr?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
           bill_storage_path?: string | null
           entered_at?: string
           entered_by?: string | null
           fuel_type?: string | null
           id?: string
+          last_retry_at?: string | null
+          ledger_state?: string
           liters?: number | null
           notes?: string | null
+          payment_mode?: string | null
+          payment_owner?: string
+          posting_error?: string | null
+          posting_state?: string
+          reimbursed_at?: string | null
+          reimbursed_by?: string | null
+          reimbursement_notes?: string | null
+          reimbursement_state?: string
+          reimbursement_updated_at?: string | null
+          retry_count?: number
           source?: string
           station_name?: string | null
           status?: string
@@ -3385,13 +5937,28 @@ export type Database = {
         }
         Update: {
           amount_inr?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
           bill_storage_path?: string | null
           entered_at?: string
           entered_by?: string | null
           fuel_type?: string | null
           id?: string
+          last_retry_at?: string | null
+          ledger_state?: string
           liters?: number | null
           notes?: string | null
+          payment_mode?: string | null
+          payment_owner?: string
+          posting_error?: string | null
+          posting_state?: string
+          reimbursed_at?: string | null
+          reimbursed_by?: string | null
+          reimbursement_notes?: string | null
+          reimbursement_state?: string
+          reimbursement_updated_at?: string | null
+          retry_count?: number
           source?: string
           station_name?: string | null
           status?: string
@@ -3597,14 +6164,19 @@ export type Database = {
           conversation_id: string
           created_at: string
           delivered_at: string | null
+          edited_at: string | null
           id: string
+          is_deleted: boolean
           is_delivered: boolean
           is_read: boolean
           message_type: string
           metadata: Json | null
           organization_id: string
           priority_weight: number
+          reactions: Json | null
           read_at: string | null
+          reply_to_id: string | null
+          reply_to_preview: Json | null
           sender_avatar_seed: string | null
           sender_name: string
           sender_role: string
@@ -3618,14 +6190,19 @@ export type Database = {
           conversation_id: string
           created_at?: string
           delivered_at?: string | null
+          edited_at?: string | null
           id?: string
+          is_deleted?: boolean
           is_delivered?: boolean
           is_read?: boolean
           message_type?: string
           metadata?: Json | null
           organization_id: string
           priority_weight?: number
+          reactions?: Json | null
           read_at?: string | null
+          reply_to_id?: string | null
+          reply_to_preview?: Json | null
           sender_avatar_seed?: string | null
           sender_name: string
           sender_role: string
@@ -3639,14 +6216,19 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           delivered_at?: string | null
+          edited_at?: string | null
           id?: string
+          is_deleted?: boolean
           is_delivered?: boolean
           is_read?: boolean
           message_type?: string
           metadata?: Json | null
           organization_id?: string
           priority_weight?: number
+          reactions?: Json | null
           read_at?: string | null
+          reply_to_id?: string | null
+          reply_to_preview?: Json | null
           sender_avatar_seed?: string | null
           sender_name?: string
           sender_role?: string
@@ -3702,6 +6284,221 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "trip_conversations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "trip_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "trip_messages_archive_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_operational_timeline_events: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          organization_id: string
+          payload: Json
+          source_id: string | null
+          source_type: string | null
+          trip_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          organization_id: string
+          payload?: Json
+          source_id?: string | null
+          source_type?: string | null
+          trip_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          organization_id?: string
+          payload?: Json
+          source_id?: string | null
+          source_type?: string | null
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_operational_timeline_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_operational_timeline_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
+      trip_other_expenses: {
+        Row: {
+          amount_inr: number
+          approval_state: string
+          approved_at: string | null
+          approved_by: string | null
+          description: string | null
+          entered_at: string
+          entered_by: string | null
+          expense_category: string
+          id: string
+          last_retry_at: string | null
+          ledger_state: string
+          location_name: string | null
+          notes: string | null
+          payment_mode: string | null
+          payment_owner: string
+          posting_error: string | null
+          posting_state: string
+          receipt_storage_path: string | null
+          reimbursed_at: string | null
+          reimbursed_by: string | null
+          reimbursement_notes: string | null
+          reimbursement_state: string
+          reimbursement_updated_at: string | null
+          retry_count: number
+          source: string
+          status: string
+          trip_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_inr?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          description?: string | null
+          entered_at?: string
+          entered_by?: string | null
+          expense_category: string
+          id?: string
+          last_retry_at?: string | null
+          ledger_state?: string
+          location_name?: string | null
+          notes?: string | null
+          payment_mode?: string | null
+          payment_owner?: string
+          posting_error?: string | null
+          posting_state?: string
+          receipt_storage_path?: string | null
+          reimbursed_at?: string | null
+          reimbursed_by?: string | null
+          reimbursement_notes?: string | null
+          reimbursement_state?: string
+          reimbursement_updated_at?: string | null
+          retry_count?: number
+          source?: string
+          status?: string
+          trip_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_inr?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          description?: string | null
+          entered_at?: string
+          entered_by?: string | null
+          expense_category?: string
+          id?: string
+          last_retry_at?: string | null
+          ledger_state?: string
+          location_name?: string | null
+          notes?: string | null
+          payment_mode?: string | null
+          payment_owner?: string
+          posting_error?: string | null
+          posting_state?: string
+          receipt_storage_path?: string | null
+          reimbursed_at?: string | null
+          reimbursed_by?: string | null
+          reimbursement_notes?: string | null
+          reimbursement_state?: string
+          reimbursement_updated_at?: string | null
+          retry_count?: number
+          source?: string
+          status?: string
+          trip_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_other_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_other_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_other_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_other_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
           },
         ]
       }
@@ -3815,13 +6612,28 @@ export type Database = {
       trip_toll_entries: {
         Row: {
           amount_inr: number
+          approval_state: string
+          approved_at: string | null
+          approved_by: string | null
           entered_at: string
           entered_by: string | null
           id: string
           is_estimated: boolean
+          last_retry_at: string | null
+          ledger_state: string
           notes: string | null
+          payment_mode: string | null
+          payment_owner: string
           plaza_name: string | null
+          posting_error: string | null
+          posting_state: string
           receipt_storage_path: string | null
+          reimbursed_at: string | null
+          reimbursed_by: string | null
+          reimbursement_notes: string | null
+          reimbursement_state: string
+          reimbursement_updated_at: string | null
+          retry_count: number
           source: string
           status: string
           trip_id: string
@@ -3829,13 +6641,28 @@ export type Database = {
         }
         Insert: {
           amount_inr?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
           entered_at?: string
           entered_by?: string | null
           id?: string
           is_estimated?: boolean
+          last_retry_at?: string | null
+          ledger_state?: string
           notes?: string | null
+          payment_mode?: string | null
+          payment_owner?: string
           plaza_name?: string | null
+          posting_error?: string | null
+          posting_state?: string
           receipt_storage_path?: string | null
+          reimbursed_at?: string | null
+          reimbursed_by?: string | null
+          reimbursement_notes?: string | null
+          reimbursement_state?: string
+          reimbursement_updated_at?: string | null
+          retry_count?: number
           source?: string
           status?: string
           trip_id: string
@@ -3843,13 +6670,28 @@ export type Database = {
         }
         Update: {
           amount_inr?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
           entered_at?: string
           entered_by?: string | null
           id?: string
           is_estimated?: boolean
+          last_retry_at?: string | null
+          ledger_state?: string
           notes?: string | null
+          payment_mode?: string | null
+          payment_owner?: string
           plaza_name?: string | null
+          posting_error?: string | null
+          posting_state?: string
           receipt_storage_path?: string | null
+          reimbursed_at?: string | null
+          reimbursed_by?: string | null
+          reimbursement_notes?: string | null
+          reimbursement_state?: string
+          reimbursement_updated_at?: string | null
+          retry_count?: number
           source?: string
           status?: string
           trip_id?: string
@@ -4066,6 +6908,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -4085,6 +6929,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -4105,13 +6950,21 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -4127,6 +6980,8 @@ export type Database = {
           client_name: string
           client_price?: number
           completed_at?: string | null
+          converted_by?: string | null
+          converted_from_indent_at?: string | null
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
@@ -4146,6 +7001,7 @@ export type Database = {
           gps_distance_km?: number | null
           id?: string
           indent_id?: string | null
+          indent_reference_code?: string | null
           is_guaranteed?: boolean
           last_location_at?: string | null
           last_location_chat_at?: string | null
@@ -4166,13 +7022,21 @@ export type Database = {
           pickup_lat?: number | null
           pickup_lon?: number | null
           platform_fee?: number
+          pod_received_at?: string | null
+          pod_required?: boolean
+          sequence_number?: number | null
           source?: string
+          source_indent_code?: string | null
+          source_indent_id?: string | null
           start_odometer_km?: number | null
           started_at?: string | null
           status?: string
+          status_change_origin?: string | null
           supplier_id?: string | null
           supplier_rate?: number
+          trip_code?: string | null
           trip_number: string
+          trip_operational_code?: string | null
           trip_payout_mode?: string | null
           updated_at?: string | null
           vehicle_display_number?: string | null
@@ -4188,6 +7052,8 @@ export type Database = {
           client_name?: string
           client_price?: number
           completed_at?: string | null
+          converted_by?: string | null
+          converted_from_indent_at?: string | null
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
@@ -4207,6 +7073,7 @@ export type Database = {
           gps_distance_km?: number | null
           id?: string
           indent_id?: string | null
+          indent_reference_code?: string | null
           is_guaranteed?: boolean
           last_location_at?: string | null
           last_location_chat_at?: string | null
@@ -4227,13 +7094,21 @@ export type Database = {
           pickup_lat?: number | null
           pickup_lon?: number | null
           platform_fee?: number
+          pod_received_at?: string | null
+          pod_required?: boolean
+          sequence_number?: number | null
           source?: string
+          source_indent_code?: string | null
+          source_indent_id?: string | null
           start_odometer_km?: number | null
           started_at?: string | null
           status?: string
+          status_change_origin?: string | null
           supplier_id?: string | null
           supplier_rate?: number
+          trip_code?: string | null
           trip_number?: string
+          trip_operational_code?: string | null
           trip_payout_mode?: string | null
           updated_at?: string | null
           vehicle_display_number?: string | null
@@ -4311,6 +7186,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "trips_source_indent_id_fkey"
+            columns: ["source_indent_id"]
+            isOneToOne: false
+            referencedRelation: "indents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trips_source_indent_id_fkey"
+            columns: ["source_indent_id"]
+            isOneToOne: false
+            referencedRelation: "v_open_indents"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "trips_supplier_id_fkey"
             columns: ["supplier_id"]
             isOneToOne: false
@@ -4325,6 +7214,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_push_tokens: {
+        Row: {
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          platform: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          platform?: string
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       user_counters: {
         Row: {
@@ -4418,8 +7328,307 @@ export type Database = {
           },
         ]
       }
+      vehicle_ledger_entries: {
+        Row: {
+          amount: number
+          approved_by: string | null
+          created_at: string
+          credit: number | null
+          debit: number | null
+          entry_type: string
+          id: string
+          metadata: Json
+          organization_id: string
+          posted_at: string
+          source_id: string
+          source_type: string
+          trip_id: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          amount?: number
+          approved_by?: string | null
+          created_at?: string
+          credit?: number | null
+          debit?: number | null
+          entry_type: string
+          id?: string
+          metadata?: Json
+          organization_id: string
+          posted_at?: string
+          source_id: string
+          source_type: string
+          trip_id?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          amount?: number
+          approved_by?: string | null
+          created_at?: string
+          credit?: number | null
+          debit?: number | null
+          entry_type?: string
+          id?: string
+          metadata?: Json
+          organization_id?: string
+          posted_at?: string
+          source_id?: string
+          source_type?: string
+          trip_id?: string | null
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_ledger_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "vehicle_ledger_entries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_maintenance_entries: {
+        Row: {
+          amount_inr: number
+          entered_at: string
+          entered_by: string | null
+          id: string
+          invoice_storage_path: string | null
+          maintenance_type: string
+          next_due_date: string | null
+          next_due_km: number | null
+          notes: string | null
+          organization_id: string
+          status: string
+          trip_id: string | null
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          amount_inr?: number
+          entered_at?: string
+          entered_by?: string | null
+          id?: string
+          invoice_storage_path?: string | null
+          maintenance_type: string
+          next_due_date?: string | null
+          next_due_km?: number | null
+          notes?: string | null
+          organization_id: string
+          status?: string
+          trip_id?: string | null
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          amount_inr?: number
+          entered_at?: string
+          entered_by?: string | null
+          id?: string
+          invoice_storage_path?: string | null
+          maintenance_type?: string
+          next_due_date?: string | null
+          next_due_km?: number | null
+          notes?: string | null
+          organization_id?: string
+          status?: string
+          trip_id?: string | null
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_maintenance_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "vehicle_maintenance_entries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_operation_ledger_entries: {
+        Row: {
+          amount: number
+          approval_state: string
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          entry_type: string
+          id: string
+          organization_id: string
+          source_id: string
+          source_type: string
+          trip_id: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          amount?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          entry_type?: string
+          id?: string
+          organization_id: string
+          source_id: string
+          source_type: string
+          trip_id?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          amount?: number
+          approval_state?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          entry_type?: string
+          id?: string
+          organization_id?: string
+          source_id?: string
+          source_type?: string
+          trip_id?: string | null
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "vehicle_operation_ledger_entries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicles: {
         Row: {
+          avatar_seed: string | null
+          avatar_url: string | null
           capacity: string | null
           created_at: string | null
           deleted_at: string | null
@@ -4433,12 +7642,15 @@ export type Database = {
           vehicle_axle: string | null
           vehicle_body_type: string | null
           vehicle_brand: string | null
+          vehicle_code: string | null
           vehicle_model: string | null
           vehicle_number: string
           vehicle_size: string | null
           vehicle_type: string | null
         }
         Insert: {
+          avatar_seed?: string | null
+          avatar_url?: string | null
           capacity?: string | null
           created_at?: string | null
           deleted_at?: string | null
@@ -4452,12 +7664,15 @@ export type Database = {
           vehicle_axle?: string | null
           vehicle_body_type?: string | null
           vehicle_brand?: string | null
+          vehicle_code?: string | null
           vehicle_model?: string | null
           vehicle_number: string
           vehicle_size?: string | null
           vehicle_type?: string | null
         }
         Update: {
+          avatar_seed?: string | null
+          avatar_url?: string | null
           capacity?: string | null
           created_at?: string | null
           deleted_at?: string | null
@@ -4471,6 +7686,7 @@ export type Database = {
           vehicle_axle?: string | null
           vehicle_body_type?: string | null
           vehicle_brand?: string | null
+          vehicle_code?: string | null
           vehicle_model?: string | null
           vehicle_number?: string
           vehicle_size?: string | null
@@ -4535,6 +7751,66 @@ export type Database = {
           },
           {
             foreignKeyName: "workspace_audit_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_products: {
+        Row: {
+          activated_at: string | null
+          billing_cycle: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          metadata: Json
+          org_id: string
+          product_id: string
+          seats: number | null
+          status: string
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          billing_cycle?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          metadata?: Json
+          org_id: string
+          product_id: string
+          seats?: number | null
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          billing_cycle?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          metadata?: Json
+          org_id?: string
+          product_id?: string
+          seats?: number | null
+          status?: string
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_products_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_products_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -4941,6 +8217,14 @@ export type Database = {
         }
         Returns: string
       }
+      allocate_invoice_number: {
+        Args: { p_financial_yr?: string; p_org_id: string }
+        Returns: string
+      }
+      allocate_operational_sequence: {
+        Args: { p_entity_type: string; p_org_id: string }
+        Returns: number
+      }
       apply_roster_deploy_from_direct_quote: {
         Args: { p_driver_id: string; p_quote_id: string; p_vehicle_id: string }
         Returns: {
@@ -4953,6 +8237,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -4972,6 +8258,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -4992,13 +8279,21 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -5010,6 +8305,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      archive_chat_messages: {
+        Args: { p_batch?: number; p_older_than?: string }
+        Returns: number
       }
       assign_aggregate_trip_driver: {
         Args: {
@@ -5041,6 +8340,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -5060,6 +8361,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -5080,13 +8382,21 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -5130,6 +8440,7 @@ export type Database = {
         Args: { p_code: string; p_max_attempts?: number }
         Returns: Json
       }
+      cleanup_expired_idempotency_keys: { Args: never; Returns: number }
       cleanup_rate_limits: { Args: { p_window?: string }; Returns: number }
       column_exists: {
         Args: { p_column: string; p_schema: string; p_table: string }
@@ -5163,8 +8474,13 @@ export type Database = {
         Args: { p_msg_id: string; p_rating: number }
         Returns: Json
       }
-      create_trip_from_direct_quote: {
-        Args: { p_quote_id: string; p_vehicle_display_number?: string }
+      create_trip_from_assigned_indent: {
+        Args: {
+          p_driver_id?: string
+          p_indent_id: string
+          p_vehicle_display_number?: string
+          p_vehicle_id?: string
+        }
         Returns: {
           actual_distance_traveled_km: number | null
           advance_paid: number
@@ -5175,6 +8491,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -5194,6 +8512,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -5214,13 +8533,102 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
+          trip_payout_mode: string | null
+          updated_at: string | null
+          vehicle_display_number: string | null
+          vehicle_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "trips"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      create_trip_from_direct_quote: {
+        Args: { p_quote_id: string; p_vehicle_display_number?: string }
+        Returns: {
+          actual_distance_traveled_km: number | null
+          advance_paid: number
+          amount_paid: number
+          assigned_by_user_id: string | null
+          booking_ref: string | null
+          client_id: string | null
+          client_name: string
+          client_price: number
+          completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
+          created_at: string | null
+          created_by_user_id: string | null
+          deleted_at: string | null
+          display_trip_id: string | null
+          distance: number | null
+          distance_discrepancy_km: number | null
+          distance_source: string | null
+          driver_commission: number
+          driver_display_name: string | null
+          driver_display_trip_id: string | null
+          driver_id: string | null
+          drop_lat: number | null
+          drop_location: string
+          drop_lon: number | null
+          end_odometer_km: number | null
+          estimated_duration: string | null
+          gps_distance_km: number | null
+          id: string
+          indent_id: string | null
+          indent_reference_code: string | null
+          is_guaranteed: boolean
+          last_location_at: string | null
+          last_location_chat_at: string | null
+          load_tons: number | null
+          load_type: string | null
+          margin: number | null
+          notes: string | null
+          odometer_distance_km: number | null
+          odometer_notes: string | null
+          odometer_updated_at: string | null
+          odometer_updated_by: string | null
+          odometer_verification_state: string
+          organization_id: string
+          owner_user_id: string | null
+          payment_status: string
+          pickup_area: string
+          pickup_date: string | null
+          pickup_lat: number | null
+          pickup_lon: number | null
+          platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
+          source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
+          start_odometer_km: number | null
+          started_at: string | null
+          status: string
+          status_change_origin: string | null
+          supplier_id: string | null
+          supplier_rate: number
+          trip_code: string | null
+          trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -5288,6 +8696,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      emit_event: {
+        Args: {
+          p_aggregate_id: string
+          p_aggregate_type: string
+          p_caused_by?: string
+          p_correlation_id?: string
+          p_event_type: string
+          p_metadata?: Json
+          p_org_id?: string
+          p_payload: Json
+          p_user_id?: string
+        }
+        Returns: string
+      }
       enforce_rpc_rate_limit: {
         Args: { p_max_requests: number; p_scope: string; p_window: string }
         Returns: undefined
@@ -5295,6 +8717,70 @@ export type Database = {
       enqueue_driver_signup_matches: {
         Args: { p_phone: string; p_user_id: string }
         Returns: number
+      }
+      ensure_chat_channel: {
+        Args: {
+          p_channel_key: string
+          p_organization_id: string
+          p_title?: string
+        }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      ensure_direct_chat: {
+        Args: { p_organization_id: string; p_peer_user_id: string }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       ensure_driver_signup_matches_for_driver: {
         Args: { p_driver_id: string }
@@ -5324,6 +8810,45 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      ensure_network_identity: {
+        Args: {
+          p_identity_type: string
+          p_org_id: string
+          p_primary_entity: string
+          p_primary_id: string
+        }
+        Returns: string
+      }
+      ensure_trip_chat_room: {
+        Args: { p_trip_id: string }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       execute_b2b_update: {
         Args: {
           p_event_type: string
@@ -5344,6 +8869,87 @@ export type Database = {
         }[]
       }
       fn_build_chat_lanes: { Args: { p_unified: Json }; Returns: Json }
+      fn_can_access_trip_for_chat: {
+        Args: { p_trip_id: string }
+        Returns: boolean
+      }
+      fn_chat_can_access_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
+      fn_chat_ensure_conv_for_network: {
+        Args: { p_network_conversation_id: string }
+        Returns: string
+      }
+      fn_chat_ensure_conv_for_trip_lane: {
+        Args: { p_trip_conversation_id: string }
+        Returns: string
+      }
+      fn_chat_is_org_member: { Args: { p_org_id: string }; Returns: boolean }
+      fn_chat_is_participant: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
+      fn_ensure_trip_chat_room: {
+        Args: { p_trip_id: string }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      fn_ensure_trip_chat_room_core: {
+        Args: { p_created_by?: string; p_trip_id: string }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       fn_ensure_trip_party_conversations: {
         Args: { p_trip_id: string }
         Returns: undefined
@@ -5366,12 +8972,37 @@ export type Database = {
         }
         Returns: undefined
       }
-      fn_post_system_message_to_trip_chats: {
-        Args: { p_content: string; p_dedupe_status?: string; p_trip_id: string }
-        Returns: undefined
-      }
+      fn_post_system_message_to_trip_chats:
+        | {
+            Args: {
+              p_content: string
+              p_dedupe_status?: string
+              p_trip_id: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_content: string
+              p_dedupe_status?: string
+              p_simulated?: boolean
+              p_trip_id: string
+            }
+            Returns: undefined
+          }
       fn_post_trip_feedback_prompt_to_chats: {
         Args: { p_trip_id: string }
+        Returns: undefined
+      }
+      fn_post_trip_room_action_card: {
+        Args: {
+          p_body?: string
+          p_event_type: string
+          p_legacy_msg_id?: string
+          p_metadata?: Json
+          p_title: string
+          p_trip_id: string
+        }
         Returns: undefined
       }
       fn_reconcile_trip_conversation_unread: {
@@ -5379,12 +9010,32 @@ export type Database = {
         Returns: number
       }
       fn_storage_trip_doc_access: { Args: { p_name: string }; Returns: boolean }
+      fn_sync_trip_room_participants: {
+        Args: { p_conversation_id: string; p_trip_id: string }
+        Returns: undefined
+      }
+      fn_trip_location_city_hint: {
+        Args: { p_trip_id: string }
+        Returns: string
+      }
       fn_trip_message_counts_as_dispatcher_unread: {
         Args: { p_message_type: string; p_sender_role: string }
         Returns: boolean
       }
       fn_trip_status_chat_message_body: {
         Args: { p: Database["public"]["Tables"]["trips"]["Row"] }
+        Returns: string
+      }
+      generate_enterprise_operational_code: {
+        Args: { p_entity_type: string; p_org_id: string }
+        Returns: string
+      }
+      generate_global_reference: {
+        Args: { p_entity_id: string; p_entity_type: string; p_org_id?: string }
+        Returns: string
+      }
+      generate_operational_code: {
+        Args: { entity_type: string; org_id: string }
         Returns: string
       }
       generate_trip_otp: {
@@ -5409,6 +9060,26 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_active_products: {
+        Args: { p_org_id: string }
+        Returns: {
+          expires_at: string
+          product_id: string
+          status: string
+          trial_ends_at: string
+        }[]
+      }
+      get_audit_log_for_org: {
+        Args: { p_limit?: number; p_offset?: number; p_org_id: string }
+        Returns: {
+          actor_email: string
+          actor_name: string
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+        }[]
+      }
       get_b2b_chat_bootstrap: {
         Args: {
           p_hub_trip_bucket?: string
@@ -5420,11 +9091,64 @@ export type Database = {
         }
         Returns: Json
       }
+      get_chat_inbox: {
+        Args: { p_before?: string; p_limit?: number; p_organization_id: string }
+        Returns: {
+          channel_key: string
+          client_id: string
+          conversation_type: string
+          created_at: string
+          driver_id: string
+          id: string
+          is_archived: boolean
+          last_message_at: string
+          last_message_preview: string
+          message_count: number
+          metadata: Json
+          my_last_read_at: string
+          organization_id: string
+          supplier_id: string
+          title: string
+          trip_id: string
+          unread_count: number
+        }[]
+      }
+      get_chat_messages: {
+        Args: { p_before?: string; p_conversation_id: string; p_limit?: number }
+        Returns: {
+          client_message_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          legacy_source: string | null
+          message_type: string
+          metadata: Json
+          organization_id: string
+          reply_to_id: string | null
+          sender_name: string
+          sender_role: string | null
+          sender_type: string
+          sender_user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "chat_messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_client_detail_bundle: {
         Args: { p_client_id: string; p_org_id: string }
         Returns: Json
       }
       get_client_details: { Args: { p_client_id: string }; Returns: Json }
+      get_client_management_bundle: {
+        Args: { p_client_id: string; p_org_id: string }
+        Returns: Json
+      }
       get_client_monthly_analytics: {
         Args: { p_client_id: string; p_months_back?: number; p_org_id: string }
         Returns: {
@@ -5627,6 +9351,17 @@ export type Database = {
         Args: { p_exclude_trip_id?: string; p_phone: string }
         Returns: Json
       }
+      get_driver_previous_rows_by_identity: {
+        Args: { p_driver_id: string; p_org_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          left_at: string
+          name: string
+          phone: string
+          user_id: string
+        }[]
+      }
       get_driver_profile_display: {
         Args: { p_driver_id: string }
         Returns: Json
@@ -5657,6 +9392,18 @@ export type Database = {
           payable_amount: number
           phone: string
           user_id: string
+        }[]
+      }
+      get_driver_tenures: {
+        Args: { p_driver_id: string; p_org_id: string }
+        Returns: {
+          created_at: string
+          driver_id: string
+          id: string
+          joined_at: string
+          left_at: string
+          organization_id: string
+          trip_count: number
         }[]
       }
       get_drivers_delta: {
@@ -5701,6 +9448,7 @@ export type Database = {
         }[]
       }
       get_global_app_bootstrap: { Args: { p_org_id: string }; Returns: Json }
+      get_identity_health: { Args: { p_since?: string }; Returns: Json }
       get_indents_delta: {
         Args: { p_limit?: number; p_org_id: string; p_since: string }
         Returns: Json
@@ -5739,6 +9487,17 @@ export type Database = {
           profile_role: string
         }[]
       }
+      get_invitees_by_phones: {
+        Args: { p_phones: string[] }
+        Returns: {
+          full_name: string
+          organization_id: string
+          organization_name: string
+          phone: string
+          profile_company_name: string
+          profile_role: string
+        }[]
+      }
       get_last_n_locations_for_trip: {
         Args: { p_n?: number; p_trip_id: string }
         Returns: {
@@ -5748,6 +9507,14 @@ export type Database = {
         }[]
       }
       get_last_trip_location: { Args: { p_trip_id: string }; Returns: Json }
+      get_latest_assignment_audit_by_trip_ids: {
+        Args: { p_trip_ids: string[] }
+        Returns: {
+          changed_at: string
+          changed_by: string
+          trip_id: string
+        }[]
+      }
       get_latest_driver_location_for_trip: {
         Args: { p_trip_id: string }
         Returns: Json
@@ -5762,6 +9529,15 @@ export type Database = {
           p_trip_offset?: number
         }
         Returns: Json
+      }
+      get_mutual_connections: {
+        Args: { p_target_org_id: string; p_viewer_org_id: string }
+        Returns: {
+          avatar_seed: string
+          avatar_url: string
+          id: string
+          name: string
+        }[]
       }
       get_network_conversations_delta: {
         Args: { p_limit?: number; p_org_id: string; p_since: string }
@@ -5792,6 +9568,10 @@ export type Database = {
           weight_tonnes: number
         }[]
       }
+      get_next_trip_sequence_for_org: {
+        Args: { p_org_id: string }
+        Returns: number
+      }
       get_org_ledger_summary: {
         Args: { p_from?: string; p_org_id: string; p_to?: string }
         Returns: {
@@ -5800,6 +9580,23 @@ export type Database = {
           receivables: number
           total_in: number
           total_out: number
+        }[]
+      }
+      get_org_members_with_profiles: {
+        Args: { p_org_id: string }
+        Returns: {
+          avatar_seed: string
+          avatar_url: string
+          email: string
+          full_name: string
+          id: string
+          joined_at: string
+          organization_id: string
+          permissions: Json
+          phone: string
+          role: string
+          status: string
+          user_id: string
         }[]
       }
       get_org_trip_metrics: {
@@ -5840,6 +9637,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -5859,6 +9658,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -5879,13 +9679,21 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -5898,6 +9706,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_platform_health: { Args: never; Returns: Json }
       get_pod_reconciliation_summary: {
         Args: { p_organization_id?: string }
         Returns: {
@@ -5911,6 +9720,8 @@ export type Database = {
           received_sum: number
         }[]
       }
+      get_safe_fallback_indent_number: { Args: never; Returns: string }
+      get_safe_fallback_trip_number: { Args: never; Returns: string }
       get_shared_ledger_entries: {
         Args: { org_id: string; partner_key: string }
         Returns: {
@@ -6051,6 +9862,36 @@ export type Database = {
           trip_id: string
         }[]
       }
+      get_trip_chat_room: {
+        Args: { p_trip_id: string }
+        Returns: {
+          channel_key: string | null
+          client_id: string | null
+          conversation_type: string
+          created_at: string
+          created_by: string | null
+          driver_id: string | null
+          id: string
+          is_archived: boolean
+          last_message_at: string | null
+          last_message_preview: string | null
+          legacy_network_conversation_id: string | null
+          legacy_trip_conversation_id: string | null
+          message_count: number
+          metadata: Json
+          organization_id: string
+          supplier_id: string | null
+          title: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_conversations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_trip_detail_bundle: {
         Args: { p_trip_id: string; p_viewer_org_id: string }
         Returns: Json
@@ -6087,6 +9928,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -6106,6 +9949,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -6126,13 +9970,21 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -6157,6 +10009,8 @@ export type Database = {
           client_name: string
           client_price: number
           completed_at: string | null
+          converted_by: string | null
+          converted_from_indent_at: string | null
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
@@ -6176,6 +10030,7 @@ export type Database = {
           gps_distance_km: number | null
           id: string
           indent_id: string | null
+          indent_reference_code: string | null
           is_guaranteed: boolean
           last_location_at: string | null
           last_location_chat_at: string | null
@@ -6196,13 +10051,21 @@ export type Database = {
           pickup_lat: number | null
           pickup_lon: number | null
           platform_fee: number
+          pod_received_at: string | null
+          pod_required: boolean
+          sequence_number: number | null
           source: string
+          source_indent_code: string | null
+          source_indent_id: string | null
           start_odometer_km: number | null
           started_at: string | null
           status: string
+          status_change_origin: string | null
           supplier_id: string | null
           supplier_rate: number
+          trip_code: string | null
           trip_number: string
+          trip_operational_code: string | null
           trip_payout_mode: string | null
           updated_at: string | null
           vehicle_display_number: string | null
@@ -6263,6 +10126,52 @@ export type Database = {
         Returns: Json
       }
       get_workspace_kyc_status: { Args: { p_org_id: string }; Returns: Json }
+      global_search: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_org_id?: string
+          p_query: string
+          p_types?: string[]
+        }
+        Returns: {
+          display_name: string
+          entity_id: string
+          entity_type: string
+          network_ref: string
+          org_id: string
+          rank: number
+          reference: string
+          secondary_ref: string
+        }[]
+      }
+      idempotency_acquire: {
+        Args: {
+          p_entity_type: string
+          p_key: string
+          p_org_id: string
+          p_req_hash: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      idempotency_complete: {
+        Args: { p_entity_id: string; p_key: string; p_response?: Json }
+        Returns: undefined
+      }
+      idempotency_fail: {
+        Args: { p_error: string; p_key: string }
+        Returns: undefined
+      }
+      increment_product_usage: {
+        Args: {
+          p_metric_key: string
+          p_org_id: string
+          p_product_id: string
+          p_quantity?: number
+        }
+        Returns: undefined
+      }
       indent_creator_org_names_for_viewer: {
         Args: { p_trip_numbers: string[]; p_viewer_org: string }
         Returns: {
@@ -6280,6 +10189,21 @@ export type Database = {
       }
       is_org_admin: { Args: { org_id: string }; Returns: boolean }
       is_org_member: { Args: { org_id: string }; Returns: boolean }
+      is_uuidv4: { Args: { p_id: string }; Returns: boolean }
+      is_uuidv7: { Args: { p_id: string }; Returns: boolean }
+      is_valid_business_reference: { Args: { p_ref: string }; Returns: boolean }
+      join_product_waitlist: {
+        Args: {
+          p_company_name?: string
+          p_email: string
+          p_fleet_size?: string
+          p_full_name?: string
+          p_org_id: string
+          p_product_id: string
+          p_use_case?: string
+        }
+        Returns: Json
+      }
       kill_idle_in_transaction_sessions: {
         Args: { p_threshold?: string }
         Returns: {
@@ -6293,6 +10217,51 @@ export type Database = {
       link_driver_phone: {
         Args: { p_driver_id: string; p_phone: string }
         Returns: Json
+      }
+      log_client_audit: {
+        Args: {
+          p_action: string
+          p_client_id: string
+          p_entity_id: string
+          p_entity_type: string
+          p_field_name?: string
+          p_new_value?: string
+          p_old_value?: string
+          p_org_id: string
+        }
+        Returns: undefined
+      }
+      log_id_generation: {
+        Args: {
+          p_entity_id?: string
+          p_entity_type: string
+          p_generated: string
+          p_latency_ms?: number
+          p_org_id: string
+          p_path?: string
+          p_reference?: string
+        }
+        Returns: undefined
+      }
+      lookup_by_reference: {
+        Args: { p_ref: string }
+        Returns: {
+          entity_id: string
+          entity_type: string
+          org_id: string
+        }[]
+      }
+      make_operational_org_code: {
+        Args: { p_org_id: string; p_org_name: string; p_salt?: number }
+        Returns: string
+      }
+      mark_chat_conversation_read: {
+        Args: { p_conversation_id: string; p_up_to?: string }
+        Returns: undefined
+      }
+      register_push_token: {
+        Args: { p_platform: string; p_token: string }
+        Returns: undefined
       }
       mark_conversation_read: {
         Args: { p_conversation_id: string }
@@ -6352,6 +10321,7 @@ export type Database = {
           commission_percent: number | null
           created_at: string | null
           deleted_at: string | null
+          driver_code: string | null
           email: string | null
           emergency_contact: string | null
           emergency_name: string | null
@@ -6377,9 +10347,17 @@ export type Database = {
       }
       my_organization_ids: { Args: never; Returns: string[] }
       next_indent_number: { Args: { p_org_id: string }; Returns: string }
+      next_operational_sequence_value: {
+        Args: { p_entity_type: string; p_org_id: string }
+        Returns: number
+      }
       next_trip_number: { Args: { p_org_id: string }; Returns: string }
       normalize_phone_last10: { Args: { p_phone: string }; Returns: string }
       normalize_phone_number: { Args: { p: string }; Returns: string }
+      operational_prefix_for_entity: {
+        Args: { p_entity_type: string }
+        Returns: string
+      }
       ops_agent_rate_limit_try_consume: {
         Args: {
           p_max_per_window?: number
@@ -6397,6 +10375,22 @@ export type Database = {
           p_trip_id: string
         }
         Returns: Json
+      }
+      record_activity: {
+        Args: {
+          p_activity_type: string
+          p_actor_id: string
+          p_actor_name: string
+          p_actor_type: string
+          p_context?: Json
+          p_is_public?: boolean
+          p_org_id?: string
+          p_target_id: string
+          p_target_name?: string
+          p_target_ref?: string
+          p_target_type: string
+        }
+        Returns: string
       }
       refresh_dashboard_trip_metrics: { Args: never; Returns: undefined }
       regenerate_trip_otp: {
@@ -6443,6 +10437,68 @@ export type Database = {
             }
             Returns: undefined
           }
+      search_chat_messages: {
+        Args: { p_limit?: number; p_organization_id: string; p_query: string }
+        Returns: {
+          client_message_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          legacy_source: string | null
+          message_type: string
+          metadata: Json
+          organization_id: string
+          reply_to_id: string | null
+          sender_name: string
+          sender_role: string | null
+          sender_type: string
+          sender_user_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "chat_messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      send_chat_message: {
+        Args: {
+          p_client_message_id?: string
+          p_content: string
+          p_conversation_id: string
+          p_mentions?: string[]
+          p_message_type?: string
+          p_metadata?: Json
+          p_reply_to_id?: string
+        }
+        Returns: {
+          client_message_id: string | null
+          content: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: string
+          legacy_source: string | null
+          message_type: string
+          metadata: Json
+          organization_id: string
+          reply_to_id: string | null
+          sender_name: string
+          sender_role: string | null
+          sender_type: string
+          sender_user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chat_messages"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       send_driver_signup_match_invite:
         | { Args: { p_driver_id: string }; Returns: Json }
         | {
@@ -6471,14 +10527,19 @@ export type Database = {
           conversation_id: string
           created_at: string
           delivered_at: string | null
+          edited_at: string | null
           id: string
+          is_deleted: boolean
           is_delivered: boolean
           is_read: boolean
           message_type: string
           metadata: Json | null
           organization_id: string
           priority_weight: number
+          reactions: Json | null
           read_at: string | null
+          reply_to_id: string | null
+          reply_to_preview: Json | null
           sender_avatar_seed: string | null
           sender_name: string
           sender_role: string
@@ -6565,6 +10626,19 @@ export type Database = {
         Returns: number
       }
       sync_my_driver_rows_user_id: { Args: never; Returns: number }
+      toggle_chat_reaction: {
+        Args: { p_emoji: string; p_message_id: string }
+        Returns: Json
+      }
+      toggle_trip_message_reaction: {
+        Args: {
+          p_emoji: string
+          p_message_id: string
+          p_org_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       tracking_record_checkpoint: {
         Args: {
           p_accuracy?: number
@@ -6598,6 +10672,18 @@ export type Database = {
         }
         Returns: Json
       }
+      upsert_entity_anchor: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_legacy_ref?: string
+          p_org_id: string
+        }
+        Returns: undefined
+      }
+      uuidv7_generate: { Args: never; Returns: string }
+      uuidv7_timestamp: { Args: { p_id: string }; Returns: string }
+      validate_identity_integrity: { Args: { p_since?: string }; Returns: Json }
       windowed_trip_message_history: {
         Args: {
           p_before?: string
@@ -6612,14 +10698,19 @@ export type Database = {
           conversation_id: string
           created_at: string
           delivered_at: string | null
+          edited_at: string | null
           id: string
+          is_deleted: boolean
           is_delivered: boolean
           is_read: boolean
           message_type: string
           metadata: Json | null
           organization_id: string
           priority_weight: number
+          reactions: Json | null
           read_at: string | null
+          reply_to_id: string | null
+          reply_to_preview: Json | null
           sender_avatar_seed: string | null
           sender_name: string
           sender_role: string
@@ -6776,3 +10867,5 @@ export const Constants = {
     },
   },
 } as const
+A new version of Supabase CLI is available: v2.106.0 (currently installed v2.101.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

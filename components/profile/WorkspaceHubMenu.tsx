@@ -33,7 +33,7 @@ import {
   getWorkspaceRegion,
 } from "@/lib/workspaceRegion";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import type { ProductId } from "@/lib/productRegistry";
+import { withBundledActiveProducts, type ProductId } from "@/lib/productRegistry";
 import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
@@ -114,8 +114,7 @@ export function WorkspaceHubMenu({
         ids.add(row.product_id);
       }
     }
-    ids.add("pulse_core");
-    return ids;
+    return withBundledActiveProducts(ids);
   }, [activations]);
 
   const [avatarUri, setAvatarUri] = useState<string | null>(null);

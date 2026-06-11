@@ -1,28 +1,26 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowRight, Truck } from "lucide-react-native";
+import { ArrowRight } from "lucide-react-native";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import Theme from "@/constants/Theme";
 import type { DriverSwapPair } from "../../utils/chatAvatar.util";
 import { ChatPartyAvatar } from "../ChatPartyAvatar";
 
-const PREV_SIZE = 30;
+const PREV_SIZE = 28;
 const NEXT_SIZE = 34;
-const SHELL_W = 94;
+const SHELL_W = 96;
 const SHELL_H = 46;
 
 export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
   const entrance = useRef(new Animated.Value(0)).current;
   const swapProgress = useRef(new Animated.Value(0)).current;
-  const truckPop = useRef(new Animated.Value(0)).current;
   const arrowPulse = useRef(new Animated.Value(0)).current;
   const livePulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     entrance.setValue(0);
     swapProgress.setValue(0);
-    truckPop.setValue(0);
 
     Animated.sequence([
       Animated.timing(entrance, {
@@ -31,25 +29,14 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-      Animated.parallel([
-        Animated.spring(swapProgress, {
-          toValue: 1,
-          speed: 12,
-          bounciness: 9,
-          useNativeDriver: true,
-        }),
-        Animated.sequence([
-          Animated.delay(280),
-          Animated.spring(truckPop, {
-            toValue: 1,
-            speed: 16,
-            bounciness: 12,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]),
+      Animated.spring(swapProgress, {
+        toValue: 1,
+        speed: 12,
+        bounciness: 9,
+        useNativeDriver: true,
+      }),
     ]).start();
-  }, [entrance, swapProgress, truckPop, swap.previous.displayName, swap.next.displayName]);
+  }, [entrance, swapProgress, swap.previous.displayName, swap.next.displayName]);
 
   useEffect(() => {
     const arrowLoop = Animated.loop(
@@ -98,15 +85,15 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
 
   const prevTranslateX = swapProgress.interpolate({
     inputRange: [0, 0.45, 1],
-    outputRange: [14, 6, 0],
+    outputRange: [12, 5, 0],
   });
   const prevOpacity = swapProgress.interpolate({
     inputRange: [0, 0.2, 1],
-    outputRange: [0, 0.5, 0.68],
+    outputRange: [0, 0.45, 0.78],
   });
   const prevScale = swapProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.82, 0.94],
+    outputRange: [0.84, 0.94],
   });
 
   const arrowOpacity = swapProgress.interpolate({
@@ -116,7 +103,7 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
   const arrowTranslateX = Animated.add(
     swapProgress.interpolate({
       inputRange: [0, 1],
-      outputRange: [-6, 0],
+      outputRange: [-5, 0],
     }),
     arrowPulse.interpolate({
       inputRange: [0, 1],
@@ -130,7 +117,7 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
 
   const nextTranslateX = swapProgress.interpolate({
     inputRange: [0, 0.55, 1],
-    outputRange: [22, 8, 0],
+    outputRange: [18, 7, 0],
   });
   const nextOpacity = swapProgress.interpolate({
     inputRange: [0, 0.4, 1],
@@ -138,23 +125,17 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
   });
   const nextScale = swapProgress.interpolate({
     inputRange: [0, 0.6, 1],
-    outputRange: [0.72, 0.96, 1],
+    outputRange: [0.74, 0.96, 1],
   });
 
   const ringOpacity = livePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.42, 0],
+    outputRange: [0.38, 0],
   });
   const ringScale = livePulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.18],
+    outputRange: [1, 1.2],
   });
-
-  const truckScale = truckPop.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.3, 1],
-  });
-  const truckOpacity = truckPop;
 
   return (
     <Animated.View
@@ -167,12 +148,18 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
       ]}
     >
       <LinearGradient
-        colors={["#FFFFFF", "#F4F5FF", "#EEF0FF"]}
-        start={{ x: 0, y: 0.2 }}
+        colors={["#FFFFFF", "#F8F9FF", "#EEF0FF"]}
+        start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.shell}
       >
-        <View style={styles.track} pointerEvents="none" />
+        <LinearGradient
+          colors={["rgba(91, 94, 244, 0.04)", "rgba(91, 94, 244, 0.14)", "rgba(91, 94, 244, 0.04)"]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.track}
+          pointerEvents="none"
+        />
 
         <Animated.View
           style={[
@@ -198,60 +185,55 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
             },
           ]}
         >
-          <View style={styles.arrowPill}>
-            <ArrowRight size={12} color={CHAT_ACCENT} strokeWidth={2.8} />
-          </View>
+          <LinearGradient
+            colors={[Theme.cardWhite, CHAT_ACCENT_SOFT]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.arrowPill}
+          >
+            <ArrowRight size={11} color={CHAT_ACCENT} strokeWidth={2.6} />
+          </LinearGradient>
         </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.nextSlot,
-          {
-            opacity: nextOpacity,
-            transform: [{ translateX: nextTranslateX }, { scale: nextScale }],
-          },
-        ]}
-      >
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.newRingPulse,
-            {
-              opacity: ringOpacity,
-              transform: [{ scale: ringScale }],
-            },
-          ]}
-        />
-        <View style={[styles.avatarRing, styles.nextRing]}>
-          <ChatPartyAvatar identity={swap.next} size={NEXT_SIZE} />
-        </View>
         <Animated.View
           style={[
-            styles.truckBadge,
+            styles.nextSlot,
             {
-              opacity: truckOpacity,
-              transform: [{ scale: truckScale }],
+              opacity: nextOpacity,
+              transform: [{ translateX: nextTranslateX }, { scale: nextScale }],
             },
           ]}
         >
-          <Truck size={11} color={CHAT_ACCENT} strokeWidth={2.5} />
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.newRingPulse,
+              {
+                opacity: ringOpacity,
+                transform: [{ scale: ringScale }],
+              },
+            ]}
+          />
+          <View style={styles.nextHalo} pointerEvents="none" />
+          <View style={[styles.avatarRing, styles.nextRing]}>
+            <ChatPartyAvatar identity={swap.next} size={NEXT_SIZE} />
+          </View>
+          <Animated.View
+            style={[
+              styles.presenceDot,
+              {
+                transform: [
+                  {
+                    scale: livePulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.12],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
         </Animated.View>
-        <Animated.View
-          style={[
-            styles.presenceDot,
-            {
-              transform: [
-                {
-                  scale: livePulse.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [1, 1.15],
-                  }),
-                },
-              ],
-            },
-          ]}
-        />
-      </Animated.View>
       </LinearGradient>
     </Animated.View>
   );
@@ -259,10 +241,10 @@ export function ChatDriverSwapAvatar({ swap }: { swap: DriverSwapPair }) {
 
 const styles = StyleSheet.create({
   outer: {
-    shadowColor: "#5b5ef4",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
+    shadowColor: CHAT_ACCENT,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
     elevation: 2,
   },
   shell: {
@@ -272,28 +254,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: SHELL_H / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(91, 94, 244, 0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(91, 94, 244, 0.16)",
     overflow: "visible",
   },
   track: {
     position: "absolute",
-    left: 18,
-    right: 18,
+    left: 20,
+    right: 22,
     top: SHELL_H / 2 - 1,
     height: 2,
     borderRadius: 1,
-    backgroundColor: "rgba(91, 94, 244, 0.1)",
   },
   prevSlot: {
     position: "absolute",
-    left: 5,
-    top: 7,
+    left: 6,
+    top: 8,
     zIndex: 1,
   },
   arrowSlot: {
     position: "absolute",
-    left: 36,
+    left: 38,
     zIndex: 3,
   },
   arrowPill: {
@@ -302,20 +283,28 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(91, 94, 244, 0.2)",
-    shadowColor: "#0f172a",
+    borderWidth: 1,
+    borderColor: "rgba(91, 94, 244, 0.18)",
+    shadowColor: CHAT_ACCENT,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
     elevation: 1,
   },
   nextSlot: {
     position: "absolute",
-    right: 4,
+    right: 5,
     top: 5,
     zIndex: 2,
+  },
+  nextHalo: {
+    position: "absolute",
+    width: NEXT_SIZE + 10,
+    height: NEXT_SIZE + 10,
+    borderRadius: (NEXT_SIZE + 10) / 2,
+    backgroundColor: "rgba(91, 94, 244, 0.08)",
+    top: -5,
+    left: -5,
   },
   avatarRing: {
     overflow: "hidden",
@@ -328,11 +317,11 @@ const styles = StyleSheet.create({
     height: PREV_SIZE,
     borderRadius: PREV_SIZE / 2,
     borderWidth: 1.5,
-    borderColor: "rgba(148, 163, 184, 0.45)",
+    borderColor: "rgba(148, 163, 184, 0.35)",
   },
   prevFrost: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 255, 0.38)",
+    backgroundColor: "rgba(255, 255, 255, 0.42)",
     borderRadius: PREV_SIZE / 2,
   },
   nextRing: {
@@ -340,9 +329,9 @@ const styles = StyleSheet.create({
     height: NEXT_SIZE,
     borderRadius: NEXT_SIZE / 2,
     borderWidth: 2,
-    borderColor: "rgba(91, 94, 244, 0.62)",
+    borderColor: "rgba(91, 94, 244, 0.55)",
     shadowColor: CHAT_ACCENT,
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.22,
     shadowRadius: 6,
     elevation: 2,
@@ -357,32 +346,13 @@ const styles = StyleSheet.create({
     top: -5,
     left: -5,
   },
-  truckBadge: {
-    position: "absolute",
-    left: -5,
-    bottom: -3,
-    width: 19,
-    height: 19,
-    borderRadius: 9.5,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Theme.cardWhite,
-    borderWidth: 1.5,
-    borderColor: "rgba(91, 94, 244, 0.35)",
-    zIndex: 4,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
   presenceDot: {
     position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
+    right: 1,
+    bottom: 1,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: CHAT_ACCENT,
     borderWidth: 2,
     borderColor: Theme.cardWhite,

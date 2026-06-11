@@ -72,6 +72,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { PushTokenRegistration } from '@/components/PushTokenRegistration';
 import { useOptionalAuth } from '@/contexts/AuthContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
@@ -357,6 +358,7 @@ export default function RootLayout() {
           >
             <NetworkProvider>
               <AuthProvider>
+                <PushTokenRegistration />
                 <OrganizationProvider>
                   <ActiveWorkspaceProvider>
                   <WalletProvider>

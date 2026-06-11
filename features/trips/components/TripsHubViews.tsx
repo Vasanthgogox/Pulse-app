@@ -1396,7 +1396,7 @@ export function TripsHubTableView({
                         size={12}
                         color={
                           dateRangeFilter === "custom"
-                            ? "#ffffff"
+                            ? Theme.primary
                             : "#64748b"
                         }
                       />
@@ -1570,7 +1570,7 @@ export function TripsHubTableView({
                         size={12}
                         color={
                           dateRangeFilter === "custom"
-                            ? "#ffffff"
+                            ? Theme.primary
                             : "#64748b"
                         }
                       />
@@ -2846,7 +2846,7 @@ export function TripsHubAuditFooter({
         <FontAwesome
           name="cloud-download"
           size={14}
-          color={Theme.textOnPrimary}
+          color={Theme.textSecondary}
         />
       </TouchableOpacity>
     </View>
@@ -3284,16 +3284,11 @@ const styles = StyleSheet.create({
   },
   auditTableWrap: {
     backgroundColor: Theme.screenBackground,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
     marginBottom: 16,
-    shadowColor: Theme.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 2,
   },
   /** Mobile ticket list — no outer shell; cards sit on page background. */
   auditTableWrapMobileCards: {
@@ -3481,22 +3476,17 @@ const styles = StyleSheet.create({
     gap: 7,
     minHeight: 34,
     paddingVertical: 7,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: Theme.actionAccent,
+    backgroundColor: Theme.primary,
     borderWidth: 1,
-    borderColor: Theme.actionAccentBorder,
-    shadowColor: Theme.actionAccentShadow,
-    shadowOpacity: 1,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    borderColor: Theme.primary,
   },
   auditAddTripBtnText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#ffffff",
-    letterSpacing: 0.9,
+    fontSize: 10,
+    fontWeight: "600",
+    color: Theme.textOnPrimary,
+    letterSpacing: 0.25,
     textTransform: "uppercase",
   },
   /** Matches Chat `tabRow` — date presets + calendar (+ mobile sort) live inside this tray. */
@@ -3554,13 +3544,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   auditDateChipActive: {
-    borderColor: Theme.iconPrimary,
-    backgroundColor: Theme.iconPrimary,
-    shadowColor: Theme.shadow,
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+    borderColor: Theme.primary,
+    backgroundColor: Theme.pulseIndigoWash,
   },
   auditDateChipText: {
     fontSize: 9,
@@ -3571,7 +3556,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   auditDateChipTextActive: {
-    color: "#ffffff",
+    color: Theme.primary,
   },
   auditDateIconBtn: {
     minHeight: 28,
@@ -4756,35 +4741,35 @@ const styles = StyleSheet.create({
   },
   auditFooterTitle: {
     fontSize: FS_BODY,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.15,
   },
   auditFooterSub: {
     marginTop: 2,
     fontSize: FS_CAPTION,
-    fontWeight: "600",
-    color: Theme.textMutedDemo,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.1,
   },
   auditExportBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: Theme.cardWhite,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
     flexShrink: 0,
   },
   auditExportBtnDisabled: { opacity: 0.45 },
   auditExportBtnText: {
     fontSize: FS_CAPTION,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-    letterSpacing: 0.6,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
   },
   expandPanel: {

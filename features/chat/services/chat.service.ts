@@ -1949,3 +1949,22 @@ export async function toggleMessageReaction(params: {
   if (error) throw error;
   return (data ?? {}) as Record<string, string[]>;
 }
+
+export async function updateChatMessageContent(
+  messageId: string,
+  content: string,
+): Promise<void> {
+  const { error } = await supabase()
+    .from("trip_messages")
+    .update({ content, edited_at: new Date().toISOString() })
+    .eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function deleteChatMessage(messageId: string): Promise<void> {
+  const { error } = await supabase()
+    .from("trip_messages")
+    .update({ is_deleted: true })
+    .eq("id", messageId);
+  if (error) throw error;
+}
