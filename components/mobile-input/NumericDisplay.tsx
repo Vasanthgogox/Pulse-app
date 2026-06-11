@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import Theme from '@/constants/Theme';
-import { formatDisplayValue } from './keypad';
+import { formatEntryDisplay } from './formatters';
 import type { SmartInputType } from './types';
 
 export type DisplayType = SmartInputType;
@@ -45,7 +45,7 @@ export function NumericDisplay({
   const resolvedPrefix = prefix !== undefined ? prefix : type === 'currency' ? '₹' : '';
   const resolvedSuffix = suffix !== undefined ? suffix : type === 'percentage' ? '%' : '';
   const isEmpty = !rawValue;
-  const display = isEmpty ? placeholder : formatDisplayValue(rawValue, type);
+  const display = isEmpty ? placeholder : formatEntryDisplay(rawValue, type);
 
   return (
     <View
@@ -79,8 +79,8 @@ export function NumericDisplay({
             isEmpty && isLarge && styles.amountPlaceholderHero,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit={!isLarge && !isEmpty}
-          minimumFontScale={isLarge ? 0.72 : 0.85}
+          adjustsFontSizeToFit={!isEmpty}
+          minimumFontScale={isLarge ? 0.5 : 0.65}
           allowFontScaling={false}
         >
           {display}
@@ -137,13 +137,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    maxWidth: '92%',
+    maxWidth: '100%',
+    width: '100%',
+    paddingHorizontal: 4,
   },
   prefix: {
     fontSize: 22,
     fontWeight: '500',
     color: Theme.textPrimary,
     marginRight: 4,
+    flexShrink: 0,
   },
   prefixHero: {
     fontSize: 48,
@@ -164,6 +167,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     lineHeight: 48,
     flexShrink: 1,
+    flexGrow: 0,
+    maxWidth: '100%',
+    textAlign: 'center',
   },
   amountHero: {
     fontSize: 72,
@@ -189,6 +195,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Theme.textSecondary,
     marginLeft: 4,
+    flexShrink: 0,
   },
   suffixHero: {
     fontSize: 38,
