@@ -76,24 +76,9 @@ export function applyKeypadPress(
 }
 
 /**
- * Format a raw digit string for display inside the entry screen.
- * Preserves a trailing dot (user sees they started entering decimals).
- *
- * Entry-time only — not for trigger display (use formatters.formatTriggerDisplay).
+ * @deprecated Use `formatEntryDisplay` from `./formatters` — kept for backward compatibility.
  */
-export function formatDisplayValue(
-  raw: string,
-  _type: 'currency' | 'numeric' | 'percentage' | 'quantity' | 'weight' | 'distance' = 'currency',
-): string {
-  if (!raw) return '';
-  const hasDot = raw.includes('.');
-  const [intStr, decStr] = raw.split('.');
-
-  const intNum = parseInt(intStr || '0', 10);
-  const formattedInt = Number.isNaN(intNum) ? '0' : intNum.toLocaleString('en-IN');
-
-  return hasDot ? `${formattedInt}.${decStr ?? ''}` : formattedInt;
-}
+export { formatEntryDisplay as formatDisplayValue } from './formatters';
 
 /**
  * Normalise any incoming `value` prop to a raw digit string.
