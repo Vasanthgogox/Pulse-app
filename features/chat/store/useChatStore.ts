@@ -73,6 +73,7 @@ import { recomputeLongHaulTripFieldsFromStream } from '../utils/longHaulChat.uti
 import { parseSystemLogLocationData } from '../utils/locationLogPayload.util';
 import { parseFeedbackRequestMetadata } from '../utils/feedbackRequestMeta';
 import { isFeedbackRequestAlreadyRatedMeta } from '../utils/feedbackRequestMeta.util';
+import { getActiveTripMessageConversationId } from '../realtime/activeTripMessageScope';
 
 // ── Realtime duplicate suppression (same message_id / transaction_id flood) ──
 // WAL can surface the same logical row twice in quick succession; skipping the
@@ -934,6 +935,26 @@ function inboundMessageCountsAsHubUnread(row: Partial<TripMessageRow>): boolean 
   return true;
 }
 
+/** Hub list preview path — bump lane unread when inbound row is not the open thread. */
+function applyHubInboundUnread(
+  entry: TripEntry,
+  partyType: ConversationPartyType,
+  row: Partial<TripMessageRow>,
+): TripEntry {
+  if (!inboundMessageCountsAsHubUnread(row)) return entry;
+  const party = entry.parties[partyType];
+  if (!party) return entry;
+  const parties = {
+    ...entry.parties,
+    [partyType]: { ...party, unreadCount: party.unreadCount + 1 },
+  } as TripEntry["parties"];
+  return {
+    ...entry,
+    parties,
+    totalUnread: sumHubVisibleUnread({ ...entry, parties }),
+  };
+}
+
 /** Apply delivery/read patch to one message in a trip entry (pure). */
 function applyAckToTripEntry(
   entry: TripEntry,
@@ -1020,7 +1041,7 @@ function applyFeedbackLaneStatusOnIncomingRow(
   };
 }
 
-const CHAT_BOOTSTRAP_TRIP_PAGE = 10;
+const CHAT_BOOTSTRAP_TRIP_PAGE = 25;
 const CHAT_BOOTSTRAP_TRIP_PAGE_MORE = 20;
 
 const tripHydrationInFlight = new Set<string>();
@@ -1521,13 +1542,18 @@ export const useChatStore = create<ChatState>()(
 
       // Hub list / non-open thread: apply trip patches + sidebar preview without merging into `event_stream`.
       if (opts?.hubListOnly) {
+        updated = applyHubInboundUnread(updated, partyType, row);
+        const hubStatusPatch = resolveTripEntryPatchesFromMessage(row, entry);
+        if (hubStatusPatch) {
+          updated = { ...updated, ...hubStatusPatch };
+        }
         if (
           row.message_type === "image" ||
           row.message_type === "document_share" ||
           row.message_type === "document_upload"
         ) {
-          updated.lastEventAt      = event.created_at ?? entry.lastEventAt;
-          updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
+          updated.lastEventAt      = event.created_at ?? updated.lastEventAt;
+          updated.lastEventPreview = previewText(row)  ?? updated.lastEventPreview;
           syncLocationLogToGlobalActiveTrips(tripId, row);
           useGlobalSyncStore.getState().touchActiveTripClientActivity(
             tripId,
@@ -1573,16 +1599,22 @@ export const useChatStore = create<ChatState>()(
         return;
       }
 
-      if (mode === "active") {
+      const isMediaInbound =
+        row.message_type === "image" ||
+        row.message_type === "document_share" ||
+        row.message_type === "document_upload";
+      const isOpenThread =
+        String(row.conversation_id ?? "") ===
+        String(getActiveTripMessageConversationId() ?? "");
+
+      const shouldPatchEventStream = mode === "active" || (isOpenThread && isMediaInbound);
+
+      if (shouldPatchEventStream) {
         const prevIds = new Set(entry.event_stream.map((e) => e.id));
         updated.event_stream = upsertEventIntoStream(entry.event_stream, event);
         const isNewId = !prevIds.has(event.id);
 
-        if (
-          row.message_type === "image" ||
-          row.message_type === "document_share" ||
-          row.message_type === "document_upload"
-        ) {
+        if (isMediaInbound) {
           updated.lastEventAt      = event.created_at ?? entry.lastEventAt;
           updated.lastEventPreview = previewText(row)  ?? entry.lastEventPreview;
           syncLocationLogToGlobalActiveTrips(tripId, row);
@@ -1604,14 +1636,16 @@ export const useChatStore = create<ChatState>()(
           return;
         }
 
-        updated = applyActiveMessageTypeMultiplex(
-          row,
-          entry,
-          updated,
-          isNewId,
-          event.created_at,
-        );
-        updated = applyFeedbackLaneStatusOnIncomingRow(updated, partyType, row);
+        if (mode === "active") {
+          updated = applyActiveMessageTypeMultiplex(
+            row,
+            entry,
+            updated,
+            isNewId,
+            event.created_at,
+          );
+          updated = applyFeedbackLaneStatusOnIncomingRow(updated, partyType, row);
+        }
       } else {
         const party = entry.parties[partyType];
         if (party && inboundMessageCountsAsHubUnread(row)) {

@@ -319,11 +319,13 @@ export function useConversations(): TripConversation[] {
  */
 export function useConversation(id: string | null): TripConversation | null {
   const prevRef = useRef<{
-    id:        string | null;
-    entryRef:  TripEntry | null;
-    partyRef:  PartyConv | null;
-    conv:      TripConversation | null;
-  }>({ id: null, entryRef: null, partyRef: null, conv: null });
+    id:         string | null;
+    entryRef:   TripEntry | null;
+    partyRef:   PartyConv | null;
+    streamLen:  number;
+    streamTail: string | null;
+    conv:       TripConversation | null;
+  }>({ id: null, entryRef: null, partyRef: null, streamLen: 0, streamTail: null, conv: null });
 
   return useSyncExternalStore(
     _subscribe,
@@ -337,12 +339,29 @@ export function useConversation(id: string | null): TripConversation | null {
       const party = entry?.parties[partyType];
       if (!entry || !party) return null;
 
+      const streamLen = entry.event_stream.length;
+      const streamTail =
+        streamLen > 0 ? entry.event_stream[streamLen - 1]?.id ?? null : null;
       const prev = prevRef.current;
-      if (entry === prev.entryRef && party === prev.partyRef && id === prev.id && prev.conv) {
+      if (
+        entry === prev.entryRef &&
+        party === prev.partyRef &&
+        id === prev.id &&
+        streamLen === prev.streamLen &&
+        streamTail === prev.streamTail &&
+        prev.conv
+      ) {
         return prev.conv;
       }
       const conv = _convFromEntry(entry, partyType as ConversationPartyType, party);
-      prevRef.current = { id, entryRef: entry, partyRef: party, conv };
+      prevRef.current = {
+        id,
+        entryRef: entry,
+        partyRef: party,
+        streamLen,
+        streamTail,
+        conv,
+      };
       return conv;
     },
     () => null,

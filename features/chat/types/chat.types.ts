@@ -62,7 +62,7 @@ export interface DocumentShareMetadata {
   document_name: string;
   /** From trip_documents.mime_type — improves image preview when file_name has no extension. */
   mime_type?: string | null;
-  entity_type: "vehicle" | "driver";
+  entity_type: "trip" | "vehicle" | "driver";
   entity_id: string;
 }
 
@@ -381,6 +381,8 @@ export interface NetworkConversation extends NetworkConversationRow {
 export interface NetworkPartner {
   org_id: string;
   name: string;
+  /** Linked org relationship — client or supplier (network DMs). */
+  party_type: "client" | "supplier";
   logo_url?: string | null;
   avatar_seed?: string | null;
 }

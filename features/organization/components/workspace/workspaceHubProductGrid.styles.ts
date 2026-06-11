@@ -1,50 +1,68 @@
 /**
- * Pulse Products dock — Metronic-aligned chip launcher.
+ * Pulse Products — Metronic-aligned 3-column grid in hub body.
  */
 import Theme from "@/constants/Theme";
 import {
   HUB_PURPLE,
-  HUB_PURPLE_BORDER,
-  HUB_PURPLE_TINT,
+  HUB_PURPLE_VIVID,
 } from "@/components/profile/workspaceHubMenu.styles";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { StyleSheet } from "react-native";
 
-export const productDockStyles = StyleSheet.create({
-  dock: {
-    borderTopWidth: 1,
-    borderTopColor: METRONIC.border,
+export const productGridStyles = StyleSheet.create({
+  section: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
     backgroundColor: METRONIC.heroBg,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 8,
+    overflow: "hidden",
   },
-  dockHeader: {
+  sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
     paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: "#F9F9F9",
+    borderBottomWidth: 1,
+    borderBottomColor: METRONIC.border,
   },
-  dockHeaderPressed: {
-    opacity: 0.88,
+  sectionHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  dockHeaderLeft: {
+  sectionAccent: {
+    width: 3,
+    height: 12,
+    borderRadius: 2,
+    backgroundColor: HUB_PURPLE_VIVID,
+    flexShrink: 0,
+  },
+  sectionTitleBlock: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  dockEyebrow: {
-    fontSize: 12,
+  sectionEyebrow: {
+    fontSize: 9,
     fontWeight: "700",
-    color: METRONIC.text,
-    letterSpacing: -0.15,
+    color: METRONIC.muted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
-  dockMeta: {
+  sectionMeta: {
     fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     lineHeight: 14,
+  },
+  sectionHeaderPressed: {
+    opacity: 0.88,
   },
   catalogueLink: {
     flexDirection: "row",
@@ -59,34 +77,36 @@ export const productDockStyles = StyleSheet.create({
     fontWeight: "600",
     color: HUB_PURPLE,
   },
-  scrollContent: {
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 10,
-    gap: 4,
-    paddingBottom: 2,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+  gridCell: {
+    width: "33.333%",
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   chip: {
-    width: 64,
     alignItems: "center",
-    gap: 5,
+    justifyContent: "flex-start",
+    gap: 6,
     paddingHorizontal: 4,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "transparent",
+    paddingVertical: 8,
+    minHeight: 72,
   },
-  chipActive: {
-    backgroundColor: HUB_PURPLE_TINT,
-    borderColor: HUB_PURPLE_BORDER,
-  },
+  chipActive: {},
   chipPressed: {
-    backgroundColor: METRONIC.bodyBg,
+    opacity: 0.82,
   },
   chipName: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "500",
     color: METRONIC.muted,
     textAlign: "center",
-    lineHeight: 12,
+    lineHeight: 13,
     width: "100%",
   },
   chipNameActive: {

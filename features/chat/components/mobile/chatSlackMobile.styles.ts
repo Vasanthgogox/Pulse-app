@@ -1,4 +1,8 @@
-import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import {
+  CHAT_ACCENT,
+  CHAT_INCOMING_BUBBLE,
+  CHAT_TEXT_PRIMARY,
+} from "@/features/chat/chatTheme";
 import { SLACK_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
 import { Platform, StyleSheet } from "react-native";
 
@@ -515,6 +519,10 @@ export const slackMobileStyles = StyleSheet.create({
     minHeight: 64,
     backgroundColor: "#FFFFFF",
   },
+  listRowWithMedia: {
+    minHeight: 140,
+    paddingVertical: 12,
+  },
   listRowSeparator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: SLACK_MOBILE.listDivider,
@@ -571,12 +579,66 @@ export const slackMobileStyles = StyleSheet.create({
     paddingTop: 1,
     textTransform: "lowercase",
   },
+  partyRecommendedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+    backgroundColor: "rgba(91, 94, 244, 0.06)",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: SLACK_MOBILE.listDivider,
+  },
+  partyRecommendedHeaderTitle: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "700",
+    color: PULSE_CHAT.accent,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  partyRecommendedHeaderMeta: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: SLACK_MOBILE.textSecondary,
+  },
+  partyRecommendedDivider: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: SLACK_MOBILE.listDivider,
+    backgroundColor: "#FAFAFA",
+  },
+  partyRecommendedDividerText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: SLACK_MOBILE.textTertiary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  listRowRecommended: {
+    backgroundColor: "rgba(91, 94, 244, 0.04)",
+  },
+  listRowPartyLine: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: SLACK_MOBILE.textTertiary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginTop: 1,
+  },
   listRowPreview: {
     fontSize: SLACK_TYPE.listPreview,
     color: SLACK_MOBILE.textSecondary,
     lineHeight: 16,
     fontWeight: "400",
     marginTop: 2,
+  },
+  listRowPreviewBelowMedia: {
+    marginTop: 4,
+    lineHeight: 17,
   },
   listRowSystemPreviewWrap: {
     marginTop: 2,
@@ -812,6 +874,68 @@ export const slackMobileStyles = StyleSheet.create({
   },
   threadMsgTextStacked: {
     marginTop: 1,
+  },
+  waMsgOuterOwn: {
+    width: "100%",
+    alignItems: "flex-end",
+    paddingTop: 3,
+    paddingBottom: 3,
+  },
+  waMsgOuterOwnLead: {
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  waMsgOuterOwnContinuation: {
+    paddingTop: 2,
+    paddingBottom: 2,
+  },
+  waMsgOuterOther: {
+    width: "100%",
+    alignItems: "flex-start",
+  },
+  waBubbleColumn: {
+    maxWidth: "82%",
+    minWidth: 0,
+  },
+  waBubbleOwn: {
+    backgroundColor: CHAT_ACCENT,
+    borderRadius: 12,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  waBubbleOther: {
+    backgroundColor: CHAT_INCOMING_BUBBLE,
+    borderRadius: 12,
+    borderBottomLeftRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
+  },
+  waBubbleTextOwn: {
+    fontSize: SLACK_TYPE.msgBody,
+    fontWeight: "500",
+    color: "#FFFFFF",
+    lineHeight: 21,
+  },
+  waBubbleTextOther: {
+    fontSize: SLACK_TYPE.msgBody,
+    fontWeight: "500",
+    color: CHAT_TEXT_PRIMARY,
+    lineHeight: 21,
+  },
+  waMetaOwn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    marginTop: 3,
+    paddingHorizontal: 2,
+  },
+  waMetaOwnText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: SLACK_MOBILE.textTertiary,
   },
   threadSysMsg: {
     paddingHorizontal: 16,

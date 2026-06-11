@@ -11,7 +11,7 @@ export type SlackMessageGroupMeta = {
   isContinuation: boolean;
 };
 
-const DEFAULT_MAX_GAP_MS = 5 * 60 * 1000;
+const DEFAULT_MAX_GAP_MS = 15 * 60 * 1000;
 
 function finalizeGroup(ids: string[], map: Map<string, SlackMessageGroupMeta>) {
   if (ids.length === 0) return;

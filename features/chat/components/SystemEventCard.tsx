@@ -145,6 +145,8 @@ function StatusChangeCard({
     <TripProgressEventCard
       avatarSeed={seed}
       avatarIdentity={driverAvatar}
+      eventKind="status"
+      statusVisual={sheet}
       kicker="SYSTEM UPDATE"
       title={bodyText}
       metaLine={metaLine}
@@ -224,10 +226,11 @@ function TrackingCard({
     <TripProgressEventCard
       avatarSeed={avatarSeed}
       avatarIdentity={driverAvatar}
+      eventKind="tracking"
       kicker="SYSTEM UPDATE"
       title={title}
       metaLine={metaLine}
-      rightPrimary={(eta ?? "LOCATION").toUpperCase()}
+      rightPrimary={(eta ?? "TRACK").toUpperCase()}
       rightPrimaryColor={CHAT_ACCENT}
       time={displayTime}
     />

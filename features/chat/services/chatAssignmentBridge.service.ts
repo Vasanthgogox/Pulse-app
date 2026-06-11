@@ -96,10 +96,28 @@ export async function postAssignmentUpdateToTripChats(params: {
 
   let driverAvatarUrl: string | null = null;
   let driverAvatarSeed: string | null = null;
+  let driverDisplayNameNew: string | null = null;
   if (audit.driver_id_new) {
     const driverRes = await getDriverById(orgId, audit.driver_id_new);
     driverAvatarUrl = driverRes.driver?.avatar_url ?? null;
     driverAvatarSeed = driverRes.driver?.avatar_seed ?? null;
+    driverDisplayNameNew =
+      driverRes.driver?.name?.trim() ||
+      driverRes.driver?.phone?.trim() ||
+      null;
+  }
+
+  let driverAvatarUrlPrev: string | null = null;
+  let driverAvatarSeedPrev: string | null = null;
+  let driverDisplayNamePrev: string | null = null;
+  if (audit.driver_id_prev) {
+    const driverPrevRes = await getDriverById(orgId, audit.driver_id_prev);
+    driverAvatarUrlPrev = driverPrevRes.driver?.avatar_url ?? null;
+    driverAvatarSeedPrev = driverPrevRes.driver?.avatar_seed ?? null;
+    driverDisplayNamePrev =
+      driverPrevRes.driver?.name?.trim() ||
+      driverPrevRes.driver?.phone?.trim() ||
+      null;
   }
 
   const metadata = {
@@ -112,10 +130,14 @@ export async function postAssignmentUpdateToTripChats(params: {
       driver_id_new: audit.driver_id_new,
       vehicle_id_prev: audit.vehicle_id_prev,
       vehicle_id_new: audit.vehicle_id_new,
-      driver_display_name: trip.driver_display_name,
+      driver_display_name:
+        driverDisplayNameNew || trip.driver_display_name,
+      driver_display_name_prev: driverDisplayNamePrev,
       vehicle_display_number: trip.vehicle_display_number,
       driver_avatar_url: driverAvatarUrl,
       driver_avatar_seed: driverAvatarSeed,
+      driver_avatar_url_prev: driverAvatarUrlPrev,
+      driver_avatar_seed_prev: driverAvatarSeedPrev,
     },
   };
 
@@ -190,6 +212,17 @@ export async function postAggregateAssignmentMessage(
   driverAvatarUrl = driverRes.driver?.avatar_url ?? null;
   driverAvatarSeed = driverRes.driver?.avatar_seed ?? null;
 
+  let driverAvatarUrlPrev: string | null = null;
+  let driverAvatarSeedPrev: string | null = null;
+  let driverDisplayNamePrev: string | null = null;
+  if (previousDriverId) {
+    const prevRes = await getDriverById(trip.organization_id, previousDriverId);
+    driverAvatarUrlPrev = prevRes.driver?.avatar_url ?? null;
+    driverAvatarSeedPrev = prevRes.driver?.avatar_seed ?? null;
+    driverDisplayNamePrev =
+      prevRes.driver?.name?.trim() || prevRes.driver?.phone?.trim() || null;
+  }
+
   const dedupeKey = `agg-assign|${trip.driver_id}|${trip.updated_at ?? new Date().toISOString()}`;
 
   const { data: conversations, error } = await supabase()
@@ -233,8 +266,11 @@ export async function postAggregateAssignmentMessage(
           driver_id_new: trip.driver_id,
           driver_id_prev: previousDriverId,
           driver_display_name: driverName,
+          driver_display_name_prev: driverDisplayNamePrev,
           driver_avatar_url: driverAvatarUrl,
           driver_avatar_seed: driverAvatarSeed,
+          driver_avatar_url_prev: driverAvatarUrlPrev,
+          driver_avatar_seed_prev: driverAvatarSeedPrev,
         },
       },
     });

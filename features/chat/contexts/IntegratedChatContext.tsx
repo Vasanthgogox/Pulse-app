@@ -36,6 +36,7 @@ export interface IntegratedChat {
   id: string;
   partnerId: string;
   partnerName: string;
+  partnerPartyType?: "client" | "supplier";
   partnerLogoUrl?: string | null;
   partnerAvatarSeed?: string | null;
   partnerRole: "dispatcher" | "owner";
@@ -123,11 +124,17 @@ function networkConversationsOrgSpecs(orgId: string) {
   ];
 }
 
-function toIntegratedChat(conv: NetworkConversation, currentOrgId: string): IntegratedChat {
+function toIntegratedChat(
+  conv: NetworkConversation,
+  currentOrgId: string,
+  partners: NetworkPartner[],
+): IntegratedChat {
+  const partnerPartyType = partners.find((p) => p.org_id === conv.partner_org_id)?.party_type;
   return {
     id: conv.id,
     partnerId: conv.partner_org_id,
     partnerName: conv.partner_name,
+    partnerPartyType,
     partnerLogoUrl: conv.partner_logo_url ?? null,
     partnerAvatarSeed: conv.partner_avatar_seed ?? null,
     partnerRole: "owner",
@@ -279,7 +286,7 @@ export function IntegratedChatProvider({
   }, [isActive, orgId, selfUid, queueRefreshData]);
 
   const chats: IntegratedChat[] = orgId
-    ? conversations.map((c) => toIntegratedChat(c, orgId))
+    ? conversations.map((c) => toIntegratedChat(c, orgId, partners))
     : [];
 
   const sendMessage = useCallback(
