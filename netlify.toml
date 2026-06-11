@@ -8,6 +8,7 @@
   NPM_FLAGS     = "--prefer-offline"
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
+  CI            = "true"
 
 # Dependency install: Netlify caches npm from package-lock.json (no custom plugin).
 # Keep NODE_VERSION + .nvmrc aligned so cache keys stay stable.
