@@ -9,8 +9,9 @@ import type { TripConversation } from "@/features/chat/types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Layout from "@/constants/Layout";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { MessageSquare } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -135,22 +136,23 @@ export default function DriverChatScreen() {
     />
   );
 
+  const rootStyle = [
+    { flex: 1, backgroundColor: "#FFFFFF" },
+    Platform.OS === "web" ? (WEB_APP_VIEWPORT_STYLE as object) : null,
+    screenPadding,
+  ];
+
   if (normalizedTripId) {
     if (openingTripThread) {
       return (
-        <View style={[{ flex: 1, backgroundColor: "#FFFFFF" }, screenPadding]}>
+        <View style={rootStyle}>
           <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
         </View>
       );
     }
     if (tripThreadError) {
       return (
-        <View
-          style={[
-            { flex: 1, backgroundColor: "#FFFFFF", paddingHorizontal: 24 },
-            screenPadding,
-          ]}
-        >
+        <View style={[...rootStyle, { paddingHorizontal: 24 }]}>
           <View style={{ flex: 1, justifyContent: "center", alignItems: "center", gap: 16 }}>
             <MessageSquare size={40} color="#e2e8f0" />
             <Text style={{ fontSize: 15, color: "#475569", textAlign: "center" }}>
@@ -177,7 +179,7 @@ export default function DriverChatScreen() {
 
     if (selectedId && resolvedOrgId) {
       return (
-        <View style={[{ flex: 1, backgroundColor: "#FFFFFF" }, screenPadding]}>
+        <View style={rootStyle}>
           {renderThread({
             id: selectedId,
             organization_id: resolvedOrgId,
@@ -193,14 +195,14 @@ export default function DriverChatScreen() {
     }
 
     return (
-      <View style={[{ flex: 1, backgroundColor: "#FFFFFF" }, screenPadding]}>
+      <View style={rootStyle}>
         <AppLoadingSplash variant="preparing" style={{ flex: 1 }} />
       </View>
     );
   }
 
   return (
-    <View style={[{ flex: 1, backgroundColor: "#FFFFFF" }, screenPadding]}>
+    <View style={rootStyle}>
       {!selectedConv ? (
         <DriverChatSlackInbox
           conversations={conversations}

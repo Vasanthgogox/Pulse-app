@@ -1,3 +1,4 @@
+import { stripChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import { CornerUpLeft, FileText, Image, X } from "lucide-react-native";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -16,7 +17,7 @@ function summarizeReplyContent(data: ReplyPreviewData): string {
   if (t === "ledger_event" || t === "ledger" || t === "payment") return "💳 Payment";
   if (t === "feedback_request" || t === "feedback") return "⭐ Feedback";
   if (t === "tracking") return "📍 Location";
-  const raw = (data.content ?? "").trim();
+  const raw = stripChatInlineMarkdown((data.content ?? "").trim());
   if (!raw) return t.replace(/_/g, " ");
   return raw.length > 90 ? raw.slice(0, 90) + "…" : raw;
 }

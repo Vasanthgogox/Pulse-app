@@ -18,7 +18,9 @@ import {
   getProductsInDisplayOrder,
   type BadgeVariant,
   type ProductDefinition,
+  isBundledActiveProduct,
   type ProductId,
+  withBundledActiveProducts,
 } from "@/lib/productRegistry";
 import {
   WORKSPACE_ACCENT,
@@ -72,10 +74,10 @@ function formatPricingHint(product: ProductDefinition): string {
 function moduleStatusMeta(
   product: ProductDefinition,
   isActive: boolean,
-  isPulseCore: boolean,
+  isBundledProduct: boolean,
   isOnWaitlist: boolean,
 ): { label: string; bg: string; text: string; progress: number; progressColor: string } {
-  if (isPulseCore) {
+  if (isBundledProduct) {
     return {
       ...METRONIC_STATUS.included,
       progress: 100,
@@ -140,12 +142,14 @@ function filterProducts(
 ): ProductDefinition[] {
   if (filter === "active") {
     return products.filter(
-      (product) => activeProductIds.has(product.id) || product.id === "pulse_core",
+      (product) =>
+        activeProductIds.has(product.id) || isBundledActiveProduct(product.id),
     );
   }
   if (filter === "discover") {
     return products.filter(
-      (product) => !activeProductIds.has(product.id) && product.id !== "pulse_core",
+      (product) =>
+        !activeProductIds.has(product.id) && !isBundledActiveProduct(product.id),
     );
   }
   return products;
@@ -216,27 +220,27 @@ function ProductCatalogCard({
   isOnWaitlist,
   activeProductIds,
 }: ProductCardProps) {
-  const isPulseCore = product.id === "pulse_core";
+  const isBundledProduct = isBundledActiveProduct(product.id);
   const canBeActivated = canActivate(product.id, activeProductIds);
   const missingDeps = product.dependencies.filter((d) => !activeProductIds.has(d));
-  const status = moduleStatusMeta(product, isActive, isPulseCore, isOnWaitlist);
+  const status = moduleStatusMeta(product, isActive, isBundledProduct, isOnWaitlist);
 
   const ctaLabel = useMemo(() => {
-    if (isPulseCore) return "Included in workspace";
+    if (isBundledProduct) return "Included in workspace";
     if (isActive) return "Manage module";
     if (isOnWaitlist) return "On waitlist";
     if (product.status === "active") return "Start trial";
     return "Learn more";
-  }, [isPulseCore, isActive, isOnWaitlist, product.status]);
+  }, [isBundledProduct, isActive, isOnWaitlist, product.status]);
 
-  const ctaDisabled = isPulseCore || isOnWaitlist;
-  const isLockedModule = !isPulseCore;
-  const isLive = isActive || isPulseCore;
+  const ctaDisabled = isBundledProduct || isOnWaitlist;
+  const isLockedModule = !isBundledProduct;
+  const isLive = isActive || isBundledProduct;
   const pricingHint = isLive ? formatPricingHint(product) : null;
 
   return (
     <View
-      style={[s.card, (isActive || isPulseCore) && s.cardActive]}
+      style={[s.card, (isActive || isBundledProduct) && s.cardActive]}
       accessibilityLabel={`${product.name}, ${status.label}`}
     >
       <View style={s.cardHeader}>
@@ -244,7 +248,7 @@ function ProductCatalogCard({
           productId={product.id}
           size={32}
           active={isLive}
-          showActiveDot={isActive && !isPulseCore}
+          showActiveDot={isActive && !isBundledProduct}
         />
         <View style={[s.statusPill, { backgroundColor: status.bg }]}>
           <Text style={[s.statusPillText, { color: status.text }]}>{status.label}</Text>
@@ -296,12 +300,12 @@ function ProductCatalogCard({
             style={[
               s.footerCtaText,
               (ctaDisabled || isLockedModule) && s.footerCtaTextMuted,
-              isPulseCore && s.footerCtaTextActive,
+              isBundledProduct && s.footerCtaTextActive,
             ]}
           >
             {ctaLabel}
           </Text>
-          {isPulseCore ? (
+          {isBundledProduct ? (
             <ChevronRight size={12} color={NAVY} strokeWidth={2.2} />
           ) : null}
         </View>
@@ -553,8 +557,7 @@ export function WorkspaceProductsPanel({ onBack }: Props) {
         ids.add(a.product_id);
       }
     }
-    ids.add("pulse_core");
-    return ids;
+    return withBundledActiveProducts(ids);
   }, [activations]);
 
   const waitlistedProductIds = useMemo<Set<ProductId>>(() => {

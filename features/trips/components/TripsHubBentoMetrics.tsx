@@ -2,13 +2,10 @@
  * Trips hub — bento intelligence metric row (reference: staggered manifest pulse cards).
  */
 import type { ReactNode } from "react";
-import { useEffect } from "react";
 import Theme from "@/constants/Theme";
 import type { TripMetricId } from "@/features/trips/utils/tripHubMetrics";
 import { formatINRChip } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { LinearGradient } from "expo-linear-gradient";
-import { Radar } from "lucide-react-native";
 import {
   Platform,
   Pressable,
@@ -20,11 +17,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, {
-  Easing,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -63,10 +58,10 @@ const VARIANT_BLOB: Record<BentoMetricVariant, string> = {
 };
 
 /** Typography parity with `TripsHubViews` fleet / ledger cards. */
-const FS_CAPTION = 8;
-const FS_AMOUNT_LABEL = 7;
-const FS_COUNT_LARGE = 28;
-const FS_COUNT_SMALL = 22;
+const FS_CAPTION = 9;
+const FS_AMOUNT_LABEL = 8;
+const FS_COUNT_LARGE = 26;
+const FS_COUNT_SMALL = 20;
 
 const BENTO_LAYOUT: Record<
   ActiveMetricTabId,
@@ -94,36 +89,18 @@ function BentoMetricCard({
 }) {
   const hover = useSharedValue(0);
   const press = useSharedValue(0);
-  const pulse = useSharedValue(0);
   const blobColor = VARIANT_BLOB[item.variant];
   const isZero = item.count === 0;
-
-  useEffect(() => {
-    if (!active || Platform.OS !== "web") return;
-    pulse.value = withRepeat(
-      withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) }),
-      -1,
-      true,
-    );
-  }, [active, pulse]);
 
   const cardAnim = useAnimatedStyle(() => ({
     transform: [
       {
-        translateY: interpolate(hover.value, [0, 1], [0, active ? -4 : -2]),
+        translateY: interpolate(hover.value, [0, 1], [0, -1]),
       },
       {
-        scale:
-          (active ? 1.02 : 1) *
-          interpolate(hover.value, [0, 1], [1, 1.006]) *
-          interpolate(press.value, [0, 1], [1, 0.988]),
+        scale: interpolate(press.value, [0, 1], [1, 0.992]),
       },
     ],
-  }));
-
-  const scanAnim = useAnimatedStyle(() => ({
-    opacity: interpolate(pulse.value, [0, 1], [0.65, 1]),
-    transform: [{ scale: interpolate(pulse.value, [0, 1], [1, 1.08]) }],
   }));
 
   return (
@@ -150,20 +127,16 @@ function BentoMetricCard({
         style={[
           styles.card,
           item.size === "large" && styles.cardLarge,
-          active ? styles.cardGlow : styles.cardIdle,
+          active ? styles.cardActive : styles.cardIdle,
           cardAnim,
         ]}
       >
-        {!active ? (
-          <View style={[StyleSheet.absoluteFill, styles.cardIdleBg]} />
-        ) : (
-          <LinearGradient
-            colors={["#171A20", "#1e293b"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            active ? styles.cardActiveBg : styles.cardIdleBg,
+          ]}
+        />
 
         <View
           style={[
@@ -191,20 +164,25 @@ function BentoMetricCard({
             >
               {item.count}
             </Text>
-            {active ? (
-              <Animated.View style={[styles.scanOrb, scanAnim]}>
-                <FontAwesome name="crosshairs" size={11} color="#818cf8" />
-              </Animated.View>
-            ) : (
-              <View
-                style={[
-                  styles.iconOrb,
-                  { backgroundColor: `${blobColor}18`, borderColor: `${blobColor}30` },
-                ]}
-              >
-                <FontAwesome name={item.icon} size={10} color={blobColor} />
-              </View>
-            )}
+            <View
+              style={[
+                styles.iconOrb,
+                {
+                  backgroundColor: active
+                    ? Theme.pulseIndigoWash
+                    : `${blobColor}14`,
+                  borderColor: active
+                    ? Theme.pulseIndigoRing
+                    : `${blobColor}28`,
+                },
+              ]}
+            >
+              <FontAwesome
+                name={item.icon}
+                size={10}
+                color={active ? Theme.primary : blobColor}
+              />
+            </View>
           </View>
           <View style={styles.labelBlock}>
             <Text
@@ -242,7 +220,7 @@ function BentoSectionHeader({
   return (
     <View style={styles.headerRow}>
       <View style={styles.missionPulse}>
-        <Radar size={13} color="#6366f1" />
+        <View style={styles.missionPulseDot} />
         <Text style={styles.missionPulseText}>{missionLabel}</Text>
       </View>
       <View style={styles.sectionLabels}>
@@ -378,13 +356,10 @@ function HistoryBentoMetricCard({
   const cardAnim = useAnimatedStyle(() => ({
     transform: [
       {
-        translateY: interpolate(hover.value, [0, 1], [0, active ? -4 : -2]),
+        translateY: interpolate(hover.value, [0, 1], [0, -1]),
       },
       {
-        scale:
-          (active ? 1.02 : 1) *
-          interpolate(hover.value, [0, 1], [1, 1.006]) *
-          interpolate(press.value, [0, 1], [1, 0.988]),
+        scale: interpolate(press.value, [0, 1], [1, 0.992]),
       },
     ],
   }));
@@ -412,21 +387,17 @@ function HistoryBentoMetricCard({
       <Animated.View
         style={[
           styles.card,
-          active ? styles.cardGlow : styles.cardIdle,
+          active ? styles.cardActive : styles.cardIdle,
           dueAttention && styles.cardDueAttention,
           cardAnim,
         ]}
       >
-        {!active ? (
-          <View style={[StyleSheet.absoluteFill, styles.cardIdleBg]} />
-        ) : (
-          <LinearGradient
-            colors={["#171A20", "#1e293b"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            active ? styles.cardActiveBg : styles.cardIdleBg,
+          ]}
+        />
 
         <View
           style={[
@@ -619,12 +590,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  missionPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.primary,
+    opacity: 0.55,
+  },
   missionPulseText: {
     fontSize: FS_CAPTION,
-    fontWeight: "800",
-    color: Theme.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    letterSpacing: 0.15,
   },
   sectionLabels: {
     flexDirection: "row",
@@ -633,11 +610,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   sectionLabel: {
-    fontSize: FS_CAPTION,
-    fontWeight: "800",
-    color: Theme.textSection,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+    fontSize: FS_CAPTION - 1,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    letterSpacing: 0.25,
   },
   bentoRow: {
     flexDirection: "row",
@@ -666,7 +642,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 12,
     borderWidth: 1,
     overflow: "hidden",
     minHeight: 92,
@@ -675,51 +651,29 @@ const styles = StyleSheet.create({
     minHeight: 96,
   },
   cardIdle: {
-    borderColor: "#ffffff",
-    ...Platform.select({
-      web: {
-        boxShadow: "0 20px 50px -10px rgba(0,0,0,0.06)",
-      },
-      default: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.06,
-        shadowRadius: 16,
-        elevation: 3,
-      },
-    }),
+    borderColor: Theme.borderLight,
   },
-  cardGlow: {
-    borderWidth: 1.5,
-    borderColor: "#171A20",
-    zIndex: 2,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 24px 48px -12px rgba(23,26,32,0.45)",
-      },
-      default: {
-        shadowColor: "#171A20",
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.35,
-        shadowRadius: 20,
-        elevation: 10,
-      },
-    }),
+  cardActive: {
+    borderColor: Theme.primary,
+    zIndex: 1,
   },
   cardIdleBg: {
     backgroundColor: Theme.cardWhite,
+  },
+  cardActiveBg: {
+    backgroundColor: Theme.pulseIndigoWash,
   },
   cornerBlob: {
     position: "absolute",
     top: 0,
     right: 0,
-    width: 64,
-    height: 64,
-    borderBottomLeftRadius: 64,
-    opacity: 0.06,
+    width: 48,
+    height: 48,
+    borderBottomLeftRadius: 48,
+    opacity: 0.04,
   },
   cornerBlobActive: {
-    opacity: 0.12,
+    opacity: 0.07,
   },
   cardBody: {
     flex: 1,
@@ -746,8 +700,8 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   count: {
-    fontWeight: "800",
-    fontStyle: "italic",
+    fontWeight: "700",
+    fontStyle: "normal",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
     flexShrink: 1,
@@ -764,26 +718,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   countActive: {
-    color: Theme.textOnDark,
+    color: Theme.primary,
   },
   countZero: {
     color: Theme.textMuted,
   },
-  scanOrb: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(99,102,241,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.35)",
-    flexShrink: 0,
-  },
   iconOrb: {
-    width: 26,
-    height: 26,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -796,29 +739,28 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: FS_CAPTION,
-    fontWeight: "800",
+    fontWeight: "600",
     textTransform: "uppercase",
-    letterSpacing: 0.55,
+    letterSpacing: 0.35,
     lineHeight: FS_CAPTION + 3,
   },
   labelIdle: {
     color: Theme.textMuted,
   },
   labelActive: {
-    color: "#a5b4fc",
+    color: Theme.primary,
   },
   sub: {
     fontSize: FS_AMOUNT_LABEL,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.45,
+    fontWeight: "500",
+    letterSpacing: 0.1,
     lineHeight: FS_AMOUNT_LABEL + 4,
   },
   subIdle: {
-    color: Theme.textSection,
+    color: Theme.textSecondary,
   },
   subActive: {
-    color: "rgba(255,255,255,0.42)",
+    color: Theme.textSecondary,
   },
   historyAmount: {
     fontSize: FS_CAPTION + 1,
@@ -835,26 +777,14 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   historyAmountActive: {
-    color: "rgba(255,255,255,0.72)",
+    color: Theme.primary,
   },
   historyAmountDue: {
     color: Theme.teslaRed,
   },
   cardDueAttention: {
     borderColor: Theme.teslaRed,
-    borderWidth: 1.5,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 8px 24px -8px rgba(220,38,38,0.25)",
-      },
-      default: {
-        shadowColor: Theme.teslaRed,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 3,
-      },
-    }),
+    borderWidth: 1,
   },
   legacyRail: {
     flexDirection: "row",

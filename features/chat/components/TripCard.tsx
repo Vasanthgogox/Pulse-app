@@ -1,12 +1,13 @@
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import type { ChatTripFlow } from "@/features/chat/types/chat.types";
 import { Bell, Network, Truck } from "lucide-react-native";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import React from "react";
 import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export type TripCardProps = {
@@ -154,7 +155,7 @@ export const TripCard = React.memo(function TripCard({
                 <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
                   {lastActivityPartyLabel}:{" "}
                 </Text>
-                {lastMessagePreview}
+                {renderChatInlineMarkdown(lastMessagePreview)}
               </>
             )}
           </Text>

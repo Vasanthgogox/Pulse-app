@@ -9,18 +9,26 @@ export type SlackMessageGroupMeta = {
   /** Show avatar (false → spacer for alignment) */
   showAvatar: boolean;
   isContinuation: boolean;
+  /** Extra top spacing before a new sender block (not the first row in the thread). */
+  partyBreak: boolean;
 };
 
 const DEFAULT_MAX_GAP_MS = 15 * 60 * 1000;
 
-function finalizeGroup(ids: string[], map: Map<string, SlackMessageGroupMeta>) {
+function finalizeGroup(
+  ids: string[],
+  map: Map<string, SlackMessageGroupMeta>,
+  firstGroupInThread: boolean,
+) {
   if (ids.length === 0) return;
+  const partyBreak = !firstGroupInThread;
   if (ids.length === 1) {
     map.set(ids[0], {
       position: "standalone",
       showHeader: true,
       showAvatar: true,
       isContinuation: false,
+      partyBreak,
     });
     return;
   }
@@ -32,6 +40,7 @@ function finalizeGroup(ids: string[], map: Map<string, SlackMessageGroupMeta>) {
       showHeader: isFirst,
       showAvatar: isFirst,
       isContinuation: !isFirst,
+      partyBreak: isFirst && partyBreak,
     });
   });
 }
@@ -49,9 +58,12 @@ export function buildSlackMessageGroupMap<T extends { id: string }>(
   const maxGap = options.maxGapMs ?? DEFAULT_MAX_GAP_MS;
   let groupIds: string[] = [];
   let prevGroupable: T | null = null;
+  let firstGroupInThread = true;
 
   const flush = () => {
-    finalizeGroup(groupIds, map);
+    if (groupIds.length === 0) return;
+    finalizeGroup(groupIds, map, firstGroupInThread);
+    firstGroupInThread = false;
     groupIds = [];
     prevGroupable = null;
   };
@@ -73,12 +85,12 @@ export function buildSlackMessageGroupMap<T extends { id: string }>(
     if (canContinue) {
       groupIds.push(message.id);
     } else {
-      finalizeGroup(groupIds, map);
+      flush();
       groupIds = [message.id];
     }
     prevGroupable = message;
   }
-  finalizeGroup(groupIds, map);
+  flush();
   return map;
 }
 

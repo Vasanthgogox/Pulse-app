@@ -2,7 +2,7 @@
  * Long-press / right-click context menu for a chat message.
  * Shows quick emoji reactions + action buttons (Reply, Copy).
  */
-import { Copy, CornerUpLeft, Plus, Smile } from "lucide-react-native";
+import { Copy, CornerUpLeft, Pencil, Plus, Smile, Trash2 } from "lucide-react-native";
 import {
   Modal,
   Pressable,
@@ -23,6 +23,10 @@ export type MessageContextMenuProps = {
   onCopy: () => void;
   /** Whether to show the full emoji picker trigger (future). */
   showMoreReactions?: boolean;
+  /** Show Edit/Delete only for the sender's own messages. */
+  isOwn?: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
 };
 
 export function ChatMessageContextMenu({
@@ -32,6 +36,9 @@ export function ChatMessageContextMenu({
   onReply,
   onCopy,
   showMoreReactions = true,
+  isOwn = false,
+  onEdit,
+  onDelete,
 }: MessageContextMenuProps) {
   if (!visible) return null;
 
@@ -91,7 +98,7 @@ export function ChatMessageContextMenu({
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.action, styles.actionLast]}
+            style={[styles.action, !isOwn && styles.actionLast]}
             onPress={() => {
               onCopy();
               onClose();
@@ -101,6 +108,34 @@ export function ChatMessageContextMenu({
             <Copy size={16} color="#374151" strokeWidth={1.65} />
             <Text style={styles.actionText}>Copy text</Text>
           </TouchableOpacity>
+
+          {isOwn && onEdit ? (
+            <TouchableOpacity
+              style={styles.action}
+              onPress={() => {
+                onEdit();
+                onClose();
+              }}
+              activeOpacity={0.82}
+            >
+              <Pencil size={16} color="#374151" strokeWidth={1.65} />
+              <Text style={styles.actionText}>Edit message</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {isOwn && onDelete ? (
+            <TouchableOpacity
+              style={[styles.action, styles.actionLast]}
+              onPress={() => {
+                onDelete();
+                onClose();
+              }}
+              activeOpacity={0.82}
+            >
+              <Trash2 size={16} color="#ef4444" strokeWidth={1.65} />
+              <Text style={[styles.actionText, styles.actionTextDanger]}>Delete message</Text>
+            </TouchableOpacity>
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -167,6 +202,9 @@ const styles = StyleSheet.create({
     color: "#1D1C1D",
     letterSpacing: 0.02,
   },
+  actionTextDanger: {
+    color: "#ef4444",
+  },
 });
 
 // ── Desktop hover action toolbar ──────────────────────────────────────────────
@@ -181,12 +219,16 @@ export function ChatMessageHoverActions({
   onReact,
   onReply,
   onCopy,
+  onEdit,
+  onDelete,
   onHoverIn,
   onHoverOut,
 }: {
   onReact?: (emoji: string) => void;
   onReply?: () => void;
   onCopy: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   onHoverIn?: () => void;
   onHoverOut?: () => void;
 }) {
@@ -226,6 +268,31 @@ export function ChatMessageHoverActions({
       >
         <Copy size={13} color="#6B7280" strokeWidth={1.65} />
       </TouchableOpacity>
+      {onEdit ? (
+        <>
+          <View style={hover.sep} />
+          <TouchableOpacity
+            style={hover.btn}
+            onPress={onEdit}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Edit"
+          >
+            <Pencil size={13} color="#6B7280" strokeWidth={1.65} />
+          </TouchableOpacity>
+        </>
+      ) : null}
+      {onDelete ? (
+        <TouchableOpacity
+          style={hover.btn}
+          onPress={onDelete}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel="Delete"
+        >
+          <Trash2 size={13} color="#ef4444" strokeWidth={1.65} />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }

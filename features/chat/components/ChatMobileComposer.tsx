@@ -20,10 +20,13 @@ import {
 import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
 import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
 import { CHAT_QUICK_PANEL_EMOJIS } from "@/features/chat/utils/chatEmojiAnim.util";
+import { ChatComposerMarkdownInput } from "@/features/chat/components/shared/ChatComposerMarkdownInput";
+import {
+  finalizeOutgoingMarkdown,
+  toggleMarkdownFormat,
+} from "@/features/chat/utils/chatMessageMarkdown.util";
 import { Theme } from "@/constants/Theme";
 import {
-  Bold,
-  Italic,
   Mic,
   Paperclip,
   Plus,
@@ -50,7 +53,7 @@ const INPUT_WEB: TextStyle =
 export type ChatMobileComposerProps = {
   value: string;
   onChangeText: (text: string) => void;
-  onSend: () => void;
+  onSend: (text?: string) => void;
   onOpenAttach?: () => void;
   quickMessages?: string[];
   hideQuickChips?: boolean;
@@ -111,10 +114,14 @@ export function ChatMobileComposer({
   const submit = useCallback(() => {
     if (!canSend) return;
     setShowQuickPanel(false);
+    const outgoing = finalizeOutgoingMarkdown(value.trim(), {
+      bold: boldActive,
+      italic: italicActive,
+    });
     setBoldActive(false);
     setItalicActive(false);
-    onSend();
-  }, [canSend, onSend]);
+    onSend(outgoing);
+  }, [canSend, onSend, value, boldActive, italicActive]);
 
   const handleChangeText = useCallback(
     (text: string) => {
@@ -126,24 +133,15 @@ export function ChatMobileComposer({
 
   const applyFormat = useCallback(
     (fmt: "bold" | "italic") => {
-      const marker = fmt === "bold" ? "**" : "_";
-      const trimmed = value.trim();
-      if (!trimmed) {
+      if (!value.trim()) {
         if (fmt === "bold") setBoldActive((v) => !v);
         else setItalicActive((v) => !v);
         return;
       }
-      // Strip all occurrences of this marker (handles stacked formats like _**HI**_)
-      const stripped = trimmed.split(marker).join("");
-      if (stripped !== trimmed) {
-        onChangeText(stripped);
-        if (fmt === "bold") setBoldActive(false);
-        else setItalicActive(false);
-      } else {
-        onChangeText(`${marker}${trimmed}${marker}`);
-        if (fmt === "bold") setBoldActive(true);
-        else setItalicActive(true);
-      }
+      const { nextText, active } = toggleMarkdownFormat(value, fmt);
+      onChangeText(nextText);
+      if (fmt === "bold") setBoldActive(active);
+      else setItalicActive(active);
     },
     [value, onChangeText],
   );
@@ -269,12 +267,13 @@ export function ChatMobileComposer({
               <Plus size={22} color="#616061" strokeWidth={1.75} />
             </TouchableOpacity>
 
-            <TextInput
+            <ChatComposerMarkdownInput
               style={[sl.input, INPUT_WEB]}
               value={value}
               onChangeText={handleChangeText}
               placeholder={placeholder}
               placeholderTextColor="#9CA3AF"
+              pendingFormat={{ bold: boldActive, italic: italicActive }}
               multiline
               scrollEnabled
               blurOnSubmit={false}
@@ -324,7 +323,7 @@ export function ChatMobileComposer({
               accessibilityRole="button"
               accessibilityLabel="Bold"
             >
-              <Bold size={13} color={boldActive ? Theme.primary : "#9CA3AF"} strokeWidth={2.2} />
+              <Text style={[sl.fmtGlyph, sl.fmtGlyphBold, boldActive && sl.fmtGlyphActive]}>B</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[sl.fmtBtn, italicActive && sl.fmtBtnActive]}
@@ -334,7 +333,7 @@ export function ChatMobileComposer({
               accessibilityRole="button"
               accessibilityLabel="Italic"
             >
-              <Italic size={13} color={italicActive ? Theme.primary : "#9CA3AF"} strokeWidth={2.2} />
+              <Text style={[sl.fmtGlyph, sl.fmtGlyphItalic, italicActive && sl.fmtGlyphActive]}>I</Text>
             </TouchableOpacity>
             <View style={sl.fmtSep} />
             {onOpenAttach ? (
@@ -597,7 +596,8 @@ const sl = StyleSheet.create({
     paddingVertical: 5,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#F0F0F0",
-    gap: 2,
+    gap: 0,
+    minHeight: 28,
   },
   fmtBtn: {
     width: 28,
@@ -605,15 +605,34 @@ const sl = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 6,
+    ...(Platform.OS === "web" ? ({ display: "flex" } as object) : {}),
   },
   fmtBtnActive: {
     backgroundColor: "rgba(91, 94, 244, 0.1)",
   },
+  fmtGlyph: {
+    fontSize: 14,
+    lineHeight: 16,
+    color: "#9CA3AF",
+    textAlign: "center",
+    ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+  },
+  fmtGlyphBold: {
+    fontWeight: "700",
+  },
+  fmtGlyphItalic: {
+    fontStyle: "italic",
+    fontWeight: "600",
+  },
+  fmtGlyphActive: {
+    color: Theme.primary,
+  },
   fmtSep: {
-    width: 1,
-    height: 16,
+    width: StyleSheet.hairlineWidth,
+    height: 18,
     backgroundColor: "#E5E7EB",
-    marginHorizontal: 4,
+    marginHorizontal: 6,
+    alignSelf: "center",
   },
   charCount: {
     marginLeft: "auto" as any,

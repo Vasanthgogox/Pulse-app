@@ -804,6 +804,10 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 9,
   },
+  alertTopRowDriverSwap: {
+    alignItems: "center",
+    gap: 10,
+  },
   alertAvatarShell: {
     width: 34,
     height: 34,
@@ -886,7 +890,15 @@ const s = StyleSheet.create({
   },
   alertCardDriverSwap: {
     backgroundColor: "#FAFBFF",
-    borderColor: "rgba(91, 94, 244, 0.14)",
+    borderColor: "rgba(91, 94, 244, 0.12)",
+    paddingVertical: 10,
+  },
+  alertDriverSwapAvatarSlot: {
+    width: 94,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
   alertSimpleMessage: {
     fontSize: 12,
@@ -1343,8 +1355,10 @@ export function TripProgressEventCard({
           driverSwap && s.alertCardDriverSwap,
         ]}
       >
-        <View style={s.alertTopRow}>
-          {avatarEl}
+        <View style={[s.alertTopRow, driverSwap && s.alertTopRowDriverSwap]}>
+          <View style={driverSwap ? s.alertDriverSwapAvatarSlot : undefined}>
+            {avatarEl}
+          </View>
           <View
             style={[
               s.alertSimpleBody,
@@ -1416,6 +1430,7 @@ function systemSheetAvatarSeed(content: string): string {
 export function ChatSystemEventCard({
   message,
   composeTrip,
+  driverProfiles,
 }: {
   message: TripMessageRow;
   /** @deprecated Single alert layout on all breakpoints. */
@@ -1423,6 +1438,7 @@ export function ChatSystemEventCard({
   /** @deprecated Route ribbon removed from alert cards. */
   routeContext?: string | null;
   composeTrip?: SystemUpdateDriverContext["composeTrip"];
+  driverProfiles?: SystemUpdateDriverContext["driverProfiles"];
 }) {
   const statusKey = inferStatusFromContent(message.content);
   const cfg = STATUS_ICON_MAP[statusKey] ?? STATUS_ICON_MAP.default;
@@ -1439,10 +1455,11 @@ export function ChatSystemEventCard({
     // keep raw
   }
 
-  const driverSwap = resolveDriverSwapAvatars(message, { composeTrip });
+  const driverCtx = { composeTrip, driverProfiles };
+  const driverSwap = resolveDriverSwapAvatars(message, driverCtx);
   const driverAvatar = driverSwap
     ? null
-    : resolveSystemUpdateDriverAvatar(message, { composeTrip });
+    : resolveSystemUpdateDriverAvatar(message, driverCtx);
   const seed =
     driverSwap?.next.displayName?.trim() ||
     driverAvatar?.displayName?.trim() ||

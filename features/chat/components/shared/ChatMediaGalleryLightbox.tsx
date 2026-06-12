@@ -13,7 +13,7 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,6 +21,12 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  loadImageNaturalSize,
+  resolveFitImageLayout,
+} from "@/features/chat/utils/fitImageInViewport.util";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 
 type GalleryLoadPass = "default" | "signed" | "blob";
 
@@ -37,23 +43,31 @@ async function loadGallerySlideUri(
   return resolveChatGallerySlideUrl(slide, { signedOnly: pass === "signed" });
 }
 
+const CHROME_TOP = 52;
+const CHROME_BOTTOM = 56;
+const H_PAD = 16;
+
 function GallerySlidePage({
   slide,
   width,
-  height,
+  viewportHeight,
 }: {
   slide: ChatGallerySlide;
   width: number;
-  height: number;
+  viewportHeight: number;
 }) {
   const [uri, setUri] = useState<string | null>(() => peekChatGallerySlideUrl(slide));
   const [loading, setLoading] = useState(() => !peekChatGallerySlideUrl(slide));
   const [error, setError] = useState(false);
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
   const loadPassRef = useRef<GalleryLoadPass>("default");
 
   useEffect(() => {
     let cancelled = false;
     loadPassRef.current = "default";
+    setNaturalSize(null);
     const peek = peekChatGallerySlideUrl(slide);
     setUri(peek);
     setError(false);
@@ -127,8 +141,31 @@ function GallerySlidePage({
     })();
   }, [slide]);
 
+  useEffect(() => {
+    if (!uri || loading || error) {
+      setNaturalSize(null);
+      return;
+    }
+    let cancelled = false;
+    void loadImageNaturalSize(uri).then((size) => {
+      if (cancelled || !size) return;
+      setNaturalSize(size);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, loading, error]);
+
+  const imageLayout = naturalSize
+    ? resolveFitImageLayout(naturalSize, width, viewportHeight, {
+        horizontal: H_PAD,
+        top: CHROME_TOP,
+        bottom: CHROME_BOTTOM,
+      })
+    : null;
+
   return (
-    <View style={[styles.page, { width, height }]}>
+    <View style={[styles.page, { width, height: viewportHeight }]}>
       {loading ? (
         <View style={styles.pageCenter}>
           <LoadingIndicator size="large" color="#fff" />
@@ -141,15 +178,59 @@ function GallerySlidePage({
         </View>
       ) : null}
       {uri && !error ? (
-        <Image
-          source={{ uri }}
-          style={styles.fullImage}
-          contentFit="contain"
-          cachePolicy="memory-disk"
-          recyclingKey={`${slide.key}-${uri}`}
-          transition={180}
-          onError={onImageError}
-        />
+        naturalSize ? (
+          <ScrollView
+            style={styles.slideScroll}
+            contentContainerStyle={[
+              styles.slideScrollContent,
+              {
+                minHeight: viewportHeight,
+                justifyContent: imageLayout?.scrollable ? "flex-start" : "center",
+                paddingTop: CHROME_TOP,
+                paddingBottom: CHROME_BOTTOM,
+              },
+            ]}
+            showsVerticalScrollIndicator={imageLayout?.scrollable ?? false}
+            centerContent={!imageLayout?.scrollable}
+            nestedScrollEnabled
+            bounces
+          >
+            <Image
+              source={{ uri }}
+              style={
+                imageLayout
+                  ? {
+                      width: imageLayout.width,
+                      height: imageLayout.height,
+                      maxWidth: width - H_PAD * 2,
+                      maxHeight: viewportHeight - CHROME_TOP - CHROME_BOTTOM,
+                    }
+                  : undefined
+              }
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              recyclingKey={`${slide.key}-${uri}`}
+              transition={180}
+              onError={onImageError}
+            />
+          </ScrollView>
+        ) : (
+          <View style={styles.pageCenter}>
+            <Image
+              source={{ uri }}
+              style={styles.measureImage}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              recyclingKey={`${slide.key}-${uri}-measure`}
+              onLoad={(event) => {
+                const w = event.source.width;
+                const h = event.source.height;
+                if (w > 0 && h > 0) setNaturalSize({ width: w, height: h });
+              }}
+              onError={onImageError}
+            />
+          </View>
+        )
       ) : null}
       {slide.fileName ? (
         <Text style={styles.caption} numberOfLines={2}>
@@ -177,6 +258,8 @@ export function ChatMediaGalleryLightbox({
   onClose,
 }: ChatMediaGalleryLightboxProps) {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const viewportHeight = Math.max(1, height - insets.top - insets.bottom);
   const listRef = useRef<FlatList<ChatGallerySlide>>(null);
   const [index, setIndex] = useState(initialIndex);
   const safeInitial = Math.min(Math.max(initialIndex, 0), Math.max(slides.length - 1, 0));
@@ -221,9 +304,15 @@ export function ChatMediaGalleryLightbox({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.root}>
+      <View
+        style={[
+          styles.root,
+          Platform.OS === "web" ? (WEB_APP_VIEWPORT_STYLE as object) : null,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
         <Pressable
-          style={styles.closeBtn}
+          style={[styles.closeBtn, { top: insets.top + 8 }]}
           onPress={onClose}
           hitSlop={12}
           accessibilityRole="button"
@@ -233,7 +322,7 @@ export function ChatMediaGalleryLightbox({
         </Pressable>
 
         {slides.length > 1 ? (
-          <Text style={styles.counter}>
+          <Text style={[styles.counter, { top: insets.top + 14 }]}>
             {index + 1} / {slides.length}
           </Text>
         ) : null}
@@ -262,7 +351,7 @@ export function ChatMediaGalleryLightbox({
             }, 80);
           }}
           renderItem={({ item }) => (
-            <GallerySlidePage slide={item} width={width} height={height} />
+            <GallerySlidePage slide={item} width={width} viewportHeight={viewportHeight} />
           )}
           style={styles.list}
           {...(Platform.OS === "web"
@@ -291,7 +380,7 @@ export function ChatMediaGalleryLightbox({
             <ChevronRight size={28} color="#fff" strokeWidth={2.4} />
           </Pressable>
         ) : null}
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -340,13 +429,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
   },
-  fullImage: {
+  slideScroll: {
+    flex: 1,
     width: "100%",
-    height: "100%",
+  },
+  slideScrollContent: {
+    alignItems: "center",
+    paddingHorizontal: H_PAD,
+  },
+  measureImage: {
+    width: 1,
+    height: 1,
+    opacity: 0,
+    position: "absolute",
   },
   caption: {
     position: "absolute",
-    bottom: 28,
+    bottom: 12,
     left: 20,
     right: 20,
     textAlign: "center",
@@ -356,7 +455,6 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 52 : 16,
     right: 16,
     zIndex: 20,
     width: 40,
@@ -368,7 +466,6 @@ const styles = StyleSheet.create({
   },
   counter: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 58 : 22,
     alignSelf: "center",
     zIndex: 20,
     fontSize: 13,

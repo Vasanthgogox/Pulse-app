@@ -1,7 +1,7 @@
 /**
  * Desktop Slack-style composer.
  * Features: reply preview banner, character counter, formatting shortcuts,
- * typing callback, attach + emoji + send toolbar.
+ * typing callback, attach + emoji picker + send toolbar.
  */
 import { Theme } from "@/constants/Theme";
 import {
@@ -9,15 +9,12 @@ import {
   type ReplyPreviewData,
 } from "@/features/chat/components/shared/ChatReplyPreview";
 import {
-  Bold,
-  Code,
-  Italic,
   Mic,
   Paperclip,
   Send,
   Smile,
 } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -27,10 +24,26 @@ import {
   View,
   type TextStyle,
 } from "react-native";
-import { SLACK_DESKTOP, SLACK_DESKTOP_TYPE, slackDesktopStyles as st } from "./chatSlackDesktop.styles";
+import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
+import { ChatComposerMarkdownInput } from "@/features/chat/components/shared/ChatComposerMarkdownInput";
+import { CHAT_DESKTOP_COMPOSER_EMOJIS } from "@/features/chat/utils/chatEmojiAnim.util";
+import {
+  finalizeOutgoingMarkdown,
+  toggleMarkdownFormat,
+} from "@/features/chat/utils/chatMessageMarkdown.util";
+import { SLACK_DESKTOP, slackDesktopStyles as st } from "./chatSlackDesktop.styles";
 
 const INPUT_WEB: TextStyle = Platform.OS === "web" ? {} : {};
 const MAX_LENGTH = 4_000;
+const TOOLBAR_ICON_SIZE = 15;
+
+function ComposerToolbarIcon({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <View style={styles.toolIconSlot}>{children}</View>;
+}
 
 export function ChatSlackDesktopComposer({
   value,
@@ -45,7 +58,7 @@ export function ChatSlackDesktopComposer({
 }: {
   value: string;
   onChangeText: (v: string) => void;
-  onSend: () => void;
+  onSend: (text?: string) => void;
   onOpenAttach?: () => void;
   quickMessages?: string[];
   placeholder?: string;
@@ -64,6 +77,7 @@ export function ChatSlackDesktopComposer({
   const quickCursor = useRef(0);
   const inputRef = useRef<TextInput | null>(null);
   const [formatActive, setFormatActive] = useState<"bold" | "italic" | "code" | null>(null);
+  const [showEmojiPanel, setShowEmojiPanel] = useState(false);
 
   useEffect(() => {
     if (!replyContext) return;
@@ -80,6 +94,7 @@ export function ChatSlackDesktopComposer({
   );
 
   const applySuggestion = () => {
+    setShowEmojiPanel(false);
     const fallback = "On it. Sharing an update shortly.";
     const suggestion =
       quickMessages.length > 0
@@ -89,29 +104,42 @@ export function ChatSlackDesktopComposer({
     onChangeText(suggestion);
   };
 
-  const addEmoji = () => {
-    handleChangeText(value.trim().length > 0 ? `${value} 👍` : "👍");
-  };
+  const toggleEmojiPanel = useCallback(() => {
+    setShowEmojiPanel((open) => !open);
+  }, []);
 
-  /** Toggle markdown format wrapping on the current text. */
+  const applyQuickEmoji = useCallback(
+    (emoji: string) => {
+      const next = value.trim().length > 0 ? `${value} ${emoji}` : emoji;
+      handleChangeText(next);
+      setShowEmojiPanel(false);
+      inputRef.current?.focus();
+    },
+    [handleChangeText, value],
+  );
+
+  const submitMessage = useCallback(() => {
+    const raw = value.trim();
+    if (!raw || raw.length > MAX_LENGTH) return;
+    const outgoing = finalizeOutgoingMarkdown(raw, {
+      bold: formatActive === "bold",
+      italic: formatActive === "italic",
+      code: formatActive === "code",
+    });
+    setFormatActive(null);
+    setShowEmojiPanel(false);
+    onSend(outgoing);
+  }, [value, formatActive, onSend]);
+
+  /** Toggle markdown format — highlight for next send, or wrap existing text. */
   const applyFormat = (fmt: "bold" | "italic" | "code") => {
-    const marker = fmt === "bold" ? "**" : fmt === "italic" ? "_" : "`";
-    const trimmed = value.trim();
-
-    if (!trimmed) {
+    if (!value.trim()) {
       setFormatActive((v) => (v === fmt ? null : fmt));
       return;
     }
-
-    // Strip all occurrences of this marker (covers stacked cases like _**HI**_ → _HI_)
-    const stripped = trimmed.split(marker).join("");
-    if (stripped !== trimmed) {
-      handleChangeText(stripped);
-      setFormatActive(null);
-    } else {
-      handleChangeText(`${marker}${trimmed}${marker}`);
-      setFormatActive(fmt);
-    }
+    const { nextText, active } = toggleMarkdownFormat(value, fmt);
+    handleChangeText(nextText);
+    setFormatActive(active ? fmt : null);
   };
 
   return (
@@ -125,22 +153,44 @@ export function ChatSlackDesktopComposer({
       ) : null}
       <View style={st.composerWrap}>
         <View style={st.composerBox}>
-          <TextInput
+          <ChatComposerMarkdownInput
             ref={inputRef}
             style={[st.composerInput, INPUT_WEB]}
             value={value}
             onChangeText={handleChangeText}
             placeholder={placeholder}
             placeholderTextColor={SLACK_DESKTOP.textTertiary}
+            pendingFormat={{
+              bold: formatActive === "bold",
+              italic: formatActive === "italic",
+              code: formatActive === "code",
+            }}
             multiline
             scrollEnabled
             blurOnSubmit={false}
             textAlignVertical="top"
             maxLength={MAX_LENGTH + 50}
           />
+          {showEmojiPanel ? (
+            <View style={styles.emojiPanel}>
+              <View style={styles.emojiGrid}>
+                {CHAT_DESKTOP_COMPOSER_EMOJIS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={styles.emojiBtn}
+                    onPress={() => applyQuickEmoji(emoji)}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Insert ${emoji}`}
+                  >
+                    <ChatAnimatedEmoji emoji={emoji} size="md" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : null}
           <View style={styles.toolbar}>
             <View style={styles.toolbarLeft}>
-              {/* Formatting buttons */}
               <TouchableOpacity
                 style={[styles.toolBtn, formatActive === "bold" && styles.toolBtnActive]}
                 hitSlop={6}
@@ -148,7 +198,15 @@ export function ChatSlackDesktopComposer({
                 accessibilityRole="button"
                 accessibilityLabel="Bold"
               >
-                <Bold size={13} color={formatActive === "bold" ? Theme.primary : SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                <Text
+                  style={[
+                    styles.fmtGlyph,
+                    styles.fmtGlyphBold,
+                    formatActive === "bold" && styles.fmtGlyphActive,
+                  ]}
+                >
+                  B
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toolBtn, formatActive === "italic" && styles.toolBtnActive]}
@@ -157,7 +215,15 @@ export function ChatSlackDesktopComposer({
                 accessibilityRole="button"
                 accessibilityLabel="Italic"
               >
-                <Italic size={13} color={formatActive === "italic" ? Theme.primary : SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                <Text
+                  style={[
+                    styles.fmtGlyph,
+                    styles.fmtGlyphItalic,
+                    formatActive === "italic" && styles.fmtGlyphActive,
+                  ]}
+                >
+                  I
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toolBtn, formatActive === "code" && styles.toolBtnActive]}
@@ -166,21 +232,45 @@ export function ChatSlackDesktopComposer({
                 accessibilityRole="button"
                 accessibilityLabel="Code"
               >
-                <Code size={13} color={formatActive === "code" ? Theme.primary : SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                <Text
+                  style={[
+                    styles.fmtGlyph,
+                    styles.fmtGlyphCode,
+                    formatActive === "code" && styles.fmtGlyphActive,
+                  ]}
+                >
+                  {"</>"}
+                </Text>
               </TouchableOpacity>
 
               <View style={styles.toolSep} />
 
               {onOpenAttach ? (
                 <TouchableOpacity onPress={onOpenAttach} style={styles.toolBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Attach file">
-                  <Paperclip size={14} color={SLACK_DESKTOP.textTertiary} strokeWidth={1.65} />
+                  <ComposerToolbarIcon>
+                    <Paperclip size={TOOLBAR_ICON_SIZE} color={SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                  </ComposerToolbarIcon>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity style={styles.toolBtn} hitSlop={6} onPress={addEmoji} accessibilityRole="button" accessibilityLabel="Add emoji">
-                <Smile size={14} color={SLACK_DESKTOP.textTertiary} strokeWidth={1.65} />
+              <TouchableOpacity
+                style={[styles.toolBtn, showEmojiPanel && styles.toolBtnActive]}
+                hitSlop={6}
+                onPress={toggleEmojiPanel}
+                accessibilityRole="button"
+                accessibilityLabel="Open emoji picker"
+              >
+                <ComposerToolbarIcon>
+                  <Smile
+                    size={TOOLBAR_ICON_SIZE}
+                    color={showEmojiPanel ? Theme.primary : SLACK_DESKTOP.textTertiary}
+                    strokeWidth={2}
+                  />
+                </ComposerToolbarIcon>
               </TouchableOpacity>
               <TouchableOpacity style={styles.toolBtn} hitSlop={6} onPress={applySuggestion} accessibilityRole="button" accessibilityLabel="Quick send suggestion">
-                <Mic size={14} color={SLACK_DESKTOP.textTertiary} strokeWidth={1.65} />
+                <ComposerToolbarIcon>
+                  <Mic size={TOOLBAR_ICON_SIZE} color={SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                </ComposerToolbarIcon>
               </TouchableOpacity>
             </View>
 
@@ -191,14 +281,16 @@ export function ChatSlackDesktopComposer({
                 </Text>
               ) : null}
               <TouchableOpacity
-                onPress={onSend}
+                onPress={submitMessage}
                 disabled={!canSend}
                 style={[styles.sendBtn, !canSend && styles.sendBtnOff]}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel="Send message"
               >
-                <Send size={14} color={canSend ? "#FFFFFF" : SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                <ComposerToolbarIcon>
+                  <Send size={TOOLBAR_ICON_SIZE} color={canSend ? "#FFFFFF" : SLACK_DESKTOP.textTertiary} strokeWidth={2} />
+                </ComposerToolbarIcon>
               </TouchableOpacity>
             </View>
           </View>
@@ -209,6 +301,30 @@ export function ChatSlackDesktopComposer({
 }
 
 const styles = StyleSheet.create({
+  emojiPanel: {
+    marginTop: 4,
+    marginBottom: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    borderRadius: 8,
+    backgroundColor: "#FAFAFA",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SLACK_DESKTOP.border,
+  },
+  emojiGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    justifyContent: "flex-start",
+  },
+  emojiBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 6,
+    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as object) : {}),
+  },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
@@ -221,12 +337,14 @@ const styles = StyleSheet.create({
   toolbarLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 0,
+    minHeight: 28,
   },
   toolbarRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    minHeight: 28,
   },
   toolBtn: {
     width: 28,
@@ -234,15 +352,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 4,
+    ...(Platform.OS === "web" ? ({ display: "flex" } as object) : {}),
+  },
+  toolIconSlot: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    ...(Platform.OS === "web" ? ({ display: "flex" } as object) : {}),
   },
   toolBtnActive: {
     backgroundColor: "rgba(91, 94, 244, 0.1)",
   },
+  fmtGlyph: {
+    fontSize: 14,
+    lineHeight: 16,
+    color: SLACK_DESKTOP.textTertiary,
+    textAlign: "center",
+    ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
+    ...(Platform.OS === "web"
+      ? ({ userSelect: "none", lineHeight: "16px" } as TextStyle)
+      : {}),
+  },
+  fmtGlyphBold: {
+    fontWeight: "700",
+  },
+  fmtGlyphItalic: {
+    fontStyle: "italic",
+    fontWeight: "600",
+  },
+  fmtGlyphCode: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: -0.3,
+    fontFamily: Platform.select({
+      web: "ui-monospace, SFMono-Regular, Menlo, monospace",
+      ios: "Menlo",
+      android: "monospace",
+      default: "monospace",
+    }),
+  },
+  fmtGlyphActive: {
+    color: Theme.primary,
+  },
   toolSep: {
-    width: 1,
-    height: 16,
+    width: StyleSheet.hairlineWidth,
+    height: 18,
     backgroundColor: SLACK_DESKTOP.border,
-    marginHorizontal: 4,
+    marginHorizontal: 6,
+    alignSelf: "center",
   },
   charCount: {
     fontSize: 10,

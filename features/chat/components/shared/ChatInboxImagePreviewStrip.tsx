@@ -57,6 +57,8 @@ function InboxThumb({
           <ChatImage
             storagePath={item.storagePath}
             thumbnail
+            displayWidth={width}
+            displayHeight={THUMB_H}
             style={{ width, height: THUMB_H, borderRadius: radius }}
           />
         </View>

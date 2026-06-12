@@ -1,0 +1,114 @@
+import { Theme } from "@/constants/Theme";
+import type { ChatPendingFormat } from "@/features/chat/utils/chatMessageMarkdown.util";
+import {
+  getComposerMarkdownPreviewSource,
+  shouldShowComposerMarkdownPreview,
+} from "@/features/chat/utils/chatMessageMarkdown.util";
+import {
+  renderChatComposerPendingPreview,
+  renderChatComposerPreview,
+} from "@/features/chat/utils/chatInlineMarkdown.util";
+import React, { useMemo } from "react";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type TextInputProps,
+  type TextStyle,
+} from "react-native";
+
+const TRANSPARENT_INPUT: TextStyle =
+  Platform.OS === "web"
+    ? ({
+        color: "transparent",
+        WebkitTextFillColor: "transparent",
+      } as TextStyle)
+    : { color: "transparent" };
+
+type ChatComposerMarkdownInputProps = {
+  value: string;
+  onChangeText: (text: string) => void;
+  style?: StyleProp<TextStyle>;
+  pendingFormat?: ChatPendingFormat;
+} & Omit<TextInputProps, "value" | "onChangeText" | "style">;
+
+export const ChatComposerMarkdownInput = React.forwardRef<
+  TextInput,
+  ChatComposerMarkdownInputProps
+>(function ChatComposerMarkdownInput(
+  {
+    value,
+    onChangeText,
+    style,
+    pendingFormat = {},
+    placeholderTextColor,
+    ...rest
+  },
+  ref,
+) {
+  const flatStyle = StyleSheet.flatten(style) ?? {};
+  const showPreview = shouldShowComposerMarkdownPreview(value, pendingFormat);
+
+  const previewSource = useMemo(
+    () => getComposerMarkdownPreviewSource(value, pendingFormat),
+    [value, pendingFormat],
+  );
+
+  const hasLiteralMarkers = /\*\*|_|`/.test(value);
+  const previewNodes = useMemo(() => {
+    if (!showPreview) return null;
+    if (!hasLiteralMarkers && (pendingFormat.bold || pendingFormat.italic || pendingFormat.code)) {
+      return renderChatComposerPendingPreview(value, pendingFormat);
+    }
+    return renderChatComposerPreview(previewSource);
+  }, [showPreview, hasLiteralMarkers, pendingFormat, value, previewSource]);
+
+  return (
+    <View style={styles.wrap}>
+      {previewNodes ? (
+        <Text
+          style={[flatStyle, styles.previewLayer]}
+          pointerEvents="none"
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        >
+          {previewNodes}
+        </Text>
+      ) : null}
+      <TextInput
+        ref={ref}
+        {...rest}
+        value={value}
+        onChangeText={onChangeText}
+        style={[flatStyle, showPreview && styles.inputLayer, showPreview && TRANSPARENT_INPUT]}
+        placeholderTextColor={placeholderTextColor}
+        caretColor={Theme.primary}
+        selectionColor="rgba(91, 94, 244, 0.22)"
+        underlineColorAndroid="transparent"
+      />
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    minWidth: 0,
+    position: "relative",
+  },
+  previewLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 0,
+  },
+  inputLayer: {
+    position: "relative",
+    zIndex: 1,
+    backgroundColor: "transparent",
+  },
+});

@@ -1,12 +1,12 @@
 import { PULSE_CHAT } from "@/features/chat/components/mobile/chatSlackMobile.styles";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
-import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import { CHAT_ACCENT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { ListFilter } from "lucide-react-native";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMirrorIndicator } from "@/lib/hooks/useMirrorIndicator";
+import { useEffect, useRef } from "react";
 import {
   Animated,
-  LayoutChangeEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -27,45 +27,6 @@ export type MirrorToggleItem = {
 };
 
 type MirrorVariant = "bottomNav" | "sidebar" | "filter" | "party";
-
-const SPRING_TRANSLATE = { useNativeDriver: true, speed: 22, bounciness: 4 } as const;
-
-function useMirrorIndicator(activeId: string, axis: "x" | "y") {
-  const layouts = useRef<Record<string, { pos: number; size: number }>>({});
-  const translate = useRef(new Animated.Value(0)).current;
-  const [indicatorSize, setIndicatorSize] = useState(0);
-
-  const snapTo = useCallback(
-    (id: string) => {
-      const layout = layouts.current[id];
-      if (!layout) return;
-      setIndicatorSize(layout.size);
-      Animated.spring(translate, {
-        toValue: layout.pos,
-        ...SPRING_TRANSLATE,
-      }).start();
-    },
-    [translate],
-  );
-
-  useEffect(() => {
-    snapTo(activeId);
-  }, [activeId, snapTo]);
-
-  const onItemLayout = useCallback(
-    (id: string, e: LayoutChangeEvent) => {
-      const { x, y, width, height } = e.nativeEvent.layout;
-      layouts.current[id] = {
-        pos: axis === "x" ? x : y,
-        size: axis === "x" ? width : height,
-      };
-      if (id === activeId) snapTo(id);
-    },
-    [activeId, axis, snapTo],
-  );
-
-  return { translate, indicatorSize, onItemLayout, axis };
-}
 
 export function ChatSlackMirrorToggle({
   items,
@@ -243,6 +204,14 @@ export function ChatSlackMirrorToggle({
               {item.avatarIdentity ? (
                 <View style={[styles.partyAvatarWrap, active && styles.partyAvatarWrapActive]}>
                   <ChatPartyAvatar identity={item.avatarIdentity} size={20} />
+                </View>
+              ) : item.Icon ? (
+                <View style={[styles.partyAvatarWrap, active && styles.partyAvatarWrapActive]}>
+                  <item.Icon
+                    size={16}
+                    color={active ? "#FFFFFF" : CHAT_ICON_MUTED}
+                    strokeWidth={2.2}
+                  />
                 </View>
               ) : null}
               <View style={styles.partyTextCol}>
@@ -428,7 +397,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F4F4",
     borderWidth: 1,
     borderColor: "#ECECEC",
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
   },
   filterIndicator: {
     backgroundColor: PULSE_CHAT.matteBlack,
@@ -440,11 +411,14 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   filterItem: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
+    minWidth: 0,
     zIndex: 1,
   },
   filterLabel: {

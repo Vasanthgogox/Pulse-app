@@ -1,11 +1,11 @@
 import {
-  CHAT_TEXT_MUTED,
-  CHAT_TEXT_PRIMARY,
-  CHAT_TEXT_SECONDARY,
+    CHAT_TEXT_MUTED,
+    CHAT_TEXT_PRIMARY,
+    CHAT_TEXT_SECONDARY,
 } from "@/features/chat/chatTheme";
 import {
-  extractDriverSwapNamesFromContent,
-  stripChatPreviewEmojiPrefix,
+    extractDriverSwapNamesFromContent,
+    stripChatPreviewEmojiPrefix,
 } from "@/features/chat/utils/chatAvatar.util";
 import { StyleSheet, Text, type TextStyle } from "react-native";
 

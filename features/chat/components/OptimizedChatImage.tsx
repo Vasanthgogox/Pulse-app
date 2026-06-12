@@ -18,9 +18,9 @@ export interface OptimizedChatImageProps {
 export function OptimizedChatImage({
   storagePath,
   isOwn = false,
-  thumbWidth = 300,
-  thumbHeight = 300,
-  thumbQuality = 70,
+  thumbWidth,
+  thumbHeight,
+  thumbQuality,
   message = null,
 }: OptimizedChatImageProps) {
   return (

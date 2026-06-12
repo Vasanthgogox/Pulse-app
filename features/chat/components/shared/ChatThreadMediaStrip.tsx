@@ -57,6 +57,9 @@ function ThreadThumb({
           <ChatImage
             storagePath={storagePath}
             thumbnail
+            displayWidth={width}
+            displayHeight={THUMB_H}
+            contentFit="contain"
             style={{ width, height: THUMB_H, borderRadius: radius }}
           />
         </View>

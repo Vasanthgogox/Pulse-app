@@ -445,6 +445,8 @@ export const slackMobileStyles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
+    width: "100%",
+    alignSelf: "stretch",
   },
   chromeDivider: {
     height: StyleSheet.hairlineWidth,
@@ -460,6 +462,9 @@ export const slackMobileStyles = StyleSheet.create({
     backgroundColor: "#F4F4F4",
     borderWidth: 1,
     borderColor: "#ECECEC",
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
   },
   filterRow: {
     flexDirection: "row",
@@ -467,15 +472,18 @@ export const slackMobileStyles = StyleSheet.create({
     gap: 4,
   },
   filterChip: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "transparent",
     backgroundColor: "transparent",
+    minWidth: 0,
   },
   filterChipActive: {
     backgroundColor: SLACK_MOBILE.chipActiveBg,
@@ -514,25 +522,28 @@ export const slackMobileStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     minHeight: 64,
     backgroundColor: "#FFFFFF",
+    borderLeftWidth: 3,
+    borderLeftColor: "transparent",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: SLACK_MOBILE.listDivider,
   },
   listRowWithMedia: {
     minHeight: 140,
     paddingVertical: 12,
   },
   listRowSeparator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: SLACK_MOBILE.listDivider,
-    marginLeft: 12 + SLACK_AVATAR.list + 8,
+    height: 0,
   },
   listRowPressed: {
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#F1F5F9",
   },
   listRowActive: {
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "rgba(91, 94, 244, 0.05)",
+    borderLeftColor: PULSE_CHAT.accent,
   },
   listRowAvatarWrap: {
     position: "relative",
@@ -619,7 +630,7 @@ export const slackMobileStyles = StyleSheet.create({
     textTransform: "uppercase",
   },
   listRowRecommended: {
-    backgroundColor: "rgba(91, 94, 244, 0.04)",
+    backgroundColor: "rgba(91, 94, 244, 0.03)",
   },
   listRowPartyLine: {
     fontSize: 9,
@@ -823,6 +834,9 @@ export const slackMobileStyles = StyleSheet.create({
   threadMsgRowLead: {
     paddingTop: 11,
     paddingBottom: 5,
+  },
+  threadMsgRowPartyBreak: {
+    marginTop: 8,
   },
   threadMsgRowContinuation: {
     paddingTop: 3,

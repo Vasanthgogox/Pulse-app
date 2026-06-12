@@ -10,7 +10,7 @@ import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useTripChat } from "@/features/chat/contexts/TripChatContext";
+import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
 import {
   openTripLedgerEntryChooser,
   pushTripLedgerQuickEntry,
@@ -821,7 +821,7 @@ export default function TripDetailScreen({
     vehicleGalleryPageWidth,
   ]);
 
-  const { initiateDriverConversationForTrip } = useTripChat();
+  const [tripRoomOpen, setTripRoomOpen] = useState(false);
 
   const openOdometerVerification = useCallback(
     (side: "start" | "end") => {
@@ -832,41 +832,10 @@ export default function TripDetailScreen({
     [detail.trip?.id, router],
   );
 
-  const handleOpenTripChat = useCallback(async () => {
-    const tr = detail.trip;
-    if (!tr?.id || !tr.organization_id) return;
-    if (!tr.driver_id) {
-      Alert.alert(t("tripChatNeedsDriverTitle"), t("tripChatNeedsDriverBody"));
-      return;
-    }
-    const id = await initiateDriverConversationForTrip({
-      tripId: tr.id,
-      fleetOrganizationId: tr.organization_id,
-      driverId: tr.driver_id,
-      driverDisplayName: detail.driverName?.trim() || "Driver",
-      tripNumber: getTripDisplayNumber(tr, currentOrganization?.id),
-      pickupArea: tr.pickup_area ?? "",
-      dropLocation: tr.drop_location ?? "",
-    });
-    if (!id) {
-      Alert.alert(t("tripChatOpenFailedTitle"), t("tripChatOpenFailedBody"));
-      return;
-    }
-    router.push({
-      pathname: ROUTES.CHAT,
-      params: {
-        tab: "trips",
-        conversationId: id,
-        ts: String(Date.now()),
-      },
-    });
-  }, [
-    detail.trip,
-    detail.driverName,
-    initiateDriverConversationForTrip,
-    router,
-    t,
-  ]);
+  const handleOpenTripChat = useCallback(() => {
+    if (!detail.trip?.id) return;
+    setTripRoomOpen(true);
+  }, [detail.trip?.id]);
 
   const [mapRouteDistanceKm, setMapRouteDistanceKm] = useState<string | null>(
     null,
@@ -5684,6 +5653,14 @@ export default function TripDetailScreen({
           }
         />
       </Suspense>
+
+      <TripChatRoomSheet
+        visible={tripRoomOpen}
+        tripId={trip.id}
+        tripLabel={getTripDisplayNumber(trip, currentOrganization?.id)}
+        onClose={() => setTripRoomOpen(false)}
+        onViewTrip={() => setTripRoomOpen(false)}
+      />
     </View>
   );
 }

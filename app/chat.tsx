@@ -11,8 +11,10 @@ import { ChatScreen } from '@/features/chat/components/ChatScreen';
 import { IntegratedChatProvider } from '@/features/chat/contexts/IntegratedChatContext';
 import { TripChatProvider } from '@/features/chat/contexts/TripChatContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { WEB_APP_VIEWPORT_STYLE } from '@/lib/webViewportHeight';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import { Platform, View } from 'react-native';
 
 export default function ChatRoute() {
   const { profile } = useAuth();
@@ -34,10 +36,17 @@ export default function ChatRoute() {
   if ((profile as { role?: string })?.role === 'driver') return null;
 
   return (
-    <TripChatProvider isActive>
-      <IntegratedChatProvider isActive>
-        <ChatScreen />
-      </IntegratedChatProvider>
-    </TripChatProvider>
+    <View
+      style={[
+        { flex: 1 },
+        Platform.OS === 'web' ? (WEB_APP_VIEWPORT_STYLE as object) : null,
+      ]}
+    >
+      <TripChatProvider isActive>
+        <IntegratedChatProvider isActive>
+          <ChatScreen />
+        </IntegratedChatProvider>
+      </TripChatProvider>
+    </View>
   );
 }

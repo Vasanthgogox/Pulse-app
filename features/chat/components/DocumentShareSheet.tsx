@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import { CHAT_ACCENT, CHAT_TEXT_MUTED, CHAT_TEXT_SECONDARY } from "@/features/chat/chatTheme";
+import { ChatImage } from "@/features/chat/components/ChatImage";
+import { SLACK_TYPE } from "@/features/chat/components/mobile/chatSlackMobile.styles";
 import {
   listChatHubDocuments,
   uploadChatHubTripDocument,
@@ -8,11 +10,17 @@ import {
   type ChatHubEntityType,
 } from "@/features/chat/services/chatDocumentHub.service";
 import { pickChatDocumentFile } from "@/features/chat/utils/chatDocumentPick.util";
-import { documentExtensionAccent } from "@/features/chat/utils/documentShareDisplay.util";
 import {
+  documentExtensionAccent,
+  isHubDocumentImage,
+} from "@/features/chat/utils/documentShareDisplay.util";
+import { normalizeTripDocumentsStoragePath } from "@/features/chat/utils/resolveChatDocumentUrl.util";
+import {
+  CheckCircle,
   FileText,
   Plus,
-  Share2,
+  RefreshCw,
+  Send,
   Truck,
   User,
   X,
@@ -44,7 +52,8 @@ interface DocumentShareSheetProps {
   orgId: string | null;
   userId: string | null;
   onClose: () => void;
-  onShare: (doc: DocumentSharePayload) => void;
+  onShare: (doc: DocumentSharePayload) => void | Promise<void>;
+  alreadySentPaths?: string[];
 }
 
 type HubSection = {
@@ -74,6 +83,8 @@ const SECTION_META: Record<
   },
 };
 
+const THUMB_SIZE = 40;
+
 function formatUploadedAt(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
@@ -90,53 +101,228 @@ function formatUploadedAt(iso: string | null | undefined): string | null {
   }
 }
 
-function DocRow({
-  item,
-  onShare,
-}: {
-  item: ChatHubDocument;
-  onShare: (doc: DocumentSharePayload) => void;
-}) {
+function pathAlreadySent(storagePath: string, alreadySentPaths: string[]): boolean {
+  const normalized = normalizeTripDocumentsStoragePath(storagePath);
+  if (!normalized) return false;
+  return alreadySentPaths.some(
+    (p) => normalizeTripDocumentsStoragePath(p) === normalized,
+  );
+}
+
+function DocHubThumb({ item }: { item: ChatHubDocument }) {
   const ext =
     item.label.split(".").pop()?.toUpperCase().slice(0, 4) ||
     (item.document_type ?? "DOC").slice(0, 4).toUpperCase();
   const accent = documentExtensionAccent(ext);
-  const uploaded = formatUploadedAt(item.uploaded_at);
+  const isImage = isHubDocumentImage(item);
+
+  if (isImage && item.storage_path) {
+    return (
+      <View style={s.docThumb}>
+        <ChatImage
+          storagePath={item.storage_path}
+          thumbnail
+          style={s.docThumbImage}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[s.docThumb, s.docThumbIcon, { backgroundColor: `${accent}12` }]}>
+      <FileText size={15} color={accent} strokeWidth={2.1} />
+      {ext ? (
+        <Text style={[s.docThumbExt, { color: accent }]} numberOfLines={1}>
+          {ext}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function confirmDocumentShare(
+  payload: DocumentSharePayload,
+  resend: boolean,
+  onConfirm: () => void,
+  onCancel?: () => void,
+) {
+  let consumed = false;
+  const once = (fn: () => void) => () => {
+    if (consumed) return;
+    consumed = true;
+    fn();
+  };
+
+  if (resend) {
+    Alert.alert(
+      "Send again?",
+      `Share "${payload.label}" in this chat again?`,
+      [
+        { text: "Cancel", style: "cancel", onPress: once(() => onCancel?.()) },
+        { text: "Send again", onPress: once(onConfirm) },
+      ],
+      { cancelable: true, onDismiss: once(() => onCancel?.()) },
+    );
+    return;
+  }
+  Alert.alert(
+    "Send document?",
+    `Share "${payload.label}" in this chat?`,
+    [
+      { text: "Cancel", style: "cancel", onPress: once(() => onCancel?.()) },
+      { text: "Send", onPress: once(onConfirm) },
+    ],
+    { cancelable: true, onDismiss: once(() => onCancel?.()) },
+  );
+}
+
+function DocRowActions({
+  alreadySent,
+  isSharing,
+  isConfirming,
+  disabled,
+  onSend,
+  onSendAgain,
+}: {
+  alreadySent: boolean;
+  isSharing: boolean;
+  isConfirming: boolean;
+  disabled: boolean;
+  onSend: () => void;
+  onSendAgain: () => void;
+}) {
+  if (isConfirming && !isSharing) {
+    return (
+      <View style={s.actionsCol}>
+        <Text style={s.actionMeta}>Confirm…</Text>
+      </View>
+    );
+  }
+  if (isSharing) {
+    return (
+      <View style={s.actionsCol}>
+        <LoadingIndicator size="small" color={CHAT_ACCENT} />
+        <Text style={s.actionMeta}>Sending…</Text>
+      </View>
+    );
+  }
+
+  if (alreadySent) {
+    return (
+      <View style={s.actionsCol}>
+        <View style={s.sentPill}>
+          <CheckCircle size={10} color="#16a34a" strokeWidth={2.4} />
+          <Text style={s.sentPillText}>Sent</Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            s.sendAgainBtn,
+            pressed && !disabled && s.actionPressed,
+            disabled && s.actionDisabled,
+          ]}
+          onPress={onSendAgain}
+          disabled={disabled}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Send document again"
+        >
+          <RefreshCw size={10} color={CHAT_ACCENT} strokeWidth={2.3} />
+          <Text style={s.sendAgainText}>Send again</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <Pressable
-      style={s.docRow}
-      onPress={() =>
-        onShare({
-          key: item.key,
-          label: item.label,
-          storage_path: item.storage_path,
-          entity_type: item.entity_type,
-          entity_id: item.entity_id,
-          mime_type: item.mime_type,
-          document_type: item.document_type,
-        })
-      }
+      style={({ pressed }) => [
+        s.sendPill,
+        pressed && !disabled && s.actionPressed,
+        disabled && s.actionDisabled,
+      ]}
+      onPress={onSend}
+      disabled={disabled}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel="Send document"
     >
-      <View style={[s.docIcon, { backgroundColor: `${accent}18` }]}>
-        <FileText size={16} color={accent} strokeWidth={2.2} />
-      </View>
+      <Send size={11} color={CHAT_ACCENT} strokeWidth={2.3} />
+      <Text style={s.sendPillText}>Send</Text>
+    </Pressable>
+  );
+}
+
+function DocRow({
+  item,
+  onRequestShare,
+  alreadySentPaths = [],
+  sharingPath,
+  confirmingPath,
+}: {
+  item: ChatHubDocument;
+  onRequestShare: (doc: DocumentSharePayload, resend: boolean) => void;
+  alreadySentPaths?: string[];
+  sharingPath: string | null;
+  confirmingPath: string | null;
+}) {
+  const uploaded = formatUploadedAt(item.uploaded_at);
+  const normalizedPath = normalizeTripDocumentsStoragePath(item.storage_path);
+  const alreadySent = pathAlreadySent(item.storage_path, alreadySentPaths);
+  const isSharing =
+    sharingPath != null &&
+    normalizeTripDocumentsStoragePath(sharingPath) === normalizedPath;
+  const isConfirming =
+    confirmingPath != null &&
+    normalizeTripDocumentsStoragePath(confirmingPath) === normalizedPath;
+  const actionsDisabled =
+    (sharingPath != null && !isSharing) ||
+    (confirmingPath != null && !isConfirming);
+
+  const payload: DocumentSharePayload = {
+    key: item.key,
+    label: item.label,
+    storage_path: item.storage_path,
+    entity_type: item.entity_type,
+    entity_id: item.entity_id,
+    mime_type: item.mime_type,
+    document_type: item.document_type,
+  };
+
+  const handleSend = () => {
+    if (sharingPath || confirmingPath) return;
+    onRequestShare(payload, false);
+  };
+
+  const handleSendAgain = () => {
+    if (sharingPath || confirmingPath) return;
+    onRequestShare(payload, true);
+  };
+
+  return (
+    <View style={s.docRow}>
+      <DocHubThumb item={item} />
       <View style={s.docTextCol}>
-        <Text style={s.docEntity}>{item.entity_type.toUpperCase()}</Text>
+        <View style={s.docTitleRow}>
+          <Text style={s.docEntity}>{item.entity_type}</Text>
+          {uploaded ? (
+            <Text style={s.docMeta} numberOfLines={1}>
+              {uploaded}
+            </Text>
+          ) : null}
+        </View>
         <Text style={s.docLabel} numberOfLines={2}>
           {item.label}
         </Text>
-        {uploaded ? (
-          <Text style={s.docMeta} numberOfLines={1}>
-            Uploaded {uploaded}
-          </Text>
-        ) : null}
       </View>
-      <View style={s.shareBtn}>
-        <Share2 size={13} color={CHAT_ACCENT} strokeWidth={2.4} />
-        <Text style={s.shareHint}>Share</Text>
-      </View>
-    </Pressable>
+      <DocRowActions
+        alreadySent={alreadySent}
+        isSharing={isSharing}
+        isConfirming={isConfirming}
+        disabled={actionsDisabled}
+        onSend={handleSend}
+        onSendAgain={handleSendAgain}
+      />
+    </View>
   );
 }
 
@@ -149,10 +335,15 @@ export function DocumentShareSheet({
   userId,
   onClose,
   onShare,
+  alreadySentPaths = [],
 }: DocumentShareSheetProps) {
   const [docs, setDocs] = useState<ChatHubDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [sharingPath, setSharingPath] = useState<string | null>(null);
+  const [confirmingPath, setConfirmingPath] = useState<string | null>(null);
+  const [sessionSentPaths, setSessionSentPaths] = useState<string[]>([]);
+  const shareInFlightRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!visible) return;
@@ -175,6 +366,69 @@ export function DocumentShareSheet({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!visible) {
+      setSharingPath(null);
+      setConfirmingPath(null);
+      shareInFlightRef.current = null;
+    }
+  }, [visible]);
+
+  const mergedSentPaths = useMemo(
+    () => [...alreadySentPaths, ...sessionSentPaths],
+    [alreadySentPaths, sessionSentPaths],
+  );
+
+  const handleShare = useCallback(
+    async (doc: DocumentSharePayload) => {
+      const pathKey = normalizeTripDocumentsStoragePath(doc.storage_path);
+      if (!pathKey || shareInFlightRef.current === pathKey) return;
+
+      shareInFlightRef.current = pathKey;
+      setSharingPath(doc.storage_path);
+      try {
+        await Promise.resolve(onShare(doc));
+        setSessionSentPaths((prev) =>
+          prev.some((p) => normalizeTripDocumentsStoragePath(p) === pathKey)
+            ? prev
+            : [...prev, doc.storage_path],
+        );
+      } finally {
+        shareInFlightRef.current = null;
+        setSharingPath(null);
+      }
+    },
+    [onShare],
+  );
+
+  const requestShare = useCallback(
+    (doc: DocumentSharePayload, resend: boolean) => {
+      const pathKey = normalizeTripDocumentsStoragePath(doc.storage_path);
+      if (!pathKey) return;
+      if (
+        shareInFlightRef.current === pathKey ||
+        sharingPath != null ||
+        confirmingPath != null
+      ) {
+        return;
+      }
+
+      const clearConfirm = () => setConfirmingPath(null);
+
+      setConfirmingPath(doc.storage_path);
+      confirmDocumentShare(
+        doc,
+        resend,
+        () => {
+          clearConfirm();
+          void handleShare(doc);
+        },
+        clearConfirm,
+      );
+    },
+    [confirmingPath, sharingPath, handleShare],
+  );
 
   const sections = useMemo((): HubSection[] => {
     const grouped: Record<ChatHubEntityType, ChatHubDocument[]> = {
@@ -218,15 +472,10 @@ export function DocumentShareSheet({
         return;
       }
       await load();
-      onShare({
-        key: doc.key,
-        label: doc.label,
-        storage_path: doc.storage_path,
-        entity_type: doc.entity_type,
-        entity_id: doc.entity_id,
-        mime_type: doc.mime_type,
-        document_type: doc.document_type,
-      });
+      Alert.alert(
+        "Document uploaded",
+        "Tap Send when you are ready to share it in chat.",
+      );
     } catch (e) {
       Alert.alert(
         "Upload failed",
@@ -248,12 +497,10 @@ export function DocumentShareSheet({
         <View style={s.header}>
           <View style={s.headerTextCol}>
             <Text style={s.title}>Documents</Text>
-            <Text style={s.subtitle}>
-              Trip, vehicle, and driver files — upload or share in chat.
-            </Text>
+            <Text style={s.subtitle}>Share trip, vehicle, or driver files in chat</Text>
           </View>
           <Pressable onPress={onClose} hitSlop={8} style={s.closeBtn}>
-            <X size={20} color="#94a3b8" />
+            <X size={18} color={CHAT_TEXT_MUTED} strokeWidth={2} />
           </Pressable>
         </View>
 
@@ -261,18 +508,18 @@ export function DocumentShareSheet({
           <Pressable
             style={({ pressed }) => [s.addRow, pressed && s.addRowPressed]}
             onPress={() => void handleUploadTripDoc()}
-            disabled={uploading}
+            disabled={uploading || sharingPath != null || confirmingPath != null}
           >
             <View style={s.addIcon}>
               {uploading ? (
                 <LoadingIndicator size="small" color={CHAT_ACCENT} />
               ) : (
-                <Plus size={18} color={CHAT_ACCENT} strokeWidth={2.4} />
+                <Plus size={15} color={CHAT_ACCENT} strokeWidth={2.3} />
               )}
             </View>
             <View style={s.addTextCol}>
               <Text style={s.addTitle}>Add trip document</Text>
-              <Text style={s.addHint}>PDF or image — shares to this chat</Text>
+              <Text style={s.addHint}>PDF or image</Text>
             </View>
           </Pressable>
         ) : null}
@@ -283,7 +530,7 @@ export function DocumentShareSheet({
           </View>
         ) : !showStructuredList ? (
           <View style={s.center}>
-            <FileText size={32} color="#e2e8f0" />
+            <FileText size={28} color="#e2e8f0" />
             <Text style={s.emptyText}>No documents yet</Text>
             <Text style={s.emptyHint}>
               Select a trip thread to manage and share documents.
@@ -301,7 +548,7 @@ export function DocumentShareSheet({
               const Icon = meta.Icon;
               return (
                 <View style={s.sectionHeader}>
-                  <Icon size={13} color="#64748b" strokeWidth={2.2} />
+                  <Icon size={11} color={CHAT_TEXT_MUTED} strokeWidth={2} />
                   <Text style={s.sectionTitle}>{section.title}</Text>
                   <Text style={s.sectionCount}>{section.data.length}</Text>
                 </View>
@@ -316,12 +563,18 @@ export function DocumentShareSheet({
                       ? "No driver assigned to this trip."
                       : SECTION_META[section.entity].empty}
                 </Text>
-              ) : (
-                <View style={s.sectionGap} />
-              )
+              ) : null
             }
-            renderItem={({ item }) => <DocRow item={item} onShare={onShare} />}
-            ListFooterComponent={<View style={{ height: 12 }} />}
+            renderItem={({ item }) => (
+              <DocRow
+                item={item}
+                onRequestShare={requestShare}
+                alreadySentPaths={mergedSentPaths}
+                sharingPath={sharingPath}
+                confirmingPath={confirmingPath}
+              />
+            )}
+            ListFooterComponent={<View style={{ height: 8 }} />}
           />
         )}
       </View>
@@ -341,155 +594,257 @@ const s = StyleSheet.create({
   },
   sheet: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 28,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 8,
+    paddingHorizontal: 0,
+    paddingBottom: 24,
     maxHeight: "72%",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e2e8f0",
+    borderColor: "#ebebeb",
     shadowColor: "#0f172a",
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 16,
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 12,
   },
   handle: {
-    width: 36,
-    height: 4,
+    width: 32,
+    height: 3,
     borderRadius: 2,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#e5e7eb",
     alignSelf: "center",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
-    gap: 10,
+    marginBottom: 8,
+    gap: 8,
+    paddingHorizontal: 14,
   },
   headerTextCol: { flex: 1, minWidth: 0 },
   title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.3,
+    fontSize: SLACK_TYPE.threadTitle,
+    fontWeight: "700",
+    color: "#1d1c1d",
+    letterSpacing: -0.2,
   },
-  subtitle: { fontSize: 12, color: "#64748b", marginTop: 3, lineHeight: 16 },
-  closeBtn: { padding: 4 },
+  subtitle: {
+    fontSize: SLACK_TYPE.threadSubtitle,
+    color: CHAT_TEXT_SECONDARY,
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  closeBtn: { padding: 2 },
   addRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(91, 94, 244, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(91, 94, 244, 0.2)",
-    marginBottom: 12,
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ebebeb",
+    backgroundColor: "#fafafa",
+    marginBottom: 4,
   },
-  addRowPressed: { opacity: 0.88 },
+  addRowPressed: { backgroundColor: "#f4f4f4" },
   addIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: "#fff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e5e7eb",
     alignItems: "center",
     justifyContent: "center",
   },
   addTextCol: { flex: 1, minWidth: 0 },
-  addTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a" },
-  addHint: { fontSize: 11, color: "#64748b", marginTop: 2 },
+  addTitle: {
+    fontSize: SLACK_TYPE.listTitle,
+    fontWeight: "600",
+    color: "#1d1c1d",
+  },
+  addHint: {
+    fontSize: SLACK_TYPE.listTime,
+    color: CHAT_TEXT_MUTED,
+    marginTop: 1,
+  },
   center: {
     alignItems: "center",
-    paddingVertical: 28,
-    gap: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 24,
+    gap: 8,
+    paddingHorizontal: 14,
   },
-  emptyText: { fontSize: 14, color: "#64748b", fontWeight: "600" },
+  emptyText: {
+    fontSize: SLACK_TYPE.listTitle,
+    color: CHAT_TEXT_SECONDARY,
+    fontWeight: "600",
+  },
   emptyHint: {
-    fontSize: 12,
-    color: "#94a3b8",
+    fontSize: SLACK_TYPE.listPreview,
+    color: CHAT_TEXT_MUTED,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 16,
   },
   list: { flexGrow: 0 },
-  listContent: { paddingBottom: 8 },
+  listContent: { paddingBottom: 4 },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingTop: 8,
-    paddingBottom: 6,
+    gap: 5,
+    paddingTop: 10,
+    paddingBottom: 5,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#ebebeb",
+    backgroundColor: "#fafafa",
   },
   sectionTitle: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#475569",
-    letterSpacing: 0.4,
+    fontSize: SLACK_TYPE.peopleSection,
+    fontWeight: "700",
+    color: "#616061",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   sectionCount: {
-    fontSize: 10,
+    fontSize: SLACK_TYPE.listTime,
     fontWeight: "700",
-    color: "#94a3b8",
+    color: CHAT_TEXT_MUTED,
   },
   sectionEmpty: {
-    fontSize: 11,
-    color: "#94a3b8",
-    lineHeight: 16,
-    paddingBottom: 8,
-    paddingLeft: 2,
-  },
-  sectionGap: { height: 4 },
-  docRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    fontSize: SLACK_TYPE.listPreview,
+    color: CHAT_TEXT_MUTED,
+    lineHeight: 15,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#f1f5f9",
   },
-  docIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+  docRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#f1f5f9",
+    minHeight: 56,
+  },
+  docThumb: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: 8,
+    overflow: "hidden",
+    flexShrink: 0,
+    backgroundColor: "#f4f4f4",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e5e7eb",
+  },
+  docThumbImage: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: 8,
+  },
+  docThumbIcon: {
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
   },
-  docTextCol: { flex: 1, minWidth: 0, gap: 1 },
-  docEntity: {
-    fontSize: 9,
+  docThumbExt: {
+    position: "absolute",
+    bottom: 2,
+    fontSize: 6,
     fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  docTextCol: { flex: 1, minWidth: 0, gap: 2 },
+  docTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  docEntity: {
+    fontSize: SLACK_TYPE.listTime,
+    fontWeight: "700",
     color: CHAT_ACCENT,
-    letterSpacing: 0.7,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   docLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#0f172a",
-    lineHeight: 17,
+    fontSize: SLACK_TYPE.listTitle,
+    fontWeight: "500",
+    color: "#1d1c1d",
+    lineHeight: 15,
   },
   docMeta: {
-    fontSize: 10,
-    color: "#94a3b8",
-    marginTop: 1,
-  },
-  shareBtn: {
-    alignItems: "center",
-    gap: 2,
+    fontSize: SLACK_TYPE.listTime,
+    color: CHAT_TEXT_MUTED,
     flexShrink: 0,
-    paddingLeft: 4,
   },
-  shareHint: {
-    fontSize: 9,
+  actionsCol: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 4,
+    flexShrink: 0,
+    minWidth: 68,
+  },
+  sentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(22, 163, 74, 0.08)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(22, 163, 74, 0.2)",
+  },
+  sentPillText: {
+    fontSize: SLACK_TYPE.listTime,
+    fontWeight: "700",
+    color: "#16a34a",
+  },
+  sendPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "rgba(91, 94, 244, 0.08)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(91, 94, 244, 0.18)",
+  },
+  sendPillText: {
+    fontSize: SLACK_TYPE.listTime,
     fontWeight: "700",
     color: CHAT_ACCENT,
   },
+  sendAgainBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(91, 94, 244, 0.22)",
+  },
+  sendAgainText: {
+    fontSize: SLACK_TYPE.listTime,
+    fontWeight: "700",
+    color: CHAT_ACCENT,
+  },
+  actionMeta: {
+    fontSize: SLACK_TYPE.listTime,
+    fontWeight: "600",
+    color: CHAT_TEXT_MUTED,
+  },
+  actionPressed: { opacity: 0.82 },
+  actionDisabled: { opacity: 0.45 },
 });

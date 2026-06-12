@@ -79,6 +79,18 @@ export function resolveDocumentShareDisplay(
   };
 }
 
+/** Image file in trip / vehicle / driver document hub rows. */
+export function isHubDocumentImage(doc: {
+  label: string;
+  mime_type?: string | null;
+  storage_path?: string | null;
+}): boolean {
+  const mime = doc.mime_type?.trim().toLowerCase();
+  if (mime?.startsWith("image/")) return true;
+  const combined = `${doc.label ?? ""} ${doc.storage_path ?? ""}`.trim().toLowerCase();
+  return IMAGE_EXT_RE.test(combined);
+}
+
 /** Accent for file-type icon tile (Slack-style). */
 export function documentExtensionAccent(ext: string): string {
   const e = (ext ?? "").trim().toLowerCase();

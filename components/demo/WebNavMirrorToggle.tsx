@@ -1,29 +1,29 @@
 /**
- * Desktop web header nav — Slack-style mirror toggle.
- * One sliding thumb; segment widths morph; labels fade on the active slot.
+ * Desktop web header nav — layout-driven mirror toggle (Q-unified-base / ChatSlack pattern).
+ * One sliding thumb follows measured segment bounds; labels expand on the active slot.
  */
 import Theme from "@/constants/Theme";
+import { useMirrorIndicator } from "@/lib/hooks/useMirrorIndicator";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
-import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
+import { useEffect, useRef } from "react";
+import {
+  Animated,
   Easing,
-  useAnimatedReaction,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 
 const PADDING = 6;
 const GAP = 6;
-const INACTIVE_W = 44;
-const ACTIVE_W = 160;
+const ICON_W = 44;
+const ACTIVE_MIN_W = 160;
 const HEIGHT = 44;
 
-const MIRROR_MOTION = {
-  duration: 240,
-  easing: Easing.bezier(0.4, 0, 0.2, 1),
-} as const;
+const LABEL_FADE_IN = { duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true } as const;
+const LABEL_FADE_OUT = { duration: 120, easing: Easing.in(Easing.cubic), useNativeDriver: true } as const;
 
 export type WebNavMirrorItem = {
   id: string;
@@ -39,54 +39,50 @@ type Props = {
   onWarmAt?: (index: number) => void;
 };
 
-function thumbOffsetForIndex(index: number): number {
-  let x = PADDING;
-  for (let i = 0; i < index; i += 1) {
-    x += INACTIVE_W + GAP;
-  }
-  return x;
-}
-
 function WebNavMirrorSegment({
   item,
   active,
   onPress,
   onWarm,
+  onLayout,
 }: {
   item: WebNavMirrorItem;
   active: boolean;
   onPress: () => void;
   onWarm?: () => void;
+  onLayout: (e: LayoutChangeEvent) => void;
 }) {
-  const widthSV = useSharedValue(active ? ACTIVE_W : INACTIVE_W);
-  const labelOpacity = useSharedValue(active ? 1 : 0);
+  const labelOpacity = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
-    widthSV.value = withTiming(active ? ACTIVE_W : INACTIVE_W, MIRROR_MOTION);
-    labelOpacity.value = withTiming(active ? 1 : 0, {
-      ...MIRROR_MOTION,
-      duration: active ? 200 : 120,
-    });
-  }, [active, labelOpacity, widthSV]);
+    Animated.timing(labelOpacity, {
+      toValue: active ? 1 : 0,
+      ...(active ? LABEL_FADE_IN : LABEL_FADE_OUT),
+    }).start();
+  }, [active, labelOpacity]);
 
-  const segmentStyle = useAnimatedStyle(() => ({
-    width: widthSV.value,
-  }));
-
-  const labelStyle = useAnimatedStyle(() => ({
-    opacity: labelOpacity.value,
-    transform: [{ translateX: (1 - labelOpacity.value) * -8 }],
-  }));
+  const labelStyle = {
+    opacity: labelOpacity,
+    transform: [
+      {
+        translateX: labelOpacity.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-6, 0],
+        }),
+      },
+    ],
+  };
 
   return (
     <Pressable
       onPress={onPress}
       onHoverIn={onWarm}
-      style={styles.segmentPressable}
+      onLayout={onLayout}
+      style={[styles.segmentPressable, active && styles.segmentPressableActive]}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
     >
-      <Animated.View style={[styles.segment, segmentStyle]}>
+      <View style={[styles.segment, active && styles.segmentActive]}>
         <View style={styles.iconBox}>
           <FontAwesome5
             name={item.icon}
@@ -95,20 +91,19 @@ function WebNavMirrorSegment({
             solid={active}
           />
         </View>
-        <Animated.View
-          style={[styles.labelWrap, labelStyle]}
-          pointerEvents="none"
-        >
-          <Text numberOfLines={1} style={styles.titleActive}>
-            {item.title}
-          </Text>
-          {item.subtitle ? (
-            <Text numberOfLines={1} style={styles.subtitleActive}>
-              {item.subtitle}
+        {active ? (
+          <Animated.View style={[styles.labelWrap, labelStyle]} pointerEvents="none">
+            <Text numberOfLines={1} style={styles.titleActive}>
+              {item.title}
             </Text>
-          ) : null}
-        </Animated.View>
-      </Animated.View>
+            {item.subtitle ? (
+              <Text numberOfLines={1} style={styles.subtitleActive}>
+                {item.subtitle}
+              </Text>
+            ) : null}
+          </Animated.View>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -119,48 +114,31 @@ export function WebNavMirrorToggle({
   onSelect,
   onWarmAt,
 }: Props) {
-  const activeIndexSV = useSharedValue(activeIndex);
-  const thumbX = useSharedValue(thumbOffsetForIndex(activeIndex));
-  const thumbW = useSharedValue(ACTIVE_W);
+  const activeId = items[activeIndex]?.id ?? items[0]?.id ?? "";
+  const { translate, indicatorSize, onItemLayout } = useMirrorIndicator(activeId, "x");
 
-  useEffect(() => {
-    activeIndexSV.value = activeIndex;
-  }, [activeIndex, activeIndexSV]);
-
-  useAnimatedReaction(
-    () => activeIndexSV.value,
-    (idx, prev) => {
-      if (idx === prev) return;
-      thumbX.value = withTiming(thumbOffsetForIndex(idx), MIRROR_MOTION);
-      thumbW.value = withTiming(ACTIVE_W, MIRROR_MOTION);
-    },
-    [activeIndex],
-  );
-
-  useEffect(() => {
-    thumbX.value = thumbOffsetForIndex(activeIndex);
-    thumbW.value = ACTIVE_W;
-  }, []);
-
-  const thumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: thumbX.value }],
-    width: thumbW.value,
-  }));
+  const thumbStyle = {
+    transform: [{ translateX: translate }],
+    width: indicatorSize > 0 ? indicatorSize : 0,
+    opacity: indicatorSize > 0 ? 1 : 0,
+  };
 
   return (
     <View style={styles.track}>
-      <Animated.View style={[styles.thumb, thumbStyle]} pointerEvents="none" />
-      <View style={styles.row}>
-        {items.map((item, index) => (
-          <WebNavMirrorSegment
-            key={item.id}
-            item={item}
-            active={index === activeIndex}
-            onPress={() => onSelect(index)}
-            onWarm={() => onWarmAt?.(index)}
-          />
-        ))}
-      </View>
+      <Animated.View
+        style={[styles.thumb, thumbStyle]}
+        pointerEvents="none"
+      />
+      {items.map((item, index) => (
+        <WebNavMirrorSegment
+          key={item.id}
+          item={item}
+          active={index === activeIndex}
+          onPress={() => onSelect(index)}
+          onWarm={() => onWarmAt?.(index)}
+          onLayout={(e) => onItemLayout(item.id, e)}
+        />
+      ))}
     </View>
   );
 }
@@ -168,6 +146,9 @@ export function WebNavMirrorToggle({
 const styles = StyleSheet.create({
   track: {
     position: "relative",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: GAP,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.6)",
@@ -192,40 +173,38 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 10,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: GAP,
-    zIndex: 1,
-  },
   segmentPressable: {
     flexShrink: 0,
+    zIndex: 1,
+  },
+  segmentPressableActive: {
+    zIndex: 2,
   },
   segment: {
     height: HEIGHT,
+    width: ICON_W,
     borderRadius: 999,
     flexDirection: "row",
     alignItems: "center",
     overflow: "hidden",
-    position: "relative",
+  },
+  segmentActive: {
+    width: undefined,
+    minWidth: ACTIVE_MIN_W,
+    paddingRight: 10,
   },
   iconBox: {
-    width: INACTIVE_W,
+    width: ICON_W,
     height: HEIGHT,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    zIndex: 2,
   },
   labelWrap: {
-    position: "absolute",
-    left: INACTIVE_W,
-    top: 0,
-    bottom: 0,
-    width: ACTIVE_W - INACTIVE_W,
+    flexShrink: 1,
+    minWidth: 0,
     justifyContent: "center",
-    paddingRight: 8,
-    zIndex: 1,
+    paddingRight: 4,
   },
   titleActive: {
     fontSize: 12,

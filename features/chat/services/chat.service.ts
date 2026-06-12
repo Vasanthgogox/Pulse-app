@@ -64,22 +64,8 @@ export interface TripForCompose {
   pickup_date?: string | null;
 }
 
-export async function getTripsForCompose(
-  organizationId: string,
-): Promise<TripForCompose[]> {
-  const { data, error } = await supabase()
-    .from("trips")
-    // Match trips hub: * only. Listing non-existent columns (e.g. supplier_name on older
-    // trips tables) makes PostgREST return an error — UI showed "Could not load trips".
-    .select("*")
-    .eq("organization_id", organizationId)
-    .neq("status", "cancelled")
-    .order("created_at", { ascending: false })
-    .limit(100);
-
-  if (error) throw error;
-
-  const trips = ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+function mapTripRowForCompose(row: Record<string, unknown>) {
+  return {
     id: String(row.id ?? ""),
     trip_number: getTripOperationalDisplay({
       trip_operational_code: (row.trip_operational_code as string | null | undefined) ?? null,
@@ -108,8 +94,12 @@ export async function getTripsForCompose(
     distance: (row.distance as string | number | null | undefined) ?? null,
     started_at: (row.started_at as string | null | undefined) ?? null,
     pickup_date: (row.pickup_date as string | null | undefined) ?? null,
-  }));
+  };
+}
 
+async function enrichTripsForCompose(
+  trips: ReturnType<typeof mapTripRowForCompose>[],
+): Promise<TripForCompose[]> {
   const clientIds = Array.from(
     new Set(trips.map((t) => t.client_id).filter((v): v is string => !!v)),
   );
@@ -245,6 +235,45 @@ export async function getTripsForCompose(
       driver_avatar_seed: (driverMeta?.avatar_seed ?? "").trim() || null,
     };
   });
+}
+
+export async function getTripsForCompose(
+  organizationId: string,
+): Promise<TripForCompose[]> {
+  const { data, error } = await supabase()
+    .from("trips")
+    // Match trips hub: * only. Listing non-existent columns (e.g. supplier_name on older
+    // trips tables) makes PostgREST return an error — UI showed "Could not load trips".
+    .select("*")
+    .eq("organization_id", organizationId)
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+
+  const trips = ((data ?? []) as Record<string, unknown>[]).map(mapTripRowForCompose);
+  return enrichTripsForCompose(trips);
+}
+
+/** Avatar-enriched trip rows for specific ids (chat lanes outside the hub top-100). */
+export async function getTripsForComposeByIds(
+  organizationId: string,
+  tripIds: string[],
+): Promise<TripForCompose[]> {
+  const ids = Array.from(new Set(tripIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .in("id", ids);
+
+  if (error) throw error;
+
+  const trips = ((data ?? []) as Record<string, unknown>[]).map(mapTripRowForCompose);
+  return enrichTripsForCompose(trips);
 }
 
 function isGenericPartyName(name: unknown): boolean {
@@ -385,7 +414,7 @@ const TRIP_EMBED_FIELDS_FULL =
 const TRIP_EMBED_FIELDS_LEGACY =
   "organization_id, trip_operational_code, trip_code, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
 
-const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata )`;
+const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata, reactions, reply_to_id, reply_to_preview, edited_at )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
 const TRIP_MESSAGES_EMBED_RECENT = 20;
 
@@ -775,7 +804,7 @@ export async function getMessagesByConversation(
 
   let query = supabase()
     .from("trip_messages")
-    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at")
+    .select("id,conversation_id,organization_id,sender_user_id,sender_role,sender_name,content,message_type,metadata,is_read,read_at,created_at,sender_avatar_seed,is_delivered,delivered_at,reactions,reply_to_id,reply_to_preview,edited_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -1948,4 +1977,23 @@ export async function toggleMessageReaction(params: {
   });
   if (error) throw error;
   return (data ?? {}) as Record<string, string[]>;
+}
+
+export async function updateChatMessageContent(
+  messageId: string,
+  content: string,
+): Promise<void> {
+  const { error } = await supabase()
+    .from("trip_messages")
+    .update({ content, edited_at: new Date().toISOString() })
+    .eq("id", messageId);
+  if (error) throw error;
+}
+
+export async function deleteChatMessage(messageId: string): Promise<void> {
+  const { error } = await supabase()
+    .from("trip_messages")
+    .update({ is_deleted: true })
+    .eq("id", messageId);
+  if (error) throw error;
 }

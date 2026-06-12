@@ -131,7 +131,7 @@ export function RegistryTagPill({ tag }: { tag: RegistryTag }) {
   );
 }
 
-const AVATAR_SIZE = 32;
+const AVATAR_SIZE = 36;
 
 export function AlertRegistrySignalCard({
   avatar,
@@ -236,8 +236,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 9,
-    paddingVertical: 10,
+    gap: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
@@ -271,11 +271,11 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 4,
   },
   headline: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
     color: METRONIC.primaryBtn,
   },
   actorName: {
@@ -291,8 +291,8 @@ const styles = StyleSheet.create({
     color: METRONIC.link,
   },
   metaLine: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "500",
     color: METRONIC.muted,
   },
@@ -301,28 +301,28 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   detailCard: {
-    marginTop: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 6,
     backgroundColor: METRONIC.quoteBg,
-    gap: 1,
+    gap: 2,
   },
   detailTitle: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
   },
   detailSubtitle: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "500",
     color: "#78829D",
   },
   detailBody: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "500",
     color: "#78829D",
   },

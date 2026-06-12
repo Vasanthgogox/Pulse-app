@@ -176,6 +176,31 @@ export function formatLocationCaptureClock(
   }
 }
 
+/** Compact date + time for inbox / list previews (IST). */
+export function formatLocationPingShortLog(
+  recordedAt: string | null | undefined,
+  messageCreatedAt: string,
+): string {
+  const raw = (recordedAt ?? "").trim() || messageCreatedAt;
+  try {
+    const d = new Date(raw);
+    const date = d.toLocaleDateString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "numeric",
+      month: "short",
+    });
+    const time = d.toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${date}, ${time}`;
+  } catch {
+    return raw.replace(/\s*UTC$/i, "").trim();
+  }
+}
+
 export function buildLocationPingCardCopy(params: {
   location: SystemLogLocationData | null;
   message: Pick<TripMessageRow, "content" | "created_at">;
@@ -192,6 +217,10 @@ export function buildLocationPingCardCopy(params: {
     params.message.content,
     params.tripHint,
   );
+  const shortLog = formatLocationPingShortLog(
+    params.location?.recorded_at,
+    params.message.created_at,
+  );
   const captureClock = formatLocationCaptureClock(
     params.location?.recorded_at,
     params.message.created_at,
@@ -199,35 +228,63 @@ export function buildLocationPingCardCopy(params: {
   const simulated = params.simulated === true;
   const consolidatedCount = params.consolidatedCount;
 
-  let title = "Driver location update";
+  let title: string;
   if (typeof consolidatedCount === "number" && consolidatedCount > 1) {
-    title = `${consolidatedCount} driver location updates`;
-  } else if (simulated) {
-    title = "Driver location update (simulated)";
+    title = `Driver is at ${city} · ${consolidatedCount} updates · ${shortLog}`;
+  } else {
+    title = `Driver is at ${city} · ${shortLog}`;
+  }
+  if (simulated) {
+    title = `${title} (simulated)`;
   }
 
-  let subLine = city;
+  let subLine: string | null = null;
   if (place && place.toLowerCase() !== city.toLowerCase()) {
-    subLine = `${place} · ${city}`;
-  } else if (
-    typeof consolidatedCount === "number" &&
-    consolidatedCount > 1
-  ) {
-    subLine = `Last near ${city}`;
+    subLine = place;
   }
 
   return { title, subLine, captureClock };
 }
 
+export function buildLocationPingInboxPreviewText(params: {
+  location: SystemLogLocationData | null;
+  message: Pick<TripMessageRow, "content" | "created_at">;
+  tripHint?: LocationPingTripHint;
+  simulated?: boolean;
+  consolidatedCount?: number;
+}): string {
+  const city = resolveLocationCityLabel(
+    params.location,
+    params.message.content,
+    params.tripHint,
+  );
+  const when = formatLocationPingShortLog(
+    params.location?.recorded_at,
+    params.message.created_at,
+  );
+  const simulated = params.simulated === true;
+  const count = params.consolidatedCount;
+
+  let base: string;
+  if (typeof count === "number" && count > 1) {
+    base = `Driver is at ${city} · ${count} updates · ${when}`;
+  } else {
+    base = `Driver is at ${city} · ${when}`;
+  }
+  return simulated ? `${base} (simulated)` : base;
+}
+
+/** @deprecated Use {@link buildLocationPingInboxPreviewText}. */
 export function buildLocationPingPreviewText(
   cityLabel: string,
   simulated: boolean,
   consolidatedCount?: number,
 ): string {
+  const when = formatLocationPingShortLog(null, new Date().toISOString());
   if (typeof consolidatedCount === "number" && consolidatedCount > 1) {
-    const base = `📍 ${consolidatedCount} location updates near ${cityLabel}`;
+    const base = `Driver is at ${cityLabel} · ${consolidatedCount} updates · ${when}`;
     return simulated ? `${base} (simulated)` : base;
   }
-  const base = `📍 Driver near ${cityLabel}`;
+  const base = `Driver is at ${cityLabel} · ${when}`;
   return simulated ? `${base} (simulated)` : base;
 }

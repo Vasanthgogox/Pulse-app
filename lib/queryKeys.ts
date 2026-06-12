@@ -241,6 +241,20 @@ export const queryKeys = {
     mine: () => ["q", "team-invites", "mine"] as const,
   },
 
+  /**
+   * Pulse Chat Platform (unified chat_* schema). Inbox is patched in-place by
+   * the chat_conversations row subscription in `useChatInboxQuery` — no
+   * per-message org-wide fan-out.
+   */
+  chatPlatform: {
+    inbox: (orgId: string) => ["q", "chat-platform", "inbox", orgId] as const,
+    tripRoom: (tripId: string) => ["q", "chat-platform", "trip-room", tripId] as const,
+    messages: (conversationId: string) =>
+      ["q", "chat-platform", "messages", conversationId] as const,
+    search: (orgId: string, query: string) =>
+      ["q", "chat-platform", "search", orgId, query] as const,
+  },
+
   tripConversations: {
     all: (orgId: string) => ["q", "trip-conversations", orgId] as const,
     detail: (conversationId: string) =>

@@ -5,14 +5,13 @@ import { ChatThreadMediaStrip } from "@/features/chat/components/shared/ChatThre
 import type { ChatMediaBurstLeader } from "@/features/chat/utils/chatMediaBurst.util";
 import type { SlackMessageGroupMeta } from "@/features/chat/utils/slackMessageGroup.util";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
-import { useEffect, useRef, type ReactNode } from "react";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
+import { useEffect, useRef } from "react";
 import {
   Animated,
-  Platform,
   Pressable,
   Text,
   View,
-  type TextStyle,
 } from "react-native";
 import {
   slackDesktopStyles as deskSt,
@@ -22,39 +21,6 @@ import {
   SLACK_AVATAR,
   slackMobileStyles as st,
 } from "../mobile/chatSlackMobile.styles";
-
-function renderMd(text: string): ReactNode[] {
-  if (!text) return [];
-  if (!/\*\*|_|`/.test(text)) return [text];
-
-  const re = /(\*\*([^*\n]+)\*\*)|(_([^_\n]+)_)|(`([^`\n]+)`)/g;
-  const nodes: ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let k = 0;
-
-  while ((match = re.exec(text)) !== null) {
-    if (match.index > last) nodes.push(text.slice(last, match.index));
-    if (match[1] !== undefined) {
-      nodes.push(<Text key={k++} style={mdBold}>{renderMd(match[2])}</Text>);
-    } else if (match[3] !== undefined) {
-      nodes.push(<Text key={k++} style={mdItalic}>{renderMd(match[4])}</Text>);
-    } else if (match[5] !== undefined) {
-      nodes.push(<Text key={k++} style={mdCode}>{match[6]}</Text>);
-    }
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
-
-const mdBold: TextStyle = { fontWeight: "700" };
-const mdItalic: TextStyle = { fontStyle: "italic" };
-const mdCode: TextStyle = {
-  fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  backgroundColor: "rgba(0,0,0,0.06)",
-  color: "#1D1C1D",
-};
 
 export type ChatMediaBurstRowProps = {
   burst: ChatMediaBurstLeader;
@@ -178,6 +144,7 @@ export function ChatMediaBurstRow({
         style={[
           styles.threadMsgRow,
           isContinuation ? styles.threadMsgRowContinuation : styles.threadMsgRowLead,
+          group?.partyBreak && styles.threadMsgRowPartyBreak,
         ]}
       >
         {avatarColumn}
@@ -204,7 +171,7 @@ export function ChatMediaBurstRow({
                 !showHeader && styles.threadMsgTextStacked,
               ]}
             >
-              {renderMd(caption)}
+              {renderChatInlineMarkdown(caption)}
             </Text>
           ) : null}
         </View>

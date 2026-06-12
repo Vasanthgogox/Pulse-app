@@ -15,6 +15,8 @@
 
 export type ProductId =
   | 'pulse_core'
+  | 'pulse_network'
+  | 'pulse_chat'
   | 'pulse_pod_pro'
   | 'pulse_invoice_pro'
   | 'pulse_finance_pro'
@@ -82,6 +84,25 @@ export interface ProductDefinition {
   upgradeFrom?: ProductId;    // which product this upgrades from
 }
 
+/** Core business trio — always connected in every workspace. */
+export const BUNDLED_ACTIVE_PRODUCT_IDS = [
+  'pulse_core',
+  'pulse_network',
+  'pulse_chat',
+] as const satisfies readonly ProductId[];
+
+export function isBundledActiveProduct(id: ProductId): boolean {
+  return (BUNDLED_ACTIVE_PRODUCT_IDS as readonly ProductId[]).includes(id);
+}
+
+export function withBundledActiveProducts(ids: Iterable<ProductId>): Set<ProductId> {
+  const next = new Set(ids);
+  for (const id of BUNDLED_ACTIVE_PRODUCT_IDS) {
+    next.add(id);
+  }
+  return next;
+}
+
 // ── The Registry ─────────────────────────────────────────────────────────────
 
 export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
@@ -90,23 +111,67 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
     id: 'pulse_core',
     name: 'Pulse Core',
     tagline: 'The foundation of your logistics business',
-    description: 'Trip management, driver coordination, client & supplier tracking, real-time GPS, and in-app chat. Everything a logistics company needs to run day-to-day operations.',
+    description: 'Trip management, driver coordination, client and supplier records, real-time GPS, and trip-level finance. The operational backbone every logistics team runs on.',
     icon: 'Zap',
     color: '#4f46e5',
     status: 'active',
     pricing: { model: 'free' },
     dependencies: [],
-    capabilities: ['dispatch', 'fleet_management', 'marketplace_post', 'marketplace_bid', 'finance_view', 'finance_manage'],
+    capabilities: ['dispatch', 'fleet_management', 'finance_view', 'finance_manage'],
     modules: [
       { name: 'Trip Management',     description: 'Create, assign, track trips end-to-end',           icon: 'Truck' },
       { name: 'Driver App',          description: 'Native mobile app for drivers',                     icon: 'Smartphone' },
       { name: 'GPS Tracking',        description: 'Real-time location for every active trip',          icon: 'MapPin' },
       { name: 'Client Management',   description: 'Customer database with contact and trip history',   icon: 'Users' },
-      { name: 'Supplier Network',    description: 'Manage subcontractors and fleet owners',            icon: 'Network' },
-      { name: 'In-App Chat',         description: 'WhatsApp-style chat per trip',                      icon: 'MessageSquare' },
+      { name: 'Supplier Records',    description: 'Subcontractors, fleet owners, and vendor contacts',   icon: 'Building2' },
       { name: 'Basic Finance',       description: 'Trip-level revenue and cost tracking',              icon: 'IndianRupee' },
     ],
     vision: 'Pulse Core is the operating system for logistics companies. Every team member, every truck, every trip — in one place.',
+  },
+
+  pulse_network: {
+    id: 'pulse_network',
+    name: 'Pulse Network',
+    tagline: 'Connect, grow, and win freight together',
+    description: 'Build your logistics network — connect with verified partners, grow alliances, bid on loads, and share updates on your Pulse story feed.',
+    icon: 'Network',
+    color: '#3730A3',
+    status: 'active',
+    pricing: { model: 'free' },
+    dependencies: ['pulse_core'],
+    capabilities: [
+      'network_connections',
+      'network_discover',
+      'marketplace_post',
+      'marketplace_bid',
+      'social_feed',
+    ],
+    modules: [
+      { name: 'Your Connections',    description: 'Integrated clients, suppliers, and fleet partners', icon: 'Users' },
+      { name: 'Grow Your Network',   description: 'Discover allies and send connection invites',       icon: 'UserPlus' },
+      { name: 'Load Bidding',        description: 'Post freight and bid on open marketplace loads',    icon: 'Gavel' },
+      { name: 'Stories & Feed',      description: 'Share updates and follow partner activity',         icon: 'Rss' },
+    ],
+    vision: 'Your logistics rolodex — connected partners, open freight, and a feed that keeps your network in motion.',
+  },
+
+  pulse_chat: {
+    id: 'pulse_chat',
+    name: 'Pulse Chat',
+    tagline: 'Trip threads and business messaging',
+    description: 'Slack-style coordination for operations — trip chat with drivers and dispatchers, plus business chat with connected partner organisations.',
+    icon: 'MessageSquare',
+    color: '#5b5ef4',
+    status: 'active',
+    pricing: { model: 'free' },
+    dependencies: ['pulse_core'],
+    capabilities: ['trip_chat', 'business_chat', 'chat_reactions', 'chat_media'],
+    modules: [
+      { name: 'Trip Chat',           description: 'Per-trip threads with drivers, clients, and ops',     icon: 'Truck' },
+      { name: 'Business Chat',       description: 'Direct messages with connected organisations',        icon: 'MessageCircle' },
+      { name: 'Media & Documents',   description: 'Photos, PODs, and files in conversation context',   icon: 'Paperclip' },
+    ],
+    vision: 'One inbox for every trip and every partner — no more WhatsApp chaos.',
   },
 
   pulse_pod_pro: {
@@ -391,14 +456,21 @@ export function getAllProducts(): ProductDefinition[] {
   return Object.values(PRODUCT_REGISTRY);
 }
 
-/** Returns products in display order (Core first, then alphabetical by status priority) */
+const DISPLAY_PRIORITY: ProductId[] = [...BUNDLED_ACTIVE_PRODUCT_IDS];
+
+/** Returns products in display order (Core trio first, then by status priority) */
 export function getProductsInDisplayOrder(): ProductDefinition[] {
   const statusOrder: Record<ProductStatus, number> = {
     active: 0, early_access: 1, private_beta: 2, coming_soon: 3, planned: 4,
   };
   return getAllProducts().sort((a, b) => {
-    if (a.id === 'pulse_core') return -1;
-    if (b.id === 'pulse_core') return 1;
+    const ai = DISPLAY_PRIORITY.indexOf(a.id);
+    const bi = DISPLAY_PRIORITY.indexOf(b.id);
+    if (ai !== -1 || bi !== -1) {
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
     return statusOrder[a.status] - statusOrder[b.status];
   });
 }

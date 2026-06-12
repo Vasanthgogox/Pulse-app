@@ -7,6 +7,7 @@ import { getDriverById } from "@/features/drivers/services/drivers.service";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import {
   buildAssignmentChatContent,
   type AssignmentNameMaps,
@@ -28,16 +29,23 @@ async function resolveAssignmentNameMaps(
   if (row.vehicle_id_new) vehicleIds.add(row.vehicle_id_new);
 
   const driverNames: Record<string, string> = {};
+  const driverProfiles: AssignmentNameMaps["driverProfiles"] = {};
   const vehicleLabels: Record<string, string> = {};
 
   await Promise.all([
     ...Array.from(driverIds).map(async (id) => {
       const res = await getDriverById(orgId, id);
-      driverNames[id] =
+      const displayName =
         res.driver?.name?.trim() ||
         res.driver?.phone?.trim() ||
         trip.driver_display_name?.trim() ||
         "Driver";
+      driverNames[id] = displayName;
+      driverProfiles[id] = {
+        displayName,
+        avatarUrl: resolveAvatarPublicUrl(res.driver?.avatar_url ?? null),
+        avatarSeed: (res.driver?.avatar_seed ?? "").trim() || null,
+      };
     }),
     ...Array.from(vehicleIds).map(async (id) => {
       const res = await getVehicleById(orgId, id);
@@ -50,7 +58,7 @@ async function resolveAssignmentNameMaps(
     }),
   ]);
 
-  return { driverNames, vehicleLabels };
+  return { driverNames, vehicleLabels, driverProfiles };
 }
 
 /**

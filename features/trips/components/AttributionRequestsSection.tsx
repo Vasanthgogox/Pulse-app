@@ -113,7 +113,7 @@ const AttributionRequestCard = memo(function AttributionRequestCard({
             accessibilityLabel={`Accept attribution request from ${driverName}`}
           >
             {busy ? (
-              <ActivityIndicator size="small" color={Theme.textOnDark} />
+              <ActivityIndicator size="small" color={Theme.primary} />
             ) : (
               <Text style={styles.acceptBtnText}>Accept</Text>
             )}
@@ -287,11 +287,10 @@ const styles = StyleSheet.create({
   sectionTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.9,
+    letterSpacing: 0.1,
   },
   countBadge: {
     paddingHorizontal: 8,
@@ -306,9 +305,9 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   sectionSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: Theme.textSecondary,
-    lineHeight: 16,
+    lineHeight: 17,
     width: "100%",
   },
   listScroll: {
@@ -381,22 +380,22 @@ const styles = StyleSheet.create({
   driverName: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 17,
     color: Theme.textPrimaryDark,
   },
   amount: {
     flexShrink: 0,
-    fontSize: 11,
-    fontWeight: "800",
-    lineHeight: 16,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
     color: Theme.textPrimaryDark,
     textAlign: "right",
   },
   cardMeta: {
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 14,
     color: Theme.textMuted,
   },
   cardActions: {
@@ -420,11 +419,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rejectBtnText: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
+    letterSpacing: 0.1,
   },
   acceptBtn: {
     flex: 1,
@@ -433,8 +431,8 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: Theme.darkBackground,
-    backgroundColor: Theme.darkBackground,
+    borderColor: Theme.primary,
+    backgroundColor: Theme.pulseIndigoWash,
     minHeight: 32,
     alignItems: "center",
     justifyContent: "center",
@@ -443,11 +441,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   acceptBtnText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: Theme.textOnDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.primary,
+    letterSpacing: 0.1,
   },
   loadMoreBtn: {
     alignItems: "center",

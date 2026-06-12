@@ -4,7 +4,11 @@ import { Pressable, Text, View } from "react-native";
 import { HUB_PURPLE } from "@/components/profile/workspaceHubMenu.styles";
 import { ProductLogo } from "@/features/organization/components/workspace/ProductLogo";
 import { productGridStyles as styles } from "@/features/organization/components/workspace/workspaceHubProductGrid.styles";
-import { getProductsInDisplayOrder, type ProductId } from "@/lib/productRegistry";
+import {
+  getProductsInDisplayOrder,
+  isBundledActiveProduct,
+  type ProductId,
+} from "@/lib/productRegistry";
 import { ChevronRight } from "lucide-react-native";
 
 function displayProductName(name: string): string {
@@ -27,7 +31,8 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
   const activeCount = useMemo(
     () =>
       products.filter(
-        (product) => activeProductIds.has(product.id) || product.id === "pulse_core",
+        (product) =>
+          activeProductIds.has(product.id) || isBundledActiveProduct(product.id),
       ).length,
     [activeProductIds, products],
   );
@@ -61,7 +66,7 @@ export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
       <View style={styles.grid}>
         {products.map((product) => {
           const isActive =
-            activeProductIds.has(product.id) || product.id === "pulse_core";
+            activeProductIds.has(product.id) || isBundledActiveProduct(product.id);
           return (
             <View key={product.id} style={styles.gridCell}>
               <Pressable

@@ -324,6 +324,14 @@ export interface TripMessageRow {
    * Absence means: visible only in the originating conversation's tab (legacy).
    */
   visibility_tags?: string[] | null;
+  /** Set when the sender edits the message content after sending. */
+  edited_at?: string | null;
+  /** Soft-delete: true means the message was retracted by the sender. */
+  is_deleted?: boolean;
+  /** Emoji reactions: { "👍": ["user-id-1"], "❤️": ["user-id-2"] } */
+  reactions?: Record<string, string[]> | null;
+  reply_to_id?: string | null;
+  reply_to_preview?: Record<string, unknown> | null;
 }
 
 export interface TripConversation extends TripConversationRow {

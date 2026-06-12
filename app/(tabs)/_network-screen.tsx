@@ -1380,7 +1380,7 @@ function NetworkScreenInner() {
                 >
                   <NetworkProfileModalBody
                     node={selectedProfileNode}
-                    isMobile={isMobileLayout}
+                    isMobile
                     profileStatsLoading={profileStatsLoading}
                     totalTrips={selectedProfileStats.totalTrips ?? 0}
                     onClose={() => setSelectedProfileNode(null)}
@@ -1405,11 +1405,18 @@ function NetworkScreenInner() {
                         <View
                           style={[
                             styles.profileRequestSentRow,
-                            isMobileLayout && styles.profileRequestSentRowMobile,
+                            (isMobileLayout || isWideNetwork) &&
+                              styles.profileRequestSentRowStacked,
                           ]}
                         >
                           {profileLivePending?.role ? (
-                            <View style={styles.profilePendingRolePill}>
+                            <View
+                              style={[
+                                styles.profilePendingRolePill,
+                                (isMobileLayout || isWideNetwork) &&
+                                  styles.profilePendingRolePillStacked,
+                              ]}
+                            >
                               <Text
                                 style={styles.profilePendingRolePillText}
                                 numberOfLines={1}
@@ -1423,7 +1430,8 @@ function NetworkScreenInner() {
                           <Pressable
                             style={({ pressed }) => [
                               styles.profileRequestSentBtn,
-                              isMobileLayout && styles.profileRequestSentBtnMobile,
+                              (isMobileLayout || isWideNetwork) &&
+                                styles.profileRequestSentBtnStacked,
                               protocolCancelling &&
                                 styles.profileRequestSentBtnDisabled,
                               pressed && { opacity: 0.85 },
@@ -1632,7 +1640,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignSelf: "stretch",
     paddingVertical: 8,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: "transparent",
   },
   commandMainCard: {
     flex: 1,
@@ -1653,6 +1661,7 @@ const styles = StyleSheet.create({
     top: -96,
   },
   commandMainContent: {
+    width: "100%",
     paddingHorizontal: 20,
     paddingVertical: 18,
     gap: 12,
@@ -1667,6 +1676,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    width: "100%",
+    minWidth: 0,
   },
   commandMainHeadMobile: {
     alignItems: "center",
@@ -1699,6 +1710,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     paddingHorizontal: 10,
+    flexShrink: 0,
   },
   commandGrowthText: {
     fontSize: 12,
@@ -1710,6 +1722,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 16,
+    width: "100%",
+    minWidth: 0,
   },
   commandMainStatsRowCompact: {
     flexDirection: "row",
@@ -1745,9 +1759,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 0,
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
     justifyContent: "flex-end",
   },
   commandMetricGridCompact: {
@@ -1889,6 +1902,7 @@ const styles = StyleSheet.create({
   },
   profileModalScrollDesktop: {
     paddingBottom: 20,
+    alignItems: "stretch",
   },
   profileModalScrollMobile: {
     paddingHorizontal: 0,
@@ -2210,6 +2224,8 @@ const styles = StyleSheet.create({
   },
   profileCtaStack: {
     width: "100%",
+    alignSelf: "stretch",
+    alignItems: "stretch",
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 4,
@@ -2220,11 +2236,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   profileCtaStackDesktop: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 4,
     gap: 10,
+    maxWidth: 360,
+    alignSelf: "center",
+    width: "100%",
   },
   profilePrimaryBtn: {
+    width: "100%",
+    alignSelf: "stretch",
     minHeight: 32,
     borderRadius: 10,
     backgroundColor: Theme.primary,
@@ -2238,6 +2260,8 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   profileSecondaryBtn: {
+    width: "100%",
+    alignSelf: "stretch",
     minHeight: 36,
     borderRadius: 10,
     backgroundColor: Theme.textPrimaryDark,
@@ -2274,7 +2298,7 @@ const styles = StyleSheet.create({
     gap: 6,
     width: "100%",
   },
-  profileRequestSentRowMobile: {
+  profileRequestSentRowStacked: {
     flexDirection: "column",
     alignItems: "stretch",
     gap: 8,
@@ -2292,10 +2316,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
   },
-  profileRequestSentBtnMobile: {
+  profileRequestSentBtnStacked: {
     minHeight: 44,
     width: "100%",
     flex: undefined,
+    alignSelf: "stretch",
   },
   profileRequestSentBtnDisabled: {
     opacity: 0.6,
@@ -2312,6 +2337,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.primary + "33",
     alignSelf: "flex-start",
+  },
+  profilePendingRolePillStacked: {
+    alignSelf: "center",
   },
   profilePendingRolePillText: {
     fontSize: 10,

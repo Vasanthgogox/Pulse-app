@@ -20,58 +20,28 @@ import type { SlackMessageGroupMeta } from "@/features/chat/utils/slackMessageGr
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Clipboard,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import {
   slackDesktopStyles as deskSt,
   SLACK_DESKTOP_AVATAR,
 } from "../desktop/chatSlackDesktop.styles";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import {
   SLACK_AVATAR,
   slackMobileStyles as st,
 } from "./chatSlackMobile.styles";
-
-// ── Inline markdown renderer ──────────────────────────────────────────────────
-// Parses **bold**, _italic_, `code` produced by our format toolbar.
-// Handles one level of nesting (e.g. _**bold italic**_).
-function renderMd(text: string): React.ReactNode[] {
-  if (!text) return [];
-  if (!/\*\*|_|`/.test(text)) return [text];
-
-  const re = /(\*\*([^*\n]+)\*\*)|(_([^_\n]+)_)|(`([^`\n]+)`)/g;
-  const nodes: React.ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let k = 0;
-
-  while ((match = re.exec(text)) !== null) {
-    if (match.index > last) nodes.push(text.slice(last, match.index));
-    if (match[1] !== undefined) {
-      nodes.push(<Text key={k++} style={mdBold}>{renderMd(match[2])}</Text>);
-    } else if (match[3] !== undefined) {
-      nodes.push(<Text key={k++} style={mdItalic}>{renderMd(match[4])}</Text>);
-    } else if (match[5] !== undefined) {
-      nodes.push(<Text key={k++} style={mdCode}>{match[6]}</Text>);
-    }
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
-
-const mdBold: TextStyle = { fontWeight: "700" };
-const mdItalic: TextStyle = { fontStyle: "italic" };
-const mdCode: TextStyle = {
-  fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  backgroundColor: "rgba(0,0,0,0.06)",
-  color: "#1D1C1D",
-};
 
 export type ChatSlackMessageRowProps = {
   messageId?: string;
@@ -97,6 +67,12 @@ export type ChatSlackMessageRowProps = {
   onReply?: () => void;
   /** Whether this message just arrived via Realtime (triggers slide-in animation) */
   isNew?: boolean;
+  /** Whether the message was edited after sending. */
+  isEdited?: boolean;
+  /** Called when user confirms an edit with new content. */
+  onEdit?: (newContent: string) => void;
+  /** Called when user confirms delete. */
+  onDelete?: () => void;
 };
 
 export function ChatSlackMessageRow({
@@ -119,6 +95,9 @@ export function ChatSlackMessageRow({
   replyPreview,
   onReply,
   isNew,
+  isEdited,
+  onEdit,
+  onDelete,
 }: ChatSlackMessageRowProps) {
   const styles = variant === "desktop" ? deskSt : st;
   const avatarSize = variant === "desktop" ? SLACK_DESKTOP_AVATAR.message : SLACK_AVATAR.thread;
@@ -180,6 +159,39 @@ export function ChatSlackMessageRow({
 
   // ── Mobile: long-press context menu ───────────────────────────────────
   const [menuVisible, setMenuVisible] = useState(false);
+
+  // ── Inline edit mode ──────────────────────────────────────────────────
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(content);
+
+  const handleStartEdit = () => {
+    setEditDraft(content);
+    setEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmed = editDraft.trim();
+    if (trimmed && trimmed !== content) {
+      onEdit?.(trimmed);
+    }
+    setEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+    setEditDraft(content);
+  };
+
+  const handleDeleteConfirm = () => {
+    Alert.alert(
+      "Delete message",
+      "This message will be removed for everyone. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => onDelete?.() },
+      ],
+    );
+  };
 
   const handleLongPress = () => {
     if (!isDesktop) setMenuVisible(true);
@@ -264,6 +276,7 @@ export function ChatSlackMessageRow({
           style={[
             styles.threadMsgRow,
             isContinuation ? styles.threadMsgRowContinuation : styles.threadMsgRowLead,
+            group?.partyBreak && styles.threadMsgRowPartyBreak,
             hovered && (isDesktop ? rowHoverStyle : undefined),
             { position: "relative" as const },
           ]}
@@ -280,27 +293,52 @@ export function ChatSlackMessageRow({
                 </Text>
               </View>
             ) : null}
-            {isJumboEmojiMessage(content) ? (
+            {editing ? (
+              <View style={inlineEditWrap}>
+                <TextInput
+                  value={editDraft}
+                  onChangeText={setEditDraft}
+                  autoFocus
+                  multiline
+                  style={inlineEditInput}
+                />
+                <View style={inlineEditActions}>
+                  <TouchableOpacity onPress={handleCancelEdit} style={inlineEditCancel}>
+                    <Text style={inlineEditCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSaveEdit} style={inlineEditSave}>
+                    <Text style={inlineEditSaveText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : isJumboEmojiMessage(content) ? (
               <ChatJumboEmojiMessage content={content} compact={showHeader} />
             ) : (
-              <Text
-                style={[
-                  styles.threadMsgText,
-                  isContinuation && styles.threadMsgTextContinuation,
-                  !showHeader && styles.threadMsgTextStacked,
-                ]}
-              >
-                {renderMd(content)}
-              </Text>
+              <View>
+                <Text
+                  style={[
+                    styles.threadMsgText,
+                    isContinuation && styles.threadMsgTextContinuation,
+                    !showHeader && styles.threadMsgTextStacked,
+                  ]}
+                >
+                  {renderChatInlineMarkdown(content)}
+                </Text>
+                {isEdited ? (
+                  <Text style={editedLabel}>(edited)</Text>
+                ) : null}
+              </View>
             )}
           </View>
 
           {/* Desktop hover toolbar — floats top-right of the row, above the row */}
-          {isDesktop && hovered && onReact && onReply ? (
+          {isDesktop && hovered ? (
             <ChatMessageHoverActions
               onReact={onReact}
               onReply={onReply}
               onCopy={handleCopy}
+              onEdit={isOwn && onEdit ? handleStartEdit : undefined}
+              onDelete={isOwn && onDelete ? handleDeleteConfirm : undefined}
               onHoverIn={showHoverActions}
               onHoverOut={hideHoverActions}
             />
@@ -308,7 +346,9 @@ export function ChatSlackMessageRow({
         </Pressable>
 
         {/* Reactions row */}
-        {reactions && onReact ? (
+        {onReact &&
+        reactions &&
+        Object.keys(reactions).length > 0 ? (
           <ChatReactionsRow
             reactions={reactions}
             selfUserId={selfUserId}
@@ -327,6 +367,9 @@ export function ChatSlackMessageRow({
           onReact={(emoji) => onReact?.(emoji)}
           onReply={() => onReply?.()}
           onCopy={handleCopy}
+          isOwn={isOwn}
+          onEdit={onEdit ? handleStartEdit : undefined}
+          onDelete={onDelete ? handleDeleteConfirm : undefined}
         />
       ) : null}
     </>
@@ -337,3 +380,62 @@ const rowHoverStyle = {
   backgroundColor: "rgba(0,0,0,0.025)",
   borderRadius: 6,
 } as const;
+
+const editSt = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    gap: 6,
+  } as ViewStyle,
+  input: {
+    borderWidth: 1.5,
+    borderColor: "#5b5ef4",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 14,
+    color: "#1D1C1D",
+    lineHeight: 20,
+    minHeight: 40,
+  } as TextStyle,
+  actions: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+  } as ViewStyle,
+  cancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#f1f5f9",
+  } as ViewStyle,
+  cancelText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  } as TextStyle,
+  saveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#5b5ef4",
+  } as ViewStyle,
+  saveText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+  } as TextStyle,
+  editedLabel: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginTop: 2,
+  } as TextStyle,
+});
+
+const inlineEditWrap = editSt.wrap;
+const inlineEditInput = editSt.input;
+const inlineEditActions = editSt.actions;
+const inlineEditCancel = editSt.cancelBtn;
+const inlineEditCancelText = editSt.cancelText;
+const inlineEditSave = editSt.saveBtn;
+const inlineEditSaveText = editSt.saveText;
+const editedLabel = editSt.editedLabel;
