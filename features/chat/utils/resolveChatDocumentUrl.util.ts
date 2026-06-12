@@ -41,8 +41,16 @@ const blobUrlCache = new Map<string, string>();
 /** Cache for transformed (thumbnail) signed URLs, keyed by `${path}:${width}x${height}q${quality}`. */
 const thumbUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
-function thumbCacheKey(path: string, width: number, height: number, quality: number): string {
-  return `${path}:${width}x${height}q${quality}`;
+type ImageTransformResize = "cover" | "contain";
+
+function thumbCacheKey(
+  path: string,
+  width: number,
+  height: number,
+  quality: number,
+  resize: ImageTransformResize = "cover",
+): string {
+  return `${path}:${width}x${height}q${quality}:${resize}`;
 }
 
 /** Strip accidental bucket prefix so createSignedUrl targets the object key inside the bucket. */
@@ -156,12 +164,13 @@ export function peekChatImageThumbnailUrl(
   width = 300,
   height = 300,
   quality = 70,
+  resize: ImageTransformResize = "cover",
 ): string | null {
   const raw = String(storagePath ?? "").trim();
   if (/^https?:\/\//i.test(raw)) return raw;
   const path = normalizeTripDocumentsStoragePath(raw);
   if (!path) return null;
-  const cacheKey = thumbCacheKey(path, width, height, quality);
+  const cacheKey = thumbCacheKey(path, width, height, quality, resize);
   const cached = thumbUrlCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.url;
   return null;
@@ -172,11 +181,12 @@ export async function resolveChatImageThumbnail(
   width  = 300,
   height = 300,
   quality = 70,
+  resize: ImageTransformResize = "cover",
 ): Promise<string | null> {
   const path = normalizeTripDocumentsStoragePath(String(storagePath ?? '').trim());
   if (!path || /^https?:\/\//i.test(path)) return storagePath || null;
 
-  const cacheKey = thumbCacheKey(path, width, height, quality);
+  const cacheKey = thumbCacheKey(path, width, height, quality, resize);
   const cached = thumbUrlCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) return cached.url;
 
@@ -190,7 +200,7 @@ export async function resolveChatImageThumbnail(
             width,
             height,
             quality,
-            resize: 'cover',
+            resize,
           },
         });
       if (!error && data?.signedUrl) {

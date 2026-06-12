@@ -37,46 +37,11 @@ import {
   slackDesktopStyles as deskSt,
   SLACK_DESKTOP_AVATAR,
 } from "../desktop/chatSlackDesktop.styles";
+import { ChatInlineMarkdownText } from "@/features/chat/utils/chatInlineMarkdown.util";
 import {
   SLACK_AVATAR,
   slackMobileStyles as st,
 } from "./chatSlackMobile.styles";
-
-// ── Inline markdown renderer ──────────────────────────────────────────────────
-// Parses **bold**, _italic_, `code` produced by our format toolbar.
-// Handles one level of nesting (e.g. _**bold italic**_).
-function renderMd(text: string): React.ReactNode[] {
-  if (!text) return [];
-  if (!/\*\*|_|`/.test(text)) return [text];
-
-  const re = /(\*\*([^*\n]+)\*\*)|(_([^_\n]+)_)|(`([^`\n]+)`)/g;
-  const nodes: React.ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let k = 0;
-
-  while ((match = re.exec(text)) !== null) {
-    if (match.index > last) nodes.push(text.slice(last, match.index));
-    if (match[1] !== undefined) {
-      nodes.push(<Text key={k++} style={mdBold}>{renderMd(match[2])}</Text>);
-    } else if (match[3] !== undefined) {
-      nodes.push(<Text key={k++} style={mdItalic}>{renderMd(match[4])}</Text>);
-    } else if (match[5] !== undefined) {
-      nodes.push(<Text key={k++} style={mdCode}>{match[6]}</Text>);
-    }
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
-
-const mdBold: TextStyle = { fontWeight: "700" };
-const mdItalic: TextStyle = { fontStyle: "italic" };
-const mdCode: TextStyle = {
-  fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  backgroundColor: "rgba(0,0,0,0.06)",
-  color: "#1D1C1D",
-};
 
 export type ChatSlackMessageRowProps = {
   messageId?: string;
@@ -311,6 +276,7 @@ export function ChatSlackMessageRow({
           style={[
             styles.threadMsgRow,
             isContinuation ? styles.threadMsgRowContinuation : styles.threadMsgRowLead,
+            group?.partyBreak && styles.threadMsgRowPartyBreak,
             hovered && (isDesktop ? rowHoverStyle : undefined),
             { position: "relative" as const },
           ]}
@@ -349,15 +315,14 @@ export function ChatSlackMessageRow({
               <ChatJumboEmojiMessage content={content} compact={showHeader} />
             ) : (
               <View>
-                <Text
+                <ChatInlineMarkdownText
+                  text={content}
                   style={[
                     styles.threadMsgText,
                     isContinuation && styles.threadMsgTextContinuation,
                     !showHeader && styles.threadMsgTextStacked,
                   ]}
-                >
-                  {renderMd(content)}
-                </Text>
+                />
                 {isEdited ? (
                   <Text style={editedLabel}>(edited)</Text>
                 ) : null}
@@ -380,7 +345,9 @@ export function ChatSlackMessageRow({
         </Pressable>
 
         {/* Reactions row */}
-        {reactions && onReact ? (
+        {onReact &&
+        reactions &&
+        Object.keys(reactions).length > 0 ? (
           <ChatReactionsRow
             reactions={reactions}
             selfUserId={selfUserId}

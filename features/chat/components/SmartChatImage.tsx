@@ -16,11 +16,14 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { X, ZoomIn } from "lucide-react-native";
 import Theme from "@/constants/Theme";
@@ -37,8 +40,16 @@ import {
   buildSupabaseRenderImagePublicUrl,
 } from "../utils/storageRenderImageUrl";
 import { extractThinImagePayload } from "../utils/thinImageMetadata";
+import {
+  loadImageNaturalSize,
+  resolveFitImageLayout,
+} from "../utils/fitImageInViewport.util";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
+import { chatPreviewFetchForDisplay } from "../utils/chatPreviewTransform.util";
 
 const PLACEHOLDER_TINT = "rgba(148, 163, 184, 0.35)";
+const THUMB_DISPLAY_H = 180;
+const THUMB_RESIZE = "contain" as const;
 
 /** Lightbox max edge — keep in sync with {@link resolveChatImageFullDisplayUrl} default. */
 const FULL_DISPLAY_MAX_EDGE = 1280;
@@ -64,10 +75,20 @@ export function SmartChatImage({
   storagePath,
   isOwn = false,
   message = null,
-  thumbWidth = 200,
-  thumbHeight = 200,
-  thumbQuality = 60,
+  thumbWidth: thumbWidthProp,
+  thumbHeight: thumbHeightProp,
+  thumbQuality: thumbQualityProp,
 }: SmartChatImageProps) {
+  const { width: screenW } = useWindowDimensions();
+  const displayW = Math.min(340, Math.max(240, screenW * 0.68));
+  const fetch = useMemo(
+    () => chatPreviewFetchForDisplay(displayW, THUMB_DISPLAY_H, THUMB_RESIZE),
+    [displayW],
+  );
+  const thumbWidth = thumbWidthProp ?? fetch.width;
+  const thumbHeight = thumbHeightProp ?? fetch.height;
+  const thumbQuality = thumbQualityProp ?? fetch.quality;
+
   const thin = useMemo(() => extractThinImagePayload(message ?? undefined), [message]);
 
   const prebuiltThumb = useMemo(() => {
@@ -87,7 +108,15 @@ export function SmartChatImage({
   const initialThumb =
     prebuiltThumb ??
     publicRenderThumb ??
-    (storagePath ? peekChatImageThumbnailUrl(storagePath, thumbWidth, thumbHeight, thumbQuality) : null);
+    (storagePath
+      ? peekChatImageThumbnailUrl(
+          storagePath,
+          thumbWidth,
+          thumbHeight,
+          thumbQuality,
+          THUMB_RESIZE,
+        )
+      : null);
 
   const [thumbUri, setThumbUri] = useState<string | null>(initialThumb);
   const [thumbState, setThumbState] = useState<LoadState>(() => {
@@ -128,7 +157,13 @@ export function SmartChatImage({
       return;
     }
     const key = thumbKey(storagePath, thumbWidth, thumbHeight, thumbQuality);
-    const fromPeek = peekChatImageThumbnailUrl(storagePath, thumbWidth, thumbHeight, thumbQuality);
+    const fromPeek = peekChatImageThumbnailUrl(
+      storagePath,
+      thumbWidth,
+      thumbHeight,
+      thumbQuality,
+      THUMB_RESIZE,
+    );
     const first =
       prebuiltThumb ?? (!publicFailed ? publicRenderThumb : null) ?? fromPeek;
     if (first) {
@@ -141,7 +176,13 @@ export function SmartChatImage({
     inFlightRef.current = key;
     let cancelled = false;
     setThumbState("loading");
-    void resolveChatImageThumbnail(storagePath, thumbWidth, thumbHeight, thumbQuality).then((url) => {
+    void resolveChatImageThumbnail(
+      storagePath,
+      thumbWidth,
+      thumbHeight,
+      thumbQuality,
+      THUMB_RESIZE,
+    ).then((url) => {
       if (cancelled || inFlightRef.current !== key) return;
       inFlightRef.current = null;
       if (url) {
@@ -230,6 +271,41 @@ export function SmartChatImage({
     }
   }, [storagePath, publicRenderThumb, thumbUri, publicFailed]);
 
+  const { width: windowW, height: windowH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const viewportHeight = Math.max(1, windowH - insets.top - insets.bottom);
+  const [fullNaturalSize, setFullNaturalSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!modalVisible) setFullNaturalSize(null);
+  }, [modalVisible]);
+
+  useEffect(() => {
+    if (!fullUri || fullState !== "ready") {
+      setFullNaturalSize(null);
+      return;
+    }
+    let cancelled = false;
+    void loadImageNaturalSize(fullUri).then((size) => {
+      if (cancelled || !size) return;
+      setFullNaturalSize(size);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fullUri, fullState]);
+
+  const fullImageLayout = fullNaturalSize
+    ? resolveFitImageLayout(fullNaturalSize, windowW, viewportHeight, {
+        horizontal: 16,
+        top: 56,
+        bottom: 24,
+      })
+    : null;
+
   if (thumbState === "error") {
     return (
       <View style={[s.placeholder, isOwn && s.placeholderOwn]}>
@@ -263,11 +339,11 @@ export function SmartChatImage({
             <Image
               source={{ uri: thumbUri }}
               style={s.thumb}
-              contentFit="cover"
+              contentFit="contain"
               cachePolicy="memory-disk"
               recyclingKey={thumbUri}
               placeholder={placeholderSource}
-              placeholderContentFit="cover"
+              placeholderContentFit="contain"
               onError={() => { onThumbError(); }}
               accessibilityLabel="Chat image thumbnail"
             />
@@ -285,7 +361,12 @@ export function SmartChatImage({
         onRequestClose={() => setModalVisible(false)}
         statusBarTranslucent
       >
-        <SafeAreaView style={s.modalBg}>
+        <SafeAreaView
+          style={[
+            s.modalBg,
+            Platform.OS === "web" ? (WEB_APP_VIEWPORT_STYLE as object) : null,
+          ]}
+        >
           <TouchableOpacity
             style={s.modalClose}
             onPress={() => setModalVisible(false)}
@@ -302,18 +383,54 @@ export function SmartChatImage({
             </View>
           )}
 
-          {fullState === "ready" && fullUri && (
-            <Pressable style={s.modalImgWrap} onPress={() => setModalVisible(false)}>
+          {fullState === "ready" && fullUri && fullNaturalSize && fullImageLayout ? (
+            <ScrollView
+              style={s.modalScroll}
+              contentContainerStyle={[
+                s.modalScrollContent,
+                {
+                  minHeight: viewportHeight,
+                  justifyContent: fullImageLayout.scrollable ? "flex-start" : "center",
+                },
+              ]}
+              showsVerticalScrollIndicator={fullImageLayout.scrollable}
+              centerContent={!fullImageLayout.scrollable}
+            >
+              <Pressable onPress={() => setModalVisible(false)}>
+                <Image
+                  source={{ uri: fullUri }}
+                  style={{
+                    width: fullImageLayout.width,
+                    height: fullImageLayout.height,
+                    maxWidth: windowW - 32,
+                    maxHeight: viewportHeight - 80,
+                  }}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                  recyclingKey={fullUri}
+                  accessibilityLabel="Full-size chat image"
+                />
+              </Pressable>
+            </ScrollView>
+          ) : null}
+
+          {fullState === "ready" && fullUri && !fullNaturalSize ? (
+            <View style={s.modalMeasure}>
               <Image
                 source={{ uri: fullUri }}
-                style={s.modalImg}
+                style={s.modalMeasureImg}
                 contentFit="contain"
                 cachePolicy="memory-disk"
-                recyclingKey={fullUri}
+                recyclingKey={`${fullUri}-measure`}
+                onLoad={(event) => {
+                  const w = event.source.width;
+                  const h = event.source.height;
+                  if (w > 0 && h > 0) setFullNaturalSize({ width: w, height: h });
+                }}
                 accessibilityLabel="Full-size chat image"
               />
-            </Pressable>
-          )}
+            </View>
+          ) : null}
 
           {fullState === "error" && (
             <View style={s.modalLoading}>
@@ -399,14 +516,24 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  modalImgWrap: {
+  modalScroll: {
+    flex: 1,
+    width: "100%",
+  },
+  modalScrollContent: {
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 56,
+  },
+  modalMeasure: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  modalImg: {
-    width: "100%",
-    height: "85%",
+  modalMeasureImg: {
+    width: 1,
+    height: 1,
+    opacity: 0,
   },
   modalLoading: {
     alignItems: "center",

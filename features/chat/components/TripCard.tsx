@@ -1,4 +1,5 @@
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
 import type { ChatTripFlow } from "@/features/chat/types/chat.types";
 import { Bell, Network, Truck } from "lucide-react-native";
 import React from "react";
@@ -142,22 +143,26 @@ export const TripCard = React.memo(function TripCard({
       </TouchableOpacity>
       <View style={styles.tripHubFooterRow}>
         <View style={styles.tripHubFooterIcons}>{partyIconRow}</View>
-        {showVehicleLate || (lastActivityPartyLabel && lastMessagePreview) ? (
+        {showVehicleLate ? (
           <Text
             style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
             numberOfLines={2}
           >
-            {showVehicleLate ? (
-              <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
-            ) : (
-              <>
-                <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
-                  {lastActivityPartyLabel}:{" "}
-                </Text>
-                {lastMessagePreview}
-              </>
-            )}
+            <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
           </Text>
+        ) : lastActivityPartyLabel && lastMessagePreview ? (
+          <View style={styles.tripHubFooterPreviewRow}>
+            <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
+              {lastActivityPartyLabel}:{" "}
+            </Text>
+            <View style={styles.tripHubFooterPreviewBody}>
+              <ChatListPreviewText
+                text={lastMessagePreview}
+                style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
+                numberOfLines={2}
+              />
+            </View>
+          </View>
         ) : null}
       </View>
     </View>
@@ -382,6 +387,17 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     flexShrink: 0,
     gap: 8,
+  },
+  tripHubFooterPreviewRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  tripHubFooterPreviewBody: {
+    flex: 1,
+    minWidth: 0,
   },
   tripHubFooterText: {
     flex: 1,

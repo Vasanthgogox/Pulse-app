@@ -8,7 +8,7 @@ type Props = {
   style?: StyleProp<TextStyle>;
 };
 
-/** Global driver shell brand label — same typography as legacy Q PILOT header. */
+/** Global driver shell brand label — same typography as legacy Pulse header. */
 export function DriverBrandMark({ color, style }: Props) {
   return (
     <Text style={[styles.brand, color != null ? { color } : null, style]}>

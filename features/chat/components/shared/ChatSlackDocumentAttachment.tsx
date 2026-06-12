@@ -1,6 +1,6 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CHAT_ACCENT, CHAT_INCOMING_BUBBLE } from "@/features/chat/chatTheme";
-import { ChatImage } from "@/features/chat/components/ChatImage";
+import { ChatDocumentThreadPreview } from "@/features/chat/components/ChatDocumentThreadPreview";
 import {
   documentExtensionAccent,
   type DocumentShareDisplay,
@@ -141,7 +141,7 @@ export function ChatSlackDocumentAttachment({
 
       {display.isImage && display.storagePath ? (
         <View style={threadStyles.thumbWrap}>
-          <ChatImage storagePath={display.storagePath} style={threadStyles.thumb} />
+          <ChatDocumentThreadPreview storagePath={display.storagePath} />
         </View>
       ) : null}
     </Pressable>
@@ -246,14 +246,9 @@ const threadStyles = StyleSheet.create({
     color: "rgba(255,255,255,0.9)",
   },
   thumbWrap: {
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: "rgba(0,0,0,0.05)",
-    maxHeight: 168,
-  },
-  thumb: {
+    alignItems: "center",
+    justifyContent: "center",
     width: "100%",
-    height: 156,
-    backgroundColor: "rgba(0,0,0,0.04)",
+    paddingTop: 2,
   },
 });

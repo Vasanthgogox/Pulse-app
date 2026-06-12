@@ -54,7 +54,7 @@ export function indentAllocationStepSubtitle(
       case "rates":
         return "Step 2 · Partner rate and advance";
       case "driverPhone":
-        return "Step 3 · Driver mobile — we’ll suggest a name if they’re on Q";
+        return "Step 3 · Driver mobile — we’ll suggest a name if they’re on Pulse";
       case "driverName":
         return "Step 4 · Driver name for tracking";
       case "vehicleReg":

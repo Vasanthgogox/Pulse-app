@@ -321,7 +321,7 @@ export default function DriverProfileScreen() {
 
   const handleShareProfile = () => {
     Share.share({
-      message: `${displayName} — Q Driver profile`,
+      message: `${displayName} — Pulse profile`,
       title: 'Share profile',
     }).catch(() => {});
   };
@@ -329,10 +329,10 @@ export default function DriverProfileScreen() {
   const handleInviteDrivers = () => {
     const inviteUrl = buildDriverInviteUrl();
     const message =
-      `Join me on Q Driver! Manage trips, payouts, and network requests.\n\n` +
+      `Join me on Pulse! Manage trips, payouts, and network requests.\n\n` +
       `Sign up here: ${inviteUrl}`;
     Share.share({
-      title: 'Join Q Driver',
+      title: 'Join Pulse',
       message,
       url: inviteUrl,
     }).catch(() => {});

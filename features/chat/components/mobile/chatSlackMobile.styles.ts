@@ -445,6 +445,8 @@ export const slackMobileStyles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
+    width: "100%",
+    alignSelf: "stretch",
   },
   chromeDivider: {
     height: StyleSheet.hairlineWidth,
@@ -460,6 +462,9 @@ export const slackMobileStyles = StyleSheet.create({
     backgroundColor: "#F4F4F4",
     borderWidth: 1,
     borderColor: "#ECECEC",
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
   },
   filterRow: {
     flexDirection: "row",
@@ -467,15 +472,18 @@ export const slackMobileStyles = StyleSheet.create({
     gap: 4,
   },
   filterChip: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "transparent",
     backgroundColor: "transparent",
+    minWidth: 0,
   },
   filterChipActive: {
     backgroundColor: SLACK_MOBILE.chipActiveBg,
@@ -826,6 +834,9 @@ export const slackMobileStyles = StyleSheet.create({
   threadMsgRowLead: {
     paddingTop: 11,
     paddingBottom: 5,
+  },
+  threadMsgRowPartyBreak: {
+    marginTop: 8,
   },
   threadMsgRowContinuation: {
     paddingTop: 3,

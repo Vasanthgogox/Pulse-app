@@ -2,6 +2,7 @@ import type {
   ConversationPartyType,
   TripMessageRow,
 } from "@/features/chat/types/chat.types";
+import { chatListThumbFetch } from "./chatPreviewTransform.util";
 import { resolveDocumentShareDisplay } from "./documentShareDisplay.util";
 import { buildSupabaseRenderImagePublicUrl } from "./storageRenderImageUrl";
 
@@ -10,8 +11,7 @@ export type ConversationImagePreview = {
   storagePath?: string | null;
 };
 
-const LIST_THUMB_WIDTH = 156;
-const LIST_THUMB_QUALITY = 58;
+const LIST_THUMB_DISPLAY_W = 156;
 
 function trimStoragePath(message: TripMessageRow): string {
   const metadata =
@@ -22,11 +22,12 @@ function trimStoragePath(message: TripMessageRow): string {
 }
 
 function previewUrlFromStoragePath(storagePath: string): string | null {
+  const fetch = chatListThumbFetch(LIST_THUMB_DISPLAY_W);
   return (
     buildSupabaseRenderImagePublicUrl({
       storagePath,
-      width: LIST_THUMB_WIDTH,
-      quality: LIST_THUMB_QUALITY,
+      width: fetch.width,
+      quality: fetch.quality,
     }) ?? null
   );
 }

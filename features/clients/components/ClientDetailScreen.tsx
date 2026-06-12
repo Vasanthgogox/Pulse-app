@@ -1112,7 +1112,7 @@ export default function ClientDetailScreen({
 
   const handleInviteToApp = useCallback(() => {
     const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
-    Share.share({ message, title: "Invite to Q" });
+    Share.share({ message, title: "Invite to Pulse" });
   }, [clientName]);
 
   // TRANSACTION LEDGER — Aggressive consolidation & tally, O(n). Must run before any early return (Rules of Hooks).
@@ -2668,7 +2668,7 @@ export default function ClientDetailScreen({
               }}
               onInviteToApp={() => {
                 const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
-                Share.share({ message, title: "Invite to Q" })
+                Share.share({ message, title: "Invite to Pulse" })
                   .then(() => {
                     triggerSuccess("INVITE_SENT");
                   })
@@ -2839,7 +2839,7 @@ export default function ClientDetailScreen({
                 ]}
                 onPress={() => {
                   const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
-                  Share.share({ message, title: "Invite to Q" });
+                  Share.share({ message, title: "Invite to Pulse" });
                 }}
                 activeOpacity={0.8}
               >

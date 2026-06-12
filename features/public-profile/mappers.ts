@@ -103,7 +103,7 @@ export function clientToPublicEntity(c: ClientRow): PublicProfileEntity {
     subtitle: c.contact_person ?? null,
     bio:
       c.address
-        ? `Operating out of ${c.address.split(",")[0]}. Connected via the Q network for real-time shared-ledger reconciliation.`
+        ? `Operating out of ${c.address.split(",")[0]}. Connected via the Pulse network for real-time shared-ledger reconciliation.`
         : null,
     metrics,
     facts,
@@ -177,7 +177,7 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
     subtitle: s.contact_person ?? null,
     bio:
       s.address
-        ? `Fleet operator based in ${s.address.split(",")[0]}. Servicing long-haul and regional routes on the Q network.`
+        ? `Fleet operator based in ${s.address.split(",")[0]}. Servicing long-haul and regional routes on the Pulse network.`
         : null,
     metrics,
     facts,

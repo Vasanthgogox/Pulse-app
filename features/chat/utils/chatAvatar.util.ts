@@ -164,8 +164,59 @@ export function resolveNetworkPartnerAvatar(
   };
 }
 
-/** Stable lane / list / header avatar for a trip conversation party. */
-export function resolveTripConversationAvatar(
+function normalizePartyLabelKey(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Linked org user is the trip's integrated client (shipper-hosted trip). */
+export function viewerIsLinkedTripClientViewer(params: {
+  clientLanePartyName: string | null | undefined;
+  viewerOrgId: string;
+  viewerOrgName: string | null | undefined;
+  tripHostOrgId: string | null | undefined;
+  composeClientLinkedOrgId: string | null | undefined;
+}): boolean {
+  const v = params.viewerOrgId.trim();
+  const host = (params.tripHostOrgId ?? "").trim();
+  if (!v || !host || v === host) return false;
+  const linked = (params.composeClientLinkedOrgId ?? "").trim();
+  if (linked && v === linked) return true;
+  const pn = normalizePartyLabelKey(params.clientLanePartyName);
+  const on = normalizePartyLabelKey(params.viewerOrgName);
+  return pn.length > 0 && on.length > 0 && pn === on;
+}
+
+/** Linked org user is the trip's integrated supplier. */
+export function viewerIsLinkedTripSupplierViewer(params: {
+  supplierLanePartyName: string | null | undefined;
+  viewerOrgId: string;
+  viewerOrgName: string | null | undefined;
+  tripHostOrgId: string | null | undefined;
+  composeSupplierLinkedOrgId: string | null | undefined;
+}): boolean {
+  const v = params.viewerOrgId.trim();
+  const host = (params.tripHostOrgId ?? "").trim();
+  if (!v || !host || v === host) return false;
+  const linked = (params.composeSupplierLinkedOrgId ?? "").trim();
+  if (linked && v === linked) return true;
+  const pn = normalizePartyLabelKey(params.supplierLanePartyName);
+  const on = normalizePartyLabelKey(params.viewerOrgName);
+  return pn.length > 0 && on.length > 0 && pn === on;
+}
+
+export type TripConversationAvatarViewerContext = {
+  viewerOrgId?: string | null;
+  viewerOrgName?: string | null;
+  tripHostOrgId?: string | null;
+};
+
+const TRIP_AVATAR_FALLBACK_ORDER: ConversationPartyType[] = [
+  "client",
+  "supplier",
+  "driver",
+];
+
+function resolveTripConversationPartyAvatar(
   conv: Pick<
     TripConversation,
     "party_type" | "party_name" | "client_id" | "supplier_id" | "driver_id"
@@ -176,11 +227,9 @@ export function resolveTripConversationAvatar(
   const name = (conv.party_name ?? "").trim() || "Partner";
 
   if (conv.party_type === "driver") {
-    const driverId = conv.driver_id ?? composeTrip?.driver_id ?? null;
+    const driverId = composeTrip?.driver_id ?? conv.driver_id ?? null;
     const displayName =
-      name ||
-      (composeTrip?.driver_display_name ?? "").trim() ||
-      "Driver";
+      (composeTrip?.driver_display_name ?? "").trim() || name || "Driver";
     return resolveDriverAvatarIdentity({
       driverId,
       displayName,
@@ -204,6 +253,177 @@ export function resolveTripConversationAvatar(
     composeTrip,
     brandingMap,
   });
+}
+
+function tripPartyExistsOnCompose(
+  partyType: ConversationPartyType,
+  conv: Pick<
+    TripConversation,
+    "client_id" | "supplier_id" | "driver_id"
+  >,
+  composeTrip: TripForCompose | null | undefined,
+): boolean {
+  if (partyType === "driver") {
+    return Boolean(String(composeTrip?.driver_id ?? conv.driver_id ?? "").trim());
+  }
+  if (partyType === "client") {
+    return Boolean(String(composeTrip?.client_id ?? conv.client_id ?? "").trim());
+  }
+  return Boolean(String(composeTrip?.supplier_id ?? conv.supplier_id ?? "").trim());
+}
+
+function syntheticConvForParty(
+  partyType: ConversationPartyType,
+  conv: Pick<
+    TripConversation,
+    "party_type" | "party_name" | "client_id" | "supplier_id" | "driver_id"
+  >,
+  composeTrip: TripForCompose | null | undefined,
+): Pick<
+  TripConversation,
+  "party_type" | "party_name" | "client_id" | "supplier_id" | "driver_id"
+> {
+  if (partyType === "driver") {
+    return {
+      party_type: "driver",
+      party_name:
+        (composeTrip?.driver_display_name ?? conv.party_name ?? "").trim() ||
+        "Driver",
+      client_id: conv.client_id,
+      supplier_id: conv.supplier_id,
+      driver_id: composeTrip?.driver_id ?? conv.driver_id ?? null,
+    };
+  }
+  if (partyType === "client") {
+    return {
+      party_type: "client",
+      party_name:
+        (composeTrip?.client_name ?? conv.party_name ?? "").trim() || "Client",
+      client_id: composeTrip?.client_id ?? conv.client_id ?? null,
+      supplier_id: conv.supplier_id,
+      driver_id: conv.driver_id,
+    };
+  }
+  return {
+    party_type: "supplier",
+    party_name:
+      (composeTrip?.supplier_name ?? conv.party_name ?? "").trim() ||
+      "Supplier",
+    client_id: conv.client_id,
+    supplier_id: composeTrip?.supplier_id ?? conv.supplier_id ?? null,
+    driver_id: conv.driver_id,
+  };
+}
+
+function viewerIsSelfTripParty(
+  partyType: ConversationPartyType,
+  conv: Pick<TripConversation, "party_name">,
+  composeTrip: TripForCompose | null | undefined,
+  viewerContext: TripConversationAvatarViewerContext,
+): boolean {
+  const viewerOrgId = (viewerContext.viewerOrgId ?? "").trim();
+  if (!viewerOrgId) return false;
+
+  if (partyType === "client") {
+    return viewerIsLinkedTripClientViewer({
+      clientLanePartyName:
+        composeTrip?.client_name ?? conv.party_name ?? null,
+      viewerOrgId,
+      viewerOrgName: viewerContext.viewerOrgName ?? null,
+      tripHostOrgId: viewerContext.tripHostOrgId ?? null,
+      composeClientLinkedOrgId: composeTrip?.client_linked_organization_id ?? null,
+    });
+  }
+
+  if (partyType === "supplier") {
+    return viewerIsLinkedTripSupplierViewer({
+      supplierLanePartyName:
+        composeTrip?.supplier_name ?? conv.party_name ?? null,
+      viewerOrgId,
+      viewerOrgName: viewerContext.viewerOrgName ?? null,
+      tripHostOrgId: viewerContext.tripHostOrgId ?? null,
+      composeSupplierLinkedOrgId:
+        composeTrip?.supplier_linked_organization_id ?? null,
+    });
+  }
+
+  return false;
+}
+
+/** Driver avatar for unified trip team room inbox rows. */
+export function resolveTripRoomDriverAvatar(params: {
+  driverId?: string | null;
+  title?: string | null;
+  composeTrip?: TripForCompose | null;
+}): ResolvedPartyAvatarIdentity {
+  const driverId = params.driverId ?? params.composeTrip?.driver_id ?? null;
+  const displayName =
+    params.composeTrip?.driver_display_name?.trim() ||
+    params.title?.trim() ||
+    "Driver";
+  return resolveDriverAvatarIdentity({
+    driverId,
+    displayName,
+    avatarUrl: params.composeTrip?.driver_avatar_url,
+    avatarSeed: params.composeTrip?.driver_avatar_seed,
+  });
+}
+
+/**
+ * Stable lane / list / header avatar for a trip conversation.
+ * Assigned driver DP wins for every lane; without a driver, show the lane party
+ * unless that party is the viewer — then fall back to the next counterparty.
+ */
+export function resolveTripConversationAvatar(
+  conv: Pick<
+    TripConversation,
+    "party_type" | "party_name" | "client_id" | "supplier_id" | "driver_id"
+  >,
+  composeTrip: TripForCompose | null | undefined,
+  brandingMap: Record<string, ChatOrgBranding>,
+  viewerContext?: TripConversationAvatarViewerContext,
+): ResolvedPartyAvatarIdentity {
+  const driverId = composeTrip?.driver_id ?? conv.driver_id ?? null;
+  if (String(driverId ?? "").trim()) {
+    const displayName =
+      (composeTrip?.driver_display_name ?? "").trim() ||
+      (conv.party_type === "driver" ? (conv.party_name ?? "").trim() : "") ||
+      "Driver";
+    return resolveDriverAvatarIdentity({
+      driverId,
+      displayName,
+      avatarUrl: composeTrip?.driver_avatar_url,
+      avatarSeed: composeTrip?.driver_avatar_seed,
+    });
+  }
+
+  const laneAvatar = resolveTripConversationPartyAvatar(
+    conv,
+    composeTrip,
+    brandingMap,
+  );
+  if (!viewerContext?.viewerOrgId?.trim()) {
+    return laneAvatar;
+  }
+
+  if (!viewerIsSelfTripParty(conv.party_type, conv, composeTrip, viewerContext)) {
+    return laneAvatar;
+  }
+
+  for (const partyType of TRIP_AVATAR_FALLBACK_ORDER) {
+    if (partyType === conv.party_type) continue;
+    if (!tripPartyExistsOnCompose(partyType, conv, composeTrip)) continue;
+    if (viewerIsSelfTripParty(partyType, conv, composeTrip, viewerContext)) {
+      continue;
+    }
+    return resolveTripConversationPartyAvatar(
+      syntheticConvForParty(partyType, conv, composeTrip),
+      composeTrip,
+      brandingMap,
+    );
+  }
+
+  return laneAvatar;
 }
 
 function cleanSystemUpdateDriverName(name: string): string | null {
@@ -261,6 +481,12 @@ function readAssignmentEventPayload(
   return meta;
 }
 
+export type AssignmentDriverProfileRef = {
+  displayName?: string;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+};
+
 export type SystemUpdateDriverContext = {
   composeTrip?: Pick<
     TripForCompose,
@@ -269,7 +495,18 @@ export type SystemUpdateDriverContext = {
     | "driver_avatar_url"
     | "driver_avatar_seed"
   > | null;
+  /** Driver photos keyed by id — from assignment audit resolution. */
+  driverProfiles?: Record<string, AssignmentDriverProfileRef>;
 };
+
+function driverProfileFromContext(
+  driverId: string | null | undefined,
+  context?: SystemUpdateDriverContext,
+): AssignmentDriverProfileRef | null {
+  const id = (driverId ?? "").trim();
+  if (!id || !context?.driverProfiles) return null;
+  return context.driverProfiles[id] ?? null;
+}
 
 /** Driver avatar for SYSTEM UPDATE cards (assignment + assigned status broadcasts). */
 export function resolveSystemUpdateDriverAvatar(
@@ -305,9 +542,11 @@ export function resolveSystemUpdateDriverAvatar(
   );
   const composeName =
     (context?.composeTrip?.driver_display_name ?? "").trim() || null;
+  const profile = driverProfileFromContext(driverId, context);
 
   let displayName =
     metaName ||
+    profile?.displayName ||
     contentName ||
     (driverId &&
     composeName &&
@@ -317,7 +556,7 @@ export function resolveSystemUpdateDriverAvatar(
     composeName;
 
   if (displayName && /^(driver|assigned|the driver)$/i.test(displayName)) {
-    displayName = contentName;
+    displayName = contentName || profile?.displayName;
   }
 
   if (!driverId && !displayName) return null;
@@ -333,9 +572,11 @@ export function resolveSystemUpdateDriverAvatar(
     displayName: displayName ?? "Driver",
     avatarUrl:
       metaAvatarUrl ||
+      profile?.avatarUrl ||
       (useComposeAvatar ? composeTrip?.driver_avatar_url : null),
     avatarSeed:
       metaAvatarSeed ||
+      profile?.avatarSeed ||
       (useComposeAvatar ? composeTrip?.driver_avatar_seed : null),
   });
 }
@@ -409,6 +650,9 @@ export function resolveDriverSwapAvatars(
   const ep = readAssignmentEventPayload(meta);
   const { prevId, newId } = readDriverSwapIds(meta);
 
+  const composeTrip = context?.composeTrip;
+  const composeDriverId = (composeTrip?.driver_id ?? "").trim() || null;
+
   const swapFromContent = /Driver changed from/i.test(content);
   const reassignFromContent = /Driver reassigned to/i.test(content);
   const idsDiffer =
@@ -418,14 +662,20 @@ export function resolveDriverSwapAvatars(
   if (swapFromContent && !prevId && !newId) {
     const names = extractDriverSwapNamesFromContent(content);
     if (!names.previousName || !names.nextName) return null;
+    const nextNameKey = names.nextName.trim().toLowerCase();
+    const composeName = (composeTrip?.driver_display_name ?? "").trim().toLowerCase();
+    const nextMatchesCompose =
+      Boolean(composeName) && composeName === nextNameKey;
     return {
       previous: resolveDriverAvatarIdentity({
         driverId: null,
         displayName: names.previousName,
       }),
       next: resolveDriverAvatarIdentity({
-        driverId: null,
+        driverId: nextMatchesCompose ? composeDriverId : null,
         displayName: names.nextName,
+        avatarUrl: nextMatchesCompose ? composeTrip?.driver_avatar_url : null,
+        avatarSeed: nextMatchesCompose ? composeTrip?.driver_avatar_seed : null,
       }),
     };
   }
@@ -461,17 +711,22 @@ export function resolveDriverSwapAvatars(
       ? ep.driver_avatar_seed_prev
       : null;
 
-  const composeTrip = context?.composeTrip;
-  const composeDriverId = (composeTrip?.driver_id ?? "").trim() || null;
   const useComposeForNew =
     Boolean(composeTrip) &&
     (!newId || !composeDriverId || composeDriverId === newId);
 
+  const prevProfile = driverProfileFromContext(prevId, context);
+  const nextProfile = driverProfileFromContext(newId, context);
+
   const previous = resolveDriverAvatarIdentity({
     driverId: prevId,
-    displayName: names.previousName || metaPrevName || "Driver",
-    avatarUrl: metaPrevAvatarUrl,
-    avatarSeed: metaPrevAvatarSeed,
+    displayName:
+      names.previousName ||
+      metaPrevName ||
+      prevProfile?.displayName ||
+      "Driver",
+    avatarUrl: metaPrevAvatarUrl || prevProfile?.avatarUrl,
+    avatarSeed: metaPrevAvatarSeed || prevProfile?.avatarSeed,
   });
 
   const next = resolveDriverAvatarIdentity({
@@ -479,14 +734,17 @@ export function resolveDriverSwapAvatars(
     displayName:
       names.nextName ||
       metaNewName ||
+      nextProfile?.displayName ||
       extractDriverNameFromSystemUpdateContent(content) ||
       (useComposeForNew ? composeTrip?.driver_display_name : null) ||
       "Driver",
     avatarUrl:
       metaNewAvatarUrl ||
+      nextProfile?.avatarUrl ||
       (useComposeForNew ? composeTrip?.driver_avatar_url : null),
     avatarSeed:
       metaNewAvatarSeed ||
+      nextProfile?.avatarSeed ||
       (useComposeForNew ? composeTrip?.driver_avatar_seed : null),
   });
 

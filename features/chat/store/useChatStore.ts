@@ -119,6 +119,8 @@ function ackFingerprint(patch: Partial<TripMessageRow>): string {
     patch.delivered_at,
     patch.is_read,
     patch.read_at,
+    patch.reactions != null ? JSON.stringify(patch.reactions) : "",
+    patch.edited_at ?? "",
   ].join('|');
 }
 

@@ -1,5 +1,5 @@
 /**
- * ShareLoadSheet — light bottom sheet to broadcast an indent to the Q Pulse network.
+ * ShareLoadSheet — light bottom sheet to broadcast an indent to the Pulse network.
  * Story broadcast (24h) + optional WhatsApp share with public story-detail URL (bidding page).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";

@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
    *  Two-pane layout matching the reference design:
    *    ┌────────────────┬───────────────────────────────────────────┐
    *    │ [icon] FROM    │ [icon] Available on mobile      [SYNC ▸] │
-   *    │  YOUR CONTACTS │  Open the Q app on your phone…           │
+   *    │  YOUR CONTACTS │  Open the Pulse app on your phone…       │
    *    │  subtitle…     │                                           │
    *    └────────────────┴───────────────────────────────────────────┘
    *

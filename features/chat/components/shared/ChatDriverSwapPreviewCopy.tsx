@@ -7,6 +7,7 @@ import {
   extractDriverSwapNamesFromContent,
   stripChatPreviewEmojiPrefix,
 } from "@/features/chat/utils/chatAvatar.util";
+import { ChatInlineMarkdownText } from "@/features/chat/utils/chatInlineMarkdown.util";
 import { StyleSheet, Text, type TextStyle } from "react-native";
 
 type Props = {
@@ -44,10 +45,13 @@ export function ChatDriverSwapPreviewCopy({
     );
   }
 
+  const fallback = cleaned || text;
   return (
-    <Text style={[styles.base, style]} numberOfLines={numberOfLines}>
-      {cleaned || text}
-    </Text>
+    <ChatInlineMarkdownText
+      text={fallback}
+      style={[styles.base, style]}
+      numberOfLines={numberOfLines}
+    />
   );
 }
 

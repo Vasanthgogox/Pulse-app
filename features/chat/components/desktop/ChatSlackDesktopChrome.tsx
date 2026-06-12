@@ -4,6 +4,7 @@ import { ChatDriverSwapInboxPreview } from "@/features/chat/components/shared/Ch
 import { ChatInboxImagePreviewStrip } from "@/features/chat/components/shared/ChatInboxImagePreviewStrip";
 import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
 import type { DriverSwapPair } from "@/features/chat/utils/chatAvatar.util";
+import { ChatLocationPingInboxPreview } from "@/features/chat/components/shared/ChatLocationPingInboxPreview";
 import { ChatSlackDocumentAttachmentCompact } from "@/features/chat/components/shared/ChatSlackDocumentAttachment";
 import type { ConversationImagePreview } from "@/features/chat/utils/conversationImagePreview.util";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
@@ -149,7 +150,7 @@ export function ChatSlackDesktopSidebarRow({
   title: string;
   partyLine?: string | null;
   preview?: string | null;
-  previewKind?: "default" | "system" | "image" | "document" | "data" | "html" | "driver_swap";
+  previewKind?: "default" | "system" | "image" | "document" | "data" | "html" | "driver_swap" | "location";
   previewImageUrl?: string | null;
   previewImagePreviews?: ConversationImagePreview[];
   previewDriverSwap?: DriverSwapPair | null;
@@ -253,7 +254,9 @@ export function ChatSlackDesktopSidebarRow({
               ) : null}
             </>
           ) : preview ? (
-            previewKind === "document" ? (
+            previewKind === "location" ? (
+              <ChatLocationPingInboxPreview text={preview} />
+            ) : previewKind === "document" ? (
               <ChatSlackDocumentAttachmentCompact
                 display={{
                   documentName: preview,

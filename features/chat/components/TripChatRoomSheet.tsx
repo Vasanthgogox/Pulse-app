@@ -5,8 +5,7 @@
  * linked client/supplier org members). Uses the platform `chat_*` store and
  * conversation-scoped realtime — not the legacy 3-lane trip chat UI.
  */
-import React, { useCallback, useState } from "react";
-import { useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -18,33 +17,76 @@ import {
   Text,
   TextInput,
   View,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Feather from "@expo/vector-icons/Feather";
 
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { Theme } from "@/constants/Theme";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 
-import { TripChatRoomActionCard } from "./TripChatRoomActionCard";
+import type { TripForCompose } from "../services/chat.service";
+import { useAssignmentAuditNameMaps } from "../hooks/useAssignmentAuditNameMaps";
+import {
+  TripChatRoomActionCard,
+  type TripChatRoomActionCardProps,
+} from "./TripChatRoomActionCard";
 import { useTripChatRoom } from "../hooks/useTripChatRoom";
+import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
 import type { ChatPlatformMessageRow } from "../types/chatPlatform.types";
-import { handleTripChatRoomAction } from "../utils/tripChatRoomActions.util";
+import { dedupeTripRoomActionCards } from "../utils/dedupeTripRoomActionCards.util";
 
 export interface TripChatRoomSheetProps {
   visible: boolean;
   tripId: string | null;
   tripLabel?: string;
+  composeTrip?: TripForCompose | null;
+  organizationId?: string | null;
   onClose: () => void;
   onViewTrip?: () => void;
+  /** When true, renders inline (full tab/route) instead of a modal sheet. */
+  embedded?: boolean;
+  /** Hide sheet header — parent thread chrome owns title/tabs (detail Team tab). */
+  chromeless?: boolean;
 }
 
-function MessageBubble({ message }: { message: ChatPlatformMessageRow }) {
+function MessageBubble({
+  message,
+  tripId,
+  composeTrip,
+  driverProfiles,
+  currentOrgId,
+  onClose,
+}: {
+  message: ChatPlatformMessageRow;
+  tripId: string;
+  composeTrip?: TripForCompose | null;
+  driverProfiles?: TripChatRoomActionCardProps["driverProfiles"];
+  currentOrgId?: string | null;
+  onClose: () => void;
+}) {
   const isSystem =
     message.sender_type === "system" || message.sender_type === "integration";
   const deleted = !!message.deleted_at;
 
   if (message.message_type === "action_card") {
-    return <TripChatRoomActionCard message={message} />;
+    return (
+      <TripChatRoomActionCard
+        message={message}
+        tripId={tripId}
+        composeTrip={composeTrip}
+        driverProfiles={driverProfiles}
+        currentOrgId={currentOrgId}
+        tripHint={{
+          pickupArea: composeTrip?.pickup_area,
+          dropLocation: composeTrip?.drop_location,
+          status: composeTrip?.status ?? null,
+        }}
+        onClose={onClose}
+      />
+    );
   }
 
   if (isSystem && message.message_type !== "text") {
@@ -69,20 +111,53 @@ function MessageBubble({ message }: { message: ChatPlatformMessageRow }) {
   );
 }
 
+function shellStyle(embedded: boolean): ViewStyle[] {
+  const base: ViewStyle[] = [styles.root];
+  if (Platform.OS === "web") {
+    base.push(WEB_APP_VIEWPORT_STYLE as ViewStyle);
+  }
+  if (embedded) {
+    base.push(styles.rootEmbedded);
+  }
+  return base;
+}
+
 export function TripChatRoomSheet({
   visible,
   tripId,
   tripLabel,
+  composeTrip,
+  organizationId,
   onClose,
   onViewTrip,
+  embedded = false,
+  chromeless = false,
 }: TripChatRoomSheetProps) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { currentOrganization } = useOrganization();
+  const currentOrgId = organizationId ?? currentOrganization?.id ?? null;
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
 
   const { room, messages, isLoading, isError, sendMessage, openRoom } =
     useTripChatRoom(visible ? tripId : null, { enabled: visible && !!tripId });
+
+  const { data: assignmentAuditRows = [] } = useTripAssignmentAuditHistoryQuery(
+    visible ? tripId : null,
+  );
+  const assignmentAuditMaps = useAssignmentAuditNameMaps(
+    currentOrgId,
+    assignmentAuditRows,
+    {
+      driver_display_name: composeTrip?.driver_display_name ?? null,
+      vehicle_display_number: composeTrip?.vehicle_display_number ?? null,
+    },
+  );
+
+  const displayMessages = useMemo(
+    () => dedupeTripRoomActionCards(messages),
+    [messages],
+  );
 
   const handleSend = useCallback(async () => {
     const text = draft.trim();
@@ -96,33 +171,21 @@ export function TripChatRoomSheet({
     }
   }, [draft, sendMessage, sending]);
 
-  const handleAction = useCallback(
-    (actionId: string, message: ChatPlatformMessageRow) => {
-      if (!tripId) return;
-      const handled = handleTripChatRoomAction(actionId, message, {
-        tripId,
-        router,
-        onClose,
-      });
-      if (!handled && actionId === "view_trip") onViewTrip?.();
-    },
-    [tripId, router, onClose, onViewTrip],
-  );
-
   const title = tripLabel?.trim() || room?.title || "Trip chat";
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
+  if (!visible) return null;
+
+  const body = (
+    <KeyboardAvoidingView
+      style={[
+        ...shellStyle(embedded),
+        chromeless ? styles.rootChromeless : null,
+        !chromeless ? { paddingTop: insets.top } : null,
+      ]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={0}
     >
-      <KeyboardAvoidingView
-        style={[styles.root, { paddingTop: insets.top }]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
+      {!chromeless ? (
         <View style={styles.header}>
           <Pressable
             onPress={onClose}
@@ -130,7 +193,11 @@ export function TripChatRoomSheet({
             accessibilityRole="button"
             accessibilityLabel="Close trip chat"
           >
-            <Feather name="x" size={22} color={Theme.textPrimary} />
+            <Feather
+              name={embedded ? "chevron-left" : "x"}
+              size={22}
+              color={Theme.textPrimary}
+            />
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle} numberOfLines={1}>
@@ -140,91 +207,141 @@ export function TripChatRoomSheet({
           </View>
           <View style={styles.headerBtn} />
         </View>
+      ) : null}
 
-        {isLoading ? (
-          <CenteredLoadingView />
-        ) : isError ? (
-          <View style={styles.centered}>
-            <Text style={styles.errorText}>Could not load trip chat.</Text>
-            <Pressable
-              style={styles.retryBtn}
-              onPress={() => void openRoom.mutateAsync()}
-            >
-              <Text style={styles.retryText}>Retry</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <FlatList
-            data={messages}
-            inverted
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: 8, paddingTop: insets.bottom + 72 },
-            ]}
+      {isLoading ? (
+        <CenteredLoadingView />
+      ) : isError ? (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Could not load trip chat.</Text>
+          <Pressable
+            style={styles.retryBtn}
+            onPress={() => void openRoom.mutateAsync()}
+          >
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={displayMessages}
+          inverted
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: 8, paddingTop: insets.bottom + 72 },
+          ]}
             renderItem={({ item }) =>
               item.message_type === "action_card" ? (
                 <TripChatRoomActionCard
                   message={item}
-                  onAction={(id, msg) => handleAction(id, msg)}
+                  tripId={tripId!}
+                  composeTrip={composeTrip}
+                  driverProfiles={assignmentAuditMaps.driverProfiles}
+                  currentOrgId={currentOrgId}
+                  tripHint={{
+                    pickupArea: composeTrip?.pickup_area,
+                    dropLocation: composeTrip?.drop_location,
+                    status: composeTrip?.status ?? null,
+                  }}
+                  onClose={onClose}
                 />
               ) : (
-                <MessageBubble message={item} />
+                <MessageBubble
+                  message={item}
+                  tripId={tripId!}
+                  composeTrip={composeTrip}
+                  driverProfiles={assignmentAuditMaps.driverProfiles}
+                  currentOrgId={currentOrgId}
+                  onClose={onClose}
+                />
               )
             }
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Text style={styles.emptyTitle}>No messages yet</Text>
-                <Text style={styles.emptySub}>
-                  Status updates, documents, and payments appear here automatically.
-                </Text>
-              </View>
-            }
-          />
-        )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No messages yet</Text>
+              <Text style={styles.emptySub}>
+                Status updates, documents, and payments appear here automatically.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
-        <View
+      <View
+        style={[
+          styles.composeBar,
+          { paddingBottom: Math.max(insets.bottom, 12) },
+        ]}
+      >
+        <TextInput
+          style={styles.input}
+          placeholder="Message the trip team…"
+          placeholderTextColor={Theme.textSecondary}
+          value={draft}
+          onChangeText={setDraft}
+          multiline
+          maxLength={8000}
+          editable={!isLoading && !isError}
+        />
+        <Pressable
           style={[
-            styles.composeBar,
-            { paddingBottom: Math.max(insets.bottom, 12) },
+            styles.sendBtn,
+            (!draft.trim() || sending) && styles.sendBtnDisabled,
           ]}
+          onPress={() => void handleSend()}
+          disabled={!draft.trim() || sending}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
         >
-          <TextInput
-            style={styles.input}
-            placeholder="Message the trip team…"
-            placeholderTextColor={Theme.textSecondary}
-            value={draft}
-            onChangeText={setDraft}
-            multiline
-            maxLength={8000}
-            editable={!isLoading && !isError}
-          />
-          <Pressable
-            style={[
-              styles.sendBtn,
-              (!draft.trim() || sending) && styles.sendBtnDisabled,
-            ]}
-            onPress={() => void handleSend()}
-            disabled={!draft.trim() || sending}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={Theme.textOnDark} />
-            ) : (
-              <Feather name="send" size={18} color={Theme.textOnDark} />
-            )}
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+          {sending ? (
+            <ActivityIndicator size="small" color={Theme.textOnDark} />
+          ) : (
+            <Feather name="send" size={18} color={Theme.textOnDark} />
+          )}
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+
+  if (embedded) {
+    return <View style={styles.embeddedHost}>{body}</View>;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
+      {body}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  embeddedHost: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+  },
   root: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
+  },
+  rootEmbedded: {
+    width: "100%",
+    minHeight: 0,
+  },
+  rootChromeless: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: "transparent",
+  },
+  list: {
+    flex: 1,
+    minHeight: 0,
   },
   header: {
     flexDirection: "row",
@@ -257,8 +374,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   listContent: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     flexGrow: 1,
+    width: "100%",
   },
   bubble: {
     alignSelf: "flex-start",

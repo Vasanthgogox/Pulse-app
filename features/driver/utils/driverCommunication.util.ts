@@ -28,7 +28,7 @@ export function buildTripFollowUpWhatsappMessage(input: {
     `Pending amount: ${amountLabel(input.amount)}`,
     `Route: ${from} → ${to}`,
     ``,
-    `Shared from Q Driver app.`,
+    `Shared from Pulse app.`,
   ].join('\n');
 }
 
@@ -63,7 +63,7 @@ export function buildTripClaimWhatsappMessage(input: {
     `Driver: ${driverName} (${driverPhone})`,
     ``,
     `A PDF with full trip & amount details was generated on this device—please review it alongside this message.`,
-    `Shared from Q Driver app.`,
+    `Shared from Pulse app.`,
   ].join('\n');
 }
 
@@ -84,7 +84,7 @@ export function buildBulkTripClaimWhatsappMessage(input: {
     `Driver: ${driverName} (${driverPhone})`,
     ``,
     `The PDF includes fleet-wise trip details for verification.`,
-    `Shared from Q Driver app.`,
+    `Shared from Pulse app.`,
   ].join('\n');
 }
 

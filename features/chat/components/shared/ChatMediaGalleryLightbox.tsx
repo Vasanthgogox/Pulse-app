@@ -22,6 +22,11 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  loadImageNaturalSize,
+  resolveFitImageLayout,
+} from "@/features/chat/utils/fitImageInViewport.util";
+import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 
 type GalleryLoadPass = "default" | "signed" | "blob";
 
@@ -41,30 +46,6 @@ async function loadGallerySlideUri(
 const CHROME_TOP = 52;
 const CHROME_BOTTOM = 56;
 const H_PAD = 16;
-
-function resolveSlideImageLayout(
-  natural: { width: number; height: number },
-  viewportWidth: number,
-  viewportHeight: number,
-): { width: number; height: number; scrollable: boolean } {
-  const maxW = Math.max(1, viewportWidth - H_PAD * 2);
-  const maxH = Math.max(1, viewportHeight - CHROME_TOP - CHROME_BOTTOM);
-  const aspect = natural.width / Math.max(natural.height, 1);
-
-  // Tall pages: fit width, allow vertical scroll for the rest.
-  if (natural.height / natural.width > maxH / maxW) {
-    const renderW = maxW;
-    const renderH = Math.max(1, renderW / aspect);
-    return { width: renderW, height: renderH, scrollable: renderH > maxH + 1 };
-  }
-
-  const scale = Math.min(maxW / natural.width, maxH / natural.height, 1);
-  return {
-    width: Math.max(1, natural.width * scale),
-    height: Math.max(1, natural.height * scale),
-    scrollable: false,
-  };
-}
 
 function GallerySlidePage({
   slide,
@@ -160,8 +141,27 @@ function GallerySlidePage({
     })();
   }, [slide]);
 
+  useEffect(() => {
+    if (!uri || loading || error) {
+      setNaturalSize(null);
+      return;
+    }
+    let cancelled = false;
+    void loadImageNaturalSize(uri).then((size) => {
+      if (cancelled || !size) return;
+      setNaturalSize(size);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, loading, error]);
+
   const imageLayout = naturalSize
-    ? resolveSlideImageLayout(naturalSize, width, viewportHeight)
+    ? resolveFitImageLayout(naturalSize, width, viewportHeight, {
+        horizontal: H_PAD,
+        top: CHROME_TOP,
+        bottom: CHROME_BOTTOM,
+      })
     : null;
 
   return (
@@ -178,41 +178,59 @@ function GallerySlidePage({
         </View>
       ) : null}
       {uri && !error ? (
-        <ScrollView
-          style={styles.slideScroll}
-          contentContainerStyle={[
-            styles.slideScrollContent,
-            {
-              minHeight: viewportHeight,
-              justifyContent: imageLayout?.scrollable ? "flex-start" : "center",
-              paddingTop: CHROME_TOP,
-              paddingBottom: CHROME_BOTTOM,
-            },
-          ]}
-          showsVerticalScrollIndicator={imageLayout?.scrollable ?? false}
-          centerContent={!imageLayout?.scrollable}
-          nestedScrollEnabled
-          bounces
-        >
-          <Image
-            source={{ uri }}
-            style={
-              imageLayout
-                ? { width: imageLayout.width, height: imageLayout.height }
-                : styles.fullImageFallback
-            }
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            recyclingKey={`${slide.key}-${uri}`}
-            transition={180}
-            onLoad={(event) => {
-              const w = event.source.width;
-              const h = event.source.height;
-              if (w > 0 && h > 0) setNaturalSize({ width: w, height: h });
-            }}
-            onError={onImageError}
-          />
-        </ScrollView>
+        naturalSize ? (
+          <ScrollView
+            style={styles.slideScroll}
+            contentContainerStyle={[
+              styles.slideScrollContent,
+              {
+                minHeight: viewportHeight,
+                justifyContent: imageLayout?.scrollable ? "flex-start" : "center",
+                paddingTop: CHROME_TOP,
+                paddingBottom: CHROME_BOTTOM,
+              },
+            ]}
+            showsVerticalScrollIndicator={imageLayout?.scrollable ?? false}
+            centerContent={!imageLayout?.scrollable}
+            nestedScrollEnabled
+            bounces
+          >
+            <Image
+              source={{ uri }}
+              style={
+                imageLayout
+                  ? {
+                      width: imageLayout.width,
+                      height: imageLayout.height,
+                      maxWidth: width - H_PAD * 2,
+                      maxHeight: viewportHeight - CHROME_TOP - CHROME_BOTTOM,
+                    }
+                  : undefined
+              }
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              recyclingKey={`${slide.key}-${uri}`}
+              transition={180}
+              onError={onImageError}
+            />
+          </ScrollView>
+        ) : (
+          <View style={styles.pageCenter}>
+            <Image
+              source={{ uri }}
+              style={styles.measureImage}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              recyclingKey={`${slide.key}-${uri}-measure`}
+              onLoad={(event) => {
+                const w = event.source.width;
+                const h = event.source.height;
+                if (w > 0 && h > 0) setNaturalSize({ width: w, height: h });
+              }}
+              onError={onImageError}
+            />
+          </View>
+        )
       ) : null}
       {slide.fileName ? (
         <Text style={styles.caption} numberOfLines={2}>
@@ -286,7 +304,13 @@ export function ChatMediaGalleryLightbox({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.root,
+          Platform.OS === "web" ? (WEB_APP_VIEWPORT_STYLE as object) : null,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
         <Pressable
           style={[styles.closeBtn, { top: insets.top + 8 }]}
           onPress={onClose}
@@ -413,11 +437,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: H_PAD,
   },
-  fullImageFallback: {
-    width: "100%",
-    maxHeight: "100%",
-    minHeight: 120,
-    aspectRatio: 1,
+  measureImage: {
+    width: 1,
+    height: 1,
+    opacity: 0,
+    position: "absolute",
   },
   caption: {
     position: "absolute",

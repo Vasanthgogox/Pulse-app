@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { CHAT_ACCENT, CHAT_TEXT_MUTED, CHAT_TEXT_SECONDARY } from "@/features/chat/chatTheme";
 import { ChatImage } from "@/features/chat/components/ChatImage";
@@ -144,15 +144,24 @@ function confirmDocumentShare(
   payload: DocumentSharePayload,
   resend: boolean,
   onConfirm: () => void,
+  onCancel?: () => void,
 ) {
+  let consumed = false;
+  const once = (fn: () => void) => () => {
+    if (consumed) return;
+    consumed = true;
+    fn();
+  };
+
   if (resend) {
     Alert.alert(
       "Send again?",
       `Share "${payload.label}" in this chat again?`,
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Send again", onPress: onConfirm },
+        { text: "Cancel", style: "cancel", onPress: once(() => onCancel?.()) },
+        { text: "Send again", onPress: once(onConfirm) },
       ],
+      { cancelable: true, onDismiss: once(() => onCancel?.()) },
     );
     return;
   }
@@ -160,25 +169,35 @@ function confirmDocumentShare(
     "Send document?",
     `Share "${payload.label}" in this chat?`,
     [
-      { text: "Cancel", style: "cancel" },
-      { text: "Send", onPress: onConfirm },
+      { text: "Cancel", style: "cancel", onPress: once(() => onCancel?.()) },
+      { text: "Send", onPress: once(onConfirm) },
     ],
+    { cancelable: true, onDismiss: once(() => onCancel?.()) },
   );
 }
 
 function DocRowActions({
   alreadySent,
   isSharing,
+  isConfirming,
   disabled,
   onSend,
   onSendAgain,
 }: {
   alreadySent: boolean;
   isSharing: boolean;
+  isConfirming: boolean;
   disabled: boolean;
   onSend: () => void;
   onSendAgain: () => void;
 }) {
+  if (isConfirming && !isSharing) {
+    return (
+      <View style={s.actionsCol}>
+        <Text style={s.actionMeta}>Confirm…</Text>
+      </View>
+    );
+  }
   if (isSharing) {
     return (
       <View style={s.actionsCol}>
@@ -235,22 +254,29 @@ function DocRowActions({
 
 function DocRow({
   item,
-  onShare,
+  onRequestShare,
   alreadySentPaths = [],
   sharingPath,
+  confirmingPath,
 }: {
   item: ChatHubDocument;
-  onShare: (doc: DocumentSharePayload) => void;
+  onRequestShare: (doc: DocumentSharePayload, resend: boolean) => void;
   alreadySentPaths?: string[];
   sharingPath: string | null;
+  confirmingPath: string | null;
 }) {
   const uploaded = formatUploadedAt(item.uploaded_at);
+  const normalizedPath = normalizeTripDocumentsStoragePath(item.storage_path);
   const alreadySent = pathAlreadySent(item.storage_path, alreadySentPaths);
   const isSharing =
     sharingPath != null &&
-    normalizeTripDocumentsStoragePath(sharingPath) ===
-      normalizeTripDocumentsStoragePath(item.storage_path);
-  const actionsDisabled = sharingPath != null && !isSharing;
+    normalizeTripDocumentsStoragePath(sharingPath) === normalizedPath;
+  const isConfirming =
+    confirmingPath != null &&
+    normalizeTripDocumentsStoragePath(confirmingPath) === normalizedPath;
+  const actionsDisabled =
+    (sharingPath != null && !isSharing) ||
+    (confirmingPath != null && !isConfirming);
 
   const payload: DocumentSharePayload = {
     key: item.key,
@@ -263,13 +289,13 @@ function DocRow({
   };
 
   const handleSend = () => {
-    if (sharingPath) return;
-    confirmDocumentShare(payload, false, () => onShare(payload));
+    if (sharingPath || confirmingPath) return;
+    onRequestShare(payload, false);
   };
 
   const handleSendAgain = () => {
-    if (sharingPath) return;
-    confirmDocumentShare(payload, true, () => onShare(payload));
+    if (sharingPath || confirmingPath) return;
+    onRequestShare(payload, true);
   };
 
   return (
@@ -291,6 +317,7 @@ function DocRow({
       <DocRowActions
         alreadySent={alreadySent}
         isSharing={isSharing}
+        isConfirming={isConfirming}
         disabled={actionsDisabled}
         onSend={handleSend}
         onSendAgain={handleSendAgain}
@@ -314,6 +341,9 @@ export function DocumentShareSheet({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharingPath, setSharingPath] = useState<string | null>(null);
+  const [confirmingPath, setConfirmingPath] = useState<string | null>(null);
+  const [sessionSentPaths, setSessionSentPaths] = useState<string[]>([]);
+  const shareInFlightRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!visible) return;
@@ -338,18 +368,66 @@ export function DocumentShareSheet({
   }, [load]);
 
   useEffect(() => {
-    if (!visible) setSharingPath(null);
+    if (!visible) {
+      setSharingPath(null);
+      setConfirmingPath(null);
+      shareInFlightRef.current = null;
+    }
   }, [visible]);
 
+  const mergedSentPaths = useMemo(
+    () => [...alreadySentPaths, ...sessionSentPaths],
+    [alreadySentPaths, sessionSentPaths],
+  );
+
   const handleShare = useCallback(
-    (doc: DocumentSharePayload) => {
-      if (sharingPath) return;
+    async (doc: DocumentSharePayload) => {
+      const pathKey = normalizeTripDocumentsStoragePath(doc.storage_path);
+      if (!pathKey || shareInFlightRef.current === pathKey) return;
+
+      shareInFlightRef.current = pathKey;
       setSharingPath(doc.storage_path);
-      void Promise.resolve(onShare(doc)).finally(() => {
+      try {
+        await Promise.resolve(onShare(doc));
+        setSessionSentPaths((prev) =>
+          prev.some((p) => normalizeTripDocumentsStoragePath(p) === pathKey)
+            ? prev
+            : [...prev, doc.storage_path],
+        );
+      } finally {
+        shareInFlightRef.current = null;
         setSharingPath(null);
-      });
+      }
     },
-    [onShare, sharingPath],
+    [onShare],
+  );
+
+  const requestShare = useCallback(
+    (doc: DocumentSharePayload, resend: boolean) => {
+      const pathKey = normalizeTripDocumentsStoragePath(doc.storage_path);
+      if (!pathKey) return;
+      if (
+        shareInFlightRef.current === pathKey ||
+        sharingPath != null ||
+        confirmingPath != null
+      ) {
+        return;
+      }
+
+      const clearConfirm = () => setConfirmingPath(null);
+
+      setConfirmingPath(doc.storage_path);
+      confirmDocumentShare(
+        doc,
+        resend,
+        () => {
+          clearConfirm();
+          void handleShare(doc);
+        },
+        clearConfirm,
+      );
+    },
+    [confirmingPath, sharingPath, handleShare],
   );
 
   const sections = useMemo((): HubSection[] => {
@@ -430,7 +508,7 @@ export function DocumentShareSheet({
           <Pressable
             style={({ pressed }) => [s.addRow, pressed && s.addRowPressed]}
             onPress={() => void handleUploadTripDoc()}
-            disabled={uploading || sharingPath != null}
+            disabled={uploading || sharingPath != null || confirmingPath != null}
           >
             <View style={s.addIcon}>
               {uploading ? (
@@ -490,9 +568,10 @@ export function DocumentShareSheet({
             renderItem={({ item }) => (
               <DocRow
                 item={item}
-                onShare={handleShare}
-                alreadySentPaths={alreadySentPaths}
+                onRequestShare={requestShare}
+                alreadySentPaths={mergedSentPaths}
                 sharingPath={sharingPath}
+                confirmingPath={confirmingPath}
               />
             )}
             ListFooterComponent={<View style={{ height: 8 }} />}

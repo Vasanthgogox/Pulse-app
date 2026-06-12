@@ -1,112 +1,187 @@
 /**
- * Renders `action_card` messages in the unified trip room.
- * Metadata carries `event_type`, optional `body`, and `actions[]`.
+ * Trip room action_card — renders through the legacy lane UI (SystemEventCard,
+ * ledger rows, location cards) while keeping platform `chat_messages` backend.
  */
-import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo } from "react";
+import { useRouter } from "expo-router";
 
-import { Theme } from "@/constants/Theme";
-
+import type { TripForCompose } from "../services/chat.service";
 import type { ChatPlatformMessageRow } from "../types/chatPlatform.types";
+import { platformActionCardToTripMessage } from "../utils/tripRoomLegacyMessage.util";
+import { parseMessageLocationData } from "../utils/locationLogPayload.util";
+import { handleTripChatRoomAction } from "../utils/tripChatRoomActions.util";
+import { ledgerEventInvolvesOrg } from "../utils/ledgerVisibility.util";
+import {
+  buildChatRouteContextLabel,
+  ChatLedgerEventCard,
+  ChatSystemEventCard,
+} from "./ChatEventCard";
+import { ChatLocationSystemCard } from "./ChatLocationSystemCard";
+import { SystemEventCard } from "./SystemEventCard";
+import type { SystemUpdateDriverContext } from "@/features/chat/utils/chatAvatar.util";
 
-interface TripRoomAction {
-  id: string;
-  label: string;
+export interface TripChatRoomActionCardProps {
+  message: ChatPlatformMessageRow;
+  tripId: string;
+  currentOrgId?: string | null;
+  composeTrip?: TripForCompose | null;
+  driverProfiles?: SystemUpdateDriverContext["driverProfiles"];
+  tripHint?: {
+    pickupArea?: string | null;
+    dropLocation?: string | null;
+    status?: string | null;
+  };
+  onClose?: () => void;
 }
 
 export function TripChatRoomActionCard({
   message,
-  onAction,
-}: {
-  message: ChatPlatformMessageRow;
-  onAction?: (actionId: string, message: ChatPlatformMessageRow) => void;
-}) {
-  const meta = message.metadata ?? {};
-  const body =
-    typeof meta.body === "string" && meta.body.trim()
-      ? meta.body.trim()
-      : message.content?.trim() || "";
-  const actions = Array.isArray(meta.actions)
-    ? (meta.actions as TripRoomAction[]).filter(
-        (a) => a && typeof a.id === "string" && typeof a.label === "string",
-      )
-    : [];
+  tripId,
+  currentOrgId,
+  composeTrip,
+  driverProfiles,
+  tripHint,
+  onClose,
+}: TripChatRoomActionCardProps) {
+  const router = useRouter();
+
+  const legacy = useMemo(
+    () => platformActionCardToTripMessage(message),
+    [message],
+  );
+
+  const routeContext = useMemo(
+    () =>
+      buildChatRouteContextLabel(
+        tripHint?.pickupArea ?? composeTrip?.pickup_area ?? null,
+        tripHint?.dropLocation ?? composeTrip?.drop_location ?? null,
+      ),
+    [tripHint, composeTrip],
+  );
+
+  const openLedger = () => {
+    handleTripChatRoomAction("view_ledger", message, {
+      tripId,
+      router,
+      onClose,
+    });
+  };
+
+  const m = legacy;
+
+  if (m.message_type === "tracking") {
+    const trackLoc = parseMessageLocationData(m);
+    if (trackLoc) {
+      return (
+        <ChatLocationSystemCard
+          message={m}
+          location={trackLoc}
+          isMobile
+          tripHint={{
+            pickupArea: tripHint?.pickupArea ?? composeTrip?.pickup_area,
+            dropLocation: tripHint?.dropLocation ?? composeTrip?.drop_location,
+            status: tripHint?.status ?? composeTrip?.status ?? null,
+          }}
+          composeTrip={composeTrip}
+          conversationDriverId={composeTrip?.driver_id ?? null}
+        />
+      );
+    }
+  }
+
+  if (m.message_type === "status_change" || m.message_type === "image") {
+    return (
+      <SystemEventCard
+        message={m}
+        isMobile
+        routeContext={routeContext}
+        composeTrip={composeTrip}
+        currentOrgId={currentOrgId ?? undefined}
+      />
+    );
+  }
+
+  if (m.message_type === "assignment_update") {
+    return (
+      <ChatSystemEventCard
+        message={m}
+        isMobile
+        routeContext={routeContext}
+        composeTrip={composeTrip}
+        driverProfiles={driverProfiles}
+      />
+    );
+  }
+
+  if (
+    m.message_type === "system" ||
+    m.message_type === "update" ||
+    m.message_type === "system_log" ||
+    m.message_type === "location_log"
+  ) {
+    const locData = parseMessageLocationData(m);
+    if (locData) {
+      return (
+        <ChatLocationSystemCard
+          message={m}
+          location={locData}
+          isMobile
+          tripHint={{
+            pickupArea: tripHint?.pickupArea ?? composeTrip?.pickup_area,
+            dropLocation: tripHint?.dropLocation ?? composeTrip?.drop_location,
+            status: tripHint?.status ?? composeTrip?.status ?? null,
+          }}
+          composeTrip={composeTrip}
+          conversationDriverId={composeTrip?.driver_id ?? null}
+        />
+      );
+    }
+    return (
+      <SystemEventCard
+        message={m}
+        isMobile
+        routeContext={routeContext}
+        composeTrip={composeTrip}
+      />
+    );
+  }
+
+  if (
+    m.message_type === "ledger_event" ||
+    m.message_type === "ledger" ||
+    m.message_type === "payment" ||
+    m.message_type === "ledger_update"
+  ) {
+    if (!currentOrgId || !ledgerEventInvolvesOrg(m, currentOrgId)) return null;
+    return (
+      <ChatLedgerEventCard
+        message={m}
+        currentOrgId={currentOrgId}
+        onAddToBook={openLedger}
+        onDispute={openLedger}
+        isMobile
+        hideLedgerActions={false}
+      />
+    );
+  }
+
+  if (m.message_type === "document_share") {
+    return (
+      <SystemEventCard
+        message={m}
+        isMobile
+        routeContext={routeContext}
+        composeTrip={composeTrip}
+      />
+    );
+  }
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.kicker}>Pulse</Text>
-      <Text style={styles.title}>{message.content || "Update"}</Text>
-      {body.length > 0 && body !== message.content ? (
-        <Text style={styles.body}>{body}</Text>
-      ) : null}
-      {actions.length > 0 ? (
-        <View style={styles.actions}>
-          {actions.map((action) => (
-            <Pressable
-              key={action.id}
-              style={styles.actionBtn}
-              onPress={() => onAction?.(action.id, message)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.actionLabel}>{action.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-    </View>
+    <SystemEventCard
+      message={m}
+      isMobile
+      routeContext={routeContext}
+      composeTrip={composeTrip}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    alignSelf: "center",
-    maxWidth: 340,
-    width: "92%",
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginVertical: 6,
-  },
-  kicker: {
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 0.4,
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-    lineHeight: 20,
-  },
-  body: {
-    marginTop: 6,
-    fontSize: 14,
-    lineHeight: 20,
-    color: Theme.textSecondary,
-  },
-  actions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  actionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: Theme.pulseIndigoWash,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.primary,
-  },
-  actionLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.primary,
-  },
-});

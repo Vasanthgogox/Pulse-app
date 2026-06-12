@@ -1075,7 +1075,7 @@ export default function SupplierDetailScreen({
 
   const handleInviteToApp = useCallback(() => {
     const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
-    Share.share({ message, title: "Invite to Q" })
+    Share.share({ message, title: "Invite to Pulse" })
       .then(() => {
         triggerSuccess("INVITE_SENT");
       })
@@ -2126,7 +2126,7 @@ export default function SupplierDetailScreen({
               }}
               onInviteToApp={() => {
                 const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
-                Share.share({ message, title: "Invite to Q" })
+                Share.share({ message, title: "Invite to Pulse" })
                   .then(() => {
                     // After sharing, show a friendlier message
                     triggerSuccess("INVITE_SENT");
@@ -2294,7 +2294,7 @@ export default function SupplierDetailScreen({
                 style={styles.profileSecondaryBtn}
                 onPress={() => {
                   const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
-                  Share.share({ message, title: "Invite to Q" });
+                  Share.share({ message, title: "Invite to Pulse" });
                 }}
                 activeOpacity={0.8}
               >

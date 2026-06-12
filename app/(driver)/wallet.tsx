@@ -554,7 +554,7 @@ export default function DriverWalletScreen() {
           <div class="row"><div class="k">Settled to</div><div class="v">${safe(settledTo)}</div></div>
           ${route ? `<div class="row"><div class="k">Route</div><div class="v">${safe(route)}</div></div>` : ``}
         </div>
-        <div class="footer">Generated from Q Driver · ${safe(capturedAt)}</div>
+        <div class="footer">Generated from Pulse · ${safe(capturedAt)}</div>
       </div>
     </div>
   </body>
@@ -659,7 +659,7 @@ export default function DriverWalletScreen() {
           <div class="row"><div class="k">Trip</div><div class="v">${safe(p.displayId)}</div></div>
           <div class="row"><div class="k">Route</div><div class="v">${safe(`${p.from} → ${p.to}`)}</div></div>
         </div>
-        <div class="footer">Share this PDF with your fleet accounts team. Generated from Q Driver · ${safe(p.capturedAt)}</div>
+        <div class="footer">Share this PDF with your fleet accounts team. Generated from Pulse · ${safe(p.capturedAt)}</div>
       </div>
     </div>
   </body>
@@ -779,7 +779,7 @@ export default function DriverWalletScreen() {
         <p class="sub">Generated at ${safe(p.generatedAt)}</p>
       </div>
       ${groupsHtml}
-      <div class="footer">Generated from Q Driver · ${safe(p.generatedAt)}</div>
+      <div class="footer">Generated from Pulse · ${safe(p.generatedAt)}</div>
     </div>
   </body>
 </html>`;
@@ -868,7 +868,7 @@ export default function DriverWalletScreen() {
           <div class="row"><div class="k">Captured at</div><div class="v">${safe(p.capturedAt)}</div></div>
           <div class="row"><div class="k">Route</div><div class="v">${safe(p.route)}</div></div>
         </div>
-        <div class="footer">Generated from Q Driver · ${safe(p.capturedAt)}</div>
+        <div class="footer">Generated from Pulse · ${safe(p.capturedAt)}</div>
       </div>
     </div>
   </body>

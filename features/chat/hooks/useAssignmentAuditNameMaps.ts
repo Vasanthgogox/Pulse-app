@@ -1,10 +1,15 @@
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
+import { resolveAvatarPublicUrl } from "@/lib/avatarUpload";
 import { useEffect, useMemo, useState } from "react";
 import type { AssignmentNameMaps } from "../utils/assignmentAuditChatMessages.util";
 
-const EMPTY_MAPS: AssignmentNameMaps = { driverNames: {}, vehicleLabels: {} };
+const EMPTY_MAPS: AssignmentNameMaps = {
+  driverNames: {},
+  vehicleLabels: {},
+  driverProfiles: {},
+};
 
 function auditRowsStableKey(rows: TripAssignmentAuditRow[]): string {
   if (rows.length === 0) return "";
@@ -22,7 +27,7 @@ function auditRowsStableKey(rows: TripAssignmentAuditRow[]): string {
     .join("|");
 }
 
-/** Resolve driver/vehicle labels for assignment audit rows (Pulse chat timeline). */
+/** Resolve driver/vehicle labels + driver profile photos for assignment audit rows. */
 export function useAssignmentAuditNameMaps(
   orgId: string | null | undefined,
   auditRows: TripAssignmentAuditRow[],
@@ -38,7 +43,8 @@ export function useAssignmentAuditNameMaps(
     if (!orgId || auditRowsKey === "") {
       setMaps((prev) =>
         Object.keys(prev.driverNames).length === 0 &&
-        Object.keys(prev.vehicleLabels).length === 0
+        Object.keys(prev.vehicleLabels).length === 0 &&
+        Object.keys(prev.driverProfiles).length === 0
           ? prev
           : EMPTY_MAPS,
       );
@@ -55,15 +61,22 @@ export function useAssignmentAuditNameMaps(
     let cancelled = false;
     void (async () => {
       const driverNames: Record<string, string> = {};
+      const driverProfiles: AssignmentNameMaps["driverProfiles"] = {};
       const vehicleLabels: Record<string, string> = {};
       await Promise.all([
         ...Array.from(driverIds).map(async (id) => {
           const res = await getDriverById(orgId, id);
-          driverNames[id] =
+          const displayName =
             res.driver?.name?.trim() ||
             res.driver?.phone?.trim() ||
             tripFallback?.driver_display_name?.trim() ||
             "Driver";
+          driverNames[id] = displayName;
+          driverProfiles[id] = {
+            displayName,
+            avatarUrl: resolveAvatarPublicUrl(res.driver?.avatar_url ?? null),
+            avatarSeed: (res.driver?.avatar_seed ?? "").trim() || null,
+          };
         }),
         ...Array.from(vehicleIds).map(async (id) => {
           const res = await getVehicleById(orgId, id);
@@ -75,7 +88,7 @@ export function useAssignmentAuditNameMaps(
             "Vehicle";
         }),
       ]);
-      if (!cancelled) setMaps({ driverNames, vehicleLabels });
+      if (!cancelled) setMaps({ driverNames, vehicleLabels, driverProfiles });
     })();
     return () => {
       cancelled = true;

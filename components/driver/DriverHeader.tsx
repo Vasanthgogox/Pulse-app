@@ -103,10 +103,10 @@ export function DriverHeader({
     const ref = profile?.uid;
     const inviteUrl = ref ? `${base}?ref=${ref}` : base;
     const message =
-      `Join me on Q Driver! Manage trips, payouts, and network requests.\n\n` +
+      `Join me on Pulse! Manage trips, payouts, and network requests.\n\n` +
       `Sign up here: ${inviteUrl}`;
     Share.share({
-      title: 'Join Q Driver',
+      title: 'Join Pulse',
       message,
       url: inviteUrl,
     }).catch(() => {});

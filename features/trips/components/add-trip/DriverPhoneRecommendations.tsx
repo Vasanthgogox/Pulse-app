@@ -55,7 +55,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
       <View style={wrapStyle}>
         <ActivityIndicator size="small" color={Theme.primary} />
         <Text style={[styles.loadingText, compact && styles.loadingTextCompact]}>
-          Looking up driver on Q…
+          Looking up driver on Pulse…
         </Text>
       </View>
     );
@@ -68,7 +68,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
           No driver profile for this number
         </Text>
         <Text style={[styles.emptySub, compact && styles.emptySubCompact]}>
-          Enter the driver name on the next step, or invite them to Q first.
+          Enter the driver name on the next step, or invite them to Pulse first.
         </Text>
       </View>
     );
@@ -107,7 +107,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
                 </Text>
               ) : (
                 <Text style={[styles.meta, compact && styles.metaCompact, active && styles.metaActive]}>
-                  On Q platform
+                  On Pulse
                 </Text>
               )}
             </View>

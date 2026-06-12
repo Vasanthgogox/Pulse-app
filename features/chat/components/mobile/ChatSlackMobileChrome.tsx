@@ -3,6 +3,7 @@ import { ChatDriverSwapInboxPreview } from "@/features/chat/components/shared/Ch
 import { ChatInboxImagePreviewStrip } from "@/features/chat/components/shared/ChatInboxImagePreviewStrip";
 import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
 import type { DriverSwapPair } from "@/features/chat/utils/chatAvatar.util";
+import { ChatLocationPingInboxPreview } from "@/features/chat/components/shared/ChatLocationPingInboxPreview";
 import { ChatSlackDocumentAttachmentCompact } from "@/features/chat/components/shared/ChatSlackDocumentAttachment";
 import type { ConversationImagePreview } from "@/features/chat/utils/conversationImagePreview.util";
 import { ChatSlackMirrorToggle } from "@/features/chat/components/shared/ChatSlackMirrorToggle";
@@ -503,7 +504,7 @@ export function ChatSlackListRow({
   title: string;
   time?: string;
   preview?: string | null;
-  previewKind?: "default" | "system" | "image" | "document" | "driver_swap";
+  previewKind?: "default" | "system" | "image" | "document" | "driver_swap" | "location";
   previewImagePreviews?: ConversationImagePreview[];
   previewDriverSwap?: DriverSwapPair | null;
   documentExtension?: string | null;
@@ -587,7 +588,9 @@ export function ChatSlackListRow({
             ) : null}
           </>
         ) : preview ? (
-          previewKind === "document" ? (
+          previewKind === "location" ? (
+            <ChatLocationPingInboxPreview text={preview} />
+          ) : previewKind === "document" ? (
             <ChatSlackDocumentAttachmentCompact
               display={{
                 documentName: preview,

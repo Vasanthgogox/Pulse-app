@@ -268,6 +268,10 @@ export function TripChatProvider({
             read_at:      row.read_at,
           };
           if (row.metadata != null) patch.metadata = row.metadata;
+          if (row.reactions != null) patch.reactions = row.reactions;
+          if (row.edited_at != null) patch.edited_at = row.edited_at;
+          if (row.content != null) patch.content = row.content;
+          if (row.is_deleted != null) patch.is_deleted = row.is_deleted;
           ackBatchRef.current.push({
             convId: row.conversation_id,
             msgId:  row.id,
@@ -361,6 +365,10 @@ export function TripChatProvider({
             read_at:      row.read_at,
           };
           if (row.metadata != null) patch.metadata = row.metadata;
+          if (row.reactions != null) patch.reactions = row.reactions;
+          if (row.edited_at != null) patch.edited_at = row.edited_at;
+          if (row.content != null) patch.content = row.content;
+          if (row.is_deleted != null) patch.is_deleted = row.is_deleted;
           ackBatchRef.current.push({ convId: row.conversation_id, msgId: row.id, patch });
           if (ackRafRef.current == null) {
             ackRafRef.current = requestAnimationFrame(() => { flushAckBatch(); });

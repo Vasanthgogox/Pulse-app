@@ -5,9 +5,17 @@
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import type { TripMessageRow } from "../types/chat.types";
 
+export type AssignmentDriverProfile = {
+  displayName: string;
+  avatarUrl: string | null;
+  avatarSeed: string | null;
+};
+
 export type AssignmentNameMaps = {
   driverNames: Record<string, string>;
   vehicleLabels: Record<string, string>;
+  /** Resolved driver photos for assignment audit rows (swap cards). */
+  driverProfiles: Record<string, AssignmentDriverProfile>;
 };
 
 function resolveDriverName(
@@ -176,6 +184,28 @@ export function syntheticAssignmentMessagesFromAudit(
           driver_id_new: row.driver_id_new,
           vehicle_id_prev: row.vehicle_id_prev,
           vehicle_id_new: row.vehicle_id_new,
+          driver_display_name: row.driver_id_new
+            ? (maps.driverProfiles[row.driver_id_new]?.displayName ??
+              maps.driverNames[row.driver_id_new] ??
+              null)
+            : null,
+          driver_display_name_prev: row.driver_id_prev
+            ? (maps.driverProfiles[row.driver_id_prev]?.displayName ??
+              maps.driverNames[row.driver_id_prev] ??
+              null)
+            : null,
+          driver_avatar_url: row.driver_id_new
+            ? (maps.driverProfiles[row.driver_id_new]?.avatarUrl ?? null)
+            : null,
+          driver_avatar_seed: row.driver_id_new
+            ? (maps.driverProfiles[row.driver_id_new]?.avatarSeed ?? null)
+            : null,
+          driver_avatar_url_prev: row.driver_id_prev
+            ? (maps.driverProfiles[row.driver_id_prev]?.avatarUrl ?? null)
+            : null,
+          driver_avatar_seed_prev: row.driver_id_prev
+            ? (maps.driverProfiles[row.driver_id_prev]?.avatarSeed ?? null)
+            : null,
         },
       },
       is_read: true,

@@ -1,6 +1,6 @@
 import { PULSE_CHAT } from "@/features/chat/components/mobile/chatSlackMobile.styles";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
-import { CHAT_ACCENT } from "@/features/chat/chatTheme";
+import { CHAT_ACCENT, CHAT_ICON_MUTED } from "@/features/chat/chatTheme";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { ListFilter } from "lucide-react-native";
 import { useMirrorIndicator } from "@/lib/hooks/useMirrorIndicator";
@@ -205,6 +205,14 @@ export function ChatSlackMirrorToggle({
                 <View style={[styles.partyAvatarWrap, active && styles.partyAvatarWrapActive]}>
                   <ChatPartyAvatar identity={item.avatarIdentity} size={20} />
                 </View>
+              ) : item.Icon ? (
+                <View style={[styles.partyAvatarWrap, active && styles.partyAvatarWrapActive]}>
+                  <item.Icon
+                    size={16}
+                    color={active ? "#FFFFFF" : CHAT_ICON_MUTED}
+                    strokeWidth={2.2}
+                  />
+                </View>
               ) : null}
               <View style={styles.partyTextCol}>
                 {item.label ? (
@@ -389,7 +397,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4F4F4",
     borderWidth: 1,
     borderColor: "#ECECEC",
-    alignSelf: "flex-start",
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
   },
   filterIndicator: {
     backgroundColor: PULSE_CHAT.matteBlack,
@@ -401,11 +411,14 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   filterItem: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
+    minWidth: 0,
     zIndex: 1,
   },
   filterLabel: {

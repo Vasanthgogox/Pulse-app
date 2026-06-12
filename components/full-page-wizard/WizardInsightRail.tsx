@@ -53,7 +53,7 @@ export const WizardInsightRail = memo(function WizardInsightRail({
       ]}
     >
       <Text style={styles.desktopInsightRailHeading}>
-        {side === "left" ? "Grow with Q" : "Quick tips"}
+        {side === "left" ? "Grow with Pulse" : "Quick tips"}
       </Text>
       {cards.map((card) => {
         const accent = accentStyles[card.accent ?? "indigo"];

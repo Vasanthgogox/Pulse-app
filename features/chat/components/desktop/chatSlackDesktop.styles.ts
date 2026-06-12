@@ -278,6 +278,44 @@ export const slackDesktopStyles = StyleSheet.create({
     minWidth: 248,
     alignSelf: "center",
   },
+  sidebarScopeToggleWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  sidebarScopeToggleRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+    width: "100%",
+  },
+  sidebarScopePill: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 32,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.28)",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sidebarScopePillOn: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  sidebarScopePillText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: "#64748B",
+  },
+  sidebarScopePillTextOn: {
+    color: "#FFFFFF",
+  },
   sidebarCategoryWrap: {
     marginTop: 6,
     backgroundColor: "transparent",
@@ -684,6 +722,9 @@ export const slackDesktopStyles = StyleSheet.create({
   threadMsgRowLead: {
     paddingTop: 10,
     paddingBottom: 2,
+  },
+  threadMsgRowPartyBreak: {
+    marginTop: 8,
   },
   threadMsgRowContinuation: {
     paddingTop: 2,

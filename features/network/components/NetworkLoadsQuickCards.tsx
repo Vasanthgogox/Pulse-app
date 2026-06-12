@@ -82,7 +82,8 @@ function GlassMarketplaceCard({
         sidebar ? styles.shellSidebar : styles.shellTile,
         compact && !sidebar && styles.shellTileCompact,
         GLASS_WEB,
-        pressed && styles.shellPressed,
+        pressed &&
+          (sidebar ? styles.shellSidebarPressed : styles.shellPressed),
       ]}
     >
       <LinearGradient
@@ -345,6 +346,12 @@ const styles = StyleSheet.create({
   shellSidebar: {
     width: "100%",
     borderRadius: 18,
+    backgroundColor: "transparent",
+  },
+  shellSidebarPressed: {
+    backgroundColor: "transparent",
+    transform: [{ scale: 0.985 }],
+    opacity: 0.94,
   },
   specular: {
     ...StyleSheet.absoluteFillObject,
