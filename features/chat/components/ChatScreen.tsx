@@ -63,6 +63,7 @@ import {
   tripChatMessageSenderKey,
 } from "@/features/chat/utils/chatMediaBurst.util";
 import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
+import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
 import { ChatMediaBurstRow } from "@/features/chat/components/shared/ChatMediaBurstRow";
 import { CHAT_DESKTOP_COMPOSER_EMOJIS } from "@/features/chat/utils/chatEmojiAnim.util";
 import {
@@ -101,7 +102,6 @@ import {
   slackDesktopStyles as deskSt,
   SLACK_DESKTOP,
 } from "@/features/chat/components/desktop/chatSlackDesktop.styles";
-import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
 import { ChatDateDivider } from "@/features/chat/components/shared/ChatDateDivider";
 import { ChatHistoryExpiryNotice } from "@/features/chat/components/shared/ChatHistoryExpiryNotice";
 import { ChatUnreadDivider } from "@/features/chat/components/shared/ChatUnreadDivider";

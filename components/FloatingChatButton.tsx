@@ -11,7 +11,6 @@ import { useOptionalTripChat } from "@/features/chat/contexts/TripChatContext";
 import { getTripDisplayNumber } from "@/features/trips/services/trips.service";
 import { useMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { isFloatingChatHostRoute } from "@/lib/floatingChatHostRoute.util";
-import { stripChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import { ROUTES } from "@/lib/routes";
 
 type ChatTab = "trips" | "network";
@@ -56,9 +55,7 @@ export function FloatingChatButton() {
         id: c.id,
         type: "network" as const,
         title: c.partnerName,
-        lastMsg: stripChatInlineMarkdown(
-          c.messages[c.messages.length - 1]?.content ?? "Open secure channel",
-        ),
+        lastMsg: c.messages[c.messages.length - 1]?.content ?? "Open secure channel",
         time: c.lastActivity || "now",
         code: c.partnerName.slice(0, 2).toUpperCase(),
         unread: c.unreadCount || 0,
@@ -75,9 +72,7 @@ export function FloatingChatButton() {
           display_trip_id: c.display_trip_id ?? null,
           trip_number: c.trip_number,
         } as any),
-        lastMsg: stripChatInlineMarkdown(
-          c.last_message_preview || `${c.pickup_area} -> ${c.drop_location}`,
-        ),
+        lastMsg: c.last_message_preview || `${c.pickup_area} -> ${c.drop_location}`,
         time: c.last_message_at
           ? new Date(c.last_message_at).toLocaleTimeString("en-IN", {
               hour: "2-digit",

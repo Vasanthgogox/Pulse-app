@@ -1,13 +1,13 @@
 import { CHAT_ACCENT } from "@/features/chat/chatTheme";
-import { ChatListPreviewText } from "@/features/chat/components/shared/ChatListPreviewText";
 import type { ChatTripFlow } from "@/features/chat/types/chat.types";
 import { Bell, Network, Truck } from "lucide-react-native";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import React from "react";
 import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export type TripCardProps = {
@@ -143,26 +143,22 @@ export const TripCard = React.memo(function TripCard({
       </TouchableOpacity>
       <View style={styles.tripHubFooterRow}>
         <View style={styles.tripHubFooterIcons}>{partyIconRow}</View>
-        {showVehicleLate ? (
+        {showVehicleLate || (lastActivityPartyLabel && lastMessagePreview) ? (
           <Text
             style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
             numberOfLines={2}
           >
-            <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
+            {showVehicleLate ? (
+              <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
+            ) : (
+              <>
+                <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
+                  {lastActivityPartyLabel}:{" "}
+                </Text>
+                {renderChatInlineMarkdown(lastMessagePreview)}
+              </>
+            )}
           </Text>
-        ) : lastActivityPartyLabel && lastMessagePreview ? (
-          <View style={styles.tripHubFooterPreviewRow}>
-            <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
-              {lastActivityPartyLabel}:{" "}
-            </Text>
-            <View style={styles.tripHubFooterPreviewBody}>
-              <ChatListPreviewText
-                text={lastMessagePreview}
-                style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
-                numberOfLines={2}
-              />
-            </View>
-          </View>
         ) : null}
       </View>
     </View>
@@ -387,17 +383,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     flexShrink: 0,
     gap: 8,
-  },
-  tripHubFooterPreviewRow: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    flexWrap: "wrap",
-  },
-  tripHubFooterPreviewBody: {
-    flex: 1,
-    minWidth: 0,
   },
   tripHubFooterText: {
     flex: 1,

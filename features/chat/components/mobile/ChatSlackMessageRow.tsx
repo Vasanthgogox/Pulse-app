@@ -37,7 +37,7 @@ import {
   slackDesktopStyles as deskSt,
   SLACK_DESKTOP_AVATAR,
 } from "../desktop/chatSlackDesktop.styles";
-import { ChatInlineMarkdownText } from "@/features/chat/utils/chatInlineMarkdown.util";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import {
   SLACK_AVATAR,
   slackMobileStyles as st,
@@ -315,14 +315,15 @@ export function ChatSlackMessageRow({
               <ChatJumboEmojiMessage content={content} compact={showHeader} />
             ) : (
               <View>
-                <ChatInlineMarkdownText
-                  text={content}
+                <Text
                   style={[
                     styles.threadMsgText,
                     isContinuation && styles.threadMsgTextContinuation,
                     !showHeader && styles.threadMsgTextStacked,
                   ]}
-                />
+                >
+                  {renderChatInlineMarkdown(content)}
+                </Text>
                 {isEdited ? (
                   <Text style={editedLabel}>(edited)</Text>
                 ) : null}

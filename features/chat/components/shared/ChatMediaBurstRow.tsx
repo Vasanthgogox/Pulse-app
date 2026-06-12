@@ -5,7 +5,7 @@ import { ChatThreadMediaStrip } from "@/features/chat/components/shared/ChatThre
 import type { ChatMediaBurstLeader } from "@/features/chat/utils/chatMediaBurst.util";
 import type { SlackMessageGroupMeta } from "@/features/chat/utils/slackMessageGroup.util";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
-import { ChatInlineMarkdownText } from "@/features/chat/utils/chatInlineMarkdown.util";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
 import { useEffect, useRef } from "react";
 import {
   Animated,
@@ -163,15 +163,16 @@ export function ChatMediaBurstRow({
           <ChatThreadMediaStrip items={burst.imageItems} />
 
           {caption ? (
-            <ChatInlineMarkdownText
-              text={caption}
+            <Text
               style={[
                 styles.threadMsgText,
                 { marginTop: 6 },
                 isContinuation && styles.threadMsgTextContinuation,
                 !showHeader && styles.threadMsgTextStacked,
               ]}
-            />
+            >
+              {renderChatInlineMarkdown(caption)}
+            </Text>
           ) : null}
         </View>
       </View>

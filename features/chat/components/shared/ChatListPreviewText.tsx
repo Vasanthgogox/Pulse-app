@@ -3,8 +3,8 @@ import {
   parseEmojiOnlyGlyphs,
   resolveInboxEmojiPreviewSize,
 } from "@/features/chat/utils/chatEmojiAnim.util";
-import { ChatInlineMarkdownText } from "@/features/chat/utils/chatInlineMarkdown.util";
-import { StyleSheet, View, type StyleProp, type TextStyle } from "react-native";
+import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
+import { StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
 
 /** Inbox / sidebar preview line — doubles emoji-only previews vs normal text. */
 export function ChatListPreviewText({
@@ -35,7 +35,9 @@ export function ChatListPreviewText({
   }
 
   return (
-    <ChatInlineMarkdownText text={text} style={style} numberOfLines={numberOfLines} />
+    <Text style={style} numberOfLines={numberOfLines}>
+      {renderChatInlineMarkdown(text)}
+    </Text>
   );
 }
 
