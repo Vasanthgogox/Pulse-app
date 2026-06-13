@@ -3,9 +3,8 @@
  */
 import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
 import { WebNavMirrorToggle } from "@/components/demo/WebNavMirrorToggle";
-import { AlertRegistryPanel, type RegistryFilterTab } from "@/components/AlertRegistryPanel";
+import type { RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
-import { InboundProtocolPanel } from "@/components/InboundProtocolPanel";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
 import Layout from "@/constants/Layout";
@@ -15,7 +14,7 @@ import {
     getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext";
+import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext.shared";
 import {
     useDemoTabBarScrollHideVersion,
     useDemoTabBarVisibilityProgressOptional,
@@ -51,19 +50,13 @@ import {
     useConnectionRequestsSentQuery,
 } from "@/lib/queries/useNetworkQueries";
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
-import {
-    approveConnectionRequest,
-    cancelConnectionRequest,
-    cancelPendingConnectionRequestsForPartnerOwner,
-    rejectConnectionRequest,
-} from "@/features/connections/services/connectionRequests.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
 import { Inbox, MessageSquare } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
     Image,
     Platform,
@@ -87,6 +80,15 @@ import {
   resolveTabBarLayoutPlatform,
 } from "@/lib/layoutInsets";
 import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
+
+// Drawer panels load on first open — statically importing AlertRegistryPanel
+// would drag drivers/clients/suppliers queries (~100 KB) into the startup chunk.
+const AlertRegistryPanel = lazy(() =>
+  import("@/components/AlertRegistryPanel").then((m) => ({ default: m.AlertRegistryPanel })),
+);
+const InboundProtocolPanel = lazy(() =>
+  import("@/components/InboundProtocolPanel").then((m) => ({ default: m.InboundProtocolPanel })),
+);
 
 function isIgnorableInviteRefetchError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -191,6 +193,8 @@ export function DemoTabBar({
   >({});
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInvitations, setShowInvitations] = useState(false);
+  // Stays true after first open so the lazy panel survives the drawer close animation.
+  const [registryPanelsMounted, setRegistryPanelsMounted] = useState(false);
   const [isNetworkExpanded, setIsNetworkExpanded] = useState(false);
   const [notifTab, setNotifTab] = useState<RegistryFilterTab>("all");
   const [inviteTab, setInviteTab] = useState<"received" | "sent">("received");
@@ -349,6 +353,12 @@ export function DemoTabBar({
   ) => {
     if (!orgId) return;
     setInviteActionId(item.id);
+    const {
+      approveConnectionRequest,
+      cancelConnectionRequest,
+      cancelPendingConnectionRequestsForPartnerOwner,
+      rejectConnectionRequest,
+    } = await import("@/features/connections/services/connectionRequests.service");
     let error: Error | null = null;
     if (action === "approve") {
       patchInviteAfterAction(item.id, item.linkedRequestIds);
@@ -742,6 +752,7 @@ export function DemoTabBar({
                 style={styles.webHeaderIconHit}
                 activeOpacity={0.72}
                 onPress={() => {
+                  setRegistryPanelsMounted(true);
                   setShowNotifications((v) => !v);
                   setShowInvitations(false);
                 }}
@@ -761,6 +772,7 @@ export function DemoTabBar({
                 style={styles.webHeaderIconHit}
                 activeOpacity={0.72}
                 onPress={() => {
+                  setRegistryPanelsMounted(true);
                   setShowInvitations((v) => !v);
                   setShowNotifications(false);
                 }}
@@ -798,6 +810,8 @@ export function DemoTabBar({
         onClose={() => setShowNotifications(false)}
         hostRef={registryDrawerRef}
       >
+        {registryPanelsMounted ? (
+        <Suspense fallback={null}>
         <AlertRegistryPanel
           layout="drawer"
           filterTab={notifTab}
@@ -817,6 +831,8 @@ export function DemoTabBar({
             busySalaryId: notifActionId,
           }}
         />
+        </Suspense>
+        ) : null}
       </RegistryWebDrawer>
 
       <RegistryWebDrawer
@@ -824,6 +840,8 @@ export function DemoTabBar({
         onClose={() => setShowInvitations(false)}
         hostRef={registryDrawerRef}
       >
+        {registryPanelsMounted ? (
+        <Suspense fallback={null}>
         <InboundProtocolPanel
           layout="drawer"
           tab={inviteTab}
@@ -848,6 +866,8 @@ export function DemoTabBar({
             } as never);
           }}
         />
+        </Suspense>
+        ) : null}
       </RegistryWebDrawer>
       </Fragment>
     );

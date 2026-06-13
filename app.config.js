@@ -94,10 +94,21 @@ const expoContactsPlugin = contactsAvailable
 // Production (https Supabase URL): disable cleartext on Android. Local dev (http): allow.
 const useCleartextTraffic = typeof supabaseUrl === 'string' && supabaseUrl.startsWith('http://');
 
+// "static" makes the dev server SSR-render every page request (λ render.js, ~5.8k-module
+// server bundle), which leaks heap until Metro OOMs in long sessions. Use SPA mode for
+// `expo start`; keep "static" for `expo export` (Netlify build).
+const isExport = process.argv.includes('export');
+// PULSE_WEB_OUTPUT=static lets you reproduce the export rendering mode in dev.
+const webOutput = process.env.PULSE_WEB_OUTPUT || (isExport ? 'static' : 'single');
+
 module.exports = {
   ...config,
   expo: {
     ...config.expo,
+    web: {
+      ...config.expo?.web,
+      output: webOutput,
+    },
     extra: {
       supabaseUrl,
       supabaseAnonKey,

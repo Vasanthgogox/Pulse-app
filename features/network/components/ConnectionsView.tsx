@@ -30,13 +30,11 @@ import {
     getRatingsForClients,
     getRatingsForDrivers,
     getRatingsForSuppliers,
-} from "@/features/ratings";
-import {
-    useClientsQuery,
-    useDriversQuery,
-    useSuppliersQuery,
-    useTripsQuery,
-} from "@/lib/queries";
+} from "@/features/ratings/services/ratings.service";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { ConnectionEntityAvatar } from "@/features/network/utils/connectionEntityAvatar";
 import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";

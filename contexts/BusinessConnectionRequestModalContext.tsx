@@ -16,42 +16,26 @@ import type { InboundProtocolInviteItem } from '@/lib/globalSync/inboundProtocol
 import { useInboundProtocolInvites } from '@/lib/globalSync/useInboundProtocolInvites';
 import { useInboundProtocolInviteActions } from '@/lib/hooks/useInboundProtocolInviteActions';
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Alert, AppState, Platform, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 
-type BusinessConnectionRequestModalContextValue = {
-  pendingConnectionCount: number;
-  pendingConnectionInvites: InboundProtocolInviteItem[];
-  presentPendingConnectionRequest: () => void;
-  /** Opens the full invite sheet for a specific connection request (e.g. list avatar tap). */
-  presentConnectionInvite: (item: InboundProtocolInviteItem) => void;
-  refreshConnectionRequests: () => Promise<void>;
-};
+import {
+  BusinessConnectionRequestModalContext,
+  type BusinessConnectionRequestModalContextValue,
+} from '@/contexts/BusinessConnectionRequestModalContext.shared';
 
-const BusinessConnectionRequestModalContext =
-  createContext<BusinessConnectionRequestModalContextValue | null>(null);
-
-export function useOptionalBusinessConnectionRequestModal(): BusinessConnectionRequestModalContextValue | null {
-  return useContext(BusinessConnectionRequestModalContext);
-}
-
-export function useBusinessConnectionRequestModal(): BusinessConnectionRequestModalContextValue {
-  const ctx = useContext(BusinessConnectionRequestModalContext);
-  if (!ctx) {
-    throw new Error(
-      'useBusinessConnectionRequestModal must be used within BusinessConnectionRequestModalProvider',
-    );
-  }
-  return ctx;
-}
+// Hook-only consumers must import from the .shared file instead — importing this
+// module pulls the modal UI (network + indents features) into their graph.
+export {
+  useBusinessConnectionRequestModal,
+  useOptionalBusinessConnectionRequestModal,
+} from '@/contexts/BusinessConnectionRequestModalContext.shared';
 
 export function BusinessConnectionRequestModalProvider({ children }: { children: ReactNode }) {
   const org = useOptionalOrganization();

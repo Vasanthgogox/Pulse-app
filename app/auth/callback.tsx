@@ -1,6 +1,6 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import Theme from "@/constants/Theme";
-import * as authService from "@/features/auth";
+import * as authService from "@/features/auth/services/auth.service";
 import { supabase } from "@/lib/supabase";
 import { ROUTES } from "@/lib/routes";
 import {

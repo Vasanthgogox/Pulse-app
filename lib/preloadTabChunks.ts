@@ -13,8 +13,8 @@ function preloadOnce(key: string, loader: () => Promise<unknown>): void {
 export type PreloadableTab = 'trips' | 'network' | 'finance';
 
 const TAB_LOADERS: Record<PreloadableTab, () => Promise<unknown>> = {
-  trips: () => import('@/app/(tabs)/_trips-screen'),
-  network: () => import('@/app/(tabs)/_network-screen'),
+  trips: () => import('@/features/trips/screens/TripsScreen'),
+  network: () => import('@/features/network/screens/NetworkScreen'),
   finance: () => import('@/features/finance/components/FinanceScreen'),
 };
 

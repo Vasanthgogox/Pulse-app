@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 // Shadow / pointerEvents RN Web compat — must run before any StyleSheet.create in the tree.
 import '@/lib/installWebRnCompatPatches';
+import { ensureWebShellParity } from '@/lib/htmlShell';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase, dumpStartupMetrics } from '@/lib/startupMetrics';
@@ -85,6 +86,9 @@ import { isFloatingChatHostRoute } from '@/lib/floatingChatHostRoute.util';
 import { GlobalSyncProvider } from '@/lib/globalSync/GlobalSyncContext';
 
 markStartupPhase('js_parse_start');
+
+// Dev (web.output "single") skips app/+html.tsx — inject its shell CSS/JS at runtime.
+ensureWebShellParity();
 
 function isNetworkError(error: Error): boolean {
   const msg = error.message;

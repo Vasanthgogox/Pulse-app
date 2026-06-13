@@ -6,7 +6,7 @@ import {
   useMarketIndentsQuery,
   useMyDirectQuotesQuery,
 } from "@/lib/queries/useIndentsQuery";
-import { useTripsQuery } from "@/lib/queries";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import {
   isIndentDeployFlowPath,
   parseIndentIdFromDeployFlowPath,

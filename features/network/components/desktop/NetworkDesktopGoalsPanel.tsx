@@ -38,14 +38,12 @@ import {
 } from "@/features/network/utils/connectionGoalsAnalytics.util";
 import type { SalesDateRange } from "@/features/network/utils/connectionSalesAnalytics.util";
 import { formatINR, formatINRChip } from "@/lib/format";
-import {
-  useClientsQuery,
-  useDriversQuery,
-  useSuppliersQuery,
-  useTransactionsQuery,
-  useTripsQuery,
-  useVehiclesQuery,
-} from "@/lib/queries";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import { useTransactionsQuery } from "@/lib/queries/useTransactionsQuery";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
+import { useVehiclesQuery } from "@/lib/queries/useVehiclesQuery";
 import {
   ArrowDownLeft,
   ArrowUpRight,

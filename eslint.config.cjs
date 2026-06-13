@@ -188,5 +188,26 @@ module.exports = [
       }],
     },
   },
+  // Ban feature barrel imports from app/, contexts/, components/.
+  // Import from a specific sub-path (e.g. '@/features/finance/services/finance.service').
+  // Barrel imports drag screen/tab components into callers' bundles.
+  // Uses regex (not glob group) because ESLint v9 uses gitignore-style matching
+  // which treats 'a/b' as a directory pattern matching 'a/b/...'.
+  {
+    files: ['app/**/*.{ts,tsx}', 'contexts/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^@/features/[^/]+$',
+              message: "Import from the specific sub-path (e.g. '@/features/finance/services/finance.service'), not the barrel index.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 

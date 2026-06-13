@@ -34,13 +34,18 @@ import { NetworkExportMenu } from "@/features/network/components/desktop/Network
 import { exportConnectionsExcel } from "@/features/network/lib/networkExport.util";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import type { NetworkChatPartner } from "@/features/network/components/desktop/NetworkDesktopChatFlexPanel";
-import { NetworkDesktopChatOverlay } from "@/features/network/components/desktop/NetworkDesktopChatOverlay";
 import { NetworkDesktopChatIntroPanel } from "@/features/network/components/desktop/NetworkDesktopChatIntroPanel";
 import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
-import { useClientsQuery, useSuppliersQuery } from "@/lib/queries";
+import { useClientsQuery } from "@/lib/queries/useClientsQuery";
+import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { MessageSquare, MoreHorizontal, UserPlus } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+
+const NetworkDesktopChatOverlay = lazy(
+  () => import("@/features/network/components/desktop/NetworkDesktopChatOverlay")
+    .then(m => ({ default: m.NetworkDesktopChatOverlay })),
+);
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 export type NetworkDesktopTab =
@@ -655,18 +660,20 @@ export function NetworkDesktopHub({
     <>
       {hubScroll}
       {chatOpen && orgId ? (
-        <NetworkDesktopChatOverlay
-          visible
-          orgId={orgId}
-          orgName={orgName}
-          onClose={() => {
-            setChatOpen(false);
-            if (tab === "chat") setTab("connections");
-          }}
-          joinRequest={pendingJoinInvite}
-          integratedPartners={integratedChatPartners}
-          initialPartnerOrgId={chatPartnerOrgId}
-        />
+        <Suspense fallback={null}>
+          <NetworkDesktopChatOverlay
+            visible
+            orgId={orgId}
+            orgName={orgName}
+            onClose={() => {
+              setChatOpen(false);
+              if (tab === "chat") setTab("connections");
+            }}
+            joinRequest={pendingJoinInvite}
+            integratedPartners={integratedChatPartners}
+            initialPartnerOrgId={chatPartnerOrgId}
+          />
+        </Suspense>
       ) : null}
     </>
   );

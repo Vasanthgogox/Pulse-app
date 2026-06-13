@@ -12,7 +12,6 @@ import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { getDriverProfileDisplay, getDriverProfileDisplayBatch } from "@/features/drivers/services/drivers.service";
-import { postLedgerEventToChat } from "@/features/chat/services/chatLedgerBridge.service";
 import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
 import {
   AVATAR_BUCKET,
@@ -1119,6 +1118,7 @@ async function tryNotifyLinkedPartyChatAfterLedgerInsert(
       receiverPartyFallback ||
       receiverOrgId;
 
+    const { postLedgerEventToChat } = await import("@/features/chat/services/chatLedgerBridge.service");
     await postLedgerEventToChat({
       tripId: row.trip_id!,
       transactionId: row.id,

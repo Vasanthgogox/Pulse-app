@@ -13,7 +13,7 @@ import Typography from "@/constants/Typography";
 
 /** Network growth card — darker indigo than `Theme.primary` for kicker + trend pill. */
 const NETWORK_GROWTH_PURPLE = "#3730A3";
-import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext";
+import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext.shared";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
   ConnectionsView,
@@ -57,7 +57,6 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
-import { getOrCreateNetworkConversation } from "@/features/chat/services/chat.service";
 import { ROUTES } from "@/lib/routes";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
@@ -805,6 +804,7 @@ function NetworkScreenInner() {
     }
     const orgName = organization?.name?.trim() || "My Organization";
     try {
+      const { getOrCreateNetworkConversation } = await import("@/features/chat/services/chat.service");
       const conversation = await getOrCreateNetworkConversation({
         orgId,
         orgName,
