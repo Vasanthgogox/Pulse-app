@@ -109,7 +109,7 @@ function EmptyState() {
     <FeatureBanner
       compact
       title="No expenses yet"
-      description="Fuel, tolls, and driver advances logged for this trip will appear here."
+      description="Fuel, tolls, and driver advances for this trip will appear here."
       illustration="📊"
       accentColor="#059669"
       bullets={[

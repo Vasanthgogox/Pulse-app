@@ -51,6 +51,13 @@ let supabaseAnonKey =
   envVars.VITE_SUPABASE_ANON_KEY ||
   '';
 
+let geminiApiKey =
+  localVars.EXPO_PUBLIC_GEMINI_API_KEY ||
+  envVars.EXPO_PUBLIC_GEMINI_API_KEY ||
+  localVars.VITE_GEMINI_API_KEY ||
+  envVars.VITE_GEMINI_API_KEY ||
+  '';
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
     '[pulse] Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY. Add them to .env in the project root and restart: npx expo start'
@@ -112,6 +119,7 @@ module.exports = {
     extra: {
       supabaseUrl,
       supabaseAnonKey,
+      geminiApiKey,
       // Use app/+not-found.tsx — built-in Unmatched.js crashes when async-loaded (StyleSheet undefined).
       router: {
         notFound: false,

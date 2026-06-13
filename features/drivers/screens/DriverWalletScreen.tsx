@@ -133,21 +133,6 @@ function ledgerTypeLabel(type: string): string {
   return DRIVER_LEDGER_TYPE_LABELS[type] ?? type;
 }
 
-function salaryRequestTypeLabel(type: string): string {
-  if (type === 'monthly') return 'Monthly salary';
-  if (type === 'advance') return 'Advance';
-  if (type === 'trip_based') return 'Trip commission';
-  return type || 'Salary';
-}
-
-function salaryRequestStatusLabel(status: string): string {
-  const normalized = String(status || '').trim().toLowerCase();
-  if (normalized === 'paid') return 'Paid';
-  if (normalized === 'approved') return 'Approved';
-  if (normalized === 'rejected') return 'Rejected';
-  return 'Pending';
-}
-
 /** Wallet card + credits — deeper emerald palette (aligned with Theme.driver*) */
 const EMERALD_950 = '#022c22';
 const EMERALD_900 = '#064e3b';
@@ -237,7 +222,7 @@ export default function DriverWalletScreen() {
   }, [walletParams.tab]);
   const [walletInviteActionId, setWalletInviteActionId] = useState<string | null>(null);
   const [journeySearch, setJourneySearch] = useState('');
-  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'salary_requested' | 'fleet_trips' | 'open_trips' | 'fleet_marked' | 'fleet_attributed' | 'settled'>('all');
+  const [journeyFilter, setJourneyFilter] = useState<'all' | 'pending' | 'fleet_trips' | 'open_trips' | 'fleet_marked' | 'fleet_attributed' | 'settled'>('all');
   const [leaveFleetLoading, setLeaveFleetLoading] = useState(false);
   const [markFleetTripLoadingId, setMarkFleetTripLoadingId] = useState<string | null>(null);
   const [tripsSubTab, setTripsSubTab] = useState<'fleet' | 'open' | 'attributed'>('fleet');
@@ -1903,39 +1888,6 @@ export default function DriverWalletScreen() {
     return bySection;
   }, [filteredCashTrips]);
 
-  const filteredSalaryRequests = useMemo(() => {
-    const search = journeySearch.trim().toLowerCase();
-    return [...salaryRequests]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .filter((req) => {
-        const orgName =
-          salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(req.organization_id ?? ''))?.orgName ?? 'Fleet';
-        const typeLabel = salaryRequestTypeLabel(req.request_type);
-        const statusLabel = salaryRequestStatusLabel(req.status);
-        const haystack = [
-          orgName,
-          typeLabel,
-          statusLabel,
-          req.note ?? '',
-          String(req.amount ?? ''),
-        ]
-          .join(' ')
-          .toLowerCase();
-        return search.length === 0 || haystack.includes(search);
-      });
-  }, [salaryRequests, salaryRequestOrgOptions, journeySearch]);
-
-  const filteredSalaryRequestSections = useMemo(() => {
-    const map = new Map<string, typeof filteredSalaryRequests>();
-    filteredSalaryRequests.forEach((req) => {
-      const sectionLabel = formatTransactionDateSection(req.created_at ?? '');
-      const bucket = map.get(sectionLabel) ?? [];
-      bucket.push(req);
-      map.set(sectionLabel, bucket);
-    });
-    return Array.from(map.entries()).map(([sectionLabel, requests]) => ({ sectionLabel, requests }));
-  }, [filteredSalaryRequests]);
-
   /** Request payment for this trip: route user to Salary Request screen. */
   const openSalaryRequestForTrip = useCallback(
     (trip: tripsService.TripRow) => {
@@ -2237,9 +2189,7 @@ export default function DriverWalletScreen() {
             inputProps={{ style: styles.tripsSearchInput }}
             placeholder={
               mainTab === 'trips'
-                ? journeyFilter === 'salary_requested'
-                  ? 'Search salary requests...'
-                  : 'Search trips...'
+                ? 'Search trips...'
                 : 'Search settlements...'
             }
           />
@@ -2298,7 +2248,6 @@ export default function DriverWalletScreen() {
                     if (
                       journeyFilter === 'fleet_trips' ||
                       journeyFilter === 'open_trips' ||
-                      journeyFilter === 'salary_requested' ||
                       journeyFilter === 'fleet_marked'
                     ) setJourneyFilter('all');
                   }}
@@ -2355,7 +2304,6 @@ export default function DriverWalletScreen() {
                     { id: 'all', label: 'All' },
                     { id: 'pending', label: 'Pending' },
                     ...(tripsSubTab === 'fleet' ? [
-                      { id: 'salary_requested', label: 'Salary req.' },
                       { id: 'fleet_marked', label: 'Fleet marked' },
                     ] : tripsSubTab === 'attributed' && currentEmployer ? [
                       { id: 'fleet_attributed', label: 'Accepted' },
@@ -2940,114 +2888,9 @@ export default function DriverWalletScreen() {
         >
         <View style={[styles.ledgerSection, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
           <Text style={[styles.transactionHistoryTitle, styles.tripsItalicText, { color: colors.text }]}>
-            {tripsSubTab === 'fleet'
-              ? (journeyFilter === 'salary_requested' ? 'Salary requested' : 'Fleet trips')
-              : 'Open trips'}
+            {tripsSubTab === 'fleet' ? 'Fleet trips' : 'Open trips'}
           </Text>
-          {journeyFilter === 'salary_requested' && tripsSubTab === 'fleet' ? (
-            filteredSalaryRequests.length === 0 ? (
-              <View style={[styles.ledgerCard, { backgroundColor: tripsCardBg, borderColor: colors.border }]}>
-                <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
-                  <FontAwesome name="file-text-o" size={32} color={colors.textMuted} />
-                  <Text style={[styles.ledgerEmptyText, { color: colors.textMuted }]}>No salary requests found</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.salaryRequestList}>
-                {filteredSalaryRequestSections.map(({ sectionLabel, requests }) => (
-                  <View key={sectionLabel} style={styles.tripsPremiumSection}>
-                    <View style={styles.tripsSectionHeaderRow}>
-                      <View style={[styles.tripsSectionDot, { backgroundColor: colors.emerald }]} />
-                      <Text style={[styles.tripsPremiumSectionLabel, { color: colors.textMuted }]}>{sectionLabel}</Text>
-                    </View>
-                    {requests.map((req) => {
-                      const orgName =
-                        salaryRequestOrgOptions.find((o) => String(o.orgId ?? '') === String(req.organization_id ?? ''))?.orgName ?? 'Fleet';
-                      const status = salaryRequestStatusLabel(req.status);
-                      const type = salaryRequestTypeLabel(req.request_type);
-                      const date = phonePeMetaDate(req.created_at);
-                      return (
-                        <View
-                          key={req.id}
-                          style={[
-                            styles.tripsCard,
-                            {
-                              backgroundColor: tripsCardBg,
-                              borderColor: isDark ? colors.borderSubtle : 'rgba(226,232,240,0.9)',
-                              shadowColor: isDark ? '#000' : 'rgba(15,23,42,0.10)',
-                            },
-                          ]}
-                        >
-                          <View style={styles.tripsCardTouch}>
-                            <View style={styles.tripsCardTop}>
-                              <View style={styles.tripsCardTopLeft}>
-                                <View
-                                  style={[
-                                    styles.tripsIcon,
-                                    { backgroundColor: isDark ? colors.surfaceElevated : 'rgba(248,250,252,0.92)' },
-                                  ]}
-                                >
-                                  <FontAwesome
-                                    name={status === 'Rejected' ? 'times-circle' : status === 'Pending' ? 'clock-o' : 'check-circle'}
-                                    size={14}
-                                    color={status === 'Rejected' ? Theme.negative : status === 'Pending' ? AMBER_600 : colors.emerald}
-                                  />
-                                </View>
-                                <View style={styles.tripsHeadText}>
-                                  <Text style={[styles.tripsTripId, { color: colors.text }]} numberOfLines={1}>
-                                    {orgName}
-                                  </Text>
-                                  <View style={styles.tripsMetaInline}>
-                                    <Text style={[styles.tripsMetaText, { color: colors.textMuted }]}>{type}</Text>
-                                    <Text style={[styles.tripsMetaDot, { color: colors.emerald }]}>•</Text>
-                                    <Text style={[styles.tripsMetaText, { color: colors.textMuted }]} numberOfLines={1}>
-                                      {date}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-                              <View style={styles.tripsCardRight}>
-                                <Text style={[styles.tripsAmount, { color: colors.text }]}>
-                                  ₹{Math.round(Number(req.amount) || 0).toLocaleString('en-IN')}
-                                </Text>
-                              </View>
-                            </View>
-                            {req.note?.trim() ? (
-                              <Text style={[styles.salaryRequestInlineNote, { color: colors.textMuted }]} numberOfLines={1}>
-                                {req.note.trim()}
-                              </Text>
-                            ) : null}
-                            <View
-                              style={[
-                                styles.tripsCardFooter,
-                                { borderTopColor: isDark ? colors.borderSubtle : '#f1f5f9' },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.tripsStatusPill,
-                                  status === 'Paid'
-                                    ? styles.tripsStatusSuccess
-                                    : status === 'Approved'
-                                      ? styles.tripsStatusInfo
-                                      : status === 'Rejected'
-                                        ? styles.salaryRequestStatusRejected
-                                        : styles.salaryRequestStatusPending,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {status}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-            )
-          ) : filteredTripJourneySections.length === 0 ? (
+          {filteredTripJourneySections.length === 0 ? (
             <View style={[styles.ledgerCard, { backgroundColor: tripsCardBg, borderColor: colors.border }]}>
               <View style={[styles.ledgerEmpty, { borderBottomWidth: 0 }]}>
                 <FontAwesome name="search" size={32} color={colors.textMuted} />

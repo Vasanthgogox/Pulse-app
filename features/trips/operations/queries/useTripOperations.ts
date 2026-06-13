@@ -2,8 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsOnline } from "@/contexts/NetworkContext";
 import { queryKeys } from "@/lib/queryKeys";
 import { STALE } from "@/lib/queryClient";
-import { getTripById } from "@/features/trips/services/trips.service";
-import { computeTripMileageMetrics } from "../mileage/mileageEngine";
+import { getTripRowByIdLight } from "@/features/trips/services/trips.service";
+import {
+  cancelDriverExpenseRequest,
+  parseDriverExpenseEventId,
+  remindDriverExpenseRequest,
+} from "../reimbursement/driverExpenseRequest.service";
 import type {
   OperationalApprovalState,
   ReimbursementState,
@@ -77,6 +81,7 @@ import {
 } from "@/features/ledger/vehicle/postingMessages.util";
 import { getTripOperationalTimelineEvents } from "../timeline/timelineEvents.service";
 import { getVehicleMaintenanceEntries } from "../maintenance/maintenance.service";
+import { computeTripMileageMetrics } from "../mileage/mileageEngine";
 import {
   updateFuelReimbursementState,
   updateOtherReimbursementState,
@@ -92,6 +97,31 @@ import { supabase } from "@/lib/supabase";
 import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
 
 const reviewInFlightKeys = new Set<string>();
+
+async function fetchTripLedgerBySource(tripId: string): Promise<{
+  fuel: Record<string, string>;
+  toll: Record<string, string>;
+  other: Record<string, string>;
+}> {
+  const empty = { fuel: {}, toll: {}, other: {} };
+  const { data: ledgerRows, error: ledgerError } = await supabase()
+    .from("vehicle_ledger_entries")
+    .select("id,source_type,source_id")
+    .eq("trip_id", tripId)
+    .in("source_type", ["fuel", "toll", "manual_adjustment"]);
+  if (ledgerError) return empty;
+  const ledgerBySource = { ...empty };
+  for (const row of ledgerRows ?? []) {
+    const sourceType = String((row as { source_type?: string | null }).source_type ?? "").toLowerCase();
+    const sourceId = String((row as { source_id?: string | null }).source_id ?? "").trim();
+    const ledgerId = String((row as { id?: string | null }).id ?? "").trim();
+    if (!sourceId || !ledgerId) continue;
+    if (sourceType === "fuel") ledgerBySource.fuel[sourceId] = ledgerId;
+    if (sourceType === "toll") ledgerBySource.toll[sourceId] = ledgerId;
+    if (sourceType === "manual_adjustment") ledgerBySource.other[sourceId] = ledgerId;
+  }
+  return ledgerBySource;
+}
 
 function invalidateTripOperationsQueries(qc: ReturnType<typeof useQueryClient>, tripId: string) {
   invalidateTripOperationalState({ queryClient: qc, tripId });
@@ -147,15 +177,15 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
       : ["q", "trips", "operations", "summary", "noop"],
     queryFn: async () => {
       const [tripRes, fuelRes, tollRes, otherRes] = await Promise.all([
-        getTripById(tripId!),
+        getTripRowByIdLight(tripId!),
         getTripFuelEntries(tripId!),
         getTripTollEntries(tripId!),
         getTripOtherExpenses(tripId!),
       ]);
       if (tripRes.error || !tripRes.trip) throw tripRes.error ?? new Error("Trip not found");
-      if (fuelRes.error) throw fuelRes.error;
-      if (tollRes.error) throw tollRes.error;
-      if (otherRes.error) throw otherRes.error;
+      const fuelEntries = fuelRes.error ? [] : fuelRes.entries;
+      const tollEntries = tollRes.error ? [] : tollRes.entries;
+      const otherEntries = otherRes.error ? [] : otherRes.entries;
       const maintenanceRes =
         tripRes.trip.vehicle_id != null
           ? await getVehicleMaintenanceEntries({
@@ -164,44 +194,21 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
               limit: 200,
             })
           : { error: null, entries: [] };
-      if (maintenanceRes.error) throw maintenanceRes.error;
-      const { data: ledgerRows, error: ledgerError } = await supabase()
-        .from("vehicle_ledger_entries")
-        .select("id,source_type,source_id")
-        .eq("trip_id", tripId!)
-        .in("source_type", ["fuel", "toll", "manual_adjustment"]);
-      if (ledgerError) throw new Error(ledgerError.message);
-      const ledgerBySource: {
-        fuel: Record<string, string>;
-        toll: Record<string, string>;
-        other: Record<string, string>;
-      } = {
-        fuel: {},
-        toll: {},
-        other: {},
-      };
-      for (const row of ledgerRows ?? []) {
-        const sourceType = String((row as { source_type?: string | null }).source_type ?? "").toLowerCase();
-        const sourceId = String((row as { source_id?: string | null }).source_id ?? "").trim();
-        const ledgerId = String((row as { id?: string | null }).id ?? "").trim();
-        if (!sourceId || !ledgerId) continue;
-        if (sourceType === "fuel") ledgerBySource.fuel[sourceId] = ledgerId;
-        if (sourceType === "toll") ledgerBySource.toll[sourceId] = ledgerId;
-        if (sourceType === "manual_adjustment") ledgerBySource.other[sourceId] = ledgerId;
-      }
+      const maintenanceEntries = maintenanceRes.error ? [] : maintenanceRes.entries;
+      const ledgerBySource = await fetchTripLedgerBySource(tripId!);
       const mileage = computeTripMileageMetrics({
         trip: tripRes.trip,
-        fuelEntries: fuelRes.entries,
-        tollEntries: tollRes.entries,
-        maintenanceEntries: maintenanceRes.entries,
+        fuelEntries,
+        tollEntries,
+        maintenanceEntries,
         capabilities: getTripOperationalCapabilities(tripRes.trip),
       });
       const capabilities = getTripOperationalCapabilities(tripRes.trip);
       const executionModel = getTripExecutionModel(tripRes.trip);
       const costEvents: TripCostEvent[] = mapTripOperationalRowsToCostEvents({
-        fuelEntries: fuelRes.entries,
-        tollEntries: tollRes.entries,
-        otherEntries: otherRes.entries,
+        fuelEntries,
+        tollEntries,
+        otherEntries,
         tripDisplay: {
           trip_operational_code: tripRes.trip.trip_operational_code ?? null,
           trip_code: tripRes.trip.trip_code ?? null,
@@ -262,10 +269,10 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         trip: tripRes.trip,
         executionModel,
         capabilities,
-        fuelEntries: fuelRes.entries,
-        tollEntries: tollRes.entries,
-        otherEntries: otherRes.entries,
-        maintenanceEntries: maintenanceRes.entries,
+        fuelEntries,
+        tollEntries,
+        otherEntries,
+        maintenanceEntries,
         mileage,
         costEvents,
         financialSnapshot,
@@ -914,6 +921,58 @@ export function useSetTripOtherReimbursementState() {
           tripId: vars.tripId,
         });
       }
+    },
+  });
+}
+
+export function useCancelDriverExpenseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      tripId: string;
+      eventId: string;
+      actorUserId: string | null;
+      organizationId?: string | null;
+    }) => {
+      const parsed = parseDriverExpenseEventId(input.eventId);
+      if (!parsed) throw new Error("Invalid expense reference");
+      const res = await cancelDriverExpenseRequest({
+        kind: parsed.kind,
+        entryId: parsed.entryId,
+        tripId: input.tripId,
+        actorUserId: input.actorUserId,
+        organizationId: input.organizationId,
+      });
+      if (res.error) throw res.error;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
+    },
+  });
+}
+
+export function useRemindDriverExpenseRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      tripId: string;
+      eventId: string;
+      actorUserId: string | null;
+      organizationId?: string | null;
+    }) => {
+      const parsed = parseDriverExpenseEventId(input.eventId);
+      if (!parsed) throw new Error("Invalid expense reference");
+      const res = await remindDriverExpenseRequest({
+        kind: parsed.kind,
+        entryId: parsed.entryId,
+        tripId: input.tripId,
+        actorUserId: input.actorUserId,
+        organizationId: input.organizationId,
+      });
+      if (res.error) throw res.error;
+    },
+    onSuccess: (_result, vars) => {
+      invalidateTripOperationsQueries(qc, vars.tripId);
     },
   });
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import Theme from '@/constants/Theme';
 import { formatEntryDisplay } from './formatters';
@@ -15,7 +15,35 @@ interface NumericDisplayProps {
   suffix?: string;
   placeholder?: string;
   /** Larger centered amount (mobile pay-style sheet). */
-  variant?: "default" | "hero" | "wizard";
+  variant?: "default" | "hero" | "wizard" | "wizardCompact";
+}
+
+function computeLargeDisplayTypography(
+  display: string,
+  variant: 'hero' | 'wizard' | 'wizardCompact',
+) {
+  const len = display.replace(/,/g, '').replace(/\./g, '').length;
+  const base =
+    variant === 'hero'
+      ? { amount: 72, lineHeight: 76, suffix: 38, prefix: 48, cursor: 54 }
+      : variant === 'wizardCompact'
+        ? { amount: 40, lineHeight: 44, suffix: 22, prefix: 26, cursor: 32 }
+        : { amount: 52, lineHeight: 56, suffix: 28, prefix: 34, cursor: 42 };
+
+  let scale = 1;
+  if (len > 4) scale = 0.9;
+  if (len > 5) scale = 0.8;
+  if (len > 6) scale = 0.72;
+  if (len > 7) scale = 0.64;
+  if (len > 8) scale = 0.58;
+
+  return {
+    amount: Math.round(base.amount * scale),
+    lineHeight: Math.round(base.lineHeight * scale),
+    suffix: Math.round(base.suffix * scale),
+    prefix: Math.round(base.prefix * scale),
+    cursor: Math.round(base.cursor * scale),
+  };
 }
 
 export function NumericDisplay({
@@ -27,7 +55,8 @@ export function NumericDisplay({
   variant = 'default',
 }: NumericDisplayProps) {
   const isHero = variant === 'hero';
-  const isWizard = variant === 'wizard';
+  const isWizard = variant === 'wizard' || variant === 'wizardCompact';
+  const isWizardCompact = variant === 'wizardCompact';
   const isLarge = isHero || isWizard;
   const blink = useRef(new Animated.Value(1)).current;
 
@@ -47,21 +76,39 @@ export function NumericDisplay({
   const isEmpty = !rawValue;
   const display = isEmpty ? placeholder : formatEntryDisplay(rawValue, type);
 
+  const largeTypography = useMemo(() => {
+    if (!isLarge || isEmpty) return null;
+    return computeLargeDisplayTypography(display, isHero ? 'hero' : isWizardCompact ? 'wizardCompact' : 'wizard');
+  }, [display, isEmpty, isHero, isLarge, isWizardCompact]);
+
   return (
     <View
       style={[
         styles.root,
         isHero && styles.rootHero,
         isWizard && styles.rootWizard,
+        isWizardCompact && styles.rootWizardCompact,
       ]}
     >
-      <View style={styles.row}>
+      <View
+        style={[
+          styles.row,
+          isHero && styles.rowHero,
+          isWizard && styles.rowWizard,
+          isWizardCompact && styles.rowWizardCompact,
+        ]}
+      >
         {resolvedPrefix ? (
           <Text
             style={[
               styles.prefix,
               isHero && styles.prefixHero,
               isWizard && styles.prefixWizard,
+              isWizardCompact && styles.prefixWizardCompact,
+              largeTypography && {
+                fontSize: largeTypography.prefix,
+                lineHeight: largeTypography.lineHeight,
+              },
               isEmpty && styles.dim,
             ]}
             allowFontScaling={false}
@@ -75,12 +122,17 @@ export function NumericDisplay({
             styles.amount,
             isHero && styles.amountHero,
             isWizard && styles.amountWizard,
+            isWizardCompact && styles.amountWizardCompact,
+            largeTypography && {
+              fontSize: largeTypography.amount,
+              lineHeight: largeTypography.lineHeight,
+            },
             isEmpty && styles.amountPlaceholder,
             isEmpty && isLarge && styles.amountPlaceholderHero,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit={!isEmpty}
-          minimumFontScale={isLarge ? 0.5 : 0.65}
+          adjustsFontSizeToFit={!isLarge && !isEmpty}
+          minimumFontScale={isLarge ? 1 : 0.65}
           allowFontScaling={false}
         >
           {display}
@@ -92,6 +144,11 @@ export function NumericDisplay({
               styles.suffix,
               isHero && styles.suffixHero,
               isWizard && styles.suffixWizard,
+              isWizardCompact && styles.suffixWizardCompact,
+              largeTypography && {
+                fontSize: largeTypography.suffix,
+                lineHeight: largeTypography.lineHeight,
+              },
               isEmpty && styles.dim,
             ]}
             allowFontScaling={false}
@@ -105,6 +162,8 @@ export function NumericDisplay({
             styles.cursor,
             isHero && styles.cursorHero,
             isWizard && styles.cursorWizard,
+            isWizardCompact && styles.cursorWizardCompact,
+            largeTypography && { height: largeTypography.cursor },
             { opacity: blink },
           ]}
         />
@@ -133,13 +192,30 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     minHeight: 84,
   },
+  rootWizardCompact: {
+    flex: 0,
+    flexGrow: 0,
+    paddingVertical: 6,
+    minHeight: 68,
+  },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'center',
     maxWidth: '100%',
-    width: '100%',
     paddingHorizontal: 4,
+  },
+  rowHero: {
+    alignSelf: 'center',
+    maxWidth: '96%',
+  },
+  rowWizard: {
+    alignSelf: 'center',
+    maxWidth: '96%',
+  },
+  rowWizardCompact: {
+    alignSelf: 'center',
+    maxWidth: '96%',
   },
   prefix: {
     fontSize: 22,
@@ -158,6 +234,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     letterSpacing: 0,
   },
+  prefixWizardCompact: {
+    fontSize: 26,
+    fontWeight: '500',
+    letterSpacing: 0,
+  },
   amount: {
     fontSize: 44,
     fontWeight: '600',
@@ -166,9 +247,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
     lineHeight: 48,
-    flexShrink: 1,
-    flexGrow: 0,
-    maxWidth: '100%',
+    flexShrink: 0,
     textAlign: 'center',
   },
   amountHero: {
@@ -183,6 +262,12 @@ const styles = StyleSheet.create({
     lineHeight: 56,
     letterSpacing: -0.8,
   },
+  amountWizardCompact: {
+    fontSize: 40,
+    fontWeight: '600',
+    lineHeight: 44,
+    letterSpacing: -0.6,
+  },
   amountPlaceholder: {
     color: Theme.textMuted,
     fontWeight: '400',
@@ -194,7 +279,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '500',
     color: Theme.textSecondary,
-    marginLeft: 4,
+    marginLeft: 6,
     flexShrink: 0,
   },
   suffixHero: {
@@ -202,6 +287,9 @@ const styles = StyleSheet.create({
   },
   suffixWizard: {
     fontSize: 28,
+  },
+  suffixWizardCompact: {
+    fontSize: 22,
   },
   dim: {
     color: Theme.textMuted,
@@ -211,7 +299,8 @@ const styles = StyleSheet.create({
     height: 36,
     backgroundColor: Theme.primary,
     borderRadius: 2,
-    marginLeft: 3,
+    marginLeft: 4,
+    alignSelf: 'center',
   },
   cursorHero: {
     height: 54,
@@ -219,6 +308,10 @@ const styles = StyleSheet.create({
   },
   cursorWizard: {
     height: 42,
+    width: 2,
+  },
+  cursorWizardCompact: {
+    height: 32,
     width: 2,
   },
 });

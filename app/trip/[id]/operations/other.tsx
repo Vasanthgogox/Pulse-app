@@ -1,6 +1,12 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { DriverUnifiedExpenseEntryScreen } from "@/features/trips/operations/shared/DriverUnifiedExpenseEntryScreen";
+import {
+  parseDriverExpenseCategoryParam,
+  parseDriverExpenseKindParam,
+} from "@/features/trips/operations/shared/driverExpenseCategoryNav.util";
 import { OtherExpenseEntryScreen } from "@/features/trips/operations/other/OtherExpenseEntryScreen";
 import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
@@ -12,9 +18,17 @@ function readParam(value: string | string[] | undefined): string {
 }
 
 export default function TripOtherExpenseEntryRoute() {
-  const params = useLocalSearchParams<{ id?: string | string[]; entryId?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    id?: string | string[];
+    entryId?: string | string[];
+    category?: string | string[];
+    kind?: string | string[];
+  }>();
+  const { profile } = useAuth();
   const tripId = readParam(params.id);
   const entryId = readParam(params.entryId);
+  const initialCategory = parseDriverExpenseCategoryParam(readParam(params.category));
+  const initialKind = parseDriverExpenseKindParam(readParam(params.kind));
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +60,24 @@ export default function TripOtherExpenseEntryRoute() {
         </View>
       );
     }
-    return <OtherExpenseEntryScreen trip={trip} entryId={entryId || null} />;
-  }, [entryId, error, loading, trip]);
+
+    if (profile?.role === "driver") {
+      return (
+        <DriverUnifiedExpenseEntryScreen
+          trip={trip}
+          entryId={entryId || null}
+          initialKind={initialKind}
+          initialOtherCategory={initialCategory}
+        />
+      );
+    }
+
+    return (
+      <OtherExpenseEntryScreen
+        trip={trip}
+        entryId={entryId || null}
+        initialCategory={initialCategory}
+      />
+    );
+  }, [entryId, error, initialCategory, initialKind, loading, profile?.role, trip]);
 }

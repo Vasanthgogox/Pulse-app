@@ -87,6 +87,19 @@ export async function getSalaryRequestsByDriverIds(
   return { error: null, requests: (data ?? []) as SalaryRequestRow[] };
 }
 
+/** Single salary request for the driver app detail view (RLS: own requests only). */
+export async function getSalaryRequestByIdForDriver(
+  requestId: string,
+): Promise<{ error: Error | null; request: SalaryRequestRow | null }> {
+  const { data, error } = await supabase()
+    .from('driver_salary_requests')
+    .select('*')
+    .eq('id', requestId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), request: null };
+  return { error: null, request: (data as SalaryRequestRow | null) ?? null };
+}
+
 /** Row returned for org: request + driver name from join. */
 export interface SalaryRequestWithDriverRow extends SalaryRequestRow {
   drivers?: {

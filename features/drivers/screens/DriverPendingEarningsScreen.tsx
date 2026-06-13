@@ -1,5 +1,6 @@
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { PendingEarningsTripCard } from '@/features/driver/components/PendingEarningsTripCard';
+import { PendingSalaryRequestCard } from '@/features/driver/components/PendingSalaryRequestCard';
 import { useDriverPendingEarnings } from '@/features/driver/hooks/useDriverPendingEarnings';
 import { groupTripsByDateSection } from '@/features/driver/utils/pendingEarningsSections.util';
 import Layout from '@/constants/Layout';
@@ -9,7 +10,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Wallet } from 'lucide-react-native';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -24,6 +25,8 @@ const LIST_BG = '#eef2f6';
 const HERO_FROM = '#022c22';
 const HERO_TO = '#064e3b';
 
+type PendingView = 'trips' | 'salary';
+
 export default function PendingEarningsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -32,16 +35,27 @@ export default function PendingEarningsScreen() {
   const isDark = theme === 'dark';
   const listBg = isDark ? colors.background : LIST_BG;
   const cardBg = isDark ? colors.surface : Theme.cardWhite;
+  const [view, setView] = useState<PendingView>('trips');
 
-  const { loading, refreshing, refresh, pendingItems, pendingTotal, tripCount, employerDetails } =
-    useDriverPendingEarnings();
+  const {
+    loading,
+    refreshing,
+    refresh,
+    pendingItems,
+    pendingTotal,
+    tripCount,
+    employerDetails,
+    salaryRequestItems,
+    salaryRequestSections,
+    salaryRequestCount,
+  } = useDriverPendingEarnings();
 
   const sections = useMemo(
     () => groupTripsByDateSection(pendingItems),
     [pendingItems],
   );
 
-  if (loading && pendingItems.length === 0) {
+  if (loading && pendingItems.length === 0 && salaryRequestCount === 0) {
     return <CenteredLoadingView message="Loading pending earnings…" />;
   }
 
@@ -108,9 +122,42 @@ export default function PendingEarningsScreen() {
           activeOpacity={0.88}
           onPress={() => router.push('/(driver)/salary-request')}
         >
-          <Text style={styles.salaryCtaText}>SALARY REQUEST</Text>
+          <Text style={styles.salaryCtaText}>Salary request</Text>
         </TouchableOpacity>
       </LinearGradient>
+
+      <View style={[styles.segmentRow, { backgroundColor: isDark ? colors.surface : '#fff', borderColor: colors.border }]}>
+        <TouchableOpacity
+          style={[
+            styles.segmentBtn,
+            view === 'trips' && [styles.segmentBtnActive, { backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : 'rgba(4,120,87,0.10)' }],
+          ]}
+          onPress={() => setView('trips')}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.segmentText, { color: view === 'trips' ? colors.emerald : colors.textMuted }]}>
+            Pending trips
+          </Text>
+          <Text style={[styles.segmentCount, { color: view === 'trips' ? colors.emerald : colors.textMuted }]}>
+            {tripCount}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.segmentBtn,
+            view === 'salary' && [styles.segmentBtnActive, { backgroundColor: isDark ? 'rgba(4,120,87,0.18)' : 'rgba(4,120,87,0.10)' }],
+          ]}
+          onPress={() => setView('salary')}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.segmentText, { color: view === 'salary' ? colors.emerald : colors.textMuted }]}>
+            Salary requests
+          </Text>
+          <Text style={[styles.segmentCount, { color: view === 'salary' ? colors.emerald : colors.textMuted }]}>
+            {salaryRequestCount}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         style={styles.scroll}
@@ -123,16 +170,58 @@ export default function PendingEarningsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.emerald} />
         }
       >
-        {pendingItems.length === 0 ? (
+        {view === 'trips' ? (
+          pendingItems.length === 0 ? (
+            <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+              <FontAwesome name="check-circle" size={36} color={colors.emerald} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>All earnings settled</Text>
+              <Text style={[styles.emptySub, { color: colors.textMuted }]}>
+                Completed trips with verified payments appear in your transaction history.
+              </Text>
+            </View>
+          ) : (
+            sections.map((section) => (
+              <View key={section.dateKey || section.sectionLabel} style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionDot, { backgroundColor: colors.emerald }]} />
+                  <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                    {section.sectionLabel}
+                  </Text>
+                </View>
+                <View style={styles.sectionList}>
+                  {section.items.map((item) => (
+                    <PendingEarningsTripCard
+                      key={item.trip.id}
+                      item={item}
+                      colors={colors}
+                      cardBg={cardBg}
+                      isDark={isDark}
+                      onPress={() =>
+                        router.push(`/(driver)/trip-history/${item.trip.id}` as import('expo-router').Href)
+                      }
+                    />
+                  ))}
+                </View>
+              </View>
+            ))
+          )
+        ) : salaryRequestItems.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
-            <FontAwesome name="check-circle" size={36} color={colors.emerald} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>All earnings settled</Text>
+            <FontAwesome name="file-text-o" size={34} color={colors.textMuted} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No salary requests yet</Text>
             <Text style={[styles.emptySub, { color: colors.textMuted }]}>
-              Completed trips with verified payments appear in your transaction history.
+              Submit monthly salary, trip commission, or advance requests for fleet review.
             </Text>
+            <TouchableOpacity
+              style={[styles.emptyCta, { backgroundColor: Theme.driverEmeraldDark }]}
+              onPress={() => router.push('/(driver)/salary-request')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.emptyCtaText}>New salary request</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          sections.map((section) => (
+          salaryRequestSections.map((section) => (
             <View key={section.dateKey || section.sectionLabel} style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionDot, { backgroundColor: colors.emerald }]} />
@@ -142,14 +231,14 @@ export default function PendingEarningsScreen() {
               </View>
               <View style={styles.sectionList}>
                 {section.items.map((item) => (
-                  <PendingEarningsTripCard
-                    key={item.trip.id}
+                  <PendingSalaryRequestCard
+                    key={item.request.id}
                     item={item}
                     colors={colors}
                     cardBg={cardBg}
                     isDark={isDark}
                     onPress={() =>
-                      router.push(`/(driver)/trip-history/${item.trip.id}` as import('expo-router').Href)
+                      router.push(`/(driver)/salary-request/${item.request.id}` as import('expo-router').Href)
                     }
                   />
                 ))}
@@ -291,9 +380,37 @@ const styles = StyleSheet.create({
   },
   salaryCtaText: {
     fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.6,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     color: Theme.textPrimaryDark,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginHorizontal: Layout.screenPaddingHorizontal,
+    marginTop: -8,
+    marginBottom: 4,
+    padding: 4,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  segmentBtnActive: {},
+  segmentText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  segmentCount: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   scroll: {
     flex: 1,
@@ -342,5 +459,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
+  },
+  emptyCta: {
+    marginTop: 8,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  emptyCtaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

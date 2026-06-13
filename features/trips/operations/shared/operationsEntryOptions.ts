@@ -36,3 +36,34 @@ export const PAYMENT_MODE_OPTIONS: ChipOption<OperationalPaymentMode>[] = [
   { value: "pending", label: "Pending" },
   { value: "unknown", label: "Unknown" },
 ];
+
+export const DRIVER_PAYMENT_OWNER_LABEL = "Paid by you (driver)";
+
+export const DRIVER_PAYMENT_OWNER_OPTION: ChipOption<OperationalPaymentOwner> = {
+  value: "driver",
+  label: DRIVER_PAYMENT_OWNER_LABEL,
+};
+
+export function defaultPaymentOwnerForActor(
+  actorRole?: string | null,
+): OperationalPaymentOwner {
+  return actorRole === "driver" ? "driver" : "organization";
+}
+
+/** Driver-submitted costs are always reimbursable requests to the fleet owner. */
+export function resolvePaymentOwnerForSave(input: {
+  actorRole?: string | null;
+  paymentOwner?: OperationalPaymentOwner | null;
+}): OperationalPaymentOwner {
+  if (input.actorRole === "driver") return "driver";
+  return input.paymentOwner ?? "unknown";
+}
+
+/** Drivers only reimburse themselves; dispatchers keep the full owner list. */
+export function paymentOwnerOptionsForActor(
+  options: ChipOption<OperationalPaymentOwner>[],
+  actorRole?: string | null,
+): ChipOption<OperationalPaymentOwner>[] {
+  if (actorRole !== "driver") return options;
+  return [DRIVER_PAYMENT_OWNER_OPTION];
+}

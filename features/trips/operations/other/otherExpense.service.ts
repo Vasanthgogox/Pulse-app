@@ -16,6 +16,7 @@ import {
 } from "../vehicle/vehicleOperationsLedger.service";
 import { appendTripOperationalTimelineEventSafe } from "../timeline/timelineEvents.service";
 import { buildExpenseEditApprovalReset } from "../shared/expenseEntryEdit.util";
+import { resolvePaymentOwnerForSave } from "../shared/operationsEntryOptions";
 import type { UpdateOtherExpenseInput } from "../types";
 
 async function syncOtherExpenseLedgerDraft(input: {
@@ -125,8 +126,7 @@ export async function createTripOtherExpense(
     receiptStoragePath?: string | null;
   },
 ): Promise<{ error: Error | null; entry: TripOtherExpenseEntry | null }> {
-  const paymentOwner: OperationalPaymentOwner =
-    input.paymentOwner ?? (input.actorRole === "driver" ? "driver" : "unknown");
+  const paymentOwner = resolvePaymentOwnerForSave(input);
   const paymentMode: OperationalPaymentMode =
     input.paymentMode ?? (input.actorRole === "driver" ? "cash" : "unknown");
   const approvalState: OperationalApprovalState =

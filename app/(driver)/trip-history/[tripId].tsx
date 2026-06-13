@@ -3,10 +3,43 @@ import { useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 
 export default function TripHistoryDetailPage() {
-  const { tripId } = useLocalSearchParams<{ tripId: string }>();
-  const id = typeof tripId === "string" ? tripId : Array.isArray(tripId) ? tripId[0] : "";
+  const params = useLocalSearchParams<{
+    tripId?: string | string[];
+    tab?: string | string[];
+    eventId?: string | string[];
+  }>();
+
+  const id =
+    typeof params.tripId === "string"
+      ? params.tripId
+      : Array.isArray(params.tripId)
+        ? params.tripId[0]
+        : "";
+
+  const tabRaw =
+    typeof params.tab === "string" ? params.tab : Array.isArray(params.tab) ? params.tab[0] : "";
+
+  const eventIdRaw =
+    typeof params.eventId === "string"
+      ? params.eventId
+      : Array.isArray(params.eventId)
+        ? params.eventId[0]
+        : "";
+
+  const initialTab =
+    tabRaw === "operations" || tabRaw === "settlement" || tabRaw === "journey"
+      ? tabRaw
+      : undefined;
+
   if (!id) {
     return <View />;
   }
-  return <DriverTripHistoryDetailScreen tripId={id} />;
+
+  return (
+    <DriverTripHistoryDetailScreen
+      tripId={id}
+      initialTab={initialTab}
+      initialSelectedExpenseId={eventIdRaw || null}
+    />
+  );
 }

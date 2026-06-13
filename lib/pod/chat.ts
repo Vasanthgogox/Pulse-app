@@ -4,8 +4,8 @@ const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const TIMEOUT_MS = 60_000;
 
 const MODELS = {
-  default: 'gemini-2.0-flash',
-  fallback: 'gemini-1.5-flash',
+  default: 'gemini-2.5-flash',
+  fallback: 'gemini-2.5-flash-lite',
 };
 
 let genAIClient: GoogleGenAI | null = null;

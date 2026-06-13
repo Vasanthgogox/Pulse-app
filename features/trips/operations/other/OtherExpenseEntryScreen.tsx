@@ -11,9 +11,8 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -26,36 +25,127 @@ import {
   useUpdateTripOtherExpense,
 } from "../queries/useTripOperations";
 import { getTripOtherExpenseById } from "./otherExpense.service";
+import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
 import {
   PAYMENT_MODE_OPTIONS,
   PAYMENT_OWNER_OPTIONS,
+  defaultPaymentOwnerForActor,
+  paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
 import { TRIP_OTHER_EXPENSE_OPTIONS } from "../shared/tripOtherExpenseCategories";
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
+import { DriverExpenseCategorySwitch } from "../shared/DriverExpenseCategorySwitch";
+import { DriverExpenseChipSelect } from "../shared/DriverExpenseChipSelect";
+import {
+  parseDriverExpenseCategoryParam,
+  normalizeTripOtherExpenseCategory,
+  type DriverExpenseCategoryNav,
+} from "../shared/driverExpenseCategoryNav.util";
+import {
+  DriverExpenseEntryLayout,
+  DriverExpenseFieldDivider,
+  DriverExpenseFieldLabel,
+  DriverExpenseSection,
+  DriverExpenseTextInput,
+} from "../shared/DriverExpenseEntryLayout";
+import { previewOtherReceiptOcr } from "../shared/applyExpenseReceiptOcr.util";
+import type { ExpenseReceiptOcrResult } from "../shared/expenseReceiptOcr.service";
+import {
+  type ExpenseBillCaptureBag,
+  useExpenseBillCapture,
+  useRegisterExpenseBillPreview,
+} from "../shared/useExpenseBillCapture";
 
 export function OtherExpenseEntryScreen({
   trip,
   entryId,
+  initialCategory,
+  expenseCategory: expenseCategoryProp,
+  onExpenseCategoryChange,
+  onCategoryNavChange,
+  lockCategorySwitch = false,
+  billCapture,
 }: {
   trip: TripRow;
   entryId?: string | null;
+  initialCategory?: TripOtherExpenseCategory | null;
+  /** Controlled category (driver unified expense shell). */
+  expenseCategory?: TripOtherExpenseCategory;
+  onExpenseCategoryChange?: (category: TripOtherExpenseCategory) => void;
+  onCategoryNavChange?: (next: DriverExpenseCategoryNav) => void;
+  lockCategorySwitch?: boolean;
+  billCapture?: ExpenseBillCaptureBag;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const isDriver = profile?.role === "driver";
   const saveExpense = useSaveTripOtherExpense();
   const updateExpense = useUpdateTripOtherExpense();
   const isEditing = !!entryId?.trim();
 
   const [loadingEntry, setLoadingEntry] = useState(isEditing);
   const [amountInr, setAmountInr] = useState<number>(0);
-  const [expenseCategory, setExpenseCategory] = useState<TripOtherExpenseCategory>("parking");
+  const [internalCategory, setInternalCategory] = useState<TripOtherExpenseCategory>(() =>
+    parseDriverExpenseCategoryParam(
+      expenseCategoryProp ?? initialCategory ?? undefined,
+    ),
+  );
+  const isCategoryControlled = expenseCategoryProp != null;
+  const expenseCategory = isCategoryControlled ? expenseCategoryProp : internalCategory;
+
+  const setExpenseCategory = useCallback(
+    (category: TripOtherExpenseCategory) => {
+      if (!isCategoryControlled) setInternalCategory(category);
+      onExpenseCategoryChange?.(category);
+    },
+    [isCategoryControlled, onExpenseCategoryChange],
+  );
   const [description, setDescription] = useState("");
   const [locationName, setLocationName] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>("organization");
+  const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>(() =>
+    defaultPaymentOwnerForActor(profile?.role),
+  );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("cash");
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  const handleOcrPreview = useCallback(
+    (result: ExpenseReceiptOcrResult) => {
+      return previewOtherReceiptOcr(
+        result,
+        { amountInr, expenseCategory, description, locationName, notes, paymentMode },
+        {
+          setAmountInr,
+          setExpenseCategory,
+          setDescription,
+          setLocationName,
+          setNotes,
+          setPaymentMode,
+        },
+      );
+    },
+    [amountInr, description, expenseCategory, locationName, notes, paymentMode, setExpenseCategory],
+  );
+
+  const ownedBillCapture = useExpenseBillCapture({
+    kind: "other",
+    permissionMessage: "Enable camera or photo library access to attach a receipt photo.",
+    previewOcrUpdates: handleOcrPreview,
+  });
+  const capture = billCapture ?? ownedBillCapture;
+  useRegisterExpenseBillPreview(billCapture, handleOcrPreview);
+
+  const {
+    photoUri,
+    setPhotoUri,
+    scanning,
+    billScan,
+    handleCapture,
+    handleRemovePhoto,
+    applyPendingUpdates,
+    dismissPendingUpdates,
+    reopenOcrReview,
+  } = capture;
 
   const contextLine = useMemo(
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
@@ -66,6 +156,16 @@ export function OtherExpenseEntryScreen({
     () => TRIP_OTHER_EXPENSE_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label })),
     [],
   );
+
+  const paymentOwnerOptions = useMemo(
+    () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role),
+    [profile?.role],
+  );
+
+  useEffect(() => {
+    if (isEditing || isCategoryControlled) return;
+    setInternalCategory(parseDriverExpenseCategoryParam(initialCategory ?? undefined));
+  }, [initialCategory, isCategoryControlled, isEditing]);
 
   useEffect(() => {
     const id = entryId?.trim();
@@ -88,32 +188,30 @@ export function OtherExpenseEntryScreen({
       }
       const entry = res.entry;
       setAmountInr(Number(entry.amount_inr ?? 0));
-      setExpenseCategory(entry.expense_category);
+      setExpenseCategory(normalizeTripOtherExpenseCategory(entry.expense_category));
       setDescription(entry.description ?? "");
       setLocationName(entry.location_name ?? "");
       setNotes(entry.notes ?? "");
       setPaymentOwner(entry.payment_owner ?? "organization");
       setPaymentMode(entry.payment_mode ?? "cash");
+      const receiptPath = entry.receipt_storage_path?.trim();
+      if (receiptPath) {
+        void getDocumentViewUrl(receiptPath).then((url) => {
+          if (mounted && url) setPhotoUri(url);
+        });
+      }
       setLoadingEntry(false);
     });
     return () => {
       mounted = false;
     };
-  }, [entryId, router, trip.id]);
+  }, [entryId, router, setExpenseCategory, setPhotoUri, trip.id]);
 
-  const handleCapture = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (permission.status !== "granted") {
-      Alert.alert("Camera required", "Enable camera access to capture a receipt.");
-      return;
+  useEffect(() => {
+    if (!isEditing && profile?.role === "driver") {
+      setPaymentOwner(defaultPaymentOwnerForActor(profile.role));
     }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    setPhotoUri(result.assets[0].uri);
-  };
+  }, [isEditing, profile?.role]);
 
   const saving = saveExpense.isPending || updateExpense.isPending;
 
@@ -156,6 +254,94 @@ export function OtherExpenseEntryScreen({
     return <CenteredLoadingView message="Loading expense…" />;
   }
 
+  if (isDriver) {
+    return (
+      <DriverExpenseEntryLayout
+        category="other"
+        title={isEditing ? "Edit expense" : "Log expense"}
+        subtitle={contextLine}
+        isEditing={isEditing}
+        saving={saving}
+        onBack={() => router.back()}
+        onSave={handleSave}
+        billScan={billScan}
+        onApplyBillScan={applyPendingUpdates}
+        onDismissBillScan={dismissPendingUpdates}
+        onReviewBillScan={reopenOcrReview}
+        attachment={{
+          uri: photoUri,
+          busy: saving || scanning,
+          label: "Receipt",
+          onAttach: handleCapture,
+          onRemove: handleRemovePhoto,
+        }}
+      >
+        <DriverExpenseSection title="Amount">
+          <SmartInput
+            type="currency"
+            value={amountInr}
+            onChange={(_, numeric) => setAmountInr(numeric)}
+            label="Expense amount"
+            submitLabel="Apply"
+            variant="field"
+            density="compact"
+            placeholder="Enter amount"
+            required={false}
+            validation={{ min: 0, max: 1000000 }}
+          />
+        </DriverExpenseSection>
+
+        <DriverExpenseSection title="Category & payment">
+          <DriverExpenseCategorySwitch
+            tripId={trip.id}
+            formKind="other"
+            otherCategory={expenseCategory}
+            onOtherCategoryChange={setExpenseCategory}
+            onCategoryNavChange={onCategoryNavChange}
+            lockCategorySwitch={lockCategorySwitch}
+          />
+          <DriverExpenseFieldDivider />
+          <DriverExpenseChipSelect
+            label="Payment mode"
+            options={PAYMENT_MODE_OPTIONS}
+            value={paymentMode}
+            onChange={setPaymentMode}
+            columns={3}
+            visualGroup="payment_mode"
+          />
+        </DriverExpenseSection>
+
+        <DriverExpenseSection title="Details">
+          <View>
+            <DriverExpenseFieldLabel>Description (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={description}
+              onChangeText={setDescription}
+              placeholder="What was this for?"
+            />
+          </View>
+          <View>
+            <DriverExpenseFieldLabel>Location (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={locationName}
+              onChangeText={setLocationName}
+              placeholder="Plaza, yard, city"
+            />
+          </View>
+          <View>
+            <DriverExpenseFieldLabel>Notes (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              placeholder="Short note"
+            />
+          </View>
+        </DriverExpenseSection>
+      </DriverExpenseEntryLayout>
+    );
+  }
+
   return (
     <View style={s.screen}>
       <OperationalHeader
@@ -196,7 +382,7 @@ export function OtherExpenseEntryScreen({
           <View style={s.divider} />
           <OperationalChipSelect
             label="Paid by"
-            options={PAYMENT_OWNER_OPTIONS}
+            options={paymentOwnerOptions}
             value={paymentOwner}
             onChange={setPaymentOwner}
             density="compact"

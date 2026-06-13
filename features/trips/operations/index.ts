@@ -21,6 +21,8 @@ export {
   useSetTripFuelReimbursementState,
   useSetTripTollReimbursementState,
   useSetTripOtherReimbursementState,
+  useCancelDriverExpenseRequest,
+  useRemindDriverExpenseRequest,
 } from "./queries/useTripOperations";
 export { useTripOperationsSync } from "./hooks/useTripOperationsSync";
 export { useVehicleOperationsLedger } from "./vehicle/useVehicleOperationsLedger";

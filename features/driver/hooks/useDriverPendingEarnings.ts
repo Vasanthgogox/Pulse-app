@@ -7,8 +7,10 @@ import {
   type DriverInviteSalaryLine,
 } from '@/features/drivers/utils/driverInviteOffer.util';
 import * as driversService from '@/features/drivers/services/drivers.service';
+import * as salaryRequestsService from '@/features/drivers/services/salaryRequests.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { useAuth } from '@/contexts/AuthContext';
+import { groupTripsByDateSection } from '@/features/driver/utils/pendingEarningsSections.util';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 function isCompleted(status: string) {
@@ -39,12 +41,19 @@ export type PendingEarningsEmployerDetail = {
   salaryLines: DriverInviteSalaryLine[];
 };
 
+export type PendingSalaryRequestItem = {
+  request: salaryRequestsService.SalaryRequestRow;
+  orgName: string;
+  rawDate: string;
+};
+
 export function useDriverPendingEarnings() {
   const { profile } = useAuth();
   const [linkedDrivers, setLinkedDrivers] = useState<driversService.DriverRow[]>([]);
   const [invites, setInvites] = useState<driversService.DriverInviteRow[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<driversService.DriverLedgerRow[]>([]);
+  const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const initialLoadDoneRef = useRef(false);
@@ -68,6 +77,7 @@ export function useDriverPendingEarnings() {
         if (drivers.length === 0) {
           setTrips([]);
           setLedgerEntries([]);
+          setSalaryRequests([]);
           setLoading(false);
           initialLoadDoneRef.current = true;
           isRefreshingRef.current = false;
@@ -78,9 +88,11 @@ export function useDriverPendingEarnings() {
         return Promise.all([
           tripsService.getTripsByDriverIds(driverIds),
           driversService.getDriverLedgerByDriverIds(driverIds),
-        ]).then(([tRes, ledgerRes]) => {
+          salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
+        ]).then(([tRes, ledgerRes, salaryRes]) => {
           setTrips(tRes.trips ?? []);
           setLedgerEntries(ledgerRes.entries ?? []);
+          setSalaryRequests(salaryRes.requests ?? []);
           setLoading(false);
           initialLoadDoneRef.current = true;
           isRefreshingRef.current = false;
@@ -287,11 +299,6 @@ export function useDriverPendingEarnings() {
     linkedDrivers,
   ]);
 
-  const pendingTotal = useMemo(
-    () => pendingItems.reduce((sum, item) => sum + item.amount, 0),
-    [pendingItems],
-  );
-
   const employerDetails = useMemo((): PendingEarningsEmployerDetail[] => {
     const acceptedByOrg = new Map<string, driversService.DriverInviteRow>();
     invites.forEach((inv) => {
@@ -328,6 +335,33 @@ export function useDriverPendingEarnings() {
       .sort((a, b) => a.orgName.localeCompare(b.orgName));
   }, [invites, linkedDrivers]);
 
+  const orgNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    salaryRequestOrgOptions.forEach((opt) => {
+      if (opt.orgId) map.set(String(opt.orgId), opt.orgName);
+    });
+    employerDetails.forEach((row) => map.set(row.orgId, row.orgName));
+    return map;
+  }, [employerDetails, salaryRequestOrgOptions]);
+
+  const salaryRequestItems = useMemo((): PendingSalaryRequestItem[] => {
+    return salaryRequests.map((request) => ({
+      request,
+      orgName: orgNameById.get(String(request.organization_id ?? '')) ?? 'Fleet',
+      rawDate: request.created_at,
+    }));
+  }, [orgNameById, salaryRequests]);
+
+  const salaryRequestSections = useMemo(
+    () => groupTripsByDateSection(salaryRequestItems),
+    [salaryRequestItems],
+  );
+
+  const pendingTotal = useMemo(
+    () => pendingItems.reduce((sum, item) => sum + item.amount, 0),
+    [pendingItems],
+  );
+
   return {
     loading,
     refreshing,
@@ -336,5 +370,8 @@ export function useDriverPendingEarnings() {
     pendingTotal,
     tripCount: pendingItems.length,
     employerDetails,
+    salaryRequestItems,
+    salaryRequestSections,
+    salaryRequestCount: salaryRequestItems.length,
   };
 }

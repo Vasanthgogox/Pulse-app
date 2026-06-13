@@ -11,31 +11,60 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { OperationalPaymentMode, OperationalPaymentOwner } from "../types";
 import { useSaveTripTollEntry, useUpdateTripTollEntry } from "../queries/useTripOperations";
 import { getTripTollEntryById } from "./toll.service";
+import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
 import {
   PAYMENT_MODE_OPTIONS,
   TOLL_PAYMENT_OWNER_OPTIONS,
+  defaultPaymentOwnerForActor,
+  paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
 import { useOperationsSyncState } from "../state/useOperationsSyncState";
+import { DriverExpenseCategorySwitch } from "../shared/DriverExpenseCategorySwitch";
+import { DriverExpenseChipSelect } from "../shared/DriverExpenseChipSelect";
+import type { DriverExpenseCategoryNav } from "../shared/driverExpenseCategoryNav.util";
+import type { TripOtherExpenseCategory } from "../types";
+import {
+  DriverExpenseEntryLayout,
+  DriverExpenseFieldDivider,
+  DriverExpenseFieldLabel,
+  DriverExpenseSection,
+  DriverExpenseTextInput,
+} from "../shared/DriverExpenseEntryLayout";
+import { previewTollReceiptOcr } from "../shared/applyExpenseReceiptOcr.util";
+import type { ExpenseReceiptOcrResult } from "../shared/expenseReceiptOcr.service";
+import {
+  type ExpenseBillCaptureBag,
+  useExpenseBillCapture,
+  useRegisterExpenseBillPreview,
+} from "../shared/useExpenseBillCapture";
 
 export function TollEntryScreen({
   trip,
   entryId,
+  otherCategory = "parking",
+  onCategoryNavChange,
+  lockCategorySwitch = false,
+  billCapture,
 }: {
   trip: TripRow;
   entryId?: string | null;
+  otherCategory?: TripOtherExpenseCategory;
+  onCategoryNavChange?: (next: DriverExpenseCategoryNav) => void;
+  lockCategorySwitch?: boolean;
+  billCapture?: ExpenseBillCaptureBag;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const isDriver = profile?.role === "driver";
   const saveToll = useSaveTripTollEntry();
   const updateToll = useUpdateTripTollEntry();
   const { pendingCount, failedCount, refresh } = useOperationsSyncState();
@@ -46,15 +75,64 @@ export function TollEntryScreen({
   const [plazaName, setPlazaName] = useState("");
   const [notes, setNotes] = useState("");
   const [isEstimated, setIsEstimated] = useState(false);
-  const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>("organization");
+  const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>(() =>
+    defaultPaymentOwnerForActor(profile?.role),
+  );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("unknown");
-  const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+
+  const handleOcrPreview = useCallback(
+    (result: ExpenseReceiptOcrResult) => {
+      return previewTollReceiptOcr(
+        result,
+        { amountInr, plazaName, notes, paymentMode },
+        {
+          setAmountInr,
+          setPlazaName,
+          setNotes,
+          setPaymentMode,
+          setIsEstimated,
+        },
+      );
+    },
+    [amountInr, notes, paymentMode, plazaName],
+  );
+
+  const ownedBillCapture = useExpenseBillCapture({
+    kind: "toll",
+    permissionMessage: "Enable camera or photo library access to attach a toll receipt photo.",
+    previewOcrUpdates: handleOcrPreview,
+  });
+  const capture = billCapture ?? ownedBillCapture;
+  useRegisterExpenseBillPreview(billCapture, handleOcrPreview);
+
+  const {
+    photoUri: receiptUri,
+    setPhotoUri: setReceiptUri,
+    scanning,
+    billScan,
+    handleCapture,
+    handleRemovePhoto: handleRemoveReceipt,
+    applyPendingUpdates,
+    dismissPendingUpdates,
+    reopenOcrReview,
+  } = capture;
 
   const contextLine = useMemo(
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
   );
+
+  const paymentOwnerOptions = useMemo(
+    () => paymentOwnerOptionsForActor(TOLL_PAYMENT_OWNER_OPTIONS, profile?.role),
+    [profile?.role],
+  );
+
+  useEffect(() => {
+    if (!isEditing && profile?.role === "driver") {
+      setPaymentOwner(defaultPaymentOwnerForActor(profile.role));
+    }
+  }, [isEditing, profile?.role]);
 
   useEffect(() => {
     const id = entryId?.trim();
@@ -82,6 +160,12 @@ export function TollEntryScreen({
       setIsEstimated(entry.is_estimated === true);
       setPaymentOwner(entry.payment_owner ?? "organization");
       setPaymentMode(entry.payment_mode ?? "unknown");
+      const receiptPath = entry.receipt_storage_path?.trim();
+      if (receiptPath) {
+        void getDocumentViewUrl(receiptPath).then((url) => {
+          if (mounted && url) setReceiptUri(url);
+        });
+      }
       setLoadingEntry(false);
     });
     return () => {
@@ -90,20 +174,6 @@ export function TollEntryScreen({
   }, [entryId, router, trip.id]);
 
   const saving = saveToll.isPending || updateToll.isPending;
-
-  const handleCapture = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (permission.status !== "granted") {
-      Alert.alert("Camera required", "Enable camera access to capture toll receipt.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    setReceiptUri(result.assets[0].uri);
-  };
 
   const handleSave = async () => {
     const payload = {
@@ -137,8 +207,107 @@ export function TollEntryScreen({
     }
   };
 
+  const syncHint =
+    pendingCount > 0
+      ? `Sync queue: ${pendingCount}${failedCount > 0 ? ` · failed ${failedCount}` : ""}`
+      : null;
+
   if (loadingEntry) {
     return <CenteredLoadingView message="Loading toll entry…" />;
+  }
+
+  if (isDriver) {
+    return (
+      <DriverExpenseEntryLayout
+        category="toll"
+        title={isEditing ? "Edit expense" : "Log expense"}
+        subtitle={contextLine}
+        isEditing={isEditing}
+        saving={saving}
+        onBack={() => router.back()}
+        onSave={handleSave}
+        hint={hint}
+        syncHint={syncHint}
+        billScan={billScan}
+        onApplyBillScan={applyPendingUpdates}
+        onDismissBillScan={dismissPendingUpdates}
+        onReviewBillScan={reopenOcrReview}
+        attachment={{
+          uri: receiptUri,
+          busy: saving || scanning,
+          label: "Receipt",
+          onAttach: handleCapture,
+          onRemove: handleRemoveReceipt,
+        }}
+      >
+        <DriverExpenseSection title="Amount">
+          <SmartInput
+            type="currency"
+            value={amountInr}
+            onChange={(_, numeric) => setAmountInr(numeric)}
+            label="Toll amount"
+            submitLabel="Apply"
+            variant="field"
+            density="compact"
+            placeholder="Enter amount"
+            required={false}
+            validation={{ min: 0, max: 1000000 }}
+          />
+        </DriverExpenseSection>
+
+        <DriverExpenseSection title="Category & payment">
+          <DriverExpenseCategorySwitch
+            tripId={trip.id}
+            formKind="toll"
+            otherCategory={otherCategory}
+            onOtherCategoryChange={() => {}}
+            onCategoryNavChange={onCategoryNavChange}
+            lockCategorySwitch={lockCategorySwitch}
+          />
+          <DriverExpenseFieldDivider />
+          <DriverExpenseChipSelect
+            label="Entry type"
+            options={[
+              { value: "actual", label: "Actual" },
+              { value: "estimated", label: "Estimated" },
+            ]}
+            value={isEstimated ? "estimated" : "actual"}
+            onChange={(v) => setIsEstimated(v === "estimated")}
+            columns={2}
+            visualGroup="toll_entry"
+          />
+          <DriverExpenseFieldDivider />
+          <DriverExpenseChipSelect
+            label="Payment mode"
+            options={PAYMENT_MODE_OPTIONS}
+            value={paymentMode}
+            onChange={setPaymentMode}
+            columns={3}
+            visualGroup="payment_mode"
+          />
+        </DriverExpenseSection>
+
+        <DriverExpenseSection title="Details">
+          <View>
+            <DriverExpenseFieldLabel>Plaza (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={plazaName}
+              onChangeText={setPlazaName}
+              placeholder="Toll plaza name"
+            />
+          </View>
+          <View>
+            <DriverExpenseFieldLabel>Notes (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              placeholder="Short note"
+            />
+          </View>
+        </DriverExpenseSection>
+      </DriverExpenseEntryLayout>
+    );
   }
 
   return (
@@ -151,10 +320,7 @@ export function TollEntryScreen({
       />
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={[
-          s.content,
-          { paddingBottom: insets.bottom + 76 },
-        ]}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 76 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -187,7 +353,7 @@ export function TollEntryScreen({
           <View style={s.divider} />
           <OperationalChipSelect
             label="Paid by"
-            options={TOLL_PAYMENT_OWNER_OPTIONS}
+            options={paymentOwnerOptions}
             value={paymentOwner}
             onChange={setPaymentOwner}
             density="compact"
@@ -243,12 +409,7 @@ export function TollEntryScreen({
         </View>
 
         {hint ? <Text style={s.hint}>{hint}</Text> : null}
-        {pendingCount > 0 ? (
-          <Text style={s.hint}>
-            Sync queue: {pendingCount}
-            {failedCount > 0 ? ` · failed ${failedCount}` : ""}
-          </Text>
-        ) : null}
+        {syncHint ? <Text style={s.hint}>{syncHint}</Text> : null}
       </ScrollView>
 
       <OperationalBottomActionBar>

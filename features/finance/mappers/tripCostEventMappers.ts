@@ -32,6 +32,22 @@ function normalizeActor(owner: string | null | undefined): TripCostActor {
   return "organization";
 }
 
+type OperationalExpenseRow = {
+  payment_owner?: string | null;
+  approval_state?: string | null;
+  reimbursement_state?: string | null;
+};
+
+/** Driver reimbursement requests use approval/reimbursement state `reported`. */
+function resolveExpensePayer(row: OperationalExpenseRow): TripCostActor {
+  const owner = normalizeActor(row.payment_owner);
+  if (owner === "driver") return "driver";
+  const approval = String(row.approval_state ?? "").toLowerCase();
+  const reimbursement = String(row.reimbursement_state ?? "").toLowerCase();
+  if (approval === "reported" && reimbursement === "reported") return "driver";
+  return owner;
+}
+
 function toApprovalState(value: string | null | undefined): TripCostApprovalState {
   const normalized = String(value ?? "").toLowerCase();
   if (normalized === "approved" || normalized === "settled") return "approved";
@@ -82,7 +98,7 @@ export function mapFuelEntryToTripCostEvent(input: {
   ledgerTransactionId?: string | null;
 }): TripCostEvent {
   const approvalState = toApprovalState(input.row.approval_state);
-  const payer = normalizeActor(input.row.payment_owner);
+  const payer = resolveExpensePayer(input.row);
   const postingState = toPostingState({
     approvalState,
     ledgerState: input.row.ledger_state,
@@ -123,7 +139,7 @@ export function mapTollEntryToTripCostEvent(input: {
   ledgerTransactionId?: string | null;
 }): TripCostEvent {
   const approvalState = toApprovalState(input.row.approval_state);
-  const payer = normalizeActor(input.row.payment_owner);
+  const payer = resolveExpensePayer(input.row);
   const postingState = toPostingState({
     approvalState,
     ledgerState: input.row.ledger_state,
@@ -164,7 +180,7 @@ export function mapOtherEntryToTripCostEvent(input: {
   ledgerTransactionId?: string | null;
 }): TripCostEvent {
   const approvalState = toApprovalState(input.row.approval_state);
-  const payer = normalizeActor(input.row.payment_owner);
+  const payer = resolveExpensePayer(input.row);
   const postingState = toPostingState({
     approvalState,
     ledgerState: input.row.ledger_state,

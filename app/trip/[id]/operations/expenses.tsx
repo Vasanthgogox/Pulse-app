@@ -1,21 +1,29 @@
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { TripExpensesScreen } from "@/features/trips/operations/hub/TripExpensesScreen";
+import { useAuth } from "@/contexts/AuthContext";
 import { ROUTES, tripExpenseEntryEditRoute } from "@/lib/routes";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { getTripById, type TripRow } from "@/features/trips/services/trips.service";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { type Href, Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 
 export default function TripExpenseControlRoute() {
-  const params = useLocalSearchParams<{ id?: string | string[] }>();
+  const params = useLocalSearchParams<{ id?: string | string[]; eventId?: string | string[] }>();
   const tripId =
     typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
+  const eventIdRaw =
+    typeof params.eventId === "string"
+      ? params.eventId
+      : Array.isArray(params.eventId)
+        ? params.eventId[0]
+        : "";
   const [trip, setTrip] = useState<TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const safeBack = useSafeBack();
   const router = useRouter();
+  const { profile } = useAuth();
 
   useEffect(() => {
     let mounted = true;
@@ -44,6 +52,15 @@ export default function TripExpenseControlRoute() {
         </View>
       );
     }
+
+    if (profile?.role === "driver") {
+      const query = new URLSearchParams({ tab: "operations" });
+      if (eventIdRaw) query.set("eventId", eventIdRaw);
+      const href =
+        `/(driver)/trip-history/${encodeURIComponent(trip.id)}?${query.toString()}` as Href;
+      return <Redirect href={href} />;
+    }
+
     return (
       <TripExpensesScreen
         trip={trip}
@@ -55,7 +72,8 @@ export default function TripExpenseControlRoute() {
           const href = tripExpenseEntryEditRoute(trip.id, event.id);
           if (href) router.push(href as never);
         }}
+        initialPreviewEventId={eventIdRaw || null}
       />
     );
-  }, [error, loading, router, safeBack, trip]);
+  }, [error, eventIdRaw, loading, profile?.role, router, safeBack, trip]);
 }

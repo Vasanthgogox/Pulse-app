@@ -43,7 +43,7 @@ export function buildOperationalTimeline(params: {
       atRaw: entry.entered_at,
       item: {
         key: `fuel-${entry.id}`,
-        title: "Fuel entry logged",
+        title: "Fuel expense",
         subtitle: `₹${Math.round(entry.amount_inr).toLocaleString("en-IN")} • ${
           entry.station_name?.trim() || "Station"
         }`,
@@ -56,7 +56,7 @@ export function buildOperationalTimeline(params: {
       atRaw: entry.entered_at,
       item: {
         key: `toll-${entry.id}`,
-        title: "Toll entry logged",
+        title: "Toll expense",
         subtitle: `₹${Math.round(entry.amount_inr).toLocaleString("en-IN")} • ${
           entry.plaza_name?.trim() || "Plaza"
         }`,

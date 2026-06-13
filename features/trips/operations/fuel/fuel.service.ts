@@ -15,6 +15,7 @@ import {
 } from "../vehicle/vehicleOperationsLedger.service";
 import { appendTripOperationalTimelineEventSafe } from "../timeline/timelineEvents.service";
 import { buildExpenseEditApprovalReset } from "../shared/expenseEntryEdit.util";
+import { resolvePaymentOwnerForSave } from "../shared/operationsEntryOptions";
 import type { UpdateFuelEntryInput } from "../types";
 
 function toNullableText(value: string | null | undefined): string | null {
@@ -105,8 +106,7 @@ export async function createTripFuelEntry(
     billStoragePath?: string | null;
   },
 ): Promise<{ error: Error | null; entry: TripFuelEntry | null }> {
-  const paymentOwner: OperationalPaymentOwner =
-    input.paymentOwner ?? (input.actorRole === "driver" ? "driver" : "unknown");
+  const paymentOwner = resolvePaymentOwnerForSave(input);
   const paymentMode: OperationalPaymentMode =
     input.paymentMode ?? (input.actorRole === "driver" ? "cash" : "unknown");
   const approvalState: OperationalApprovalState =
