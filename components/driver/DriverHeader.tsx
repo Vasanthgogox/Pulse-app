@@ -1,14 +1,14 @@
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import Typography from '@/constants/Typography';
-import { useAuth } from '@/contexts/AuthContext';
-import { useOptionalLanguage } from '@/contexts/LanguageContext';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
+import { DriverHeaderTripOpsButtons } from '@/components/driver/DriverHeaderTripOpsButtons';
+import { useOptionalLanguage } from '@/contexts/LanguageContext';
 import { ROUTES } from '@/lib/routes';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Image, Platform, Share, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Image, Platform, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import Animated, {
     cancelAnimation,
     Easing,
@@ -46,9 +46,12 @@ type Props = {
   onPressOtpClaim?: () => void;
   onPressNotifications?: () => void;
   onPressLanguage?: () => void;
-  /** Number of pending fleet invitations — shows a badge on the invite icon. */
-  pendingInviteCount?: number;
-  onPressInvites?: () => void;
+  /** Active trip for header expense / odometer shortcuts. */
+  hasActiveTrip?: boolean;
+  showExpenseOps?: boolean;
+  showOdometerOps?: boolean;
+  onPressExpense?: () => void;
+  onPressOdometer?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -60,13 +63,15 @@ export function DriverHeader({
   variant = 'default',
   onPressNotifications,
   onPressLanguage,
-  pendingInviteCount = 0,
-  onPressInvites,
+  hasActiveTrip = false,
+  showExpenseOps = true,
+  showOdometerOps = true,
+  onPressExpense,
+  onPressOdometer,
   style,
 }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
   const { localeOptions, locale } = useOptionalLanguage();
   const languageCode = (localeOptions.find((o) => o.value === locale)?.label ?? 'EN')
     .slice(0, 2)
@@ -98,19 +103,7 @@ export function DriverHeader({
     opacity: ringPulse.value,
   }));
 
-  const handleInviteDrivers = () => {
-    const base = 'https://pulse.netlify.app/invite';
-    const ref = profile?.uid;
-    const inviteUrl = ref ? `${base}?ref=${ref}` : base;
-    const message =
-      `Join me on Pulse Driver! Manage trips, payouts, and network requests.\n\n` +
-      `Sign up here: ${inviteUrl}`;
-    Share.share({
-      title: 'Join Pulse Driver',
-      message,
-      url: inviteUrl,
-    }).catch(() => {});
-  };
+  const showTripOps = Boolean(onPressExpense || onPressOdometer);
 
   return (
     <View
@@ -206,30 +199,19 @@ export function DriverHeader({
           </Text>
         </TouchableOpacity>
 
-        {/* Fleet invitation icon — badge shows pending count */}
-        <TouchableOpacity
-          onPress={onPressInvites ?? handleInviteDrivers}
-          style={[
-            styles.notificationBtn,
-            { backgroundColor: colors.whiteMuted, borderColor: colors.border },
-          ]}
-          activeOpacity={0.8}
-          accessibilityLabel={pendingInviteCount > 0 ? `${pendingInviteCount} fleet invite${pendingInviteCount > 1 ? 's' : ''}` : 'Invite drivers'}
-          accessibilityHint={pendingInviteCount > 0 ? 'Tap to view fleet invitations' : 'Share your invite link'}
-        >
-          <FontAwesome
-            name={pendingInviteCount > 0 ? 'envelope' : 'user-plus'}
-            size={Layout.driverHeaderActionIconSize}
-            color={pendingInviteCount > 0 ? colors.emerald : colors.text}
+        {showTripOps ? (
+          <DriverHeaderTripOpsButtons
+            hasActiveTrip={hasActiveTrip}
+            showExpense={showExpenseOps}
+            showOdometer={showOdometerOps}
+            onPressExpense={onPressExpense ?? (() => {})}
+            onPressOdometer={onPressOdometer ?? (() => {})}
+            surfaceColor={colors.whiteMuted}
+            borderColor={colors.border}
+            textColor={colors.text}
+            accentColor={colors.emerald}
           />
-          {pendingInviteCount > 0 ? (
-            <View style={[styles.inviteBadge, { backgroundColor: colors.emerald }]}>
-              <Text style={styles.inviteBadgeText}>
-                {pendingInviteCount > 9 ? '9+' : String(pendingInviteCount)}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
+        ) : null}
 
         <TouchableOpacity
           onPress={onPressNotifications ?? (() => router.push('/(driver)/notifications'))}
@@ -346,23 +328,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  inviteBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 17,
-    height: 17,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  inviteBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#fff',
-    lineHeight: 12,
   },
 });
 

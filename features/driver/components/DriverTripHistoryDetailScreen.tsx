@@ -23,6 +23,7 @@ import * as salaryRequestsService from "@/features/drivers/services/salaryReques
 import * as tripsService from "@/features/trips/services/trips.service";
 import { tripEarningsForDriver } from "@/features/drivers/utils/driverUtils.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
 import {
@@ -77,6 +78,7 @@ import { TripDetailSettlementPanel } from "@/features/driver/components/TripDeta
 import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSync } from "@/features/trips/operations";
 import { DriverTripOperationsTab } from "@/features/driver/components/DriverTripOperationsTab";
+import { useRegisterDriverContextTrip } from "@/contexts/DriverTripOpsContext";
 
 function TimelinePulseIcon({
   expanded,
@@ -108,9 +110,15 @@ function TimelinePulseIcon({
 
 export type DriverTripHistoryDetailScreenProps = {
   tripId: string;
+  initialTab?: "journey" | "operations" | "settlement";
+  initialSelectedExpenseId?: string | null;
 };
 
-export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetailScreenProps) {
+export function DriverTripHistoryDetailScreen({
+  tripId,
+  initialTab,
+  initialSelectedExpenseId,
+}: DriverTripHistoryDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const colors = useDriverThemeColors();
@@ -129,7 +137,9 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const [routeMetricsByTripId, setRouteMetricsByTripId] = useState<
     Record<string, { distance: number; estimated_duration: string }>
   >({});
-  const [detailTab, setDetailTab] = useState<"journey" | "operations" | "settlement">("journey");
+  const [detailTab, setDetailTab] = useState<"journey" | "operations" | "settlement">(
+    initialTab ?? "journey",
+  );
   const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
   const [detailPodDocuments, setDetailPodDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
   const [detailPodLoading, setDetailPodLoading] = useState(false);
@@ -138,6 +148,8 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
   const [podPreviewUrl, setPodPreviewUrl] = useState<string | null>(null);
   const [podPreviewLoading, setPodPreviewLoading] = useState(false);
   const [podPreviewError, setPodPreviewError] = useState(false);
+
+  useRegisterDriverContextTrip(trip);
 
   // Fleet attribution state
   const [linkedDriversFull, setLinkedDriversFull] = useState<driversService.DriverRow[]>([]);
@@ -159,6 +171,16 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
       mounted = false;
     };
   }, [loadTrip]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      void loadTrip(() => mounted);
+      return () => {
+        mounted = false;
+      };
+    }, [loadTrip]),
+  );
 
   useEffect(() => {
     const uid = profile?.uid;
@@ -1000,7 +1022,11 @@ export function DriverTripHistoryDetailScreen({ tripId }: DriverTripHistoryDetai
 
               {detailTab === "operations" && trip ? (
                 <View style={{ marginBottom: 12 }}>
-                  <DriverTripOperationsTab trip={trip} operationsSync={operationsSync} />
+                  <DriverTripOperationsTab
+                    trip={trip}
+                    operationsSync={operationsSync}
+                    initialSelectedExpenseId={initialSelectedExpenseId}
+                  />
                 </View>
               ) : null}
 

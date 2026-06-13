@@ -18,6 +18,16 @@ export interface SaveTripVerificationInput {
   markBusinessVerified?: boolean;
 }
 
+export interface SaveTripVerificationBothInput {
+  tripId: string;
+  startOdometerKm: number | null;
+  endOdometerKm: number | null;
+  gpsDistanceKm?: number | null;
+  notes?: string | null;
+  updatedBy: string | null;
+  markBusinessVerified?: boolean;
+}
+
 function roundKm(value: number | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
@@ -175,6 +185,98 @@ export async function saveTripVerification(
       payload: {
         side: input.side,
         odometerKm: input.odometerKm,
+        discrepancyKm,
+        verificationState: state,
+      },
+    });
+    if (discrepancyKm != null && discrepancyKm > 0) {
+      await appendTripOperationalTimelineEventSafe({
+        organizationId: persisted.organization_id,
+        tripId: persisted.id,
+        eventType: "discrepancy_detected",
+        sourceType: "odometer",
+        sourceId: persisted.id,
+        actorUserId: input.updatedBy ?? null,
+        payload: {
+          discrepancyKm,
+          distanceSource,
+        },
+      });
+    }
+  }
+  return { error: null, trip: persisted };
+}
+
+export async function saveTripVerificationBoth(
+  input: SaveTripVerificationBothInput,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data: current, error: readError } = await supabase()
+    .from("trips")
+    .select(
+      "id, start_odometer_km, end_odometer_km, gps_distance_km, odometer_verification_state",
+    )
+    .eq("id", input.tripId)
+    .maybeSingle();
+
+  if (readError) return { error: new Error(readError.message), trip: null };
+  if (!current) return { error: new Error("Trip not found"), trip: null };
+
+  const startKm = roundKm(input.startOdometerKm);
+  const endKm = roundKm(input.endOdometerKm);
+  const gpsDistanceKm =
+    input.gpsDistanceKm !== undefined
+      ? roundKm(input.gpsDistanceKm)
+      : roundKm(current.gps_distance_km as number | null);
+  const odometerDistanceKm = computeOdometerDistance(startKm, endKm);
+  const discrepancyKm = computeDistanceDiscrepancy(odometerDistanceKm, gpsDistanceKm);
+  const distanceSource = deriveDistanceSource(odometerDistanceKm, gpsDistanceKm);
+  const state = deriveVerificationState(
+    {
+      start_odometer_km: startKm,
+      end_odometer_km: endKm,
+      distance_discrepancy_km: discrepancyKm,
+      gps_distance_km: gpsDistanceKm,
+      odometer_verification_state:
+        (current.odometer_verification_state as string | null) ?? null,
+    },
+    { markBusinessVerified: input.markBusinessVerified },
+  );
+
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    start_odometer_km: startKm,
+    end_odometer_km: endKm,
+    odometer_distance_km: odometerDistanceKm,
+    gps_distance_km: gpsDistanceKm,
+    distance_discrepancy_km: discrepancyKm,
+    distance_source: distanceSource,
+    odometer_verification_state: state,
+    odometer_notes: (input.notes ?? "").trim() || null,
+    odometer_updated_by: input.updatedBy,
+    odometer_updated_at: new Date().toISOString(),
+  };
+
+  const { data: row, error } = await supabase()
+    .from("trips")
+    .update(updates)
+    .eq("id", input.tripId)
+    .select()
+    .maybeSingle();
+
+  if (error) return { error: new Error(error.message), trip: null };
+  const persisted = (row ?? null) as TripRow | null;
+  if (persisted != null) {
+    await appendTripOperationalTimelineEventSafe({
+      organizationId: persisted.organization_id,
+      tripId: persisted.id,
+      eventType: "odometer_added",
+      sourceType: "odometer",
+      sourceId: persisted.id,
+      actorUserId: input.updatedBy ?? null,
+      payload: {
+        side: "both",
+        startOdometerKm: startKm,
+        endOdometerKm: endKm,
         discrepancyKm,
         verificationState: state,
       },

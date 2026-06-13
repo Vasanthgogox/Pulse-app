@@ -4,6 +4,64 @@ import type {
   TripVerificationSnapshot,
 } from "../types";
 import { deriveVerificationState } from "../state/verificationState";
+import { computeDistanceDiscrepancy } from "../verification.service";
+
+export const ODOMETER_GPS_CONFLICT_THRESHOLD_KM = 10;
+
+export type OdometerGpsComparisonHint = {
+  text: string;
+  hasConflict: boolean;
+};
+
+export function buildOdometerGpsComparisonHint(input: {
+  startOdometerKm: number | null;
+  endOdometerKm: number | null;
+  odometerDistanceKm: number | null;
+  gpsDistanceKm: number | null;
+  distanceDiscrepancyKm: number | null;
+}): OdometerGpsComparisonHint | null {
+  const hasStart = input.startOdometerKm != null;
+  const hasEnd = input.endOdometerKm != null;
+  if (!hasStart || !hasEnd) return null;
+
+  const odoTrip = input.odometerDistanceKm;
+  const gps = input.gpsDistanceKm;
+
+  if (gps == null && odoTrip == null) return null;
+
+  if (gps == null) {
+    return {
+      text: `Odo trip ${formatKm(odoTrip)} · GPS unavailable`,
+      hasConflict: false,
+    };
+  }
+
+  if (odoTrip == null) {
+    return {
+      text: `GPS ${formatKm(gps)} tracked · odo trip pending`,
+      hasConflict: false,
+    };
+  }
+
+  const delta =
+    input.distanceDiscrepancyKm ??
+    computeDistanceDiscrepancy(odoTrip, gps);
+  const hasConflict =
+    delta != null && delta >= ODOMETER_GPS_CONFLICT_THRESHOLD_KM;
+
+  if (hasConflict) {
+    return {
+      text: `Odo ${formatKm(odoTrip)} · GPS ${formatKm(gps)} · Δ ${formatKm(delta)} conflict`,
+      hasConflict: true,
+    };
+  }
+
+  const deltaLabel = delta != null ? formatKm(delta) : "0 KM";
+  return {
+    text: `GPS ${formatKm(gps)} verified · odo ${formatKm(odoTrip)} · Δ ${deltaLabel}`,
+    hasConflict: false,
+  };
+}
 
 export function toVerificationSnapshot(trip: TripRow): TripVerificationSnapshot {
   return {

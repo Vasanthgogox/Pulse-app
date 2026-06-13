@@ -1,10 +1,12 @@
 import Theme from "@/constants/Theme";
 import { OperationalButton } from "@/components/operational";
+import { ExpenseBillScanOverlay } from "@/features/trips/operations/shared/ExpenseBillScanOverlay";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 export function OdometerPhotoCapture({
   photoUri,
   busy,
+  scanning = false,
   onCapture,
   onRetake,
   compact = false,
@@ -15,6 +17,7 @@ export function OdometerPhotoCapture({
 }: {
   photoUri: string | null;
   busy?: boolean;
+  scanning?: boolean;
   onCapture: () => void;
   onRetake: () => void;
   compact?: boolean;
@@ -31,11 +34,14 @@ export function OdometerPhotoCapture({
       ) : null}
       {photoUri ? (
         <>
-          <Image
-            source={{ uri: photoUri }}
-            style={[styles.preview, compact && styles.previewCompact]}
-            resizeMode="cover"
-          />
+          <View style={styles.previewWrap}>
+            <Image
+              source={{ uri: photoUri }}
+              style={[styles.preview, compact && styles.previewCompact]}
+              resizeMode="cover"
+            />
+            <ExpenseBillScanOverlay visible={scanning} />
+          </View>
           <OperationalButton
             intent="utility"
             label={retakeLabel}
@@ -94,6 +100,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 12,
     marginTop: -2,
+  },
+  previewWrap: {
+    position: "relative",
+    borderRadius: 10,
+    overflow: "hidden",
   },
   preview: {
     width: "100%",

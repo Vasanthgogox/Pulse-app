@@ -8,8 +8,8 @@ const VALIDATION_MISMATCH_PERCENT = 1;
 
 // We use the absolute fastest available model natively provided by Gemini
 const MODELS = {
-  default: 'gemini-2.0-flash',
-  fallback: 'gemini-1.5-flash',
+  default: 'gemini-2.5-flash',
+  fallback: 'gemini-2.5-flash-lite',
 };
 
 export interface OCROutput {

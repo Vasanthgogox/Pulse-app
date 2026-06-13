@@ -6,6 +6,7 @@ import {
   TripDetailsStrip,
 } from "@/components/driver/DriverTripSheetLayout";
 import { DriverInviteCard } from "@/components/driver/DriverInviteCard";
+import { JobRequestCard } from "@/components/JobRequestCard";
 import { DriverMapAvatarMarker } from "@/components/driver/DriverMapAvatarMarker";
 import {
     LeafletMap,
@@ -15,7 +16,7 @@ import {
 import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
-import { JobRequestCard } from "@/components/JobRequestCard";
+import { useOptionalDriverTripOps } from "@/contexts/DriverTripOpsContext";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -516,6 +517,9 @@ export default function DriverRadarScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [acceptedTripId, setAcceptedTripId] = useState<string | null>(null);
+  // Stays false until the AsyncStorage check completes so we never flash the
+  // "Hold to accept" card for a driver who already accepted this trip.
+  const [acceptedTripIdResolved, setAcceptedTripIdResolved] = useState(false);
   const [selectedIncomingTripId, setSelectedIncomingTripId] = useState<
     string | null
   >(null);
@@ -716,6 +720,7 @@ export default function DriverRadarScreen() {
   useEffect(() => {
     AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY).then((id) => {
       if (id != null && id !== "") setAcceptedTripId(id);
+      setAcceptedTripIdResolved(true);
     });
     AsyncStorage.getItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY).then((v) => {
       if (v === "1") setAssignableTripsNotifyOnlyAfterMission(true);
@@ -1389,6 +1394,15 @@ export default function DriverRadarScreen() {
       pendingOtpTrips.find((t) => String(t.id).toLowerCase() === want) ?? null
     );
   }, [acceptedTripId, mergedIncomingTrips, allTrips, pendingOtpTrips]);
+
+  const driverTripOps = useOptionalDriverTripOps();
+  const driverHeaderTripOpsProps = {
+    hasActiveTrip: driverTripOps?.hasTargetTrip ?? false,
+    showExpenseOps: driverTripOps?.showExpenseOps ?? true,
+    showOdometerOps: driverTripOps?.showOdometerOps ?? true,
+    onPressExpense: () => driverTripOps?.openExpense(),
+    onPressOdometer: () => driverTripOps?.openOdometer(),
+  };
 
   const selectedIncomingTrip =
     visibleIncomingTrips.find((trip) => trip.id === selectedIncomingTripId) ??
@@ -2146,15 +2160,19 @@ export default function DriverRadarScreen() {
   }, [showOfflineAssignedCard, pickupDotPingAnim]);
 
   // Blink for "New assignment" card (pending accept, or showing accept/decline feedback).
+  // Guard on acceptedTripIdResolved: don't show the card until we've checked AsyncStorage —
+  // cached trips may load synchronously before AsyncStorage answers, causing a false flash
+  // of the "Hold to accept" card for drivers who already accepted the trip.
   const showNewAssignmentCard = Boolean(
-    (otpClaimTripId && otpClaimTrip) ||
+    acceptedTripIdResolved &&
+    ((otpClaimTripId && otpClaimTrip) ||
       (effectiveFirstIncoming &&
         (assignmentFeedback != null ||
           (!assignableTripsNotifyOnlyAfterMission &&
             effectiveIncomingId !== String(acceptedTripId ?? "").toLowerCase() &&
             effectiveIncomingId !== justClaimedTripIdRef.current &&
             effectiveIncomingId !== justClaimedOldTripIdRef.current &&
-            !activeMission))),
+            !activeMission)))),
   );
   const isAcceptedIncomingFlow = Boolean(
     effectiveFirstIncoming &&
@@ -4922,10 +4940,7 @@ export default function DriverRadarScreen() {
                 driverName={driverName}
                 isOnline
                 variant="assigned"
-                pendingInviteCount={pendingInviteModalCount}
-                onPressInvites={
-                  pendingInviteModalCount > 0 ? presentPendingInvite : undefined
-                }
+                {...driverHeaderTripOpsProps}
                 style={[
                   styles.assignedStaticHeader,
                   {
@@ -4951,10 +4966,7 @@ export default function DriverRadarScreen() {
                   driverName={driverName}
                   isOnline
                   variant="assigned"
-                  pendingInviteCount={pendingInviteModalCount}
-                  onPressInvites={
-                    pendingInviteModalCount > 0 ? presentPendingInvite : undefined
-                  }
+                  {...driverHeaderTripOpsProps}
                   style={[
                     styles.assignedStaticHeader,
                     {
@@ -5167,10 +5179,7 @@ export default function DriverRadarScreen() {
                 driverName={driverName}
                 isOnline={isOnline}
                 onPressOtpClaim={handleOpenOtpClaimFromHeader}
-                pendingInviteCount={pendingInviteModalCount}
-                onPressInvites={
-                  pendingInviteModalCount > 0 ? presentPendingInvite : undefined
-                }
+                {...driverHeaderTripOpsProps}
               />
               {driver?.organization_id ? (
                 <TouchableOpacity

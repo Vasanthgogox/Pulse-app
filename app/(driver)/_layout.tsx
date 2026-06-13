@@ -5,6 +5,7 @@
  */
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { DriverInviteModalProvider } from '@/contexts/DriverInviteModalContext';
+import { DriverTripOpsProvider } from '@/contexts/DriverTripOpsContext';
 import { DriverTabBar } from '@/components/driver/DriverTabBar';
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -147,7 +148,9 @@ export default function DriverAppLayout() {
       <DriverAvatarProvider>
         <DriverCommunicationProvider>
           <DriverInviteModalProvider>
-            <DriverTabsNavigator />
+            <DriverTripOpsProvider>
+              <DriverTabsNavigator />
+            </DriverTripOpsProvider>
           </DriverInviteModalProvider>
         </DriverCommunicationProvider>
       </DriverAvatarProvider>

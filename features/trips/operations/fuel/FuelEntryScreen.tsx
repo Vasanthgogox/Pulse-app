@@ -11,32 +11,151 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FuelType, OperationalPaymentMode, OperationalPaymentOwner } from "../types";
 import { useSaveTripFuelEntry, useUpdateTripFuelEntry } from "../queries/useTripOperations";
 import { getTripFuelEntryById } from "./fuel.service";
+import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
 import {
   FUEL_TYPE_OPTIONS,
   PAYMENT_MODE_OPTIONS,
   PAYMENT_OWNER_OPTIONS,
+  defaultPaymentOwnerForActor,
+  paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
 import { useOperationsSyncState } from "../state/useOperationsSyncState";
+import { DriverExpenseCategorySwitch } from "../shared/DriverExpenseCategorySwitch";
+import { DriverExpenseChipSelect } from "../shared/DriverExpenseChipSelect";
+import type { DriverExpenseCategoryNav } from "../shared/driverExpenseCategoryNav.util";
+import type { TripOtherExpenseCategory } from "../types";
+import {
+  DriverExpenseEntryLayout,
+  DriverExpenseFieldDivider,
+  DriverExpenseFieldLabel,
+  DriverExpenseSection,
+  DriverExpenseTextInput,
+} from "../shared/DriverExpenseEntryLayout";
+import { previewFuelReceiptOcr } from "../shared/applyExpenseReceiptOcr.util";
+import type { ExpenseReceiptOcrResult } from "../shared/expenseReceiptOcr.service";
+import {
+  type ExpenseBillCaptureBag,
+  useExpenseBillCapture,
+  useRegisterExpenseBillPreview,
+} from "../shared/useExpenseBillCapture";
+
+function FuelAmountFlow({
+  amountInr,
+  liters,
+  onAmountChange,
+  onLitersChange,
+  flowHintColor = Theme.textMuted,
+}: {
+  amountInr: number;
+  liters: number | null;
+  onAmountChange: (numeric: number) => void;
+  onLitersChange: (numeric: number) => void;
+  flowHintColor?: string;
+}) {
+  const showLitersStep = amountInr > 0;
+
+  return (
+    <View style={flowStyles.wrap}>
+      <SmartInput
+        type="currency"
+        value={amountInr}
+        onChange={(_, numeric) => onAmountChange(numeric)}
+        label="Spend"
+        submitLabel="Continue"
+        variant="field"
+        density="compact"
+        placeholder="Enter amount"
+        required={false}
+        validation={{ min: 0, max: 1000000 }}
+      />
+
+      {showLitersStep ? (
+        <>
+          <View style={flowStyles.connector}>
+            <View style={[flowStyles.connectorLine, { backgroundColor: flowHintColor }]} />
+            <Text style={[flowStyles.connectorLabel, { color: flowHintColor }]}>Then enter liters</Text>
+            <View style={[flowStyles.connectorLine, { backgroundColor: flowHintColor }]} />
+          </View>
+          <SmartInput
+            type="quantity"
+            value={liters ?? ""}
+            onChange={(_, numeric) => onLitersChange(numeric)}
+            label="Liters"
+            submitLabel="Apply"
+            variant="field"
+            density="compact"
+            placeholder="How many liters?"
+            suffix=" L"
+            required={false}
+            validation={{ min: 0, max: 5000 }}
+          />
+        </>
+      ) : (
+        <Text style={[flowStyles.pendingHint, { color: flowHintColor }]}>
+          Enter spend amount to continue to liters
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const flowStyles = StyleSheet.create({
+  wrap: {
+    gap: 10,
+  },
+  connector: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 2,
+  },
+  connectorLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.35,
+  },
+  connectorLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  pendingHint: {
+    fontSize: 11,
+    fontWeight: "500",
+    lineHeight: 15,
+    paddingHorizontal: 2,
+  },
+});
 
 export function FuelEntryScreen({
   trip,
   entryId,
+  otherCategory = "parking",
+  onCategoryNavChange,
+  lockCategorySwitch = false,
+  billCapture,
 }: {
   trip: TripRow;
   entryId?: string | null;
+  otherCategory?: TripOtherExpenseCategory;
+  onCategoryNavChange?: (next: DriverExpenseCategoryNav) => void;
+  lockCategorySwitch?: boolean;
+  /** Shared OCR state from DriverUnifiedExpenseEntryScreen (keeps photo across category switch). */
+  billCapture?: ExpenseBillCaptureBag;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const isDriver = profile?.role === "driver";
   const saveFuel = useSaveTripFuelEntry();
   const updateFuel = useUpdateTripFuelEntry();
   const { pendingCount, failedCount, refresh } = useOperationsSyncState();
@@ -48,15 +167,65 @@ export function FuelEntryScreen({
   const [fuelType, setFuelType] = useState<FuelType>("diesel");
   const [stationName, setStationName] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>("organization");
+  const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>(() =>
+    defaultPaymentOwnerForActor(profile?.role),
+  );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("unknown");
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+
+  const handleOcrPreview = useCallback(
+    (result: ExpenseReceiptOcrResult) => {
+      return previewFuelReceiptOcr(
+        result,
+        { amountInr, liters, fuelType, stationName, notes, paymentMode },
+        {
+          setAmountInr,
+          setLiters,
+          setFuelType,
+          setStationName,
+          setNotes,
+          setPaymentMode,
+        },
+      );
+    },
+    [amountInr, fuelType, liters, notes, paymentMode, stationName],
+  );
+
+  const ownedBillCapture = useExpenseBillCapture({
+    kind: "fuel",
+    permissionMessage: "Enable camera or photo library access to attach a fuel bill photo.",
+    previewOcrUpdates: handleOcrPreview,
+  });
+  const capture = billCapture ?? ownedBillCapture;
+  useRegisterExpenseBillPreview(billCapture, handleOcrPreview);
+
+  const {
+    photoUri,
+    setPhotoUri,
+    scanning,
+    billScan,
+    handleCapture,
+    handleRemovePhoto,
+    applyPendingUpdates,
+    dismissPendingUpdates,
+    reopenOcrReview,
+  } = capture;
 
   const contextLine = useMemo(
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
   );
+
+  const paymentOwnerOptions = useMemo(
+    () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role),
+    [profile?.role],
+  );
+
+  useEffect(() => {
+    if (!isEditing && profile?.role === "driver") {
+      setPaymentOwner(defaultPaymentOwnerForActor(profile.role));
+    }
+  }, [isEditing, profile?.role]);
 
   useEffect(() => {
     const id = entryId?.trim();
@@ -85,6 +254,12 @@ export function FuelEntryScreen({
       setNotes(entry.notes ?? "");
       setPaymentOwner(entry.payment_owner ?? "organization");
       setPaymentMode(entry.payment_mode ?? "unknown");
+      const billPath = entry.bill_storage_path?.trim();
+      if (billPath) {
+        void getDocumentViewUrl(billPath).then((url) => {
+          if (mounted && url) setPhotoUri(url);
+        });
+      }
       setLoadingEntry(false);
     });
     return () => {
@@ -93,20 +268,6 @@ export function FuelEntryScreen({
   }, [entryId, router, trip.id]);
 
   const saving = saveFuel.isPending || updateFuel.isPending;
-
-  const handleCapture = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (permission.status !== "granted") {
-      Alert.alert("Camera required", "Enable camera access to capture fuel bill.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    setPhotoUri(result.assets[0].uri);
-  };
 
   const handleSave = async () => {
     const payload = {
@@ -129,9 +290,7 @@ export function FuelEntryScreen({
           ...payload,
           actorRole: profile?.role ?? null,
         });
-        if (res.queued) {
-          setHint("Saved offline — will sync when connected.");
-        }
+        if (res.queued) setHint("Saved offline — will sync when connected.");
       }
       await refresh();
       router.back();
@@ -143,8 +302,99 @@ export function FuelEntryScreen({
     }
   };
 
+  const syncHint =
+    pendingCount > 0
+      ? `Sync queue: ${pendingCount}${failedCount > 0 ? ` · failed ${failedCount}` : ""}`
+      : null;
+
   if (loadingEntry) {
     return <CenteredLoadingView message="Loading fuel entry…" />;
+  }
+
+  if (isDriver) {
+    return (
+      <DriverExpenseEntryLayout
+        category="fuel"
+        title={isEditing ? "Edit expense" : "Log expense"}
+        subtitle={contextLine}
+        isEditing={isEditing}
+        saving={saving}
+        onBack={() => router.back()}
+        onSave={handleSave}
+        hint={hint}
+        syncHint={syncHint}
+        billScan={billScan}
+        onApplyBillScan={applyPendingUpdates}
+        onDismissBillScan={dismissPendingUpdates}
+        onReviewBillScan={reopenOcrReview}
+        attachment={{
+          uri: photoUri,
+          busy: saving || scanning,
+          label: "Bill photo",
+          onAttach: handleCapture,
+          onRemove: handleRemovePhoto,
+        }}
+      >
+        <DriverExpenseSection title="Amount">
+          <FuelAmountFlow
+            amountInr={amountInr}
+            liters={liters}
+            onAmountChange={setAmountInr}
+            onLitersChange={setLiters}
+            flowHintColor={Theme.driverEmeraldDark}
+          />
+        </DriverExpenseSection>
+
+        <DriverExpenseSection title="Category & payment">
+          <DriverExpenseCategorySwitch
+            tripId={trip.id}
+            formKind="fuel"
+            otherCategory={otherCategory}
+            onOtherCategoryChange={() => {}}
+            onCategoryNavChange={onCategoryNavChange}
+            lockCategorySwitch={lockCategorySwitch}
+          />
+          <DriverExpenseFieldDivider />
+          <DriverExpenseChipSelect
+            label="Fuel type"
+            options={FUEL_TYPE_OPTIONS}
+            value={fuelType}
+            onChange={setFuelType}
+            columns={2}
+            visualGroup="fuel_type"
+          />
+          <DriverExpenseFieldDivider />
+          <DriverExpenseChipSelect
+            label="Payment mode"
+            options={PAYMENT_MODE_OPTIONS}
+            value={paymentMode}
+            onChange={setPaymentMode}
+            columns={3}
+            visualGroup="payment_mode"
+          />
+        </DriverExpenseSection>
+
+        <DriverExpenseSection title="Details">
+          <View>
+            <DriverExpenseFieldLabel>Station (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={stationName}
+              onChangeText={setStationName}
+              placeholder="Pump / station name"
+            />
+          </View>
+          <View>
+            <DriverExpenseFieldLabel>Notes (optional)</DriverExpenseFieldLabel>
+            <DriverExpenseTextInput
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              placeholder="Short note"
+            />
+          </View>
+        </DriverExpenseSection>
+      </DriverExpenseEntryLayout>
+    );
   }
 
   return (
@@ -157,45 +407,17 @@ export function FuelEntryScreen({
       />
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={[
-          s.content,
-          { paddingBottom: insets.bottom + 76 },
-        ]}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 76 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Surface elevation={1} density="high" style={s.card}>
-          <View style={s.row2}>
-            <View style={s.row2Cell}>
-              <SmartInput
-                type="currency"
-                value={amountInr}
-                onChange={(_, numeric) => setAmountInr(numeric)}
-                label="Spend"
-                submitLabel="Apply"
-                variant="field"
-                density="compact"
-                placeholder="Tap to enter"
-                required={false}
-                validation={{ min: 0, max: 1000000 }}
-              />
-            </View>
-            <View style={s.row2Cell}>
-              <SmartInput
-                type="quantity"
-                value={liters ?? ""}
-                onChange={(_, numeric) => setLiters(numeric)}
-                label="Liters"
-                submitLabel="Apply"
-                variant="field"
-                density="compact"
-                placeholder="Tap to enter"
-                suffix=" L"
-                required={false}
-                validation={{ min: 0, max: 5000 }}
-              />
-            </View>
-          </View>
+          <FuelAmountFlow
+            amountInr={amountInr}
+            liters={liters}
+            onAmountChange={setAmountInr}
+            onLitersChange={setLiters}
+          />
         </Surface>
 
         <Surface elevation={1} density="high" style={s.card}>
@@ -209,7 +431,7 @@ export function FuelEntryScreen({
           <View style={s.divider} />
           <OperationalChipSelect
             label="Paid by"
-            options={PAYMENT_OWNER_OPTIONS}
+            options={paymentOwnerOptions}
             value={paymentOwner}
             onChange={setPaymentOwner}
             density="compact"
@@ -268,12 +490,7 @@ export function FuelEntryScreen({
         </View>
 
         {hint ? <Text style={s.hint}>{hint}</Text> : null}
-        {pendingCount > 0 ? (
-          <Text style={s.hint}>
-            Sync queue: {pendingCount}
-            {failedCount > 0 ? ` · failed ${failedCount}` : ""}
-          </Text>
-        ) : null}
+        {syncHint ? <Text style={s.hint}>{syncHint}</Text> : null}
       </ScrollView>
 
       <OperationalBottomActionBar>

@@ -20,3 +20,8 @@ export {
 export { buildReimbursementTimeline } from "./reimbursementTimeline";
 export { buildReimbursementMetrics } from "./reimbursementMetrics";
 export { useReimbursementQueue } from "./useReimbursementQueue";
+export {
+  cancelDriverExpenseRequest,
+  remindDriverExpenseRequest,
+  parseDriverExpenseEventId,
+} from "./driverExpenseRequest.service";

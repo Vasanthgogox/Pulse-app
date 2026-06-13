@@ -1,31 +1,46 @@
-import { SmartInput } from "@/components/mobile-input";
-import {
-  OperationalBottomActionBar,
-  OperationalButton,
-  OperationalHeader,
-  Surface,
-} from "@/components/operational";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsOnline } from "@/contexts/NetworkContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { useGPSDistanceEstimate } from "./GPSDistanceHook";
-import { flushVerificationOutbox } from "./offline/sync";
-import { useSaveTripVerification } from "./queries/useTripVerification";
-import { useVerificationSyncState } from "./state/useVerificationSyncState";
-import { OdometerPhotoCapture } from "./OdometerPhotoCapture";
-import type { VerificationSide } from "./types";
-import * as ImagePicker from "expo-image-picker";
+import { DriverOpsEntryFooter } from "@/features/trips/operations/shared/DriverOpsEntryFooter";
+import { OpsEntryBodyPhotoSlot } from "@/features/trips/operations/shared/OpsEntryBodyPhotoSlot";
+import { driverOpsEntryStyles as ops } from "@/features/trips/operations/shared/driverOpsEntry.styles";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  ScrollView,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+
+import { normalizeOdometerRaw } from "./applyOdometerScan.util";
+import { OdometerEntryShell } from "./components/OdometerEntryShell";
+import { OdometerKeypadFlow } from "./components/OdometerKeypadFlow";
+import { OdometerScanBanner } from "./components/OdometerScanBanner";
+import { useGPSDistanceEstimate } from "./GPSDistanceHook";
+import { useOdometerPhotoOcr } from "./hooks/useOdometerPhotoOcr";
+import { useHydrateOdometerPhotos } from "./hooks/useHydrateOdometerPhotos";
+import { flushVerificationOutbox } from "./offline/sync";
+import { useSaveTripVerification } from "./queries/useTripVerification";
+import { computeOdometerDistance } from "./verification.service";
+import { useVerificationSyncState } from "./state/useVerificationSyncState";
+import type { VerificationSide } from "./types";
+
+function kmToRaw(km: number | null | undefined): string {
+  if (km == null || !Number.isFinite(Number(km))) return "";
+  const n = Number(km);
+  return Number.isInteger(n) ? String(n) : String(n);
+}
+
+function rawToKm(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
 
 export function OdometerEntryScreen({
   trip,
@@ -40,23 +55,76 @@ export function OdometerEntryScreen({
   const saveVerification = useSaveTripVerification();
   const { pendingCount, failedCount, refresh } = useVerificationSyncState();
   const gpsDistanceKm = useGPSDistanceEstimate(trip);
-  const [odometerKm, setOdometerKm] = useState<number | null>(
-    side === "start" ? trip.start_odometer_km ?? null : trip.end_odometer_km ?? null,
-  );
+
+  const initialRaw =
+    side === "start" ? kmToRaw(trip.start_odometer_km) : kmToRaw(trip.end_odometer_km);
+
+  const [rawValue, setRawValue] = useState(initialRaw);
   const [notes, setNotes] = useState(trip.odometer_notes ?? "");
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [showNotes, setShowNotes] = useState(Boolean(trip.odometer_notes?.trim()));
   const [syncHint, setSyncHint] = useState<string | null>(null);
 
-  const title = side === "start" ? "Start Odometer" : "Closing Odometer";
-  const subtitle =
-    side === "start"
-      ? "Optional verification before movement. You can skip and continue."
-      : "Optional verification before/after completion. You can update later.";
+  const applyKmReading = useCallback((raw: string) => {
+    const normalized = normalizeOdometerRaw(raw) || raw.trim();
+    setRawValue(normalized);
+  }, []);
+
+  const onStartRawChange = useCallback(
+    (raw: string) => {
+      if (side === "start") applyKmReading(raw);
+    },
+    [applyKmReading, side],
+  );
+
+  const onEndRawChange = useCallback(
+    (raw: string) => {
+      if (side === "end") applyKmReading(raw);
+    },
+    [applyKmReading, side],
+  );
+
+  const {
+    photoUri,
+    setPhotoUri,
+    scanning,
+    scanState,
+    handleCapture,
+    clearPhoto,
+    applyPendingReading,
+    dismissPendingReading,
+    rescanPhoto,
+    reopenOcrReview,
+  } = useOdometerPhotoOcr({
+    getCurrentRaw: () => rawValue,
+    currentRaw: rawValue,
+    onKmApplied: applyKmReading,
+  });
+
+  useHydrateOdometerPhotos({
+    tripId: trip.id,
+    setStartPhotoUri: side === "start" ? setPhotoUri : () => {},
+    setEndPhotoUri: side === "end" ? setPhotoUri : () => {},
+    startHasLocalPhoto: side === "start" && Boolean(photoUri?.trim()),
+    endHasLocalPhoto: side === "end" && Boolean(photoUri?.trim()),
+  });
+
+  const title = side === "start" ? "Start KM" : "End KM";
 
   const contextLine = useMemo(
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
   );
+
+  const startRaw = side === "start" ? rawValue : kmToRaw(trip.start_odometer_km);
+  const endRaw = side === "end" ? rawValue : kmToRaw(trip.end_odometer_km);
+
+  const odometerKm = useMemo(() => rawToKm(rawValue), [rawValue]);
+
+  const tripDistanceKm = useMemo(() => {
+    if (side !== "end") return null;
+    const start = rawToKm(kmToRaw(trip.start_odometer_km));
+    return computeOdometerDistance(start, odometerKm);
+  }, [odometerKm, side, trip.start_odometer_km]);
 
   useEffect(() => {
     void refresh();
@@ -67,21 +135,6 @@ export function OdometerEntryScreen({
   }, [isOnline, refresh]);
 
   const saving = saveVerification.isPending;
-
-  const handleCapturePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (permission.status !== "granted") {
-      Alert.alert("Camera required", "Enable camera access to capture odometer photo.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-      quality: 0.8,
-      allowsEditing: false,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    setPhotoUri(result.assets[0].uri);
-  };
 
   const handleSave = async () => {
     if (saving) return;
@@ -112,113 +165,145 @@ export function OdometerEntryScreen({
     }
   };
 
+  const syncFooterHint =
+    syncHint ??
+    (pendingCount > 0
+      ? `Pending sync items: ${pendingCount}${failedCount > 0 ? ` · failed: ${failedCount}` : ""}`
+      : null);
+
+  const photoUriTrimmed = photoUri?.trim() || null;
+  const showScanBanner = scanState.phase !== "idle" && scanState.message.trim().length > 0;
+  const scanActive = scanState.phase === "preparing" || scanState.phase === "analyzing";
+
   return (
-    <View style={styles.screen}>
-      <OperationalHeader title={title} subtitle={subtitle} onBack={() => router.back()} />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Surface elevation={1}>
-          <SmartInput
-            type="distance"
-            value={odometerKm ?? ""}
-            onChange={(_, numeric) => setOdometerKm(numeric)}
-            label={`${side === "start" ? "Starting" : "Closing"} Odometer`}
-            context={contextLine}
-            placeholder="Enter KM"
-            submitLabel="Apply KM"
-            suffix=" KM"
-            required={false}
-            validation={{ min: 0, max: 999999 }}
-          />
-        </Surface>
-
-        <OdometerPhotoCapture
-          photoUri={photoUri}
-          busy={saving}
-          onCapture={handleCapturePhoto}
-          onRetake={handleCapturePhoto}
+    <OdometerEntryShell
+      title={title}
+      subtitle={contextLine}
+      onBack={() => router.back()}
+      scan={scanState}
+      attachment={{
+        uri: photoUri,
+        busy: saving || scanning,
+        onAttach: () => void handleCapture(),
+        onRemove: clearPhoto,
+      }}
+      footer={
+        <DriverOpsEntryFooter
+          cancelLabel="Skip for now"
+          onCancel={() => router.back()}
+          saveLabel={saving ? "Saving…" : "Save reading"}
+          onSave={() => void handleSave()}
+          saving={saving}
+          hint={syncFooterHint}
         />
-
-        <Surface elevation={1}>
-          <Text style={styles.notesTitle}>Notes (optional)</Text>
-          <TextInput
-            style={styles.notesInput}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Any odometer issue, correction, or remark"
-            placeholderTextColor={Theme.textMuted}
-            multiline
-          />
-        </Surface>
-
-        {syncHint ? <Text style={styles.syncHint}>{syncHint}</Text> : null}
-        {pendingCount > 0 ? (
-          <Text style={styles.syncHint}>
-            Pending sync items: {pendingCount}
-            {failedCount > 0 ? ` · failed: ${failedCount}` : ""}
-          </Text>
-        ) : null}
-      </ScrollView>
-
-      <OperationalBottomActionBar>
-        <View style={styles.footerRow}>
-          <OperationalButton
-            intent="utility"
-            label="Skip for now"
-            onPress={() => router.back()}
-            disabled={saving}
-            fullWidth
-          />
-          <OperationalButton
-            intent="bottomSticky"
-            label={saving ? "Saving..." : "Save verification"}
-            onPress={handleSave}
-            loading={saving}
-            fullWidth
-          />
-        </View>
-      </OperationalBottomActionBar>
-    </View>
+      }
+    >
+      {(openPhotoPreview) => (
+        <OdometerKeypadFlow
+          shellMode
+          startRawValue={startRaw}
+          endRawValue={endRaw}
+          onStartRawChange={onStartRawChange}
+          onEndRawChange={onEndRawChange}
+          activeFieldId={side}
+          tripDistanceKm={tripDistanceKm}
+          startHasPhoto={side === "start" && Boolean(photoUriTrimmed)}
+          endHasPhoto={side === "end" && Boolean(photoUriTrimmed)}
+          startPhotoUri={side === "start" ? photoUriTrimmed : null}
+          endPhotoUri={side === "end" ? photoUriTrimmed : null}
+          bodyHeader={
+            <>
+              <OpsEntryBodyPhotoSlot
+                compact
+                uri={photoUriTrimmed}
+                title={`${side === "start" ? "Start" : "End"} odometer photo`}
+                emptyTitle={`${side === "start" ? "Start" : "End"} odometer photo`}
+                hint="Tap image to enlarge · scan fills KM when detected"
+                emptyHint="Photograph the dashboard to auto-fill KM for this reading"
+                scanning={scanActive}
+                busy={saving || scanning}
+                scanLabel="Reading KM"
+                onAttach={() => void handleCapture()}
+                onPress={photoUriTrimmed ? openPhotoPreview : undefined}
+                onRetake={() => void handleCapture()}
+                onRemove={clearPhoto}
+              />
+              {showScanBanner ? (
+                <OdometerScanBanner
+                  scan={scanState}
+                  hasPhoto={Boolean(photoUriTrimmed)}
+                  onApplyPending={applyPendingReading}
+                  onDismissPending={dismissPendingReading}
+                  onRescanPhoto={() => void rescanPhoto()}
+                  onReviewOcr={reopenOcrReview}
+                />
+              ) : photoUriTrimmed ? (
+                <OdometerScanBanner
+                  scan={{
+                    phase: "complete",
+                    message: "Photo attached · re-scan to read KM or enter manually",
+                    detectedKm: null,
+                    appliedFields: [],
+                    stepIndex: 3,
+                  }}
+                  hasPhoto
+                  onRescanPhoto={() => void rescanPhoto()}
+                />
+              ) : null}
+            </>
+          }
+          extras={
+          <View style={styles.extras}>
+            {showNotes ? (
+              <View style={styles.notesWrap}>
+                <Text style={[ops.fieldLabel, { color: Theme.textMuted }]}>Notes (optional)</Text>
+                <TextInput
+                  style={[
+                    ops.input,
+                    ops.inputMultiline,
+                    {
+                      color: Theme.textPrimaryDark,
+                      backgroundColor: Theme.cardWhite,
+                      borderColor: Theme.borderLight,
+                    },
+                  ]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Correction, issue, or remark"
+                  placeholderTextColor={Theme.textMuted}
+                  multiline
+                />
+              </View>
+            ) : (
+              <Pressable
+                style={styles.notesToggle}
+                onPress={() => setShowNotes(true)}
+                accessibilityRole="button"
+              >
+                <Text style={[ops.syncHint, { color: Theme.textSecondary }]}>
+                  Add note (optional)
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        }
+        />
+      )}
+    </OdometerEntryShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: Theme.screenBackground,
+  extras: {
+    width: "100%",
+    gap: 8,
   },
-  content: {
-    padding: 14,
-    paddingBottom: 24,
-    gap: 12,
+  notesWrap: {
+    gap: 5,
   },
-  notesTitle: {
-    color: Theme.text,
-    fontSize: 13,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  notesInput: {
-    minHeight: 90,
-    borderWidth: 1,
-    borderColor: Theme.border,
-    borderRadius: 10,
-    padding: 10,
-    color: Theme.text,
-    backgroundColor: Theme.whiteMuted,
-    textAlignVertical: "top",
-    fontSize: 13,
-  },
-  footerRow: {
-    gap: 10,
-  },
-  syncHint: {
-    color: "#b45309",
-    fontSize: 12,
-    lineHeight: 18,
-    paddingHorizontal: 2,
+  notesToggle: {
+    alignSelf: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
 });

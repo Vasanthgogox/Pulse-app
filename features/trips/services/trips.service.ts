@@ -416,6 +416,20 @@ export async function getTripById(
   return { error: null, trip };
 }
 
+/** Trip row without indent embeds — safe for driver operations summaries under indent RLS. */
+export async function getTripRowByIdLight(
+  tripId: string,
+): Promise<{ error: Error | null; trip: TripRow | null }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("*")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  if (!data) return { error: new Error("Trip not found"), trip: null };
+  return { error: null, trip: normalizeTripRowWithIndent(data as TripRow) };
+}
+
 /** Latest trip row for an indent (direct-quote / Staff Handshake recovery). */
 export async function getTripByIndentId(
   indentId: string,

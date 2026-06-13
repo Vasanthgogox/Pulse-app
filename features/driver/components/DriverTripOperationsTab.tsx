@@ -1,39 +1,27 @@
 import { type Href, useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
-import {
-  Activity,
-  ChevronRight,
-  Fuel,
-  Gauge,
-  MapPin,
-  Receipt,
-  Route,
-  Zap,
-} from "lucide-react-native";
-import { useMemo } from "react";
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { Activity, ChevronRight, Gauge, Wallet } from "lucide-react-native";
+import { useCallback, useMemo, type ReactNode } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import Theme from "@/constants/Theme";
-import { useDriverTheme, useDriverThemeColors } from "@/contexts/DriverThemeContext";
+import { useDriverThemeColors } from "@/contexts/DriverThemeContext";
+import { DriverTripExpenseLogSection } from "@/features/driver/components/DriverTripExpenseLogSection";
 import { tripHistoryDetailStyles as td } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
-import { getTripOperationalCapabilities } from "@/features/trips/capabilities";
-import {
-  OperationsHub,
-  type OperationsHubDriverTheme,
-} from "@/features/trips/operations/hub/OperationsHub";
-import { deriveOperationalHealth } from "@/features/trips/operations/health/operationalHealth";
-import { toOperationsDisplayMetrics } from "@/features/trips/operations/metrics/operationsMetrics";
 import { useTripOperationsSummary } from "@/features/trips/operations/queries/useTripOperations";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { toVerificationSnapshot } from "@/features/trips/verification/selectors/verificationSelectors";
+import { queryKeys } from "@/lib/queryKeys";
+import { ROUTES, tripExpenseEntryEditRoute } from "@/lib/routes";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGPSDistanceEstimate } from "@/features/trips/verification/GPSDistanceHook";
 import { VerificationStatusChip } from "@/features/trips/verification/components/VerificationStatusChip";
+import { useTripVerification } from "@/features/trips/verification/queries/useTripVerification";
+import {
+  buildOdometerGpsComparisonHint,
+  formatKm,
+  toVerificationSnapshot,
+} from "@/features/trips/verification/selectors/verificationSelectors";
+import { computeDistanceDiscrepancy } from "@/features/trips/verification/verification.service";
+import Theme from "@/constants/Theme";
 
 type OperationsSyncState = {
   isSyncing: boolean;
@@ -43,321 +31,246 @@ type OperationsSyncState = {
 type Props = {
   trip: TripRow;
   operationsSync: OperationsSyncState;
+  initialSelectedExpenseId?: string | null;
 };
 
 function inr(v: number): string {
   return `₹${Math.round(v).toLocaleString("en-IN")}`;
 }
 
-function km(v: number | null | undefined): string {
-  if (!Number.isFinite(Number(v))) return "—";
-  return `${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 1 })} km`;
+function TimelineSectionHeader({
+  icon,
+  title,
+  trailing,
+  colors,
+}: {
+  icon: ReactNode;
+  title: string;
+  trailing?: ReactNode;
+  colors: ReturnType<typeof useDriverThemeColors>;
+}) {
+  return (
+    <View style={td.tdTimelineHeader}>
+      <View style={td.tdTimelineHeaderIcon}>{icon}</View>
+      <Text style={[td.tdTimelineHeaderTitle, { color: colors.text }]} numberOfLines={1}>
+        {title}
+      </Text>
+      {trailing}
+    </View>
+  );
 }
 
-function healthTone(state: "healthy" | "attention" | "at_risk", isDark: boolean) {
-  if (state === "healthy") {
-    return {
-      bg: isDark ? "rgba(16,185,129,0.14)" : Theme.positiveMuted,
-      border: isDark ? Theme.driverEmeraldBorder : Theme.positive,
-      text: Theme.driverEmerald,
-    };
-  }
-  if (state === "attention") {
-    return {
-      bg: isDark ? "rgba(251,191,36,0.12)" : "#fff7ed",
-      border: isDark ? "rgba(251,191,36,0.35)" : "#fed7aa",
-      text: "#d97706",
-    };
-  }
-  return {
-    bg: isDark ? "rgba(248,113,113,0.12)" : "#fef2f2",
-    border: isDark ? "rgba(248,113,113,0.35)" : "#fecaca",
-    text: Theme.negative,
-  };
-}
-
-type QuickAction = {
-  key: string;
-  label: string;
-  sub: string;
-  icon: typeof Fuel;
-  onPress: () => void;
-  primary?: boolean;
-  hidden?: boolean;
-};
-
-export function DriverTripOperationsTab({ trip, operationsSync }: Props) {
+export function DriverTripOperationsTab({
+  trip,
+  operationsSync,
+  initialSelectedExpenseId,
+}: Props) {
   const router = useRouter();
   const colors = useDriverThemeColors();
-  const { theme } = useDriverTheme();
-  const isDark = theme === "dark";
+  const queryClient = useQueryClient();
 
-  const tripHref = (path: string) =>
-    `/trip/${encodeURIComponent(trip.id)}/operations/${path}` as Href;
-  const verificationHref = (side: "start" | "end") =>
-    `/trip/${encodeURIComponent(trip.id)}/verification?side=${side}` as Href;
+  const odometerCaptureHref =
+    `/trip/${encodeURIComponent(trip.id)}/verification?side=both` as Href;
 
-  const snapshot = toVerificationSnapshot(trip);
-  const capabilities = getTripOperationalCapabilities(trip);
-  const health = deriveOperationalHealth(trip);
-  const healthColors = healthTone(health.state, isDark);
+  const verificationQuery = useTripVerification(trip.id);
+  const snapshot = verificationQuery.data ?? toVerificationSnapshot(trip);
+  const gpsEstimate = useGPSDistanceEstimate(trip);
   const summaryQuery = useTripOperationsSummary(trip.id);
 
-  const metrics = useMemo(() => {
-    if (!summaryQuery.data) return null;
-    return toOperationsDisplayMetrics(summaryQuery.data.mileage);
-  }, [summaryQuery.data]);
-
-  const driverTheme: OperationsHubDriverTheme = useMemo(
-    () => ({
-      surface: colors.surface,
-      surfaceElevated: colors.surfaceElevated,
-      border: colors.border,
-      text: colors.text,
-      textMuted: colors.textMuted,
-      emerald: colors.emerald,
-      emeraldMuted: colors.emeraldMuted,
-      emeraldDark: colors.emeraldDark,
-      background: colors.background,
-      isDark,
-    }),
-    [colors, isDark],
+  useFocusEffect(
+    useCallback(() => {
+      if (!trip.id) return;
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.trips.operationsSummary(trip.id),
+      });
+    }, [queryClient, trip.id]),
   );
 
-  const syncLabel = operationsSync.isSyncing
-    ? "Syncing"
-    : operationsSync.lastResult?.failed
-      ? `Retry (${operationsSync.lastResult.failed})`
-      : operationsSync.lastResult?.processed
-        ? `Posted ${operationsSync.lastResult.processed}`
-        : "Live";
-
-  const syncTone =
-    operationsSync.isSyncing || operationsSync.lastResult?.failed
-      ? { dot: Theme.warning, pillBg: isDark ? "rgba(251,191,36,0.14)" : "#fff7ed" }
-      : { dot: colors.emerald, pillBg: isDark ? "rgba(16,185,129,0.14)" : colors.emeraldMuted };
+  const costEvents = summaryQuery.data?.costEvents ?? [];
+  const reimbursementDueInr =
+    summaryQuery.data?.financialSnapshot?.payableOutstandingInr ?? 0;
+  const totalExpensesInr = useMemo(
+    () => costEvents.reduce((sum, event) => sum + Math.max(0, event.amount), 0),
+    [costEvents],
+  );
+  const pendingCount = costEvents.filter(
+    (e) => e.settlementState !== "settled" && e.approvalState !== "rejected",
+  ).length;
+  const settledCount = costEvents.filter((e) => e.settlementState === "settled").length;
 
   const distanceKm =
     summaryQuery.data?.mileage.distanceKm ??
     snapshot.odometerDistanceKm ??
     (trip.distance != null ? Number(trip.distance) : null);
-  const fuelSpend = summaryQuery.data?.mileage.totalFuelSpendInr ?? 0;
-  const tollSpend = summaryQuery.data?.mileage.totalTollSpendInr ?? 0;
 
-  const quickActions: QuickAction[] = [
+  const syncLabel = operationsSync.isSyncing
+    ? "Syncing"
+    : operationsSync.lastResult?.failed
+      ? `Retry (${operationsSync.lastResult.failed})`
+      : "Live";
+
+  const statusMessage =
+    pendingCount > 0
+      ? `${pendingCount} expense${pendingCount === 1 ? "" : "s"} awaiting fleet review`
+      : reimbursementDueInr > 0
+        ? `${inr(reimbursementDueInr)} pending reimbursement`
+        : costEvents.length > 0
+          ? "All expenses settled"
+          : "No expenses yet";
+
+  const summaryMetrics = [
+    { label: "Distance", value: summaryQuery.isLoading ? "…" : formatKm(distanceKm) },
+    { label: "Expenses", value: summaryQuery.isLoading ? "…" : inr(totalExpensesInr) },
+    { label: "Due", value: summaryQuery.isLoading ? "…" : inr(reimbursementDueInr) },
     {
-      key: "fuel",
-      label: "Fuel",
-      sub: capabilities.canTrackFuel ? "Log fill-up" : "Notes",
-      icon: Fuel,
-      onPress: () => router.push(tripHref("fuel")),
-      primary: true,
-      hidden: false,
-    },
-    {
-      key: "toll",
-      label: "Toll",
-      sub: "Add toll",
-      icon: Receipt,
-      onPress: () => router.push(tripHref("toll")),
-    },
-    {
-      key: "expenses",
-      label: "Expenses",
-      sub: "All costs",
-      icon: Activity,
-      onPress: () => router.push(tripHref("expenses")),
-    },
-    {
-      key: "start",
-      label: "Start KM",
-      sub: "Odometer",
-      icon: Gauge,
-      onPress: () => router.push(verificationHref("start")),
-    },
-    {
-      key: "end",
-      label: "End KM",
-      sub: "Odometer",
-      icon: MapPin,
-      onPress: () => router.push(verificationHref("end")),
-    },
-    {
-      key: "route",
-      label: "Route",
-      sub: capabilities.isAssetTrip ? "Asset trip" : "Coordination",
-      icon: Route,
-      onPress: () => router.push(tripHref("expenses")),
+      label: "Settled",
+      value: summaryQuery.isLoading ? "…" : `${settledCount}/${costEvents.length || 0}`,
     },
   ];
 
+  const odometerMetrics = [
+    { label: "Start", value: formatKm(snapshot.startOdometerKm) },
+    { label: "End", value: formatKm(snapshot.endOdometerKm) },
+    { label: "Trip", value: formatKm(snapshot.odometerDistanceKm) },
+  ];
+
+  const gpsDistanceKm = snapshot.gpsDistanceKm ?? gpsEstimate;
+  const distanceDiscrepancyKm =
+    snapshot.distanceDiscrepancyKm ??
+    computeDistanceDiscrepancy(snapshot.odometerDistanceKm, gpsDistanceKm);
+  const odometerComparisonHint = buildOdometerGpsComparisonHint({
+    startOdometerKm: snapshot.startOdometerKm,
+    endOdometerKm: snapshot.endOdometerKm,
+    odometerDistanceKm: snapshot.odometerDistanceKm,
+    gpsDistanceKm,
+    distanceDiscrepancyKm,
+  });
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.heroOuter}>
-        <LinearGradient
-          colors={isDark ? ["#0f172a", "#020617"] : ["#0f172a", "#1e293b"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-          <Route
-            size={96}
-            color="rgba(255,255,255,0.06)"
-            style={styles.heroWatermark}
-          />
-          <View style={styles.heroTop}>
-            <View style={styles.heroIconWrap}>
-              <Activity size={18} color={colors.emerald} strokeWidth={2.4} />
-            </View>
-            <View style={styles.heroText}>
-              <Text style={styles.heroKicker}>Trip operations</Text>
-              <Text style={styles.heroTitle}>
-                {capabilities.isAssetTrip ? "Asset manifest" : "Coordination"}
-              </Text>
-              <Text style={styles.heroSub}>
-                Fuel, toll, mileage & verification for this trip
-              </Text>
-            </View>
-            <View style={[styles.syncPill, { backgroundColor: syncTone.pillBg }]}>
-              <View style={[styles.syncDot, { backgroundColor: syncTone.dot }]} />
-              <Text style={[styles.syncPillText, { color: colors.emerald }]}>{syncLabel}</Text>
-            </View>
-          </View>
-          <View style={styles.heroFooter}>
-            <VerificationStatusChip state={snapshot.state} />
-            <Text style={styles.heroStatus}>
-              {String(trip.status ?? "—").replaceAll("_", " ")}
-            </Text>
-          </View>
-          <View style={[styles.heroAccent, { backgroundColor: colors.emerald }]} />
-        </LinearGradient>
-      </View>
+      <TimelineSectionHeader
+        icon={<Gauge size={13} color="#ffffff" strokeWidth={2.2} />}
+        title="Odometer"
+        colors={colors}
+      />
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.metricScroll}
+      <TouchableOpacity
+        style={[
+          td.tdTimelineCard,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+        onPress={() => router.push(odometerCaptureHref)}
+        activeOpacity={0.86}
       >
-        <View style={[styles.metricTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Distance</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
-            {summaryQuery.isLoading ? "…" : km(distanceKm)}
-          </Text>
+        <View style={styles.odometerTopRow}>
+          <VerificationStatusChip state={snapshot.state} compact />
+          <View style={styles.odometerAction}>
+            <Text style={[td.tdLogMetaV, { color: colors.emerald, fontWeight: "700" }]}>Update</Text>
+            <ChevronRight size={14} color={colors.emerald} strokeWidth={2.4} />
+          </View>
         </View>
-        <View style={[styles.metricTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Fuel</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
-            {summaryQuery.isLoading
-              ? "…"
-              : capabilities.canTrackFuel
-                ? inr(fuelSpend)
-                : "—"}
-          </Text>
+
+        <View
+          style={[
+            td.tdLogDetailsBox,
+            styles.metricsBox,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+        >
+          <View style={td.tdLogInTransitGrid}>
+            {odometerMetrics.map((metric) => (
+              <View key={metric.label} style={td.tdLogInTransitCol}>
+                <Text style={[td.tdLogMetaK, { color: colors.textMuted }]}>{metric.label}</Text>
+                <Text style={[td.tdLogMetaV, { color: colors.text }]} numberOfLines={1}>
+                  {metric.value}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
-        <View style={[styles.metricTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Toll</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
-            {summaryQuery.isLoading ? "…" : inr(tollSpend)}
+
+        {odometerComparisonHint ? (
+          <Text
+            style={[
+              styles.odometerCompareHint,
+              {
+                color: odometerComparisonHint.hasConflict
+                  ? Theme.warning
+                  : colors.textMuted,
+              },
+            ]}
+            numberOfLines={2}
+          >
+            {odometerComparisonHint.text}
           </Text>
-        </View>
-        <View style={[styles.metricTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>Efficiency</Text>
-          <Text style={[styles.metricValue, { color: colors.text }]}>
-            {capabilities.canTrackMileage ? metrics?.efficiencyLabel ?? "—" : "N/A"}
+        ) : (
+          <Text style={[td.tdEmptyTimeline, styles.odometerHint, { color: colors.textMuted }]}>
+            Tap to enter start and end KM
           </Text>
-        </View>
-      </ScrollView>
+        )}
+      </TouchableOpacity>
+
+      <TimelineSectionHeader
+        icon={<Wallet size={13} color="#ffffff" strokeWidth={2.2} />}
+        title="Reimbursement summary"
+        colors={colors}
+        trailing={
+          <View style={[styles.syncPill, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+            <View style={[styles.syncDot, { backgroundColor: colors.emerald }]} />
+            <Text style={[td.tdLogTime, { color: colors.emerald }]}>{syncLabel}</Text>
+          </View>
+        }
+      />
 
       <View
         style={[
-          styles.healthCard,
-          {
-            backgroundColor: healthColors.bg,
-            borderColor: healthColors.border,
-          },
+          td.tdTimelineCard,
+          { backgroundColor: colors.surface, borderColor: colors.border },
         ]}
       >
-        <View style={styles.healthRow}>
-          <Zap size={14} color={healthColors.text} />
-          <Text style={[styles.healthTitle, { color: healthColors.text }]}>
-            {health.state.replaceAll("_", " ")}
-          </Text>
-          <Text style={[styles.healthSpend, { color: colors.textMuted }]}>
-            {metrics?.totalOpsSpendLabel ? `Ops ${metrics.totalOpsSpendLabel}` : ""}
-          </Text>
-        </View>
-        <Text style={[styles.healthMessage, { color: colors.text }]}>{health.message}</Text>
-      </View>
-
-      <View style={td.tdTimelineHeader}>
-        <View style={[td.tdTimelineHeaderIcon, { backgroundColor: isDark ? colors.surfaceElevated : "#0f172a" }]}>
-          <Fuel size={13} color={isDark ? colors.emerald : "#fff"} />
-        </View>
-        <Text style={[td.tdTimelineHeaderTitle, { color: colors.textMuted }]}>Quick log</Text>
-      </View>
-
-      <View style={styles.actionGrid}>
-        {quickActions.map((action) => {
-          const Icon = action.icon;
-          const isPrimary = action.primary;
-          return (
-            <TouchableOpacity
-              key={action.key}
-              style={[
-                styles.actionTile,
-                {
-                  backgroundColor: isPrimary ? colors.emeraldMuted : colors.surface,
-                  borderColor: isPrimary ? colors.emeraldBorder : colors.border,
-                },
-              ]}
-              onPress={action.onPress}
-              activeOpacity={0.82}
-            >
-              <View
-                style={[
-                  styles.actionIconCircle,
-                  {
-                    backgroundColor: isPrimary
-                      ? `${colors.emerald}22`
-                      : isDark
-                        ? colors.surfaceElevated
-                        : "#f1f5f9",
-                  },
-                ]}
-              >
-                <Icon size={18} color={isPrimary ? colors.emerald : colors.text} />
+        <View
+          style={[
+            td.tdLogDetailsBox,
+            styles.metricsBox,
+            { backgroundColor: colors.background, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.metricGrid}>
+            {summaryMetrics.map((metric) => (
+              <View key={metric.label} style={styles.metricCell}>
+                <Text style={[td.tdLogMetaK, { color: colors.textMuted }]}>{metric.label}</Text>
+                <Text style={[td.tdLogMetaV, { color: colors.text }]} numberOfLines={1}>
+                  {metric.value}
+                </Text>
               </View>
-              <Text style={[styles.actionLabel, { color: colors.text }]}>{action.label}</Text>
-              <Text style={[styles.actionSub, { color: colors.textMuted }]}>{action.sub}</Text>
-              <ChevronRight
-                size={12}
-                color={colors.textMuted}
-                style={styles.actionChevron}
-              />
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={td.tdTimelineHeader}>
-        <View style={[td.tdTimelineHeaderIcon, { backgroundColor: isDark ? colors.surfaceElevated : "#0f172a" }]}>
-          <Activity size={13} color={isDark ? colors.emerald : "#fff"} />
+            ))}
+          </View>
         </View>
-        <Text style={[td.tdTimelineHeaderTitle, { color: colors.textMuted }]}>
-          Ledger & activity
-        </Text>
+
+        <View style={[styles.statusBanner, { backgroundColor: colors.emeraldDark }]}>
+          <Text style={styles.summaryStatus}>{statusMessage}</Text>
+          <Text style={styles.summaryHint}>
+            Fleet reviews and marks reimbursements after you submit expenses.
+          </Text>
+        </View>
       </View>
 
-      <OperationsHub
+      <TimelineSectionHeader
+        icon={<Activity size={13} color="#ffffff" strokeWidth={2.2} />}
+        title="Expense log"
+        colors={colors}
+      />
+
+      <DriverTripExpenseLogSection
         trip={trip}
-        variant="driver"
-        driverTheme={driverTheme}
-        hideHeader
-        onEditStart={() => router.push(verificationHref("start"))}
-        onEditEnd={() => router.push(verificationHref("end"))}
-        onAddFuel={() => router.push(tripHref("fuel"))}
-        onAddToll={() => router.push(tripHref("toll"))}
-        onOpenExpenses={() => router.push(tripHref("expenses"))}
+        events={costEvents}
+        loading={summaryQuery.isLoading}
+        initialSelectedEventId={initialSelectedExpenseId}
+        onAddExpense={() => router.push(ROUTES.tripOtherExpenseEntry(trip.id) as Href)}
+        onEditExpense={(event) => {
+          const href = tripExpenseEntryEditRoute(trip.id, event.id);
+          if (href) router.push(href as Href);
+        }}
       />
     </View>
   );
@@ -365,196 +278,78 @@ export function DriverTripOperationsTab({ trip, operationsSync }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 12,
-  },
-  heroOuter: {
-    borderRadius: 16,
-    overflow: "hidden",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 12,
-      },
-      default: { elevation: 4 },
-    }),
-  },
-  heroCard: {
-    borderRadius: 16,
-    padding: 14,
-    minHeight: 118,
-    overflow: "hidden",
-  },
-  heroWatermark: {
-    position: "absolute",
-    right: -8,
-    top: -12,
-  },
-  heroTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  heroIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "rgba(16,185,129,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  heroKicker: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.driverPrimary,
-    textTransform: "uppercase",
-    letterSpacing: 1.1,
-  },
-  heroTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#fff",
-    letterSpacing: -0.2,
-  },
-  heroSub: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.65)",
-    lineHeight: 14,
+    gap: 0,
   },
   syncPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    maxWidth: 100,
+    paddingVertical: 4,
+    flexShrink: 0,
   },
   syncDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  syncPillText: {
-    fontSize: 9,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+  metricsBox: {
+    marginBottom: 10,
   },
-  heroFooter: {
+  metricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 12,
+    columnGap: 16,
+  },
+  metricCell: {
+    width: "46%",
+    minWidth: 0,
+  },
+  statusBanner: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 3,
+  },
+  summaryStatus: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+    color: "#fff",
+    letterSpacing: 0.1,
+  },
+  summaryHint: {
+    fontSize: 10,
+    fontWeight: "500",
+    lineHeight: 14,
+    color: "rgba(255,255,255,0.82)",
+  },
+  odometerTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 12,
     gap: 8,
+    marginBottom: 10,
   },
-  heroStatus: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.55)",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+  odometerAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    flexShrink: 0,
   },
-  heroAccent: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 3,
+  odometerHint: {
+    marginTop: 10,
+    paddingVertical: 0,
   },
-  metricScroll: {
-    gap: 8,
-    paddingRight: 4,
-  },
-  metricTile: {
-    minWidth: 108,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 4,
-  },
-  metricLabel: {
+  odometerCompareHint: {
+    marginTop: 8,
     fontSize: 8,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  metricValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    letterSpacing: -0.2,
-  },
-  healthCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  healthRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  healthTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    flex: 1,
-  },
-  healthSpend: {
-    fontSize: 9,
-    fontWeight: "700",
-  },
-  healthMessage: {
-    fontSize: 11,
     fontWeight: "600",
-    lineHeight: 15,
-  },
-  actionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  actionTile: {
-    width: "48%",
-    flexGrow: 1,
-    minWidth: "46%",
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 12,
-    minHeight: 88,
-    position: "relative",
-  },
-  actionIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  actionLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  actionSub: {
-    fontSize: 9,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  actionChevron: {
-    position: "absolute",
-    right: 10,
-    top: 12,
+    lineHeight: 11,
+    letterSpacing: 0.1,
+    textAlign: "center",
   },
 });

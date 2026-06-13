@@ -1,4 +1,5 @@
 import Feather from "@expo/vector-icons/Feather";
+import { useFocusEffect } from "@react-navigation/native";
 import type { ComponentProps } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -9,6 +10,8 @@ import Layout from "@/constants/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import {
+  useCancelDriverExpenseRequest,
+  useRemindDriverExpenseRequest,
   useReviewTripFuelEntry,
   useReviewTripOtherExpenseEntry,
   useReviewTripTollEntry,
@@ -17,8 +20,11 @@ import {
   useSetTripTollReimbursementState,
   useTripOperationsSummary,
 } from "../queries/useTripOperations";
+import { useTripOperationsSync } from "../hooks/useTripOperationsSync";
+import { isDriverReimbursementCostEvent } from "../shared/driverReimbursementEvents.util";
 import { formatOtherExpenseCategoryLabel } from "../shared/tripOtherExpenseCategories";
 import { canEditTripCostEvent } from "../shared/expenseEntryEdit.util";
+import { ExpensePreviewSheet } from "./ExpensePreviewSheet";
 import { syncOperationalFinanceProjection } from "@/features/finance/projections";
 import { syncPostedTripExpensesToOperationLedger } from "../vehicle/syncPostedExpensesToOperationLedger.service";
 import type { TripCostEvent, TripCostCategory } from "@/features/finance";
@@ -142,6 +148,41 @@ export type TripDriverCashPayoutRow = {
   description?: string | null;
 };
 
+function needsDriverPendingAction(event: TripCostEvent): boolean {
+  return (
+    event.incurredBy === "driver" &&
+    event.reimbursable &&
+    event.approvalState === "pending" &&
+    event.postingState !== "posted"
+  );
+}
+
+function isDriverReimbursementEvent(event: TripCostEvent): boolean {
+  return isDriverReimbursementCostEvent(event);
+}
+
+function driverEventStatusLabel(event: TripCostEvent): string {
+  if (event.approvalState === "pending") return "Awaiting fleet approval";
+  if (event.approvalState === "rejected") return "Cancelled";
+  if (event.settlementState === "settled") return "Reimbursed";
+  if (event.approvalState === "approved" && event.settlementState !== "settled") {
+    return "Approved · payout pending";
+  }
+  return eventStatusLabel(event);
+}
+
+function driverReimbursementHint(event: TripCostEvent): string | null {
+  if (event.approvalState === "pending") {
+    return "Submitted for fleet reimbursement";
+  }
+  if (event.approvalState === "rejected") return "Request cancelled";
+  if (event.settlementState === "settled") return "Fleet marked this reimbursed";
+  if (event.approvalState === "approved" && event.settlementState !== "settled") {
+    return "Approved by fleet · payout pending";
+  }
+  return formatReimbursedHint(event);
+}
+
 function needsUserAction(event: TripCostEvent): boolean {
   if (canApproveAndPostToLedger(event)) return true;
   return (
@@ -151,7 +192,13 @@ function needsUserAction(event: TripCostEvent): boolean {
   );
 }
 
-function StatusChip({ event }: { event: TripCostEvent }) {
+function StatusChip({
+  event,
+  isDriverViewer = false,
+}: {
+  event: TripCostEvent;
+  isDriverViewer?: boolean;
+}) {
   const tone = statusTone(event);
   const chipStyle =
     tone === "bad"
@@ -174,7 +221,7 @@ function StatusChip({ event }: { event: TripCostEvent }) {
     <View style={[styles.chip, chipStyle]}>
       <View style={[styles.chipDot, dotStyle]} />
       <Text style={[styles.chipText, tone === "settled" && styles.chipTextOnSolid]} numberOfLines={1}>
-        {eventStatusLabel(event)}
+        {isDriverViewer ? driverEventStatusLabel(event) : eventStatusLabel(event)}
       </Text>
     </View>
   );
@@ -185,10 +232,14 @@ type ExpenseRowProps = {
   embedded: boolean;
   iconMd: number;
   loadingAction: boolean;
+  isDriverViewer: boolean;
   onApprove: (event: TripCostEvent) => void;
   onReject: (event: TripCostEvent) => void;
   onMarkSettled: (event: TripCostEvent) => void;
+  onCancelRequest: (event: TripCostEvent) => void;
+  onRemindRequest: (event: TripCostEvent) => void;
   onEdit?: (event: TripCostEvent) => void;
+  onPreview: (event: TripCostEvent) => void;
 };
 
 const ExpenseRow = memo(function ExpenseRow({
@@ -196,15 +247,21 @@ const ExpenseRow = memo(function ExpenseRow({
   embedded,
   iconMd,
   loadingAction,
+  isDriverViewer,
   onApprove,
   onReject,
   onMarkSettled,
+  onCancelRequest,
+  onRemindRequest,
   onEdit,
+  onPreview,
 }: ExpenseRowProps) {
   const visual = categoryVisual(event.category);
-  const showActions = needsUserAction(event);
+  const showFleetActions = !isDriverViewer && needsUserAction(event);
+  const showDriverActions = isDriverViewer && needsDriverPendingAction(event);
+  const showActions = showFleetActions || showDriverActions;
   const tone = statusTone(event);
-  const hint = formatReimbursedHint(event);
+  const hint = isDriverViewer ? driverReimbursementHint(event) : formatReimbursedHint(event);
   const editable = canEditTripCostEvent(event) && typeof onEdit === "function";
 
   return (
@@ -216,7 +273,12 @@ const ExpenseRow = memo(function ExpenseRow({
         { borderLeftColor: visual.rail, borderLeftWidth: 3 },
       ]}
     >
-      <View style={styles.rowMain}>
+      <Pressable
+        style={styles.rowMain}
+        onPress={() => onPreview(event)}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${toCategoryLabel(event)} expense`}
+      >
         <View style={[styles.rowAvatar, { backgroundColor: visual.bg }]}>
           <Feather name={visual.icon} size={iconMd} color={visual.fg} />
         </View>
@@ -231,18 +293,6 @@ const ExpenseRow = memo(function ExpenseRow({
           ) : null}
         </View>
         <View style={styles.rowRight}>
-          {editable ? (
-            <Pressable
-              style={({ pressed }) => [styles.editBtn, pressed && styles.editBtnPressed]}
-              onPress={() => onEdit?.(event)}
-              disabled={loadingAction}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${toCategoryLabel(event)}`}
-              hitSlop={8}
-            >
-              <Feather name="edit-2" size={iconMd} color={Theme.primary} />
-            </Pressable>
-          ) : null}
           <Text
             style={[
               styles.rowAmount,
@@ -251,13 +301,51 @@ const ExpenseRow = memo(function ExpenseRow({
           >
             {inr(event.amount)}
           </Text>
-          <StatusChip event={event} />
+          <StatusChip event={event} isDriverViewer={isDriverViewer} />
+          <Feather name="chevron-right" size={iconMd} color={Theme.textMuted} />
         </View>
-      </View>
+      </Pressable>
+
+      {editable ? (
+        <Pressable
+          style={({ pressed }) => [styles.rowEditLink, pressed && styles.editBtnPressed]}
+          onPress={() => onEdit?.(event)}
+          disabled={loadingAction}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit ${toCategoryLabel(event)}`}
+        >
+          <Feather name="edit-2" size={iconMd} color={Theme.primary} />
+          <Text style={styles.rowEditLinkText}>Edit</Text>
+        </Pressable>
+      ) : null}
 
       {showActions ? (
         <View style={styles.actions}>
-          {canApproveAndPostToLedger(event) ? (
+          {showDriverActions ? (
+            <>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.actionBtnPrimary,
+                  pressed && styles.actionBtnPressed,
+                ]}
+                onPress={() => void onRemindRequest(event)}
+                disabled={loadingAction}
+              >
+                <Text style={styles.actionBtnTextPrimary}>Remind fleet</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && styles.actionBtnSecondaryPressed,
+                ]}
+                onPress={() => void onCancelRequest(event)}
+                disabled={loadingAction}
+              >
+                <Text style={styles.actionBtnText}>Cancel request</Text>
+              </Pressable>
+            </>
+          ) : canApproveAndPostToLedger(event) ? (
             <>
               <Pressable
                 style={({ pressed }) => [
@@ -315,6 +403,7 @@ export function TripExpensesScreen({
   onAddToll,
   onAddOtherExpense,
   onEditExpense,
+  initialPreviewEventId,
   driverCashPayouts = [],
   onRecordDriverPayment,
 }: {
@@ -325,6 +414,8 @@ export function TripExpensesScreen({
   onAddToll?: () => void;
   onAddOtherExpense?: () => void;
   onEditExpense?: (event: TripCostEvent) => void;
+  /** Opens preview sheet on mount (e.g. deep link from Operations tab row). */
+  initialPreviewEventId?: string | null;
   /** Cash-out rows to driver from Finance ledger (`transactions` on this trip). */
   driverCashPayouts?: TripDriverCashPayoutRow[];
   onRecordDriverPayment?: () => void;
@@ -332,8 +423,12 @@ export function TripExpensesScreen({
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const [listFilter, setListFilter] = useState<ListFilter>("all");
+  const isDriverViewer = profile?.role === "driver";
+  const [listFilter, setListFilter] = useState<ListFilter>(isDriverViewer ? "action" : "all");
+  const driverDefaultTabSetRef = useRef(false);
+  const [previewEvent, setPreviewEvent] = useState<TripCostEvent | null>(null);
   const summaryQuery = useTripOperationsSummary(trip.id, { enabled: true });
+  useTripOperationsSync();
   const ledgerBackfillTripRef = useRef<string | null>(null);
 
   const vehicleLabel = useMemo(() => {
@@ -342,7 +437,14 @@ export function TripExpensesScreen({
   }, [trip.vehicle_display_number]);
 
   useEffect(() => {
-    if (!trip.id || !trip.vehicle_id || ledgerBackfillTripRef.current === trip.id) return;
+    if (!isDriverViewer || driverDefaultTabSetRef.current) return;
+    setListFilter("action");
+  }, [isDriverViewer]);
+
+  useEffect(() => {
+    if (isDriverViewer || !trip.id || !trip.vehicle_id || ledgerBackfillTripRef.current === trip.id) {
+      return;
+    }
     ledgerBackfillTripRef.current = trip.id;
     void syncPostedTripExpensesToOperationLedger(trip.id).then(() => {
       syncOperationalFinanceProjection({
@@ -352,13 +454,59 @@ export function TripExpensesScreen({
         vehicleId: trip.vehicle_id ?? null,
       });
     });
-  }, [queryClient, trip.id, trip.organization_id, trip.vehicle_id]);
+  }, [isDriverViewer, queryClient, trip.id, trip.organization_id, trip.vehicle_id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!trip.id) return;
+      void summaryQuery.refetch();
+    }, [summaryQuery.refetch, trip.id]),
+  );
+
+  const previewDeepLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const id = initialPreviewEventId?.trim();
+    if (!id) {
+      previewDeepLinkRef.current = null;
+      return;
+    }
+    const match = (summaryQuery.data?.costEvents ?? []).find((event) => event.id === id);
+    if (match) {
+      setPreviewEvent(match);
+      return;
+    }
+    if (summaryQuery.isLoading || previewDeepLinkRef.current === id) return;
+    previewDeepLinkRef.current = id;
+    void summaryQuery.refetch().then((res) => {
+      const found = res.data?.costEvents.find((event) => event.id === id);
+      if (found) setPreviewEvent(found);
+    });
+  }, [initialPreviewEventId, summaryQuery]);
+
+  const handlePreview = useCallback((event: TripCostEvent) => {
+    setPreviewEvent(event);
+  }, []);
   const reviewFuel = useReviewTripFuelEntry();
   const reviewToll = useReviewTripTollEntry();
   const reviewOther = useReviewTripOtherExpenseEntry();
   const setFuelReimbursement = useSetTripFuelReimbursementState();
   const setTollReimbursement = useSetTripTollReimbursementState();
   const setOtherReimbursement = useSetTripOtherReimbursementState();
+  const cancelDriverExpense = useCancelDriverExpenseRequest();
+  const remindDriverExpense = useRemindDriverExpenseRequest();
+
+  const allCostEvents = summaryQuery.data?.costEvents ?? [];
+  const events = useMemo(() => {
+    if (!isDriverViewer) return allCostEvents;
+    return allCostEvents.filter(isDriverReimbursementEvent);
+  }, [allCostEvents, isDriverViewer]);
+
+  useEffect(() => {
+    if (!isDriverViewer || driverDefaultTabSetRef.current || summaryQuery.isLoading) return;
+    driverDefaultTabSetRef.current = true;
+    if (events.some(needsDriverPendingAction)) setListFilter("action");
+  }, [events, isDriverViewer, summaryQuery.isLoading]);
 
   const loadingAction =
     reviewFuel.isPending ||
@@ -366,20 +514,31 @@ export function TripExpensesScreen({
     reviewOther.isPending ||
     setFuelReimbursement.isPending ||
     setTollReimbursement.isPending ||
-    setOtherReimbursement.isPending;
+    setOtherReimbursement.isPending ||
+    cancelDriverExpense.isPending ||
+    remindDriverExpense.isPending;
 
-  const events = summaryQuery.data?.costEvents ?? [];
   const snapshot = summaryQuery.data?.financialSnapshot ?? null;
-  const actionNeededEvents = useMemo(
-    () => events.filter(needsUserAction),
-    [events],
-  );
+  const actionNeededEvents = useMemo(() => {
+    if (isDriverViewer) {
+      return events.filter(needsDriverPendingAction);
+    }
+    return events.filter(needsUserAction);
+  }, [events, isDriverViewer]);
   const postedCostInr = snapshot?.postedOperationalCostInr ?? 0;
   const pendingPostCount = snapshot?.approvedAwaitingPostingCount ?? 0;
   const reimbursementDueInr = snapshot?.payableOutstandingInr ?? 0;
   const hasSummaryAlerts = pendingPostCount > 0 || reimbursementDueInr > 0;
   const hasReimbursableExpenses = events.some((event) => event.reimbursable);
+  const driverExpensesInr = useMemo(
+    () =>
+      events
+        .filter((event) => event.incurredBy === "driver")
+        .reduce((sum, event) => sum + Math.max(0, event.amount), 0),
+    [events],
+  );
   const showDriverPaymentCta =
+    !isDriverViewer &&
     typeof onRecordDriverPayment === "function" &&
     !!trip.driver_id &&
     (reimbursementDueInr > 0 || hasReimbursableExpenses);
@@ -519,6 +678,61 @@ export function TripExpensesScreen({
     trip.id,
   ]);
 
+  const handleCancelRequest = useCallback(
+    (event: TripCostEvent) => {
+      Alert.alert(
+        "Cancel reimbursement request?",
+        `Remove ${toCategoryLabel(event)} (${inr(event.amount)}) from fleet review?`,
+        [
+          { text: "Keep request", style: "cancel" },
+          {
+            text: "Cancel request",
+            style: "destructive",
+            onPress: () => {
+              void cancelDriverExpense
+                .mutateAsync({
+                  tripId: trip.id,
+                  eventId: event.id,
+                  actorUserId: profile?.uid ?? null,
+                  organizationId: trip.organization_id,
+                })
+                .catch((e) => {
+                  Alert.alert(
+                    "Could not cancel request",
+                    e instanceof Error ? e.message : "Unknown error",
+                  );
+                });
+            },
+          },
+        ],
+      );
+    },
+    [cancelDriverExpense, profile?.uid, trip.id, trip.organization_id],
+  );
+
+  const handleRemindRequest = useCallback(
+    async (event: TripCostEvent) => {
+      try {
+        await remindDriverExpense.mutateAsync({
+          tripId: trip.id,
+          eventId: event.id,
+          actorUserId: profile?.uid ?? null,
+          organizationId: trip.organization_id,
+        });
+        Alert.alert(
+          "Reminder sent",
+          "Fleet owner will see this reimbursement request at the top of their queue.",
+        );
+      } catch (e) {
+        Alert.alert(
+          "Could not send reminder",
+          e instanceof Error ? e.message : "Unknown error",
+        );
+      }
+    },
+    [profile?.uid, remindDriverExpense, trip.id, trip.organization_id],
+  );
+
   const displayedEvents = useMemo(() => {
     if (listFilter === "action") return actionNeededEvents;
     return events;
@@ -556,6 +770,7 @@ export function TripExpensesScreen({
 
       <View style={[styles.toolbar, embedded && styles.toolbarEmbedded]}>
           <View style={[styles.hubShell, embedded && styles.hubShellEmbedded]}>
+            {!isDriverViewer ? (
             <View style={styles.ledgerHero}>
               <View style={styles.ledgerAccent} />
               <View style={styles.ledgerHeroBody}>
@@ -598,6 +813,29 @@ export function TripExpensesScreen({
                 ) : null}
               </View>
             </View>
+            ) : (
+              <View style={styles.driverSummaryHero}>
+                <View style={styles.ledgerAccent} />
+                <View style={styles.ledgerHeroBody}>
+                  <View style={styles.ledgerHeroTop}>
+                    <View style={styles.ledgerHeroIcon}>
+                      <Feather name="clock" size={11} color={Theme.primary} />
+                    </View>
+                    <View style={styles.summaryLeft}>
+                      <Text style={styles.summaryLabel}>Expenses</Text>
+                      <Text style={styles.summaryValue}>{inr(driverExpensesInr)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.driverSummaryHint}>
+                    {actionNeededEvents.length > 0
+                      ? `${actionNeededEvents.length} request${actionNeededEvents.length === 1 ? "" : "s"} awaiting fleet approval`
+                      : reimbursementDueInr > 0
+                        ? `${inr(reimbursementDueInr)} pending payout from fleet`
+                        : "Submit expenses you paid out of pocket for fleet review"}
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {quickActions.length > 0 ? (
               <View style={styles.quickActionsRow}>
@@ -682,7 +920,7 @@ export function TripExpensesScreen({
                   listFilter === "action" ? styles.segmentBtnTextActive : null,
                 ]}
               >
-                Needs action
+                {isDriverViewer ? "Pending" : "Needs action"}
               </Text>
               <View
                 style={[
@@ -746,7 +984,16 @@ export function TripExpensesScreen({
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
       >
-        {summaryQuery.isLoading ? (
+        {summaryQuery.isError ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Could not load expenses</Text>
+            <Text style={styles.empty}>
+              {summaryQuery.error instanceof Error
+                ? summaryQuery.error.message
+                : "Pull to refresh or go back and try again."}
+            </Text>
+          </View>
+        ) : summaryQuery.isLoading ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Loading expenses…</Text>
           </View>
@@ -762,8 +1009,12 @@ export function TripExpensesScreen({
             </Text>
             <Text style={styles.empty}>
               {listFilter === "action"
-                ? "Nothing waiting for approve, post, or reimburse."
-                : "Add fuel, toll, or other costs for this trip."}
+                ? isDriverViewer
+                  ? "No reimbursement requests waiting on fleet right now."
+                  : "Nothing waiting for approve, post, or reimburse."
+                : isDriverViewer
+                  ? "Log fuel, toll, or other trip costs you paid for reimbursement."
+                  : "Add fuel, toll, or other costs for this trip."}
             </Text>
           </View>
         ) : (
@@ -785,13 +1036,17 @@ export function TripExpensesScreen({
                 embedded={embedded}
                 iconMd={iconMd}
                 loadingAction={loadingAction}
+                isDriverViewer={isDriverViewer}
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onMarkSettled={handleMarkSettled}
+                onCancelRequest={handleCancelRequest}
+                onRemindRequest={handleRemindRequest}
                 onEdit={onEditExpense}
+                onPreview={handlePreview}
               />
             ))}
-            {hasReimbursableExpenses ? (
+            {!isDriverViewer && hasReimbursableExpenses ? (
               <View style={styles.payoutSection}>
                 <Text style={styles.payoutSectionTitle}>Driver cash payouts</Text>
                 <Text style={styles.payoutSectionHint}>
@@ -824,6 +1079,24 @@ export function TripExpensesScreen({
           </>
         )}
       </ScrollView>
+
+      <ExpensePreviewSheet
+        visible={previewEvent != null}
+        costEventId={previewEvent?.id ?? null}
+        event={previewEvent}
+        isDriverViewer={isDriverViewer}
+        onClose={() => setPreviewEvent(null)}
+        onEdit={onEditExpense}
+        onRemind={handleRemindRequest}
+        onCancel={handleCancelRequest}
+        statusLabel={
+          previewEvent
+            ? isDriverViewer
+              ? driverEventStatusLabel(previewEvent)
+              : eventStatusLabel(previewEvent)
+            : undefined
+        }
+      />
     </View>
   );
 }
@@ -884,6 +1157,18 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.pulseIndigoWash,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#e6edf5",
+  },
+  driverSummaryHero: {
+    position: "relative",
+    backgroundColor: "#f0fdf4",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#dcfce7",
+  },
+  driverSummaryHint: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    lineHeight: 13,
   },
   ledgerAccent: {
     position: "absolute",
@@ -1380,6 +1665,20 @@ const styles = StyleSheet.create({
   },
   editBtnPressed: {
     opacity: 0.65,
+  },
+  rowEditLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    marginTop: -2,
+  },
+  rowEditLinkText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.primary,
   },
   rowAmount: {
     fontSize: 10,

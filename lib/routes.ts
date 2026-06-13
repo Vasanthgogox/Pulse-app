@@ -156,8 +156,8 @@ export const ROUTES = {
     if (!focus) return base;
     return `${base}?focus=${focus}` as const;
   },
-  /** Optional trip odometer verification (start/end). */
-  tripVerification: (tripId: string, side: "start" | "end" = "start") =>
+  /** Optional trip odometer verification (start/end/both). */
+  tripVerification: (tripId: string, side: "start" | "end" | "both" = "start") =>
     `/trip/${encodeURIComponent(tripId)}/verification?side=${side}` as const,
   /** Optional operations entries (fuel/toll). */
   tripFuelEntry: (tripId: string, entryId?: string) => {
@@ -174,6 +174,9 @@ export const ROUTES = {
   },
   tripExpenses: (tripId: string) =>
     `/trip/${encodeURIComponent(tripId)}/operations/expenses` as const,
+  /** Unified fuel / toll / other expense launcher. */
+  tripExpenseLauncher: (tripId: string) =>
+    `/trip/${encodeURIComponent(tripId)}/operations/launcher` as const,
   /** Modal: same add-client UX as Create Trip (PartyRegistrationPortal on web). */
   ADD_CLIENT:     '/(modals)/add-client' as const,
   CREATE_INDENT:  '/create-indent'  as const,

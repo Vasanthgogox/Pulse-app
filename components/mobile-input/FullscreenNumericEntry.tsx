@@ -112,14 +112,19 @@ export function FullscreenNumericEntry({
 
   const hasValue = isKeypadValueSubmittable(raw);
 
+  const payDisplayVariant =
+    type === 'currency' ? 'hero' : 'wizard';
+  const resolvedPlaceholder =
+    placeholder ?? (type === 'distance' || type === 'quantity' ? '0' : undefined);
+
   const amountDisplay = (
     <NumericDisplay
       rawValue={raw}
       type={type}
       prefix={prefix}
       suffix={suffix}
-      placeholder={placeholder}
-      variant={isPayLayout ? 'hero' : 'default'}
+      placeholder={resolvedPlaceholder}
+      variant={isPayLayout ? payDisplayVariant : 'default'}
     />
   );
 
@@ -384,15 +389,19 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   payLabelOnlyText: {
-    fontSize: 24,
+    fontSize: 14,
     fontWeight: '700',
-    color: Theme.textPrimary,
+    color: Theme.textPrimaryDark,
     textAlign: 'center',
+    lineHeight: 19,
   },
   payContextLine: {
-    fontSize: 18,
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 15,
     color: Theme.textSecondary,
     textAlign: 'center',
+    paddingHorizontal: 8,
   },
   payBottom: {
     flexShrink: 0,

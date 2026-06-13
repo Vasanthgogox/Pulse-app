@@ -10,8 +10,11 @@ import {
   enqueueVerificationPhoto,
 } from "../offline/outbox";
 import { uploadVerificationPhoto } from "../uploads/odometerUploads";
-import { saveTripVerification } from "../verification.service";
-import type { SaveTripVerificationInput } from "../verification.service";
+import { saveTripVerification, saveTripVerificationBoth } from "../verification.service";
+import type {
+  SaveTripVerificationBothInput,
+  SaveTripVerificationInput,
+} from "../verification.service";
 
 export function useTripVerification(tripId: string | null) {
   return useQuery({
@@ -126,6 +129,107 @@ export function useSaveTripVerification() {
           userId: null,
         });
       }
+
+      return { queued: false as const };
+    },
+    onSuccess: (_result, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.trips.detail(input.tripId) });
+      qc.invalidateQueries({ queryKey: queryKeys.trips.verification(input.tripId) });
+      qc.invalidateQueries({
+        queryKey: queryKeys.trips.verificationPhotos(input.tripId),
+      });
+    },
+  });
+}
+
+type SaveBothMutationInput = SaveTripVerificationBothInput & {
+  startPhotoLocalUri?: string | null;
+  endPhotoLocalUri?: string | null;
+  photoUserId?: string | null;
+};
+
+export function useSaveTripOdometerBoth() {
+  const qc = useQueryClient();
+  const isOnline = useIsOnline();
+
+  return useMutation({
+    mutationFn: async (input: SaveBothMutationInput) => {
+      const {
+        startPhotoLocalUri,
+        endPhotoLocalUri,
+        photoUserId,
+        tripId,
+        ...verificationInput
+      } = input;
+
+      const saveSide = async (side: "start" | "end", photoLocalUri?: string | null) => {
+        if (!photoLocalUri || !photoUserId) return;
+        const uploadRes = await uploadVerificationPhoto({
+          tripId,
+          side,
+          localUri: photoLocalUri,
+          userId: photoUserId,
+        });
+        if (uploadRes.error) {
+          await enqueueVerificationPhoto({
+            tripId,
+            side,
+            localUri: photoLocalUri,
+            userId: photoUserId,
+          });
+        }
+      };
+
+      const queueBoth = async () => {
+        await enqueueVerificationMetadata({
+          tripId,
+          side: "start",
+          odometerKm: verificationInput.startOdometerKm,
+          gpsDistanceKm: verificationInput.gpsDistanceKm ?? null,
+          notes: verificationInput.notes ?? null,
+          updatedBy: verificationInput.updatedBy,
+          markBusinessVerified: verificationInput.markBusinessVerified,
+        });
+        await enqueueVerificationMetadata({
+          tripId,
+          side: "end",
+          odometerKm: verificationInput.endOdometerKm,
+          gpsDistanceKm: verificationInput.gpsDistanceKm ?? null,
+          notes: verificationInput.notes ?? null,
+          updatedBy: verificationInput.updatedBy,
+          markBusinessVerified: verificationInput.markBusinessVerified,
+        });
+        if (startPhotoLocalUri) {
+          await enqueueVerificationPhoto({
+            tripId,
+            side: "start",
+            localUri: startPhotoLocalUri,
+            userId: photoUserId ?? null,
+          });
+        }
+        if (endPhotoLocalUri) {
+          await enqueueVerificationPhoto({
+            tripId,
+            side: "end",
+            localUri: endPhotoLocalUri,
+            userId: photoUserId ?? null,
+          });
+        }
+      };
+
+      if (!isOnline) {
+        await queueBoth();
+        return { queued: true as const };
+      }
+
+      const verificationRes = await saveTripVerificationBoth({ tripId, ...verificationInput });
+      if (verificationRes.error) {
+        await queueBoth();
+        return { queued: true as const };
+      }
+
+      await saveSide("start", startPhotoLocalUri);
+      await saveSide("end", endPhotoLocalUri);
 
       return { queued: false as const };
     },

@@ -411,7 +411,7 @@ export function OperationsHub({
       return "Vehicle economics not applicable for aggregation operations";
     }
     if (ledgerState === "posting_disabled") return "Vehicle accounting disabled";
-    if (ledgerState === "no_operations") return "No operational expenses logged";
+    if (ledgerState === "no_operations") return "No operational expenses";
     if (ledgerState === "pending_approval") return "Awaiting accounting approval";
     return null;
   }, [ledgerState]);
