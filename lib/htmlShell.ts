@@ -48,6 +48,8 @@ export function setupAndroidInteractiveWidgetViewport() {
  */
 export function setupViewportHeightBootstrap() {
   function setAppVh() {
+    // Once installWebViewportHeight (React runtime) takes over, stop writing.
+    if ((window as any).__appVhOwned) return;
     var vv = window.visualViewport;
     var h = Math.round(vv && vv.height ? vv.height : window.innerHeight);
     document.documentElement.style.setProperty('--app-vh', h + 'px');

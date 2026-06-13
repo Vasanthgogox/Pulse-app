@@ -22,6 +22,9 @@ export function installWebViewportHeight(): () => void {
     return () => {};
   }
 
+  // Claim ownership — suppresses setupViewportHeightBootstrap from the static HTML shell.
+  (window as any).__appVhOwned = true;
+
   let stableLayoutHeight = Math.round(window.innerHeight);
 
   const setAppVh = () => {
@@ -49,6 +52,7 @@ export function installWebViewportHeight(): () => void {
   vv?.addEventListener("scroll", setAppVh);
 
   return () => {
+    (window as any).__appVhOwned = false;
     window.removeEventListener("resize", setAppVh);
     window.removeEventListener("orientationchange", setAppVh);
     vv?.removeEventListener("resize", setAppVh);
