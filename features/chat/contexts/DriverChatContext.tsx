@@ -168,9 +168,8 @@ export function DriverChatProvider({
         },
       );
 
-      void refetchConversations();
-      // Return both IDs so callers can render the thread without waiting for the
-      // conversations list query to re-enable (happens when driverIds loads late).
+      // Optimistic cache patch above is correct — no refetch needed.  The
+      // realtime subscription will patch the list if the server row diverges.
       return { convId: created.id, orgId: trip.organization_id };
     },
     [driverIds, profile, uid, queryClient, refetchConversations],
