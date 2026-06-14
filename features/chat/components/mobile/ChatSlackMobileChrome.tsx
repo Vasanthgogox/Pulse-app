@@ -30,7 +30,7 @@ import {
   type TextInput as TextInputType,
   type ViewStyle,
 } from "react-native";
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   CHAT_SLACK_BOTTOM_NAV_BAR,
   PULSE_CHAT,
@@ -484,7 +484,7 @@ export function ChatSlackInboxToolbar({
   );
 }
 
-export function ChatSlackListRow({
+function ChatSlackListRowInner({
   identity,
   title,
   time,
@@ -621,6 +621,8 @@ export function ChatSlackListRow({
     </Pressable>
   );
 }
+
+export const ChatSlackListRow = memo(ChatSlackListRowInner);
 
 export function ChatSlackFab({
   onPress,

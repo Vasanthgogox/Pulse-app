@@ -7,6 +7,7 @@ import type { TripConversation } from "@/features/chat/types/chat.types";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { MessageSquare } from "lucide-react-native";
 import { FlashList } from "@shopify/flash-list";
+import { memo, useCallback } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -17,7 +18,7 @@ function convListIdentity(conv: TripConversation): ResolvedPartyAvatarIdentity {
   };
 }
 
-export function DriverChatSlackInbox({
+function DriverChatSlackInboxInner({
   conversations,
   isLoading,
   selectedId,
@@ -37,6 +38,37 @@ export function DriverChatSlackInbox({
   onOpenConv: (conv: TripConversation) => void;
 }) {
   const insets = useSafeAreaInsets();
+
+  const renderConvItem = useCallback(
+    ({ item }: { item: TripConversation }) => {
+      const time = item.last_message_at
+        ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          })
+        : "";
+      const routeLine = [item.pickup_area, item.drop_location]
+        .filter(Boolean)
+        .join(" → ");
+      const preview = stripChatPreviewEmojiPrefix(
+        item.last_message_preview?.trim() ?? "",
+      );
+      return (
+        <ChatSlackListRow
+          identity={convListIdentity(item)}
+          title={item.trip_number || "Trip"}
+          time={time}
+          partyLine={routeLine || "Driver"}
+          preview={preview || null}
+          active={selectedId === item.id}
+          unread={item.unread_dispatcher_count}
+          onPress={() => onOpenConv(item)}
+        />
+      );
+    },
+    [selectedId, onOpenConv],
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
@@ -79,36 +111,11 @@ export function DriverChatSlackInbox({
           data={conversations}
           keyExtractor={(c) => c.id}
           contentContainerStyle={{ paddingBottom: 8 }}
-          renderItem={({ item }) => {
-            const time = item.last_message_at
-              ? new Date(item.last_message_at).toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: true,
-                })
-              : "";
-            const routeLine = [item.pickup_area, item.drop_location]
-              .filter(Boolean)
-              .join(" → ");
-            const preview = stripChatPreviewEmojiPrefix(
-              item.last_message_preview?.trim() ?? "",
-            );
-
-            return (
-              <ChatSlackListRow
-                identity={convListIdentity(item)}
-                title={item.trip_number || "Trip"}
-                time={time}
-                partyLine={routeLine || "Driver"}
-                preview={preview || null}
-                active={selectedId === item.id}
-                unread={item.unread_dispatcher_count}
-                onPress={() => onOpenConv(item)}
-              />
-            );
-          }}
+          renderItem={renderConvItem}
         />
       )}
     </View>
   );
 }
+
+export const DriverChatSlackInbox = memo(DriverChatSlackInboxInner);

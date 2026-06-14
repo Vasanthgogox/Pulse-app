@@ -18,7 +18,7 @@ import {
 import { ChatReplyThreadStrip, type ReplyPreviewData } from "@/features/chat/components/shared/ChatReplyPreview";
 import type { SlackMessageGroupMeta } from "@/features/chat/utils/slackMessageGroup.util";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -75,7 +75,7 @@ export type ChatSlackMessageRowProps = {
   onDelete?: () => void;
 };
 
-export function ChatSlackMessageRow({
+function ChatSlackMessageRowInner({
   messageId,
   senderName,
   content,
@@ -375,6 +375,43 @@ export function ChatSlackMessageRow({
     </>
   );
 }
+
+/**
+ * Memoized with custom comparator so unchanged messages don't re-render
+ * when a new message arrives and `group` objects are rebuilt.
+ * Callbacks are excluded from comparison — they close over stable setters.
+ */
+export const ChatSlackMessageRow = memo(
+  ChatSlackMessageRowInner,
+  (prev, next) => {
+    if (prev.messageId !== next.messageId) return false;
+    if (prev.content !== next.content) return false;
+    if (prev.isNew !== next.isNew) return false;
+    if (prev.isEdited !== next.isEdited) return false;
+    if (prev.reactions !== next.reactions) return false;
+    if (prev.senderName !== next.senderName) return false;
+    if (prev.timestamp !== next.timestamp) return false;
+    if (prev.isOwn !== next.isOwn) return false;
+    if (prev.variant !== next.variant) return false;
+    if (prev.selfUserId !== next.selfUserId) return false;
+    if (prev.avatar !== next.avatar) return false;
+    if (prev.userAvatarUrl !== next.userAvatarUrl) return false;
+    if (prev.userAvatarSeed !== next.userAvatarSeed) return false;
+    if (prev.userOrgLogoUrl !== next.userOrgLogoUrl) return false;
+    if (prev.userName !== next.userName) return false;
+    if (prev.replyPreview !== next.replyPreview) return false;
+    // group: structural comparison of layout-affecting fields only.
+    const pg = prev.group, ng = next.group;
+    if ((pg == null) !== (ng == null)) return false;
+    if (pg && ng) {
+      if (pg.showHeader !== ng.showHeader) return false;
+      if (pg.showAvatar !== ng.showAvatar) return false;
+      if (pg.isContinuation !== ng.isContinuation) return false;
+      if (pg.partyBreak !== ng.partyBreak) return false;
+    }
+    return true;
+  },
+);
 
 const rowHoverStyle = {
   backgroundColor: "rgba(0,0,0,0.025)",
