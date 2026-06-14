@@ -21,6 +21,8 @@ import {
 import { useCallback, useMemo } from 'react';
 
 const STALE_MS = 30_000;
+// 30 min GC: thread stays cached across tab switches so back-navigation is instant.
+const GC_MS = 30 * 60_000;
 
 export { driverChatMessagesQueryKey } from '@/features/chat/utils/driverChatMessageCache.util';
 
@@ -32,7 +34,8 @@ export function useDriverChatMessagesQuery(conversationId: string | null) {
     enabled: !!cid,
     initialPageParam: undefined as string | undefined,
     staleTime: STALE_MS,
-    gcTime: 10 * 60_000,
+    gcTime: GC_MS,
+    networkMode: 'offlineFirst',
     retry: infrastructureShouldRetry,
     retryDelay: infrastructureRetryDelay,
     refetchOnWindowFocus: false,
