@@ -38,6 +38,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { supabase } from '@/lib/supabase';
 import {
   fetchChatBootstrapPayload,
   fetchConversationHistory,
@@ -1318,6 +1319,13 @@ export const useChatStore = create<ChatState>()(
     bootstrap: async (orgId) => {
       if (get().bootstrappedOrg === orgId) return;
       if (chatBootstrapInFlightFor === orgId) return;
+
+      // Abort if there is no valid session — the RPC requires auth and will 42501
+      // on anon. This happens during the brief window between SIGNED_OUT and
+      // SIGNED_IN when React context still holds the previous orgId/selfUid.
+      const { data: { session } } = await supabase().auth.getSession();
+      if (!session) return;
+
       chatBootstrapInFlightFor = orgId;
 
       let seededFromDisk = false;
@@ -1388,9 +1396,15 @@ export const useChatStore = create<ChatState>()(
         }));
       } catch (err) {
         if (__DEV__) console.error('[useChatStore] bootstrap failed:', err);
-        // Always mark as bootstrapped so bootstrapDone=true and the spinner
-        // never stays stuck even when the network is unavailable.
-        set({ bootstrappedOrg: orgId, isLoading: false });
+        const code = (err as any)?.code;
+        // 42501 = permission denied (no session); PGRST301 = JWT expired.
+        // Don't mark bootstrapped — a valid session may arrive shortly and must
+        // be able to retry. For network/other errors mark done to unblock the spinner.
+        if (code === '42501' || code === 'PGRST301') {
+          set({ isLoading: false });
+        } else {
+          set({ bootstrappedOrg: orgId, isLoading: false });
+        }
       } finally {
         chatBootstrapInFlightFor = null;
       }
