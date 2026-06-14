@@ -602,26 +602,45 @@ export function TripChatProvider({
     [organizationId],
   );
 
+  const contextValue = useMemo(
+    (): TripChatContextType => ({
+      organizationId,
+      conversations,
+      isLoading,
+      sendMessage,
+      markAsRead,
+      markTripThreadsRead,
+      totalUnreadCount,
+      getTotalUnreadCount,
+      refreshConversations: loadConversations,
+      hydrateConversationById,
+      changeTripStatus,
+      initiateConversation,
+      initiateDriverConversationForTrip,
+      switchParty,
+      tripHasPendingFeedback,
+    }),
+    [
+      organizationId,
+      conversations,
+      isLoading,
+      sendMessage,
+      markAsRead,
+      markTripThreadsRead,
+      totalUnreadCount,
+      getTotalUnreadCount,
+      loadConversations,
+      hydrateConversationById,
+      changeTripStatus,
+      initiateConversation,
+      initiateDriverConversationForTrip,
+      switchParty,
+      tripHasPendingFeedback,
+    ],
+  );
+
   return (
-    <TripChatContext.Provider
-      value={{
-        organizationId,
-        conversations,
-        isLoading,
-        sendMessage,
-        markAsRead,
-        markTripThreadsRead,
-        totalUnreadCount,
-        getTotalUnreadCount,
-        refreshConversations: loadConversations,
-        hydrateConversationById,
-        changeTripStatus,
-        initiateConversation,
-        initiateDriverConversationForTrip,
-        switchParty,
-        tripHasPendingFeedback,
-      }}
-    >
+    <TripChatContext.Provider value={contextValue}>
       {children}
     </TripChatContext.Provider>
   );

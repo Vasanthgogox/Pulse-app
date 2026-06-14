@@ -493,6 +493,7 @@ function RootOverlayTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const auth = useOptionalAuth();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const scrollControls = useDemoTabBarScrollOptional();
@@ -505,9 +506,9 @@ function RootOverlayTabBar() {
   }, [pathname, scrollControls, showOnRootScreens]);
 
   useEffect(() => {
-    if (!showOnRootScreens) return;
+    if (!showOnRootScreens || auth?.profile?.role === 'driver') return;
     scheduleDispatcherTabPreloads(undefined, { queryClient, orgId });
-  }, [showOnRootScreens, orgId, queryClient]);
+  }, [showOnRootScreens, orgId, queryClient, auth?.profile?.role]);
 
   if (!showOnRootScreens) return null;
 

@@ -148,7 +148,7 @@ function DemoCustomTabBar(
 export const unstable_settings = { initialRouteName: 'trips' };
 
 export default function TabLayout() {
-  const { user, profile, roleVerified, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const org = useOptionalOrganization();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -170,11 +170,11 @@ export default function TabLayout() {
   }, []);
 
   useEffect(() => {
-    if (loading || !orgId) return;
+    if (loading || !orgId || profile?.role === 'driver') return;
     void getLastTabRoute().then((route) => {
       scheduleDispatcherTabPreloads(route, { queryClient, orgId });
     });
-  }, [loading, orgId, queryClient]);
+  }, [loading, orgId, profile?.role, queryClient]);
 
   // Pre-warm chat providers + bootstrap as soon as auth + org are ready.
   // This runs immediately (not idle), so provider modules and the bootstrap RPC
@@ -220,10 +220,10 @@ export default function TabLayout() {
       router.replace(ROUTES.SIGN_IN_DIRECT);
       return;
     }
-    if (profile.role === 'driver' && roleVerified) {
+    if (profile.role === 'driver') {
       router.replace(ROUTES.DRIVER_ROOT);
     }
-  }, [loading, user, profile, roleVerified, router]);
+  }, [loading, user, profile, router]);
 
   if (loading || !user || !profile || profile.role === 'driver') {
     return (
@@ -260,10 +260,10 @@ function TabsWithProfileDrawer({ isDesktopWeb }: { isDesktopWeb: boolean }) {
         tabBarShowLabel: false,
         tabBarStyle: { display: 'none' },
         /**
-         * Native: keep all primary tabs mounted (Slack-like persistence).
-         * Mobile web: lazy first paint to protect Metro; chunks still preloaded.
+         * Desktop web: keep all primary tabs mounted (Slack-like persistence).
+         * Native + mobile web: lazy mount — only the active tab loads its chunk.
          */
-        lazy: isDesktopWeb ? false : Platform.OS === 'web',
+        lazy: !isDesktopWeb,
         freezeOnBlur: !isDesktopWeb,
         animation: 'none',
         sceneStyle: {

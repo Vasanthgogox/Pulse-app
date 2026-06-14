@@ -3,6 +3,7 @@
  */
 import type { PendingOtpTripRow } from '@/features/trips/services/tripOtp.service';
 import { getPendingOtpTrips } from '@/features/trips/services/tripOtp.service';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppStateIsActive } from '@/lib/hooks/useAppStateIsActive';
 import { queryKeys } from '@/lib/queryKeys';
 import {
@@ -27,6 +28,7 @@ function hasPendingOtpTrips(trips: PendingOtpTripRow[] | undefined): boolean {
 
 export function usePendingOtpTripsQuery(userId: string | null) {
   const appActive = useAppStateIsActive();
+  const { status } = useAuth();
   const uid = userId ?? '';
 
   const query = useQuery({
@@ -36,7 +38,7 @@ export function usePendingOtpTripsQuery(userId: string | null) {
       if (error) throw error;
       return trips ?? [];
     },
-    enabled: !!uid,
+    enabled: !!uid && status !== 'restoring',
     staleTime: STALE_MS,
     gcTime: 10 * 60_000,
     retry: infrastructureShouldRetry,

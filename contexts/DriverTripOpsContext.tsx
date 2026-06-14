@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,9 +29,6 @@ type DriverTripOpsContextValue = {
   hasTargetTrip: boolean;
   showExpenseOps: boolean;
   showOdometerOps: boolean;
-  opsMenuOpen: boolean;
-  toggleOpsMenu: () => void;
-  closeOpsMenu: () => void;
   openExpense: () => void;
   openOdometer: () => void;
   registerContextTrip: (trip: tripsService.TripRow | null) => void;
@@ -74,7 +71,6 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
 
   const [acceptedTripId, setAcceptedTripId] = useState<string | null>(null);
   const [contextTrip, setContextTrip] = useState<tripsService.TripRow | null>(null);
-  const [opsMenuOpen, setOpsMenuOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -108,9 +104,6 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
 
   const caps = useMemo(() => driverOpsTripCapabilities(targetTrip), [targetTrip]);
 
-  const closeOpsMenu = useCallback(() => setOpsMenuOpen(false), []);
-  const toggleOpsMenu = useCallback(() => setOpsMenuOpen((open) => !open), []);
-
   const registerContextTrip = useCallback((trip: tripsService.TripRow | null) => {
     setContextTrip(trip);
   }, []);
@@ -130,7 +123,6 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const openExpense = useCallback(() => {
-    closeOpsMenu();
     if (!targetTrip?.id) {
       alertPickTrip();
       return;
@@ -144,10 +136,9 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
       return;
     }
     router.push(ROUTES.tripOtherExpenseEntry(targetTrip.id) as never);
-  }, [alertPickTrip, caps.showExpense, closeOpsMenu, router, targetTrip?.id]);
+  }, [alertPickTrip, caps.showExpense, router, targetTrip?.id]);
 
   const openOdometer = useCallback(() => {
-    closeOpsMenu();
     if (!targetTrip?.id) {
       alertPickTrip();
       return;
@@ -161,16 +152,13 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
       return;
     }
     baseOps.openOdometer();
-  }, [alertPickTrip, baseOps, caps.showOdometer, closeOpsMenu, targetTrip?.id]);
+  }, [alertPickTrip, baseOps, caps.showOdometer, targetTrip?.id]);
 
   const value = useMemo<DriverTripOpsContextValue>(
     () => ({
       hasTargetTrip: Boolean(targetTrip?.id),
       showExpenseOps: caps.showExpense,
       showOdometerOps: caps.showOdometer,
-      opsMenuOpen,
-      toggleOpsMenu,
-      closeOpsMenu,
       openExpense,
       openOdometer,
       registerContextTrip,
@@ -178,22 +166,16 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
     [
       caps.showExpense,
       caps.showOdometer,
-      closeOpsMenu,
       openExpense,
       openOdometer,
-      opsMenuOpen,
       registerContextTrip,
       targetTrip?.id,
-      toggleOpsMenu,
     ],
   );
 
   return (
     <DriverTripOpsContext.Provider value={value}>
       {children}
-      {opsMenuOpen ? (
-        <Pressable style={styles.backdrop} onPress={closeOpsMenu} accessibilityLabel="Close menu" />
-      ) : null}
     </DriverTripOpsContext.Provider>
   );
 }
@@ -221,11 +203,3 @@ export function useRegisterDriverContextTrip(trip: tripsService.TripRow | null |
     }, [ctx, trip]),
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.35)",
-    zIndex: 999,
-  },
-});

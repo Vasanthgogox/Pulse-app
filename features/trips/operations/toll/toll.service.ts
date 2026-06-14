@@ -51,7 +51,7 @@ export async function getTripTollEntryById(
 }
 
 export async function updateTripTollEntry(
-  input: UpdateTollEntryInput & { receiptStoragePath?: string | null },
+  input: UpdateTollEntryInput & { receiptStoragePath?: string | null; ocrJobId?: string | null },
 ): Promise<{ error: Error | null; entry: TripTollEntry | null }> {
   const existing = await getTripTollEntryById(input.entryId);
   if (existing.error || !existing.entry) {
@@ -76,6 +76,9 @@ export async function updateTripTollEntry(
   if (input.receiptStoragePath !== undefined) {
     payload.receipt_storage_path = toNullableText(input.receiptStoragePath);
   }
+  if (input.ocrJobId !== undefined) {
+    payload.ocr_job_id = input.ocrJobId;
+  }
   const { data, error } = await supabase()
     .from("trip_toll_entries")
     .update(payload)
@@ -96,6 +99,7 @@ export async function updateTripTollEntry(
 export async function createTripTollEntry(
   input: Omit<SaveTollEntryInput, "receiptLocalUri"> & {
     receiptStoragePath?: string | null;
+    ocrJobId?: string | null;
   },
 ): Promise<{ error: Error | null; entry: TripTollEntry | null }> {
   const paymentOwner = resolvePaymentOwnerForSave(input);
@@ -110,6 +114,7 @@ export async function createTripTollEntry(
     notes: toNullableText(input.notes),
     is_estimated: input.isEstimated === true,
     receipt_storage_path: toNullableText(input.receiptStoragePath),
+    ocr_job_id: input.ocrJobId ?? null,
     entered_by: input.enteredBy,
     entered_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

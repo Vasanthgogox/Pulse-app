@@ -8,6 +8,7 @@ import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
 import { supabase } from "@/lib/supabase";
+import { normalizeInfrastructureErrorMessage } from "@/lib/supabaseHttp.util";
 import {
   validateDriverInviteCompensation,
 } from "../utils/driverInviteCompensation.util";
@@ -408,7 +409,12 @@ export async function getLinkedDriversForCurrentUser(
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(20);
-  if (error) return { error: new Error(error.message), drivers: [] };
+  if (error) {
+    return {
+      error: new Error(normalizeInfrastructureErrorMessage(error.message)),
+      drivers: [],
+    };
+  }
   return { error: null, drivers: (data ?? []) as unknown as DriverRow[] };
 }
 

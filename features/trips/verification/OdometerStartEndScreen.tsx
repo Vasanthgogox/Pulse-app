@@ -65,11 +65,23 @@ export function OdometerStartEndScreen({ trip }: { trip: TripRow }) {
   }, []);
 
   const startOcr = useOdometerPhotoOcr({
+    organizationId: trip.organization_id,
+    tripId: trip.id,
+    vehicleId: trip.vehicle_id,
+    driverId: trip.driver_id,
+    odometerSide: "start",
+    createdBy: profile?.uid ?? null,
     getCurrentRaw: () => startRaw,
     currentRaw: startRaw,
     onKmApplied: applyStartReading,
   });
   const endOcr = useOdometerPhotoOcr({
+    organizationId: trip.organization_id,
+    tripId: trip.id,
+    vehicleId: trip.vehicle_id,
+    driverId: trip.driver_id,
+    odometerSide: "end",
+    createdBy: profile?.uid ?? null,
     getCurrentRaw: () => endRaw,
     currentRaw: endRaw,
     onKmApplied: applyEndReading,
@@ -81,6 +93,10 @@ export function OdometerStartEndScreen({ trip }: { trip: TripRow }) {
     tripId: trip.id,
     setStartPhotoUri: startOcr.setPhotoUri,
     setEndPhotoUri: endOcr.setPhotoUri,
+    onPersistedOcrLoaded: (hydrateSide, documentId) => {
+      if (hydrateSide === "start") void startOcr.hydratePersistedOcr(documentId);
+      else void endOcr.hydratePersistedOcr(documentId);
+    },
     startHasLocalPhoto: Boolean(startOcr.photoUri?.trim()),
     endHasLocalPhoto: Boolean(endOcr.photoUri?.trim()),
   });

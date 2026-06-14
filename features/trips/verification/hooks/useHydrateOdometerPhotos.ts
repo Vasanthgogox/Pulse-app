@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { loadPersistedOcrJob } from "@/features/ocr";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 
 import { useTripVerificationPhotos } from "../queries/useTripVerification";
@@ -10,16 +11,18 @@ type Options = {
   tripId: string;
   setStartPhotoUri: (uri: string | null) => void;
   setEndPhotoUri: (uri: string | null) => void;
-  /** Skip hydration when user already attached a local photo this session. */
+  /** Load persisted OCR from DB only — never runs Gemini. */
+  onPersistedOcrLoaded?: (side: Side, tripDocumentId: string) => void;
   startHasLocalPhoto?: boolean;
   endHasLocalPhoto?: boolean;
 };
 
-/** Load saved odometer photos from trip documents into preview URIs. */
+/** Load saved odometer photos + link to persisted OCR jobs (read-only). */
 export function useHydrateOdometerPhotos({
   tripId,
   setStartPhotoUri,
   setEndPhotoUri,
+  onPersistedOcrLoaded,
   startHasLocalPhoto = false,
   endHasLocalPhoto = false,
 }: Options) {
@@ -36,6 +39,16 @@ export function useHydrateOdometerPhotos({
       if (!doc?.storage_path) return;
       const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
       if (url) setUri(url);
+
+      const jobId = (doc as { ocr_job_id?: string | null }).ocr_job_id;
+      if (jobId) {
+        onPersistedOcrLoaded?.(side, doc.id);
+        return;
+      }
+      const job = await loadPersistedOcrJob(doc.id);
+      if (job?.status === "completed") {
+        onPersistedOcrLoaded?.(side, doc.id);
+      }
     };
 
     void Promise.all([
@@ -44,6 +57,7 @@ export function useHydrateOdometerPhotos({
     ]);
   }, [
     endHasLocalPhoto,
+    onPersistedOcrLoaded,
     photosQuery.data,
     setEndPhotoUri,
     setStartPhotoUri,

@@ -18,5 +18,5 @@ export function infrastructureShouldRetry(failureCount: number, error: unknown):
 }
 
 export function infrastructureRetryDelay(attemptIndex: number): number {
-  return Math.min(120_000, 15_000 * 2 ** attemptIndex);
+  return Math.min(30_000, 2_000 * 2 ** attemptIndex);
 }

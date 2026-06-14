@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -12,6 +11,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.1"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -4074,6 +4098,153 @@ export type Database = {
           },
         ]
       }
+      ocr_jobs: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          created_by: string | null
+          document_fingerprint: string
+          duplicate_of_job_id: string | null
+          engine_name: string
+          engine_version: string
+          error_message: string | null
+          force_rescan: boolean
+          id: string
+          is_duplicate: boolean
+          ocr_model: string | null
+          organization_id: string
+          pod_attachment_id: string | null
+          processing_completed_at: string | null
+          processing_duration_ms: number | null
+          processing_started_at: string | null
+          prompt_version: string
+          raw_model_json: Json | null
+          result_json: Json | null
+          source_kind: string
+          source_subtype: string | null
+          status: Database["public"]["Enums"]["ocr_job_status"]
+          storage_path: string | null
+          trip_document_id: string | null
+          trip_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          document_fingerprint: string
+          duplicate_of_job_id?: string | null
+          engine_name?: string
+          engine_version: string
+          error_message?: string | null
+          force_rescan?: boolean
+          id?: string
+          is_duplicate?: boolean
+          ocr_model?: string | null
+          organization_id: string
+          pod_attachment_id?: string | null
+          processing_completed_at?: string | null
+          processing_duration_ms?: number | null
+          processing_started_at?: string | null
+          prompt_version?: string
+          raw_model_json?: Json | null
+          result_json?: Json | null
+          source_kind: string
+          source_subtype?: string | null
+          status?: Database["public"]["Enums"]["ocr_job_status"]
+          storage_path?: string | null
+          trip_document_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          created_by?: string | null
+          document_fingerprint?: string
+          duplicate_of_job_id?: string | null
+          engine_name?: string
+          engine_version?: string
+          error_message?: string | null
+          force_rescan?: boolean
+          id?: string
+          is_duplicate?: boolean
+          ocr_model?: string | null
+          organization_id?: string
+          pod_attachment_id?: string | null
+          processing_completed_at?: string | null
+          processing_duration_ms?: number | null
+          processing_started_at?: string | null
+          prompt_version?: string
+          raw_model_json?: Json | null
+          result_json?: Json | null
+          source_kind?: string
+          source_subtype?: string | null
+          status?: Database["public"]["Enums"]["ocr_job_status"]
+          storage_path?: string | null
+          trip_document_id?: string | null
+          trip_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocr_jobs_duplicate_of_job_id_fkey"
+            columns: ["duplicate_of_job_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_document_id_fkey"
+            columns: ["trip_document_id"]
+            isOneToOne: false
+            referencedRelation: "trip_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ocr_jobs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+        ]
+      }
       operational_sequences: {
         Row: {
           created_at: string
@@ -5279,6 +5450,524 @@ export type Database = {
           },
         ]
       }
+      supplier_compliance_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_type: string
+          expiry_date: string | null
+          file_name: string | null
+          id: string
+          label: string
+          notes: string | null
+          organization_id: string
+          status: string
+          storage_path: string | null
+          supplier_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_type: string
+          expiry_date?: string | null
+          file_name?: string | null
+          id?: string
+          label: string
+          notes?: string | null
+          organization_id: string
+          status?: string
+          storage_path?: string | null
+          supplier_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_type?: string
+          expiry_date?: string | null
+          file_name?: string | null
+          id?: string
+          label?: string
+          notes?: string | null
+          organization_id?: string
+          status?: string
+          storage_path?: string | null
+          supplier_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_compliance_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_compliance_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_compliance_documents_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_contacts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          department: string | null
+          designation: string | null
+          email: string | null
+          id: string
+          is_dispatch: boolean
+          is_finance: boolean
+          is_operations: boolean
+          is_primary: boolean
+          mobile: string | null
+          name: string
+          notes: string | null
+          organization_id: string
+          supplier_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          department?: string | null
+          designation?: string | null
+          email?: string | null
+          id?: string
+          is_dispatch?: boolean
+          is_finance?: boolean
+          is_operations?: boolean
+          is_primary?: boolean
+          mobile?: string | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          supplier_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          department?: string | null
+          designation?: string | null
+          email?: string | null
+          id?: string
+          is_dispatch?: boolean
+          is_finance?: boolean
+          is_operations?: boolean
+          is_primary?: boolean
+          mobile?: string | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          supplier_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contacts_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_contract_agreements: {
+        Row: {
+          contract_number: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          effective_date: string | null
+          expiry_date: string | null
+          general_terms: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          payment_terms: Json | null
+          rate_type: string | null
+          signed_storage_path: string | null
+          sla_terms: Json | null
+          status: string
+          supplier_id: string
+          title: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          contract_number: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          effective_date?: string | null
+          expiry_date?: string | null
+          general_terms?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          payment_terms?: Json | null
+          rate_type?: string | null
+          signed_storage_path?: string | null
+          sla_terms?: Json | null
+          status?: string
+          supplier_id: string
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          contract_number?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          effective_date?: string | null
+          expiry_date?: string | null
+          general_terms?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          payment_terms?: Json | null
+          rate_type?: string | null
+          signed_storage_path?: string | null
+          sla_terms?: Json | null
+          status?: string
+          supplier_id?: string
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_contract_agreements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contract_agreements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_contract_agreements_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_fleet: {
+        Row: {
+          capacity_tons: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          driver_id: string | null
+          fitness_expiry: string | null
+          has_gps: boolean
+          id: string
+          insurance_expiry: string | null
+          notes: string | null
+          organization_id: string
+          ownership: string
+          permit_expiry: string | null
+          supplier_id: string
+          updated_at: string
+          vehicle_number: string
+          vehicle_type: string | null
+        }
+        Insert: {
+          capacity_tons?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          driver_id?: string | null
+          fitness_expiry?: string | null
+          has_gps?: boolean
+          id?: string
+          insurance_expiry?: string | null
+          notes?: string | null
+          organization_id: string
+          ownership?: string
+          permit_expiry?: string | null
+          supplier_id: string
+          updated_at?: string
+          vehicle_number: string
+          vehicle_type?: string | null
+        }
+        Update: {
+          capacity_tons?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          driver_id?: string | null
+          fitness_expiry?: string | null
+          has_gps?: boolean
+          id?: string
+          insurance_expiry?: string | null
+          notes?: string | null
+          organization_id?: string
+          ownership?: string
+          permit_expiry?: string | null
+          supplier_id?: string
+          updated_at?: string
+          vehicle_number?: string
+          vehicle_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_fleet_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_fleet_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "supplier_fleet_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_fleet_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_fleet_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_kyc_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          doc_label: string | null
+          doc_type: string
+          expiry_date: string | null
+          file_name: string | null
+          id: string
+          is_mandatory: boolean
+          mime_type: string | null
+          notes: string | null
+          organization_id: string
+          status: string
+          storage_path: string | null
+          supplier_id: string
+          updated_at: string
+          updated_by: string | null
+          verified_at: string | null
+          verified_by: string | null
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_label?: string | null
+          doc_type: string
+          expiry_date?: string | null
+          file_name?: string | null
+          id?: string
+          is_mandatory?: boolean
+          mime_type?: string | null
+          notes?: string | null
+          organization_id: string
+          status?: string
+          storage_path?: string | null
+          supplier_id: string
+          updated_at?: string
+          updated_by?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          version_number?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_label?: string | null
+          doc_type?: string
+          expiry_date?: string | null
+          file_name?: string | null
+          id?: string
+          is_mandatory?: boolean
+          mime_type?: string | null
+          notes?: string | null
+          organization_id?: string
+          status?: string
+          storage_path?: string | null
+          supplier_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_kyc_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_kyc_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_kyc_documents_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_warehouses: {
+        Row: {
+          address: string | null
+          city: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          loading_bays: number | null
+          name: string
+          notes: string | null
+          organization_id: string
+          pincode: string | null
+          state: string | null
+          storage_capacity_tons: number | null
+          supplier_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          loading_bays?: number | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          pincode?: string | null
+          state?: string | null
+          storage_capacity_tons?: number | null
+          supplier_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          loading_bays?: number | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          pincode?: string | null
+          state?: string | null
+          storage_capacity_tons?: number | null
+          supplier_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_warehouses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_warehouses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_warehouses_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           address: string | null
@@ -5291,7 +5980,9 @@ export type Database = {
           deleted_at: string | null
           email: string | null
           gst_number: string | null
+          gstin: string | null
           id: string
+          industry: string | null
           is_active: boolean
           is_verified: boolean
           linked_organization_id: string | null
@@ -5303,10 +5994,14 @@ export type Database = {
           operating_areas: string[] | null
           organization_id: string
           owner_full_name: string | null
+          pan_number: string | null
           phone: string | null
+          registered_address: string | null
           supplier_type: string | null
           updated_at: string | null
+          updated_by: string | null
           vehicle_types: string[] | null
+          website: string | null
         }
         Insert: {
           address?: string | null
@@ -5319,7 +6014,9 @@ export type Database = {
           deleted_at?: string | null
           email?: string | null
           gst_number?: string | null
+          gstin?: string | null
           id?: string
+          industry?: string | null
           is_active?: boolean
           is_verified?: boolean
           linked_organization_id?: string | null
@@ -5331,10 +6028,14 @@ export type Database = {
           operating_areas?: string[] | null
           organization_id: string
           owner_full_name?: string | null
+          pan_number?: string | null
           phone?: string | null
+          registered_address?: string | null
           supplier_type?: string | null
           updated_at?: string | null
+          updated_by?: string | null
           vehicle_types?: string[] | null
+          website?: string | null
         }
         Update: {
           address?: string | null
@@ -5347,7 +6048,9 @@ export type Database = {
           deleted_at?: string | null
           email?: string | null
           gst_number?: string | null
+          gstin?: string | null
           id?: string
+          industry?: string | null
           is_active?: boolean
           is_verified?: boolean
           linked_organization_id?: string | null
@@ -5359,10 +6062,14 @@ export type Database = {
           operating_areas?: string[] | null
           organization_id?: string
           owner_full_name?: string | null
+          pan_number?: string | null
           phone?: string | null
+          registered_address?: string | null
           supplier_type?: string | null
           updated_at?: string | null
+          updated_by?: string | null
           vehicle_types?: string[] | null
+          website?: string | null
         }
         Relationships: [
           {
@@ -5727,6 +6434,7 @@ export type Database = {
           file_name: string
           id: string
           mime_type: string | null
+          ocr_job_id: string | null
           size_bytes: number | null
           storage_path: string
           trip_id: string
@@ -5738,6 +6446,7 @@ export type Database = {
           file_name: string
           id?: string
           mime_type?: string | null
+          ocr_job_id?: string | null
           size_bytes?: number | null
           storage_path: string
           trip_id: string
@@ -5749,6 +6458,7 @@ export type Database = {
           file_name?: string
           id?: string
           mime_type?: string | null
+          ocr_job_id?: string | null
           size_bytes?: number | null
           storage_path?: string
           trip_id?: string
@@ -5756,6 +6466,13 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_documents_ocr_job_id_fkey"
+            columns: ["ocr_job_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_documents_trip_id_fkey"
             columns: ["trip_id"]
@@ -5889,6 +6606,7 @@ export type Database = {
           ledger_state: string
           liters: number | null
           notes: string | null
+          ocr_job_id: string | null
           payment_mode: string | null
           payment_owner: string
           posting_error: string | null
@@ -5919,6 +6637,7 @@ export type Database = {
           ledger_state?: string
           liters?: number | null
           notes?: string | null
+          ocr_job_id?: string | null
           payment_mode?: string | null
           payment_owner?: string
           posting_error?: string | null
@@ -5949,6 +6668,7 @@ export type Database = {
           ledger_state?: string
           liters?: number | null
           notes?: string | null
+          ocr_job_id?: string | null
           payment_mode?: string | null
           payment_owner?: string
           posting_error?: string | null
@@ -5966,6 +6686,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_fuel_entries_ocr_job_id_fkey"
+            columns: ["ocr_job_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_fuel_entries_trip_id_fkey"
             columns: ["trip_id"]
@@ -6395,6 +7122,7 @@ export type Database = {
           ledger_state: string
           location_name: string | null
           notes: string | null
+          ocr_job_id: string | null
           payment_mode: string | null
           payment_owner: string
           posting_error: string | null
@@ -6425,6 +7153,7 @@ export type Database = {
           ledger_state?: string
           location_name?: string | null
           notes?: string | null
+          ocr_job_id?: string | null
           payment_mode?: string | null
           payment_owner?: string
           posting_error?: string | null
@@ -6455,6 +7184,7 @@ export type Database = {
           ledger_state?: string
           location_name?: string | null
           notes?: string | null
+          ocr_job_id?: string | null
           payment_mode?: string | null
           payment_owner?: string
           posting_error?: string | null
@@ -6472,6 +7202,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_other_expenses_ocr_job_id_fkey"
+            columns: ["ocr_job_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_other_expenses_trip_id_fkey"
             columns: ["trip_id"]
@@ -6622,6 +7359,7 @@ export type Database = {
           last_retry_at: string | null
           ledger_state: string
           notes: string | null
+          ocr_job_id: string | null
           payment_mode: string | null
           payment_owner: string
           plaza_name: string | null
@@ -6651,6 +7389,7 @@ export type Database = {
           last_retry_at?: string | null
           ledger_state?: string
           notes?: string | null
+          ocr_job_id?: string | null
           payment_mode?: string | null
           payment_owner?: string
           plaza_name?: string | null
@@ -6680,6 +7419,7 @@ export type Database = {
           last_retry_at?: string | null
           ledger_state?: string
           notes?: string | null
+          ocr_job_id?: string | null
           payment_mode?: string | null
           payment_owner?: string
           plaza_name?: string | null
@@ -6698,6 +7438,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_toll_entries_ocr_job_id_fkey"
+            columns: ["ocr_job_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_toll_entries_trip_id_fkey"
             columns: ["trip_id"]
@@ -7215,27 +7962,6 @@ export type Database = {
           },
         ]
       }
-      user_push_tokens: {
-        Row: {
-          platform: string
-          token: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          platform: string
-          token: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          platform?: string
-          token?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       user_counters: {
         Row: {
           indent_seq: number
@@ -7264,6 +7990,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_push_tokens: {
+        Row: {
+          platform: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          platform: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          platform?: string
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       users: {
         Row: {
@@ -7523,6 +8270,125 @@ export type Database = {
           },
           {
             foreignKeyName: "vehicle_maintenance_entries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_odometer_events: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          driver_id: string | null
+          event_side: string
+          id: string
+          ocr_job_id: string | null
+          odometer_km: number
+          organization_id: string
+          photo_storage_path: string | null
+          reading_source: string
+          recorded_at: string
+          trip_id: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          driver_id?: string | null
+          event_side: string
+          id?: string
+          ocr_job_id?: string | null
+          odometer_km: number
+          organization_id: string
+          photo_storage_path?: string | null
+          reading_source?: string
+          recorded_at?: string
+          trip_id?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          driver_id?: string | null
+          event_side?: string
+          id?: string
+          ocr_job_id?: string | null
+          odometer_km?: number
+          organization_id?: string
+          photo_storage_path?: string | null
+          reading_source?: string
+          recorded_at?: string
+          trip_id?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_odometer_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_balances"
+            referencedColumns: ["driver_id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_ocr_job_id_fkey"
+            columns: ["ocr_job_id"]
+            isOneToOne: false
+            referencedRelation: "ocr_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_driver_tracking_health"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "v_long_haul_health"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "vehicle_odometer_events_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
             referencedRelation: "vehicles"
@@ -8409,6 +9275,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      backfill_trip_room_operational_batch: {
+        Args: { p_limit?: number }
+        Returns: number
+      }
       batch_award_indents_to_trips: {
         Args: { p_org_id: string }
         Returns: number
@@ -8427,6 +9297,7 @@ export type Database = {
         }
         Returns: Json
       }
+      check_ocr_scan_quota: { Args: { p_org_id: string }; Returns: Json }
       check_rate_limit: {
         Args: {
           p_max: number
@@ -8954,6 +9825,7 @@ export type Database = {
         Args: { p_trip_id: string }
         Returns: undefined
       }
+      fn_expire_workspace_products: { Args: never; Returns: undefined }
       fn_insert_driver_location_log_chat: {
         Args: {
           p_body: string
@@ -8962,6 +9834,10 @@ export type Database = {
           p_trip_id: string
         }
         Returns: undefined
+      }
+      fn_mirror_legacy_trip_message_to_room: {
+        Args: { p_msg_id: string }
+        Returns: boolean
       }
       fn_post_system_log_to_trip_chats: {
         Args: {
@@ -8997,6 +9873,7 @@ export type Database = {
       fn_post_trip_room_action_card: {
         Args: {
           p_body?: string
+          p_created_at?: string
           p_event_type: string
           p_legacy_msg_id?: string
           p_metadata?: Json
@@ -9244,6 +10121,7 @@ export type Database = {
         }[]
       }
       get_db_capabilities: { Args: never; Returns: Json }
+      get_db_observability_summary: { Args: never; Returns: Json }
       get_direct_quotes_with_bidder_names: {
         Args: { p_indent_id: string }
         Returns: {
@@ -9572,6 +10450,35 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: number
       }
+      get_ocr_metrics: {
+        Args: { p_days?: number; p_org_id: string }
+        Returns: {
+          avg_confidence: number
+          avg_duration_ms: number
+          duplicate_count: number
+          failed_count: number
+          jobs_in_window: number
+          jobs_this_month: number
+          jobs_today: number
+          quota_limit: number
+          quota_remaining: number
+          quota_tier: string
+          quota_used: number
+        }[]
+      }
+      get_org_active_products: {
+        Args: { p_org_id: string }
+        Returns: {
+          activated_at: string
+          billing_cycle: string
+          days_remaining: number
+          expires_at: string
+          product_id: string
+          seats: number
+          status: string
+          trial_ends_at: string
+        }[]
+      }
       get_org_ledger_summary: {
         Args: { p_from?: string; p_org_id: string; p_to?: string }
         Returns: {
@@ -9797,6 +10704,10 @@ export type Database = {
         }[]
       }
       get_supplier_details: { Args: { p_supplier_id: string }; Returns: Json }
+      get_supplier_management_bundle: {
+        Args: { p_org_id: string; p_supplier_id: string }
+        Returns: Json
+      }
       get_supplier_monthly_analytics: {
         Args: {
           p_months_back?: number
@@ -10259,10 +11170,6 @@ export type Database = {
         Args: { p_conversation_id: string; p_up_to?: string }
         Returns: undefined
       }
-      register_push_token: {
-        Args: { p_platform: string; p_token: string }
-        Returns: undefined
-      }
       mark_conversation_read: {
         Args: { p_conversation_id: string }
         Returns: undefined
@@ -10400,6 +11307,10 @@ export type Database = {
           expires_at: string
         }[]
       }
+      register_push_token: {
+        Args: { p_platform: string; p_token: string }
+        Returns: undefined
+      }
       reject_driver_invite: {
         Args: { p_invite_id: string }
         Returns: undefined
@@ -10437,6 +11348,13 @@ export type Database = {
             }
             Returns: undefined
           }
+      resolve_ocr_scan_monthly_limit: {
+        Args: { p_org_id: string }
+        Returns: {
+          monthly_limit: number
+          tier: string
+        }[]
+      }
       search_chat_messages: {
         Args: { p_limit?: number; p_organization_id: string; p_query: string }
         Returns: {
@@ -10731,6 +11649,7 @@ export type Database = {
         | "pending"
         | "verified"
         | "rejected"
+      ocr_job_status: "pending" | "processing" | "completed" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -10856,6 +11775,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       kyc_verification_status: [
@@ -10864,8 +11786,7 @@ export const Constants = {
         "verified",
         "rejected",
       ],
+      ocr_job_status: ["pending", "processing", "completed", "failed"],
     },
   },
-} as const
-A new version of Supabase CLI is available: v2.106.0 (currently installed v2.101.0)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
+} as const;

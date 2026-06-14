@@ -9,6 +9,7 @@ import {
   enqueueVerificationMetadata,
   enqueueVerificationPhoto,
 } from "../offline/outbox";
+import { linkTripDocumentOcrJob } from "@/features/ocr/services/ocrJob.service";
 import { uploadVerificationPhoto } from "../uploads/odometerUploads";
 import { saveTripVerification, saveTripVerificationBoth } from "../verification.service";
 import type {
@@ -55,6 +56,7 @@ export function useTripVerificationPhotos(
 type SaveMutationInput = SaveTripVerificationInput & {
   photoLocalUri?: string | null;
   photoUserId?: string | null;
+  ocrJobId?: string | null;
 };
 
 export function useSaveTripVerification() {
@@ -66,6 +68,7 @@ export function useSaveTripVerification() {
       const {
         photoLocalUri,
         photoUserId,
+        ocrJobId,
         tripId,
         ...verificationInput
       } = input;
@@ -120,6 +123,8 @@ export function useSaveTripVerification() {
             localUri: photoLocalUri,
             userId: photoUserId,
           });
+        } else if (uploadRes.doc?.id && ocrJobId) {
+          await linkTripDocumentOcrJob(uploadRes.doc.id, ocrJobId);
         }
       } else if (photoLocalUri && !photoUserId) {
         await enqueueVerificationPhoto({

@@ -16,6 +16,7 @@
  * The `/chat` route mounts its own providers (`app/chat.tsx`) with `skipWrap`.
  */
 import { useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useOptionalAuth } from '@/contexts/AuthContext';
 import {
   getResolvedChatProviders,
   preloadChatProviderModules,
@@ -59,6 +60,7 @@ export function LazyChatProviders({
   isActive,
   skipWrap = false,
 }: LazyChatProvidersProps) {
+  const auth = useOptionalAuth();
   const loadedRef = useRef<Loaded>(null);
   const [loaded, setLoaded] = useState<Loaded>(() => {
     const cached = getResolvedChatProviders();
@@ -71,6 +73,8 @@ export function LazyChatProviders({
   loadedRef.current = loaded;
 
   useLayoutEffect(() => {
+    if (!auth) return;
+    if (auth.profile?.role === 'driver') return;
     if (skipWrap) {
       void preloadChatProviderModules();
       void preloadChatScreenModule();
@@ -130,9 +134,9 @@ export function LazyChatProviders({
       cancelled = true;
       if (pendingRetry) clearTimeout(pendingRetry);
     };
-  }, [isActive, skipWrap]);
+  }, [auth, isActive, skipWrap]);
 
-  if (skipWrap || !loaded) {
+  if (skipWrap || !loaded || !auth || auth.profile?.role === 'driver') {
     return <>{children}</>;
   }
 

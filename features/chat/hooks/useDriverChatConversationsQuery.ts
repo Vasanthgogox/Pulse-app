@@ -12,6 +12,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 const STALE_MS = 30_000;
+// 30 min GC: driver switches tabs frequently — keep cache alive to avoid refetch on re-mount.
+const GC_MS = 30 * 60_000;
 const EMPTY: TripConversation[] = [];
 
 export function driverChatConversationsQueryKey(driverIdsKey: string) {
@@ -30,7 +32,8 @@ export function useDriverChatConversationsQuery(driverIds: string[]) {
     queryFn: () => chatService.getConversationsByDriverIds(safeDriverIds),
     enabled: safeDriverIds.length > 0,
     staleTime: STALE_MS,
-    gcTime: 10 * 60_000,
+    gcTime: GC_MS,
+    networkMode: 'offlineFirst',
     retry: infrastructureShouldRetry,
     retryDelay: infrastructureRetryDelay,
     refetchOnWindowFocus: false,

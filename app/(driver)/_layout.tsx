@@ -52,7 +52,13 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="trip-history" options={{ title: 'History' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Transactions' }} />
       {/* Not listed in DriverTabBar TAB_CONFIG; omit href: null so router.push / query params work on web */}
-      <Tabs.Screen name="chat" options={{ title: 'Trip chat' }} />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: "Trip chat",
+          tabBarStyle: { display: "none" },
+        }}
+      />
 
       {/* Hidden routes */}
       <Tabs.Screen name="notifications" options={{ title: 'Notifications', href: null }} />
@@ -79,7 +85,7 @@ export default function DriverAppLayout() {
   const fontsReady = fontsLoaded || fontError != null;
 
   // ✅ Keep roleVerified from deepak/main
-  const { user, profile, roleVerified, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
 
   const router = useRouter();
   const logDriverGate = (event: string, details: Record<string, unknown>) => {
@@ -106,15 +112,14 @@ export default function DriverAppLayout() {
       return;
     }
 
-    if (profile && (!roleVerified || profile.role !== 'driver')) {
-      logDriverGate('redirect_tabs_non_driver_or_unverified', {
+    if (profile && profile.role !== 'driver') {
+      logDriverGate('redirect_tabs_non_driver', {
         uid: user.uid,
         role: profile.role,
-        roleVerified,
       });
       router.replace(ROUTES.TABS.TRIPS as '/');
     }
-  }, [loading, user, profile, roleVerified, router]);
+  }, [loading, user, profile, router]);
 
   useEffect(() => {
     if (fontError && __DEV__ && Platform.OS === 'web') {
@@ -131,13 +136,12 @@ export default function DriverAppLayout() {
     loading ||
     !user ||
     !profile ||
-    !roleVerified ||
     profile.role !== 'driver';
 
   if (gate) {
     return (
       <AppLoadingSplash
-        variant={loading ? 'session' : !fontsReady ? 'preparing' : 'verify'}
+        variant={loading ? 'session' : !fontsReady ? 'preparing' : 'generic'}
         style={styles.gate}
       />
     );

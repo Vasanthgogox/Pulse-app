@@ -376,7 +376,7 @@ export function useSaveTripFuelEntry() {
         }
       }
 
-      const save = await createTripFuelEntry({ ...basePayload, billStoragePath });
+      const save = await createTripFuelEntry({ ...basePayload, billStoragePath, ocrJobId: input.ocrJobId ?? null });
       if (save.error) {
         await enqueueFuelMetadata(basePayload);
         return { queued: true };
@@ -411,7 +411,7 @@ export function useUpdateTripFuelEntry() {
         if (upload.error) throw upload.error;
         billStoragePath = upload.storagePath ?? undefined;
       }
-      const save = await updateTripFuelEntry({ ...input, billStoragePath });
+      const save = await updateTripFuelEntry({ ...input, billStoragePath, ocrJobId: input.ocrJobId });
       if (save.error) throw save.error;
       return save.entry;
     },
@@ -479,7 +479,7 @@ export function useSaveTripTollEntry() {
         }
       }
 
-      const save = await createTripTollEntry({ ...basePayload, receiptStoragePath });
+      const save = await createTripTollEntry({ ...basePayload, receiptStoragePath, ocrJobId: input.ocrJobId ?? null });
       if (save.error) {
         await enqueueTollMetadata(basePayload);
         return { queued: true };
@@ -514,7 +514,7 @@ export function useUpdateTripTollEntry() {
         if (upload.error) throw upload.error;
         receiptStoragePath = upload.storagePath ?? undefined;
       }
-      const save = await updateTripTollEntry({ ...input, receiptStoragePath });
+      const save = await updateTripTollEntry({ ...input, receiptStoragePath, ocrJobId: input.ocrJobId });
       if (save.error) throw save.error;
       return save.entry;
     },
@@ -775,6 +775,7 @@ export function useSaveTripOtherExpense() {
         paymentOwner: input.paymentOwner ?? null,
         paymentMode: input.paymentMode ?? null,
         receiptStoragePath,
+        ocrJobId: input.ocrJobId ?? null,
       });
       if (save.error) throw save.error;
       return { queued: false };
@@ -807,7 +808,7 @@ export function useUpdateTripOtherExpense() {
         if (upload.error) throw upload.error;
         receiptStoragePath = upload.storagePath ?? undefined;
       }
-      const save = await updateTripOtherExpense({ ...input, receiptStoragePath });
+      const save = await updateTripOtherExpense({ ...input, receiptStoragePath, ocrJobId: input.ocrJobId });
       if (save.error) throw save.error;
       return save.entry;
     },

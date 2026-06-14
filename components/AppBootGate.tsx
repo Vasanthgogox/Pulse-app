@@ -38,7 +38,7 @@ type AppBootGateProps = {
 };
 
 export function AppBootGate({ children }: AppBootGateProps) {
-  const { status, user, profile, roleVerified } = useAuth();
+  const { status, user, profile } = useAuth();
   const pathname = usePathname();
   const splashHidden = useRef(false);
   const [timedOut, setTimedOut] = useState(false);
@@ -59,19 +59,12 @@ export function AppBootGate({ children }: AppBootGateProps) {
     // Only block on auth state — workspace/org data loads behind the scenes
     // after navigation is unblocked. Each screen shows its own skeleton while
     // workspace data streams in (avoids blocking the entire app on org fetch).
-    if (status === 'restoring') return false;     // no session yet — must block
+    if (status === 'restoring') return false;
     if (user && !profile && status !== 'authenticated' && !timedOut) return false;
-    if (user && profile?.role === 'driver' && !roleVerified && !timedOut) return false;
     return true;
-    // Intentionally excluded: org?.isLoading — workspace loads behind the screen
-  }, [status, user, profile, roleVerified, timedOut, pathname]);
+  }, [status, user, profile, timedOut, pathname]);
 
-  const splashVariant =
-    status === 'restoring'
-      ? 'session'
-      : user && profile && !roleVerified
-        ? 'verify'
-        : 'preparing';
+  const splashVariant = status === 'restoring' ? 'session' : 'preparing';
 
   useEffect(() => {
     if (!bootReady || splashHidden.current) return;

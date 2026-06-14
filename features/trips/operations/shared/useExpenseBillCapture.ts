@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  enqueueOcrJob,
+  expenseResultFromJob,
+  loadPersistedOcrJob,
+  loadPersistedOcrJobById,
+  OcrQuotaExceededError,
+  scheduleOcrJobProcessing,
+  scheduleOcrRescan,
+} from "@/features/ocr";
+import type { ExpenseOcrKind, OcrJobRow } from "@/features/ocr";
+import { useOcrJobPoll } from "@/features/ocr/hooks/useOcrJobPoll";
+import { ocrReviewDecision } from "@/features/ocr/utils/ocrConfidenceReview.util";
 import { captureOrPickImage } from "@/lib/media/captureImage.util";
 
 import {
@@ -10,7 +22,6 @@ import {
   type BillFieldUpdateAction,
 } from "./applyExpenseReceiptOcr.util";
 import {
-  extractExpenseReceiptOcr,
   type ExpenseBillKind,
   type ExpenseReceiptOcrResult,
 } from "./expenseReceiptOcr.service";
@@ -20,6 +31,12 @@ import { BILL_SCAN_IDLE, type BillPendingFieldUpdate, type BillScanState } from 
 export type ExpenseBillPreviewFn = (result: ExpenseReceiptOcrResult) => BillFieldUpdateAction[];
 
 type Options = {
+  organizationId: string;
+  tripId: string;
+  createdBy?: string | null;
+  tripDocumentId?: string | null;
+  expenseEntryId?: string | null;
+  storagePath?: string | null;
   kind: ExpenseBillKind;
   permissionMessage: string;
   previewOcrUpdates: ExpenseBillPreviewFn;
@@ -30,12 +47,15 @@ export type ExpenseBillCaptureBag = {
   setPhotoUri: (uri: string | null) => void;
   scanning: boolean;
   billScan: BillScanState;
+  persistedJob: OcrJobRow | null;
   handleCapture: () => Promise<void>;
   handleRemovePhoto: () => void;
   applyPendingUpdates: () => void;
   dismissPendingUpdates: () => void;
   reopenOcrReview: () => void;
   registerPreviewUpdates: (fn: ExpenseBillPreviewFn) => void;
+  hydratePersistedOcr: (tripDocumentId: string) => Promise<void>;
+  hydratePersistedOcrFromJob: (ocrJobId: string) => Promise<void>;
   hasOcrResult: boolean;
 };
 
@@ -49,6 +69,12 @@ function toPendingDisplay(updates: BillFieldUpdateAction[]): BillPendingFieldUpd
 }
 
 export function useExpenseBillCapture({
+  organizationId,
+  tripId,
+  createdBy = null,
+  tripDocumentId = null,
+  expenseEntryId = null,
+  storagePath = null,
   kind,
   permissionMessage,
   previewOcrUpdates,
@@ -56,6 +82,8 @@ export function useExpenseBillCapture({
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [billScan, setBillScan] = useState<BillScanState>(BILL_SCAN_IDLE);
+  const [persistedJob, setPersistedJob] = useState<OcrJobRow | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const analyzingTick = useRef(0);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingUpdatesRef = useRef<BillFieldUpdateAction[]>([]);
@@ -63,8 +91,13 @@ export function useExpenseBillCapture({
   const lastOcrResultRef = useRef<ExpenseReceiptOcrResult | null>(null);
   const previewFnRef = useRef<ExpenseBillPreviewFn>(previewOcrUpdates);
   const appliedOcrUpdatesRef = useRef<BillPendingFieldUpdate[]>([]);
+  const tripDocumentIdRef = useRef(tripDocumentId);
+  const expenseEntryIdRef = useRef(expenseEntryId);
+  const captureInputRef = useRef<Parameters<typeof enqueueOcrJob>[0] | null>(null);
 
   previewFnRef.current = previewOcrUpdates;
+  tripDocumentIdRef.current = tripDocumentId;
+  expenseEntryIdRef.current = expenseEntryId;
 
   const clearStepTimer = useCallback(() => {
     if (stepTimer.current) {
@@ -75,6 +108,18 @@ export function useExpenseBillCapture({
 
   const setConfirmFromResult = useCallback((result: ExpenseReceiptOcrResult, updates: BillFieldUpdateAction[]) => {
     pendingUpdatesRef.current = updates;
+    const amountConf = result.amountInr?.confidence ?? null;
+    const review = ocrReviewDecision(amountConf);
+
+    if (review.action === "auto_accept" && updates.length > 0) {
+      updates.forEach((u) => u.apply());
+      const applied = toPendingDisplay(updates);
+      appliedOcrUpdatesRef.current = applied;
+      pendingUpdatesRef.current = [];
+      setBillScan(buildBillScanAppliedState(applied, processingSecRef.current));
+      return;
+    }
+
     if (updates.length > 0) {
       setBillScan(buildBillScanConfirmState(result, toPendingDisplay(updates)));
       return;
@@ -85,6 +130,47 @@ export function useExpenseBillCapture({
       stepIndex: 3,
     });
   }, []);
+
+  const applyJobToUi = useCallback(
+    (job: OcrJobRow) => {
+      setPersistedJob(job);
+      setScanning(false);
+      if (job.status === "pending" || job.status === "processing") {
+        setBillScan({
+          phase: "analyzing",
+          message: "OCR processing…",
+          appliedFields: [],
+          stepIndex: 1,
+        });
+        return;
+      }
+      const result = expenseResultFromJob(job);
+      if (!result) {
+        if (job.status === "failed") {
+          setBillScan({
+            phase: "error",
+            message: `Bill attached · ${job.error_message ?? "Bill scan failed"}`,
+            appliedFields: [],
+            error: job.error_message ?? "Bill scan failed",
+            stepIndex: 0,
+          });
+        }
+        return;
+      }
+      lastOcrResultRef.current = result;
+      processingSecRef.current = (job.processing_duration_ms ?? 0) / 1000;
+      const updates = previewFnRef.current(result);
+      setConfirmFromResult(result, updates);
+    },
+    [setConfirmFromResult],
+  );
+
+  useOcrJobPoll({
+    jobId: activeJobId,
+    enabled: Boolean(activeJobId),
+    onUpdate: applyJobToUi,
+    onTerminal: applyJobToUi,
+  });
 
   const registerPreviewUpdates = useCallback(
     (fn: ExpenseBillPreviewFn) => {
@@ -161,6 +247,84 @@ export function useExpenseBillCapture({
     setConfirmFromResult(last, updates);
   }, [setConfirmFromResult]);
 
+  const startScanPipeline = useCallback(
+    async (uri: string, userRequestedRescan = false) => {
+      const expenseKind = kind as ExpenseOcrKind;
+      const baseInput = {
+        organizationId,
+        localUri: uri,
+        sourceKind: "expense_receipt" as const,
+        sourceSubtype: kind,
+        tripId,
+        tripDocumentId: tripDocumentIdRef.current,
+        expenseEntryId: expenseEntryIdRef.current,
+        expenseKind,
+        storagePath,
+        createdBy,
+      };
+      captureInputRef.current = baseInput;
+
+      if (userRequestedRescan) {
+        scheduleOcrRescan(baseInput, persistedJob, {
+          onProgress: () => {
+            setScanning(true);
+            setBillScan({
+              phase: "analyzing",
+              message: BILL_SCAN_ANALYZING_MESSAGES[0],
+              appliedFields: [],
+              stepIndex: 1,
+            });
+          },
+          onComplete: (job) => {
+            setActiveJobId(job.id);
+            applyJobToUi(job);
+          },
+          onError: () => setScanning(false),
+        });
+        return;
+      }
+
+      try {
+        const { job, needsProcessing } = await enqueueOcrJob(baseInput);
+        setPersistedJob(job);
+        setActiveJobId(job.id);
+
+        if (!needsProcessing) {
+          applyJobToUi(job);
+          return;
+        }
+
+        setBillScan({
+          phase: "analyzing",
+          message: "Bill attached · OCR processing…",
+          appliedFields: [],
+          stepIndex: 1,
+        });
+
+        scheduleOcrJobProcessing(job.id, baseInput, {
+          onComplete: applyJobToUi,
+          onError: () => setScanning(false),
+        });
+      } catch (error) {
+        setScanning(false);
+        const message =
+          error instanceof OcrQuotaExceededError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "Could not queue bill scan.";
+        setBillScan({
+          phase: "error",
+          message: `Bill attached · ${message}`,
+          appliedFields: [],
+          error: message,
+          stepIndex: 0,
+        });
+      }
+    },
+    [applyJobToUi, createdBy, kind, organizationId, persistedJob, storagePath, tripId],
+  );
+
   const handleCapture = useCallback(async () => {
     const picked = await captureOrPickImage({
       permissionTitle: "Camera required",
@@ -174,57 +338,43 @@ export function useExpenseBillCapture({
     appliedOcrUpdatesRef.current = [];
     setBillScan({
       phase: "preparing",
-      message: "Optimizing bill photo…",
+      message: "Bill attached · queuing scan…",
       appliedFields: [],
       stepIndex: 0,
     });
 
-    try {
-      const result = await extractExpenseReceiptOcr(picked.uri, kind, (phase) => {
-        if (phase === "preparing") {
-          setBillScan({
-            phase: "preparing",
-            message: "Optimizing bill photo…",
-            appliedFields: [],
-            stepIndex: 0,
-          });
-          return;
-        }
-        setBillScan({
-          phase: "analyzing",
-          message: BILL_SCAN_ANALYZING_MESSAGES[0],
-          appliedFields: [],
-          stepIndex: 1,
-        });
-      });
+    await startScanPipeline(picked.uri, false);
+  }, [permissionMessage, startScanPipeline]);
 
-      lastOcrResultRef.current = result;
-      processingSecRef.current = result.processingTimeSec;
-      const updates = previewFnRef.current(result);
-      setConfirmFromResult(result, updates);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Bill scan failed. Enter details manually.";
-      pendingUpdatesRef.current = [];
-      lastOcrResultRef.current = null;
-      setBillScan({
-        phase: "error",
-        message: `Bill attached · ${message}`,
-        appliedFields: [],
-        error: message,
-        stepIndex: 0,
-      });
-    } finally {
-      setScanning(false);
-    }
-  }, [kind, permissionMessage, setConfirmFromResult]);
+  const hydratePersistedOcr = useCallback(
+    async (documentId: string) => {
+      const job = await loadPersistedOcrJob(documentId);
+      if (!job) return;
+      setActiveJobId(job.id);
+      applyJobToUi(job);
+    },
+    [applyJobToUi],
+  );
+
+  const hydratePersistedOcrFromJob = useCallback(
+    async (ocrJobId: string) => {
+      const job = await loadPersistedOcrJobById(ocrJobId);
+      if (!job) return;
+      setActiveJobId(job.id);
+      applyJobToUi(job);
+    },
+    [applyJobToUi],
+  );
 
   const handleRemovePhoto = useCallback(() => {
     pendingUpdatesRef.current = [];
     appliedOcrUpdatesRef.current = [];
     lastOcrResultRef.current = null;
+    setPersistedJob(null);
+    setActiveJobId(null);
     setPhotoUri(null);
     setBillScan(BILL_SCAN_IDLE);
+    setScanning(false);
   }, []);
 
   return {
@@ -232,17 +382,19 @@ export function useExpenseBillCapture({
     setPhotoUri,
     scanning,
     billScan,
+    persistedJob,
     handleCapture,
     handleRemovePhoto,
     applyPendingUpdates,
     dismissPendingUpdates,
     reopenOcrReview,
     registerPreviewUpdates,
+    hydratePersistedOcr,
+    hydratePersistedOcrFromJob,
     hasOcrResult: photoUri != null || billScan.phase !== "idle",
   };
 }
 
-/** Rebind OCR preview when form fields / category change (unified expense shell). */
 export function useRegisterExpenseBillPreview(
   billCapture: ExpenseBillCaptureBag | undefined,
   previewFn: ExpenseBillPreviewFn,

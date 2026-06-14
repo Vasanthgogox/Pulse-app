@@ -7,7 +7,7 @@ import { DriverChatSlackThread } from "@/features/chat/components/driver/DriverC
 import { useDriverChat } from "@/features/chat/contexts/DriverChatContext";
 import type { TripConversation } from "@/features/chat/types/chat.types";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useSegments } from "expo-router";
 import Layout from "@/constants/Layout";
 import { WEB_APP_VIEWPORT_STYLE } from "@/lib/webViewportHeight";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,15 +19,22 @@ export default function DriverChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
+  const segments = useSegments();
+  const isDriverChatRoute = segments[segments.length - 1] === "chat";
+
   const driverTabBarClearance = useMemo(() => {
+    if (isDriverChatRoute) return 0;
     const footerPadTop = 4;
     const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
     return Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
-  }, [insets.bottom]);
+  }, [insets.bottom, isDriverChatRoute]);
 
   const screenPadding = useMemo(
-    () => ({ paddingTop: 0, paddingBottom: driverTabBarClearance }),
-    [driverTabBarClearance],
+    () => ({
+      paddingTop: 0,
+      paddingBottom: isDriverChatRoute ? 0 : driverTabBarClearance,
+    }),
+    [driverTabBarClearance, isDriverChatRoute],
   );
 
   const params = useLocalSearchParams<{ tripId?: string | string[] }>();
@@ -133,6 +140,7 @@ export default function DriverChatScreen() {
         setMessageInput("");
         if (normalizedTripId) router.back();
       }}
+      bottomTabClearance={isDriverChatRoute ? 0 : driverTabBarClearance}
     />
   );
 
@@ -211,6 +219,7 @@ export default function DriverChatScreen() {
           profileName={profile?.full_name ?? profile?.displayName ?? undefined}
           profileAvatarUrl={profile?.avatar_url ?? null}
           profileAvatarSeed={profile?.avatar_seed ?? null}
+          bottomInset={isDriverChatRoute ? insets.bottom : driverTabBarClearance}
           onBack={() =>
             router.canGoBack() ? router.back() : router.replace("/(driver)")
           }

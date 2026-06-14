@@ -78,7 +78,7 @@ export async function getTripOtherExpenseById(
 }
 
 export async function updateTripOtherExpense(
-  input: UpdateOtherExpenseInput & { receiptStoragePath?: string | null },
+  input: UpdateOtherExpenseInput & { receiptStoragePath?: string | null; ocrJobId?: string | null },
 ): Promise<{ error: Error | null; entry: TripOtherExpenseEntry | null }> {
   const existing = await getTripOtherExpenseById(input.entryId);
   if (existing.error || !existing.entry) {
@@ -104,6 +104,9 @@ export async function updateTripOtherExpense(
   if (input.receiptStoragePath !== undefined) {
     payload.receipt_storage_path = toNullableText(input.receiptStoragePath);
   }
+  if (input.ocrJobId !== undefined) {
+    payload.ocr_job_id = input.ocrJobId;
+  }
   const { data, error } = await supabase()
     .from("trip_other_expenses")
     .update(payload)
@@ -124,6 +127,7 @@ export async function updateTripOtherExpense(
 export async function createTripOtherExpense(
   input: Omit<SaveOtherExpenseInput, "receiptLocalUri"> & {
     receiptStoragePath?: string | null;
+    ocrJobId?: string | null;
   },
 ): Promise<{ error: Error | null; entry: TripOtherExpenseEntry | null }> {
   const paymentOwner = resolvePaymentOwnerForSave(input);
@@ -139,6 +143,7 @@ export async function createTripOtherExpense(
     location_name: toNullableText(input.locationName),
     notes: toNullableText(input.notes),
     receipt_storage_path: toNullableText(input.receiptStoragePath),
+    ocr_job_id: input.ocrJobId ?? null,
     entered_by: input.enteredBy,
     entered_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

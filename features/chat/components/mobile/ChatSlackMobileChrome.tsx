@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react-native";
 import {
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -30,7 +31,8 @@ import {
   type TextInput as TextInputType,
   type ViewStyle,
 } from "react-native";
-import { useState } from "react";
+import { memo, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CHAT_SLACK_BOTTOM_NAV_BAR,
   PULSE_CHAT,
@@ -484,7 +486,7 @@ export function ChatSlackInboxToolbar({
   );
 }
 
-export function ChatSlackListRow({
+function ChatSlackListRowInner({
   identity,
   title,
   time,
@@ -622,6 +624,8 @@ export function ChatSlackListRow({
   );
 }
 
+export const ChatSlackListRow = memo(ChatSlackListRowInner);
+
 export function ChatSlackFab({
   onPress,
   bottom,
@@ -652,6 +656,8 @@ export function ChatSlackThreadHeader({
   partyTabsRow,
   compactRoleTag,
   onOpenFilters,
+  topInset,
+  contentPaddingHorizontal,
 }: {
   title: string;
   subtitle?: string;
@@ -660,15 +666,31 @@ export function ChatSlackThreadHeader({
   partyTabsRow?: React.ReactNode;
   compactRoleTag?: string;
   onOpenFilters?: () => void;
+  /** Status-bar / notch inset — defaults to safe-area top on native. */
+  topInset?: number;
+  /** Align header content with message list horizontal padding. */
+  contentPaddingHorizontal?: number;
 }) {
+  const insets = useSafeAreaInsets();
   const [roleTagActive, setRoleTagActive] = useState(false);
   const normalizedTitle = title.trim().toLowerCase();
   const normalizedSubtitle = (subtitle ?? "").trim().toLowerCase();
   const safeSubtitle =
     normalizedSubtitle && normalizedSubtitle !== normalizedTitle ? subtitle : undefined;
   const toggleOnlyHeader = Boolean(partyTabsRow);
+  const resolvedTopInset =
+    topInset ?? (Platform.OS === "web" ? 0 : insets.top);
+  const horizontalPad = contentPaddingHorizontal ?? 12;
   return (
-    <View style={st.threadHeader}>
+    <View
+      style={[
+        st.threadHeader,
+        {
+          paddingTop: resolvedTopInset + 10,
+          paddingHorizontal: horizontalPad,
+        },
+      ]}
+    >
       <View style={st.threadHeaderTop}>
         <TouchableOpacity onPress={onBack} hitSlop={10} style={st.threadBackBtn}>
           <ArrowLeft

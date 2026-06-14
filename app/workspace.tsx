@@ -8,6 +8,7 @@ import { WorkspaceAccountPanel } from "@/features/organization/components/worksp
 import { WorkspaceEditAccountPanel } from "@/features/organization/components/workspace/WorkspaceEditAccountPanel";
 import { WorkspaceFeedbackProvider } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
 import { WorkspaceOrgKycPanel } from "@/features/organization/components/workspace/WorkspaceOrgKycPanel";
+import { WorkspaceOcrUsagePanel } from "@/features/organization/components/workspace/WorkspaceOcrUsagePanel";
 import { WorkspaceProductsPanel } from "@/features/organization/components/workspace/WorkspaceProductsPanel";
 import { WorkspaceSettingsPanel } from "@/features/organization/components/workspace/WorkspaceSettingsPanel";
 import {
@@ -76,6 +77,9 @@ export default function WorkspaceScreen() {
     }
     if (activePanel === "products") {
       return <WorkspaceProductsPanel onBack={closePanel} />;
+    }
+    if (activePanel === "ocr-usage") {
+      return <WorkspaceOcrUsagePanel onBack={closePanel} />;
     }
     return null;
   }, [activePanel, closeOverlay, closePanel, openPanel, router]);

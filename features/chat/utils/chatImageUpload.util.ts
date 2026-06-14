@@ -20,8 +20,10 @@ import { Platform } from "react-native";
 import { buildSupabaseRenderImagePublicUrl } from "./storageRenderImageUrl";
 
 const CHAT_IMAGE_BUCKET = "trip-documents" as const;
-const MAX_LONG_EDGE = 1080;
-const JPEG_QUALITY = 0.75;
+// 800px / 0.65: ~35% smaller than 1080/0.75 — fits Indian 2G/3G upload budgets
+// while remaining sharp enough for document and POD use-cases.
+const MAX_LONG_EDGE = 800;
+const JPEG_QUALITY = 0.65;
 const MAX_RAW_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export interface ChatImageUploadResult {

@@ -76,6 +76,7 @@ export interface TripDocumentRow {
   uploaded_at: string;
   uploaded_by: string | null;
   document_type: TripDocumentType;
+  ocr_job_id?: string | null;
 }
 
 export interface UploadTripDocumentResult {

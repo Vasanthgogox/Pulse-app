@@ -1,12 +1,3 @@
-import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
-import { lazy, Suspense } from 'react';
+import DriverHomeScreen from '@/features/drivers/screens/DriverHomeScreen';
 
-const DriverHome = lazy(() => import('@/features/drivers/screens/DriverHomeScreen'));
-
-export default function DriverHomeRoute() {
-  return (
-    <Suspense fallback={<LazySuspenseInlineFallback />}>
-      <DriverHome />
-    </Suspense>
-  );
-}
+export default DriverHomeScreen;

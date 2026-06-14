@@ -25,7 +25,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,7 +34,7 @@ const SIGN_IN_BOOT_KEY = '__sign_in__';
 export default function Index() {
   const insets = useSafeAreaInsets();
   const isOnline = useIsOnline();
-  const { user, profile, roleVerified, loading, refreshSession } = useAuth();
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isFocused = useIsFocused();
@@ -99,14 +98,6 @@ export default function Index() {
         }
         return;
       }
-      if (!roleVerified) {
-        logRouteDecision('block_driver_redirect_unverified_role', {
-          uid,
-          pathname,
-          role: profile.role,
-        });
-        return;
-      }
       if (!claimIndexBootRedirect(uid)) return;
       logRouteDecision('redirect_driver_root', { uid, pathname });
       router.replace(DEFAULT_DRIVER_ROUTE as '/');
@@ -121,45 +112,29 @@ export default function Index() {
       logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
       router.replace(route as '/');
     });
-  }, [uid, profile, roleVerified, loading, pathname, router, isFocused, brandingGateHydrated]);
+  }, [uid, profile, loading, pathname, router, isFocused, brandingGateHydrated]);
 
   const splashVariant = useMemo(() => {
     if (loading) return 'session' as const;
-    if (user && profile?.role === 'driver' && !roleVerified) return 'verify' as const;
     if (user && !profile) return 'verify' as const;
     return 'generic' as const;
-  }, [loading, profile, roleVerified, user]);
+  }, [loading, profile, user]);
 
   const showOfflineHint = !loading && !isOnline;
-  const showRetry = !loading && isOnline && user && profile?.role === 'driver' && !roleVerified;
 
   return (
     <View style={styles.container}>
       <AppLoadingSplash variant={splashVariant} useGlobalI18n />
-      {(showOfflineHint || showRetry) && (
+      {showOfflineHint ? (
         <View
           style={[
             styles.footer,
             { paddingBottom: Math.max(insets.bottom, Layout.spacingMedium) },
           ]}
         >
-          {showOfflineHint ? (
-            <Text style={styles.splashHint}>{tGlobal('splashOfflineHint')}</Text>
-          ) : null}
-          {showRetry ? (
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={tGlobal('splashRetrySession')}
-              style={styles.retryButton}
-              onPress={() => {
-                void refreshSession();
-              }}
-            >
-              <Text style={styles.retryLabel}>{tGlobal('splashRetrySession')}</Text>
-            </TouchableOpacity>
-          ) : null}
+          <Text style={styles.splashHint}>{tGlobal('splashOfflineHint')}</Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

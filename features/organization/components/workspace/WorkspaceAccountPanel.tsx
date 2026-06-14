@@ -23,6 +23,7 @@ import {
   Lock,
   MessageSquare,
   Pencil,
+  ScanLine,
   Settings2,
   Shield,
   Sparkles,
@@ -380,6 +381,11 @@ export function WorkspaceAccountPanel({
                 label="Org identity & KYC"
                 icon={<Settings2 size={15} color={PURPLE} strokeWidth={1.8} />}
                 onPress={() => onOpenPanel("kyc")}
+              />
+              <ManagementRow
+                label="Pulse Scan usage"
+                icon={<ScanLine size={15} color={PURPLE} strokeWidth={1.8} />}
+                onPress={() => onOpenPanel("ocr-usage")}
               />
             </>
           ) : null}

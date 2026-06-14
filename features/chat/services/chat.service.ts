@@ -1,4 +1,5 @@
 import type { RatedType, RatingRow } from "@/features/ratings/types";
+import { markStart, markEnd } from "@/lib/chatPerf";
 import { supabase } from "@/lib/supabase";
 import type {
   ChatTripFlow,
@@ -774,6 +775,7 @@ export async function getMessagesByConversation(
     Math.max(opts?.limit ?? TRIP_CHAT_HISTORY_PAGE, 1),
     100,
   );
+  markStart('thread_load');
   const partyType =
     opts?.partyType != null && String(opts.partyType).trim() !== ""
       ? String(opts.partyType).trim()
@@ -790,6 +792,7 @@ export async function getMessagesByConversation(
   );
 
   if (!rpcError && Array.isArray(rpcData)) {
+    markEnd('thread_load', { conversationId, limit, messageCount: rpcData.length });
     return [...rpcData].reverse() as TripMessageRow[];
   }
 
@@ -800,7 +803,10 @@ export async function getMessagesByConversation(
       String(rpcError.message ?? "")
         .toLowerCase()
         .includes("windowed_trip_message_history"));
-  if (rpcError && !missingRpc) throw rpcError;
+  if (rpcError && !missingRpc) {
+    markEnd('thread_load', { conversationId, limit });
+    throw rpcError;
+  }
 
   let query = supabase()
     .from("trip_messages")
@@ -814,7 +820,11 @@ export async function getMessagesByConversation(
   }
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) {
+    markEnd('thread_load', { conversationId, limit });
+    throw error;
+  }
+  markEnd('thread_load', { conversationId, limit, messageCount: (data ?? []).length });
   return (data ?? []).reverse();
 }
 
@@ -1332,37 +1342,90 @@ export async function getConversationsByDriverIds(
       };
     });
 
-  // Fetch conversations and messages in separate parallel queries.
-  // Embedding trip_messages via PostgREST generates a LATERAL subquery per conversation row
-  // which causes statement timeouts when a driver has many trips.
+  markStart('inbox_load');
+
+  // Step 1: fetch conversations only — the minimal set needed to derive trip IDs and
+  // conversation IDs for the two parallel follow-up queries.
   const { data: convRows, error: convErr } = await supabase()
     .from("trip_conversations")
     .select("id,organization_id,trip_id,party_type,party_name,client_id,supplier_id,driver_id,last_message_at,last_message_preview,unread_dispatcher_count,created_at,updated_at")
     .in("driver_id", driverIds)
-    .order("last_message_at", { ascending: false, nullsFirst: false });
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(100);
   if (convErr) throw convErr;
 
   const normalizedConvRows = (convRows ?? []) as DriverChatConversationRow[];
+  if (normalizedConvRows.length === 0) return [];
+
   const tripIds = Array.from(new Set(normalizedConvRows.map((r) => String(r.trip_id ?? "")).filter(Boolean)));
+  const convIds = normalizedConvRows.map((r) => String(r.id ?? "")).filter(Boolean);
+
+  // Step 2: trips metadata + inbox preview messages in parallel — eliminates the
+  // sequential 200 ms+ waterfall that was the primary driver of slow inbox open.
   const emptyTripsRes: { data: DriverChatTripMini[]; error: null } = { data: [], error: null };
-  const tripRes = tripIds.length
-    ? await supabase()
-        .from("trips")
-        .select(
-          "id, trip_operational_code, trip_code, display_trip_id, trip_number, driver_display_trip_id, pickup_area, drop_location",
-        )
-        .in("id", tripIds)
-    : emptyTripsRes;
+  markStart('inbox_parallel_fetch');
+  const [tripRes, messagesByConversationId] = await Promise.all([
+    tripIds.length
+      ? supabase()
+          .from("trips")
+          .select(
+            "id, trip_operational_code, trip_code, display_trip_id, trip_number, driver_display_trip_id, pickup_area, drop_location",
+          )
+          .in("id", tripIds)
+      : Promise.resolve(emptyTripsRes),
+    fetchDriverInboxPreviewMessages(convIds),
+  ]);
+  markEnd('inbox_parallel_fetch', { tripCount: tripIds.length, convCount: convIds.length });
 
   const tripsById = new Map<string, DriverChatTripMini>();
   for (const tr of (tripRes.data ?? []) as DriverChatTripMini[]) {
     tripsById.set(String(tr.id ?? ""), tr);
   }
 
-  // Message bodies load per-thread via windowed_trip_message_history (TanStack infinite query).
-  const messagesByConversationId = new Map<string, TripMessageRow[]>();
-
+  markEnd('inbox_load', { convCount: normalizedConvRows.length, driverCount: driverIds.length });
   return mapRows(normalizedConvRows, tripsById, messagesByConversationId);
+}
+
+// 5 image/document rows per conversation is enough for the thumbnail strip
+// (ChatInboxImagePreviewStrip shows at most 4).  Filtering to media-only types
+// cuts the row count by ~80% vs fetching all message types.
+const DRIVER_INBOX_PREVIEW_MSGS_PER_CONV = 5;
+const DRIVER_INBOX_PREVIEW_MEDIA_TYPES = ["image", "document_share", "document_upload"];
+
+/** Recent media rows for driver inbox image-preview strips (batched, media-only). */
+async function fetchDriverInboxPreviewMessages(
+  conversationIds: string[],
+): Promise<Map<string, TripMessageRow[]>> {
+  const byConv = new Map<string, TripMessageRow[]>();
+  if (conversationIds.length === 0) return byConv;
+
+  const rowCap = Math.min(
+    conversationIds.length * DRIVER_INBOX_PREVIEW_MSGS_PER_CONV,
+    120,
+  );
+
+  const { data, error } = await supabase()
+    .from("trip_messages")
+    .select(
+      "id,conversation_id,message_type,metadata,created_at",
+    )
+    .in("conversation_id", conversationIds)
+    .in("message_type", DRIVER_INBOX_PREVIEW_MEDIA_TYPES)
+    .order("created_at", { ascending: false })
+    .limit(rowCap);
+
+  if (error) throw error;
+
+  for (const row of (data ?? []) as TripMessageRow[]) {
+    const cid = String(row.conversation_id ?? "");
+    if (!cid) continue;
+    const list = byConv.get(cid) ?? [];
+    if (list.length >= DRIVER_INBOX_PREVIEW_MSGS_PER_CONV) continue;
+    list.unshift(row);
+    byConv.set(cid, list);
+  }
+
+  return byConv;
 }
 
 /** Sends a message as the driver role. Thin wrapper for consistency. */

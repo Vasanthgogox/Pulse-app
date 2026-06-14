@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import type { TripRow } from "@/features/trips/services/trips.service";
 
@@ -32,6 +33,7 @@ export function DriverUnifiedExpenseEntryScreen({
   initialKind = "other",
   initialOtherCategory,
 }: Props) {
+  const { profile } = useAuth();
   const trimmedEntryId = entryId?.trim() ?? "";
   const isEditing = Boolean(trimmedEntryId);
 
@@ -45,6 +47,10 @@ export function DriverUnifiedExpenseEntryScreen({
   const [editResolveLoading, setEditResolveLoading] = useState(isEditing);
 
   const billCapture = useExpenseBillCapture({
+    organizationId: trip.organization_id,
+    tripId: trip.id,
+    createdBy: profile?.uid ?? null,
+    expenseEntryId: trimmedEntryId || null,
     kind: formKind,
     permissionMessage: "Enable camera or photo library access to attach a receipt photo.",
     previewOcrUpdates: () => [],

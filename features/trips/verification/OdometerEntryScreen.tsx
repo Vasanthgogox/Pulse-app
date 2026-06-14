@@ -88,13 +88,21 @@ export function OdometerEntryScreen({
     setPhotoUri,
     scanning,
     scanState,
+    persistedJob,
     handleCapture,
     clearPhoto,
     applyPendingReading,
     dismissPendingReading,
     rescanPhoto,
     reopenOcrReview,
+    hydratePersistedOcr,
   } = useOdometerPhotoOcr({
+    organizationId: trip.organization_id,
+    tripId: trip.id,
+    vehicleId: trip.vehicle_id,
+    driverId: trip.driver_id,
+    odometerSide: side,
+    createdBy: profile?.uid ?? null,
     getCurrentRaw: () => rawValue,
     currentRaw: rawValue,
     onKmApplied: applyKmReading,
@@ -104,6 +112,9 @@ export function OdometerEntryScreen({
     tripId: trip.id,
     setStartPhotoUri: side === "start" ? setPhotoUri : () => {},
     setEndPhotoUri: side === "end" ? setPhotoUri : () => {},
+    onPersistedOcrLoaded: (_hydrateSide, documentId) => {
+      void hydratePersistedOcr(documentId);
+    },
     startHasLocalPhoto: side === "start" && Boolean(photoUri?.trim()),
     endHasLocalPhoto: side === "end" && Boolean(photoUri?.trim()),
   });
@@ -149,6 +160,7 @@ export function OdometerEntryScreen({
         updatedBy: profile?.uid ?? null,
         photoLocalUri: photoUri,
         photoUserId: profile?.uid ?? null,
+        ocrJobId: persistedJob?.id ?? null,
       });
       if (result.queued) {
         setSyncHint(
