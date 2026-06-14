@@ -62,9 +62,13 @@ function _buildSnapshot(): TripConversation[] {
   return result;
 }
 
-// Invalidate snapshot on every Zustand state change so useSyncExternalStore
-// picks up the new array reference correctly.
-useChatStore.subscribe(() => { _snapshotCache = null; });
+// Invalidate snapshot only when `trips` reference changes (immutable spread ensures
+// any trip mutation produces a new reference).  ACK-only mutations (isLoading,
+// bootstrappedOrg, etc.) that leave `trips` unchanged skip the rebuild entirely —
+// useSyncExternalStore returns the same array reference and React skips re-render.
+useChatStore.subscribe((newState, oldState) => {
+  if (newState.trips !== oldState.trips) _snapshotCache = null;
+});
 
 function _convFromEntry(
   entry:     TripEntry,

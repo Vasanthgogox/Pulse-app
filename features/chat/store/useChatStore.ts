@@ -682,28 +682,46 @@ export function mergeTripMessageMetadata(
 }
 
 /**
+ * Binary insert into a sorted-ASC (by created_at) stream.
+ * O(log n) search + O(n) splice — avoids O(n log n) full sort + n Date allocations.
+ */
+function binaryInsertEvent(stream: TripEvent[], incoming: TripEvent): TripEvent[] {
+  const t = Date.parse(incoming.created_at);
+  let lo = 0, hi = stream.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (Date.parse(stream[mid].created_at) <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  const next = [...stream];
+  next.splice(lo, 0, incoming);
+  return next;
+}
+
+/**
  * Idempotent upsert: same `id` updates in place (status ticks, metadata, body)
  * instead of duplicating — safe for multi-tab Realtime and bootstrap overlap.
  */
 export function upsertEventIntoStream(stream: TripEvent[], incoming: TripEvent): TripEvent[] {
   const idx = stream.findIndex((e) => e.id === incoming.id);
-  let next: TripEvent[];
   if (idx === -1) {
-    next = [...stream, incoming];
-  } else {
-    const prev = stream[idx];
-    const merged: TripEvent = {
-      ...prev,
-      ...incoming,
-      partyType: incoming.partyType ?? prev.partyType,
-      metadata: mergeTripMessageMetadata(prev.metadata, incoming.metadata),
-    };
-    next = [...stream];
-    next[idx] = merged;
+    // New event: binary insert maintains sort without full O(n log n) sort.
+    return binaryInsertEvent(stream, incoming);
   }
-  return next.sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
+  const prev = stream[idx];
+  const merged: TripEvent = {
+    ...prev,
+    ...incoming,
+    partyType: incoming.partyType ?? prev.partyType,
+    metadata: mergeTripMessageMetadata(prev.metadata, incoming.metadata),
+  };
+  const next = [...stream];
+  next[idx] = merged;
+  // Common case: same timestamp (status tick / metadata update) — position unchanged.
+  if (merged.created_at === prev.created_at) return next;
+  // Rare: optimistic→persisted with different server timestamp — re-insert correctly.
+  next.splice(idx, 1);
+  return binaryInsertEvent(next, merged);
 }
 
 /** Merge two TripEvent arrays with per-id deep metadata merge, sorted ASC. */
@@ -2365,8 +2383,9 @@ export const useChatStore = create<ChatState>()(
         const au = a.totalUnread > 0 ? 0 : 1;
         const bu = b.totalUnread > 0 ? 0 : 1;
         if (au !== bu) return au - bu;
-        const ta = a.lastEventAt ? new Date(a.lastEventAt).getTime() : 0;
-        const tb = b.lastEventAt ? new Date(b.lastEventAt).getTime() : 0;
+        // Date.parse avoids allocating Date objects on every comparison.
+        const ta = a.lastEventAt ? Date.parse(a.lastEventAt) : 0;
+        const tb = b.lastEventAt ? Date.parse(b.lastEventAt) : 0;
         return tb - ta;
       }),
   })),
