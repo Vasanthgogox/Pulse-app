@@ -14,6 +14,8 @@ import {
   slackMobileStyles as slackSt,
 } from "@/features/chat/components/mobile/chatSlackMobile.styles";
 import { ChatSlackMessageRow } from "@/features/chat/components/mobile/ChatSlackMessageRow";
+import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
+import { SmartChatImage } from "@/features/chat/components/SmartChatImage";
 import { ChatMediaBurstRow } from "@/features/chat/components/shared/ChatMediaBurstRow";
 import { ChatHistoryExpiryNotice } from "@/features/chat/components/shared/ChatHistoryExpiryNotice";
 import type { TripMessageRow } from "@/features/chat/types/chat.types";
@@ -33,9 +35,11 @@ import {
   type DriverChatMessagesPage,
 } from "@/features/chat/utils/driverChatMessageCache.util";
 import { stripChatPreviewEmojiPrefix } from "@/features/chat/utils/chatAvatar.util";
+import { resolveDocumentShareDisplay } from "@/features/chat/utils/documentShareDisplay.util";
 import {
   buildSlackMessageGroupMap,
   isSlackGroupableTripMessage,
+  type SlackMessageGroupMeta,
 } from "@/features/chat/utils/slackMessageGroup.util";
 import { useDriverChatSystem } from "@/features/driver/communication";
 import {
@@ -48,7 +52,6 @@ import {
 import type { TripRow } from "@/features/trips/services/trips.service";
 import * as tripsService from "@/features/trips/services/trips.service";
 import {
-  dockPaddingBottom,
   effectiveKeyboardInset,
   useKeyboardVisible,
 } from "@/lib/hooks/useKeyboardVisible";
@@ -56,7 +59,7 @@ import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -69,7 +72,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/** Matches `threadMsgsContent` horizontal padding — keep header/composer aligned. */
+const DRIVER_CHAT_EDGE = 16;
 
 const DRIVER_QUICK_MESSAGES = [
   "I have arrived at pickup.",
@@ -107,6 +114,226 @@ function UploadingImagePreview({ localUri }: { localUri: string }) {
   );
 }
 
+type ThreadRow =
+  | { key: string; kind: "msg"; m: TripMessageRow }
+  | { key: string; kind: "status"; u: ParsedDriverStatusNote };
+
+type DriverSlackImageRowProps = {
+  message: TripMessageRow;
+  storagePath: string;
+  own: boolean;
+  selfName: string;
+  ownAvatar: ResolvedPartyAvatarIdentity;
+  fleetAvatar: ResolvedPartyAvatarIdentity;
+  fleetName?: string | null;
+  profile: ReturnType<typeof useAuth>["profile"];
+  currentOrganization: { logo_url?: string | null } | null;
+  group?: SlackMessageGroupMeta;
+};
+
+const DriverSlackImageRow = memo(function DriverSlackImageRow({
+  message,
+  storagePath,
+  own,
+  selfName,
+  ownAvatar,
+  fleetAvatar,
+  fleetName,
+  profile,
+  currentOrganization,
+  group,
+}: DriverSlackImageRowProps) {
+  const peerLabel = message.sender_name?.trim() || fleetName?.trim() || "Fleet";
+  const showHeader = group?.showHeader ?? true;
+  const showAvatar = group?.showAvatar ?? true;
+  const isContinuation = group?.isContinuation ?? false;
+
+  const avatarColumn = showAvatar ? (
+    <View style={slackSt.threadMsgAvatarCircle}>
+      <ChatPartyAvatar
+        identity={own ? ownAvatar : fleetAvatar}
+        size={SLACK_AVATAR.thread}
+        isOwnUser={own}
+        userName={selfName}
+        userAvatarUrl={profile?.avatar_url ?? null}
+        userAvatarSeed={profile?.avatar_seed ?? null}
+        userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+      />
+    </View>
+  ) : (
+    <View style={[slackSt.threadMsgAvatarSpacer, { width: SLACK_AVATAR.thread }]} />
+  );
+
+  return (
+    <View
+      style={[
+        slackSt.threadMsgRow,
+        isContinuation ? slackSt.threadMsgRowContinuation : slackSt.threadMsgRowLead,
+        group?.partyBreak && slackSt.threadMsgRowPartyBreak,
+      ]}
+    >
+      {avatarColumn}
+      <View style={slackSt.threadMsgBody}>
+        {showHeader ? (
+          <View style={slackSt.threadMsgHeader}>
+            <Text style={slackSt.threadMsgName} numberOfLines={1}>
+              {own ? selfName : peerLabel}
+            </Text>
+            <Text style={slackSt.threadMsgTime} numberOfLines={1}>
+              {new Date(message.created_at).toLocaleTimeString("en-IN", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              })}
+            </Text>
+          </View>
+        ) : null}
+        <View style={localStyles.imageBody}>
+          <SmartChatImage
+            storagePath={storagePath}
+            message={message}
+            isOwn={own}
+          />
+        </View>
+      </View>
+    </View>
+  );
+});
+
+type DriverSlackDocumentRowProps = Omit<DriverSlackImageRowProps, "storagePath">;
+
+const DriverSlackDocumentRow = memo(function DriverSlackDocumentRow({
+  message,
+  own,
+  selfName,
+  ownAvatar,
+  fleetAvatar,
+  fleetName,
+  profile,
+  currentOrganization,
+  group,
+}: DriverSlackDocumentRowProps) {
+  const peerLabel = message.sender_name?.trim() || fleetName?.trim() || "Fleet";
+  const showHeader = group?.showHeader ?? true;
+  const showAvatar = group?.showAvatar ?? true;
+  const isContinuation = group?.isContinuation ?? false;
+
+  const avatarColumn = showAvatar ? (
+    <View style={slackSt.threadMsgAvatarCircle}>
+      <ChatPartyAvatar
+        identity={own ? ownAvatar : fleetAvatar}
+        size={SLACK_AVATAR.thread}
+        isOwnUser={own}
+        userName={selfName}
+        userAvatarUrl={profile?.avatar_url ?? null}
+        userAvatarSeed={profile?.avatar_seed ?? null}
+        userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+      />
+    </View>
+  ) : (
+    <View style={[slackSt.threadMsgAvatarSpacer, { width: SLACK_AVATAR.thread }]} />
+  );
+
+  return (
+    <View
+      style={[
+        slackSt.threadMsgRow,
+        isContinuation ? slackSt.threadMsgRowContinuation : slackSt.threadMsgRowLead,
+        group?.partyBreak && slackSt.threadMsgRowPartyBreak,
+      ]}
+    >
+      {avatarColumn}
+      <View style={slackSt.threadMsgBody}>
+        {showHeader ? (
+          <View style={slackSt.threadMsgHeader}>
+            <Text style={slackSt.threadMsgName} numberOfLines={1}>
+              {own ? selfName : peerLabel}
+            </Text>
+            <Text style={slackSt.threadMsgTime} numberOfLines={1}>
+              {new Date(message.created_at).toLocaleTimeString("en-IN", {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              })}
+            </Text>
+          </View>
+        ) : null}
+        <DocumentShareCard message={message} isOwn={own} embedSlack />
+      </View>
+    </View>
+  );
+});
+
+const DriverSlackUploadingImageRow = memo(function DriverSlackUploadingImageRow({
+  localUri,
+  selfName,
+  ownAvatar,
+  profile,
+  currentOrganization,
+  group,
+}: {
+  localUri: string;
+  selfName: string;
+  ownAvatar: ResolvedPartyAvatarIdentity;
+  profile: ReturnType<typeof useAuth>["profile"];
+  currentOrganization: { logo_url?: string | null } | null;
+  group?: SlackMessageGroupMeta;
+}) {
+  const showHeader = group?.showHeader ?? true;
+  const showAvatar = group?.showAvatar ?? true;
+  const isContinuation = group?.isContinuation ?? false;
+
+  const avatarColumn = showAvatar ? (
+    <View style={slackSt.threadMsgAvatarCircle}>
+      <ChatPartyAvatar
+        identity={ownAvatar}
+        size={SLACK_AVATAR.thread}
+        isOwnUser
+        userName={selfName}
+        userAvatarUrl={profile?.avatar_url ?? null}
+        userAvatarSeed={profile?.avatar_seed ?? null}
+        userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+      />
+    </View>
+  ) : (
+    <View style={[slackSt.threadMsgAvatarSpacer, { width: SLACK_AVATAR.thread }]} />
+  );
+
+  return (
+    <View
+      style={[
+        slackSt.threadMsgRow,
+        isContinuation ? slackSt.threadMsgRowContinuation : slackSt.threadMsgRowLead,
+        group?.partyBreak && slackSt.threadMsgRowPartyBreak,
+      ]}
+    >
+      {avatarColumn}
+      <View style={slackSt.threadMsgBody}>
+        {showHeader ? (
+          <View style={slackSt.threadMsgHeader}>
+            <Text style={slackSt.threadMsgName} numberOfLines={1}>
+              {selfName}
+            </Text>
+          </View>
+        ) : null}
+        <View style={localStyles.imageBody}>
+          <UploadingImagePreview localUri={localUri} />
+        </View>
+      </View>
+    </View>
+  );
+});
+
+// Stable item-type key for FlashList recycling — puts each content shape in its
+// own pool so cells of different heights never swap buffers (prevents layout jank).
+function getThreadItemType(item: ThreadRow): string {
+  if (item.kind === "status") return "status";
+  const mt = item.m.message_type ?? "text";
+  if (mt === "image" || mt === "document_share" || mt === "document_upload") return "media";
+  if (mt === "system_log" || mt === "location_log") return "location";
+  return "text";
+}
+
 export type DriverChatSlackThreadProps = {
   conversationId: string;
   organizationId: string;
@@ -120,6 +347,10 @@ export type DriverChatSlackThreadProps = {
   onSend: () => void;
   onSendTripChat: (text: string) => Promise<void>;
   onBack: () => void;
+  /** Bottom tab bar height clearance when thread is full-screen above driver tabs. */
+  bottomTabClearance?: number;
+  /** Pre-hydrated trip row from the caller — skips an extra network round trip on open. */
+  initialTrip?: TripRow | null;
 };
 
 export function DriverChatSlackThread({
@@ -135,6 +366,8 @@ export function DriverChatSlackThread({
   onSend,
   onSendTripChat,
   onBack,
+  bottomTabClearance = 0,
+  initialTrip = null,
 }: DriverChatSlackThreadProps) {
   const { profile } = useAuth();
   const orgCtx = useOptionalOrganization();
@@ -143,10 +376,13 @@ export function DriverChatSlackThread({
   const selfName = profile?.full_name || profile?.displayName || "You";
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlashListRef<ThreadRow>>(null);
+  const mergedCountRef = useRef(0);
+  const didInitialScrollRef = useRef(false);
   const { keyboardVisible: keyboardOpen, keyboardHeight } = useKeyboardVisible();
   const keyboardInset = effectiveKeyboardInset(keyboardOpen, keyboardHeight);
-  const [trip, setTrip] = useState<TripRow | null>(null);
+  // Use initialTrip so the thread renders immediately without waiting for a DB fetch.
+  const [trip, setTrip] = useState<TripRow | null>(initialTrip);
   const [uploading, setUploading] = useState(false);
   const [statusSending, setStatusSending] = useState<string | null>(null);
   const mountedAtMs = useRef(Date.now()).current;
@@ -168,24 +404,35 @@ export function DriverChatSlackThread({
     if (Platform.OS === "web") return;
     const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const sub = Keyboard.addListener(showEvt, () => {
-      setTimeout(
-        () => scrollRef.current?.scrollToEnd({ animated: true }),
-        Platform.OS === "ios" ? 80 : 120,
-      );
+      // Use rAF instead of hard-coded timeouts — fires after the layout pass that
+      // follows keyboard appearance, avoiding scroll position jumps on slow devices.
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToEnd({ animated: true });
+      });
     });
     return () => sub.remove();
   }, []);
 
   useEffect(() => {
+    // Reset to initialTrip when tripId changes so the previous trip's status
+    // notes don't flash briefly before the fetch resolves.
+    setTrip(initialTrip ?? null);
+  }, [tripId]); // intentional: only reset on tripId change
+
+  useEffect(() => {
+    // Defer the trip fetch until the message list has loaded so the messages
+    // query gets the network slot first (critical on low-bandwidth connections).
+    if (messagesLoading) return;
+    // If we already have the trip from initialTrip and it matches, skip re-fetch.
+    if (trip?.id === tripId) return;
     let cancelled = false;
-    setTrip(null);
     void tripsService.getTripById(tripId).then(({ trip: t }) => {
-      if (!cancelled) setTrip(t);
+      if (!cancelled) setTrip(t ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [tripId]);
+  }, [tripId, messagesLoading]); // intentional: trip/initialTrip excluded to avoid re-fetch loops
 
   const statusNotes = useMemo(
     () => parseDriverUpdatesFromNotes(trip?.notes ?? null),
@@ -224,11 +471,16 @@ export function DriverChatSlackThread({
     [displayMessages, senderKey],
   );
 
-  const merged = useMemo(() => {
-    type Row =
-      | { key: string; kind: "msg"; m: TripMessageRow }
-      | { key: string; kind: "status"; u: ParsedDriverStatusNote };
-    const items: Row[] = [];
+  // Stable refs so renderTripMessage's useCallback doesn't re-create on every
+  // message update (Maps are new instances each render but the callback only
+  // needs to READ the current value, not capture it as a closure dep).
+  const mediaBurstIndexRef = useRef(mediaBurstIndex);
+  mediaBurstIndexRef.current = mediaBurstIndex;
+  const slackGroupMetaRef = useRef(slackGroupMeta);
+  slackGroupMetaRef.current = slackGroupMeta;
+
+  const merged = useMemo((): ThreadRow[] => {
+    const items: ThreadRow[] = [];
     for (const m of displayMessages) {
       if (mediaBurstIndex.skipIds.has(m.id)) continue;
       items.push({ key: `m-${m.id}`, kind: "msg", m });
@@ -242,18 +494,30 @@ export function DriverChatSlackThread({
       });
     });
     items.sort((a, b) => {
-      const ta =
-        a.kind === "msg"
-          ? new Date(a.m.created_at).getTime()
-          : new Date(a.u.timestamp).getTime();
-      const tb =
-        b.kind === "msg"
-          ? new Date(b.m.created_at).getTime()
-          : new Date(b.u.timestamp).getTime();
+      // Date.parse() avoids allocating a Date object on every comparison.
+      const ta = a.kind === "msg" ? Date.parse(a.m.created_at) : Date.parse(a.u.timestamp);
+      const tb = b.kind === "msg" ? Date.parse(b.m.created_at) : Date.parse(b.u.timestamp);
       return ta - tb;
     });
     return items;
   }, [displayMessages, mediaBurstIndex.skipIds, messages, statusNotes]);
+
+  useEffect(() => {
+    didInitialScrollRef.current = false;
+    mergedCountRef.current = 0;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (messagesLoading || merged.length === 0) return;
+    const isNewMessage = merged.length > mergedCountRef.current;
+    mergedCountRef.current = merged.length;
+    if (!didInitialScrollRef.current || isNewMessage) {
+      didInitialScrollRef.current = true;
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToEnd({ animated: isNewMessage && merged.length > 1 });
+      });
+    }
+  }, [messagesLoading, merged.length]);
 
   const flowStep = trip ? deriveDriverFlowStepFromTrip(trip) : "completed";
   const predefinedForStep = DRIVER_PREDEFINED_STATUS_BY_STEP[flowStep] ?? [];
@@ -314,7 +578,7 @@ export function DriverChatSlackThread({
       msgKey,
       (old) => appendDriverChatMessageToCache(old, optimistic),
     );
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
 
     setUploading(true);
     try {
@@ -338,6 +602,13 @@ export function DriverChatSlackThread({
         msgKey,
         (old) => replaceDriverChatMessageInCache(old, tempId, persisted),
       );
+      void queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === "q" &&
+          q.queryKey[1] === "driver-chat" &&
+          q.queryKey[2] === "conversations",
+      });
     } catch (err: unknown) {
       queryClient.setQueryData<InfiniteData<DriverChatMessagesPage>>(
         msgKey,
@@ -368,102 +639,174 @@ export function DriverChatSlackThread({
     [fleetName],
   );
 
-  const renderTripMessage = (m: TripMessageRow) => {
-    const own = m.sender_role === "driver";
-    const burstLeader = mediaBurstIndex.leaders.get(m.id);
-    if (burstLeader) {
-      const burstIsNew = burstLeader.messages.some(
-        (msg) => Date.parse(msg.created_at) > mountedAtMs,
-      );
+  const renderTripMessage = useCallback(
+    (m: TripMessageRow) => {
+      const own = m.sender_role === "driver";
+      const burstLeader = mediaBurstIndexRef.current.leaders.get(m.id);
+      if (burstLeader) {
+        const burstIsNew = burstLeader.messages.some(
+          (msg) => Date.parse(msg.created_at) > mountedAtMs,
+        );
+        return (
+          <ChatMediaBurstRow
+            burst={burstLeader}
+            senderName={own ? selfName : m.sender_name?.trim() || "Fleet"}
+            timestamp={m.created_at}
+            avatar={own ? ownAvatar : fleetAvatar}
+            isOwn={own}
+            userName={selfName}
+            userAvatarUrl={profile?.avatar_url ?? null}
+            userAvatarSeed={profile?.avatar_seed ?? null}
+            userOrgLogoUrl={currentOrganization?.logo_url ?? null}
+            variant="mobile"
+            group={slackGroupMetaRef.current.get(m.id)}
+            isNew={burstIsNew}
+          />
+        );
+      }
+
+      if (isLocationPingMessage(m)) {
+        const loc = parseSystemLogLocationData(m);
+        return (
+          <ChatLocationSystemCard
+            message={m}
+            location={loc}
+            isMobile
+            isOwnDriverSend={own}
+          />
+        );
+      }
+
+      if (m.message_type === "image") {
+        const meta = m.metadata as { storage_path?: string; local_uri?: string } | null;
+        const localUri = String(meta?.local_uri ?? "").trim();
+        const storagePath =
+          String(meta?.storage_path ?? "").trim() || (m.content ?? "").trim();
+        if (localUri && !String(meta?.storage_path ?? "").trim()) {
+          return (
+            <DriverSlackUploadingImageRow
+              localUri={localUri}
+              selfName={selfName}
+              ownAvatar={ownAvatar}
+              profile={profile}
+              currentOrganization={currentOrganization}
+              group={slackGroupMetaRef.current.get(m.id)}
+            />
+          );
+        }
+        if (storagePath) {
+          return (
+            <DriverSlackImageRow
+              message={m}
+              storagePath={storagePath}
+              own={own}
+              selfName={selfName}
+              ownAvatar={ownAvatar}
+              fleetAvatar={fleetAvatar}
+              fleetName={fleetName}
+              profile={profile}
+              currentOrganization={currentOrganization}
+              group={slackGroupMetaRef.current.get(m.id)}
+            />
+          );
+        }
+      }
+
+      if (m.message_type === "document_share") {
+        const doc = resolveDocumentShareDisplay(m);
+        if (doc?.isImage && doc.storagePath) {
+          return (
+            <DriverSlackImageRow
+              message={m}
+              storagePath={doc.storagePath}
+              own={own}
+              selfName={selfName}
+              ownAvatar={ownAvatar}
+              fleetAvatar={fleetAvatar}
+              fleetName={fleetName}
+              profile={profile}
+              currentOrganization={currentOrganization}
+              group={slackGroupMetaRef.current.get(m.id)}
+            />
+          );
+        }
+        return (
+          <DriverSlackDocumentRow
+            message={m}
+            own={own}
+            selfName={selfName}
+            ownAvatar={ownAvatar}
+            fleetAvatar={fleetAvatar}
+            fleetName={fleetName}
+            profile={profile}
+            currentOrganization={currentOrganization}
+            group={slackGroupMetaRef.current.get(m.id)}
+          />
+        );
+      }
+
+      if (m.message_type === "ledger_event") return null;
+
+      const peerLabel = m.sender_name?.trim() || fleetName?.trim() || "Fleet";
+      const peerAvatar = fleetAvatar;
+
       return (
-        <ChatMediaBurstRow
-          burst={burstLeader}
-          senderName={own ? selfName : m.sender_name?.trim() || "Fleet"}
+        <ChatSlackMessageRow
+          senderName={own ? selfName : peerLabel}
+          content={stripChatPreviewEmojiPrefix(m.content)}
           timestamp={m.created_at}
-          avatar={own ? ownAvatar : fleetAvatar}
+          avatar={own ? ownAvatar : peerAvatar}
           isOwn={own}
           userName={selfName}
           userAvatarUrl={profile?.avatar_url ?? null}
           userAvatarSeed={profile?.avatar_seed ?? null}
           userOrgLogoUrl={currentOrganization?.logo_url ?? null}
           variant="mobile"
-          group={slackGroupMeta.get(m.id)}
-          isNew={burstIsNew}
+          group={slackGroupMetaRef.current.get(m.id)}
+          isNew={Date.parse(m.created_at) > mountedAtMs}
         />
       );
-    }
+    },
+    // mediaBurstIndexRef and slackGroupMetaRef are stable refs — omit from deps.
+    [mountedAtMs, selfName, ownAvatar, fleetAvatar, profile, currentOrganization, fleetName],
+  );
 
-    if (isLocationPingMessage(m)) {
-      const loc = parseSystemLogLocationData(m);
-      return (
-        <ChatLocationSystemCard
-          message={m}
-          location={loc}
-          isMobile
-          isOwnDriverSend={own}
-        />
-      );
-    }
-
-    if (m.message_type === "image") {
-      const meta = m.metadata as { storage_path?: string; local_uri?: string } | null;
-      const localUri = String(meta?.local_uri ?? "").trim();
-      if (localUri && !String(meta?.storage_path ?? "").trim()) {
+  const renderThreadRow = useCallback(
+    ({ item }: { item: ThreadRow }) => {
+      if (item.kind === "status") {
         return (
-          <View style={[slackSt.threadMsgRow, slackSt.threadMsgRowLead]}>
-            <View style={slackSt.threadMsgAvatarCircle}>
-              <ChatPartyAvatar
-                identity={ownAvatar}
-                size={SLACK_AVATAR.thread}
-                isOwnUser
-                userName={selfName}
-                userAvatarUrl={profile?.avatar_url ?? null}
-                userAvatarSeed={profile?.avatar_seed ?? null}
-                userOrgLogoUrl={currentOrganization?.logo_url ?? null}
-              />
-            </View>
-            <View style={[slackSt.threadMsgBody, { paddingTop: 4 }]}>
-              <UploadingImagePreview localUri={localUri} />
-            </View>
+          <View style={slackSt.threadSysMsg}>
+            <Text style={slackSt.threadSysMsgText}>{item.u.message}</Text>
           </View>
         );
       }
-    }
+      return renderTripMessage(item.m);
+    },
+    [renderTripMessage],
+  );
 
-    if (m.message_type === "ledger_event") return null;
-
-    const peerLabel = m.sender_name?.trim() || fleetName?.trim() || "Fleet";
-    const peerAvatar = fleetAvatar;
-
-    return (
-      <ChatSlackMessageRow
-        senderName={own ? selfName : peerLabel}
-        content={stripChatPreviewEmojiPrefix(m.content)}
-        timestamp={m.created_at}
-        avatar={own ? ownAvatar : peerAvatar}
-        isOwn={own}
-        userName={selfName}
-        userAvatarUrl={profile?.avatar_url ?? null}
-        userAvatarSeed={profile?.avatar_seed ?? null}
-        userOrgLogoUrl={currentOrganization?.logo_url ?? null}
-        variant="mobile"
-        group={slackGroupMeta.get(m.id)}
-        isNew={Date.parse(m.created_at) > mountedAtMs}
-      />
-    );
-  };
+  const threadListFooter = useMemo(
+    () => <ChatHistoryExpiryNotice slackLayout />,
+    [],
+  );
 
   const routeSubtitle = `${pickupArea || trip?.pickup_area || ""}${
     dropLocation || trip?.drop_location ? ` → ${dropLocation || trip?.drop_location}` : ""
   }`.trim();
 
+  const composerBottomPad = keyboardOpen
+    ? 8
+    : Math.max(insets.bottom + bottomTabClearance, 8);
+
   const composerDock = (
     <View
       style={[
         localStyles.composerDock,
-        { paddingBottom: dockPaddingBottom(insets.bottom, keyboardOpen) },
+        { paddingBottom: composerBottomPad },
         Platform.OS === "android" &&
-          keyboardInset > 0 && { paddingBottom: keyboardInset },
+          keyboardInset > 0 && {
+            paddingBottom: Math.max(keyboardInset, 8),
+          },
       ]}
     >
       {predefinedForStep.length > 0 ? (
@@ -500,6 +843,7 @@ export function DriverChatSlackThread({
       ) : null}
       <ChatMobileComposer
         variant="slack"
+        contentPaddingHorizontal={DRIVER_CHAT_EDGE}
         value={messageInput}
         onChangeText={setMessageInput}
         onSend={onSend}
@@ -512,13 +856,15 @@ export function DriverChatSlackThread({
   );
 
   const threadBody = (
-    <>
+    <View style={localStyles.threadShell}>
       <ChatSlackThreadHeader
         title={tripNumber || trip?.trip_number || "Trip"}
         subtitle={routeSubtitle || undefined}
         avatarIdentity={fleetAvatar}
         onBack={onBack}
         compactRoleTag="Driver"
+        topInset={insets.top}
+        contentPaddingHorizontal={DRIVER_CHAT_EDGE}
       />
       {uploading ? (
         <View style={localStyles.uploadBar}>
@@ -527,50 +873,46 @@ export function DriverChatSlackThread({
         </View>
       ) : null}
 
-      <ScrollView
-        ref={scrollRef}
+      <FlashList
+        ref={listRef}
+        data={merged}
+        keyExtractor={(row) => row.key}
+        renderItem={renderThreadRow}
+        getItemType={getThreadItemType}
+        drawDistance={400}
         style={localStyles.threadScroll}
         contentContainerStyle={slackSt.threadMsgsContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         onScroll={(e) => {
           if (!hasOlder || isFetchingOlder) return;
           if (e.nativeEvent.contentOffset.y < 80) void loadOlder();
         }}
         scrollEventThrottle={200}
-      >
-        {messagesLoading ? (
-          <View style={localStyles.centered}>
-            <LoadingIndicator size="small" color={Theme.primary} />
-          </View>
-        ) : null}
-        {isFetchingOlder ? (
-          <View style={localStyles.centeredCompact}>
-            <LoadingIndicator size="small" color="#94a3b8" />
-          </View>
-        ) : null}
-        {merged.length === 0 && !messagesLoading ? (
-          <View style={slackSt.threadSysMsg}>
-            <Text style={slackSt.threadSysMsgText}>
-              No messages yet — use quick status or reply below.
-            </Text>
-          </View>
-        ) : (
-          merged.map((row) =>
-            row.kind === "status" ? (
-              <View key={row.key} style={slackSt.threadSysMsg}>
-                <Text style={slackSt.threadSysMsgText}>{row.u.message}</Text>
-              </View>
-            ) : (
-              <View key={row.key}>{renderTripMessage(row.m)}</View>
-            ),
+        ListHeaderComponent={
+          isFetchingOlder ? (
+            <View style={localStyles.centeredCompact}>
+              <LoadingIndicator size="small" color="#94a3b8" />
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          messagesLoading ? (
+            <View style={localStyles.centered}>
+              <LoadingIndicator size="small" color={Theme.primary} />
+            </View>
+          ) : (
+            <View style={slackSt.threadSysMsg}>
+              <Text style={slackSt.threadSysMsgText}>
+                No messages yet — use quick status or reply below.
+              </Text>
+            </View>
           )
-        )}
-        <ChatHistoryExpiryNotice slackLayout />
-      </ScrollView>
+        }
+        ListFooterComponent={merged.length > 0 ? threadListFooter : null}
+      />
       {composerDock}
-    </>
+    </View>
   );
 
   if (Platform.OS === "ios") {
@@ -578,7 +920,7 @@ export function DriverChatSlackThread({
       <KeyboardAvoidingView
         style={localStyles.root}
         behavior="padding"
-        keyboardVerticalOffset={insets.top}
+        keyboardVerticalOffset={0}
       >
         {threadBody}
       </KeyboardAvoidingView>
@@ -593,19 +935,28 @@ const localStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
-  threadScroll: { flex: 1 },
+  threadShell: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: "#FFFFFF",
+  },
+  threadScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
   composerDock: {
     backgroundColor: "#FFFFFF",
     flexShrink: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "rgba(24, 28, 50, 0.08)",
+    paddingTop: 4,
   },
   centered: { paddingVertical: 24, alignItems: "center" },
   centeredCompact: { paddingVertical: 8, alignItems: "center" },
   quickStatusBlock: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingHorizontal: DRIVER_CHAT_EDGE,
+    paddingTop: 6,
+    paddingBottom: 2,
     backgroundColor: "#FFFFFF",
   },
   quickStatusLabel: {
@@ -638,14 +989,20 @@ const localStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: DRIVER_CHAT_EDGE,
     paddingVertical: 6,
     backgroundColor: "rgba(91, 94, 244, 0.06)",
   },
   uploadBarText: { fontSize: 12, color: "#64748b", fontWeight: "500" },
+  imageBody: {
+    alignSelf: "flex-start",
+    width: "100%",
+    maxWidth: "100%",
+  },
   uploadShell: {
-    width: 160,
-    height: 120,
+    width: "100%",
+    maxWidth: 280,
+    aspectRatio: 4 / 3,
     borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#e5e7eb",
