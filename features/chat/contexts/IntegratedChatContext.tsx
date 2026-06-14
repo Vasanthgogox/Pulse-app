@@ -176,6 +176,9 @@ export function IntegratedChatProvider({
   const missingNetConvRefreshAtRef = useRef<Record<string, number>>({});
   const bootstrappedOrgRef = useRef<string | null>(null);
   const lastFetchedAtRef = useRef<number>(0);
+  // Stable ref read inside realtime callback so isActive changes don't re-subscribe.
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
 
   const loadData = useCallback(async () => {
     if (!orgId || !selfUid) return;
@@ -231,24 +234,28 @@ export function IntegratedChatProvider({
     };
   }, []);
 
-  // Lightweight always-on realtime: conversation rows only (org-filtered), not global network_messages WAL.
+  // Single always-on subscription — isActiveRef read inside the callback avoids
+  // channel teardown/rebuild on every focus-change (previously two effects shared
+  // the same channel key which caused refcount 2→0→1 churn on isActive flips).
   useEffect(() => {
-    if (!orgId || !selfUid || isActive) return;
+    if (!orgId || !selfUid) return;
     return subscribeSharedPostgresChanges(
       `network_conversations:org:${orgId}`,
       networkConversationsOrgSpecs(orgId),
       (payload) => {
-        if (isActive) return;
+        if (isActiveRef.current) {
+          // Focused screen: full debounced sync.
+          queueRefreshData();
+          return;
+        }
+        // Background: lightweight unread-count patch — no full refetch.
         const row = payload.new as Partial<NetworkConversationRow> | null;
         if (!row?.id || row.org_a_id == null || row.org_b_id == null) return;
-
-        const myUnread =
-          row.org_a_id === orgId ? row.unread_count_a : row.unread_count_b;
+        const myUnread = row.org_a_id === orgId ? row.unread_count_a : row.unread_count_b;
         if (typeof myUnread !== "number") return;
-
         let found = false;
-        setConversations((prev) => {
-          const next = prev.map((conv) => {
+        setConversations((prev) =>
+          prev.map((conv) => {
             if (conv.id !== row.id) return conv;
             found = true;
             return {
@@ -257,10 +264,8 @@ export function IntegratedChatProvider({
               last_message_at: row.last_message_at ?? conv.last_message_at,
               last_message_preview: row.last_message_preview ?? conv.last_message_preview,
             };
-          });
-          return next;
-        });
-
+          })
+        );
         if (!found) {
           const now = Date.now();
           const last = missingNetConvRefreshAtRef.current[row.id] ?? 0;
@@ -271,23 +276,12 @@ export function IntegratedChatProvider({
         }
       }
     );
-  }, [orgId, selfUid, isActive, queueRefreshData]);
+  }, [orgId, selfUid, queueRefreshData]);
 
-  // Focused screen: full sync on conversation insert/update for this org (still org-filtered).
-  useEffect(() => {
-    if (!isActive || !orgId || !selfUid) return;
-    return subscribeSharedPostgresChanges(
-      `network_conversations:org:${orgId}`,
-      networkConversationsOrgSpecs(orgId),
-      () => {
-        queueRefreshData();
-      }
-    );
-  }, [isActive, orgId, selfUid, queueRefreshData]);
-
-  const chats: IntegratedChat[] = orgId
-    ? conversations.map((c) => toIntegratedChat(c, orgId, partners))
-    : [];
+  const chats = useMemo<IntegratedChat[]>(
+    () => orgId ? conversations.map((c) => toIntegratedChat(c, orgId, partners)) : [],
+    [orgId, conversations, partners],
+  );
 
   const sendMessage = useCallback(
     (chatId: string, content: string, _viewerRole: "dispatcher" | "owner") => {
@@ -418,19 +412,22 @@ export function IntegratedChatProvider({
     [orgId, orgName]
   );
 
+  const contextValue = useMemo(
+    (): IntegratedChatContextType => ({
+      chats,
+      partners,
+      isLoading,
+      sendMessage,
+      markAsRead,
+      getUnreadCount,
+      getTotalUnreadCount,
+      initiateNetworkConversation,
+    }),
+    [chats, partners, isLoading, sendMessage, markAsRead, getUnreadCount, getTotalUnreadCount, initiateNetworkConversation],
+  );
+
   return (
-    <IntegratedChatContext.Provider
-      value={{
-        chats,
-        partners,
-        isLoading,
-        sendMessage,
-        markAsRead,
-        getUnreadCount,
-        getTotalUnreadCount,
-        initiateNetworkConversation,
-      }}
-    >
+    <IntegratedChatContext.Provider value={contextValue}>
       {children}
     </IntegratedChatContext.Provider>
   );
