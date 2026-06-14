@@ -323,6 +323,11 @@ export interface UpdateSupplierData {
   contact_person?: string;
   phone?: string;
   email?: string;
+  address?: string;
+  gstin?: string;
+  pan_number?: string;
+  vehicle_types?: string[];
+  operating_areas?: string[];
 }
 
 export async function updateSupplier(
@@ -335,6 +340,11 @@ export async function updateSupplier(
   if (patch.contact_person !== undefined) updates.contact_person = patch.contact_person.trim() || null;
   if (patch.phone !== undefined) updates.phone = patch.phone.trim();
   if (patch.email !== undefined) updates.email = patch.email.trim() || null;
+  if (patch.address !== undefined) updates.address = patch.address.trim() || null;
+  if (patch.gstin !== undefined) updates.gstin = patch.gstin.trim().toUpperCase() || null;
+  if (patch.pan_number !== undefined) updates.pan_number = patch.pan_number.trim().toUpperCase() || null;
+  if (patch.vehicle_types !== undefined) updates.vehicle_types = patch.vehicle_types;
+  if (patch.operating_areas !== undefined) updates.operating_areas = patch.operating_areas;
   const name = (patch.company_name ?? '').trim() || (patch.contact_person ?? '').trim() || '';
   if (patch.company_name !== undefined || patch.contact_person !== undefined) updates.name = name;
   if (Object.keys(updates).length === 0) return { error: null, supplier: null };

@@ -102,6 +102,8 @@ export const queryKeys = {
         : (["q", "suppliers", orgId] as const),
     detail: (orgId: string, supplierId: string) =>
       ["q", "suppliers", orgId, supplierId] as const,
+    managementBundle: (orgId: string, supplierId: string) =>
+      ["q", "suppliers", orgId, supplierId, "management-bundle"] as const,
   },
 
   drivers: {

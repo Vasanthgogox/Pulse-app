@@ -59,6 +59,11 @@ import {
   updateSupplierOnboarding,
   type OnboardingAgreementStatus,
 } from "@/features/suppliers/services/supplierProfile.service";
+import { upsertSupplierKycDocument, updateSupplierKycDocumentStatus } from "@/features/suppliers/services/supplierKycDocuments.service";
+import { createSupplierComplianceDoc, deleteSupplierComplianceDoc, type SupplierComplianceDocType } from "@/features/suppliers/services/supplierComplianceDocs.service";
+import { createSupplierContract } from "@/features/suppliers/services/supplierContracts.service";
+import { createSupplierVehicle } from "@/features/suppliers/services/supplierFleet.service";
+import { createSupplierWarehouse } from "@/features/suppliers/services/supplierWarehouses.service";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -73,6 +78,7 @@ import {
 type BundleProps = {
   bundle: SupplierManagementBundle;
   orgId?: string;
+  supplierId?: string;
   onRefresh?: () => void;
 };
 
@@ -234,14 +240,41 @@ export function SupplierProfileOverviewPanel({ bundle }: BundleProps) {
 
 // ── TAB 2: KYC ────────────────────────────────────────────────────────────────
 
-export function SupplierProfileKycPanel({ bundle, onUploadDoc }: BundleProps & { onUploadDoc?: (type: SupplierKycDocType) => void }) {
+export function SupplierProfileKycPanel({ bundle, orgId, supplierId, onRefresh, onUploadDoc }: BundleProps & { onUploadDoc?: (type: SupplierKycDocType) => void }) {
   const { kyc_documents } = bundle;
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [kycForm, setKycForm] = useState<{ doc_type: SupplierKycDocType; expiry_date: string; notes: string }>({
+    doc_type: "pan", expiry_date: "", notes: "",
+  });
   const total = MANDATORY_SUPPLIER_KYC_TYPES.length;
   const verified = kyc_documents.filter((d) => d.status === "verified").length;
   const score = total > 0 ? Math.round((verified / total) * 100) : 0;
 
   const docForType = (type: SupplierKycDocType) =>
     kyc_documents.filter((d) => d.doc_type === type).sort((a, b) => b.version_number - a.version_number)[0];
+
+  const handleAddKyc = async () => {
+    if (!orgId || !supplierId) return;
+    setSaving(true); setFormErr(null);
+    const { error } = await upsertSupplierKycDocument(orgId, supplierId, {
+      doc_type: kycForm.doc_type,
+      expiry_date: kycForm.expiry_date.trim() || undefined,
+      notes: kycForm.notes.trim() || undefined,
+    });
+    setSaving(false);
+    if (error) { setFormErr(error.message); return; }
+    setKycForm({ doc_type: "pan", expiry_date: "", notes: "" });
+    setShowForm(false);
+    onRefresh?.();
+  };
+
+  const handleStatusUpdate = async (docId: string, status: "verified" | "rejected") => {
+    if (!orgId) return;
+    const { error } = await updateSupplierKycDocumentStatus(docId, status);
+    if (!error) onRefresh?.();
+  };
 
   return (
     <View style={styles.panel}>
@@ -262,6 +295,51 @@ export function SupplierProfileKycPanel({ bundle, onUploadDoc }: BundleProps & {
         </View>
       </View>
 
+      {orgId && supplierId ? (
+        <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 }}>
+          <Pressable style={spStyles.addBtn} onPress={() => setShowForm((v) => !v)}>
+            <Plus size={13} color="#fff" strokeWidth={2} />
+            <Text style={spStyles.addBtnText}>Add document</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {showForm ? (
+        <View style={spStyles.inlineFormCard}>
+          <Text style={spStyles.inlineFormTitle}>Add KYC document</Text>
+          <View style={spStyles.formGrid}>
+            <View style={[spStyles.fieldGroup, { zIndex: 10 }]}>
+              <Text style={spStyles.fieldLabel}>Document type</Text>
+              <View style={spStyles.selectBtn}>
+                <Text style={spStyles.selectBtnText}>{kycForm.doc_type.replace(/_/g, " ").toUpperCase()}</Text>
+              </View>
+              <View style={spStyles.selectDropdown}>
+                {(["pan","gstin","cin","certificate_of_incorporation","board_resolution","partnership_deed","aadhaar_front","aadhaar_back","msme","other"] as SupplierKycDocType[]).map((t) => (
+                  <Pressable key={t} style={[spStyles.selectOption, kycForm.doc_type === t && spStyles.selectOptionActive]} onPress={() => setKycForm((f) => ({ ...f, doc_type: t }))}>
+                    <Text style={[spStyles.selectOptionText, kycForm.doc_type === t && spStyles.selectOptionTextActive]}>{t.replace(/_/g, " ")}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Expiry date (optional)</Text>
+              <TextInput style={spStyles.fieldInput} value={kycForm.expiry_date} onChangeText={(v) => setKycForm((f) => ({ ...f, expiry_date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={[spStyles.fieldGroup, { flexBasis: "100%" }]}>
+              <Text style={spStyles.fieldLabel}>Notes (optional)</Text>
+              <TextInput style={spStyles.fieldInput} value={kycForm.notes} onChangeText={(v) => setKycForm((f) => ({ ...f, notes: v }))} placeholder="Optional notes" placeholderTextColor={METRONIC.muted} />
+            </View>
+          </View>
+          {formErr ? <View style={spStyles.inlineFormError}><Text style={spStyles.inlineFormErrorText}>{formErr}</Text></View> : null}
+          <View style={spStyles.inlineFormActions}>
+            <Pressable style={spStyles.inlineCancelBtn} onPress={() => { setShowForm(false); setFormErr(null); }}><Text style={spStyles.inlineCancelBtnText}>Cancel</Text></Pressable>
+            <Pressable style={spStyles.inlineSaveBtn} onPress={handleAddKyc} disabled={saving}>
+              {saving ? <ActivityIndicator size={14} color="#fff" /> : <Text style={spStyles.inlineSaveBtnText}>Save</Text>}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
       <SectionTitle>Mandatory documents</SectionTitle>
       <View style={spStyles.kycDocGrid}>
         {MANDATORY_SUPPLIER_KYC_TYPES.map((type) => {
@@ -281,10 +359,17 @@ export function SupplierProfileKycPanel({ bundle, onUploadDoc }: BundleProps & {
               <StatusBadge status={doc?.status ?? "pending"} />
               {doc?.expiry_date ? <Text style={spStyles.kycDocExpiry}>Expires {doc.expiry_date}</Text> : null}
               {doc?.verified_by ? <Text style={spStyles.kycDocExpiry}>Verified by {doc.verified_by}</Text> : null}
-              <Pressable style={spStyles.kycUploadBtn} onPress={() => onUploadDoc?.(type)}>
-                <Upload size={13} color={Theme.textOnPrimary} strokeWidth={2} />
-                <Text style={spStyles.kycUploadBtnText}>{uploaded ? "Replace" : "Upload"}</Text>
-              </Pressable>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                <Pressable style={[spStyles.kycUploadBtn, { flex: 1 }]} onPress={() => onUploadDoc?.(type)}>
+                  <Upload size={13} color={Theme.textOnPrimary} strokeWidth={2} />
+                  <Text style={spStyles.kycUploadBtnText}>{uploaded ? "Replace" : "Upload"}</Text>
+                </Pressable>
+                {doc && doc.status === "pending" && orgId ? (
+                  <Pressable style={[spStyles.kycUploadBtn, { backgroundColor: "#50CD89" }]} onPress={() => void handleStatusUpdate(doc.id, "verified")}>
+                    <Text style={spStyles.kycUploadBtnText}>Verify</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           );
         })}
@@ -331,29 +416,43 @@ export function SupplierProfileKycPanel({ bundle, onUploadDoc }: BundleProps & {
 
 // ── TAB 3: Compliance ─────────────────────────────────────────────────────────
 
-export function SupplierProfileCompliancePanel({ bundle }: BundleProps) {
+export function SupplierProfileCompliancePanel({ bundle, orgId, supplierId, onRefresh }: BundleProps) {
   const { compliance_docs } = bundle;
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [form, setForm] = useState<{ doc_type: SupplierComplianceDocType; label: string; expiry_date: string; notes: string }>({
+    doc_type: "insurance", label: "", expiry_date: "", notes: "",
+  });
 
-  const daysToLight = (days: number | null | undefined): "green" | "amber" | "red" => {
-    if (!days) return "green";
-    if (days > 60) return "green";
-    if (days > 30) return "amber";
-    return "red";
+  const handleAdd = async () => {
+    if (!orgId || !supplierId) return;
+    if (!form.label.trim()) { setFormErr("Label is required."); return; }
+    setSaving(true); setFormErr(null);
+    const { error } = await createSupplierComplianceDoc(orgId, supplierId, {
+      doc_type: form.doc_type,
+      label: form.label.trim(),
+      expiry_date: form.expiry_date.trim() || undefined,
+      notes: form.notes.trim() || undefined,
+    });
+    setSaving(false);
+    if (error) { setFormErr(error.message); return; }
+    setForm({ doc_type: "insurance", label: "", expiry_date: "", notes: "" });
+    setShowForm(false);
+    onRefresh?.();
+  };
+
+  const handleDelete = async (docId: string) => {
+    if (!orgId) return;
+    const { error } = await deleteSupplierComplianceDoc(docId);
+    if (!error) onRefresh?.();
   };
 
   const ALERT_THRESHOLDS = [90, 60, 30, 15, 7, 1];
-
-  const SAMPLE_DOCS: ComplianceDocument[] = [
-    { id: "1", doc_type: "insurance", label: "Vehicle Insurance", expiry_date: null, status: "green", daysToExpiry: null },
-    { id: "2", doc_type: "pollution", label: "PUC Certificate", expiry_date: null, status: "green", daysToExpiry: null },
-    { id: "3", doc_type: "gst", label: "GST Registration", expiry_date: null, status: "green", daysToExpiry: null },
-    { id: "4", doc_type: "labor_license", label: "Labour License", expiry_date: null, status: "amber", daysToExpiry: 45 },
-  ];
-
-  const docs = compliance_docs.length > 0 ? compliance_docs : SAMPLE_DOCS;
-  const red = docs.filter((d) => d.status === "red").length;
-  const amber = docs.filter((d) => d.status === "amber").length;
+  const docs = compliance_docs;
   const green = docs.filter((d) => d.status === "green").length;
+  const amber = docs.filter((d) => d.status === "amber").length;
+  const red = docs.filter((d) => d.status === "red").length;
 
   return (
     <View style={styles.panel}>
@@ -372,33 +471,81 @@ export function SupplierProfileCompliancePanel({ bundle }: BundleProps) {
         ))}
       </View>
 
-      <SectionTitle>Document tracker</SectionTitle>
-      <View style={spStyles.dataTable}>
-        <View style={spStyles.dataTableHead}>
-          {["Document", "Status", "Expiry date", "Days remaining", "Action"].map((h) => (
-            <Text key={h} style={spStyles.dataTableHeadCell}>{h}</Text>
-          ))}
-        </View>
-        {docs.map((doc) => (
-          <View key={doc.id} style={spStyles.dataTableRow}>
-            <Text style={[spStyles.dataTableCell, { flex: 2 }]}>{doc.label}</Text>
-            <View style={[spStyles.dataTableCell as object, { flex: 1, flexDirection: "row", alignItems: "center", gap: 6 }]}>
-              <TrafficLight status={doc.status} />
-              <Text style={spStyles.dataTableCell}>{doc.status}</Text>
-            </View>
-            <Text style={spStyles.dataTableCell}>{doc.expiry_date ?? "—"}</Text>
-            <Text style={[spStyles.dataTableCell, doc.daysToExpiry != null && doc.daysToExpiry <= 30 && { color: "#F1416C", fontWeight: "700" }]}>
-              {doc.daysToExpiry != null ? `${doc.daysToExpiry}d` : "—"}
-            </Text>
-            <Pressable style={spStyles.kycUploadBtn}>
-              <Upload size={12} color="#fff" strokeWidth={2} />
-              <Text style={spStyles.kycUploadBtnText}>Renew</Text>
-            </Pressable>
-          </View>
-        ))}
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <SectionTitle>Document tracker</SectionTitle>
+        {orgId && supplierId ? (
+          <Pressable style={spStyles.addBtn} onPress={() => setShowForm((v) => !v)}>
+            <Plus size={13} color="#fff" strokeWidth={2} />
+            <Text style={spStyles.addBtnText}>Add document</Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      <SectionTitle>Alert configuration</SectionTitle>
+      {showForm ? (
+        <View style={spStyles.inlineFormCard}>
+          <Text style={spStyles.inlineFormTitle}>Add compliance document</Text>
+          <View style={spStyles.formGrid}>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Type</Text>
+              <View style={spStyles.selectBtn}>
+                <Text style={spStyles.selectBtnText}>{form.doc_type.replace(/_/g, " ")}</Text>
+              </View>
+              <View style={spStyles.selectDropdown}>
+                {(["insurance","pollution_certificate","gst","labor_license","vehicle_fitness","trade_license","other"] as SupplierComplianceDocType[]).map((t) => (
+                  <Pressable key={t} style={[spStyles.selectOption, form.doc_type === t && spStyles.selectOptionActive]} onPress={() => setForm((f) => ({ ...f, doc_type: t }))}>
+                    <Text style={[spStyles.selectOptionText, form.doc_type === t && spStyles.selectOptionTextActive]}>{t.replace(/_/g, " ")}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Label *</Text>
+              <TextInput style={spStyles.fieldInput} value={form.label} onChangeText={(v) => setForm((f) => ({ ...f, label: v }))} placeholder="e.g. Vehicle Insurance" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Expiry date</Text>
+              <TextInput style={spStyles.fieldInput} value={form.expiry_date} onChangeText={(v) => setForm((f) => ({ ...f, expiry_date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+          </View>
+          {formErr ? <View style={spStyles.inlineFormError}><Text style={spStyles.inlineFormErrorText}>{formErr}</Text></View> : null}
+          <View style={spStyles.inlineFormActions}>
+            <Pressable style={spStyles.inlineCancelBtn} onPress={() => { setShowForm(false); setFormErr(null); }}><Text style={spStyles.inlineCancelBtnText}>Cancel</Text></Pressable>
+            <Pressable style={spStyles.inlineSaveBtn} onPress={handleAdd} disabled={saving}>
+              {saving ? <ActivityIndicator size={14} color="#fff" /> : <Text style={spStyles.inlineSaveBtnText}>Save</Text>}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      {docs.length === 0 ? (
+        <Empty message="No compliance documents yet. Add insurance, PUC, and other docs." />
+      ) : (
+        <View style={spStyles.dataTable}>
+          <View style={spStyles.dataTableHead}>
+            {["Document", "Type", "Status", "Expiry date", ""].map((h) => (
+              <Text key={h} style={spStyles.dataTableHeadCell}>{h}</Text>
+            ))}
+          </View>
+          {docs.map((doc) => (
+            <View key={doc.id} style={spStyles.dataTableRow}>
+              <Text style={[spStyles.dataTableCell, { flex: 2 }]}>{doc.label}</Text>
+              <Text style={spStyles.dataTableCell}>{doc.doc_type.replace(/_/g, " ")}</Text>
+              <View style={[spStyles.dataTableCell as object, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
+                <TrafficLight status={doc.status} />
+                <Text style={spStyles.dataTableCell}>{doc.status}</Text>
+              </View>
+              <Text style={spStyles.dataTableCell}>{doc.expiry_date ?? "—"}</Text>
+              {orgId ? (
+                <Pressable onPress={() => void handleDelete(doc.id)} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 11, color: "#F1416C", fontWeight: "600" }}>Remove</Text>
+                </Pressable>
+              ) : <View style={{ width: 48 }} />}
+            </View>
+          ))}
+        </View>
+      )}
+
+      <SectionTitle>Alert thresholds</SectionTitle>
       <View style={spStyles.alertConfigRow}>
         {ALERT_THRESHOLDS.map((days) => (
           <View key={days} style={spStyles.alertConfigChip}>
@@ -554,132 +701,261 @@ function SupplierOnboardingAgreementCard({
   );
 }
 
-export function SupplierProfileContractsPanel({ bundle, orgId, onRefresh }: BundleProps) {
+export function SupplierProfileContractsPanel({ bundle, orgId, supplierId, onRefresh }: BundleProps) {
   const { contracts } = bundle;
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    contract_number: "", rate_type: "per_trip" as "per_trip"|"per_ton"|"per_km"|"fixed_monthly",
+    effective_date: "", expiry_date: "", credit_days: "", general_terms: "",
+  });
+
+  const handleAdd = async () => {
+    if (!orgId || !supplierId) return;
+    if (!form.contract_number.trim()) { setFormErr("Contract number is required."); return; }
+    setSaving(true); setFormErr(null);
+    const { error } = await createSupplierContract(orgId, supplierId, {
+      contract_number: form.contract_number.trim(),
+      rate_type: form.rate_type,
+      effective_date: form.effective_date.trim() || undefined,
+      expiry_date: form.expiry_date.trim() || undefined,
+      payment_terms: form.credit_days ? { credit_days: Number(form.credit_days) } : undefined,
+      general_terms: form.general_terms.trim() || undefined,
+    });
+    setSaving(false);
+    if (error) { setFormErr(error.message); return; }
+    setForm({ contract_number: "", rate_type: "per_trip", effective_date: "", expiry_date: "", credit_days: "", general_terms: "" });
+    setShowForm(false);
+    onRefresh?.();
+  };
+
   const active = contracts.filter((c) => c.status === "active");
   const expired = contracts.filter((c) => c.status === "expired");
-
-  if (contracts.length === 0) {
-    return (
-      <View style={styles.panel}>
-        <SupplierOnboardingAgreementCard bundle={bundle} orgId={orgId} onRefresh={onRefresh} />
-        <View style={spStyles.emptyActionCard}>
-          <FileText size={36} color={METRONIC.muted} strokeWidth={1.5} />
-          <Text style={spStyles.emptyActionTitle}>No rate contracts yet</Text>
-          <Text style={spStyles.emptyActionSub}>Create a rate contract to manage lanes, SLA, and penalty terms.</Text>
-          <Pressable style={spStyles.addBtn}>
-            <Plus size={14} color="#fff" strokeWidth={2} />
-            <Text style={spStyles.addBtnText}>Add contract</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.panel}>
       <SupplierOnboardingAgreementCard bundle={bundle} orgId={orgId} onRefresh={onRefresh} />
-      <View style={spStyles.contractsHeaderRow}>
-        <Text style={styles.sectionTitle}>{active.length} active contract{active.length !== 1 ? "s" : ""}</Text>
-        <Pressable style={spStyles.addBtn}>
-          <Plus size={13} color="#fff" strokeWidth={2} />
-          <Text style={spStyles.addBtnText}>Add contract</Text>
-        </Pressable>
+
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <Text style={styles.sectionTitle}>{contracts.length} contract{contracts.length !== 1 ? "s" : ""}</Text>
+        {orgId && supplierId ? (
+          <Pressable style={spStyles.addBtn} onPress={() => setShowForm((v) => !v)}>
+            <Plus size={13} color="#fff" strokeWidth={2} />
+            <Text style={spStyles.addBtnText}>Add contract</Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      {active.map((contract) => (
-        <View key={contract.id} style={spStyles.contractCard}>
-          <View style={spStyles.contractCardHeader}>
-            <View style={spStyles.contractCardLeft}>
-              <Text style={spStyles.contractCardTitle}>{contract.contract_name}</Text>
-              <Text style={spStyles.contractCardMeta}>
-                {contract.effective_date} → {contract.expiry_date ?? "No expiry"} · {contract.mode.replace("_", " ").toUpperCase()}
-              </Text>
+      {showForm ? (
+        <View style={spStyles.inlineFormCard}>
+          <Text style={spStyles.inlineFormTitle}>New contract</Text>
+          <View style={spStyles.formGrid}>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Contract number *</Text>
+              <TextInput style={spStyles.fieldInput} value={form.contract_number} onChangeText={(v) => setForm((f) => ({ ...f, contract_number: v }))} placeholder="e.g. CTR-2026-001" placeholderTextColor={METRONIC.muted} />
             </View>
-            <View style={[spStyles.contractStatusPill, { backgroundColor: "#E8FFF3" }]}>
-              <Text style={{ fontSize: 10, fontWeight: "700", color: "#50CD89" }}>ACTIVE</Text>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Rate type</Text>
+              <View style={spStyles.selectBtn}><Text style={spStyles.selectBtnText}>{form.rate_type.replace(/_/g, " ")}</Text></View>
+              <View style={spStyles.selectDropdown}>
+                {(["per_trip","per_ton","per_km","fixed_monthly"] as const).map((t) => (
+                  <Pressable key={t} style={[spStyles.selectOption, form.rate_type === t && spStyles.selectOptionActive]} onPress={() => setForm((f) => ({ ...f, rate_type: t }))}>
+                    <Text style={[spStyles.selectOptionText, form.rate_type === t && spStyles.selectOptionTextActive]}>{t.replace(/_/g, " ")}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Effective date</Text>
+              <TextInput style={spStyles.fieldInput} value={form.effective_date} onChangeText={(v) => setForm((f) => ({ ...f, effective_date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Expiry date</Text>
+              <TextInput style={spStyles.fieldInput} value={form.expiry_date} onChangeText={(v) => setForm((f) => ({ ...f, expiry_date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Credit days</Text>
+              <TextInput style={spStyles.fieldInput} value={form.credit_days} onChangeText={(v) => setForm((f) => ({ ...f, credit_days: v }))} placeholder="e.g. 30" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+            </View>
+            <View style={[spStyles.fieldGroup, { flexBasis: "100%" }]}>
+              <Text style={spStyles.fieldLabel}>General terms</Text>
+              <TextInput style={[spStyles.fieldInput, { minHeight: 60 }]} value={form.general_terms} onChangeText={(v) => setForm((f) => ({ ...f, general_terms: v }))} placeholder="Key terms and conditions" placeholderTextColor={METRONIC.muted} multiline />
             </View>
           </View>
-
-          {contract.lane_rates.length > 0 ? (
-            <>
-              <Text style={spStyles.contractSubTitle}>Rate matrix</Text>
-              <DataTable
-                headers={["Origin", "Destination", "Vehicle", "Rate (₹)", "Rate type"]}
-                rows={contract.lane_rates.map((lr) => [
-                  lr.origin, lr.destination, lr.vehicle_type,
-                  formatINR(lr.rate), lr.rate_type.replace(/_/g, " "),
-                ])}
-              />
-            </>
-          ) : null}
-
-          <Text style={spStyles.contractSubTitle}>SLA terms</Text>
-          <View style={spStyles.slaBadgeRow}>
-            {[
-              `POD: ${contract.sla.pod_submission_days}d deadline`,
-              `₹${contract.sla.pod_penalty_per_day}/day late`,
-              `Detention: ${contract.sla.detention_free_hours}h free`,
-              `₹${contract.sla.detention_rate_per_hour}/hr after`,
-              `Placement grace: ${contract.sla.placement_delay_grace_hours}h`,
-            ].map((s) => (
-              <View key={s} style={spStyles.slaChip}>
-                <Text style={spStyles.slaChipText}>{s}</Text>
-              </View>
-            ))}
+          {formErr ? <View style={spStyles.inlineFormError}><Text style={spStyles.inlineFormErrorText}>{formErr}</Text></View> : null}
+          <View style={spStyles.inlineFormActions}>
+            <Pressable style={spStyles.inlineCancelBtn} onPress={() => { setShowForm(false); setFormErr(null); }}><Text style={spStyles.inlineCancelBtnText}>Cancel</Text></Pressable>
+            <Pressable style={spStyles.inlineSaveBtn} onPress={handleAdd} disabled={saving}>
+              {saving ? <ActivityIndicator size={14} color="#fff" /> : <Text style={spStyles.inlineSaveBtnText}>Save</Text>}
+            </Pressable>
           </View>
         </View>
-      ))}
+      ) : null}
 
-      {expired.length > 0 ? (
+      {contracts.length === 0 ? (
+        <View style={spStyles.emptyActionCard}>
+          <FileText size={36} color={METRONIC.muted} strokeWidth={1.5} />
+          <Text style={spStyles.emptyActionTitle}>No rate contracts yet</Text>
+          <Text style={spStyles.emptyActionSub}>Add a contract to manage payment terms and SLA.</Text>
+        </View>
+      ) : (
         <>
-          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Expired contracts ({expired.length})</Text>
-          {expired.map((c) => (
-            <View key={c.id} style={[spStyles.contractCard, { opacity: 0.6 }]}>
-              <Text style={spStyles.contractCardTitle}>{c.contract_name}</Text>
-              <Text style={spStyles.contractCardMeta}>Expired {c.expiry_date ?? "—"}</Text>
+          {active.map((contract) => (
+            <View key={contract.id} style={spStyles.contractCard}>
+              <View style={spStyles.contractCardHeader}>
+                <View style={spStyles.contractCardLeft}>
+                  <Text style={spStyles.contractCardTitle}>{(contract as { contract_number?: string }).contract_number ?? (contract as { contract_name?: string }).contract_name ?? "—"}</Text>
+                  <Text style={spStyles.contractCardMeta}>
+                    {(contract as { effective_date?: string }).effective_date ?? "—"} → {contract.expiry_date ?? "No expiry"} · {((contract as { rate_type?: string }).rate_type ?? "").replace(/_/g, " ")}
+                  </Text>
+                </View>
+                <View style={[spStyles.contractStatusPill, { backgroundColor: "#E8FFF3" }]}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#50CD89" }}>ACTIVE</Text>
+                </View>
+              </View>
             </View>
           ))}
+          {expired.length > 0 ? (
+            <>
+              <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Expired ({expired.length})</Text>
+              {expired.map((c) => (
+                <View key={c.id} style={[spStyles.contractCard, { opacity: 0.6 }]}>
+                  <Text style={spStyles.contractCardTitle}>{(c as { contract_number?: string }).contract_number ?? (c as { contract_name?: string }).contract_name ?? "—"}</Text>
+                  <Text style={spStyles.contractCardMeta}>Expired {c.expiry_date ?? "—"}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
         </>
-      ) : null}
+      )}
     </View>
   );
 }
 
 // ── TAB 5: Fleet ──────────────────────────────────────────────────────────────
 
-export function SupplierProfileFleetPanel({ bundle }: BundleProps) {
+export function SupplierProfileFleetPanel({ bundle, orgId, supplierId, onRefresh }: BundleProps) {
   const { fleet } = bundle;
-  const active = fleet.filter((v) => v.status === "active").length;
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    vehicle_number: "", vehicle_type: "truck" as string,
+    capacity_tons: "", ownership: "owned" as "owned"|"leased"|"hired",
+    insurance_expiry: "", fitness_expiry: "", permit_expiry: "",
+    has_gps: false,
+  });
+
+  const handleAdd = async () => {
+    if (!orgId || !supplierId) return;
+    if (!form.vehicle_number.trim()) { setFormErr("Vehicle number is required."); return; }
+    setSaving(true); setFormErr(null);
+    const { error } = await createSupplierVehicle(orgId, supplierId, {
+      vehicle_number: form.vehicle_number.trim().toUpperCase(),
+      vehicle_type: form.vehicle_type || undefined,
+      capacity_tons: form.capacity_tons ? Number(form.capacity_tons) : undefined,
+      ownership: form.ownership,
+      insurance_expiry: form.insurance_expiry.trim() || undefined,
+      fitness_expiry: form.fitness_expiry.trim() || undefined,
+      permit_expiry: form.permit_expiry.trim() || undefined,
+      has_gps: form.has_gps,
+    });
+    setSaving(false);
+    if (error) { setFormErr(error.message); return; }
+    setForm({ vehicle_number: "", vehicle_type: "truck", capacity_tons: "", ownership: "owned", insurance_expiry: "", fitness_expiry: "", permit_expiry: "", has_gps: false });
+    setShowForm(false);
+    onRefresh?.();
+  };
 
   return (
     <View style={styles.panel}>
-      <View style={spStyles.contractsHeaderRow}>
-        <Text style={styles.sectionTitle}>{fleet.length} vehicles registered</Text>
-        <Pressable style={spStyles.addBtn}>
-          <Plus size={13} color="#fff" strokeWidth={2} />
-          <Text style={spStyles.addBtnText}>Add vehicle</Text>
-        </Pressable>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <Text style={styles.sectionTitle}>{fleet.length} vehicle{fleet.length !== 1 ? "s" : ""}</Text>
+        {orgId && supplierId ? (
+          <Pressable style={spStyles.addBtn} onPress={() => setShowForm((v) => !v)}>
+            <Plus size={13} color="#fff" strokeWidth={2} />
+            <Text style={spStyles.addBtnText}>Add vehicle</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {showForm ? (
+        <View style={spStyles.inlineFormCard}>
+          <Text style={spStyles.inlineFormTitle}>Register vehicle</Text>
+          <View style={spStyles.formGrid}>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Vehicle number *</Text>
+              <TextInput style={spStyles.fieldInput} value={form.vehicle_number} onChangeText={(v) => setForm((f) => ({ ...f, vehicle_number: v }))} placeholder="e.g. MH01AB1234" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Vehicle type</Text>
+              <TextInput style={spStyles.fieldInput} value={form.vehicle_type} onChangeText={(v) => setForm((f) => ({ ...f, vehicle_type: v }))} placeholder="e.g. truck, trailer, mini-truck" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Capacity (tons)</Text>
+              <TextInput style={spStyles.fieldInput} value={form.capacity_tons} onChangeText={(v) => setForm((f) => ({ ...f, capacity_tons: v }))} placeholder="e.g. 10" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Ownership</Text>
+              <View style={spStyles.selectBtn}><Text style={spStyles.selectBtnText}>{form.ownership}</Text></View>
+              <View style={spStyles.selectDropdown}>
+                {(["owned","leased","hired"] as const).map((t) => (
+                  <Pressable key={t} style={[spStyles.selectOption, form.ownership === t && spStyles.selectOptionActive]} onPress={() => setForm((f) => ({ ...f, ownership: t }))}>
+                    <Text style={[spStyles.selectOptionText, form.ownership === t && spStyles.selectOptionTextActive]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Insurance expiry</Text>
+              <TextInput style={spStyles.fieldInput} value={form.insurance_expiry} onChangeText={(v) => setForm((f) => ({ ...f, insurance_expiry: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Fitness expiry</Text>
+              <TextInput style={spStyles.fieldInput} value={form.fitness_expiry} onChangeText={(v) => setForm((f) => ({ ...f, fitness_expiry: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Permit expiry</Text>
+              <TextInput style={spStyles.fieldInput} value={form.permit_expiry} onChangeText={(v) => setForm((f) => ({ ...f, permit_expiry: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={[spStyles.fieldGroup, { justifyContent: "center" }]}>
+              <Text style={spStyles.fieldLabel}>GPS equipped</Text>
+              <Pressable onPress={() => setForm((f) => ({ ...f, has_gps: !f.has_gps }))} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 8 }}>
+                <View style={{ width: 36, height: 20, borderRadius: 10, backgroundColor: form.has_gps ? METRONIC.link : "#E5E7EB", justifyContent: "center", paddingHorizontal: 2 }}>
+                  <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: "#fff", alignSelf: form.has_gps ? "flex-end" : "flex-start" }} />
+                </View>
+                <Text style={spStyles.fieldLabel}>{form.has_gps ? "Yes" : "No"}</Text>
+              </Pressable>
+            </View>
+          </View>
+          {formErr ? <View style={spStyles.inlineFormError}><Text style={spStyles.inlineFormErrorText}>{formErr}</Text></View> : null}
+          <View style={spStyles.inlineFormActions}>
+            <Pressable style={spStyles.inlineCancelBtn} onPress={() => { setShowForm(false); setFormErr(null); }}><Text style={spStyles.inlineCancelBtnText}>Cancel</Text></Pressable>
+            <Pressable style={spStyles.inlineSaveBtn} onPress={handleAdd} disabled={saving}>
+              {saving ? <ActivityIndicator size={14} color="#fff" /> : <Text style={spStyles.inlineSaveBtnText}>Save</Text>}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {fleet.length === 0 ? (
         <View style={spStyles.emptyActionCard}>
           <Truck size={36} color={METRONIC.muted} strokeWidth={1.5} />
           <Text style={spStyles.emptyActionTitle}>No vehicles registered</Text>
-          <Text style={spStyles.emptyActionSub}>Track supplier fleet vehicles, compliance documents, and GPS status.</Text>
+          <Text style={spStyles.emptyActionSub}>Track supplier fleet, compliance docs, and GPS status.</Text>
         </View>
       ) : (
         <DataTable
-          headers={["Vehicle No", "Type", "Capacity", "Ownership", "Insurance", "Fitness", "GPS", "Status"]}
+          headers={["Vehicle No", "Type", "Capacity", "Ownership", "Insurance", "Fitness", "GPS"]}
           rows={fleet.map((v) => [
             v.vehicle_number,
-            v.vehicle_type,
+            (v as { vehicle_type?: string }).vehicle_type ?? "—",
             v.capacity_tons != null ? `${v.capacity_tons}T` : "—",
-            v.ownership,
+            (v as { ownership?: string }).ownership ?? "—",
             v.insurance_expiry ?? "—",
             v.fitness_expiry ?? "—",
-            v.gps_available ? "Yes" : "No",
-            v.status,
+            (v as { has_gps?: boolean }).has_gps ? "Yes" : "No",
           ])}
         />
       )}
@@ -727,24 +1003,107 @@ export function SupplierProfileDriversPanel({ bundle }: BundleProps) {
 
 // ── TAB 7: Warehouses ─────────────────────────────────────────────────────────
 
-export function SupplierProfileWarehousesPanel({ bundle }: BundleProps) {
+export function SupplierProfileWarehousesPanel({ bundle, orgId, supplierId, onRefresh }: BundleProps) {
   const { warehouses } = bundle;
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "", address: "", city: "", state: "", pincode: "",
+    contact_name: "", contact_phone: "",
+    storage_capacity_tons: "", loading_bays: "",
+  });
+
+  const handleAdd = async () => {
+    if (!orgId || !supplierId) return;
+    if (!form.name.trim()) { setFormErr("Warehouse name is required."); return; }
+    setSaving(true); setFormErr(null);
+    const { error } = await createSupplierWarehouse(orgId, supplierId, {
+      name: form.name.trim(),
+      address: form.address.trim() || undefined,
+      city: form.city.trim() || undefined,
+      state: form.state.trim() || undefined,
+      pincode: form.pincode.trim() || undefined,
+      contact_name: form.contact_name.trim() || undefined,
+      contact_phone: form.contact_phone.trim() || undefined,
+      storage_capacity_tons: form.storage_capacity_tons ? Number(form.storage_capacity_tons) : undefined,
+      loading_bays: form.loading_bays ? Number(form.loading_bays) : undefined,
+    });
+    setSaving(false);
+    if (error) { setFormErr(error.message); return; }
+    setForm({ name: "", address: "", city: "", state: "", pincode: "", contact_name: "", contact_phone: "", storage_capacity_tons: "", loading_bays: "" });
+    setShowForm(false);
+    onRefresh?.();
+  };
 
   return (
     <View style={styles.panel}>
-      <View style={spStyles.contractsHeaderRow}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <Text style={styles.sectionTitle}>{warehouses.length} warehouse{warehouses.length !== 1 ? "s" : ""}</Text>
-        <Pressable style={spStyles.addBtn}>
-          <Plus size={13} color="#fff" strokeWidth={2} />
-          <Text style={spStyles.addBtnText}>Add warehouse</Text>
-        </Pressable>
+        {orgId && supplierId ? (
+          <Pressable style={spStyles.addBtn} onPress={() => setShowForm((v) => !v)}>
+            <Plus size={13} color="#fff" strokeWidth={2} />
+            <Text style={spStyles.addBtnText}>Add warehouse</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {showForm ? (
+        <View style={spStyles.inlineFormCard}>
+          <Text style={spStyles.inlineFormTitle}>Add warehouse</Text>
+          <View style={spStyles.formGrid}>
+            <View style={[spStyles.fieldGroup, { flexBasis: "100%" }]}>
+              <Text style={spStyles.fieldLabel}>Warehouse name *</Text>
+              <TextInput style={spStyles.fieldInput} value={form.name} onChangeText={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="e.g. Mumbai North Hub" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={[spStyles.fieldGroup, { flexBasis: "100%" }]}>
+              <Text style={spStyles.fieldLabel}>Address</Text>
+              <TextInput style={spStyles.fieldInput} value={form.address} onChangeText={(v) => setForm((f) => ({ ...f, address: v }))} placeholder="Street address" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>City</Text>
+              <TextInput style={spStyles.fieldInput} value={form.city} onChangeText={(v) => setForm((f) => ({ ...f, city: v }))} placeholder="Mumbai" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>State</Text>
+              <TextInput style={spStyles.fieldInput} value={form.state} onChangeText={(v) => setForm((f) => ({ ...f, state: v }))} placeholder="Maharashtra" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Pincode</Text>
+              <TextInput style={spStyles.fieldInput} value={form.pincode} onChangeText={(v) => setForm((f) => ({ ...f, pincode: v }))} placeholder="400001" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Contact name</Text>
+              <TextInput style={spStyles.fieldInput} value={form.contact_name} onChangeText={(v) => setForm((f) => ({ ...f, contact_name: v }))} placeholder="Manager name" placeholderTextColor={METRONIC.muted} />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Contact phone</Text>
+              <TextInput style={spStyles.fieldInput} value={form.contact_phone} onChangeText={(v) => setForm((f) => ({ ...f, contact_phone: v }))} placeholder="9876543210" placeholderTextColor={METRONIC.muted} keyboardType="phone-pad" />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Capacity (tons)</Text>
+              <TextInput style={spStyles.fieldInput} value={form.storage_capacity_tons} onChangeText={(v) => setForm((f) => ({ ...f, storage_capacity_tons: v }))} placeholder="e.g. 500" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+            </View>
+            <View style={spStyles.fieldGroup}>
+              <Text style={spStyles.fieldLabel}>Loading bays</Text>
+              <TextInput style={spStyles.fieldInput} value={form.loading_bays} onChangeText={(v) => setForm((f) => ({ ...f, loading_bays: v }))} placeholder="e.g. 4" placeholderTextColor={METRONIC.muted} keyboardType="numeric" />
+            </View>
+          </View>
+          {formErr ? <View style={spStyles.inlineFormError}><Text style={spStyles.inlineFormErrorText}>{formErr}</Text></View> : null}
+          <View style={spStyles.inlineFormActions}>
+            <Pressable style={spStyles.inlineCancelBtn} onPress={() => { setShowForm(false); setFormErr(null); }}><Text style={spStyles.inlineCancelBtnText}>Cancel</Text></Pressable>
+            <Pressable style={spStyles.inlineSaveBtn} onPress={handleAdd} disabled={saving}>
+              {saving ? <ActivityIndicator size={14} color="#fff" /> : <Text style={spStyles.inlineSaveBtnText}>Save</Text>}
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {warehouses.length === 0 ? (
         <View style={spStyles.emptyActionCard}>
           <Building2 size={36} color={METRONIC.muted} strokeWidth={1.5} />
           <Text style={spStyles.emptyActionTitle}>No warehouses registered</Text>
-          <Text style={spStyles.emptyActionSub}>Register supplier warehouses with address, capacity, and compliance documents.</Text>
+          <Text style={spStyles.emptyActionSub}>Register supplier warehouses with address, capacity, and loading bays.</Text>
         </View>
       ) : (
         <View style={spStyles.warehouseGrid}>
@@ -753,15 +1112,13 @@ export function SupplierProfileWarehousesPanel({ bundle }: BundleProps) {
               <View style={spStyles.warehouseCardHead}>
                 <Building2 size={20} color={METRONIC.link} strokeWidth={2} />
                 <Text style={spStyles.warehouseCardName}>{wh.name}</Text>
-                {wh.code ? <Text style={spStyles.warehouseCardCode}>{wh.code}</Text> : null}
               </View>
               {[
-                ["Address", wh.address],
+                ["Address", wh.address ?? "—"],
                 ["City", [wh.city, wh.state, wh.pincode].filter(Boolean).join(", ") || "—"],
-                ["Phone", wh.contact_number ?? "—"],
-                ["Capacity", wh.storage_capacity_sqft != null ? `${wh.storage_capacity_sqft} sqft` : "—"],
+                ["Phone", (wh as { contact_phone?: string }).contact_phone ?? (wh as { contact_number?: string }).contact_number ?? "—"],
+                ["Capacity", (wh as { storage_capacity_tons?: number }).storage_capacity_tons != null ? `${(wh as { storage_capacity_tons?: number }).storage_capacity_tons}T` : "—"],
                 ["Loading bays", wh.loading_bays != null ? String(wh.loading_bays) : "—"],
-                ["Working hours", wh.working_hours ?? "—"],
               ].map(([l, v]) => <InfoRow key={l} label={l} value={v} />)}
             </View>
           ))}

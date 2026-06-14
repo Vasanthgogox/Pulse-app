@@ -11,12 +11,14 @@ import {
   METRONIC,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { BadgeCheck, Building2, Mail, MapPin, Phone, ArrowLeft } from "lucide-react-native";
+import { Fragment } from "react";
 import { Pressable, Text, View } from "react-native";
 
 type Props = {
   client: ClientRow;
   locationLabel?: string | null;
   kycScore: number;
+  stats?: { value: string; label: string }[];
   onBack?: () => void;
 };
 
@@ -36,6 +38,7 @@ export function ClientProfileHubHero({
   client,
   locationLabel,
   kycScore,
+  stats,
   onBack,
 }: Props) {
   const displayName = client.name?.trim() || "Client";
@@ -137,6 +140,20 @@ export function ClientProfileHubHero({
                   <Text style={styles.heroMetaText}>{phoneLine}</Text>
                 </View>
               ) : null}
+            </View>
+          ) : null}
+
+          {stats && stats.length > 0 ? (
+            <View style={cpStyles.heroStatsRow}>
+              {stats.map((s, i) => (
+                <Fragment key={s.label}>
+                  {i > 0 ? <View style={cpStyles.heroStatDivider} /> : null}
+                  <View style={cpStyles.heroStatItem}>
+                    <Text style={cpStyles.heroStatValue}>{s.value}</Text>
+                    <Text style={cpStyles.heroStatLabel}>{s.label}</Text>
+                  </View>
+                </Fragment>
+              ))}
             </View>
           ) : null}
         </View>

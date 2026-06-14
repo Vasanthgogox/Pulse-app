@@ -18,6 +18,29 @@ export type SupplierProfileTab =
   | "finance"
   | "timeline";
 
+// ── Contacts ─────────────────────────────────────────────────────────────────
+
+export type SupplierContactRow = {
+  id: string;
+  organization_id: string;
+  supplier_id: string;
+  name: string;
+  designation?: string | null;
+  mobile?: string | null;
+  email?: string | null;
+  department?: string | null;
+  is_primary: boolean;
+  is_operations: boolean;
+  is_finance: boolean;
+  is_dispatch: boolean;
+  notes?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
+};
+
 // ── KYC ──────────────────────────────────────────────────────────────────────
 
 export type SupplierKycDocType =
@@ -226,6 +249,7 @@ export type SupplierManagementBundle = {
   trips: TripRow[];
   transactions: LedgerRow[];
   drivers: DriverRow[];
+  contacts: SupplierContactRow[];
   kyc_documents: SupplierKycDocument[];
   compliance_docs: ComplianceDocument[];
   contracts: SupplierContract[];
@@ -291,6 +315,7 @@ export function buildDefaultBundle(supplier: SupplierRow, trips: TripRow[], tran
     trips,
     transactions,
     drivers,
+    contacts: [],
     kyc_documents: [],
     compliance_docs: [],
     contracts: [],

@@ -33,12 +33,184 @@ import {
 import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { SupplierProfileHubHero } from "@/features/suppliers/components/desktop/SupplierProfileHubHero";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
+import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
+import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { ArrowLeft, MessageSquare, MoreHorizontal, Plus } from "lucide-react-native";
+import { ArrowLeft, FileText, MessageSquare, MoreHorizontal, Plus } from "lucide-react-native";
+
+type SupplierSidebarProps = {
+  bundle: SupplierManagementBundle;
+  kycScore: number;
+  perfScore: number;
+  onTabChange: (tab: SupplierProfileTab) => void;
+  onEdit?: () => void;
+};
+
+function SupplierPartyDetailSidebar({ bundle, kycScore, perfScore, onTabChange, onEdit }: SupplierSidebarProps) {
+  const router = useRouter();
+  const { supplier } = bundle;
+  const isIntegrated = supplier.supplier_type === "integrated" || Boolean(supplier.linked_organization_id);
+  const isVerified = supplier.is_verified;
+  const address = supplier.address?.trim() || null;
+  const phone = supplier.phone?.trim() || null;
+  const email = supplier.email?.trim() || null;
+  const contactPerson = supplier.contact_person?.trim() || null;
+
+  const onboardingStatus = (supplier as Record<string, unknown>).onboarding_agreement_status as string | null | undefined;
+  const onboardingSignedAt = (supplier as Record<string, unknown>).onboarding_agreement_signed_at as string | null | undefined;
+  const vehicleTypes = (supplier as Record<string, unknown>).vehicle_types as string[] | null | undefined;
+  const operatingAreas = (supplier as Record<string, unknown>).operating_areas as string[] | null | undefined;
+
+  const integrationLabel = isIntegrated ? "INTEGRATED" : (supplier.supplier_type ?? "OFFLINE").toUpperCase();
+  const integrationBg = isIntegrated ? "#E8FFF3" : "#F1F1F4";
+  const integrationColor = isIntegrated ? "#50CD89" : METRONIC.subtle;
+
+  const onboardBg =
+    onboardingStatus === "signed" ? "#E8FFF3" :
+    onboardingStatus === "expired" || onboardingStatus === "terminated" ? "#FFF1F2" :
+    "#FFF8DD";
+  const onboardColor =
+    onboardingStatus === "signed" ? "#50CD89" :
+    onboardingStatus === "expired" || onboardingStatus === "terminated" ? "#F1416C" :
+    "#F6C000";
+
+  const kycBg = kycScore >= 80 ? "#E8FFF3" : kycScore >= 50 ? "#FFF8DD" : "#FFF1F2";
+  const kycColor = kycScore >= 80 ? "#50CD89" : kycScore >= 50 ? "#F6C000" : "#F1416C";
+
+  return (
+    <View>
+      {/* Highlights */}
+      <View style={supplierStyles.sidebarCard}>
+        <Text style={supplierStyles.sidebarCardTitle}>Highlights</Text>
+        <View style={supplierStyles.sidebarKvRow}>
+          <Text style={supplierStyles.sidebarKvLabel}>Type</Text>
+          <View style={[supplierStyles.sidebarBadge, { backgroundColor: integrationBg }]}>
+            <Text style={[supplierStyles.sidebarBadgeText, { color: integrationColor }]}>{integrationLabel}</Text>
+          </View>
+        </View>
+        <View style={supplierStyles.sidebarKvRow}>
+          <Text style={supplierStyles.sidebarKvLabel}>Verified</Text>
+          <View style={[supplierStyles.sidebarBadge, { backgroundColor: isVerified ? "#E8FFF3" : "#F1F1F4" }]}>
+            <Text style={[supplierStyles.sidebarBadgeText, { color: isVerified ? "#50CD89" : METRONIC.muted }]}>
+              {isVerified ? "YES" : "NO"}
+            </Text>
+          </View>
+        </View>
+        <View style={supplierStyles.sidebarKvRow}>
+          <Text style={supplierStyles.sidebarKvLabel}>KYC</Text>
+          <View style={[supplierStyles.sidebarBadge, { backgroundColor: kycBg }]}>
+            <Text style={[supplierStyles.sidebarBadgeText, { color: kycColor }]}>{kycScore}%</Text>
+          </View>
+        </View>
+        {perfScore > 0 ? (
+          <View style={supplierStyles.sidebarKvRow}>
+            <Text style={supplierStyles.sidebarKvLabel}>Score</Text>
+            <Text style={supplierStyles.sidebarKvValue}>{perfScore}</Text>
+          </View>
+        ) : null}
+        {address ? (
+          <View style={supplierStyles.sidebarKvRow}>
+            <Text style={supplierStyles.sidebarKvLabel}>Location</Text>
+            <Text style={supplierStyles.sidebarKvValue} numberOfLines={2}>{address}</Text>
+          </View>
+        ) : null}
+        {vehicleTypes && vehicleTypes.length > 0 ? (
+          <View style={supplierStyles.sidebarKvRow}>
+            <Text style={supplierStyles.sidebarKvLabel}>Vehicles</Text>
+            <Text style={supplierStyles.sidebarKvValue} numberOfLines={1}>{vehicleTypes.join(", ")}</Text>
+          </View>
+        ) : null}
+        {operatingAreas && operatingAreas.length > 0 ? (
+          <View style={supplierStyles.sidebarKvRow}>
+            <Text style={supplierStyles.sidebarKvLabel}>Areas</Text>
+            <Text style={supplierStyles.sidebarKvValue} numberOfLines={1}>{operatingAreas.slice(0, 3).join(", ")}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Onboarding */}
+      <View style={supplierStyles.sidebarCard}>
+        <Text style={supplierStyles.sidebarCardTitle}>Onboarding</Text>
+        <View style={supplierStyles.sidebarKvRow}>
+          <Text style={supplierStyles.sidebarKvLabel}>Agreement</Text>
+          {onboardingStatus ? (
+            <View style={[supplierStyles.sidebarBadge, { backgroundColor: onboardBg }]}>
+              <Text style={[supplierStyles.sidebarBadgeText, { color: onboardColor }]}>{onboardingStatus.toUpperCase()}</Text>
+            </View>
+          ) : (
+            <Text style={[supplierStyles.sidebarKvValue, { color: METRONIC.muted }]}>Not started</Text>
+          )}
+        </View>
+        {onboardingSignedAt ? (
+          <View style={supplierStyles.sidebarKvRow}>
+            <Text style={supplierStyles.sidebarKvLabel}>Signed</Text>
+            <Text style={supplierStyles.sidebarKvValue}>{onboardingSignedAt.slice(0, 10)}</Text>
+          </View>
+        ) : null}
+        <Pressable style={supplierStyles.sidebarActionBtn} onPress={() => onTabChange("compliance")} accessibilityRole="button">
+          <FileText size={13} color={METRONIC.text} strokeWidth={2} />
+          <Text style={supplierStyles.sidebarActionBtnText}>Compliance docs ({bundle.compliance_docs.length})</Text>
+        </Pressable>
+      </View>
+
+      {/* Actions */}
+      <View style={supplierStyles.sidebarCard}>
+        <Text style={supplierStyles.sidebarCardTitle}>Actions</Text>
+        <Pressable
+          style={[supplierStyles.sidebarActionBtn, supplierStyles.sidebarActionBtnPrimary]}
+          onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
+          accessibilityRole="button"
+        >
+          <Plus size={13} color="#fff" strokeWidth={2.5} />
+          <Text style={[supplierStyles.sidebarActionBtnText, supplierStyles.sidebarActionBtnTextPrimary]}>Create trip</Text>
+        </Pressable>
+        <Pressable style={supplierStyles.sidebarActionBtn} onPress={() => onTabChange("contracts")} accessibilityRole="button">
+          <FileText size={13} color={METRONIC.text} strokeWidth={2} />
+          <Text style={supplierStyles.sidebarActionBtnText}>Contracts ({bundle.contracts.length})</Text>
+        </Pressable>
+        <Pressable style={supplierStyles.sidebarActionBtn} onPress={() => onTabChange("finance")} accessibilityRole="button">
+          <Text style={[supplierStyles.sidebarActionBtnText, { fontSize: 13 }]}>₹</Text>
+          <Text style={supplierStyles.sidebarActionBtnText}>Ledger</Text>
+        </Pressable>
+        {onEdit ? (
+          <Pressable style={[supplierStyles.sidebarActionBtn, { marginBottom: 0 }]} onPress={onEdit} accessibilityRole="button">
+            <Text style={supplierStyles.sidebarActionBtnText}>Edit Profile</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {/* Contact */}
+      {(contactPerson || phone || email) ? (
+        <View style={supplierStyles.sidebarCard}>
+          <Text style={supplierStyles.sidebarCardTitle}>Contact</Text>
+          {contactPerson ? (
+            <View style={supplierStyles.sidebarKvRow}>
+              <Text style={supplierStyles.sidebarKvLabel}>Name</Text>
+              <Text style={supplierStyles.sidebarKvValue} numberOfLines={1}>{contactPerson}</Text>
+            </View>
+          ) : null}
+          {phone ? (
+            <Pressable style={supplierStyles.sidebarKvRow} onPress={() => void Linking.openURL(`tel:${phone}`)}>
+              <Text style={supplierStyles.sidebarKvLabel}>Phone</Text>
+              <Text style={[supplierStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{phone}</Text>
+            </Pressable>
+          ) : null}
+          {email ? (
+            <Pressable style={supplierStyles.sidebarKvRow} onPress={() => void Linking.openURL(`mailto:${email}`)}>
+              <Text style={supplierStyles.sidebarKvLabel}>Email</Text>
+              <Text style={[supplierStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{email}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 const TABS: { id: SupplierProfileTab; label: string }[] = [
   { id: "overview",    label: "Overview" },
@@ -71,6 +243,7 @@ export function SupplierProfileHub({
   const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<SupplierProfileTab>(initialTab);
   const [chatOpen, setChatOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (initialTab) setTab(initialTab);
@@ -143,24 +316,24 @@ export function SupplierProfileHub({
   };
 
   const orgId = supplier.organization_id;
-  const sharedProps = { bundle, orgId, onRefresh };
+  const sharedProps = { bundle, orgId, supplierId: supplier.id, onRefresh };
 
   const panel = (() => {
     switch (tab) {
       case "overview":
         return <SupplierProfileOverviewPanel bundle={bundle} />;
       case "kyc":
-        return <SupplierProfileKycPanel bundle={bundle} onUploadDoc={handleUploadDoc} />;
+        return <SupplierProfileKycPanel {...sharedProps} onUploadDoc={handleUploadDoc} />;
       case "compliance":
-        return <SupplierProfileCompliancePanel bundle={bundle} />;
+        return <SupplierProfileCompliancePanel {...sharedProps} />;
       case "contracts":
         return <SupplierProfileContractsPanel {...sharedProps} />;
       case "fleet":
-        return <SupplierProfileFleetPanel bundle={bundle} />;
+        return <SupplierProfileFleetPanel {...sharedProps} />;
       case "drivers":
         return <SupplierProfileDriversPanel bundle={bundle} />;
       case "warehouses":
-        return <SupplierProfileWarehousesPanel bundle={bundle} />;
+        return <SupplierProfileWarehousesPanel {...sharedProps} />;
       case "performance":
         return <SupplierProfilePerformancePanel bundle={bundle} />;
       case "finance":
@@ -224,25 +397,14 @@ export function SupplierProfileHub({
           </ScrollView>
         </View>
       ) : (
-        <View style={supplierStyles.backBar}>
-          {onBack ? (
-            <Pressable onPress={onBack} style={styles.tabActionBtn} hitSlop={8}>
-              <ArrowLeft size={16} color={METRONIC.text} strokeWidth={2.2} />
-              <Text style={supplierStyles.backBarText}>Back</Text>
-            </Pressable>
-          ) : null}
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={supplierStyles.hubChromeTitle} numberOfLines={1}>{displayName.toUpperCase()}</Text>
-            <View style={supplierStyles.hubChromePills}>
-              <View style={supplierStyles.hubChromePill}><Text style={supplierStyles.hubChromePillText}>SUPPLIER</Text></View>
-              <View style={supplierStyles.hubChromePill}>
-                <Text style={supplierStyles.hubChromePillText}>{isIntegrated ? "INTEGRATED" : (supplier.supplier_type ?? "offline").toUpperCase()}</Text>
-              </View>
-              <View style={supplierStyles.hubChromePill}><Text style={supplierStyles.hubChromePillText}>KYC {kycScore}%</Text></View>
-              <View style={supplierStyles.hubChromePill}><Text style={supplierStyles.hubChromePillText}>SCORE {perfScore}</Text></View>
-            </View>
-          </View>
-        </View>
+        <SupplierProfileHubHero
+          supplier={supplier}
+          totalTrips={trips.length}
+          totalPayable={0}
+          kycScore={kycScore}
+          performanceScore={perfScore}
+          onBack={onBack}
+        />
       )}
 
       <View style={[styles.tabBar, compact && mobile.tabBarCompact]}>
@@ -304,36 +466,60 @@ export function SupplierProfileHub({
         )}
       </View>
 
-      <View style={[compact ? mobile.metricsWrapCompact : { paddingHorizontal: 32, paddingTop: 12, paddingBottom: 0, backgroundColor: "#ffffff" }]}>
-        <View style={[styles.statsBar, compact && mobile.statsBarGrid]}>
-          {stats.map((s, idx) => (
-            <View
-              key={s.label}
-              style={[
-                styles.statCell,
-                !compact && idx === stats.length - 1 && styles.statCellLast,
-                compact && mobile.statCellGrid,
-                statCellCompactStyle(idx),
-              ]}
-            >
-              <Text style={[styles.statValue, compact && mobile.statValueCompact]}>{s.value}</Text>
-              <Text style={[styles.statLabel, compact && mobile.statLabelCompact]}>{s.label}</Text>
-            </View>
-          ))}
+      {compact ? (
+        <View style={mobile.metricsWrapCompact}>
+          <View style={[styles.statsBar, mobile.statsBarGrid]}>
+            {stats.map((s, idx) => (
+              <View
+                key={s.label}
+                style={[styles.statCell, mobile.statCellGrid, statCellCompactStyle(idx)]}
+              >
+                <Text style={[styles.statValue, mobile.statValueCompact]}>{s.value}</Text>
+                <Text style={[styles.statLabel, mobile.statLabelCompact]}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
 
-      {panel}
+      {compact ? panel : (
+        <View style={supplierStyles.hubBodyRow}>
+          <View style={supplierStyles.hubSidebarCol}>
+            <SupplierPartyDetailSidebar
+              bundle={bundle}
+              kycScore={kycScore}
+              perfScore={perfScore}
+              onTabChange={setTab}
+              onEdit={() => setEditOpen(true)}
+            />
+          </View>
+          <View style={supplierStyles.hubMainCol}>
+            {panel}
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 
   return (
-    <ProfileHubChatSplitLayout
-      chatOpen={chatOpen}
-      onCloseChat={() => setChatOpen(false)}
-      partner={chatPartner}
-    >
-      {hubScroll}
-    </ProfileHubChatSplitLayout>
+    <>
+      <ProfileHubChatSplitLayout
+        chatOpen={chatOpen}
+        onCloseChat={() => setChatOpen(false)}
+        partner={chatPartner}
+      >
+        {hubScroll}
+      </ProfileHubChatSplitLayout>
+      <EditSupplierModal
+        visible={editOpen}
+        supplier={supplier}
+        onClose={() => setEditOpen(false)}
+        onSave={async (patch) => {
+          await updateSupplier(supplier.organization_id, supplier.id, patch);
+          setEditOpen(false);
+          onRefresh?.();
+        }}
+      />
+    </>
   );
 }

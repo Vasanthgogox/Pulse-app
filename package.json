@@ -12,7 +12,7 @@
     "start": "node scripts/run-expo.js start --go",
     "start:clean": "npm run clean:metro && node scripts/run-expo.js start --go -c",
     "start:dev-client": "node scripts/run-expo.js start",
-    "start:simulator": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 node scripts/run-expo.js start --localhost",
+    "start:simulator": "cross-env REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 node scripts/run-expo.js start --go --localhost",
     "start:go": "node scripts/run-expo.js start --go",
     "preview": "node scripts/run-expo.js start --go --tunnel",
     "start:tunnel": "node scripts/run-expo.js start --tunnel",

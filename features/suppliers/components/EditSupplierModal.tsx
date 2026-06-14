@@ -75,6 +75,11 @@ export function EditSupplierModal({
   const [contactPerson, setContactPerson] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [panNumber, setPanNumber] = useState("");
+  const [vehicleTypes, setVehicleTypes] = useState("");
+  const [operatingAreas, setOperatingAreas] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -101,6 +106,11 @@ export function EditSupplierModal({
       setContactPerson(fromLinked?.contactPerson ?? fromSupplier.contactPerson);
       setPhone(fromLinked?.phone ?? fromSupplier.phone);
       setEmail(fromLinked?.email ?? fromSupplier.email);
+      setAddress(supplier.address ?? "");
+      setGstin((supplier as { gstin?: string | null }).gstin ?? "");
+      setPanNumber((supplier as { pan_number?: string | null }).pan_number ?? "");
+      setVehicleTypes((supplier.vehicle_types ?? []).join(", "));
+      setOperatingAreas((supplier.operating_areas ?? []).join(", "));
     }
   }, [supplier, initialLinkedProfile]);
 
@@ -173,6 +183,11 @@ export function EditSupplierModal({
     const patch: UpdateSupplierData = {};
     patch.contact_person = contactPerson.trim();
     patch.email = email.trim();
+    patch.address = address.trim();
+    patch.gstin = gstin.trim();
+    patch.pan_number = panNumber.trim();
+    patch.vehicle_types = vehicleTypes.split(",").map((s) => s.trim()).filter(Boolean);
+    patch.operating_areas = operatingAreas.split(",").map((s) => s.trim()).filter(Boolean);
     if (canEditCompany) {
       patch.company_name = companyName.trim();
     }
@@ -328,6 +343,65 @@ export function EditSupplierModal({
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                />
+              </Pressable>
+
+              <Pressable style={styles.screenInputCard}>
+                <Text style={styles.screenInputLabel}>Address</Text>
+                <TextInput
+                  style={styles.screenInput}
+                  placeholder="Registered address"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  value={address}
+                  onChangeText={setAddress}
+                  autoCapitalize="words"
+                />
+              </Pressable>
+
+              <View style={[styles.screenTwoCol, useSingleColumnFields && styles.screenTwoColStack]}>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>GSTIN</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="22AAAAA0000A1Z5"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={gstin}
+                    onChangeText={setGstin}
+                    autoCapitalize="characters"
+                  />
+                </Pressable>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>PAN Number</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="AAAAA0000A"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={panNumber}
+                    onChangeText={setPanNumber}
+                    autoCapitalize="characters"
+                  />
+                </Pressable>
+              </View>
+
+              <Pressable style={styles.screenInputCard}>
+                <Text style={styles.screenInputLabel}>Vehicle types (comma-separated)</Text>
+                <TextInput
+                  style={styles.screenInput}
+                  placeholder="e.g. Truck, Trailer, Mini-truck"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  value={vehicleTypes}
+                  onChangeText={setVehicleTypes}
+                />
+              </Pressable>
+
+              <Pressable style={styles.screenInputCard}>
+                <Text style={styles.screenInputLabel}>Operating areas (comma-separated)</Text>
+                <TextInput
+                  style={styles.screenInput}
+                  placeholder="e.g. Mumbai, Pune, Bangalore"
+                  placeholderTextColor={Theme.textMutedDemo}
+                  value={operatingAreas}
+                  onChangeText={setOperatingAreas}
                 />
               </Pressable>
 

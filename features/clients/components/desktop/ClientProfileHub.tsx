@@ -30,10 +30,171 @@ import { networkDesktopChatStyles as chatStyles } from "@/features/network/compo
 import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
-import { ArrowLeft, MessageSquare, MoreHorizontal, Plus } from "lucide-react-native";
+import { ClientProfileHubHero } from "@/features/clients/components/desktop/ClientProfileHubHero";
+import { EditClientModal } from "@/features/clients/components/EditClientModal";
+import { updateClient } from "@/features/clients/services/clients.service";
+import { ArrowLeft, Building2, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Phone, Plus, User } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+
+type SidebarProps = {
+  client: ClientRow;
+  bundle: ClientManagementBundle;
+  kycScore: number;
+  onTabChange: (tab: ClientProfileTab) => void;
+  onEdit: () => void;
+};
+
+function ClientPartyDetailSidebar({ client, bundle, kycScore, onTabChange, onEdit }: SidebarProps) {
+  const router = useRouter();
+  const isIntegrated = client.is_integrated ?? Boolean(client.linked_organization_id);
+  const locationLabel =
+    [bundle.client?.state, bundle.client?.country].filter(Boolean).join(", ") ||
+    bundle.warehouses[0]?.city || null;
+  const industry = (client as Record<string, unknown>).industry as string | null | undefined;
+  const clientStatus = (client as Record<string, unknown>).client_status as string | null | undefined;
+  const fp = bundle.finance_profile;
+
+  const statusBg = clientStatus === "inactive" ? "#FFF8DD" : clientStatus === "prospect" ? "#EEF6FF" : "#E8FFF3";
+  const statusColor = clientStatus === "inactive" ? "#F6C000" : clientStatus === "prospect" ? "#3E97FF" : "#50CD89";
+  const kycBg = kycScore >= 80 ? "#E8FFF3" : kycScore >= 50 ? "#FFF8DD" : "#FFF1F2";
+  const kycColor = kycScore >= 80 ? "#50CD89" : kycScore >= 50 ? "#F6C000" : "#F1416C";
+
+  return (
+    <View>
+      {/* Highlights — KV label-value rows */}
+      <View style={cpStyles.sidebarCard}>
+        <Text style={cpStyles.sidebarCardTitle}>Highlights</Text>
+
+        {clientStatus ? (
+          <View style={cpStyles.sidebarKvRow}>
+            <Text style={cpStyles.sidebarKvLabel}>Status</Text>
+            <View style={[cpStyles.sidebarBadge, { backgroundColor: statusBg }]}>
+              <Text style={[cpStyles.sidebarBadgeText, { color: statusColor }]}>{clientStatus.toUpperCase()}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={cpStyles.sidebarKvRow}>
+          <Text style={cpStyles.sidebarKvLabel}>In App</Text>
+          <View style={[cpStyles.sidebarBadge, { backgroundColor: isIntegrated ? "#E8FFF3" : "#F1F1F4" }]}>
+            <Text style={[cpStyles.sidebarBadgeText, { color: isIntegrated ? "#50CD89" : METRONIC.subtle }]}>
+              {isIntegrated ? "INTEGRATED" : "NOT IN APP"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={cpStyles.sidebarKvRow}>
+          <Text style={cpStyles.sidebarKvLabel}>KYC</Text>
+          <View style={[cpStyles.sidebarBadge, { backgroundColor: kycBg }]}>
+            <Text style={[cpStyles.sidebarBadgeText, { color: kycColor }]}>{kycScore}%</Text>
+          </View>
+        </View>
+
+        {locationLabel ? (
+          <View style={cpStyles.sidebarKvRow}>
+            <Text style={cpStyles.sidebarKvLabel}>Location</Text>
+            <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{locationLabel}</Text>
+          </View>
+        ) : null}
+
+        {industry ? (
+          <View style={cpStyles.sidebarKvRow}>
+            <Text style={cpStyles.sidebarKvLabel}>Sector</Text>
+            <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{industry}</Text>
+          </View>
+        ) : null}
+
+        {client.gstin ? (
+          <View style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]}>
+            <Text style={cpStyles.sidebarKvLabel}>GSTIN</Text>
+            <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{client.gstin}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Commercial — payment terms from finance profile */}
+      {fp ? (
+        <View style={cpStyles.sidebarCard}>
+          <Text style={cpStyles.sidebarCardTitle}>Commercial</Text>
+
+          {fp.credit_days ? (
+            <View style={cpStyles.sidebarKvRow}>
+              <Text style={cpStyles.sidebarKvLabel}>Credit days</Text>
+              <Text style={cpStyles.sidebarKvValue}>{fp.credit_days}d</Text>
+            </View>
+          ) : null}
+
+          {fp.invoice_frequency ? (
+            <View style={cpStyles.sidebarKvRow}>
+              <Text style={cpStyles.sidebarKvLabel}>Invoice freq.</Text>
+              <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{fp.invoice_frequency}</Text>
+            </View>
+          ) : null}
+
+          {(fp as Record<string, unknown>).payment_terms ? (
+            <View style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]}>
+              <Text style={cpStyles.sidebarKvLabel}>Payment</Text>
+              <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>
+                {String((fp as Record<string, unknown>).payment_terms)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Actions */}
+      <View style={cpStyles.sidebarCard}>
+        <Text style={cpStyles.sidebarCardTitle}>Actions</Text>
+        <Pressable
+          style={[cpStyles.sidebarActionBtn, cpStyles.sidebarActionBtnPrimary]}
+          onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
+          accessibilityRole="button"
+        >
+          <Plus size={13} color="#fff" strokeWidth={2.5} />
+          <Text style={[cpStyles.sidebarActionBtnText, cpStyles.sidebarActionBtnTextPrimary]}>Create trip</Text>
+        </Pressable>
+        <Pressable style={cpStyles.sidebarActionBtn} onPress={() => onTabChange("contracts")} accessibilityRole="button">
+          <FileText size={13} color={METRONIC.text} strokeWidth={2} />
+          <Text style={cpStyles.sidebarActionBtnText}>Contracts ({bundle.agreements.length})</Text>
+        </Pressable>
+        <Pressable style={cpStyles.sidebarActionBtn} onPress={() => onTabChange("finance")} accessibilityRole="button">
+          <Text style={[cpStyles.sidebarActionBtnText, { fontSize: 13 }]}>₹</Text>
+          <Text style={cpStyles.sidebarActionBtnText}>Ledger</Text>
+        </Pressable>
+        <Pressable style={[cpStyles.sidebarActionBtn, { marginBottom: 0 }]} onPress={onEdit} accessibilityRole="button">
+          <Text style={cpStyles.sidebarActionBtnText}>Edit Profile</Text>
+        </Pressable>
+      </View>
+
+      {/* Contact */}
+      {(client.phone || client.email || client.contact_person) ? (
+        <View style={cpStyles.sidebarCard}>
+          <Text style={cpStyles.sidebarCardTitle}>Contact</Text>
+          {client.contact_person ? (
+            <View style={cpStyles.sidebarKvRow}>
+              <Text style={cpStyles.sidebarKvLabel}>Name</Text>
+              <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{client.contact_person}</Text>
+            </View>
+          ) : null}
+          {client.phone ? (
+            <Pressable style={cpStyles.sidebarKvRow} onPress={() => void Linking.openURL(`tel:${client.phone}`)}>
+              <Text style={cpStyles.sidebarKvLabel}>Phone</Text>
+              <Text style={[cpStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{client.phone}</Text>
+            </Pressable>
+          ) : null}
+          {client.email ? (
+            <Pressable style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]} onPress={() => void Linking.openURL(`mailto:${client.email}`)}>
+              <Text style={cpStyles.sidebarKvLabel}>Email</Text>
+              <Text style={[cpStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{client.email}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 const TABS: { id: ClientProfileTab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -67,6 +228,7 @@ export function ClientProfileHub({
   const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<ClientProfileTab>(initialTab);
   const [chatOpen, setChatOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const orgId = String((bundle.client as Record<string, unknown>)?.organization_id ?? client.organization_id ?? "");
   const clientId = client.id;
   const kyc = computeKycScore(bundle.kyc_documents);
@@ -249,37 +411,13 @@ export function ClientProfileHub({
           </ScrollView>
         </View>
       ) : (
-        <View style={cpStyles.backBar}>
-          {onBack ? (
-            <Pressable onPress={onBack} style={styles.tabActionBtn} hitSlop={8}>
-              <ArrowLeft size={16} color={METRONIC.text} strokeWidth={2.2} />
-              <Text style={cpStyles.backBarText}>Back</Text>
-            </Pressable>
-          ) : null}
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={cpStyles.hubChromeTitle} numberOfLines={1}>
-              {(client.name ?? "Client").toUpperCase()}
-            </Text>
-            <View style={cpStyles.hubChromePills}>
-              <View style={cpStyles.hubChromePill}>
-                <Text style={cpStyles.hubChromePillText}>CLIENT</Text>
-              </View>
-              <View style={cpStyles.hubChromePill}>
-                <Text style={cpStyles.hubChromePillText}>
-                  {isIntegrated ? "INTEGRATED" : "NOT IN APP"}
-                </Text>
-              </View>
-              {locationLabel ? (
-                <View style={cpStyles.hubChromePill}>
-                  <Text style={cpStyles.hubChromePillText}>{locationLabel}</Text>
-                </View>
-              ) : null}
-              <View style={cpStyles.hubChromePill}>
-                <Text style={cpStyles.hubChromePillText}>KYC {kyc.score}%</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        <ClientProfileHubHero
+          client={client}
+          locationLabel={locationLabel}
+          kycScore={kyc.score}
+          stats={stats}
+          onBack={onBack}
+        />
       )}
 
       <View style={[styles.tabBar, compact && mobile.tabBarCompact]}>
@@ -399,37 +537,60 @@ export function ClientProfileHub({
         )}
       </View>
 
-      <View style={[cpStyles.metricsWrap, compact && mobile.metricsWrapCompact]}>
-        <View style={[styles.statsBar, compact && mobile.statsBarGrid]}>
-          {stats.map((s, idx) => (
-            <View
-              key={s.label}
-              style={[
-                styles.statCell,
-                !compact && cpStyles.statCellCompact,
-                !compact && idx === stats.length - 1 && styles.statCellLast,
-                compact && mobile.statCellGrid,
-                statCellCompactStyle(idx),
-              ]}
-            >
-              <Text style={[styles.statValue, compact && mobile.statValueCompact]}>{s.value}</Text>
-              <Text style={[styles.statLabel, compact && mobile.statLabelCompact]}>{s.label}</Text>
-            </View>
-          ))}
+      {compact ? (
+        <View style={[cpStyles.metricsWrap, mobile.metricsWrapCompact]}>
+          <View style={[styles.statsBar, mobile.statsBarGrid]}>
+            {stats.map((s, idx) => (
+              <View
+                key={s.label}
+                style={[styles.statCell, mobile.statCellGrid, statCellCompactStyle(idx)]}
+              >
+                <Text style={[styles.statValue, mobile.statValueCompact]}>{s.value}</Text>
+                <Text style={[styles.statLabel, mobile.statLabelCompact]}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
 
-      {panel}
+      {compact ? panel : (
+        <View style={cpStyles.hubBodyRow}>
+          <View style={cpStyles.hubSidebarCol}>
+            <ClientPartyDetailSidebar
+              client={client}
+              bundle={bundle}
+              kycScore={kyc.score}
+              onTabChange={setTab}
+              onEdit={() => setEditOpen(true)}
+            />
+          </View>
+          <View style={cpStyles.hubMainCol}>
+            {panel}
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 
   return (
-    <ProfileHubChatSplitLayout
-      chatOpen={chatOpen}
-      onCloseChat={() => setChatOpen(false)}
-      partner={chatPartner}
-    >
-      {hubScroll}
-    </ProfileHubChatSplitLayout>
+    <>
+      <ProfileHubChatSplitLayout
+        chatOpen={chatOpen}
+        onCloseChat={() => setChatOpen(false)}
+        partner={chatPartner}
+      >
+        {hubScroll}
+      </ProfileHubChatSplitLayout>
+      <EditClientModal
+        visible={editOpen}
+        client={client}
+        onClose={() => setEditOpen(false)}
+        onSave={async (patch) => {
+          await updateClient(orgId, clientId, patch);
+          setEditOpen(false);
+          onRefresh?.();
+        }}
+      />
+    </>
   );
 }

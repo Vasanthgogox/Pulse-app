@@ -447,4 +447,144 @@ export const clientProfileStyles = StyleSheet.create({
   laneCardGrid: {
     gap: 0,
   },
+
+  // ── Hero stats strip (matches supplierStyles.heroStatsRow pattern) ──────────
+  heroStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    overflow: "hidden",
+  },
+  heroStatItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  heroStatValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: METRONIC.text,
+    letterSpacing: -0.3,
+  },
+  heroStatLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: METRONIC.muted,
+    letterSpacing: 0.6,
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+  heroStatDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: METRONIC.border,
+  },
+
+  // ── Two-column desktop body layout ─────────────────────────────────────────
+  hubBodyRow: {
+    flexDirection: "row",
+    flex: 1,
+    minHeight: 400,
+  },
+  hubSidebarCol: {
+    width: 280,
+    borderRightWidth: 1,
+    borderRightColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+  },
+  hubMainCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  // ── Sidebar atoms ───────────────────────────────────────────────────────────
+  sidebarCard: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: METRONIC.border,
+  },
+  sidebarCardTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: METRONIC.muted,
+    letterSpacing: 0.8,
+    marginBottom: 12,
+    textTransform: "uppercase",
+  },
+  sidebarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  sidebarRowText: {
+    fontSize: 13,
+    color: METRONIC.text,
+    fontWeight: "500",
+    flex: 1,
+    minWidth: 0,
+  },
+  sidebarActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+    marginBottom: 8,
+  },
+  sidebarActionBtnPrimary: {
+    backgroundColor: METRONIC.text,
+    borderColor: METRONIC.text,
+  },
+  sidebarActionBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: METRONIC.text,
+    letterSpacing: 0.2,
+  },
+  sidebarActionBtnTextPrimary: {
+    color: Theme.textOnPrimary,
+  },
+  sidebarBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  sidebarBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  sidebarKvRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: METRONIC.border,
+    gap: 8,
+  },
+  sidebarKvLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: METRONIC.muted,
+    flexShrink: 0,
+    minWidth: 72,
+  },
+  sidebarKvValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: METRONIC.text,
+    textAlign: "right",
+    flex: 1,
+  },
 });
