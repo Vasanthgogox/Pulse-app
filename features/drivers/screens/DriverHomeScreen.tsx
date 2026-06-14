@@ -16,7 +16,6 @@ import {
 import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
-import { useOptionalDriverTripOps } from "@/contexts/DriverTripOpsContext";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -734,7 +733,9 @@ export default function DriverRadarScreen() {
   const driversDataUpdatedAt = linkedDriversQuery.dataUpdatedAt;
   const driversFetchStatus = linkedDriversQuery.fetchStatus;
   const driversQueryFailed =
-    linkedDriversQuery.isError && !linkedDriversQuery.isFetched;
+    linkedDriversQuery.isError &&
+    linkedDriversQuery.isFetched &&
+    linkedDriversQuery.activeLinkedDrivers.length === 0;
 
   /**
    * Trips by driver ids — keyed on primitive query signals only (never callback/array deps).
@@ -762,11 +763,18 @@ export default function DriverRadarScreen() {
       }
 
       if (driversQueryFailed) {
-        if (!cancelled) finishLoading();
+        if (!cancelled) {
+          setAcceptError(
+            linkedDriversQuery.error instanceof Error
+              ? linkedDriversQuery.error.message
+              : "Could not load your fleet. Pull down to retry.",
+          );
+          finishLoading();
+        }
         return;
       }
 
-      if (!linkedDriversQuery.isFetched) {
+      if (!linkedDriversQuery.isFetched || linkedDriversQuery.isFetching) {
         return;
       }
 
@@ -854,6 +862,8 @@ export default function DriverRadarScreen() {
     driversFetchStatus,
     driversQueryFailed,
     linkedDriversQuery.isFetched,
+    linkedDriversQuery.isFetching,
+    linkedDriversQuery.isError,
     isOtpClaiming,
   ]);
 
@@ -1394,15 +1404,6 @@ export default function DriverRadarScreen() {
       pendingOtpTrips.find((t) => String(t.id).toLowerCase() === want) ?? null
     );
   }, [acceptedTripId, mergedIncomingTrips, allTrips, pendingOtpTrips]);
-
-  const driverTripOps = useOptionalDriverTripOps();
-  const driverHeaderTripOpsProps = {
-    hasActiveTrip: driverTripOps?.hasTargetTrip ?? false,
-    showExpenseOps: driverTripOps?.showExpenseOps ?? true,
-    showOdometerOps: driverTripOps?.showOdometerOps ?? true,
-    onPressExpense: () => driverTripOps?.openExpense(),
-    onPressOdometer: () => driverTripOps?.openOdometer(),
-  };
 
   const selectedIncomingTrip =
     visibleIncomingTrips.find((trip) => trip.id === selectedIncomingTripId) ??
@@ -4940,7 +4941,6 @@ export default function DriverRadarScreen() {
                 driverName={driverName}
                 isOnline
                 variant="assigned"
-                {...driverHeaderTripOpsProps}
                 style={[
                   styles.assignedStaticHeader,
                   {
@@ -4966,7 +4966,6 @@ export default function DriverRadarScreen() {
                   driverName={driverName}
                   isOnline
                   variant="assigned"
-                  {...driverHeaderTripOpsProps}
                   style={[
                     styles.assignedStaticHeader,
                     {
@@ -5179,7 +5178,6 @@ export default function DriverRadarScreen() {
                 driverName={driverName}
                 isOnline={isOnline}
                 onPressOtpClaim={handleOpenOtpClaimFromHeader}
-                {...driverHeaderTripOpsProps}
               />
               {driver?.organization_id ? (
                 <TouchableOpacity

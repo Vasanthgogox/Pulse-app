@@ -44,6 +44,7 @@ export interface TripFuelEntry {
   station_name: string | null;
   notes: string | null;
   bill_storage_path: string | null;
+  ocr_job_id: string | null;
   entered_by: string | null;
   entered_at: string;
   updated_at: string;
@@ -74,6 +75,7 @@ export interface TripTollEntry {
   notes: string | null;
   is_estimated: boolean;
   receipt_storage_path: string | null;
+  ocr_job_id: string | null;
   entered_by: string | null;
   entered_at: string;
   updated_at: string;
@@ -108,6 +110,7 @@ export interface SaveFuelEntryInput {
   paymentOwner?: OperationalPaymentOwner | null;
   paymentMode?: OperationalPaymentMode | null;
   billPhotoLocalUri?: string | null;
+  ocrJobId?: string | null;
 }
 
 export type UpdateFuelEntryInput = Omit<SaveFuelEntryInput, "actorRole"> & {
@@ -125,6 +128,7 @@ export interface SaveTollEntryInput {
   paymentOwner?: OperationalPaymentOwner | null;
   paymentMode?: OperationalPaymentMode | null;
   receiptLocalUri?: string | null;
+  ocrJobId?: string | null;
 }
 
 export type UpdateTollEntryInput = Omit<SaveTollEntryInput, "actorRole"> & {
@@ -153,6 +157,7 @@ export interface TripOtherExpenseEntry {
   location_name: string | null;
   notes: string | null;
   receipt_storage_path: string | null;
+  ocr_job_id: string | null;
   entered_by: string | null;
   entered_at: string;
   updated_at: string;
@@ -187,6 +192,7 @@ export interface SaveOtherExpenseInput {
   paymentOwner?: OperationalPaymentOwner | null;
   paymentMode?: OperationalPaymentMode | null;
   receiptLocalUri?: string | null;
+  ocrJobId?: string | null;
 }
 
 export type UpdateOtherExpenseInput = Omit<SaveOtherExpenseInput, "actorRole"> & {

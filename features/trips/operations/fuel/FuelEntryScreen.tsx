@@ -10,7 +10,6 @@ import {
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -46,6 +45,7 @@ import {
   useExpenseBillCapture,
   useRegisterExpenseBillPreview,
 } from "../shared/useExpenseBillCapture";
+import { ExpenseBillPhotoScan } from "@/features/trips/operations/shared/ExpenseBillPhotoScan";
 
 function FuelAmountFlow({
   amountInr,
@@ -192,6 +192,9 @@ export function FuelEntryScreen({
   );
 
   const ownedBillCapture = useExpenseBillCapture({
+    organizationId: trip.organization_id,
+    tripId: trip.id,
+    createdBy: profile?.uid ?? null,
     kind: "fuel",
     permissionMessage: "Enable camera or photo library access to attach a fuel bill photo.",
     previewOcrUpdates: handleOcrPreview,
@@ -204,11 +207,13 @@ export function FuelEntryScreen({
     setPhotoUri,
     scanning,
     billScan,
+    persistedJob,
     handleCapture,
     handleRemovePhoto,
     applyPendingUpdates,
     dismissPendingUpdates,
     reopenOcrReview,
+    hydratePersistedOcrFromJob,
   } = capture;
 
   const contextLine = useMemo(
@@ -260,12 +265,16 @@ export function FuelEntryScreen({
           if (mounted && url) setPhotoUri(url);
         });
       }
+      const ocrJobId = entry.ocr_job_id?.trim();
+      if (ocrJobId) {
+        void hydratePersistedOcrFromJob(ocrJobId);
+      }
       setLoadingEntry(false);
     });
     return () => {
       mounted = false;
     };
-  }, [entryId, router, trip.id]);
+  }, [entryId, hydratePersistedOcrFromJob, router, setPhotoUri, trip.id]);
 
   const saving = saveFuel.isPending || updateFuel.isPending;
 
@@ -281,6 +290,7 @@ export function FuelEntryScreen({
       paymentOwner,
       paymentMode,
       billPhotoLocalUri: photoUri,
+      ocrJobId: persistedJob?.id,
     };
     try {
       if (isEditing && entryId?.trim()) {
@@ -476,16 +486,19 @@ export function FuelEntryScreen({
         </Surface>
 
         <View style={s.photoWrap}>
-          <OdometerPhotoCapture
-            photoUri={photoUri}
+          <ExpenseBillPhotoScan
+            label="Fuel Receipt"
+            uri={photoUri}
+            scan={billScan}
+            scanning={scanning}
             busy={saving}
-            onCapture={handleCapture}
+            onAttach={handleCapture}
             onRetake={handleCapture}
-            compact
-            title="Bill photo"
-            subtitle="Optional · camera capture"
-            captureLabel="Add bill photo"
-            retakeLabel="Retake"
+            onRemove={handleRemovePhoto}
+            onRescanPhoto={handleCapture}
+            onApplyPending={applyPendingUpdates}
+            onDismissPending={dismissPendingUpdates}
+            onReviewOcr={reopenOcrReview}
           />
         </View>
 

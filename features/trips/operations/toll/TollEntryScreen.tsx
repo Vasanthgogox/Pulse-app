@@ -10,7 +10,6 @@ import {
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { OdometerPhotoCapture } from "@/features/trips/verification/components/OdometerPhotoCapture";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
@@ -45,6 +44,7 @@ import {
   useExpenseBillCapture,
   useRegisterExpenseBillPreview,
 } from "../shared/useExpenseBillCapture";
+import { ExpenseBillPhotoScan } from "@/features/trips/operations/shared/ExpenseBillPhotoScan";
 
 export function TollEntryScreen({
   trip,
@@ -99,6 +99,9 @@ export function TollEntryScreen({
   );
 
   const ownedBillCapture = useExpenseBillCapture({
+    organizationId: trip.organization_id,
+    tripId: trip.id,
+    createdBy: profile?.uid ?? null,
     kind: "toll",
     permissionMessage: "Enable camera or photo library access to attach a toll receipt photo.",
     previewOcrUpdates: handleOcrPreview,
@@ -111,11 +114,13 @@ export function TollEntryScreen({
     setPhotoUri: setReceiptUri,
     scanning,
     billScan,
+    persistedJob,
     handleCapture,
     handleRemovePhoto: handleRemoveReceipt,
     applyPendingUpdates,
     dismissPendingUpdates,
     reopenOcrReview,
+    hydratePersistedOcrFromJob,
   } = capture;
 
   const contextLine = useMemo(
@@ -166,12 +171,16 @@ export function TollEntryScreen({
           if (mounted && url) setReceiptUri(url);
         });
       }
+      const ocrJobId = entry.ocr_job_id?.trim();
+      if (ocrJobId) {
+        void hydratePersistedOcrFromJob(ocrJobId);
+      }
       setLoadingEntry(false);
     });
     return () => {
       mounted = false;
     };
-  }, [entryId, router, trip.id]);
+  }, [entryId, hydratePersistedOcrFromJob, router, setReceiptUri, trip.id]);
 
   const saving = saveToll.isPending || updateToll.isPending;
 
@@ -186,6 +195,7 @@ export function TollEntryScreen({
       paymentOwner,
       paymentMode,
       receiptLocalUri: receiptUri,
+      ocrJobId: persistedJob?.id,
     };
     try {
       if (isEditing && entryId?.trim()) {
@@ -395,16 +405,19 @@ export function TollEntryScreen({
         </Surface>
 
         <View style={s.photoWrap}>
-          <OdometerPhotoCapture
-            photoUri={receiptUri}
+          <ExpenseBillPhotoScan
+            label="Toll Receipt"
+            uri={receiptUri}
+            scan={billScan}
+            scanning={scanning}
             busy={saving}
-            onCapture={handleCapture}
+            onAttach={handleCapture}
             onRetake={handleCapture}
-            compact
-            title="Receipt"
-            subtitle="Optional · camera capture"
-            captureLabel="Add receipt"
-            retakeLabel="Retake"
+            onRemove={handleRemoveReceipt}
+            onRescanPhoto={handleCapture}
+            onApplyPending={applyPendingUpdates}
+            onDismissPending={dismissPendingUpdates}
+            onReviewOcr={reopenOcrReview}
           />
         </View>
 

@@ -796,7 +796,7 @@ export function DriverChatSlackThread({
 
   const composerBottomPad = keyboardOpen
     ? 8
-    : Math.max(insets.bottom + bottomTabClearance, 8);
+    : Math.max(insets.bottom + bottomTabClearance, 12);
 
   const composerDock = (
     <View
@@ -920,7 +920,7 @@ export function DriverChatSlackThread({
       <KeyboardAvoidingView
         style={localStyles.root}
         behavior="padding"
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={insets.top}
       >
         {threadBody}
       </KeyboardAvoidingView>

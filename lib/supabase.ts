@@ -19,6 +19,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { isRetryableHttpResponse } from '@/lib/supabaseHttp.util';
 
 // Lazy-load SecureStore so we can fall back to AsyncStorage if native module is missing (Expo Go, etc.)
 let SecureStore: typeof import('expo-secure-store') | null = null;
@@ -30,7 +31,7 @@ try {
 }
 
 const REQUEST_TIMEOUT_MS = 25_000;
-const MAX_RETRIES = 2;   // 3 total attempts: initial + 2 retries
+const MAX_RETRIES = 3;   // 4 total attempts: initial + 3 retries
 /** Exponential backoff: attempt 1 → 2s, attempt 2 → 4s */
 function retryDelayMs(attempt: number): number {
   return Math.min(2_000 * Math.pow(2, attempt - 1), 8_000);
@@ -57,6 +58,10 @@ async function fetchWithTimeoutAndRetry(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await doFetch(init?.signal ?? undefined);
+      if (isRetryableHttpResponse(res) && attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
+        continue;
+      }
       return res;
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));

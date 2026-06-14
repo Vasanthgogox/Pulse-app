@@ -5,6 +5,7 @@
  * If that returns nothing and the DB has get_organizations_for_user() RPC, tries RPC to backfill owner memberships.
  */
 import { supabase } from "@/lib/supabase";
+import { normalizeInfrastructureErrorMessage } from "@/lib/supabaseHttp.util";
 import type { CurrentOrganization, WorkspaceKyc } from "@/types/organization";
 
 const defaultCapabilities = {
@@ -39,7 +40,7 @@ function isNetworkError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return (
     msg === "Network request failed" ||
-    /network|fetch.*failed|timeout/i.test(msg)
+    /network|fetch.*failed|timeout|json parse|unexpected character|522|520|502|503|504/i.test(msg)
   );
 }
 
@@ -64,29 +65,23 @@ export async function getOrganizationsForUser(): Promise<{
   organizations: CurrentOrganization[];
 }> {
   let user: { id: string } | null = null;
-  let sessionError: { message: string } | null = null;
   try {
-    const result = await supabase().auth.getUser();
-    user = result.data?.user ?? null;
-    sessionError = result.error;
+    const { data: { session }, error: sessionError } =
+      await supabase().auth.getSession();
+    if (sessionError) {
+      return { error: new Error(sessionError.message), organizations: [] };
+    }
+    user = session?.user ?? null;
   } catch (e) {
-    const err = e instanceof Error ? e : new Error(String(e));
+    const raw = e instanceof Error ? e.message : String(e);
+    const err = new Error(normalizeInfrastructureErrorMessage(raw));
     if (__DEV__ && !isNetworkError(err)) {
       console.log("[getOrganizationsForUser] No session:", err.message);
     }
     return { error: err, organizations: [] };
   }
-  if (sessionError || !user) {
-    const msg = sessionError?.message ?? "no user";
-    if (__DEV__ && !isNetworkError(new Error(msg))) {
-      console.log("[getOrganizationsForUser] No session:", msg);
-    }
-    return {
-      error: sessionError
-        ? new Error(sessionError.message)
-        : new Error("Not signed in"),
-      organizations: [],
-    };
+  if (!user) {
+    return { error: new Error("Not signed in"), organizations: [] };
   }
 
   try {

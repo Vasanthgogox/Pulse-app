@@ -100,8 +100,6 @@ import {
   type ClientPassThroughRecommendation,
 } from "@/features/trips/components/trip-detail/adjustment/tripAdjustmentPassThrough.util";
 import { TripOdometerPreviewCard } from "@/features/trips/components/trip-detail/TripOdometerPreviewCard";
-import { TripDetailFloatingActions } from "@/features/trips/components/trip-detail/TripDetailFloatingActions";
-import { TripOdometerLauncherSheet } from "@/features/trips/components/trip-detail/TripOdometerLauncherSheet";
 const TripAdjustmentModal = lazy(() =>
   import("./TripAdjustmentModal").then((m) => ({ default: m.TripAdjustmentModal })),
 );
@@ -824,7 +822,6 @@ export default function TripDetailScreen({
   ]);
 
   const [tripRoomOpen, setTripRoomOpen] = useState(false);
-  const [odometerLauncherOpen, setOdometerLauncherOpen] = useState(false);
 
   const openOdometerVerification = useCallback(
     (side: "start" | "end") => {
@@ -2075,8 +2072,6 @@ export default function TripDetailScreen({
   );
 
   const showOdometerVerification = isAssetExecutionTrip(trip);
-  const showExpenseOpsFab = showOdometerVerification && !isAggregate;
-  const showOdometerOpsFab = showOdometerVerification;
   const odometerPreviewEl = showOdometerVerification ? (
     <TripOdometerPreviewCard
       trip={trip}
@@ -5667,24 +5662,6 @@ export default function TripDetailScreen({
         onViewTrip={() => setTripRoomOpen(false)}
       />
 
-      {showExpenseOpsFab || showOdometerOpsFab ? (
-        <TripDetailFloatingActions
-          showExpense={showExpenseOpsFab}
-          showOdometer={showOdometerOpsFab}
-          onExpensePress={() =>
-            router.push(ROUTES.tripOtherExpenseEntry(trip.id) as never)
-          }
-          onOdometerPress={() => setOdometerLauncherOpen(true)}
-        />
-      ) : null}
-
-      <TripOdometerLauncherSheet
-        visible={odometerLauncherOpen}
-        onClose={() => setOdometerLauncherOpen(false)}
-        onSelect={(side) =>
-          router.push(ROUTES.tripVerification(trip.id, side) as never)
-        }
-      />
     </View>
   );
 }

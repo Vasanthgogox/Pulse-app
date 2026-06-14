@@ -1,7 +1,6 @@
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { DriverHeader } from '@/components/driver/DriverHeader';
 import { DriverTripFlowCard } from '@/features/driver/components/DriverTripFlowCard';
-import { useOptionalDriverTripOps } from '@/contexts/DriverTripOpsContext';
 import { JobRequestCard } from '@/components/JobRequestCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -840,14 +839,6 @@ export default function DriverDashboard() {
   const firstIncoming = incomingTrips.find((t) => t.id !== declinedTripId) ?? null;
   // Load-based (assign by phone): trip is in pendingOtpTrips, not allTrips. Use same assignment card and flow.
   const effectiveFirstIncoming = firstIncoming ?? pendingOtpTrips[0] ?? null;
-  const driverTripOps = useOptionalDriverTripOps();
-  const driverHeaderTripOpsProps = {
-    hasActiveTrip: driverTripOps?.hasTargetTrip ?? false,
-    showExpenseOps: driverTripOps?.showExpenseOps ?? true,
-    showOdometerOps: driverTripOps?.showOdometerOps ?? true,
-    onPressExpense: () => driverTripOps?.openExpense(),
-    onPressOdometer: () => driverTripOps?.openOdometer(),
-  };
   // OTP only for non-roster (ad-hoc) trips; connected/roster trips accept directly.
   const pendingOtpTripsRequiringOtp = pendingOtpTrips.filter((t) => !isRosterTrip(t));
   // Require OTP when trip is in pending OTP list OR when it's an aggregate (assign-by-phone) trip still in assigned state
@@ -2073,7 +2064,6 @@ export default function DriverDashboard() {
                 driverName={driverName}
                 isOnline
                 variant="assigned"
-                {...driverHeaderTripOpsProps}
                 style={[
                   styles.assignedStaticHeader,
                   {
@@ -2097,7 +2087,6 @@ export default function DriverDashboard() {
                   driverName={driverName}
                   isOnline
                   variant="assigned"
-                  {...driverHeaderTripOpsProps}
                   style={[
                     styles.assignedStaticHeader,
                     {
@@ -2510,7 +2499,6 @@ export default function DriverDashboard() {
             driverName={driverName}
             isOnline={isOnline}
             onPressOtpClaim={handleOpenOtpClaimFromHeader}
-            {...driverHeaderTripOpsProps}
           />
           {driver?.organization_id ? (
             <TouchableOpacity

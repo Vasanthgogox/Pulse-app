@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  canRequestOcrRescan,
+  enqueueOcrJob,
+  engineVersionForSource,
+  loadPersistedOcrJob,
+  OcrQuotaExceededError,
+  odometerResultFromJob,
+  scheduleOcrJobProcessing,
+  scheduleOcrRescan,
+} from "@/features/ocr";
+import type { OcrJobRow } from "@/features/ocr";
+import { useOcrJobPoll } from "@/features/ocr/hooks/useOcrJobPoll";
+import { ocrReviewActionForConfidence } from "@/features/ocr/utils/ocrConfidenceReview.util";
 import { captureOrPickImage } from "@/lib/media/captureImage.util";
 
 import {
@@ -10,28 +23,42 @@ import {
   reconcileOdometerScanWithReading,
 } from "../applyOdometerScan.util";
 import {
-  extractOdometerPhotoOcr,
   formatOdometerKmForEntry,
+  type OdometerPhotoOcrResult,
 } from "../odometerPhotoOcr.service";
 import {
   ODOMETER_SCAN_IDLE,
   ODOMETER_SCAN_MESSAGES,
   type OdometerScanState,
 } from "../odometerScan.types";
-
-const MIN_APPLY_CONFIDENCE = 0.2;
-const MIN_CONFIRM_CONFIDENCE = 0.12;
+import {
+  OCR_MIN_CONFIRM_CONFIDENCE_ODOMETER,
+} from "@/features/ocr/constants/ocr.constants";
 
 type Options = {
+  organizationId: string;
+  tripId: string;
+  vehicleId?: string | null;
+  driverId?: string | null;
+  odometerSide: "start" | "end";
+  createdBy?: string | null;
+  tripDocumentId?: string | null;
+  storagePath?: string | null;
   permissionMessage?: string;
-  /** Latest keypad reading — avoids stale closure during async OCR. */
   getCurrentRaw: () => string;
-  /** Pass live keypad value so Apply re-enables when user edits away from OCR. */
   currentRaw?: string;
   onKmApplied: (rawKm: string) => void;
 };
 
 export function useOdometerPhotoOcr({
+  organizationId,
+  tripId,
+  vehicleId = null,
+  driverId = null,
+  odometerSide,
+  createdBy = null,
+  tripDocumentId = null,
+  storagePath = null,
   permissionMessage = "Enable camera or photo library access to photograph the odometer.",
   getCurrentRaw,
   currentRaw,
@@ -40,6 +67,8 @@ export function useOdometerPhotoOcr({
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanState, setScanState] = useState<OdometerScanState>(ODOMETER_SCAN_IDLE);
+  const [persistedJob, setPersistedJob] = useState<OcrJobRow | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const getCurrentRawRef = useRef(getCurrentRaw);
   const onKmAppliedRef = useRef(onKmApplied);
   const pendingKmRef = useRef<string | null>(null);
@@ -48,11 +77,13 @@ export function useOdometerPhotoOcr({
   const photoUriRef = useRef<string | null>(null);
   const analyzingTick = useRef(0);
   const stepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tripDocumentIdRef = useRef(tripDocumentId);
 
   getCurrentRawRef.current = getCurrentRaw;
   onKmAppliedRef.current = onKmApplied;
   scanStateRef.current = scanState;
   photoUriRef.current = photoUri;
+  tripDocumentIdRef.current = tripDocumentId;
 
   const clearStepTimer = useCallback(() => {
     if (stepTimer.current) {
@@ -97,58 +128,34 @@ export function useOdometerPhotoOcr({
     });
   }, [currentRaw]);
 
-  const applyPendingReading = useCallback(() => {
-    const pendingRaw = (pendingKmRef.current ?? scanStateRef.current.pendingKm)?.trim();
-    if (!pendingRaw) return;
-
-    const normalized = normalizeOdometerRaw(pendingRaw) || pendingRaw;
-    pendingKmRef.current = null;
-    onKmAppliedRef.current(normalized);
-    setScanState((prev) => ({
-      phase: "complete",
-      message: `${normalized} KM applied · review and save`,
-      appliedFields: ["KM reading"],
-      pendingKm: null,
-      detectedKm: normalized,
-      processingSec: prev.processingSec,
-      stepIndex: 3,
-    }));
-  }, []);
-
-  const dismissPendingReading = useCallback(() => {
-    pendingKmRef.current = null;
-    setScanState((prev) => ({
-      phase: "complete",
-      message: prev.pendingKm
-        ? `Kept ${normalizeOdometerRaw(getCurrentRawRef.current()) || getCurrentRawRef.current().trim() || "current"} KM · adjust manually if needed`
-        : "Photo attached · enter KM manually",
-      pendingKm: null,
-      detectedKm: prev.detectedKm ?? detectedKmRef.current,
-      appliedFields: [],
-      processingSec: prev.processingSec,
-      stepIndex: 3,
-    }));
-  }, []);
-
   const processOcrResult = useCallback(
-    (
-      result: Awaited<ReturnType<typeof extractOdometerPhotoOcr>>,
-      processingSec?: number,
-    ) => {
+    (result: OdometerPhotoOcrResult, processingSec?: number) => {
       const km = result.odometerKm?.value;
       const confidence = result.odometerKm?.confidence ?? 0;
 
-      if (km != null && km >= 0 && confidence >= MIN_CONFIRM_CONFIDENCE) {
+      if (km != null && km >= 0 && confidence >= OCR_MIN_CONFIRM_CONFIDENCE_ODOMETER) {
         const formatted = formatOdometerKmForEntry(km);
         detectedKmRef.current = formatted;
         const currentNorm = normalizeOdometerRaw(getCurrentRawRef.current());
-        const lowConfidence = confidence < MIN_APPLY_CONFIDENCE;
+        const reviewAction = ocrReviewActionForConfidence(confidence);
+        const lowConfidence = reviewAction !== "auto_accept";
 
-        if (!currentNorm) {
+        if (!currentNorm && reviewAction === "auto_accept") {
           onKmAppliedRef.current(formatted);
           pendingKmRef.current = null;
           setScanState({
             ...buildOdometerScanCompleteState(formatted, true, processingSec),
+            detectedKm: formatted,
+          });
+          return;
+        }
+
+        if (!currentNorm && reviewAction !== "auto_accept") {
+          pendingKmRef.current = formatted;
+          setScanState({
+            ...buildOdometerScanConfirmState(formatted, "", processingSec, {
+              lowConfidence: reviewAction === "manual_confirm",
+            }),
             detectedKm: formatted,
           });
           return;
@@ -203,8 +210,48 @@ export function useOdometerPhotoOcr({
     [],
   );
 
-  const runOcrOnUri = useCallback(
-    async (uri: string) => {
+  const applyJobToUi = useCallback(
+    (job: OcrJobRow) => {
+      setPersistedJob(job);
+      setScanning(job.status === "pending" || job.status === "processing");
+      if (job.status === "pending" || job.status === "processing") {
+        setScanState({
+          phase: "analyzing",
+          message: ODOMETER_SCAN_MESSAGES[1],
+          appliedFields: [],
+          stepIndex: 1,
+          pendingKm: null,
+        });
+        return;
+      }
+      const result = odometerResultFromJob(job);
+      if (!result) {
+        if (job.status === "failed") {
+          setScanState({
+            phase: "error",
+            message: job.error_message ?? "OCR failed",
+            error: job.error_message ?? "OCR failed",
+            stepIndex: 0,
+            pendingKm: null,
+            detectedKm: null,
+          });
+        }
+        return;
+      }
+      processOcrResult(result, (job.processing_duration_ms ?? 0) / 1000);
+    },
+    [processOcrResult],
+  );
+
+  useOcrJobPoll({
+    jobId: activeJobId,
+    enabled: Boolean(activeJobId),
+    onUpdate: applyJobToUi,
+    onTerminal: applyJobToUi,
+  });
+
+  const runOcrPipeline = useCallback(
+    async (uri: string, userRequestedRescan = false) => {
       setScanning(true);
       pendingKmRef.current = null;
       setScanState({
@@ -215,21 +262,51 @@ export function useOdometerPhotoOcr({
         pendingKm: null,
       });
 
+      const baseInput = {
+        organizationId,
+        localUri: uri,
+        sourceKind: "odometer" as const,
+        sourceSubtype: odometerSide,
+        tripId,
+        tripDocumentId: tripDocumentIdRef.current,
+        storagePath,
+        vehicleId,
+        driverId,
+        createdBy,
+      };
+
+      if (userRequestedRescan) {
+        scheduleOcrRescan(baseInput, persistedJob, { onComplete: applyJobToUi });
+        return;
+      }
+
       try {
+        const { job, needsProcessing } = await enqueueOcrJob(baseInput);
+        setPersistedJob(job);
+        setActiveJobId(job.id);
+
+        if (!needsProcessing) {
+          applyJobToUi(job);
+          return;
+        }
+
         setScanState({
           phase: "analyzing",
-          message: ODOMETER_SCAN_MESSAGES[1],
+          message: "Photo attached · OCR processing…",
           appliedFields: [],
           stepIndex: 1,
           pendingKm: null,
         });
 
-        const result = await extractOdometerPhotoOcr(uri);
-        processOcrResult(result, result.processingTimeSec);
+        scheduleOcrJobProcessing(job.id, baseInput, { onComplete: applyJobToUi });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : "Could not read odometer photo.";
-        pendingKmRef.current = null;
+          error instanceof OcrQuotaExceededError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "Could not queue odometer scan.";
+        setScanning(false);
         setScanState({
           phase: "error",
           message: `Photo attached · ${message}`,
@@ -238,11 +315,19 @@ export function useOdometerPhotoOcr({
           pendingKm: null,
           detectedKm: detectedKmRef.current,
         });
-      } finally {
-        setScanning(false);
       }
     },
-    [processOcrResult],
+    [
+      applyJobToUi,
+      createdBy,
+      driverId,
+      odometerSide,
+      organizationId,
+      persistedJob,
+      storagePath,
+      tripId,
+      vehicleId,
+    ],
   );
 
   const handleCapture = useCallback(async () => {
@@ -255,14 +340,8 @@ export function useOdometerPhotoOcr({
 
     setPhotoUri(picked.uri);
     detectedKmRef.current = null;
-    await runOcrOnUri(picked.uri);
-  }, [permissionMessage, runOcrOnUri]);
-
-  const rescanPhoto = useCallback(async () => {
-    const uri = photoUriRef.current?.trim();
-    if (!uri) return;
-    await runOcrOnUri(uri);
-  }, [runOcrOnUri]);
+    await runOcrPipeline(picked.uri, false);
+  }, [permissionMessage, runOcrPipeline]);
 
   const reopenOcrReview = useCallback(() => {
     const detected = detectedKmRef.current?.trim();
@@ -302,10 +381,71 @@ export function useOdometerPhotoOcr({
     });
   }, []);
 
+  const rescanPhoto = useCallback(async () => {
+    const uri = photoUriRef.current?.trim();
+    if (!uri) return;
+    const engineVersion = engineVersionForSource("odometer");
+    if (
+      !canRequestOcrRescan(persistedJob, {
+        userRequested: true,
+        currentEngineVersion: engineVersion,
+      })
+    ) {
+      reopenOcrReview();
+      return;
+    }
+    await runOcrPipeline(uri, true);
+  }, [persistedJob, reopenOcrReview, runOcrPipeline]);
+
+  const hydratePersistedOcr = useCallback(
+    async (documentId: string) => {
+      const job = await loadPersistedOcrJob(documentId);
+      if (!job) return;
+      setActiveJobId(job.id);
+      applyJobToUi(job);
+    },
+    [applyJobToUi],
+  );
+
+  const applyPendingReading = useCallback(() => {
+    const pendingRaw = (pendingKmRef.current ?? scanStateRef.current.pendingKm)?.trim();
+    if (!pendingRaw) return;
+
+    const normalized = normalizeOdometerRaw(pendingRaw) || pendingRaw;
+    pendingKmRef.current = null;
+    onKmAppliedRef.current(normalized);
+    setScanState((prev) => ({
+      phase: "complete",
+      message: `${normalized} KM applied · review and save`,
+      appliedFields: ["KM reading"],
+      pendingKm: null,
+      detectedKm: normalized,
+      processingSec: prev.processingSec,
+      stepIndex: 3,
+    }));
+  }, []);
+
+  const dismissPendingReading = useCallback(() => {
+    pendingKmRef.current = null;
+    setScanState((prev) => ({
+      phase: "complete",
+      message: prev.pendingKm
+        ? `Kept ${normalizeOdometerRaw(getCurrentRawRef.current()) || getCurrentRawRef.current().trim() || "current"} KM · adjust manually if needed`
+        : "Photo attached · enter KM manually",
+      pendingKm: null,
+      detectedKm: prev.detectedKm ?? detectedKmRef.current,
+      appliedFields: [],
+      processingSec: prev.processingSec,
+      stepIndex: 3,
+    }));
+  }, []);
+
   const clearPhoto = useCallback(() => {
     pendingKmRef.current = null;
     detectedKmRef.current = null;
     setPhotoUri(null);
+    setPersistedJob(null);
+    setActiveJobId(null);
     setScanState(ODOMETER_SCAN_IDLE);
   }, []);
 
@@ -314,12 +454,14 @@ export function useOdometerPhotoOcr({
     setPhotoUri,
     scanning,
     scanState,
+    persistedJob,
     handleCapture,
     rescanPhoto,
     reopenOcrReview,
     clearPhoto,
     applyPendingReading,
     dismissPendingReading,
+    hydratePersistedOcr,
   };
 }
 

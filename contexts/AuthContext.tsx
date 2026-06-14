@@ -49,6 +49,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type Context,
   type ReactNode,
 } from "react";
 import { Platform } from "react-native";
@@ -81,7 +82,20 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+/** Metro can duplicate this module across async chunks — one Context instance globally. */
+const PULSE_AUTH_CONTEXT_KEY = '__pulse_auth_context__';
+
+function getOrCreateAuthContext(): Context<AuthContextType | undefined> {
+  const g = globalThis as typeof globalThis & {
+    [PULSE_AUTH_CONTEXT_KEY]?: Context<AuthContextType | undefined>;
+  };
+  if (!g[PULSE_AUTH_CONTEXT_KEY]) {
+    g[PULSE_AUTH_CONTEXT_KEY] = createContext<AuthContextType | undefined>(undefined);
+  }
+  return g[PULSE_AUTH_CONTEXT_KEY];
+}
+
+const AuthContext = getOrCreateAuthContext();
 
 export function useOptionalAuth() {
   return useContext(AuthContext);
@@ -193,11 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(web.user);
       setProfile(web.profile);
       setStatus("authenticated");
-      // Note: roleVerified intentionally NOT set here — setting it in useLayoutEffect
-      // causes React hydration mismatch (#418) on Netlify static export because child
-      // components render with the new value before server HTML is fully reconciled.
-      // Dispatchers don't need roleVerified to boot. Drivers wait for async restore
-      // (capped at BOOT_HARD_TIMEOUT_MS = 8s).
+      setRoleVerified(web.profile.role === "driver" || web.profile.role === "user");
     }
   }, []);
 
@@ -298,25 +308,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  /** Apply session from auth metadata when DB profile is not yet available (zombie recovery will retry). */
-  const applyDegradedAuthSession = useCallback(
-    (auth: { user: AuthUser; profile: authService.AuthProfile }) => {
-      const nextProfile = freezeInDev(authProfileToUserProfile(auth.profile));
-      const trustSessionRole =
-        auth.profile.role === "driver" || auth.profile.role === "user";
-      setUser(auth.user);
-      setProfile(nextProfile);
-      setRoleVerified(trustSessionRole);
+  /** Trust signed JWT metadata for routing; DB profile merges in background. */
+  const commitAuthenticatedSession = useCallback(
+    (
+      nextUser: AuthUser,
+      sessionProfile: authService.AuthProfile,
+      options?: { logEvent?: string; logLevel?: "info" | "warn" },
+    ) => {
+      const trustRole =
+        sessionProfile.role === "driver" || sessionProfile.role === "user";
+      setUser(nextUser);
+      setProfile(freezeInDev(authProfileToUserProfile(sessionProfile)));
+      setRoleVerified(trustRole);
       setStatus("authenticated");
-      logAuth(
-        trustSessionRole
-          ? "profile_verification_metadata_fallback"
-          : "profile_verification_degraded",
-        { uid: auth.user.uid, role: auth.profile.role },
-        "warn",
-      );
+      setRestoreError(null);
+      if (options?.logEvent) {
+        logAuth(
+          options.logEvent,
+          { uid: nextUser.uid, role: sessionProfile.role },
+          options.logLevel ?? "info",
+        );
+      }
     },
     [],
+  );
+
+  const scheduleDbProfileHydration = useCallback(
+    (
+      uid: string,
+      sessionProfile: authService.AuthProfile,
+      isActive: () => boolean,
+    ) => {
+      void getVerifiedDbProfile(uid).then((dbProfile) => {
+        if (!isActive() || !dbProfile) return;
+        const merged = mergeAuthProfiles(sessionProfile, dbProfile);
+        const nextProfile = freezeInDev(authProfileToUserProfile(merged));
+        setProfile((prev) =>
+          areUserProfilesEqual(prev, nextProfile) ? prev : nextProfile,
+        );
+        setRoleVerified(true);
+        resetCircuitBreaker();
+        logAuth("db_profile_hydrated", { uid, role: merged.role });
+      });
+    },
+    [getVerifiedDbProfile],
   );
 
   // ---- session restore + subscription ----
@@ -341,23 +376,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!mounted || !isCurrentListenerSeq(seqId)) return;
           try {
             if (auth) {
-              const dbProfile = await getVerifiedDbProfile(auth.user.uid);
-              if (!mounted || !isCurrentListenerSeq(seqId)) return;
-              if (!dbProfile) {
-                applyDegradedAuthSession(auth);
-                return;
-              }
-              const merged = mergeAuthProfiles(auth.profile, dbProfile);
-              const nextProfile = freezeInDev(authProfileToUserProfile(merged));
-              setUser((prev) => (prev?.uid === auth.user.uid ? prev : auth.user));
-              setProfile((prev) => (areUserProfilesEqual(prev, nextProfile) ? prev : nextProfile));
-              setRoleVerified(true);
-              setStatus("authenticated");
-              resetCircuitBreaker();
-              logAuth("auth_state_signed_in", {
-                uid: auth.user.uid,
-                role: merged.role,
+              if (restoringRef.current) return;
+              commitAuthenticatedSession(auth.user, auth.profile, {
+                logEvent: "auth_state_signed_in",
               });
+              scheduleDbProfileHydration(auth.user.uid, auth.profile, () =>
+                mounted && isCurrentListenerSeq(seqId),
+              );
             } else {
               if (restoringRef.current) {
                 logAuth("auth_state_signed_out_ignored_during_restore");
@@ -413,137 +438,85 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setStatus("unauthenticated");
             logAuth("restore_signed_out_keep_off", { uid: session.user.uid });
           } else {
-            let nextUser = session.user;
-            let nextProfile = session.profile;
-            let verifiedDbProfile: authService.AuthProfile | null = null;
-            // Hydrate from persisted session immediately so HMR/reload never flashes sign-in
-            // while the network refresh runs.
-            setUser(nextUser);
-            setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
-            setStatus("authenticated");
-            const tokenExpiresAtMs =
-              await authService.getAccessTokenExpiresAtMs();
-            const tokenFresh = authService.isAccessTokenFresh(
-              tokenExpiresAtMs,
-              AUTH_SESSION_FRESH_MS,
-            );
-            try {
-              if (tokenFresh) {
-                logAuth("restore_skip_refresh_token_fresh", {
-                  uid: session.user.uid,
-                });
-                verifiedDbProfile = await getVerifiedDbProfile(
-                  session.user.uid,
-                );
+            const sessionUser = session.user;
+            const sessionProfile = session.profile;
+
+            commitAuthenticatedSession(sessionUser, sessionProfile, {
+              logEvent: "restore_session_applied",
+            });
+            restoringRef.current = false;
+
+            void (async () => {
+              try {
+                const tokenExpiresAtMs =
+                  await authService.getAccessTokenExpiresAtMs();
                 if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(
-                    session.profile,
-                    verifiedDbProfile,
-                  );
-                  setRoleVerified(true);
-                } else {
-                  setRoleVerified(false);
-                }
-              } else {
-                const refreshed = await withTimeout(
-                  authService.refreshSession(),
-                  AUTH_RESTORE_REFRESH_TIMEOUT_MS,
+
+                const tokenFresh = authService.isAccessTokenFresh(
+                  tokenExpiresAtMs,
+                  AUTH_SESSION_FRESH_MS,
                 );
-                if (mounted && isCurrentAuthAttempt(initAttemptId) && refreshed) {
-                  nextUser = refreshed.user;
-                  nextProfile = refreshed.profile;
-                  verifiedDbProfile = await getVerifiedDbProfile(
-                    refreshed.user.uid,
-                  );
-                  if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                  if (verifiedDbProfile) {
-                    nextProfile = mergeAuthProfiles(
-                      refreshed.profile,
-                      verifiedDbProfile,
+
+                if (!tokenFresh) {
+                  try {
+                    const refreshed = await withTimeout(
+                      authService.refreshSession(),
+                      AUTH_RESTORE_REFRESH_TIMEOUT_MS,
                     );
-                    setRoleVerified(true);
-                  } else {
-                    setRoleVerified(false);
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (refreshed) {
+                      commitAuthenticatedSession(refreshed.user, refreshed.profile, {
+                        logEvent: "restore_refresh_completed",
+                      });
+                      scheduleDbProfileHydration(
+                        refreshed.user.uid,
+                        refreshed.profile,
+                        () => mounted && isCurrentAuthAttempt(initAttemptId),
+                      );
+                      return;
+                    }
+                    const stillStored = await authService.getSession();
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (!stillStored) {
+                      clearAuthState(true);
+                      logAuth(
+                        "restore_refresh_invalid_session",
+                        { uid: sessionUser.uid },
+                        "warn",
+                      );
+                      return;
+                    }
+                  } catch (e) {
+                    if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
+                    if (e instanceof TimeoutError) {
+                      logAuth(
+                        "restore_refresh_timeout",
+                        { uid: sessionUser.uid },
+                        "warn",
+                      );
+                    } else {
+                      logAuthError("restore_refresh_error", e, {
+                        uid: sessionUser.uid,
+                      });
+                    }
                   }
-                } else if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                  const stillStored = await authService.getSession();
-                  if (!stillStored) {
-                    clearAuthState(true);
-                    logAuth("restore_refresh_invalid_session", {
-                      uid: session.user.uid,
-                    }, "warn");
-                    return;
-                  }
-                  verifiedDbProfile = await getVerifiedDbProfile(
-                    session.user.uid,
-                  );
-                  if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-                  if (verifiedDbProfile) {
-                    nextProfile = mergeAuthProfiles(
-                      session.profile,
-                      verifiedDbProfile,
-                    );
-                    setRoleVerified(true);
-                  } else {
-                    setRoleVerified(false);
-                  }
-                }
-              }
-            } catch (e) {
-              if (mounted && isCurrentAuthAttempt(initAttemptId)) {
-                if (e instanceof TimeoutError) {
-                  logAuth(
-                    "restore_refresh_timeout",
-                    { uid: session.user.uid },
-                    "warn",
-                  );
                 } else {
-                  logAuthError("restore_refresh_error", e, {
-                    uid: session.user.uid,
+                  logAuth("restore_skip_refresh_token_fresh", {
+                    uid: sessionUser.uid,
                   });
                 }
-                verifiedDbProfile =
-                  verifiedDbProfile ??
-                  (await getVerifiedDbProfile(session.user.uid).catch(
-                    () => null,
-                  ));
-                setRoleVerified(!!verifiedDbProfile);
-                if (verifiedDbProfile) {
-                  nextProfile = mergeAuthProfiles(
-                    session.profile,
-                    verifiedDbProfile,
-                  );
-                }
+
+                scheduleDbProfileHydration(
+                  sessionUser.uid,
+                  sessionProfile,
+                  () => mounted && isCurrentAuthAttempt(initAttemptId),
+                );
+              } catch (e) {
+                logAuthError("restore_background_hydration_error", e, {
+                  uid: sessionUser.uid,
+                });
               }
-            }
-            if (!mounted || !isCurrentAuthAttempt(initAttemptId)) return;
-            setRestoreError(null);
-            if (!verifiedDbProfile) {
-              const trustSessionRole =
-                nextProfile.role === "driver" || nextProfile.role === "user";
-              setUser(nextUser);
-              setProfile(freezeInDev(authProfileToUserProfile(nextProfile)));
-              setRoleVerified(trustSessionRole);
-              setStatus("authenticated");
-              logAuth(
-                trustSessionRole
-                  ? "restore_profile_metadata_fallback"
-                  : "restore_profile_degraded",
-                { uid: nextUser.uid, role: nextProfile.role },
-                "warn",
-              );
-              return;
-            }
-            const finalProfile = freezeInDev(authProfileToUserProfile(nextProfile));
-            setUser(nextUser);
-            setProfile(finalProfile);
-            setStatus("authenticated");
-            resetCircuitBreaker();
-            logAuth("restore_completed", {
-              uid: nextUser.uid,
-              role: nextProfile.role,
-            });
+            })();
           }
         } else {
           setRestoreError(null);
@@ -555,14 +528,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           logAuthError("restore_error", err);
           const stored = await authService.getSession().catch(() => null);
           if (stored) {
-            setUser(stored.user);
-            setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
-            setRoleVerified(false);
-            setStatus("authenticated");
+            commitAuthenticatedSession(stored.user, stored.profile, {
+              logEvent: "restore_error_degraded_session_preserved",
+              logLevel: "warn",
+            });
             setRestoreError(authErrorFromUnknown(err));
-            logAuth("restore_error_degraded_session_preserved", {
-              uid: stored.user.uid,
-            }, "warn");
           } else {
             setRestoreError(authErrorFromUnknown(err));
             clearAuthState(false);
@@ -702,46 +672,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       if (!isCurrentAuthAttempt(refreshAttemptId)) return;
       if (session) {
-        const dbProfile = await getVerifiedDbProfile(session.user.uid);
-        if (!isCurrentAuthAttempt(refreshAttemptId)) return;
-        if (!dbProfile) {
-          const trustSessionRole =
-            session.profile.role === "driver" || session.profile.role === "user";
-          setUser(session.user);
-          setProfile(freezeInDev(authProfileToUserProfile(session.profile)));
-          setRoleVerified(trustSessionRole);
-          setStatus("authenticated");
-          logAuth(
-            trustSessionRole
-              ? "refresh_profile_metadata_fallback"
-              : "refresh_profile_degraded",
-            { uid: session.user.uid, role: session.profile.role },
-            "warn",
-          );
-          return;
-        }
-        const merged = mergeAuthProfiles(session.profile, dbProfile);
-        const finalProfile = freezeInDev(authProfileToUserProfile(merged));
-        setUser(session.user);
-        setProfile(finalProfile);
-        setRoleVerified(true);
-        setStatus("authenticated");
-        setRestoreError(null);
-        resetCircuitBreaker();
-        logAuth("refresh_completed", {
-          uid: session.user.uid,
-          role: merged.role,
+        commitAuthenticatedSession(session.user, session.profile, {
+          logEvent: "refresh_session_applied",
         });
+        scheduleDbProfileHydration(
+          session.user.uid,
+          session.profile,
+          () => isCurrentAuthAttempt(refreshAttemptId),
+        );
       } else {
-        // refreshSession returned null — network failure or genuinely expired session.
         const stored = await authService.getSession();
         if (!isCurrentAuthAttempt(refreshAttemptId)) return;
         if (stored) {
-          setUser(stored.user);
-          setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
-          setRoleVerified(false);
-          setStatus("authenticated");
-          logAuth("refresh_degraded_session_preserved", { uid: stored.user.uid }, "warn");
+          commitAuthenticatedSession(stored.user, stored.profile, {
+            logEvent: "refresh_degraded_session_preserved",
+            logLevel: "warn",
+          });
         } else {
           clearAuthState(true);
           logAuth("refresh_invalid_session_cleared", {}, "warn");
@@ -761,18 +707,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logAuthError("refresh_session_error", e);
       }
       if (!isCurrentAuthAttempt(refreshAttemptId)) return;
-      // Timeout / unexpected error: never sign out if a token is still in storage.
-      // The stored session may be perfectly valid — the network call just failed.
       const stored = await authService.getSession();
       if (!isCurrentAuthAttempt(refreshAttemptId)) return;
       const err = authErrorFromUnknown(e);
       if (stored) {
-        setUser(stored.user);
-        setProfile(freezeInDev(authProfileToUserProfile(stored.profile)));
-        setRoleVerified(false);
-        setStatus("authenticated");
+        commitAuthenticatedSession(stored.user, stored.profile, {
+          logEvent: "refresh_timeout_degraded_session_preserved",
+          logLevel: "warn",
+        });
         setRestoreError(err);
-        logAuth("refresh_timeout_degraded_session_preserved", { uid: stored.user.uid }, "warn");
       } else {
         setRestoreError(err);
         clearAuthState(true);

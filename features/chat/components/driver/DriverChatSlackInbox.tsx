@@ -27,6 +27,7 @@ function DriverChatSlackInboxInner({
   profileAvatarSeed,
   onBack,
   onOpenConv,
+  bottomInset = 0,
 }: {
   conversations: TripConversation[];
   isLoading: boolean;
@@ -36,6 +37,7 @@ function DriverChatSlackInboxInner({
   profileAvatarSeed?: string | null;
   onBack: () => void;
   onOpenConv: (conv: TripConversation) => void;
+  bottomInset?: number;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -110,7 +112,7 @@ function DriverChatSlackInboxInner({
         <FlashList
           data={conversations}
           keyExtractor={(c) => c.id}
-          contentContainerStyle={{ paddingBottom: 8 }}
+          contentContainerStyle={{ paddingBottom: Math.max(bottomInset, 12) }}
           renderItem={renderConvItem}
         />
       )}

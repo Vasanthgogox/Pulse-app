@@ -5,6 +5,7 @@ export type WorkspacePanelId =
   | "team"
   | "kyc"
   | "products"
+  | "ocr-usage"
   | "language"
   | "region";
 
@@ -15,6 +16,7 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   team: "Team members",
   kyc: "Org identity & KYC",
   products: "Pulse Products",
+  "ocr-usage": "Pulse Scan usage",
   language: "Language",
   region: "Region",
 };
@@ -23,6 +25,7 @@ export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>
   account: "Manage your personal identity",
   "account-edit": "Update your name, photo and status",
   products: "Your logistics business operating system",
+  "ocr-usage": "OCR scans, quota, and quality metrics for your workspace",
 };
 
 export type WorkspaceHubInlinePanelId = "language" | "region";
@@ -49,6 +52,7 @@ export function parseWorkspacePanelId(
     value === "team" ||
     value === "kyc" ||
     value === "products" ||
+    value === "ocr-usage" ||
     value === "language" ||
     value === "region"
   ) {

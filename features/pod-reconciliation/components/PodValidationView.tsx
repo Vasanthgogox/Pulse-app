@@ -19,7 +19,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { runOCR } from '@/lib/pod/ocr';
+import { enqueueAndProcessOcrJob, getOcrJobForPodAttachment } from '@/features/ocr';
 import { chatWithDocument } from '@/lib/pod/chat';
 import { compressImage } from '@/lib/pod/imageCompression';
 import type { PodReconciliationTripView } from '../services/podReconciliationService';
@@ -116,37 +116,60 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   };
 
   const handleScanWithAI = async () => {
-    if (attachments.length === 0) return;
+    if (attachments.length === 0 || !trip?.internal_id) return;
     const doc = attachments[selectedDocIndex] || attachments[0];
     if (!doc) return;
 
     try {
       setIsScanning(true);
       setScanProgress(5);
-      
+
+      const { data: tripMeta, error: tripMetaError } = await supabase()
+        .from('trips')
+        .select('organization_id')
+        .eq('id', trip.internal_id)
+        .maybeSingle();
+      if (tripMetaError) throw tripMetaError;
+      if (!tripMeta?.organization_id) throw new Error('Trip organization not found');
+
       const url = getFileUrl(
         STORAGE_BUCKET_CANDIDATES[0],
         sanitizeStoragePath(doc.file_path),
       );
       const response = await fetch(url);
       const blob = await response.blob();
-      
+
       setScanProgress(15);
       const finalFile = await compressImage(blob, 1200);
-      
+
       setScanProgress(30);
-      const result = await runOCR(finalFile, doc.file_name, setScanProgress);
-      setExtractedData(result.extraction);
-      
-      if (result.extraction.financials) {
-        if (result.extraction.financials.shortage_amount?.value) {
-          setShortage(String(result.extraction.financials.shortage_amount.value));
+      const objectUrl = URL.createObjectURL(finalFile);
+      try {
+        const job = await enqueueAndProcessOcrJob({
+          organizationId: tripMeta.organization_id,
+          localUri: objectUrl,
+          sourceKind: 'pod_document',
+          tripId: trip.internal_id,
+          podAttachmentId: doc.id,
+          storagePath: doc.file_path,
+        });
+        const extraction = job.result_json?.extraction as PODExtraction | undefined;
+        if (!extraction) throw new Error('OCR completed without extraction payload');
+        setExtractedData(extraction);
+
+        if (extraction.financials) {
+          if (extraction.financials.shortage_amount?.value) {
+            setShortage(String(extraction.financials.shortage_amount.value));
+          }
+          if (extraction.financials.damage_amount?.value) {
+            setDamage(String(extraction.financials.damage_amount.value));
+          }
         }
-        if (result.extraction.financials.damage_amount?.value) {
-          setDamage(String(result.extraction.financials.damage_amount.value));
-        }
+        const durationSec = (job.processing_duration_ms ?? 0) / 1000;
+        Alert.alert('AI Scan Complete', `Extracted data in ${durationSec.toFixed(1)}s`);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
       }
-      Alert.alert('AI Scan Complete', `Extracted data in ${result.processingTime.toFixed(1)}s`);
     } catch (err) {
       console.error(err);
       Alert.alert('Scan Failed', err instanceof Error ? err.message : 'Unknown error');
@@ -155,6 +178,27 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       setScanProgress(0);
     }
   };
+
+  useEffect(() => {
+    const doc = attachments[selectedDocIndex] || attachments[0];
+    if (!doc) return;
+
+    const persisted = doc.extracted_data as PODExtraction | null | undefined;
+    if (persisted && typeof persisted === 'object') {
+      setExtractedData(persisted);
+      return;
+    }
+
+    let cancelled = false;
+    void getOcrJobForPodAttachment(doc.id).then((job) => {
+      if (cancelled || !job?.result_json?.extraction) return;
+      setExtractedData(job.result_json.extraction as PODExtraction);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attachments, selectedDocIndex]);
 
   const handleChatSubmit = async () => {
     if (!chatInput.trim() || attachments.length === 0) return;

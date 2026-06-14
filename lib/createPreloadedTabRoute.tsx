@@ -8,21 +8,36 @@ import { SceneLoadingSplash } from '@/components/chromeLoadingScreens';
 import { markMobileTabHydrated } from '@/lib/mobileTabNav/persistence';
 
 /**
- * Tab route without React.lazy/Suspense: preload the chunk early (idle / press-in),
- * then render once resolved — avoids a suspend boundary on tab switch.
+ * Tab route without React.lazy/Suspense: load the chunk when the tab mounts (or
+ * when {@link preload} is called explicitly). Does NOT start importing at module
+ * evaluation — that previously fired 3× ~3.5k-module graphs in parallel whenever
+ * Expo Router registered tab routes, starving Metro and delaying data fetches.
  */
 export function createPreloadedTabRoute(
   loader: () => Promise<{ default: ComponentType<object> }>,
   tabName?: string,
 ) {
   let Resolved: ComponentType<object> | null = null;
-  const promise = loader().then((mod) => {
-    Resolved = mod.default;
-    return mod.default;
-  });
+  let promise: Promise<ComponentType<object>> | null = null;
+
+  function loadChunk(): Promise<ComponentType<object>> {
+    if (Resolved) return Promise.resolve(Resolved);
+    if (!promise) {
+      promise = loader()
+        .then((mod) => {
+          Resolved = mod.default;
+          return mod.default;
+        })
+        .catch((err) => {
+          promise = null;
+          throw err;
+        });
+    }
+    return promise;
+  }
 
   function preload(): void {
-    void promise;
+    void loadChunk();
   }
 
   function TabRoute(): React.ReactElement | null {
@@ -32,7 +47,7 @@ export function createPreloadedTabRoute(
     useEffect(() => {
       if (Screen) return;
       let cancelled = false;
-      void promise.then((C) => {
+      void loadChunk().then((C) => {
         if (!cancelled) setScreen(() => C);
       });
       return () => {
@@ -49,5 +64,5 @@ export function createPreloadedTabRoute(
     return createElement(Screen);
   }
 
-  return { TabRoute, preload, promise };
+  return { TabRoute, preload };
 }

@@ -4,13 +4,14 @@
  */
 import type { DriverRow } from '@/features/drivers/services/drivers.service';
 import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppStateIsActive } from '@/lib/hooks/useAppStateIsActive';
 import { queryKeys } from '@/lib/queryKeys';
 import {
   infrastructureRetryDelay,
   infrastructureShouldRetry,
 } from '@/lib/queryRetry';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 const STALE_MS = 30_000;
@@ -23,6 +24,7 @@ export function driverHomeLinkedDriversQueryKey(userId: string) {
 
 export function useDriverHomeDriversQuery(userId: string | null) {
   const appActive = useAppStateIsActive();
+  const { status } = useAuth();
   const uid = userId ?? '';
 
   const query = useQuery({
@@ -32,7 +34,7 @@ export function useDriverHomeDriversQuery(userId: string | null) {
       if (error) throw error;
       return drivers ?? [];
     },
-    enabled: !!uid,
+    enabled: !!uid && status !== 'restoring',
     staleTime: STALE_MS,
     gcTime: 10 * 60_000,
     retry: infrastructureShouldRetry,
@@ -40,6 +42,7 @@ export function useDriverHomeDriversQuery(userId: string | null) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: appActive ? POLL_MS : false,
+    placeholderData: keepPreviousData,
   });
 
   const activeLinkedDrivers = useMemo(

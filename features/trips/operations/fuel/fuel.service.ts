@@ -58,7 +58,7 @@ export async function getTripFuelEntryById(
 }
 
 export async function updateTripFuelEntry(
-  input: UpdateFuelEntryInput & { billStoragePath?: string | null },
+  input: UpdateFuelEntryInput & { billStoragePath?: string | null; ocrJobId?: string | null },
 ): Promise<{ error: Error | null; entry: TripFuelEntry | null }> {
   const existing = await getTripFuelEntryById(input.entryId);
   if (existing.error || !existing.entry) {
@@ -84,6 +84,9 @@ export async function updateTripFuelEntry(
   if (input.billStoragePath !== undefined) {
     payload.bill_storage_path = toNullableText(input.billStoragePath);
   }
+  if (input.ocrJobId !== undefined) {
+    payload.ocr_job_id = input.ocrJobId;
+  }
   const { data, error } = await supabase()
     .from("trip_fuel_entries")
     .update(payload)
@@ -104,6 +107,7 @@ export async function updateTripFuelEntry(
 export async function createTripFuelEntry(
   input: Omit<SaveFuelEntryInput, "billPhotoLocalUri"> & {
     billStoragePath?: string | null;
+    ocrJobId?: string | null;
   },
 ): Promise<{ error: Error | null; entry: TripFuelEntry | null }> {
   const paymentOwner = resolvePaymentOwnerForSave(input);
@@ -119,6 +123,7 @@ export async function createTripFuelEntry(
     station_name: toNullableText(input.stationName),
     notes: toNullableText(input.notes),
     bill_storage_path: toNullableText(input.billStoragePath),
+    ocr_job_id: input.ocrJobId ?? null,
     entered_by: input.enteredBy,
     entered_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

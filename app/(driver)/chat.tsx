@@ -1,12 +1,3 @@
-import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
-import { lazy, Suspense } from 'react';
+import DriverChatScreen from '@/features/drivers/screens/DriverChatScreen';
 
-const DriverChatScreen = lazy(() => import('@/features/drivers/screens/DriverChatScreen'));
-
-export default function DriverChatRoute() {
-  return (
-    <Suspense fallback={<LazySuspenseInlineFallback />}>
-      <DriverChatScreen />
-    </Suspense>
-  );
-}
+export default DriverChatScreen;

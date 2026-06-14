@@ -420,6 +420,11 @@ export const queryKeys = {
       ["q", "operations", "ledger-reconciliation", "trip", tripId] as const,
   },
 
+  ocr: {
+    metrics: (orgId: string, days = 30) =>
+      ["q", "ocr", "metrics", orgId, days] as const,
+  },
+
   /** Linked-org display profiles (avatar URL + seed) fetched via batch RPC. */
   linkedOrgDisplay: (ids: string[]) =>
     ["q", "linked-org-display", ids.join("|")] as const,
