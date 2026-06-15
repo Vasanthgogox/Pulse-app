@@ -1,12 +1,12 @@
-import { ChatImage } from "@/features/chat/components/ChatImage";
+import { ChatImage, resolveChatImageStorageKey } from "@/features/chat/components/ChatImage";
 import { SLACK_DESKTOP_AVATAR } from "@/features/chat/components/desktop/chatSlackDesktop.styles";
 import { SLACK_AVATAR } from "@/features/chat/components/mobile/chatSlackMobile.styles";
 import { useChatMediaGallery } from "@/features/chat/components/shared/ChatMediaGalleryLightbox";
 import type { ConversationImagePreview } from "@/features/chat/utils/conversationImagePreview.util";
 import { chatGallerySlideFromInboxPreview } from "@/features/chat/utils/chatMediaGallery.util";
+import { isDirectChatImageHttpUrl } from "@/features/chat/utils/storageRenderImageUrl";
 import { useMemo, useState } from "react";
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +32,15 @@ function InboxThumb({
 }) {
   const radius = Math.max(8, Math.round(width * 0.1));
 
+  const storagePath = String(item.storagePath ?? "").trim();
+  const directUrl = isDirectChatImageHttpUrl(item.url) && !resolveChatImageStorageKey(storagePath)
+    ? item.url
+    : isDirectChatImageHttpUrl(storagePath)
+      ? storagePath
+      : null;
+  const imageSource = resolveChatImageStorageKey(storagePath) || directUrl || storagePath || "";
+  const preferredUrl = isDirectChatImageHttpUrl(item.url) ? item.url : null;
+
   return (
     <Pressable
       onPress={onPress}
@@ -47,7 +56,7 @@ function InboxThumb({
       accessibilityRole="button"
       accessibilityLabel="Open image preview"
     >
-      {item.storagePath ? (
+      {imageSource ? (
         <View
           style={[
             styles.thumbShell,
@@ -55,23 +64,15 @@ function InboxThumb({
           ]}
         >
           <ChatImage
-            storagePath={item.storagePath}
+            storagePath={imageSource}
+            preferredUrl={preferredUrl}
             thumbnail
             displayWidth={width}
             displayHeight={THUMB_H}
             style={{ width, height: THUMB_H, borderRadius: radius }}
           />
         </View>
-      ) : (
-        <Image
-          source={{ uri: item.url }}
-          style={[
-            styles.thumbImage,
-            { width, height: THUMB_H, borderRadius: radius },
-          ]}
-          resizeMode="cover"
-        />
-      )}
+      ) : null}
     </Pressable>
   );
 }

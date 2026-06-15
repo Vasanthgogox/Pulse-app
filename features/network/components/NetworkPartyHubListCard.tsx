@@ -4,6 +4,8 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import Theme from "@/constants/Theme";
+import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
+import { SLACK_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
 import { NetworkHubGlassButton } from "@/features/network/components/NetworkHubGlassButton";
@@ -22,6 +24,7 @@ import {
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { SPLIT_STACK_BREAKPOINT } from "@/features/network/constants/networkHubGrid";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
+import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { partyAccentFromEntityType } from "@/lib/partyEntityAccent";
 import { Building2, Phone, Send } from "lucide-react-native";
 import { useMemo } from "react";
@@ -62,6 +65,8 @@ export type NetworkPartyHubListCardProps = {
   loading?: boolean;
   compact?: boolean;
   mobileGrid?: boolean;
+  /** Desktop 2-row hub — chat people-strip avatar + ring styling. */
+  chatHubTile?: boolean;
   nativeListRow?: boolean;
 };
 
@@ -90,11 +95,13 @@ export function NetworkPartyHubListCard({
   loading = false,
   compact: compactProp,
   mobileGrid: mobileGridProp = false,
+  chatHubTile: chatHubTileProp = false,
   nativeListRow: nativeListRowProp,
 }: NetworkPartyHubListCardProps) {
   const { t } = useLanguage();
   const { width } = useWindowDimensions();
   const mobileGrid = mobileGridProp === true;
+  const chatHubTile = chatHubTileProp === true;
   const nativeListRow =
     nativeListRowProp ??
     (Platform.OS !== "web" && width < SPLIT_STACK_BREAKPOINT && !mobileGrid);
@@ -223,8 +230,15 @@ export function NetworkPartyHubListCard({
 
   if (mobileGrid) {
     const cardPressHandler = onOpenProfile ?? onPressCard;
-    const gridAvatarSize = 52;
+    const gridAvatarSize = chatHubTile ? SLACK_CHAT_AVATAR.people : 52;
     const accent = partyAccentFromEntityType(entityType);
+    const partyIdentity: ResolvedPartyAvatarIdentity = {
+      displayName,
+      entityType,
+      avatarUrl: avatarUrl ?? null,
+      avatarSeed: avatarSeed ?? null,
+      isIntegrated: showOnline,
+    };
     return (
       <Pressable
         onPress={cardPressHandler}
@@ -237,30 +251,63 @@ export function NetworkPartyHubListCard({
           style={[
             networkHubListCardChromeStyles.cardMobileGrid,
             styles.cardGridTile,
+            chatHubTile && styles.chatHubTile,
           ]}
         >
-          <View style={styles.gridTileAvatarCol}>
-            <PartyEntityAvatarGlow accent={accent} size={gridAvatarSize}>
-              <PartyAvatar
-                name={displayName}
-                initialsColorSeed={partyId}
-                avatarSeed={avatarSeed}
-                avatarUrl={avatarUrl}
-                entityType={entityType}
-                size={gridAvatarSize}
-              />
-            </PartyEntityAvatarGlow>
-            {showOnline ? (
-              <View style={[styles.onlineDot, styles.gridTileOnlineDot]} />
-            ) : null}
+          <View style={[styles.gridTileAvatarCol, chatHubTile && { width: 64, height: 64 }]}>
+            {chatHubTile ? (
+              <View style={styles.chatHubAvatarWrap}>
+                <View
+                  style={[
+                    styles.chatHubAvatarRing,
+                    {
+                      borderColor: accent.ring,
+                      backgroundColor: showOnline ? accent.tint : Theme.screenBackground,
+                    },
+                  ]}
+                >
+                  <View style={styles.chatHubAvatarCircle}>
+                    <ChatPartyAvatar identity={partyIdentity} size={gridAvatarSize} />
+                  </View>
+                </View>
+                {showOnline ? <View style={styles.chatHubOnlineDot} /> : null}
+              </View>
+            ) : (
+              <>
+                <PartyEntityAvatarGlow accent={accent} size={gridAvatarSize}>
+                  <PartyAvatar
+                    name={displayName}
+                    initialsColorSeed={partyId}
+                    avatarSeed={avatarSeed}
+                    avatarUrl={avatarUrl}
+                    entityType={entityType}
+                    size={gridAvatarSize}
+                  />
+                </PartyEntityAvatarGlow>
+                {showOnline ? (
+                  <View style={[styles.onlineDot, styles.gridTileOnlineDot]} />
+                ) : null}
+              </>
+            )}
           </View>
           <Text
-            style={styles.partyNameMobileGrid}
+            style={[
+              styles.partyNameMobileGrid,
+              chatHubTile && styles.chatHubName,
+            ]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
             {displayName}
           </Text>
+          {chatHubTile && rolePill ? (
+            <Text
+              style={[styles.chatHubRoleCue, { color: accent.ring }]}
+              numberOfLines={1}
+            >
+              {rolePill.label}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
     );

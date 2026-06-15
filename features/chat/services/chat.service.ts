@@ -421,6 +421,8 @@ const TRIP_MESSAGES_EMBED_RECENT = 20;
 
 /** Page size for on-demand trip thread history (WhatsApp-style window; bootstrap RPC uses same cap). */
 export const TRIP_CHAT_HISTORY_PAGE = 20;
+/** Network / org DM thread page size (keyset pagination). */
+export const NETWORK_CHAT_HISTORY_PAGE = 50;
 
 function tripConversationSelect(tripEmbedFields: string): string {
   return `
@@ -991,6 +993,32 @@ export async function getOrCreateNetworkConversation(params: {
 
   if (error) throw error;
   return data;
+}
+
+export async function getNetworkMessagesByConversation(
+  conversationId: string,
+  opts?: { before?: string; limit?: number },
+): Promise<NetworkMessageRow[]> {
+  const limit = Math.min(
+    Math.max(opts?.limit ?? NETWORK_CHAT_HISTORY_PAGE, 1),
+    100,
+  );
+  let query = supabase()
+    .from("network_messages")
+    .select(
+      "id, conversation_id, content, sender_org_id, sender_name, sender_user_id, created_at, is_read_by_other, read_at",
+    )
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (opts?.before) {
+    query = query.lt("created_at", opts.before);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return [...(data ?? [])].reverse() as NetworkMessageRow[];
 }
 
 export async function sendNetworkMessage(params: {

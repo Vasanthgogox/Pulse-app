@@ -1,5 +1,5 @@
 /**
- * Your connections — horizontal swipe pages (6×1 desktop, 3×2 mobile) + Previous / Next.
+ * Your connections — horizontal swipe pages (5×2 desktop, 3×2 mobile) + Previous / Next.
  */
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -130,9 +130,12 @@ export function NetworkHubConnectionsPagedGrid<T>({
       }
 
       return (
-        <View style={styles.grid}>
+        <View style={[styles.grid, rows >= 2 && styles.gridTwoRow]}>
           {gridRows.map((row, rowIndex) => (
-            <View key={`hub-page-row-${rowIndex}`} style={styles.row}>
+            <View
+              key={`hub-page-row-${rowIndex}`}
+              style={[styles.row, rows >= 2 && styles.rowHubTiles]}
+            >
               {row.map((item, colIndex) => (
                 <View
                   key={
@@ -274,11 +277,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
     gap: NETWORK_HUB_GRID_GAP_PX,
   },
+  gridTwoRow: {
+    gap: 14,
+    paddingBottom: 4,
+  },
   row: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: NETWORK_HUB_GRID_GAP_PX,
     width: "100%",
+  },
+  rowHubTiles: {
+    alignItems: "flex-start",
+    gap: 12,
   },
   cell: {
     flex: 1,

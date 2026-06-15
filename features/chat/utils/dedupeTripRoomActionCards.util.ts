@@ -26,8 +26,12 @@ export function tripRoomActionCardDedupKey(msg: ChatPlatformMessageRow): string 
   const txId = meta.transaction_id ?? meta.transactionId;
   if (txId) return `ledger:${String(txId)}`;
 
-  const payload = meta.event_payload as Record<string, unknown> | undefined;
-  const newStatus = meta.new_status ?? payload?.new_status;
+  if (eventType === "feedback_request" || eventType === "feedback") {
+    const tripId = String(meta.trip_id ?? "").trim() || "unknown";
+    return `feedback_request:trip:${tripId}`;
+  }
+
+  const newStatus = meta.new_status ?? (meta.event_payload as Record<string, unknown> | undefined)?.new_status;
   if (eventType === "status_change" && newStatus != null) {
     return `status:${String(newStatus)}:${minute}:${body.slice(0, 120)}`;
   }

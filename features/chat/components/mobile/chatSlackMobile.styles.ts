@@ -353,7 +353,7 @@ export const slackMobileStyles = StyleSheet.create({
     alignItems: "flex-start",
   },
   peopleItem: {
-    width: 56,
+    width: 64,
     alignItems: "center",
     gap: 6,
   },
@@ -426,7 +426,7 @@ export const slackMobileStyles = StyleSheet.create({
     fontWeight: "500",
     color: SLACK_MOBILE.textSecondary,
     textAlign: "center",
-    width: 56,
+    width: 64,
   },
   peopleNameActive: {
     color: SLACK_MOBILE.textPrimary,
@@ -636,8 +636,7 @@ export const slackMobileStyles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "600",
     color: SLACK_MOBILE.textTertiary,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    letterSpacing: 0.4,
     marginTop: 1,
   },
   listRowPreview: {

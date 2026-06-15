@@ -21,7 +21,7 @@ type WorkspaceHubProductGridProps = {
   onSelectProduct?: (productId: ProductId) => void;
 };
 
-/** Pulse Products — 3-column grid inside the hub scroll body. */
+/** Pulse Products — 3-column grid inside the hub scroll body (Core + Driver + Network + Chat free). */
 export const WorkspaceHubProductGrid = memo(function WorkspaceHubProductGrid({
   activeProductIds,
   onOpenCatalogue,

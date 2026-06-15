@@ -67,6 +67,11 @@ interface IntegratedChatContextType {
   getUnreadCount: (chatId: string) => number;
   getTotalUnreadCount: () => number;
   initiateNetworkConversation: (partner: NetworkPartner) => Promise<string | null>;
+  /** Load the newest page of DM history (replaces bootstrap slice). */
+  hydrateNetworkThread: (chatId: string) => Promise<void>;
+  /** Keyset page of older messages — prepends when more history exists. */
+  loadOlderNetworkMessages: (chatId: string) => Promise<boolean>;
+  networkThreadHasMore: (chatId: string) => boolean;
 }
 
 const IntegratedChatContext = createContext<IntegratedChatContextType | undefined>(undefined);
@@ -174,6 +179,9 @@ export function IntegratedChatProvider({
   const loadDataRef = useRef<() => Promise<void>>(async () => {});
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const missingNetConvRefreshAtRef = useRef<Record<string, number>>({});
+  const networkHasMoreRef = useRef<Record<string, boolean>>({});
+  const networkHydrateInFlightRef = useRef<Record<string, boolean>>({});
+  const networkOlderInFlightRef = useRef<Record<string, boolean>>({});
   const bootstrappedOrgRef = useRef<string | null>(null);
   const lastFetchedAtRef = useRef<number>(0);
   // Stable ref read inside realtime callback so isActive changes don't re-subscribe.
@@ -412,6 +420,92 @@ export function IntegratedChatProvider({
     [orgId, orgName]
   );
 
+  const mergeNetworkMessages = useCallback(
+    (
+      chatId: string,
+      incoming: NetworkMessageRow[],
+      mode: "replace" | "prepend",
+    ) => {
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== chatId) return conv;
+          if (mode === "replace") {
+            return { ...conv, messages: incoming };
+          }
+          const existingIds = new Set(conv.messages.map((m) => m.id));
+          const older = incoming.filter((m) => !existingIds.has(m.id));
+          if (older.length === 0) return conv;
+          return { ...conv, messages: [...older, ...conv.messages] };
+        }),
+      );
+    },
+    [],
+  );
+
+  const hydrateNetworkThread = useCallback(
+    async (chatId: string) => {
+      if (!chatId || networkHydrateInFlightRef.current[chatId]) return;
+      networkHydrateInFlightRef.current[chatId] = true;
+      try {
+        const rows = await chatService.getNetworkMessagesByConversation(chatId, {
+          limit: chatService.NETWORK_CHAT_HISTORY_PAGE,
+        });
+        networkHasMoreRef.current[chatId] =
+          rows.length >= chatService.NETWORK_CHAT_HISTORY_PAGE;
+        mergeNetworkMessages(chatId, rows, "replace");
+      } catch {
+        // non-critical — bootstrap slice still visible
+      } finally {
+        networkHydrateInFlightRef.current[chatId] = false;
+      }
+    },
+    [mergeNetworkMessages],
+  );
+
+  const loadOlderNetworkMessages = useCallback(
+    async (chatId: string): Promise<boolean> => {
+      if (
+        !chatId ||
+        !networkHasMoreRef.current[chatId] ||
+        networkOlderInFlightRef.current[chatId]
+      ) {
+        return false;
+      }
+      const conv = conversations.find((c) => c.id === chatId);
+      const oldest = conv?.messages[0]?.created_at;
+      if (!oldest) {
+        networkHasMoreRef.current[chatId] = false;
+        return false;
+      }
+      networkOlderInFlightRef.current[chatId] = true;
+      try {
+        const rows = await chatService.getNetworkMessagesByConversation(chatId, {
+          before: oldest,
+          limit: chatService.NETWORK_CHAT_HISTORY_PAGE,
+        });
+        if (rows.length === 0) {
+          networkHasMoreRef.current[chatId] = false;
+          return false;
+        }
+        if (rows.length < chatService.NETWORK_CHAT_HISTORY_PAGE) {
+          networkHasMoreRef.current[chatId] = false;
+        }
+        mergeNetworkMessages(chatId, rows, "prepend");
+        return networkHasMoreRef.current[chatId] ?? false;
+      } catch {
+        return false;
+      } finally {
+        networkOlderInFlightRef.current[chatId] = false;
+      }
+    },
+    [conversations, mergeNetworkMessages],
+  );
+
+  const networkThreadHasMore = useCallback(
+    (chatId: string) => networkHasMoreRef.current[chatId] ?? true,
+    [],
+  );
+
   const contextValue = useMemo(
     (): IntegratedChatContextType => ({
       chats,
@@ -422,8 +516,23 @@ export function IntegratedChatProvider({
       getUnreadCount,
       getTotalUnreadCount,
       initiateNetworkConversation,
+      hydrateNetworkThread,
+      loadOlderNetworkMessages,
+      networkThreadHasMore,
     }),
-    [chats, partners, isLoading, sendMessage, markAsRead, getUnreadCount, getTotalUnreadCount, initiateNetworkConversation],
+    [
+      chats,
+      partners,
+      isLoading,
+      sendMessage,
+      markAsRead,
+      getUnreadCount,
+      getTotalUnreadCount,
+      initiateNetworkConversation,
+      hydrateNetworkThread,
+      loadOlderNetworkMessages,
+      networkThreadHasMore,
+    ],
   );
 
   return (

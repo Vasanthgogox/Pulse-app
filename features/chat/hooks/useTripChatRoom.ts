@@ -4,7 +4,7 @@
  * Combines `ensure_trip_chat_room` (participant fan-in) with
  * `useChatThreadRealtime` (conversation-scoped message stream).
  */
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "@/lib/queryKeys";
@@ -14,6 +14,7 @@ import {
   ensureTripChatRoom,
   getTripChatRoom,
   markChatConversationRead,
+  refreshTripChatRoomTeam,
   sendPlatformChatMessage,
 } from "../services/chatPlatform.service";
 import type {
@@ -34,7 +35,8 @@ export function useTripChatRoom(tripId: string | null, options?: { enabled?: boo
       return ensureTripChatRoom(tripId!);
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   });
 
   const conversationId = roomQuery.data?.id ?? null;
@@ -46,6 +48,18 @@ export function useTripChatRoom(tripId: string | null, options?: { enabled?: boo
       qc.setQueryData(queryKeys.chatPlatform.tripRoom(tripId!), room);
     },
   });
+
+  const syncTeamMutation = useMutation({
+    mutationFn: () => refreshTripChatRoomTeam(tripId!),
+    onSuccess: (room) => {
+      qc.setQueryData(queryKeys.chatPlatform.tripRoom(tripId!), room);
+    },
+  });
+
+  const syncTeam = useCallback(() => {
+    if (!tripId || syncTeamMutation.isPending) return;
+    void syncTeamMutation.mutateAsync();
+  }, [tripId, syncTeamMutation]);
 
   // Mark read when the room is open and messages are loaded.
   useEffect(() => {
@@ -71,6 +85,8 @@ export function useTripChatRoom(tripId: string | null, options?: { enabled?: boo
       void threadQuery.refetch();
     },
     openRoom,
+    syncTeam,
+    isSyncingTeam: syncTeamMutation.isPending,
     sendMessage,
     conversationId,
   };

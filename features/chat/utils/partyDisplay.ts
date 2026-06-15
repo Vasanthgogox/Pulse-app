@@ -47,3 +47,55 @@ export function formatChatPartyTypeLabel(
   if (type === "supplier") return "SUPPLIER";
   return "DRIVER";
 }
+
+/** Slack-style @mention from party display name (first token, lowercase). */
+export function formatChatPartyHandle(name: string | null | undefined): string | null {
+  if (shouldHideChatPartyName(name)) return null;
+  const token = String(name).trim().split(/\s+/)[0] ?? "";
+  const handle = token.replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase();
+  return handle ? `@${handle}` : null;
+}
+
+/** Inbox / thread kicker: `DRIVER · @ahmed` when a real name exists. */
+export function formatChatPartyInboxLine(
+  type: ConversationPartyType | "client" | "supplier" | null | undefined,
+  name: string | null | undefined,
+): string | null {
+  const role = formatChatPartyTypeLabel(type);
+  if (!role) return null;
+  const handle = formatChatPartyHandle(name);
+  if (handle) return `${role} · ${handle}`;
+  return role;
+}
+
+export type ChatComposeTripPartyNames = {
+  driver_display_name?: string | null;
+  client_name?: string | null;
+  supplier_name?: string | null;
+};
+
+export function resolveChatPartyDisplayName(
+  partyType: ConversationPartyType,
+  partyName: string | null | undefined,
+  composeTrip?: ChatComposeTripPartyNames | null,
+): string | null {
+  if (partyType === "driver") {
+    return (composeTrip?.driver_display_name ?? partyName ?? "").trim() || null;
+  }
+  if (partyType === "client") {
+    return (composeTrip?.client_name ?? partyName ?? "").trim() || null;
+  }
+  return (composeTrip?.supplier_name ?? partyName ?? "").trim() || null;
+}
+
+/** People strip under Integrated / On trip: `@aiman` (individual party, not paired). */
+export function formatChatPartyStripLabel(
+  type: ConversationPartyType,
+  name: string | null | undefined,
+): string {
+  return (
+    formatChatPartyHandle(name) ??
+    formatChatPartyTypeLabel(type) ??
+    "PARTY"
+  );
+}

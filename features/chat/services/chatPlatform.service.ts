@@ -167,6 +167,16 @@ export async function flushChatOutbox(): Promise<{
 
 // ─── Unified trip room (Phase 2) ─────────────────────────────────────────────
 
+export async function refreshTripChatRoomTeam(
+  tripId: string,
+): Promise<ChatConversationRow> {
+  const { data, error } = await supabase().rpc("refresh_trip_chat_room_team", {
+    p_trip_id: tripId,
+  });
+  if (error) throw new Error(`Failed to sync trip team: ${error.message}`);
+  return data as ChatConversationRow;
+}
+
 export async function ensureTripChatRoom(
   tripId: string,
 ): Promise<ChatConversationRow> {

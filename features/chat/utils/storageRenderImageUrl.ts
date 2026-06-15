@@ -10,6 +10,18 @@ import { normalizeTripDocumentsStoragePath } from "./resolveChatDocumentUrl.util
 /** Default bucket for trip chat uploads after path normalization. */
 export const TRIP_CHAT_IMAGE_BUCKET = "trip-documents" as const;
 
+/** Public render URLs 403 on RLS-gated buckets — never use as first-paint chat previews. */
+export function isSupabasePublicRenderImageUrl(url: string | null | undefined): boolean {
+  return /\/storage\/v1\/render\/image\/public\//i.test(String(url ?? "").trim());
+}
+
+/** HTTPS URLs safe to pass directly to `<Image>` (signed/object URLs, not public render). */
+export function isDirectChatImageHttpUrl(url: string | null | undefined): boolean {
+  const u = String(url ?? "").trim();
+  if (!/^https?:\/\//i.test(u)) return false;
+  return !isSupabasePublicRenderImageUrl(u);
+}
+
 /**
  * Builds: `{SUPABASE_URL}/storage/v1/render/image/public/{bucket}/{objectPath}?width=&quality=`
  * Object path segments are encoded; slashes preserved between segments.

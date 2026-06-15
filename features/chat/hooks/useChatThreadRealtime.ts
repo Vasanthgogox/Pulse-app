@@ -1,17 +1,16 @@
 /**
  * Conversation-scoped realtime for one open unified chat thread.
  *
- * Subscribes to `chat_messages` rows for a SINGLE conversation
- * (`conversation_id=eq.<id>`) — the Phase 1 replacement for org-wide message
- * fan-out. Only the device with the thread open receives message payloads;
- * everyone else's inbox updates via the cheap `chat_conversations` row stream
- * (see `useChatInboxQuery`).
+ * Bootstrap model (aligns with driver chat and global TQ config):
+ *   1. Bootstrap: getChatMessages RPC fetches the newest page once (staleTime: 60s).
+ *   2. Patch: subscribeSharedPostgresChanges upserts each INSERT/UPDATE into the cache.
+ *   3. Any Realtime events that arrive before the bootstrap cache is populated are
+ *      buffered in a local ref and drained as soon as the query resolves.
  *
- * Message pages live in the TanStack cache under
- * `queryKeys.chatPlatform.messages(conversationId)` newest-first, matching
- * `getChatMessages`.
+ * Only the device with the thread open receives message payloads; everyone else's
+ * inbox updates via the cheap `chat_conversations` row stream (useChatInboxQuery).
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "@/lib/queryKeys";
@@ -23,10 +22,12 @@ import type { ChatPlatformMessageRow } from "../types/chatPlatform.types";
 function upsertMessage(
   old: ChatPlatformMessageRow[] | undefined,
   row: ChatPlatformMessageRow,
-): ChatPlatformMessageRow[] | undefined {
-  if (!Array.isArray(old)) return old;
-  // Replace in place on edit/delete/echo (same id, or optimistic row matched
-  // by client_message_id after an offline replay).
+): ChatPlatformMessageRow[] {
+  if (!Array.isArray(old)) {
+    // Cache not yet populated (bootstrap in flight) — seed with this event.
+    // The bootstrap result will merge via the drain effect below.
+    return [row];
+  }
   const idx = old.findIndex(
     (m) =>
       m.id === row.id ||
@@ -38,7 +39,6 @@ function upsertMessage(
     next[idx] = { ...next[idx], ...row };
     return next;
   }
-  // Newest-first prepend.
   return [row, ...old];
 }
 
@@ -48,15 +48,37 @@ function upsertMessage(
  */
 export function useChatThreadRealtime(conversationId: string | null) {
   const qc = useQueryClient();
+  // Buffer Realtime events that fire before the bootstrap cache exists.
+  const pendingRef = useRef<ChatPlatformMessageRow[]>([]);
 
   const query = useQuery({
     queryKey: queryKeys.chatPlatform.messages(conversationId ?? "_"),
     queryFn: () => getChatMessages(conversationId!),
     enabled: !!conversationId,
+    staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    networkMode: "offlineFirst",
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
   });
 
+  // Drain buffered events once the bootstrap cache is available.
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !query.isSuccess || !pendingRef.current.length) return;
+    const pending = pendingRef.current.splice(0);
+    for (const row of pending) {
+      qc.setQueryData<ChatPlatformMessageRow[]>(
+        queryKeys.chatPlatform.messages(conversationId),
+        (old) => upsertMessage(old, row),
+      );
+    }
+  }, [conversationId, query.isSuccess, qc]);
+
+  useEffect(() => {
+    if (!conversationId) {
+      pendingRef.current = [];
+      return;
+    }
     return subscribeSharedPostgresChanges(
       `chat_messages:conv:${conversationId}`,
       [
@@ -76,6 +98,14 @@ export function useChatThreadRealtime(conversationId: string | null) {
       (payload) => {
         const row = payload.new as ChatPlatformMessageRow | null;
         if (!row?.id) return;
+        const current = qc.getQueryData<ChatPlatformMessageRow[]>(
+          queryKeys.chatPlatform.messages(conversationId),
+        );
+        if (!Array.isArray(current)) {
+          // Bootstrap in flight — buffer for drain.
+          pendingRef.current.push(row);
+          return;
+        }
         qc.setQueryData<ChatPlatformMessageRow[]>(
           queryKeys.chatPlatform.messages(conversationId),
           (old) => upsertMessage(old, row),

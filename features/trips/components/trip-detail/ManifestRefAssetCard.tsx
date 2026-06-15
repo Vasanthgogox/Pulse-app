@@ -1,6 +1,7 @@
 import { EntityAvatar as PartyAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
 import { formatIndianVehicleNumber } from "@/lib/format";
+import { formatChatPartyInboxLine } from "@/features/chat/utils/partyDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -187,12 +188,16 @@ export function ManifestRefAssetCard({
     return tail || null;
   })();
   const isDriver = variant === "driver";
+  const displayRoleLabel =
+    isDriver && displayPrimary && displayPrimary !== "—" && displayPrimary !== "Unassigned"
+      ? formatChatPartyInboxLine("driver", displayPrimary) ?? roleLabel
+      : roleLabel;
 
   return (
     <View style={[styles.card, desktop && styles.cardDesktop, style]}>
       <View style={styles.headerRow}>
         <Text style={styles.roleLabel} numberOfLines={1}>
-          {roleLabel}
+          {displayRoleLabel}
         </Text>
         {showChange && onChange ? (
           <TouchableOpacity
@@ -298,8 +303,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 8,
     fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
+    letterSpacing: 0.4,
     color: Theme.textMuted,
     lineHeight: 11,
   },

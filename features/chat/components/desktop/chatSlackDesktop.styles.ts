@@ -443,8 +443,7 @@ export const slackDesktopStyles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "600",
     color: "#94A3B8",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    letterSpacing: 0.4,
     marginTop: 2,
   },
   sidebarRowPreview: {

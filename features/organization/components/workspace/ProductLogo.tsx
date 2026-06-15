@@ -8,6 +8,7 @@ import {
   Network,
   Receipt,
   ShieldCheck,
+  Smartphone,
   Store,
   Truck,
   UserSearch,
@@ -21,6 +22,7 @@ import { PRODUCT_REGISTRY, type ProductId } from "@/lib/productRegistry";
 
 const PRODUCT_ICON: Record<ProductId, LucideIcon> = {
   pulse_core: Zap,
+  pulse_driver: Smartphone,
   pulse_network: Network,
   pulse_chat: MessageSquare,
   pulse_pod_pro: FileCheck,

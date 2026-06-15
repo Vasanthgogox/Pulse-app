@@ -35,6 +35,7 @@ import {
   type DriverChatMessagesPage,
 } from "@/features/chat/utils/driverChatMessageCache.util";
 import { stripChatPreviewEmojiPrefix } from "@/features/chat/utils/chatAvatar.util";
+import { formatChatPartyHandle } from "@/features/chat/utils/partyDisplay";
 import { resolveDocumentShareDisplay } from "@/features/chat/utils/documentShareDisplay.util";
 import {
   buildSlackMessageGroupMap,
@@ -374,6 +375,7 @@ export function DriverChatSlackThread({
   const currentOrganization = orgCtx?.currentOrganization ?? null;
   const selfUid = profile?.uid ?? null;
   const selfName = profile?.full_name || profile?.displayName || "You";
+  const driverRoleTag = formatChatPartyHandle(selfName) ?? "Driver";
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const listRef = useRef<FlashListRef<ThreadRow>>(null);
@@ -862,7 +864,7 @@ export function DriverChatSlackThread({
         subtitle={routeSubtitle || undefined}
         avatarIdentity={fleetAvatar}
         onBack={onBack}
-        compactRoleTag="Driver"
+        compactRoleTag={driverRoleTag}
         topInset={insets.top}
         contentPaddingHorizontal={DRIVER_CHAT_EDGE}
       />

@@ -199,6 +199,7 @@ function ConnectionProfileCard({
   item,
   compact,
   mobileGrid,
+  chatHubTile,
   nativeListRow,
   onOpenProfile,
   onPressMutuals,
@@ -210,6 +211,7 @@ function ConnectionProfileCard({
   item: ConnectedOrg;
   compact?: boolean;
   mobileGrid?: boolean;
+  chatHubTile?: boolean;
   nativeListRow?: boolean;
   onOpenProfile?: (item: ConnectedOrg) => void;
   onPressMutuals?: (org: { id: string; name: string }) => void;
@@ -245,6 +247,7 @@ function ConnectionProfileCard({
         }
         compact={compact}
         mobileGrid={mobileGrid}
+        chatHubTile={chatHubTile}
         nativeListRow={nativeListRow}
         rolePills={rolePillsForConnection(item)}
         totalTrips={item.total_trips ?? null}
@@ -1000,6 +1003,7 @@ export function ConnectionsView({
       item={item}
       compact={hubListCompact}
       mobileGrid={hubConnectionsLayout.columns > 1}
+      chatHubTile={hubConnectionsLayout.rows >= 2}
       nativeListRow={false}
       onOpenProfile={onOpenProfile}
       onPressMutuals={onPressMutuals}
