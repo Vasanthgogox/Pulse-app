@@ -39,7 +39,27 @@ export function useActiveTripLaneRealtime(
         if (payload.eventType !== "INSERT") return;
         const row = payload.new as Partial<TripMessageRow> | null;
         if (!row?.conversation_id) return;
-        if (row.sender_user_id && row.sender_user_id === selfUid) return;
+
+        // Skip own messages only when an optimistic entry is still in the stream
+        // for this conversation — replaceOptimistic will reconcile it.
+        // If no optimistic exists (RPC failed → removeMessage already ran), we must
+        // process the Realtime INSERT so the persisted message reaches the UI.
+        if (row.sender_user_id && row.sender_user_id === selfUid) {
+          const { trips, convToTrip } = useChatStore.getState();
+          const tripId = convToTrip[row.conversation_id];
+          const entry = tripId ? trips[tripId] : null;
+          const hasOptimistic = entry?.event_stream.some(
+            (e) =>
+              String(e.id).startsWith("optimistic-") &&
+              e.conversation_id === row.conversation_id,
+          );
+          if (__DEV__) {
+            console.log(
+              `[CHAT:REALTIME] own INSERT conv=${row.conversation_id} id=${row.id} hasOptimistic=${hasOptimistic}`,
+            );
+          }
+          if (hasOptimistic) return;
+        }
 
         const mode: "active" | "background" = isActive ? "active" : "background";
         const activeCid = getActiveTripMessageConversationId();

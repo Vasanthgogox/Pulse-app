@@ -1065,7 +1065,7 @@ function applyFeedbackLaneStatusOnIncomingRow(
 const CHAT_BOOTSTRAP_TRIP_PAGE = 25;
 const CHAT_BOOTSTRAP_TRIP_PAGE_MORE = 20;
 
-const tripHydrationInFlight = new Set<string>();
+const tripHydrationInFlight = new Map<string, Promise<void>>();
 
 function allPartyHistoryWindowsLoaded(entry: TripEntry): boolean {
   const order: ConversationPartyType[] = ["client", "supplier", "driver"];
@@ -1478,7 +1478,12 @@ export const useChatStore = create<ChatState>()(
     hydrateTripMessagesIfNeeded: async (tripId, opts) => {
       const orgId = get().bootstrappedOrg;
       if (!orgId || !tripId) return;
-      if (tripHydrationInFlight.has(tripId)) return;
+
+      const existing = tripHydrationInFlight.get(tripId);
+      if (existing) {
+        await existing;
+        return;
+      }
 
       const entry0 = get().trips[tripId];
       if (!entry0) return;
@@ -1488,41 +1493,44 @@ export const useChatStore = create<ChatState>()(
 
       const targetConvId = (opts?.conversationId ?? "").trim();
 
-      tripHydrationInFlight.add(tripId);
-      try {
-        let next = entry0;
-        const partyOrder: ConversationPartyType[] = ["client", "supplier", "driver"];
+      const work = (async () => {
+        try {
+          let next = entry0;
+          const partyOrder: ConversationPartyType[] = ["client", "supplier", "driver"];
 
-        const resolvePartyForConv = (): ConversationPartyType | null => {
-          if (!targetConvId) return null;
-          for (const pt of partyOrder) {
-            if (next.parties[pt]?.conversationId === targetConvId) return pt;
+          const resolvePartyForConv = (): ConversationPartyType | null => {
+            if (!targetConvId) return null;
+            for (const pt of partyOrder) {
+              if (next.parties[pt]?.conversationId === targetConvId) return pt;
+            }
+            return null;
+          };
+
+          const singlePt = resolvePartyForConv();
+          const partiesToHydrate: ConversationPartyType[] = singlePt
+            ? [singlePt]
+            : partyOrder;
+
+          for (const pt of partiesToHydrate) {
+            const p = next.parties[pt];
+            if (!p?.conversationId) continue;
+            if (p.historyWindowLoaded) continue;
+            const rows = await fetchConversationHistory(p.conversationId, {
+              partyType: pt,
+            });
+            next = mergeHistoryRowsIntoTripEntry(orgId, next, pt, rows);
           }
-          return null;
-        };
-
-        const singlePt = resolvePartyForConv();
-        const partiesToHydrate: ConversationPartyType[] = singlePt
-          ? [singlePt]
-          : partyOrder;
-
-        for (const pt of partiesToHydrate) {
-          const p = next.parties[pt];
-          if (!p?.conversationId) continue;
-          if (p.historyWindowLoaded) continue;
-          const rows = await fetchConversationHistory(p.conversationId, {
-            partyType: pt,
-          });
-          next = mergeHistoryRowsIntoTripEntry(orgId, next, pt, rows);
+          set((s) => ({
+            trips: { ...s.trips, [tripId]: next },
+          }));
+        } catch (err) {
+          if (__DEV__) console.error("[useChatStore] hydrateTripMessagesIfNeeded failed:", err);
+        } finally {
+          tripHydrationInFlight.delete(tripId);
         }
-        set((s) => ({
-          trips: { ...s.trips, [tripId]: next },
-        }));
-      } catch (err) {
-        if (__DEV__) console.error("[useChatStore] hydrateTripMessagesIfNeeded failed:", err);
-      } finally {
-        tripHydrationInFlight.delete(tripId);
-      }
+      })();
+      tripHydrationInFlight.set(tripId, work);
+      await work;
     },
 
     // ── processIncomingEvent (idempotent Realtime / bootstrap overlap) ───────
@@ -1531,8 +1539,9 @@ export const useChatStore = create<ChatState>()(
 
     processIncomingEvent: (row, mode, opts) => {
       if (!row.conversation_id || !row.id) return;
+      if (__DEV__) console.log(`[CHAT:REALTIME] processIncomingEvent id=${row.id} conv=${row.conversation_id} sender=${row.sender_user_id} mode=${mode}`);
       if (!consumeActionIdDedupe(row)) return;
-      if (!consumeRealtimeInsertDedupe(row)) return;
+      if (!consumeRealtimeInsertDedupe(row)) { if (__DEV__) console.log(`[CHAT:REALTIME] dedupe-dropped id=${row.id}`); return; }
       const { trips, convToTrip, convToParty } = get();
 
       const tripId    = convToTrip[row.conversation_id];
@@ -2159,6 +2168,7 @@ export const useChatStore = create<ChatState>()(
     },
 
     optimisticInsert: (convId, msg) => {
+      if (__DEV__) console.log(`[CHAT:SEND] optimisticInsert conv=${convId} id=${msg.id} content="${String(msg.content ?? "").slice(0, 40)}"`);
       get().appendMessage(convId, msg);
     },
 
@@ -2179,9 +2189,9 @@ export const useChatStore = create<ChatState>()(
             }
           : persisted;
 
-      const nextStream = entry.event_stream.map((e) =>
-        e.id === tempId ? { ...persistedRow, partyType } : e,
-      );
+      if (__DEV__) console.log(`[CHAT:SEND] replaceOptimistic conv=${convId} tempId=${tempId} realId=${persisted.id}`);
+      const streamWithoutOptimistic = entry.event_stream.filter((e) => e.id !== tempId);
+      const nextStream = upsertEventIntoStream(streamWithoutOptimistic, { ...persistedRow, partyType });
       set({
         trips: {
           ...trips,
@@ -2199,6 +2209,7 @@ export const useChatStore = create<ChatState>()(
     },
 
     removeMessage: (convId, msgId) => {
+      if (__DEV__) console.warn(`[CHAT:SEND] removeMessage conv=${convId} id=${msgId} — RPC failed or returned no data`);
       const { trips, convToTrip } = get();
       const tripId = convToTrip[convId];
       if (!tripId) return;

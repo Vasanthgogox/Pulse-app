@@ -7968,6 +7968,9 @@ function TripConversationDetailLoaded({
 
     const target = partyConversationMap[partyType];
     if (target) {
+      await useChatStore.getState().hydrateTripMessagesIfNeeded(liveConv.trip_id, {
+        conversationId: target.id,
+      });
       onSelectConversation(target.id);
       void markTripThreadsRead(liveConv.trip_id);
       return;
@@ -8035,14 +8038,17 @@ function TripConversationDetailLoaded({
     ) {
       const s = partyConversationMap.supplier;
       const d = partyConversationMap.driver;
-      if (s?.id) {
-        chatStore.switchParty(liveConv.trip_id, "supplier");
-        onSelectConversation(s.id);
-        void markTripThreadsRead(liveConv.trip_id);
-      } else if (d?.id) {
-        chatStore.switchParty(liveConv.trip_id, "driver");
-        onSelectConversation(d.id);
-        void markTripThreadsRead(liveConv.trip_id);
+      const target = s ?? d;
+      const targetParty = s ? "supplier" : "driver";
+      if (target?.id) {
+        chatStore.switchParty(liveConv.trip_id, targetParty);
+        void (async () => {
+          await useChatStore.getState().hydrateTripMessagesIfNeeded(liveConv.trip_id, {
+            conversationId: target.id,
+          });
+          onSelectConversation(target.id);
+          void markTripThreadsRead(liveConv.trip_id);
+        })();
       }
       return;
     }
@@ -8054,14 +8060,17 @@ function TripConversationDetailLoaded({
     ) {
       const c = partyConversationMap.client;
       const d = partyConversationMap.driver;
-      if (c?.id) {
-        chatStore.switchParty(liveConv.trip_id, "client");
-        onSelectConversation(c.id);
-        void markTripThreadsRead(liveConv.trip_id);
-      } else if (d?.id) {
-        chatStore.switchParty(liveConv.trip_id, "driver");
-        onSelectConversation(d.id);
-        void markTripThreadsRead(liveConv.trip_id);
+      const target = c ?? d;
+      const targetParty = c ? "client" : "driver";
+      if (target?.id) {
+        chatStore.switchParty(liveConv.trip_id, targetParty);
+        void (async () => {
+          await useChatStore.getState().hydrateTripMessagesIfNeeded(liveConv.trip_id, {
+            conversationId: target.id,
+          });
+          onSelectConversation(target.id);
+          void markTripThreadsRead(liveConv.trip_id);
+        })();
       }
     }
   }, [
