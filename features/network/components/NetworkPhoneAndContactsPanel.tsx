@@ -936,8 +936,6 @@ export function NetworkPhoneAndContactsPanel({
         </View>
       ) : null}
 
-      {!mobileDiscoverCluster ? growInviteBlock : null}
-
       <ConnectionRoleModal
         visible={roleModalOrgId != null}
         companyName={roleModalName}
