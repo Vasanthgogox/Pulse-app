@@ -1235,6 +1235,7 @@ function NetworkScreenInner() {
                 search={discoverOrgSearch}
                 onSearchChange={setDiscoverSearch}
                 showSearchChrome={false}
+                suppressGrowSectionHeader
                 onOpenProfile={handleOpenProfileFromDiscover}
                 onPressMutuals={handlePressMutuals}
                 onPressMutual={handleOpenMutualProfile}
