@@ -1728,7 +1728,7 @@ const styles = StyleSheet.create({
   commandMainStatsRowCompact: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
     gap: 12,
   },
   commandTotalWrap: {
@@ -1759,9 +1759,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 0,
+    marginLeft: "auto",
     flexGrow: 0,
     flexShrink: 0,
     justifyContent: "flex-end",
+    alignSelf: "flex-end",
   },
   commandMetricGridCompact: {
     gap: 5,
@@ -1779,10 +1781,10 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   commandMetricCellCompact: {
-    flex: 1,
-    width: undefined,
-    minWidth: 0,
-    maxWidth: 66,
+    flex: 0,
+    width: 62,
+    minWidth: 56,
+    maxWidth: 72,
     minHeight: 52,
     borderRadius: 12,
     paddingHorizontal: 3,
