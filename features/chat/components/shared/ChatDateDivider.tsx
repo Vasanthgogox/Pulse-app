@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-function formatDividerDate(dateStr: string): string {
+export function formatChatDividerDate(dateStr: string): string {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
   const now = new Date();
@@ -19,16 +19,24 @@ function formatDividerDate(dateStr: string): string {
   });
 }
 
+type Props = {
+  dateStr?: string;
+  /** When set, skips parsing `dateStr` (e.g. "Other"). */
+  label?: string;
+  variant?: "mobile" | "desktop";
+  onPress?: () => void;
+};
+
 export function ChatDateDivider({
   dateStr,
+  label: labelOverride,
   variant = "mobile",
-}: {
-  dateStr: string;
-  variant?: "mobile" | "desktop";
-}) {
-  const label = formatDividerDate(dateStr);
+  onPress,
+}: Props) {
+  const label = labelOverride ?? (dateStr ? formatChatDividerDate(dateStr) : "");
   if (!label) return null;
-  return (
+
+  const body = (
     <View style={[styles.wrap, variant === "desktop" && styles.wrapDesktop]}>
       <View style={styles.line} />
       <Text style={[styles.label, variant === "desktop" && styles.labelDesktop]}>
@@ -36,6 +44,14 @@ export function ChatDateDivider({
       </Text>
       <View style={styles.line} />
     </View>
+  );
+
+  if (!onPress) return body;
+
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      {body}
+    </Pressable>
   );
 }
 

@@ -14,6 +14,7 @@ import {
     LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import { LedgerDayDivider } from "@/features/finance/components/LedgerDayDivider";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatIndianVehicleNumber, formatINRChip, formatLedgerAmount } from "@/lib/format";
 import { partyAvatarHasRenderableOutput, partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
@@ -130,16 +131,9 @@ function sectionTitleForKey(key: string): string {
   return `${d} ${MONTHS_FULL[m - 1]} ${y}`;
 }
 
-/** Compact date for the single-row day sync bar (avoids truncation on narrow screens). */
-function sectionBarDateLabel(key: string): string {
-  if (key === "—") return "Other";
-  const title = sectionTitleForKey(key);
-  if (title === "Today" || title === "Yesterday") return title;
-  const [y, m, d] = key.split("-").map(Number);
-  const month = MONTHS_SHORT[m - 1] ?? String(m);
-  const thisYear = new Date().getFullYear();
-  if (y === thisYear) return `${d} ${month}`;
-  return `${d} ${month} '${String(y).slice(-2)}`;
+function ledgerDividerDateIso(key: string): string | undefined {
+  if (key === "—" || key === "_all") return undefined;
+  return `${key}T12:00:00`;
 }
 
 /** Initials from party/name (max 2 chars, uppercase). */
@@ -968,8 +962,6 @@ export function LedgerTransactionListView({
             {...tabBarScrollProps}
           >
             {groups.map(({ key, rows: sectionRows }) => {
-              const sectionLabel =
-                key === "—" ? "Other" : sectionTitleForKey(key);
               const dayIn = sectionRows.reduce(
                 (s, r) => s + Number(r.amount_in ?? 0),
                 0,
@@ -987,73 +979,22 @@ export function LedgerTransactionListView({
                     : sectionRows;
               return (
                 <View key={key} style={styles.tableViewSection}>
-                  <View style={styles.tableViewDateBar}>
-                    <TouchableOpacity
-                      style={styles.tableViewDateBarLeft}
-                      onPress={() => toggleSectionExpanded(key)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.tableViewDateBarDate}>
-                        {sectionLabel}
-                      </Text>
-                      <FontAwesome
-                        name={
-                          isSectionExpanded(key) ? "chevron-up" : "chevron-down"
-                        }
-                        size={12}
-                        color={Theme.textMuted}
-                        style={styles.tableViewDateBarChevron}
-                      />
-                      <View style={styles.tableViewDateBarDivider} />
+                  <LedgerDayDivider
+                    dateStr={ledgerDividerDateIso(key)}
+                    label={key === "—" ? "Other" : undefined}
+                    paidLabel={formatINRChip(dayOut)}
+                    receivedLabel={formatINRChip(dayIn)}
+                    flowFilter={flowFilter}
+                    onToggleExpand={() => toggleSectionExpanded(key)}
+                    onFlowFilter={(filter) => setSectionFlowFilter(key, filter)}
+                  />
+                  {isSectionExpanded(key) ? (
+                    <View style={styles.tableViewMetaRow}>
                       <Text style={styles.tableViewDateBarCount}>
                         {sectionRows.length} transactions
                       </Text>
-                    </TouchableOpacity>
-                    <View style={styles.tableViewDateBarRight}>
-                      <TouchableOpacity
-                        style={[
-                          styles.tableViewDateBarFlow,
-                          flowFilter === "out" &&
-                            styles.tableViewDateBarFlowActiveOut,
-                        ]}
-                        onPress={() =>
-                          setSectionFlowFilter(
-                            key,
-                            flowFilter === "out" ? "all" : "out",
-                          )
-                        }
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.tableViewDateBarFlowLabel}>
-                          Flow Out
-                        </Text>
-                        <Text style={styles.tableViewDateBarFlowOut}>
-                          ₹{formatLedgerAmount(dayOut)}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.tableViewDateBarFlow,
-                          flowFilter === "in" &&
-                            styles.tableViewDateBarFlowActiveIn,
-                        ]}
-                        onPress={() =>
-                          setSectionFlowFilter(
-                            key,
-                            flowFilter === "in" ? "all" : "in",
-                          )
-                        }
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.tableViewDateBarFlowLabel}>
-                          Flow In
-                        </Text>
-                        <Text style={styles.tableViewDateBarFlowIn}>
-                          ₹{formatLedgerAmount(dayIn)}
-                        </Text>
-                      </TouchableOpacity>
                     </View>
-                  </View>
+                  ) : null}
                   {isSectionExpanded(key) && (
                     <View style={styles.tableViewTable}>
                       <View style={styles.tableViewHeader}>
@@ -1428,127 +1369,17 @@ export function LedgerTransactionListView({
                     >
                       {!useFlatList &&
                         (useTimelineLayout ? (
-                          <View style={styles.dateSyncBar}>
-                            <View style={styles.dateSyncBarCardsWrap}>
-                              <View style={styles.dateSyncBarSingleRow}>
-                                <TouchableOpacity
-                                  style={styles.dateSyncBarDateCol}
-                                  onPress={() => toggleSectionExpanded(key)}
-                                  activeOpacity={0.7}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={`${sectionLabel}, ${isSectionExpanded(key) ? "collapse" : "expand"} transactions`}
-                                >
-                                  <Text
-                                    style={styles.dateSyncBarDate}
-                                    numberOfLines={2}
-                                  >
-                                    {sectionBarDateLabel(key)}
-                                  </Text>
-                                  <FontAwesome
-                                    name={
-                                      isSectionExpanded(key)
-                                        ? "chevron-up"
-                                        : "chevron-down"
-                                    }
-                                    size={8}
-                                    color={Theme.textMuted}
-                                  />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[
-                                    styles.dateSyncBarCard,
-                                    styles.dateSyncBarCardOut,
-                                    getSectionFlowFilter(key) === "out" &&
-                                      styles.dateSyncBarCardActiveOut,
-                                  ]}
-                                  onPress={() =>
-                                    setSectionFlowFilter(
-                                      key,
-                                      getSectionFlowFilter(key) === "out"
-                                        ? "all"
-                                        : "out",
-                                    )
-                                  }
-                                  activeOpacity={0.8}
-                                >
-                                  <View style={styles.dateSyncBarMetricStack}>
-                                    <Text style={styles.dateSyncBarCardLabel}>
-                                      Paid
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.dateSyncBarCardAmount,
-                                        styles.dateSyncBarCardAmountOut,
-                                      ]}
-                                      numberOfLines={1}
-                                      adjustsFontSizeToFit
-                                      minimumFontScale={0.85}
-                                    >
-                                      {formatINRChip(dayOut)}
-                                    </Text>
-                                  </View>
-                                  <View
-                                    style={[
-                                      styles.dateSyncBarCardIconWrap,
-                                      styles.dateSyncBarCardIconOut,
-                                    ]}
-                                  >
-                                    <FontAwesome
-                                      name="arrow-up"
-                                      size={8}
-                                      color={Theme.teslaRed}
-                                    />
-                                  </View>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[
-                                    styles.dateSyncBarCard,
-                                    styles.dateSyncBarCardIn,
-                                    getSectionFlowFilter(key) === "in" &&
-                                      styles.dateSyncBarCardActiveIn,
-                                  ]}
-                                  onPress={() =>
-                                    setSectionFlowFilter(
-                                      key,
-                                      getSectionFlowFilter(key) === "in"
-                                        ? "all"
-                                        : "in",
-                                    )
-                                  }
-                                  activeOpacity={0.8}
-                                >
-                                  <View style={styles.dateSyncBarMetricStack}>
-                                    <Text style={styles.dateSyncBarCardLabel}>
-                                      Rcvd
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.dateSyncBarCardAmount,
-                                        styles.dateSyncBarCardAmountIn,
-                                      ]}
-                                      numberOfLines={1}
-                                      adjustsFontSizeToFit
-                                      minimumFontScale={0.85}
-                                    >
-                                      {formatINRChip(dayIn)}
-                                    </Text>
-                                  </View>
-                                  <View
-                                    style={[
-                                      styles.dateSyncBarCardIconWrap,
-                                      styles.dateSyncBarCardIconIn,
-                                    ]}
-                                  >
-                                    <FontAwesome
-                                      name="arrow-down"
-                                      size={8}
-                                      color={Theme.darkGreen}
-                                    />
-                                  </View>
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          </View>
+                          <LedgerDayDivider
+                            dateStr={ledgerDividerDateIso(key)}
+                            label={key === "—" ? "Other" : undefined}
+                            paidLabel={formatINRChip(dayOut)}
+                            receivedLabel={formatINRChip(dayIn)}
+                            flowFilter={getSectionFlowFilter(key)}
+                            onToggleExpand={() => toggleSectionExpanded(key)}
+                            onFlowFilter={(filter) =>
+                              setSectionFlowFilter(key, filter)
+                            }
+                          />
                         ) : (
                           <View style={styles.sectionBar}>
                             <Text
@@ -2713,6 +2544,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   tableViewSection: { marginBottom: 16 },
+  tableViewMetaRow: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 6,
+  },
   tableViewDateBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -2970,14 +2805,43 @@ const styles = StyleSheet.create({
     color: Theme.textOnPrimary,
   },
   dateSyncBar: {
-    paddingVertical: 2,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 4,
+    paddingHorizontal: 0,
     backgroundColor: "transparent",
   },
   dateSyncBarSingleRow: {
     flexDirection: "row",
-    alignItems: "stretch",
+    alignItems: "center",
     minHeight: 40,
+  },
+  dateSyncBarMetricCell: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    minWidth: 0,
+    borderRadius: 8,
+  },
+  dateSyncBarMetricCellActiveOut: {
+    backgroundColor: "rgba(248,113,113,0.1)",
+  },
+  dateSyncBarMetricCellActiveIn: {
+    backgroundColor: "rgba(34,197,94,0.1)",
+  },
+  dateSyncBarMetricDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: Theme.borderLight,
+    marginVertical: 8,
+  },
+  dateSyncBarMetricCopy: {
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 1,
+    alignItems: "flex-start",
   },
   dateSyncBarDateCol: {
     flexDirection: "row",
@@ -3022,12 +2886,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   dateSyncBarCardsWrap: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
     backgroundColor: Theme.cardWhite,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    paddingVertical: 5,
-    paddingHorizontal: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
     shadowColor: Theme.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -3102,13 +2967,11 @@ const styles = StyleSheet.create({
     color: Theme.darkGreen,
   },
   dateSyncBarCardIconWrap: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.surfaceGray,
-    marginLeft: 4,
     flexShrink: 0,
   },
   dateSyncBarCardIconOut: { backgroundColor: "rgba(239,68,68,0.25)" },
