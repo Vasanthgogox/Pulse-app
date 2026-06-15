@@ -1595,6 +1595,7 @@ export const useChatStore = create<ChatState>()(
           row.message_type === "document_share" ||
           row.message_type === "document_upload"
         ) {
+          updated.event_stream     = upsertEventIntoStream(entry.event_stream, event);
           updated.lastEventAt      = event.created_at ?? updated.lastEventAt;
           updated.lastEventPreview = previewText(row)  ?? updated.lastEventPreview;
           syncLocationLogToGlobalActiveTrips(tripId, row);
@@ -1624,6 +1625,7 @@ export const useChatStore = create<ChatState>()(
           event.created_at,
         );
         updated = applyFeedbackLaneStatusOnIncomingRow(updated, partyType, row);
+        updated.event_stream     = upsertEventIntoStream(entry.event_stream, event);
         updated.lastEventAt      = event.created_at ?? updated.lastEventAt;
         updated.lastEventPreview = previewText(row)  ?? updated.lastEventPreview;
         updated = withLongHaulFieldsFromStream(updated);
