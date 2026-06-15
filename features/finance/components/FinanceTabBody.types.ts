@@ -90,6 +90,8 @@ export interface FinanceTabBodyProps {
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  /** Mobile finance: parent ScrollView owns vertical scroll (header + body). */
+  embedInParentScroll?: boolean;
   profileImages: Record<string, string>;
   linkedOrgDisplayMap: Record<string, LinkedOrgDisplay>;
   tripFinanceAdjustmentsByTripId?: Record<string, TripAdjustment[]>;

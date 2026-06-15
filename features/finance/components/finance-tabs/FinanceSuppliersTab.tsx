@@ -23,6 +23,7 @@ export function FinanceSuppliersTab(props: FinanceTabBodyProps) {
     financeSubTab,
     supplierViewTab,
     onSupplierViewTabChange,
+    embedInParentScroll,
   } = props;
 
   const entityAggregationLedger =
@@ -51,6 +52,7 @@ export function FinanceSuppliersTab(props: FinanceTabBodyProps) {
       viewTab={supplierViewTab}
       onViewTabChange={onSupplierViewTabChange}
       hideSummaryRow
+      embedInParentScroll={embedInParentScroll}
     />
   );
 }

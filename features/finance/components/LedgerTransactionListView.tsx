@@ -794,7 +794,7 @@ export function LedgerTransactionListView({
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, embedInParentScroll && styles.wrapEmbedded]}>
       {showHistoryHeader && useTimelineLayout && showFiscalSubTabs ? (
         <View
           style={[styles.streamHeader, fullWidth && { paddingHorizontal: 16 }]}
@@ -2332,6 +2332,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     width: '100%',
     alignSelf: 'stretch',
+  },
+  wrapEmbedded: {
+    flex: 0,
+    minHeight: undefined,
   },
   /** Web: ScrollView content must stretch to viewport width (avoids centered narrow column). */
   ledgerMainScroll: {

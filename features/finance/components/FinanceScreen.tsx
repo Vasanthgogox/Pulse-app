@@ -56,6 +56,7 @@ import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useDriverProfileImagesQuery } from "@/lib/queries/useDriverProfileImagesQuery";
 import { queryKeys } from "@/lib/queryKeys";
+import { ROUTES } from "@/lib/routes";
 import { clearAllDomainCacheMetaForOrg } from "@/lib/cache/cacheMetadataStore";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
@@ -63,10 +64,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Platform,
+    RefreshControl,
+    ScrollView,
     Text,
     View,
     useWindowDimensions,
 } from "react-native";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFinanceAddEntityHandlers } from "../hooks/useFinanceAddEntityHandlers";
@@ -83,6 +87,7 @@ import { FinanceModalsGate } from "./FinanceModalsGate";
 import { FinancePartyRegistrationPortal } from "./FinancePartyRegistrationPortal";
 import { styles } from "./FinanceScreen.styles";
 import { FinanceSummarySection } from "./FinanceSummarySection";
+import { FinanceTabRow } from "./FinanceTabRow";
 import type { PartyRegistrationKind } from "./PartyRegistrationPortal";
 import { FinanceTabBody } from "./FinanceTabBody";
 import type { FinancialRowData } from "./FinancialRow";
@@ -104,6 +109,9 @@ export function FinanceScreen() {
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
   const { width: screenWidth } = useWindowDimensions();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
+  /** Native + mobile web: one scroll surface (header scrolls with ledger). */
+  const useMobileUnifiedScroll = Platform.OS !== "web" || screenWidth < 1024;
   /** Web (any width): same in-tab portal as modal routes — avoids legacy sheet on mobile browser. */
   const usePartyPortalOnWeb = Platform.OS === "web";
   const [partyPortalOpen, setPartyPortalOpen] = useState(false);
@@ -340,6 +348,7 @@ export function FinanceScreen() {
     data: FinancialRowData;
     entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
     subTab: FinanceSubTab;
+    initialDetailTab?: "main" | "ledger" | "shared_ledger";
   } | null>(null);
   const [selectedDriverLedgerEntries, setSelectedDriverLedgerEntries] =
     useState<DriverLedgerRow[] | null>(null);
@@ -985,24 +994,34 @@ export function FinanceScreen() {
       entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER",
       subTab: FinanceSubTab,
     ) => {
-      // Customer selection from Finance > Customers: open full ClientDetailScreen (detail page)
       if (entityType === "CLIENT" && subTab === "customers") {
-        router.push(`/client/${data.id}`);
+        router.push(
+          ROUTES.clientDetail(data.id, "cash") as Parameters<
+            typeof router.push
+          >[0],
+        );
         return;
       }
-      // Supplier selection from Finance > Suppliers: open full SupplierDetailScreen (detail page)
       if (entityType === "SUPPLIER" && subTab === "suppliers") {
-        router.push(`/supplier/${data.id}`);
+        router.push(
+          ROUTES.supplierDetail(data.id, "cash") as Parameters<
+            typeof router.push
+          >[0],
+        );
         return;
       }
       // Vehicle selection from Finance > Garage: open full VehicleDetailScreen (detail page)
       if (entityType === "VEHICLE" && subTab === "garage") {
-        router.push(`/vehicle/${data.id}`);
+        router.push(ROUTES.vehicleDetail(data.id) as Parameters<typeof router.push>[0]);
         return;
       }
       // Driver selection from Finance > Drivers: open full DriverDetailScreen (detail page)
       if (entityType === "DRIVER" && subTab === "drivers") {
-        router.push(`/driver/${data.id}`);
+        router.push(
+          ROUTES.driverDetail(data.id, "ledger") as Parameters<
+            typeof router.push
+          >[0],
+        );
         return;
       }
       setSelectedEntity({ data, entityType, subTab });
@@ -1402,11 +1421,7 @@ export function FinanceScreen() {
     );
   }
 
-  return (
-    <View
-      style={[styles.container, { paddingTop: screenTopPad }]}
-      testID="finance-tab-screen"
-    >
+  const summarySection = (
       <FinanceSummarySection
         activeTab={financeSubTab}
         onTabPress={handleTabPress}
@@ -1508,11 +1523,13 @@ export function FinanceScreen() {
         auditedTotalIn={bannerTotals.totalIn}
         auditedTotalOut={bannerTotals.totalOut}
         desktopCardMetrics={desktopCardMetrics}
+        omitTabRow={useMobileUnifiedScroll}
       />
-      <View style={styles.tableScroll}>
-        <View style={styles.tableScrollInner}>
-          <View style={styles.ledgerCardWrap}>
+  );
+
+  const tabBody = (
             <FinanceTabBody
+              embedInParentScroll={useMobileUnifiedScroll}
               financeSubTab={financeSubTab}
               organizationId={orgId}
               ledgerLoading={ledgerLoading}
@@ -1562,9 +1579,52 @@ export function FinanceScreen() {
               linkedOrgDisplayMap={linkedOrgDisplayMap}
               tripFinanceAdjustmentsByTripId={tripFinanceAdjustmentsByTripId}
             />
+  );
+
+  return (
+    <View
+      style={[styles.container, { paddingTop: screenTopPad }]}
+      testID="finance-tab-screen"
+    >
+      {useMobileUnifiedScroll ? (
+        <>
+          <View style={styles.mobileFixedTabBar}>
+            <FinanceTabRow
+              treasuryInset
+              activeTab={financeSubTab}
+              onTabPress={handleTabPress}
+            />
           </View>
-        </View>
-      </View>
+          <ScrollView
+            style={styles.mobileUnifiedScroll}
+            contentContainerStyle={[
+              styles.mobileUnifiedScrollContent,
+              { paddingBottom: layout.scrollBottomPadding(64) },
+            ]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={Theme.teslaRed}
+              />
+            }
+            {...tabBarScrollProps}
+          >
+            {summarySection}
+            <View style={styles.mobileUnifiedBody}>{tabBody}</View>
+          </ScrollView>
+        </>
+      ) : (
+        <>
+          {summarySection}
+          <View style={styles.tableScroll}>
+            <View style={styles.tableScrollInner}>
+              <View style={styles.ledgerCardWrap}>{tabBody}</View>
+            </View>
+          </View>
+        </>
+      )}
 
       {(() => {
         const partyKind = financeSubTabToPartyKind(financeSubTab);

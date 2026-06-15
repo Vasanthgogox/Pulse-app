@@ -19,6 +19,21 @@ export function formatChatDividerDate(dateStr: string): string {
   });
 }
 
+/** Shorter label for narrow cash-flow day dividers (e.g. "13 Jun"). */
+export function formatChatDividerDateCompact(dateStr: string): string {
+  const full = formatChatDividerDate(dateStr);
+  if (full === "Today" || full === "Yesterday") return full;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const now = new Date();
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: msgDay.getFullYear() !== now.getFullYear() ? "2-digit" : undefined,
+  });
+}
+
 type Props = {
   dateStr?: string;
   /** When set, skips parsing `dateStr` (e.g. "Other"). */

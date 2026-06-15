@@ -98,6 +98,8 @@ export interface LedgerTabProps {
   driverProfileImageUrls?: Record<string, string>;
   /** Linked-org branding (`logo`/seed) by connected partner org id. */
   linkedOrgDisplayMap?: Record<string, LinkedOrgDisplay>;
+  /** Parent ScrollView owns vertical scroll (finance mobile). */
+  embedInParentScroll?: boolean;
 }
 
 export function LedgerTab({
@@ -119,6 +121,7 @@ export function LedgerTab({
   driverRows = [],
   driverProfileImageUrls = {},
   linkedOrgDisplayMap = {},
+  embedInParentScroll = false,
 }: LedgerTabProps) {
   const { t } = useLanguage();
   const router = useRouter();
@@ -319,13 +322,18 @@ export function LedgerTab({
         ...driverProfileImageUrls,
         ...profileImages,
       }}
+      embedInParentScroll={embedInParentScroll}
     />
   );
 
   return (
     <>
       {viewMode === "transaction" ? (
-        <View style={styles.ledgerWrap}>
+        <View
+          style={
+            embedInParentScroll ? styles.ledgerWrapEmbedded : styles.ledgerWrap
+          }
+        >
           {transactionContent}
         </View>
       ) : (
@@ -561,6 +569,7 @@ export function LedgerTab({
 
 const styles = StyleSheet.create({
   ledgerWrap: { flex: 1, minHeight: 0, backgroundColor: "#FBFBFF" },
+  ledgerWrapEmbedded: { width: "100%", minWidth: 0, backgroundColor: "#FBFBFF" },
   ledgerSectionHeader: {
     flexDirection: "row",
     alignItems: "center",

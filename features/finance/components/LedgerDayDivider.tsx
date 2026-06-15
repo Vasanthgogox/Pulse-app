@@ -2,9 +2,8 @@
  * Cash-flow day separator — chat date pill centered, Paid / Rcvd on the flanks.
  * `──── Paid ₹X   [29 May]   Rcvd ₹Y ────`
  */
-import {
-  formatChatDividerDate,
-} from "@/features/chat/components/shared/ChatDateDivider";
+import { formatChatDividerDate } from "@/features/chat/components/shared/ChatDateDivider";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -59,7 +58,9 @@ export function LedgerDayDivider({
         accessibilityRole="button"
         accessibilityLabel={dateLabel}
       >
-        <Text style={styles.datePillText}>{dateLabel}</Text>
+        <Text style={styles.datePillText} numberOfLines={1}>
+          {dateLabel}
+        </Text>
       </Pressable>
 
       <View style={styles.side}>
@@ -87,10 +88,11 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingVertical: 12,
-    gap: 8,
+    gap: 10,
     minWidth: 0,
+    width: "100%",
   },
   side: {
     flex: 1,
@@ -101,9 +103,9 @@ const styles = StyleSheet.create({
   },
   line: {
     flex: 1,
-    height: 1,
+    height: StyleSheet.hairlineWidth,
     backgroundColor: "#CBD5E1",
-    minWidth: 8,
+    minWidth: 10,
   },
   metric: {
     flexDirection: "row",
@@ -116,15 +118,15 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   metricActiveOut: {
-    backgroundColor: "rgba(248,113,113,0.1)",
+    backgroundColor: "rgba(248,113,113,0.08)",
   },
   metricActiveIn: {
-    backgroundColor: "rgba(34,197,94,0.1)",
+    backgroundColor: "rgba(34,197,94,0.08)",
   },
   metricKey: {
     fontSize: 8,
     fontWeight: "600",
-    color: "#94A3B8",
+    color: Theme.textMuted,
     letterSpacing: 0.45,
     textTransform: "uppercase",
   },
@@ -144,17 +146,21 @@ const styles = StyleSheet.create({
   },
   datePill: {
     flexShrink: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(100,116,139,0.34)",
-    backgroundColor: "rgba(255,255,255,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    minWidth: 72,
   },
   datePillText: {
     fontSize: 10.5,
     fontWeight: "600",
-    color: "#64748B",
-    letterSpacing: 0.2,
+    color: Theme.textSecondary,
+    letterSpacing: 0.15,
+    textAlign: "center",
   },
 });

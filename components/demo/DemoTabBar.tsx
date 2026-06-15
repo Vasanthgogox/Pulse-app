@@ -3,6 +3,7 @@
  */
 import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
 import { WebNavMirrorToggle } from "@/components/demo/WebNavMirrorToggle";
+import { WEB_TOP_NAV_ICON } from "@/components/demo/webTopNavIcon.tokens";
 import type { RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
@@ -52,9 +53,8 @@ import {
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { LinearGradient } from "expo-linear-gradient";
-import { Inbox, MessageSquare } from "lucide-react-native";
+import { DollarSign, Inbox, LineChart, MessageSquare, Signpost, Truck } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
 import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -652,35 +652,35 @@ export function DemoTabBar({
       id: DemoTabId;
       title: string;
       subtitle?: string;
-      icon: React.ComponentProps<typeof FontAwesome5>["name"];
+      Icon: typeof DollarSign;
       active: boolean;
     }> = [
       {
         id: "finance",
         title: "FINANCE",
         subtitle: "LEDGER",
-        icon: "dollar-sign",
+        Icon: DollarSign,
         active: isFiscal,
       },
       {
         id: "trips",
         title: "TRIPS",
         subtitle: "OPERATIONS",
-        icon: "map-signs",
+        Icon: Signpost,
         active: isTrips,
       },
       {
         id: "network",
         title: "NETWORK",
         subtitle: "MARKET",
-        icon: "chart-line",
+        Icon: LineChart,
         active: isNetwork,
       },
       {
         id: "loadCenter",
         title: "LOAD",
         subtitle: "CENTER",
-        icon: "truck-loading",
+        Icon: Truck,
         active: isLoadCenter,
       },
     ];
@@ -739,9 +739,9 @@ export function DemoTabBar({
               }}
             >
               <MessageSquare
-                size={22}
-                color={WEB_HEADER_ICON.muted}
-                strokeWidth={WEB_HEADER_ICON.stroke}
+                size={WEB_TOP_NAV_ICON.size}
+                color={WEB_TOP_NAV_ICON.muted}
+                strokeWidth={WEB_TOP_NAV_ICON.stroke}
               />
               {messageUnreadCount > 0 ? (
                 <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotChat]} />
@@ -758,11 +758,11 @@ export function DemoTabBar({
                 }}
               >
                 <NotificationBellIcon
-                  size={22}
+                  size={WEB_TOP_NAV_ICON.size}
                   color={
-                    showNotifications ? WEB_HEADER_ICON.active : WEB_HEADER_ICON.muted
+                    showNotifications ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted
                   }
-                  strokeWidth={WEB_HEADER_ICON.stroke}
+                  strokeWidth={WEB_TOP_NAV_ICON.stroke}
                   badgeCount={showNotifications ? 0 : notificationCount}
                 />
               </AnimatedPress>
@@ -778,9 +778,9 @@ export function DemoTabBar({
                 }}
               >
                 <Inbox
-                  size={22}
-                  color={showInvitations ? WEB_HEADER_ICON.active : WEB_HEADER_ICON.muted}
-                  strokeWidth={WEB_HEADER_ICON.stroke}
+                  size={WEB_TOP_NAV_ICON.size}
+                  color={showInvitations ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted}
+                  strokeWidth={WEB_TOP_NAV_ICON.stroke}
                 />
                 {pendingInvites > 0 && !showInvitations ? (
                   <View style={[styles.webHeaderIconDot, styles.webHeaderIconDotInbox]} />
@@ -891,12 +891,8 @@ export function DemoTabBar({
   );
 }
 
-/** Metronic utility toolbar — outline icons, no squircle chrome. */
-const WEB_HEADER_ICON = {
-  muted: "#5E6278",
-  active: "#181C32",
-  stroke: 1.85,
-} as const;
+/** @deprecated Use WEB_TOP_NAV_ICON — kept for any external imports. */
+const WEB_HEADER_ICON = WEB_TOP_NAV_ICON;
 
 const styles = StyleSheet.create({
   staticIconWrap: {

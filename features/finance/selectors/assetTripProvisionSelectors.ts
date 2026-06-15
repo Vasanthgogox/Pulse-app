@@ -189,7 +189,7 @@ export function buildAssetProvisionCostBreakdownLines(
     }
   }
 
-  return lines;
+  return lines.filter((line) => line.amount > 0 || line.variant === "section");
 }
 
 export interface AssetTripProvisionCostBreakdown {

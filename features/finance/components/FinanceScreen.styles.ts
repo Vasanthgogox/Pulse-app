@@ -689,6 +689,50 @@ export const styles = StyleSheet.create({
   },
 
   /** minHeight: 0 lets flex children shrink so inner ScrollView can scroll (web + native). */
+  mobileUnifiedScroll: {
+    flex: 1,
+    width: "100%",
+    minWidth: 0,
+    minHeight: 0,
+  },
+  /** Pinned Cash / Customers / … pills on mobile finance. */
+  mobileFixedTabBar: {
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+    flexShrink: 0,
+    backgroundColor: "#000000",
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(255,255,255,0.12)",
+    zIndex: 2,
+  },
+  mobileUnifiedScrollContent: {
+    width: "100%",
+    minWidth: 0,
+  },
+  mobileUnifiedBody: {
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
+  tableBodyWrapEmbedded: {
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+    paddingHorizontal: 12,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftColor: Theme.borderLight,
+    borderRightColor: Theme.borderLight,
+    borderBottomColor: Theme.borderLight,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    backgroundColor: Theme.screenBackground,
+    marginTop: -1,
+  },
   tableScroll: { flex: 1, width: "100%", minWidth: 0, minHeight: 0 },
   tableScrollInner: { flex: 1, minHeight: 0, minWidth: 0 },
   tableContent: {

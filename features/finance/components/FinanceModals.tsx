@@ -115,6 +115,7 @@ export interface FinanceModalsProps {
     data: FinancialRowData;
     entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
     subTab: FinanceSubTab;
+    initialDetailTab?: "main" | "ledger" | "shared_ledger";
   } | null;
   selectedEntityTrips: TripRow[];
   selectedEntityTransactions: LedgerRow[] | null;
@@ -408,6 +409,7 @@ export function FinanceModals(props: FinanceModalsProps) {
           financeClientRows={entityOverlayClientRows}
           financeSupplierRows={entityOverlaySupplierRows}
           financePartyDrivers={driverRows}
+          initialDetailTab={selectedEntity.initialDetailTab}
         />
       )}
 

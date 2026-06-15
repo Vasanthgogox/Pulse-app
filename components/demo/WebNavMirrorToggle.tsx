@@ -3,7 +3,8 @@
  * Selection stays fully expanded on a dark thumb; hover previews on a light thumb.
  */
 import Theme from "@/constants/Theme";
-import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
+import { WEB_TOP_NAV_ICON } from "@/components/demo/webTopNavIcon.tokens";
+import type { LucideIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -37,7 +38,7 @@ export type WebNavMirrorItem = {
   id: string;
   title: string;
   subtitle?: string;
-  icon: React.ComponentProps<typeof FontAwesome5>["name"];
+  Icon: LucideIcon;
 };
 
 type Props = {
@@ -67,6 +68,12 @@ function segmentVisualFor(
   return "idle";
 }
 
+function iconColorFor(visual: SegmentVisual): string {
+  if (visual === "selected-expanded") return WEB_TOP_NAV_ICON.onDark;
+  if (visual === "hover-expanded") return WEB_TOP_NAV_ICON.onHover;
+  return WEB_TOP_NAV_ICON.muted;
+}
+
 function WebNavMirrorSegment({
   item,
   visual,
@@ -84,6 +91,7 @@ function WebNavMirrorSegment({
 }) {
   const expanded = visual !== "idle";
   const labelOpacity = useSharedValue(expanded ? 1 : 0);
+  const Icon = item.Icon;
 
   useEffect(() => {
     labelOpacity.value = withTiming(expanded ? 1 : 0, {
@@ -101,12 +109,7 @@ function WebNavMirrorSegment({
     transform: [{ translateX: (1 - labelOpacity.value) * -6 }],
   }));
 
-  const iconColor =
-    visual === "selected-expanded"
-      ? Theme.textOnPrimary
-      : visual === "hover-expanded"
-        ? Theme.networkBadgeClientText
-        : Theme.textMutedDemo;
+  const iconColor = iconColorFor(visual);
 
   const titleStyle =
     visual === "hover-expanded" ? styles.titleHover : styles.titleActive;
@@ -123,11 +126,10 @@ function WebNavMirrorSegment({
     >
       <Animated.View style={[styles.segment, segmentStyle]}>
         <View style={styles.iconBox}>
-          <FontAwesome5
-            name={item.icon}
-            size={16}
+          <Icon
+            size={WEB_TOP_NAV_ICON.size}
             color={iconColor}
-            solid={expanded}
+            strokeWidth={WEB_TOP_NAV_ICON.stroke}
           />
         </View>
         <Animated.View style={[styles.labelWrap, labelStyle]} pointerEvents="none">

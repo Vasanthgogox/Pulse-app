@@ -289,12 +289,14 @@ export interface DriverDetailScreenProps {
   driverId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
+  initialDetailTab?: "trips" | "ledger" | "statement" | "ranking" | "earnings";
 }
 
 export default function DriverDetailScreen({
   driverId,
   onBack,
   autoOpenProfile,
+  initialDetailTab,
 }: DriverDetailScreenProps) {
   const { t } = useLanguage();
   const { profile } = useAuth();
@@ -344,7 +346,7 @@ export default function DriverDetailScreen({
   const [driverTransactions, setDriverTransactions] = useState<LedgerRow[]>([]);
   const [driverDetailTab, setDriverDetailTab] = useState<
     "trips" | "ledger" | "statement" | "ranking" | "earnings"
-  >("trips");
+  >(initialDetailTab ?? "trips");
   const [tripsDatePreset, setTripsDatePreset] =
     useState<FinancePeriodFilter>("RANGE");
   const [tripsCustomFrom, setTripsCustomFrom] = useState<string | null>(null);

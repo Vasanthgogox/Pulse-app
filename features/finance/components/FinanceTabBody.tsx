@@ -48,7 +48,13 @@ export function FinanceTabBody(props: FinanceTabBodyProps) {
   }
 
   return (
-    <View style={{ flex: 1, minHeight: 0 }}>
+    <View
+      style={
+        props.embedInParentScroll
+          ? { width: "100%", minWidth: 0 }
+          : { flex: 1, minHeight: 0 }
+      }
+    >
       {TABS.map((tab) => {
         const TabPanel = TAB_COMPONENTS[tab.id];
         if (!TabPanel || !mountedTabs.has(tab.id)) return null;
@@ -56,7 +62,11 @@ export function FinanceTabBody(props: FinanceTabBodyProps) {
           <PersistentTabPanel
             key={tab.id}
             active={activeTab === tab.id}
-            style={{ flex: 1, minHeight: 0 }}
+            style={
+              props.embedInParentScroll
+                ? { width: "100%", minWidth: 0 }
+                : { flex: 1, minHeight: 0 }
+            }
           >
             <TabPanel {...props} financeSubTab={tab.id} />
           </PersistentTabPanel>

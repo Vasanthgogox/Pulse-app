@@ -95,6 +95,8 @@ export interface FinanceSummarySectionProps {
       }
     >
   >;
+  /** Mobile unified scroll: tab pills render in FinanceScreen fixed dock. */
+  omitTabRow?: boolean;
 }
 
 function formatAmount(value: number): string {
@@ -212,6 +214,7 @@ export function FinanceSummarySection({
   auditedTotalOut,
   onQuickCustomRange,
   desktopCardMetrics,
+  omitTabRow = false,
 }: FinanceSummarySectionProps) {
   void desktopCardMetrics;
   const auditedIn = auditedTotalIn ?? totalIn;
@@ -263,11 +266,13 @@ export function FinanceSummarySection({
             <TreasurySummaryCard
               fullWidth
               topContent={
-                <FinanceTabRow
-                  treasuryInset
-                  activeTab={activeTab}
-                  onTabPress={onTabPress}
-                />
+                omitTabRow ? undefined : (
+                  <FinanceTabRow
+                    treasuryInset
+                    activeTab={activeTab}
+                    onTabPress={onTabPress}
+                  />
+                )
               }
               totalIn={totalIn}
               totalOut={totalOut}
