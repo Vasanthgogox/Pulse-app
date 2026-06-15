@@ -41,6 +41,7 @@ import {
     TripsHubTableView,
     TripsHubTripCard,
 } from "@/features/trips/components/TripsHubViews";
+import { computeTripSettlementDues } from "@/features/finance/utils/tripSettlement.util";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import {
@@ -222,24 +223,16 @@ function historyTripDueState(
   adjustments?: TripAdjustment[] | null,
   subcontractRate?: number | null,
 ): { receivableDue: number; payableDue: number } {
-  const ledger = summarizeTripLedgerForHub(ledgerRows);
-  const receivableTarget = Math.max(
-    tripHubRevenue(trip, currentOrganizationId, adjustments),
-    0,
-  );
-  const payableTarget = Math.max(
-    tripHubCost(trip, currentOrganizationId, adjustments, {
-      subcontractRate: subcontractRate ?? null,
-      nonSupplierExpenseTotal: tripNonSupplierOutflowTotal(ledgerRows),
-    }),
-    0,
-  );
+  const settlement = computeTripSettlementDues({
+    trip,
+    viewerOrgId: currentOrganizationId,
+    ledgerEntries: ledgerRows,
+    adjustments,
+    subcontractRate: subcontractRate ?? null,
+  });
   return {
-    receivableDue: Math.max(
-      receivableTarget - Math.max(ledger.receivedTotal, 0),
-      0,
-    ),
-    payableDue: Math.max(payableTarget - Math.max(ledger.paidTotal, 0), 0),
+    receivableDue: settlement.receivableDue,
+    payableDue: settlement.payableDue,
   };
 }
 
@@ -1044,20 +1037,20 @@ export default function TripsScreen() {
           return db.localeCompare(da);
         },
       );
-      const ledger = summarizeTripLedgerForHub(txns);
       const rowAdj = tripFinanceAdjForHubLookup(tripFinanceAdjForHub, trip.id);
-      const salesValue = Math.max(tripHubRevenue(trip, orgId, rowAdj), 0);
-      const supplierCost = Math.max(
-        tripHubCost(trip, orgId, rowAdj, {
-          subcontractRate: hubSubcontractRateByTripId.get(trip.id) ?? null,
-          nonSupplierExpenseTotal: tripNonSupplierOutflowTotal(txns),
-        }),
-        0,
-      );
-      const received = Math.max(ledger.receivedTotal, 0);
-      const paid = Math.max(ledger.paidTotal, 0);
-      const pendingRecv = Math.max(salesValue - received, 0);
-      const pendingPay = Math.max(supplierCost - paid, 0);
+      const settlement = computeTripSettlementDues({
+        trip,
+        viewerOrgId: orgId,
+        ledgerEntries: txns,
+        adjustments: rowAdj,
+        subcontractRate: hubSubcontractRateByTripId.get(trip.id) ?? null,
+      });
+      const salesValue = settlement.receivableTarget;
+      const supplierCost = settlement.payableTarget;
+      const received = settlement.clientReceived;
+      const paid = settlement.payablePaid;
+      const pendingRecv = settlement.receivableDue;
+      const pendingPay = settlement.payableDue;
       rows.push({
         rowType: "TRIP",
         trip: tripRef,

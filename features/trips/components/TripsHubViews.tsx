@@ -5,12 +5,13 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
-import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import {
-    adjustedCost,
-    adjustedRevenue,
-    type TripAdjustment,
-} from "@/features/trips/services/tripAdjustments";
+  computeTripSettlementDues,
+  tripHubCost,
+  tripHubRevenue,
+  type TripHubCostOptions,
+} from "@/features/finance/utils/tripSettlement.util";
+import { type TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { compareTripsByScheduleDesc } from "@/lib/dateRangePresets";
@@ -152,22 +153,11 @@ export function tripFinanceAdjForHubLookup(
   return map[k] ?? [];
 }
 
-export function tripHubRevenue(
-  trip: TripRow,
-  currentOrganizationId: string | null | undefined,
-  adjustments?: TripAdjustment[] | null,
-): number {
-  const isOwner =
-    currentOrganizationId != null &&
-    trip.organization_id != null &&
-    trip.organization_id === currentOrganizationId;
-  const useSupplierRate = trip.indent_id != null && !isOwner;
-  const raw = useSupplierRate
-    ? Number(trip.supplier_rate ?? 0)
-    : Number(trip.client_price ?? 0);
-  if (adjustments == null) return raw;
-  return adjustedRevenue(raw, adjustments);
-}
+export {
+  tripHubCost,
+  tripHubRevenue,
+  type TripHubCostOptions,
+} from "@/features/finance/utils/tripSettlement.util";
 
 function trackingStepForTrip(trip: TripRow, stageUpper: string): number {
   const completedLike =
@@ -195,39 +185,6 @@ function missionStatusForTrip(trip: TripRow): string {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-}
-
-/** Optional manifest / indent context for hub payable (cost) rollups. */
-export type TripHubCostOptions = {
-  subcontractRate?: number | null;
-  nonSupplierExpenseTotal?: number | null;
-};
-
-export function tripHubCost(
-  trip: TripRow,
-  currentOrganizationId: string | null | undefined,
-  adjustments?: TripAdjustment[] | null,
-  options?: TripHubCostOptions | null,
-): number {
-  const isOwner =
-    currentOrganizationId != null &&
-    trip.organization_id != null &&
-    trip.organization_id === currentOrganizationId;
-  const indentPartner = trip.indent_id != null && !isOwner;
-  const nonSup = Math.max(0, Number(options?.nonSupplierExpenseTotal ?? 0));
-
-  let raw: number;
-  if (indentPartner) {
-    const freight = computePartnerIndentFreightCost(options?.subcontractRate ?? null);
-    raw =
-      freight > 0
-        ? freight + nonSup
-        : Number(trip.supplier_rate ?? 0) + nonSup;
-  } else {
-    raw = Number(trip.supplier_rate ?? 0) + nonSup;
-  }
-  if (adjustments == null) return raw;
-  return adjustedCost(raw, adjustments);
 }
 
 function tripHubPnl(
@@ -1764,14 +1721,18 @@ export function TripsHubTableView({
             const filterKind = classifyTripFilter(t);
             const stageTag = getStageLabel(t).toUpperCase();
             const receivableTarget = Math.max(mySales, 0);
-            const payableTarget = Math.max(cost, 0);
-            const receivedActual = Math.max(ledgerRoll.receivedTotal, 0);
-            const paidActual = Math.max(ledgerRoll.paidTotal, 0);
-            const pendingReceivable = Math.max(
-              receivableTarget - receivedActual,
-              0,
-            );
-            const pendingPayable = Math.max(payableTarget - paidActual, 0);
+            const settlement = computeTripSettlementDues({
+              trip: t,
+              viewerOrgId: currentOrganizationId,
+              ledgerEntries: entries,
+              adjustments: rowAdj,
+              subcontractRate: hubCostOpts.subcontractRate ?? null,
+            });
+            const payableTarget = settlement.payableTarget;
+            const receivedActual = settlement.clientReceived;
+            const paidActual = settlement.payablePaid;
+            const pendingReceivable = settlement.receivableDue;
+            const pendingPayable = settlement.payableDue;
             const recvBarPct =
               receivableTarget > 0
                 ? Math.min(100, (receivedActual / receivableTarget) * 100)

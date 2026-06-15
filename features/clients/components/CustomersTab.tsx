@@ -1816,6 +1816,8 @@ export interface CustomersTabProps {
   /** View mode for the customers tab (list | analytics). */
   viewTab?: CustomersViewTab;
   onViewTabChange?: (v: CustomersViewTab) => void;
+  /** Parent ScrollView owns vertical scroll (finance mobile). */
+  embedInParentScroll?: boolean;
 }
 
 export function CustomersTab({
@@ -1841,6 +1843,7 @@ export function CustomersTab({
   hideSummaryRow = false,
   viewTab,
   onViewTabChange,
+  embedInParentScroll = false,
 }: CustomersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
@@ -2014,15 +2017,145 @@ export function CustomersTab({
     : hideSummaryRow
       ? 0
       : 1;
+  const rowsToRender = embedInParentScroll ? filteredRows : visibleCustomerRows;
+  const tableContentStyle = [
+    styles.customerTableScrollContent,
+    embedInParentScroll
+      ? { paddingBottom: 0 }
+      : { paddingBottom: bottomInset + insets.bottom },
+  ];
+
+  const tableBody = (
+    <>
+      {topContent}
+      {!hideSummaryRow && (
+        <View style={styles.receivablesSummaryRow}>
+          <View style={styles.receivablesSummaryCard}>
+            <Text style={styles.receivablesSummaryLabel}>Total Outstanding</Text>
+            <Text style={styles.receivablesSummaryOutstanding}>
+              ₹{pendingBalance.toLocaleString("en-IN")}
+            </Text>
+          </View>
+          <LiquidFillPill
+            percentage={collectionPercent}
+            label="Collection"
+            valueSuffix="%"
+          />
+        </View>
+      )}
+      <View style={styles.customerTableHeader}>
+        <View style={styles.customerTableHeaderEntityCol}>
+          <Text
+            style={[styles.customerTableHeaderCell, styles.ctHeaderLeft]}
+            numberOfLines={1}
+          >
+            Customer Entity
+          </Text>
+        </View>
+        <View style={styles.customerTableHeaderTripsCol}>
+          <Text
+            style={[styles.customerTableHeaderCell, styles.ctHeaderCenter]}
+            numberOfLines={1}
+          >
+            Trips
+          </Text>
+        </View>
+        <View style={styles.customerTableHeaderDueCol}>
+          <Text
+            style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+            numberOfLines={1}
+          >
+            Due
+          </Text>
+        </View>
+      </View>
+      <View style={styles.customerTableCard}>
+        {rowsToRender.map((data) => {
+          const due = data.pending ?? 0;
+          const sales = data.billed ?? 0;
+          const received = data.received ?? Math.max(0, sales - due);
+          const tripCount = data.trips ?? 0;
+          const avatarData = clientAvatarById.get(data.id);
+          const receivedDisplay = formatCustomerAmountCompact(received);
+          return (
+            <TouchableOpacity
+              key={data.id}
+              style={styles.customerTableRow}
+              onPress={() => handleRowSelect(data)}
+              activeOpacity={0.7}
+            >
+              <EntityAvatar
+                name={data.name ?? ""}
+                avatarUrl={avatarData?.avatar_url}
+                avatarSeed={avatarData?.avatar_seed}
+                entityType="client"
+                isIntegrated={!!data.is_integrated}
+              />
+              <View style={[styles.customerTableCell, styles.ctEntity]}>
+                <Text
+                  style={styles.customerTableEntityName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {data.name ?? "—"}
+                </Text>
+                <Text
+                  style={styles.customerTableEntitySub}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Sales: ₹
+                  {sales >= 1000
+                    ? `${(sales / 1000).toFixed(1)}k`
+                    : sales.toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={[styles.customerTableCell, styles.ctTrips]}>
+                <View style={styles.customerTableTripsPill}>
+                  <Text style={styles.customerTableTripsPillText}>
+                    {tripCount}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.customerTableCell, styles.ctDue]}>
+                <Text
+                  style={[
+                    styles.customerTableDueValue,
+                    due > 0
+                      ? styles.customerTableDueUnpaid
+                      : styles.customerTableDueSettled,
+                  ]}
+                  numberOfLines={1}
+                >
+                  ₹{due.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.customerTableReceivedLabel} numberOfLines={1}>
+                  Received: ₹{receivedDisplay}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+        <View style={styles.customerTableFooter}>
+          <Text style={styles.customerTableFooterText}>All Clients Synced</Text>
+        </View>
+      </View>
+    </>
+  );
+
+  if (embedInParentScroll) {
+    return (
+      <View style={[styles.wrap, styles.wrapEmbedded]}>
+        <View style={tableContentStyle}>{tableBody}</View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
       <ScrollView
         style={styles.customerTableScroll}
-        contentContainerStyle={[
-          styles.customerTableScrollContent,
-          { paddingBottom: bottomInset + insets.bottom },
-        ]}
+        contentContainerStyle={tableContentStyle}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
         onScroll={handleCustomerTableScroll}
@@ -2038,122 +2171,7 @@ export function CustomersTab({
           ) : undefined
         }
       >
-        {topContent}
-        {!hideSummaryRow && (
-          <View style={styles.receivablesSummaryRow}>
-            <View style={styles.receivablesSummaryCard}>
-              <Text style={styles.receivablesSummaryLabel}>Total Outstanding</Text>
-              <Text style={styles.receivablesSummaryOutstanding}>
-                ₹{pendingBalance.toLocaleString("en-IN")}
-              </Text>
-            </View>
-            <LiquidFillPill
-              percentage={collectionPercent}
-              label="Collection"
-              valueSuffix="%"
-            />
-          </View>
-        )}
-        <View style={styles.customerTableHeader}>
-          <View style={styles.customerTableHeaderEntityCol}>
-            <Text
-              style={[styles.customerTableHeaderCell, styles.ctHeaderLeft]}
-              numberOfLines={1}
-            >
-              Customer Entity
-            </Text>
-          </View>
-          <View style={styles.customerTableHeaderTripsCol}>
-            <Text
-              style={[styles.customerTableHeaderCell, styles.ctHeaderCenter]}
-              numberOfLines={1}
-            >
-              Trips
-            </Text>
-          </View>
-          <View style={styles.customerTableHeaderDueCol}>
-            <Text
-              style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
-              numberOfLines={1}
-            >
-              Due
-            </Text>
-          </View>
-        </View>
-        <View style={styles.customerTableCard}>
-          {visibleCustomerRows.map((data) => {
-            const due = data.pending ?? 0;
-            const sales = data.billed ?? 0;
-            // For this list, "Received" maps to the cash collected from the customer.
-            const received = data.received ?? Math.max(0, sales - due);
-            const tripCount = data.trips ?? 0;
-            const avatarData = clientAvatarById.get(data.id);
-            const receivedDisplay = formatCustomerAmountCompact(received);
-            return (
-              <TouchableOpacity
-                key={data.id}
-                style={styles.customerTableRow}
-                onPress={() => handleRowSelect(data)}
-                activeOpacity={0.7}
-              >
-                <EntityAvatar
-                  name={data.name ?? ""}
-                  avatarUrl={avatarData?.avatar_url}
-                  avatarSeed={avatarData?.avatar_seed}
-                  entityType="client"
-                  isIntegrated={!!data.is_integrated}
-                />
-                <View style={[styles.customerTableCell, styles.ctEntity]}>
-                  <Text
-                    style={styles.customerTableEntityName}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {data.name ?? "—"}
-                  </Text>
-                  <Text
-                    style={styles.customerTableEntitySub}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    Sales: ₹
-                    {sales >= 1000
-                      ? `${(sales / 1000).toFixed(1)}k`
-                      : sales.toLocaleString("en-IN")}
-                  </Text>
-                </View>
-                <View style={[styles.customerTableCell, styles.ctTrips]}>
-                  <View style={styles.customerTableTripsPill}>
-                    <Text style={styles.customerTableTripsPillText}>
-                      {tripCount}
-                    </Text>
-                  </View>
-                </View>
-                <View style={[styles.customerTableCell, styles.ctDue]}>
-                  <Text
-                    style={[
-                      styles.customerTableDueValue,
-                      due > 0
-                        ? styles.customerTableDueUnpaid
-                        : styles.customerTableDueSettled,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    ₹{due.toLocaleString("en-IN")}
-                  </Text>
-                  <Text style={styles.customerTableReceivedLabel} numberOfLines={1}>
-                    Received: ₹{receivedDisplay}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-          <View style={styles.customerTableFooter}>
-            <Text style={styles.customerTableFooterText}>
-              All Clients Synced
-            </Text>
-          </View>
-        </View>
+        {tableBody}
       </ScrollView>
     </View>
   );
@@ -2162,6 +2180,7 @@ export function CustomersTab({
 const styles = StyleSheet.create({
   loading: { padding: 24, textAlign: "center", color: Theme.textSecondary },
   wrap: { flex: 1, backgroundColor: "#FBFBFF" },
+  wrapEmbedded: { flex: 0, width: "100%", minWidth: 0 },
   receivablesHeader: {
     flexDirection: "row",
     alignItems: "center",

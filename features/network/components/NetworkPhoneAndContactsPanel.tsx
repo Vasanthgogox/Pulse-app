@@ -856,37 +856,51 @@ export function NetworkPhoneAndContactsPanel({
           discoverCount={discoverCount}
           totalConnections={totalConnections}
           todayInviteCount={todayInviteCount}
+          style={!heroBannerHorizontal ? styles.inviteRowChildStacked : undefined}
         />
-        <View style={styles.inviteCard}>
+        <View
+          style={[
+            styles.inviteCard,
+            !heroBannerHorizontal && styles.inviteCardStacked,
+          ]}
+        >
           <View style={styles.inviteGlow} pointerEvents="none" />
-          <View style={styles.inviteHeaderRow}>
+          <View style={styles.inviteTopRow}>
             <View style={styles.inviteIconWrap}>
               <LinkIcon size={14} color={Theme.actionAccent} strokeWidth={2.2} />
             </View>
-            <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
-          </View>
-          <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
-          <View style={styles.inviteCopyRow}>
-            <Text style={styles.inviteUrlText} numberOfLines={1}>
-              {inviteUrl.display}
-            </Text>
-            <Pressable
-              onPress={() => void handleCopyInvite()}
-              style={({ pressed }) => [
-                styles.inviteCopyBtn,
-                pressed && styles.inviteCopyBtnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={
-                inviteCopied
-                  ? t("networkInviteCopied")
-                  : t("networkInviteCopy")
-              }
-            >
-              <Text style={styles.inviteCopyBtnText}>
-                {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
-              </Text>
-            </Pressable>
+            <View style={styles.inviteContentCol}>
+              <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
+              <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
+              <View
+                style={[
+                  styles.inviteCopyRow,
+                  windowWidth < 400 && styles.inviteCopyRowStacked,
+                ]}
+              >
+                <Text style={styles.inviteUrlText} numberOfLines={1}>
+                  {inviteUrl.display}
+                </Text>
+                <Pressable
+                  onPress={() => void handleCopyInvite()}
+                  style={({ pressed }) => [
+                    styles.inviteCopyBtn,
+                    windowWidth < 400 && styles.inviteCopyBtnStacked,
+                    pressed && styles.inviteCopyBtnPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    inviteCopied
+                      ? t("networkInviteCopied")
+                      : t("networkInviteCopy")
+                  }
+                >
+                  <Text style={styles.inviteCopyBtnText}>
+                    {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -913,10 +927,14 @@ const HUB_PAD = NETWORK_HUB_GRID_ROW_PADDING_H;
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
+    minWidth: 0,
     paddingHorizontal: HUB_PAD,
     marginTop: 4,
     marginBottom: 14,
     gap: 12,
+    ...Platform.select({
+      web: { boxSizing: "border-box" },
+    }),
   },
 
   /* ── Hero banner (FROM YOUR CONTACTS) ─────────────────────────────
@@ -1163,24 +1181,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 12,
+    minWidth: 0,
   },
   inviteRowStacked: {
     flexDirection: "column",
+    width: "100%",
+  },
+  inviteRowChildStacked: {
+    flex: 0,
+    flexGrow: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   inviteCard: {
     flex: 1,
     minWidth: 0,
+    width: "100%",
+    alignSelf: "stretch",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
     padding: 18,
-    gap: 8,
     position: "relative",
     ...Platform.select({
       web: {
         boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        boxSizing: "border-box",
       },
       default: {
         shadowColor: "#0f172a",
@@ -1191,6 +1219,10 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  inviteCardStacked: {
+    flex: 0,
+    flexGrow: 0,
+  },
   inviteGlow: {
     position: "absolute",
     top: -40,
@@ -1200,11 +1232,17 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     backgroundColor: "rgba(99, 102, 241, 0.05)",
   },
-  inviteHeaderRow: {
+  inviteTopRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     minWidth: 0,
+    width: "100%",
+  },
+  inviteContentCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
   },
   inviteIconWrap: {
     width: 30,
@@ -1217,8 +1255,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(99, 102, 241, 0.14)",
   },
   inviteCardTitle: {
-    flex: 1,
-    minWidth: 0,
     fontSize: 14,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
@@ -1229,20 +1265,28 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: Theme.textSecondary,
     lineHeight: 17,
-    marginTop: 2,
   },
   inviteCopyRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 10,
-    paddingLeft: 12,
-    paddingRight: 6,
+    gap: 8,
+    marginTop: 4,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+    overflow: "hidden",
+  },
+  inviteCopyRowStacked: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+    paddingVertical: 8,
   },
   inviteUrlText: {
     flex: 1,
@@ -1257,6 +1301,7 @@ const styles = StyleSheet.create({
     }),
   },
   inviteCopyBtn: {
+    flexShrink: 0,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
@@ -1273,6 +1318,9 @@ const styles = StyleSheet.create({
         elevation: 1,
       },
     }),
+  },
+  inviteCopyBtnStacked: {
+    alignSelf: "flex-end",
   },
   inviteCopyBtnPressed: {
     opacity: 0.88,

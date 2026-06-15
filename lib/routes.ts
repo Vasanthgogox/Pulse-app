@@ -119,15 +119,33 @@ export const ROUTES = {
     if (!tab) return base;
     return `${base}?tab=${encodeURIComponent(tab)}` as const;
   },
-  /** Finance ledger + trips detail for a client. */
-  clientDetail: (clientId: string) =>
-    `/client/${encodeURIComponent(clientId)}` as const,
-  /** Finance ledger + trips detail for a supplier. */
-  supplierDetail: (supplierId: string) =>
-    `/supplier/${encodeURIComponent(supplierId)}` as const,
-  /** Fleet driver detail (trips, cash flow, earnings). */
-  driverDetail: (driverId: string) =>
-    `/driver/${encodeURIComponent(driverId)}` as const,
+  /** Read-only party profile (client / supplier / driver) — connections hub avatar, chat, etc. */
+  publicProfile: (
+    type: "client" | "supplier" | "driver",
+    partyId: string,
+  ) => `/public-profile/${type}/${encodeURIComponent(partyId)}` as const,
+  /** Finance entity detail (trips, cash flow, shared ledger). */
+  clientDetail: (clientId: string, tab?: 'trips' | 'cash' | 'shared') => {
+    const base = `/client/${encodeURIComponent(clientId)}` as const;
+    if (!tab) return base;
+    return `${base}?tab=${encodeURIComponent(tab)}` as const;
+  },
+  /** Finance entity detail (trips, cash flow, shared ledger). */
+  supplierDetail: (supplierId: string, tab?: 'trips' | 'cash' | 'shared') => {
+    const base = `/supplier/${encodeURIComponent(supplierId)}` as const;
+    if (!tab) return base;
+    return `${base}?tab=${encodeURIComponent(tab)}` as const;
+  },
+  /** Fleet driver detail (trips, cash flow / ledger, earnings). */
+  driverDetail: (
+    driverId: string,
+    tab?: "trips" | "ledger" | "statement" | "ranking" | "earnings" | "cash",
+  ) => {
+    const base = `/driver/${encodeURIComponent(driverId)}` as const;
+    if (!tab || tab === "trips") return base;
+    const normalized = tab === "cash" ? "ledger" : tab;
+    return `${base}?tab=${encodeURIComponent(normalized)}` as const;
+  },
   /** Vehicle detail (trips, P&L, operations). */
   vehicleDetail: (vehicleId: string) =>
     `/vehicle/${encodeURIComponent(vehicleId)}` as const,

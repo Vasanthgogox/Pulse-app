@@ -262,7 +262,6 @@ export function NetworkPartyHubListCard({
                     styles.chatHubAvatarRing,
                     {
                       borderColor: accent.ring,
-                      backgroundColor: showOnline ? accent.tint : Theme.screenBackground,
                     },
                   ]}
                 >

@@ -143,6 +143,7 @@ export interface SupplierDetailScreenProps {
   supplierId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
+  initialDetailSubTab?: "trips" | "cash" | "shared";
   openSharedFromNotification?: boolean;
   notificationAction?: string;
   notificationTripId?: string;
@@ -152,6 +153,7 @@ export default function SupplierDetailScreen({
   supplierId,
   onBack,
   autoOpenProfile,
+  initialDetailSubTab,
   openSharedFromNotification,
   notificationAction,
   notificationTripId,
@@ -209,7 +211,9 @@ export default function SupplierDetailScreen({
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+    initialDetailSubTab ?? "trips",
+  );
   const [tripDatePeriod, setTripDatePeriod] =
     useState<FinancePeriodFilter>("RANGE");
   const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);

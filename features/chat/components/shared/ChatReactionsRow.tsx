@@ -1,6 +1,11 @@
 import { ChatAnimatedEmoji } from "@/features/chat/components/shared/ChatAnimatedEmoji";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { PULSE_CHAT } from "@/features/chat/components/mobile/chatSlackMobile.styles";
+import {
+  CHAT_ACCENT,
+  CHAT_ACCENT_BORDER,
+  CHAT_ACCENT_SOFT,
+  CHAT_TEXT_SECONDARY,
+} from "@/features/chat/chatTheme";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export type ChatReactions = Record<string, string[]>;
 
@@ -35,14 +40,14 @@ export function ChatReactionsRow({
   reactions: ChatReactions | null | undefined;
   selfUserId: string | null | undefined;
   onToggle: (emoji: string) => void;
-  /** Left margin to align under message body (after avatar column). */
   avatarOffset?: number;
   variant?: "mobile" | "desktop";
-  /** WhatsApp-style own messages align reactions to the right. */
   align?: "left" | "right";
 }) {
   const entries = parseReactions(reactions, selfUserId);
   if (entries.length === 0) return null;
+
+  const compact = variant === "desktop";
 
   return (
     <View
@@ -58,18 +63,21 @@ export function ChatReactionsRow({
           key={entry.emoji}
           style={[
             styles.chip,
-            entry.hasOwn && styles.chipOwn,
-            variant === "desktop" && styles.chipDesktop,
+            compact && styles.chipCompact,
+            entry.hasOwn ? styles.chipOwn : styles.chipDefault,
           ]}
           onPress={() => onToggle(entry.emoji)}
-          activeOpacity={0.72}
+          activeOpacity={0.78}
           accessibilityRole="button"
           accessibilityLabel={`${entry.emoji} ${entry.count} reaction${entry.count > 1 ? "s" : ""}`}
         >
-          <ChatAnimatedEmoji emoji={entry.emoji} size="sm" loop={entry.hasOwn} />
+          <View style={[styles.emojiSlot, compact && styles.emojiSlotCompact]}>
+            <ChatAnimatedEmoji emoji={entry.emoji} size="xs" loop={false} />
+          </View>
           <Text
             style={[
               styles.count,
+              compact && styles.countCompact,
               entry.hasOwn && styles.countOwn,
             ]}
           >
@@ -81,12 +89,26 @@ export function ChatReactionsRow({
   );
 }
 
+const CHIP_SHADOW =
+  Platform.OS === "web"
+    ? ({ boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)" } as object)
+    : Platform.select({
+        ios: {
+          shadowColor: "#0f172a",
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.06,
+          shadowRadius: 2,
+        },
+        android: { elevation: 1 },
+        default: {},
+      });
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 5,
-    marginTop: 4,
+    gap: 6,
+    marginTop: 5,
     marginBottom: 2,
   },
   rowRight: {
@@ -97,30 +119,58 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#F9FAFB",
+    justifyContent: "center",
+    gap: 4,
+    paddingLeft: 7,
+    paddingRight: 9,
+    paddingVertical: 4,
+    minHeight: 28,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    ...CHIP_SHADOW,
+  },
+  chipCompact: {
+    minHeight: 24,
+    paddingLeft: 6,
+    paddingRight: 8,
+    paddingVertical: 2,
+    gap: 3,
+  },
+  chipDefault: {
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
   },
   chipOwn: {
-    borderColor: "rgba(91, 94, 244, 0.45)",
-    backgroundColor: "rgba(91, 94, 244, 0.08)",
+    borderColor: CHAT_ACCENT_BORDER,
+    backgroundColor: CHAT_ACCENT_SOFT,
   },
-  chipDesktop: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+  emojiSlot: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  emojiSlotCompact: {
+    width: 16,
+    height: 16,
   },
   count: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: CHAT_TEXT_SECONDARY,
+    lineHeight: 14,
+    includeFontPadding: false,
+    fontVariant: ["tabular-nums"],
+    minWidth: 10,
+    textAlign: "center",
+  },
+  countCompact: {
     fontSize: 11,
-    fontWeight: "600",
-    color: "#6B7280",
-    lineHeight: 16,
+    lineHeight: 13,
+    minWidth: 8,
   },
   countOwn: {
-    color: PULSE_CHAT.accent,
+    color: CHAT_ACCENT,
   },
 });

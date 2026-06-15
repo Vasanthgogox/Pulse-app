@@ -26,6 +26,8 @@ import { DiscoverView } from "@/features/network/components/DiscoverView";
 import { NetworkPhoneAndContactsPanel } from "@/features/network/components/NetworkPhoneAndContactsPanel";
 import { NetworkSupportHelpCards } from "@/features/network/components/NetworkSupportHelpCards";
 import { discoverSearchTermForOrgs } from "@/lib/networkPhoneSearch";
+import { connectedOrgLedgerDetailRoute } from "@/features/network/utils/connectionDetailNavigation.util";
+import { ROUTES } from "@/lib/routes";
 import { MutualConnectionsModal } from "@/features/network/components/MutualConnectionsModal";
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import {
@@ -57,7 +59,6 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
-import { ROUTES } from "@/lib/routes";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
   useConnectionRequestsReceivedQuery,
@@ -633,25 +634,16 @@ function NetworkScreenInner() {
 
   const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
 
-  const handleOpenProfileFromConnection = (item: ConnectedOrg) => {
-    if (item.role === "CLIENT") {
-      router.push(ROUTES.clientDetail(item.id) as Parameters<typeof router.push>[0]);
-      return;
-    }
-    setSelectedProfileNode({
-      id: item.linked_organization_id ?? item.id,
-      name: item.name,
-      type: item.role,
-      location: getNetworkNodeLocation(item),
-      status: item.is_integrated ? "CONNECTED" : "LIVE",
-      rating: item.rating ?? null,
-      mutuals: item.mutual_count ?? 0,
-      phone: item.phone ?? null,
-      avatar_url: item.avatar_url ?? null,
-      avatar_seed: item.avatar_seed ?? null,
-      is_integrated: item.is_integrated,
-    });
-  };
+  const handleOpenProfileFromConnection = useCallback(
+    (item: ConnectedOrg) => {
+      router.push(
+        connectedOrgLedgerDetailRoute(item) as Parameters<
+          typeof router.push
+        >[0],
+      );
+    },
+    [router],
+  );
 
   const handleSendProtocolFromProfile = () => {
     if (!selectedProfileNode || !orgId) return;
@@ -1728,7 +1720,7 @@ const styles = StyleSheet.create({
   commandMainStatsRowCompact: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
     gap: 12,
   },
   commandTotalWrap: {
@@ -1759,9 +1751,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 0,
+    marginLeft: "auto",
     flexGrow: 0,
     flexShrink: 0,
     justifyContent: "flex-end",
+    alignSelf: "flex-end",
   },
   commandMetricGridCompact: {
     gap: 5,
@@ -1779,10 +1773,10 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   commandMetricCellCompact: {
-    flex: 1,
-    width: undefined,
-    minWidth: 0,
-    maxWidth: 66,
+    flex: 0,
+    width: 62,
+    minWidth: 56,
+    maxWidth: 72,
     minHeight: 52,
     borderRadius: 12,
     paddingHorizontal: 3,

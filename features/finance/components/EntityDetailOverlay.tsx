@@ -347,6 +347,8 @@ export interface EntityDetailOverlayProps {
   financeSupplierRows?: SupplierRow[];
   /** Org drivers — driver column on trips. */
   financePartyDrivers?: DriverRow[];
+  /** When set, CLIENT/SUPPLIER overlay opens on this tab (e.g. ledger from Finance list). */
+  initialDetailTab?: "main" | "ledger" | "shared_ledger";
 }
 
 /** Latest payment captured date for a trip from ledger (transaction_date or created_at). Used when trip has no pickup_date. */
@@ -696,6 +698,7 @@ export function EntityDetailOverlay({
   financeClientRows = [],
   financeSupplierRows = [],
   financePartyDrivers = [],
+  initialDetailTab = "main",
 }: EntityDetailOverlayProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -704,7 +707,7 @@ export function EntityDetailOverlay({
   const [showReportModal, setShowReportModal] = useState(false);
   const [detailTab, setDetailTab] = useState<
     "main" | "ledger" | "shared_ledger"
-  >("main");
+  >(initialDetailTab);
   /** Driver-only: PROFILE | LEDGER | STATEMENT. */
   const [driverDetailTab, setDriverDetailTab] = useState<
     "profile" | "ledger" | "statement"
@@ -773,6 +776,15 @@ export function EntityDetailOverlay({
       setDriverRatings(res.error ? [] : (res.ratings ?? []));
     });
   }, [isDriver, entity.id]);
+
+  useEffect(() => {
+    setDetailTab(initialDetailTab);
+    setDriverDetailTab("profile");
+    setExpandedMonthKey(null);
+    setExpandedDriverLedgerRowId(null);
+    setExpandedEntityLedgerRowId(null);
+    setEntityLedgerViewMode("table");
+  }, [entity.id, entityType, initialDetailTab]);
 
   const tripRouteLabelByTripId = useMemo(() => {
     const m = new Map<string, string>();

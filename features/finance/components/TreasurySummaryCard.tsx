@@ -6,6 +6,7 @@ import {
     CHAT_FILTER_MUTED,
     chatFilterChromeStyles as chatChrome,
 } from "@/constants/ChatFilterChrome";
+import { ChatFilterMirrorToggle } from "@/components/ChatFilterMirrorToggle";
 import Theme from '@/constants/Theme';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
@@ -1106,47 +1107,17 @@ export function TreasurySummaryCard({
               ]}
             >
               {showInlineSourceChips ? (
-                <View
-                  style={[chatChrome.tabRow, styles.toolbarStackInlineChipsTabRow]}
-                >
-                  {(["all", "asset", "aggregate"] as const).map((s) => {
-                    const active = sourceFilter === s;
-                    return (
-                      <TouchableOpacity
-                        key={s}
-                        style={[
-                          chatChrome.tabPill,
-                          active && chatChrome.tabPillActive,
-                        ]}
-                        onPress={() => onSourceFilterChange?.(s)}
-                        activeOpacity={0.75}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: active }}
-                      >
-                        <FontAwesome
-                          name={
-                            s === "all"
-                              ? "list"
-                              : s === "asset"
-                                ? "truck"
-                                : "sitemap"
-                          }
-                          size={12}
-                          color={active ? "#ffffff" : CHAT_FILTER_MUTED}
-                        />
-                        <Text
-                          style={[
-                            chatChrome.tabPillLabel,
-                            active && chatChrome.tabPillLabelActive,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {SOURCE_FILTER_LABELS[s]}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <ChatFilterMirrorToggle
+                  style={styles.toolbarStackInlineChipsTabRow}
+                  activeId={sourceFilter}
+                  onSelect={(id) => onSourceFilterChange?.(id as typeof sourceFilter)}
+                  items={(["all", "asset", "aggregate"] as const).map((s) => ({
+                    id: s,
+                    label: SOURCE_FILTER_LABELS[s],
+                    icon:
+                      s === "all" ? "list" : s === "asset" ? "truck" : "sitemap",
+                  }))}
+                />
               ) : null}
 
               <View

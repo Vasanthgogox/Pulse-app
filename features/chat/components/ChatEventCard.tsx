@@ -889,8 +889,6 @@ const s = StyleSheet.create({
     paddingVertical: 8,
   },
   alertCardDriverSwap: {
-    backgroundColor: "#FAFBFF",
-    borderColor: "rgba(91, 94, 244, 0.12)",
     paddingVertical: 10,
   },
   alertDriverSwapAvatarSlot: {

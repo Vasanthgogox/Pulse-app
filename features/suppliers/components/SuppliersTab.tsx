@@ -71,6 +71,7 @@ export interface SuppliersTabProps {
   /** View mode for the suppliers tab (list | analytics). */
   viewTab?: SuppliersViewTab;
   onViewTabChange?: (v: SuppliersViewTab) => void;
+  embedInParentScroll?: boolean;
 }
 
 export function SuppliersTab({
@@ -93,6 +94,7 @@ export function SuppliersTab({
   hideSummaryRow = false,
   viewTab,
   onViewTabChange,
+  embedInParentScroll = false,
 }: SuppliersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -198,15 +200,122 @@ export function SuppliersTab({
     : hideSummaryRow
       ? 0
       : 1;
+  const rowsToRender = embedInParentScroll ? filteredRows : visibleSupplierRows;
+  const tableContentStyle = [
+    styles.tableScrollContent,
+    embedInParentScroll
+      ? { paddingBottom: 0 }
+      : { paddingBottom: bottomInset + insets.bottom },
+  ];
+
+  const tableBody = (
+    <>
+      {topContent}
+      {!hideSummaryRow && (
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Total Due</Text>
+            <Text style={styles.summaryDue}>
+              ₹{totalDue.toLocaleString("en-IN")}
+            </Text>
+          </View>
+          <LiquidFillPill
+            percentage={settledPercent}
+            label="Settled"
+            valueSuffix="%"
+          />
+        </View>
+      )}
+      <View style={styles.tableHeader}>
+        <View style={styles.headerEntityCol}>
+          <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
+            Supplier Entity
+          </Text>
+        </View>
+        <View style={styles.headerTripsCol}>
+          <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
+            Trips
+          </Text>
+        </View>
+        <View style={styles.headerDueCol}>
+          <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+            Due
+          </Text>
+        </View>
+      </View>
+      <View style={styles.tableCard}>
+        {rowsToRender.map((data) => {
+          const due = data.due ?? 0;
+          const paid = data.paid ?? 0;
+          const tripCount = data.trips ?? 0;
+          const avatarData = supplierAvatarById.get(data.id);
+          return (
+            <TouchableOpacity
+              key={data.id}
+              style={styles.tableRow}
+              onPress={() =>
+                onRowSelect
+                  ? onRowSelect(data, "SUPPLIER", "suppliers")
+                  : router.push(`/supplier/${data.id}`)
+              }
+              activeOpacity={0.7}
+            >
+              <EntityAvatar
+                name={data.name ?? ""}
+                avatarUrl={avatarData?.avatar_url}
+                avatarSeed={avatarData?.avatar_seed}
+                entityType="supplier"
+                isIntegrated={!!data.is_integrated}
+              />
+              <View style={[styles.tableCell, styles.ctEntity]}>
+                <View style={styles.tableEntityHeader}>
+                  <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                    {data.name ?? "—"}
+                  </Text>
+                </View>
+                <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
+                  Payables: ₹{(data.payables ?? 0) >= 1000 ? `${((data.payables ?? 0) / 1000).toFixed(1)}k` : (data.payables ?? 0).toLocaleString("en-IN")}
+                </Text>
+              </View>
+              <View style={[styles.tableCell, styles.ctTrips]}>
+                <View style={styles.tripsPill}>
+                  <Text style={styles.tripsPillText}>{tripCount}</Text>
+                </View>
+              </View>
+              <View style={[styles.tableCell, styles.ctDue]}>
+                <Text
+                  style={[
+                    styles.tableDueValue,
+                    due > 0 ? styles.tableDueUnpaid : styles.tableDueSettled,
+                  ]}
+                  numberOfLines={1}
+                >
+                  ₹{due.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.tablePaidLabel} numberOfLines={1}>
+                  Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString("en-IN")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </>
+  );
+
+  if (embedInParentScroll) {
+    return (
+      <View style={[styles.wrap, styles.wrapEmbedded]}>
+        <View style={tableContentStyle}>{tableBody}</View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
       <ScrollView
         style={styles.tableScroll}
-        contentContainerStyle={[
-          styles.tableScrollContent,
-          { paddingBottom: bottomInset + insets.bottom },
-        ]}
+        contentContainerStyle={tableContentStyle}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
         onScroll={handleSupplierTableScroll}
@@ -222,96 +331,7 @@ export function SuppliersTab({
           ) : undefined
         }
       >
-        {topContent}
-        {!hideSummaryRow && (
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Due</Text>
-              <Text style={styles.summaryDue}>
-                ₹{totalDue.toLocaleString("en-IN")}
-              </Text>
-            </View>
-            <LiquidFillPill
-              percentage={settledPercent}
-              label="Settled"
-              valueSuffix="%"
-            />
-          </View>
-        )}
-        <View style={styles.tableHeader}>
-          <View style={styles.headerEntityCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
-              Supplier Entity
-            </Text>
-          </View>
-          <View style={styles.headerTripsCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
-              Trips
-            </Text>
-          </View>
-          <View style={styles.headerDueCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-              Due
-            </Text>
-          </View>
-        </View>
-        <View style={styles.tableCard}>
-          {visibleSupplierRows.map((data) => {
-            const due = data.due ?? 0;
-            const paid = data.paid ?? 0;
-            const tripCount = data.trips ?? 0;
-            const avatarData = supplierAvatarById.get(data.id);
-            return (
-              <TouchableOpacity
-                key={data.id}
-                style={styles.tableRow}
-                onPress={() =>
-                  onRowSelect
-                    ? onRowSelect(data, "SUPPLIER", "suppliers")
-                    : router.push(`/supplier/${data.id}`)
-                }
-                activeOpacity={0.7}
-              >
-                <EntityAvatar
-                  name={data.name ?? ""}
-                  avatarUrl={avatarData?.avatar_url}
-                  avatarSeed={avatarData?.avatar_seed}
-                  entityType="supplier"
-                  isIntegrated={!!data.is_integrated}
-                />
-                <View style={[styles.tableCell, styles.ctEntity]}>
-                  <View style={styles.tableEntityHeader}>
-                    <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
-                      {data.name ?? "—"}
-                    </Text>
-                  </View>
-                  <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                    Payables: ₹{(data.payables ?? 0) >= 1000 ? `${((data.payables ?? 0) / 1000).toFixed(1)}k` : (data.payables ?? 0).toLocaleString("en-IN")}
-                  </Text>
-                </View>
-                <View style={[styles.tableCell, styles.ctTrips]}>
-                  <View style={styles.tripsPill}>
-                    <Text style={styles.tripsPillText}>{tripCount}</Text>
-                  </View>
-                </View>
-                <View style={[styles.tableCell, styles.ctDue]}>
-                  <Text
-                    style={[
-                      styles.tableDueValue,
-                      due > 0 ? styles.tableDueUnpaid : styles.tableDueSettled,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    ₹{due.toLocaleString("en-IN")}
-                  </Text>
-                  <Text style={styles.tablePaidLabel} numberOfLines={1}>
-                    Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString("en-IN")}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {tableBody}
       </ScrollView>
     </View>
   );
@@ -320,6 +340,7 @@ export function SuppliersTab({
 const styles = StyleSheet.create({
   loading: { padding: 24, textAlign: "center", color: Theme.textSecondary },
   wrap: { flex: 1, backgroundColor: "#FBFBFF" },
+  wrapEmbedded: { flex: 0, width: "100%", minWidth: 0 },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",

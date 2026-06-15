@@ -81,6 +81,7 @@ export interface GarrageTabProps {
   bottomInset?: number;
   /** Desktop finance parity: hide summary strip under hero/cards. */
   hideSummaryRow?: boolean;
+  embedInParentScroll?: boolean;
 }
 
 function formatCurrency(amount: number): string {
@@ -111,6 +112,7 @@ export function GarrageTab({
   onRefresh,
   bottomInset = 100,
   hideSummaryRow = false,
+  embedInParentScroll = false,
 }: GarrageTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -393,36 +395,24 @@ export function GarrageTab({
       ? 0
       : 1;
 
-  /** Format amount for subline: "₹179.0k" or full */
   const formatSubline = (amount: number) =>
     amount >= 1000
       ? `₹${(amount / 1000).toFixed(1)}k`
       : `₹${amount.toLocaleString("en-IN")}`;
+  const tripRowsToRender = embedInParentScroll ? filteredTripsList : visibleTripRows;
+  const vehicleRowsToRender = embedInParentScroll
+    ? filteredVehiclesList
+    : visibleVehicleRows;
+  const listContentStyle = [
+    styles.listScrollContent,
+    embedInParentScroll
+      ? { paddingBottom: 0 }
+      : { paddingBottom: bottomInset + insets.bottom },
+  ];
 
-  return (
-    <View style={styles.wrap}>
-      <ScrollView
-        style={styles.listScroll}
-        contentContainerStyle={[
-          styles.listScrollContent,
-          { paddingBottom: bottomInset + insets.bottom },
-        ]}
-        showsVerticalScrollIndicator={false}
-        {...tabBarScrollProps}
-        onScroll={handleGarrageTableScroll}
-        scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
-        stickyHeaderIndices={viewTab !== "analytics" ? [stickyHeaderIndex] : []}
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Theme.teslaRed}
-            />
-          ) : undefined
-        }
-      >
-        {topContent}
+  const listBody = (
+    <>
+      {topContent}
         {!hideSummaryRow && (
           <View style={styles.summaryWrap}>
             <View style={styles.receivablesSummaryRow}>
@@ -499,7 +489,7 @@ export function GarrageTab({
                 <Text style={styles.emptyText}>No trips in this period.</Text>
               </View>
             ) : (
-              visibleTripRows.map((row) => (
+              tripRowsToRender.map((row) => (
                 <TouchableOpacity
                   key={row.id}
                   style={styles.listRow}
@@ -550,7 +540,7 @@ export function GarrageTab({
               </Text>
             </View>
           ) : (
-            visibleVehicleRows.map((row) => {
+            vehicleRowsToRender.map((row) => {
               const vehicleRow = vehicleById.get(row.id);
               return (
               <TouchableOpacity
@@ -611,6 +601,38 @@ export function GarrageTab({
           )}
         </View>
         ) : null}
+    </>
+  );
+
+  if (embedInParentScroll) {
+    return (
+      <View style={[styles.wrap, styles.wrapEmbedded]}>
+        <View style={listContentStyle}>{listBody}</View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.wrap}>
+      <ScrollView
+        style={styles.listScroll}
+        contentContainerStyle={listContentStyle}
+        showsVerticalScrollIndicator={false}
+        {...tabBarScrollProps}
+        onScroll={handleGarrageTableScroll}
+        scrollEventThrottle={tabBarScrollProps.scrollEventThrottle ?? 100}
+        stickyHeaderIndices={viewTab !== "analytics" ? [stickyHeaderIndex] : []}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.teslaRed}
+            />
+          ) : undefined
+        }
+      >
+        {listBody}
       </ScrollView>
     </View>
   );
@@ -618,6 +640,7 @@ export function GarrageTab({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: "#FBFBFF" },
+  wrapEmbedded: { flex: 0, width: "100%", minWidth: 0 },
   summaryWrap: {
     gap: 8,
   },

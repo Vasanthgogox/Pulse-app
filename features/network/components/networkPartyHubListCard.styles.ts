@@ -145,6 +145,7 @@ export const hubListCardStyles = StyleSheet.create({
     borderRadius: 999,
     padding: 2,
     borderWidth: 2,
+    backgroundColor: "transparent",
   },
   chatHubAvatarCircle: {
     borderRadius: 999,

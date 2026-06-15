@@ -23,13 +23,18 @@ export function FinanceCashLedgerPanel({
   profileImages,
   linkedOrgDisplayMap,
   topContent,
+  embedInParentScroll = false,
 }: FinanceTabBodyProps) {
   const header =
     topContent ??
     (orgId != null ? <FinanceAIInsights organizationId={orgId} /> : null);
 
   return (
-    <View style={styles.tableBodyWrap}>
+    <View
+      style={
+        embedInParentScroll ? styles.tableBodyWrapEmbedded : styles.tableBodyWrap
+      }
+    >
       {header}
       {ledgerLoading && ledgerTransactions === null ? (
         <Text style={styles.ledgerLoading}>Loading…</Text>
@@ -42,6 +47,7 @@ export function FinanceCashLedgerPanel({
           }
           viewMode="transaction"
           showFiscalSubTabs={false}
+          embedInParentScroll={embedInParentScroll}
           onRowSelect={onLedgerRowSelect}
           onEntitySelect={() => {}}
           getVehicleNumberForTripId={getVehicleNumberForTripId}

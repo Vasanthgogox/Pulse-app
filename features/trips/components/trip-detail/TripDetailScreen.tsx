@@ -162,6 +162,7 @@ import {
   selectAssetTripProvisionCostBreakdown,
   selectTripManifestMargin,
 } from "@/features/finance";
+import { computeTripSettlementDues, tripPayableCostTarget } from "@/features/finance/utils/tripSettlement.util";
 import { getDriverById } from "@/features/drivers/services/drivers.service";
 import { type ExpenseRow } from "./sections/ExpensesTable";
 const LRDocumentsSection = lazy(() =>
@@ -1511,10 +1512,26 @@ export default function TripDetailScreen({
   const isAssetTripFinance = isAssetExecutionTrip(trip);
   const assetApprovedCostInr =
     tripOperationsSummaryQuery.data?.financialSnapshot?.approvedOperationalCostInr ?? 0;
+  const assetDriverOffer = driverOfferFromDriverRow(
+    assignedDriverCompQuery.data ?? null,
+  );
+  const assetCostEstimate =
+    assetProvisionCostPreview?.totalBaseCostInr ??
+    (assetApprovedCostInr > 0
+      ? assetApprovedCostInr
+      : isAssetTripFinance
+        ? tripPayableCostTarget(
+            trip,
+            currentOrganization?.id ?? null,
+            null,
+            assetDriverOffer,
+            null,
+          )
+        : 0);
   const cost = isPartnerSettlementView
     ? computePartnerIndentFreightCost(detail.subcontractRate)
     : isAssetTripFinance
-      ? (assetProvisionCostPreview?.totalBaseCostInr ?? assetApprovedCostInr)
+      ? assetCostEstimate
       : supplierCost;
   const baseFreight = sales;
   const totalExpenses = isAssetTripFinance
@@ -1534,22 +1551,20 @@ export default function TripDetailScreen({
     (s, tx) => s + Number(tx.amount_in ?? 0),
     0,
   );
-  const receivedFromClient = detail.tripLedgerEntries.reduce(
-    (s, tx) =>
-      tx.contact_type === "client" ? s + Number(tx.amount_in ?? 0) : s,
-    0,
-  );
-  // Fallback to trips.amount_paid so UI still reflects receipts even when
-  // transaction query is delayed or filtered by org context.
-  const recordedAmountPaid = Math.max(0, Number(trip.amount_paid ?? 0));
-  const collectedFromClient = Math.max(receivedFromClient, recordedAmountPaid);
   const pending = Math.max(0, sales - received);
 
-  const supplierPaid = detail.tripLedgerEntries.reduce(
-    (s, tx) => s + Number(tx.amount_out ?? 0),
-    0,
-  );
-  const supplierDue = Math.max(0, cost - supplierPaid);
+  const tripSettlement = computeTripSettlementDues({
+    trip,
+    viewerOrgId: currentOrganization?.id ?? null,
+    ledgerEntries: detail.tripLedgerEntries,
+    adjustments: detail.adjustments,
+    subcontractRate: detail.subcontractRate ?? null,
+    driverOffer: assetDriverOffer,
+    assetProvisionCostInr: assetProvisionCostPreview?.totalBaseCostInr ?? null,
+  });
+  const collectedFromClient = tripSettlement.clientReceived;
+  const supplierPaid = tripSettlement.payablePaid;
+  const supplierDue = tripSettlement.payableDue;
 
   type FinanceHistoryRow = {
     key: string;
@@ -1873,11 +1888,8 @@ export default function TripDetailScreen({
     : "Client sale − supplier cost";
   const revenueSideDelta = adjSales - sales;
   const costSideDelta = adjCost - cost;
-  const receivableAfterAdjustments = Math.max(
-    0,
-    adjSales - collectedFromClient,
-  );
-  const supplierDueAfterAdjustments = Math.max(0, adjCost - supplierPaid);
+  const receivableAfterAdjustments = tripSettlement.receivableDue;
+  const supplierDueAfterAdjustments = tripSettlement.payableDue;
   const provisionCostPartyName = isAssetTripFinance
     ? allocatedDriverName !== "Unassigned"
       ? allocatedDriverName

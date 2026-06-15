@@ -71,6 +71,7 @@ export interface DriversTabProps {
   hideSummaryRow?: boolean;
   viewTab?: DriversViewTab;
   onViewTabChange?: (v: DriversViewTab) => void;
+  embedInParentScroll?: boolean;
 }
 
 export function DriversTab({
@@ -93,6 +94,7 @@ export function DriversTab({
   hideSummaryRow = false,
   viewTab = "list" as DriversViewTab,
   onViewTabChange,
+  embedInParentScroll = false,
 }: DriversTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -260,15 +262,132 @@ export function DriversTab({
     : hideSummaryRow
       ? 0
       : 1;
+  const rowsToRender = embedInParentScroll ? filteredRows : visibleDriverRows;
+  const tableContentStyle = [
+    styles.tableScrollContent,
+    embedInParentScroll
+      ? { paddingBottom: 0 }
+      : { paddingBottom: bottomInset + insets.bottom },
+  ];
+
+  const tableBody = (
+    <>
+      {topContent}
+      {!hideSummaryRow && viewTab !== "analytics" && (
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Total Pending</Text>
+            <Text style={styles.summaryPending}>
+              ₹{totalPending.toLocaleString('en-IN')}
+            </Text>
+          </View>
+          <LiquidFillPill
+            percentage={settlementPercent}
+            label="Settled"
+            valueSuffix="%"
+          />
+        </View>
+      )}
+      {viewTab !== "analytics" ? (
+        <View style={styles.tableHeader}>
+          <View style={styles.headerEntityCol}>
+            <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
+              Driver Entity
+            </Text>
+          </View>
+          <View style={styles.headerTripsCol}>
+            <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
+              Trips
+            </Text>
+          </View>
+          <View style={styles.headerPendingCol}>
+            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+              Pending
+            </Text>
+          </View>
+        </View>
+      ) : null}
+      {viewTab !== "analytics" ? (
+        <View style={styles.tableCard}>
+          {rowsToRender.map((data) => {
+            const pending = data.pending ?? 0;
+            const paid = data.paid ?? 0;
+            const tripCount = data.trips ?? 0;
+            const isDisconnected =
+              data.left_at != null && String(data.left_at).trim() !== '';
+            const isIntegrated = !isDisconnected && !!data.is_integrated;
+            const driver = driverById.get(data.id);
+            return (
+              <TouchableOpacity
+                key={data.id}
+                style={styles.tableRow}
+                onPress={() =>
+                  onRowSelect
+                    ? onRowSelect(data, 'DRIVER', 'drivers')
+                    : router.push(`/driver/${data.id}`)
+                }
+                activeOpacity={0.7}
+              >
+                <EntityAvatar
+                  name={data.name ?? ''}
+                  avatarUrl={driver?.avatar_url}
+                  avatarSeed={driver?.avatar_seed}
+                  entityType="driver"
+                  isIntegrated={isIntegrated}
+                />
+                <View style={[styles.tableCell, styles.ctEntity]}>
+                  <View style={styles.tableEntityHeader}>
+                    <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                      {data.name ?? '—'}
+                    </Text>
+                  </View>
+                  <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
+                    Earned: ₹{(data.due ?? 0) >= 1000 ? `${((data.due ?? 0) / 1000).toFixed(1)}k` : (data.due ?? 0).toLocaleString('en-IN')}
+                  </Text>
+                </View>
+                <View style={[styles.tableCell, styles.ctTrips]}>
+                  <View style={styles.tripsPill}>
+                    <Text style={styles.tripsPillText}>{tripCount}</Text>
+                  </View>
+                </View>
+                <View style={[styles.tableCell, styles.ctPending]}>
+                  <Text
+                    style={[
+                      styles.tablePendingValue,
+                      pending > 0 ? styles.tablePendingDue : styles.tablePendingSettled,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    ₹{pending.toLocaleString('en-IN')}
+                  </Text>
+                  <Text style={styles.tablePaidLabel} numberOfLines={1}>
+                    Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString('en-IN')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
+      {viewTab === "analytics" ? (
+        <FleetDriverAnalyticsTab rows={rows} drivers={drivers} />
+      ) : null}
+    </>
+  );
+
+  if (embedInParentScroll) {
+    return (
+      <View style={[styles.wrap, styles.wrapEmbedded]}>
+        <View style={tableContentStyle}>{tableBody}</View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
       <ScrollView
         style={styles.tableScroll}
-        contentContainerStyle={[
-          styles.tableScrollContent,
-          { paddingBottom: bottomInset + insets.bottom },
-        ]}
+        contentContainerStyle={tableContentStyle}
         showsVerticalScrollIndicator={false}
         {...tabBarScrollProps}
         onScroll={handleDriverTableScroll}
@@ -284,109 +403,7 @@ export function DriversTab({
           ) : undefined
         }
       >
-        {topContent}
-        {!hideSummaryRow && viewTab !== "analytics" && (
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Pending</Text>
-              <Text style={styles.summaryPending}>
-                ₹{totalPending.toLocaleString('en-IN')}
-              </Text>
-            </View>
-            <LiquidFillPill
-              percentage={settlementPercent}
-              label="Settled"
-              valueSuffix="%"
-            />
-          </View>
-        )}
-        {viewTab !== "analytics" ? (
-          <View style={styles.tableHeader}>
-            <View style={styles.headerEntityCol}>
-              <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
-                Driver Entity
-              </Text>
-            </View>
-            <View style={styles.headerTripsCol}>
-              <Text style={[styles.tableHeaderCell, styles.ctCenter]} numberOfLines={1}>
-                Trips
-              </Text>
-            </View>
-            <View style={styles.headerPendingCol}>
-              <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-                Pending
-              </Text>
-            </View>
-          </View>
-        ) : null}
-        {viewTab !== "analytics" ? (
-            <View style={styles.tableCard}>
-              {visibleDriverRows.map((data) => {
-                const pending = data.pending ?? 0;
-                const paid = data.paid ?? 0;
-                const tripCount = data.trips ?? 0;
-                const isDisconnected =
-                  data.left_at != null && String(data.left_at).trim() !== '';
-                const isIntegrated = !isDisconnected && !!data.is_integrated;
-                const driver = driverById.get(data.id);
-                return (
-                  <TouchableOpacity
-                    key={data.id}
-                    style={styles.tableRow}
-                    onPress={() =>
-                      onRowSelect
-                        ? onRowSelect(data, 'DRIVER', 'drivers')
-                        : router.push(`/driver/${data.id}`)
-                    }
-                    activeOpacity={0.7}
-                  >
-                    <EntityAvatar
-                      name={data.name ?? ''}
-                      avatarUrl={driver?.avatar_url}
-                      avatarSeed={driver?.avatar_seed}
-                      entityType="driver"
-                      isIntegrated={isIntegrated}
-                    />
-                    <View style={[styles.tableCell, styles.ctEntity]}>
-                      <View style={styles.tableEntityHeader}>
-                        <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
-                          {data.name ?? '—'}
-                        </Text>
-                      </View>
-                      <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
-                        Earned: ₹{(data.due ?? 0) >= 1000 ? `${((data.due ?? 0) / 1000).toFixed(1)}k` : (data.due ?? 0).toLocaleString('en-IN')}
-                      </Text>
-                    </View>
-                    <View style={[styles.tableCell, styles.ctTrips]}>
-                      <View style={styles.tripsPill}>
-                        <Text style={styles.tripsPillText}>{tripCount}</Text>
-                      </View>
-                    </View>
-                    <View style={[styles.tableCell, styles.ctPending]}>
-                      <Text
-                        style={[
-                          styles.tablePendingValue,
-                          pending > 0 ? styles.tablePendingDue : styles.tablePendingSettled,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        ₹{pending.toLocaleString('en-IN')}
-                      </Text>
-                      <Text style={styles.tablePaidLabel} numberOfLines={1}>
-                        Paid: ₹{paid >= 1000 ? `${(paid / 1000).toFixed(1)}k` : paid.toLocaleString('en-IN')}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-        ) : null}
-        {viewTab === "analytics" ? (
-          <FleetDriverAnalyticsTab
-            rows={rows}
-            drivers={drivers}
-          />
-        ) : null}
+        {tableBody}
       </ScrollView>
     </View>
   );
@@ -395,6 +412,7 @@ export function DriversTab({
 const styles = StyleSheet.create({
   loading: { padding: 24, textAlign: 'center', color: Theme.textSecondary },
   wrap: { flex: 1, backgroundColor: '#FBFBFF' },
+  wrapEmbedded: { flex: 0, width: '100%', minWidth: 0 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

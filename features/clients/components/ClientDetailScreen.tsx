@@ -236,6 +236,7 @@ export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
+  initialDetailSubTab?: "trips" | "cash" | "shared";
   openSharedFromNotification?: boolean;
   notificationAction?: string;
   notificationTripId?: string;
@@ -245,6 +246,7 @@ export default function ClientDetailScreen({
   clientId,
   onBack,
   autoOpenProfile,
+  initialDetailSubTab,
   openSharedFromNotification,
   notificationAction,
   notificationTripId,
@@ -317,7 +319,9 @@ export default function ClientDetailScreen({
   const isRefreshingRef = useRef(false);
   const lastFocusRefreshRef = useRef<number>(0);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">("trips");
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+    initialDetailSubTab ?? "trips",
+  );
   const [tripDatePeriod, setTripDatePeriod] =
     useState<FinancePeriodFilter>("RANGE");
   const [tripCustomFrom, setTripCustomFrom] = useState<string | null>(null);
