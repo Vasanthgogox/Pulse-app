@@ -1,11 +1,11 @@
-import { ChatImage } from "@/features/chat/components/ChatImage";
+import { ChatImage, resolveChatImageStorageKey } from "@/features/chat/components/ChatImage";
 import { useChatMediaGallery } from "@/features/chat/components/shared/ChatMediaGalleryLightbox";
 import type { ChatMediaBurstImageItem } from "@/features/chat/utils/chatMediaBurst.util";
 import { chatGallerySlideFromBurstItem } from "@/features/chat/utils/chatMediaGallery.util";
+import { isDirectChatImageHttpUrl } from "@/features/chat/utils/storageRenderImageUrl";
 import { ZoomIn } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,11 +31,24 @@ function ThreadThumb({
   const radius = Math.max(8, Math.round(width * 0.08));
   const storagePath =
     item.preview.storagePath ??
-    (typeof item.message.metadata === "object" &&
+    ((typeof item.message.metadata === "object" &&
     item.message.metadata &&
     typeof (item.message.metadata as Record<string, unknown>).storage_path === "string"
       ? String((item.message.metadata as Record<string, unknown>).storage_path)
-      : "");
+      : "") ||
+      (() => {
+        const content = String(item.message.content ?? "").trim();
+        return content && !/^https?:\/\//i.test(content) ? content : "";
+      })());
+  const directUrl =
+    item.preview.url && isDirectChatImageHttpUrl(item.preview.url) && !resolveChatImageStorageKey(storagePath)
+      ? item.preview.url
+      : isDirectChatImageHttpUrl(storagePath)
+        ? storagePath
+        : null;
+  const imageSource = resolveChatImageStorageKey(storagePath) || directUrl || storagePath || "";
+  const preferredUrl =
+    isDirectChatImageHttpUrl(item.preview.url) ? item.preview.url : null;
 
   return (
     <Pressable
@@ -47,7 +60,7 @@ function ThreadThumb({
       accessibilityRole="button"
       accessibilityLabel="Open image preview"
     >
-      {storagePath ? (
+      {imageSource ? (
         <View
           style={[
             styles.thumbShell,
@@ -55,7 +68,9 @@ function ThreadThumb({
           ]}
         >
           <ChatImage
-            storagePath={storagePath}
+            storagePath={imageSource}
+            preferredUrl={preferredUrl}
+            message={item.message}
             thumbnail
             displayWidth={width}
             displayHeight={THUMB_H}
@@ -63,16 +78,7 @@ function ThreadThumb({
             style={{ width, height: THUMB_H, borderRadius: radius }}
           />
         </View>
-      ) : (
-        <Image
-          source={{ uri: item.preview.url }}
-          style={[
-            styles.thumbImage,
-            { width, height: THUMB_H, borderRadius: radius },
-          ]}
-          resizeMode="cover"
-        />
-      )}
+      ) : null}
       <View style={styles.zoomBadge}>
         <ZoomIn size={12} color="#fff" strokeWidth={2.5} />
       </View>

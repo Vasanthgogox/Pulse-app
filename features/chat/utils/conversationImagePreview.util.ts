@@ -4,7 +4,7 @@ import type {
 } from "@/features/chat/types/chat.types";
 import { chatListThumbFetch } from "./chatPreviewTransform.util";
 import { resolveDocumentShareDisplay } from "./documentShareDisplay.util";
-import { buildSupabaseRenderImagePublicUrl } from "./storageRenderImageUrl";
+import { peekChatImageThumbnailUrl } from "./resolveChatDocumentUrl.util";
 
 export type ConversationImagePreview = {
   url: string;
@@ -18,17 +18,22 @@ function trimStoragePath(message: TripMessageRow): string {
     message.metadata && typeof message.metadata === "object"
       ? (message.metadata as Record<string, unknown>)
       : null;
-  return typeof metadata?.storage_path === "string" ? metadata.storage_path : "";
+  const fromMeta =
+    typeof metadata?.storage_path === "string" ? metadata.storage_path.trim() : "";
+  if (fromMeta && !/^https?:\/\//i.test(fromMeta)) return fromMeta;
+  const raw = (message.content ?? "").trim();
+  if (raw && !/^https?:\/\//i.test(raw)) return raw;
+  return fromMeta || "";
 }
 
 function previewUrlFromStoragePath(storagePath: string): string | null {
   const fetch = chatListThumbFetch(LIST_THUMB_DISPLAY_W);
-  return (
-    buildSupabaseRenderImagePublicUrl({
-      storagePath,
-      width: fetch.width,
-      quality: fetch.quality,
-    }) ?? null
+  return peekChatImageThumbnailUrl(
+    storagePath,
+    fetch.width,
+    fetch.height,
+    fetch.quality,
+    "cover",
   );
 }
 
@@ -42,7 +47,7 @@ export function imagePreviewFromTripMessage(
     const storagePath = trimStoragePath(message);
     if (storagePath) {
       const url = previewUrlFromStoragePath(storagePath);
-      return url ? { url, storagePath } : null;
+      return { url: url ?? "", storagePath };
     }
     const raw = (message.content ?? "").trim();
     if (/^https?:\/\//i.test(raw)) {
@@ -58,7 +63,7 @@ export function imagePreviewFromTripMessage(
     const doc = resolveDocumentShareDisplay(message);
     if (!doc?.isImage || !doc.storagePath) return null;
     const url = previewUrlFromStoragePath(doc.storagePath);
-    return url ? { url, storagePath: doc.storagePath } : null;
+    return { url: url ?? "", storagePath: doc.storagePath };
   }
 
   return null;

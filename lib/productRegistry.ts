@@ -15,6 +15,7 @@
 
 export type ProductId =
   | 'pulse_core'
+  | 'pulse_driver'
   | 'pulse_network'
   | 'pulse_chat'
   | 'pulse_pod_pro'
@@ -84,9 +85,10 @@ export interface ProductDefinition {
   upgradeFrom?: ProductId;    // which product this upgrades from
 }
 
-/** Core business trio — always connected in every workspace. */
+/** Core business apps — always connected in every workspace (free). */
 export const BUNDLED_ACTIVE_PRODUCT_IDS = [
   'pulse_core',
+  'pulse_driver',
   'pulse_network',
   'pulse_chat',
 ] as const satisfies readonly ProductId[];
@@ -120,13 +122,39 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
     capabilities: ['dispatch', 'fleet_management', 'finance_view', 'finance_manage'],
     modules: [
       { name: 'Trip Management',     description: 'Create, assign, track trips end-to-end',           icon: 'Truck' },
-      { name: 'Driver App',          description: 'Native mobile app for drivers',                     icon: 'Smartphone' },
       { name: 'GPS Tracking',        description: 'Real-time location for every active trip',          icon: 'MapPin' },
       { name: 'Client Management',   description: 'Customer database with contact and trip history',   icon: 'Users' },
       { name: 'Supplier Records',    description: 'Subcontractors, fleet owners, and vendor contacts',   icon: 'Building2' },
       { name: 'Basic Finance',       description: 'Trip-level revenue and cost tracking',              icon: 'IndianRupee' },
     ],
     vision: 'Pulse Core is the operating system for logistics companies. Every team member, every truck, every trip — in one place.',
+  },
+
+  pulse_driver: {
+    id: 'pulse_driver',
+    name: 'Pulse Driver',
+    tagline: 'Native app for drivers on the road',
+    description: 'Mobile-first experience for assigned drivers — trip execution, odometer and expense capture, POD upload, live status updates, and fleet chat. Free with Pulse Core.',
+    icon: 'Smartphone',
+    color: '#16a34a',
+    status: 'active',
+    pricing: { model: 'free' },
+    dependencies: ['pulse_core'],
+    capabilities: [
+      'driver_mobile',
+      'driver_trip_execution',
+      'driver_expenses',
+      'driver_odometer',
+      'driver_pod_capture',
+    ],
+    modules: [
+      { name: 'Trip execution',      description: 'Accept trips, update status, complete deliveries', icon: 'Truck' },
+      { name: 'Expense capture',     description: 'Fuel, toll, and receipt OCR on the go',           icon: 'Receipt' },
+      { name: 'Odometer photos',     description: 'Start/end KM with Pulse Scan',                     icon: 'Gauge' },
+      { name: 'POD & documents',     description: 'Capture and upload proof from the cab',            icon: 'Camera' },
+      { name: 'Driver chat',         description: 'Trip threads with dispatch and fleet',             icon: 'MessageSquare' },
+    ],
+    vision: 'Every driver gets a purpose-built app — no dispatcher login, no clutter, just the trip in their pocket.',
   },
 
   pulse_network: {

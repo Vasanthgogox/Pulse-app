@@ -71,7 +71,7 @@ import {
   type ConversationImagePreview,
 } from "@/features/chat/utils/conversationImagePreview.util";
 import { chatListThumbFetch } from "@/features/chat/utils/chatPreviewTransform.util";
-import { buildSupabaseRenderImagePublicUrl } from "@/features/chat/utils/storageRenderImageUrl";
+import { peekChatImageThumbnailUrl } from "@/features/chat/utils/resolveChatDocumentUrl.util";
 import {
   ChatSlackInboxToolbar,
   ChatSlackListHeader,
@@ -158,7 +158,13 @@ import { mergeAssignmentAuditIntoTripMessages } from "@/features/chat/utils/assi
 import { buildTripMessageListLayoutMeta } from "@/features/chat/utils/chatMessageListLayout";
 import { applyContractualHubPartyIsolation } from "@/features/chat/utils/contractHubPartyIsolation.util";
 import { dedupeTripStatusBroadcastsForLane } from "@/features/chat/utils/dedupeTripStatusBroadcastForLane.util";
-import { formatChatPartyName, formatChatPartyTypeLabel } from "@/features/chat/utils/partyDisplay";
+import {
+  formatChatPartyInboxLine,
+  formatChatPartyName,
+  formatChatPartyStripLabel,
+  formatChatPartyTypeLabel,
+  resolveChatPartyDisplayName,
+} from "@/features/chat/utils/partyDisplay";
 import {
   isHubActiveTripStatus,
   isOperationalTripChatStatus,
@@ -404,14 +410,14 @@ function resolveTripImagePreviewUrl(message: TripMessageRow | null | undefined):
       ? (message.metadata as Record<string, unknown>)
       : null;
   const storagePath = typeof metadata?.["storage_path"] === "string" ? metadata.storage_path : "";
-  if (storagePath) {
+  if (storagePath && !/^https?:\/\//i.test(storagePath)) {
     const fetch = chatListThumbFetch(112);
-    return (
-      buildSupabaseRenderImagePublicUrl({
-        storagePath,
-        width: fetch.width,
-        quality: fetch.quality,
-      }) ?? null
+    return peekChatImageThumbnailUrl(
+      storagePath,
+      fetch.width,
+      fetch.height,
+      fetch.quality,
+      "cover",
     );
   }
   const rawContent = trimPreviewText(message.content);
@@ -462,11 +468,13 @@ function previewFromTripMessage(
         doc?.isImage && doc.storagePath
           ? (() => {
               const fetch = chatListThumbFetch(112);
-              return buildSupabaseRenderImagePublicUrl({
-                storagePath: doc.storagePath,
-                width: fetch.width,
-                quality: fetch.quality,
-              });
+              return peekChatImageThumbnailUrl(
+                doc.storagePath,
+                fetch.width,
+                fetch.height,
+                fetch.quality,
+                "cover",
+              );
             })()
           : null;
       return {
@@ -1993,10 +2001,16 @@ export function ChatScreen() {
       (c) => tripPartyPeopleKey(c) === focusedTripPartyKey,
     );
     if (!conv) return null;
+    const composeTrip = tripComposeById.get(conv.trip_id) ?? null;
     return (
-      formatChatPartyName(conv.party_name) ?? partyLabelReadable(conv.party_type)
+      formatChatPartyInboxLine(
+        conv.party_type,
+        resolveChatPartyDisplayName(conv.party_type, conv.party_name, composeTrip),
+      ) ??
+      formatChatPartyName(conv.party_name) ??
+      partyLabelReadable(conv.party_type)
     );
-  }, [focusedTripPartyKey, tripStreamForActiveHubTab]);
+  }, [focusedTripPartyKey, tripStreamForActiveHubTab, tripComposeById]);
 
   const mobileTripInboxRows = useMemo((): MobileTripInboxRow[] => {
     if (!isMobileChatUi) return [];
@@ -2623,9 +2637,12 @@ export function ChatScreen() {
               conv.trip_organization_id ?? conv.organization_id ?? null,
           },
         );
-        const shortName =
-          formatChatPartyName(conv.party_name)?.split(/\s+/)[0] ??
-          partyLabelReadable(conv.party_type);
+        const resolvedName = resolveChatPartyDisplayName(
+          conv.party_type,
+          conv.party_name,
+          composeTrip,
+        );
+        const shortName = formatChatPartyStripLabel(conv.party_type, resolvedName);
         return {
           id: bucket.key,
           name: shortName,
@@ -2682,7 +2699,10 @@ export function ChatScreen() {
         tripHostOrgId: item.trip_organization_id ?? item.organization_id ?? null,
       },
     );
-    const partyLine = formatChatPartyTypeLabel(item.party_type);
+    const partyLine = formatChatPartyInboxLine(
+      item.party_type,
+      resolveChatPartyDisplayName(item.party_type, item.party_name, composeTrip),
+    );
     const latestPreview = latestTripConversationPreview(item, {
         manualDriverOnly: activeTab === "trips" && item.party_type === "driver",
         composeTrip,
@@ -7947,15 +7967,9 @@ function TripConversationDetailLoaded({
   const displayPartyName = useCallback(
     (partyType: ConversationPartyType): string => {
       const conv = partyConversationMap[partyType];
-      const fromConv = (conv?.party_name ?? "").trim();
-      if (fromConv) return fromConv;
-      if (partyType === "client") {
-        return (tripCompose?.client_name ?? "").trim();
-      }
-      if (partyType === "supplier") {
-        return (tripCompose?.supplier_name ?? "").trim();
-      }
-      return (tripCompose?.driver_display_name ?? "").trim();
+      return (
+        resolveChatPartyDisplayName(partyType, conv?.party_name, tripCompose) ?? ""
+      );
     },
     [partyConversationMap, tripCompose],
   );
@@ -8507,6 +8521,12 @@ function TripConversationDetailLoaded({
   const detailMirrorTabItems = useMemo(() => {
     const partyItems = missionBarPartyTypes.map((tab) => {
       const relabeledClientTab = tab.displayType !== tab.rowType;
+      const tabConversation = partyConversationMap[tab.rowType];
+      const resolvedPartyName = resolveChatPartyDisplayName(
+        tab.rowType,
+        tabConversation?.party_name,
+        tripCompose,
+      );
       const partyLine = relabeledClientTab
         ? formatChatPartyName(
             indentShipperDisplayName || liveConv.trip_organization_name || null,
@@ -8515,10 +8535,11 @@ function TripConversationDetailLoaded({
             supplierFleetOwnsTrip &&
             indentShipperDisplayName
           ? formatChatPartyName(indentShipperDisplayName)
-          : formatChatPartyName(displayPartyName(tab.rowType));
-      const roleLabel = partyLabelReadable(tab.displayType);
+          : formatChatPartyName(resolvedPartyName ?? displayPartyName(tab.rowType));
+      const roleLabel =
+        formatChatPartyInboxLine(tab.displayType, resolvedPartyName) ??
+        partyLabelReadable(tab.displayType);
       const partyName = partyLine ?? roleLabel;
-      const tabConversation = partyConversationMap[tab.rowType];
       const tabAvatarIdentity = resolveTripConversationAvatar(
         {
           party_type: tab.rowType,
@@ -8606,6 +8627,16 @@ function TripConversationDetailLoaded({
             partyType != null &&
             missionBarPartyTypes.find((t) => t.rowType === partyType)?.displayType !==
               partyType;
+          const tabConversation =
+            partyType != null ? partyConversationMap[partyType] : null;
+          const resolvedPartyName =
+            partyType != null
+              ? resolveChatPartyDisplayName(
+                  partyType,
+                  tabConversation?.party_name,
+                  tripCompose,
+                )
+              : null;
           const partyLine =
             partyType == null
               ? null
@@ -8617,7 +8648,17 @@ function TripConversationDetailLoaded({
                     supplierFleetOwnsTrip &&
                     indentShipperDisplayName
                   ? formatChatPartyName(indentShipperDisplayName)
-                  : formatChatPartyName(displayPartyName(partyType));
+                  : formatChatPartyName(
+                      resolvedPartyName ?? displayPartyName(partyType),
+                    );
+          const partyRoleLine =
+            partyType != null
+              ? formatChatPartyInboxLine(
+                  missionBarPartyTypes.find((t) => t.rowType === partyType)
+                    ?.displayType ?? partyType,
+                  resolvedPartyName,
+                ) ?? partyLabelReadable(partyType)
+              : tab.subLabel;
           return (
             <TouchableOpacity
               key={tab.id}
@@ -8656,7 +8697,7 @@ function TripConversationDetailLoaded({
                   ]}
                   numberOfLines={1}
                 >
-                  {isTeam ? tab.subLabel : partyLabelReadable(partyType!)}
+                  {isTeam ? tab.subLabel : partyRoleLine}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -8696,7 +8737,14 @@ function TripConversationDetailLoaded({
     liveConv.party_type;
   const chatDetailPartyTypeLabel = isTeamDetailTab
     ? "Team room · all parties"
-    : formatChatPartyTypeLabel(activeLaneDisplayType) ?? chatDetailSubtitle;
+    : formatChatPartyInboxLine(
+        activeLaneDisplayType,
+        resolveChatPartyDisplayName(
+          liveConv.party_type,
+          liveConv.party_name,
+          tripCompose,
+        ),
+      ) ?? chatDetailSubtitle;
   const slackThreadAvatarResolved = isTeamDetailTab
     ? resolveTripRoomDriverAvatar({
         driverId,
@@ -8980,6 +9028,24 @@ function NetworkDetailPanel({
     return items;
   }, [selectedNet]);
 
+  const integratedChat = useOptionalIntegratedChat();
+  const [loadingOlderNet, setLoadingOlderNet] = useState(false);
+
+  useEffect(() => {
+    if (!selectedNet?.id || !integratedChat?.hydrateNetworkThread) return;
+    void integratedChat.hydrateNetworkThread(selectedNet.id);
+  }, [selectedNet?.id, integratedChat?.hydrateNetworkThread]);
+
+  const onNetStartReached = useCallback(() => {
+    if (!selectedNet?.id || !integratedChat?.loadOlderNetworkMessages) return;
+    if (!integratedChat.networkThreadHasMore(selectedNet.id)) return;
+    if (loadingOlderNet) return;
+    setLoadingOlderNet(true);
+    void integratedChat
+      .loadOlderNetworkMessages(selectedNet.id)
+      .finally(() => setLoadingOlderNet(false));
+  }, [selectedNet?.id, integratedChat, loadingOlderNet]);
+
   useEffect(() => {
     setNetReactionsByMessageId({});
   }, [selectedNet?.id]);
@@ -9039,6 +9105,8 @@ function NetworkDetailPanel({
           maxToRenderPerBatch={!isDesktop ? 10 : undefined}
           initialNumToRender={!isDesktop ? 16 : undefined}
           showsVerticalScrollIndicator={!isDesktop ? false : undefined}
+          onStartReached={onNetStartReached}
+          onStartReachedThreshold={0.15}
           renderItem={({ item }) => {
             if ("__dateDivider" in item && item.__dateDivider) {
               return (
@@ -9079,18 +9147,19 @@ function NetworkDetailPanel({
             );
           }}
           ListHeaderComponent={
-            <ChatSystemMsg
-              label="Secure channel · Today"
-              isMobile={!isDesktop}
-              slackLayout={slackThreadUi}
-              isDesktop={isDesktop}
-            />
-          }
-          ListFooterComponent={
-            <ChatHistoryExpiryNotice
-              variant={isDesktop ? "desktop" : "mobile"}
-              slackLayout={slackThreadUi}
-            />
+            <>
+              {loadingOlderNet ? (
+                <View style={{ alignItems: "center", paddingVertical: 8 }}>
+                  <LoadingIndicator size="small" color="#94a3b8" />
+                </View>
+              ) : null}
+              <ChatSystemMsg
+                label="Secure channel · Today"
+                isMobile={!isDesktop}
+                slackLayout={slackThreadUi}
+                isDesktop={isDesktop}
+              />
+            </>
           }
           onContentSizeChange={() => messagesRef.current?.scrollToEnd({ animated: false })}
         />

@@ -358,6 +358,7 @@ export default function CreateIndentScreen() {
   const isCompactMobile = windowWidth < 480;
   /** Stepped wizard — no multi-card desktop grid. */
   const desktopFormGrid = isDesktopEnterprise;
+  const desktopFormMaxWidth = Math.min(windowWidth - 48, 1680);
   const webCursor =
     Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : null;
   const pickerCardMaxW = Math.min(windowWidth - 32, 440);
@@ -1199,7 +1200,7 @@ export default function CreateIndentScreen() {
                 styles.contentMax,
                 {
                   maxWidth: desktopFormGrid
-                    ? "100%"
+                    ? desktopFormMaxWidth
                     : isWide
                       ? 1000
                       : 960,
@@ -1210,6 +1211,8 @@ export default function CreateIndentScreen() {
                       : isCompactMobile
                         ? 0
                         : Layout.screenPaddingHorizontal,
+                  width: desktopFormGrid ? "100%" : undefined,
+                  alignSelf: desktopFormGrid ? "stretch" : undefined,
                   paddingTop: isMobileWizard ? 0 : undefined,
                 },
               ]}
@@ -1238,6 +1241,7 @@ export default function CreateIndentScreen() {
                       : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridRouteWeb,
                     desktopFormGrid && styles.cardDesktopEnterprise,
+                    desktopFormGrid && styles.cardDesktopStretch,
                   ]}
                 >
                 {!isMobileWizard ? (
@@ -1560,6 +1564,7 @@ export default function CreateIndentScreen() {
                       : [styles.card, isCompactMobile && styles.cardCompact],
                     desktopFormGrid && styles.cardGridClientWeb,
                     desktopFormGrid && styles.cardDesktopEnterprise,
+                    desktopFormGrid && styles.cardDesktopStretch,
                   ]}
                 >
                 {!isMobileWizard ? (
@@ -3191,7 +3196,7 @@ const styles = StyleSheet.create({
   },
   contentMax: {
     width: "100%",
-    maxWidth: 960,
+    maxWidth: 1680,
     alignSelf: "center",
   },
   mainGrid: {
@@ -3210,8 +3215,8 @@ const styles = StyleSheet.create({
     web: {
       display: "grid",
       gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-      gap: 20,
-      alignItems: "start",
+      gap: 16,
+      alignItems: "stretch",
       gridAutoRows: "min-content",
     } as unknown as ViewStyle,
     default: {},
@@ -3237,6 +3242,15 @@ const styles = StyleSheet.create({
       borderRadius: 12,
       marginBottom: 0,
     } as ViewStyle,
+    default: {},
+  }),
+  cardDesktopStretch: Platform.select<ViewStyle>({
+    web: {
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      minHeight: 0,
+    } as unknown as ViewStyle,
     default: {},
   }),
   cardHeadDesktopEnterprise: {

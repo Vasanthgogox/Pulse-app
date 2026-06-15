@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 
 import type { TripForCompose } from "../services/chat.service";
 import type { ChatPlatformMessageRow } from "../types/chatPlatform.types";
+import { isTripRoomFeedbackMirror } from "../utils/sanitizeTripRoomMessages.util";
 import { platformActionCardToTripMessage } from "../utils/tripRoomLegacyMessage.util";
 import { parseMessageLocationData } from "../utils/locationLogPayload.util";
 import { handleTripChatRoomAction } from "../utils/tripChatRoomActions.util";
@@ -44,6 +45,10 @@ export function TripChatRoomActionCard({
   onClose,
 }: TripChatRoomActionCardProps) {
   const router = useRouter();
+
+  if (isTripRoomFeedbackMirror(message)) {
+    return null;
+  }
 
   const legacy = useMemo(
     () => platformActionCardToTripMessage(message),

@@ -5,7 +5,7 @@
  * linked client/supplier org members). Uses the platform `chat_*` store and
  * conversation-scoped realtime — not the legacy 3-lane trip chat UI.
  */
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -36,7 +36,7 @@ import {
 import { useTripChatRoom } from "../hooks/useTripChatRoom";
 import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
 import type { ChatPlatformMessageRow } from "../types/chatPlatform.types";
-import { dedupeTripRoomActionCards } from "../utils/dedupeTripRoomActionCards.util";
+import { sanitizeTripRoomMessages, isTripRoomFeedbackMirror } from "../utils/sanitizeTripRoomMessages.util";
 
 export interface TripChatRoomSheetProps {
   visible: boolean;
@@ -54,42 +54,15 @@ export interface TripChatRoomSheetProps {
 
 function MessageBubble({
   message,
-  tripId,
-  composeTrip,
-  driverProfiles,
-  currentOrgId,
-  onClose,
 }: {
   message: ChatPlatformMessageRow;
-  tripId: string;
-  composeTrip?: TripForCompose | null;
-  driverProfiles?: TripChatRoomActionCardProps["driverProfiles"];
-  currentOrgId?: string | null;
-  onClose: () => void;
 }) {
   const isSystem =
     message.sender_type === "system" || message.sender_type === "integration";
   const deleted = !!message.deleted_at;
 
-  if (message.message_type === "action_card") {
-    return (
-      <TripChatRoomActionCard
-        message={message}
-        tripId={tripId}
-        composeTrip={composeTrip}
-        driverProfiles={driverProfiles}
-        currentOrgId={currentOrgId}
-        tripHint={{
-          pickupArea: composeTrip?.pickup_area,
-          dropLocation: composeTrip?.drop_location,
-          status: composeTrip?.status ?? null,
-        }}
-        onClose={onClose}
-      />
-    );
-  }
-
   if (isSystem && message.message_type !== "text") {
+    if (isTripRoomFeedbackMirror(message)) return null;
     return (
       <View style={styles.systemWrap}>
         <Text style={styles.systemText}>
@@ -138,8 +111,10 @@ export function TripChatRoomSheet({
   const currentOrgId = organizationId ?? currentOrganization?.id ?? null;
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // mentionUserIds is wired through to the RPC — team member picker is a future feature.
+  const mentionUserIdsRef = useRef<string[]>([]);
 
-  const { room, messages, isLoading, isError, sendMessage, openRoom } =
+  const { room, messages, isLoading, isError, sendMessage, openRoom, syncTeam, isSyncingTeam } =
     useTripChatRoom(visible ? tripId : null, { enabled: visible && !!tripId });
 
   const { data: assignmentAuditRows = [] } = useTripAssignmentAuditHistoryQuery(
@@ -155,7 +130,7 @@ export function TripChatRoomSheet({
   );
 
   const displayMessages = useMemo(
-    () => dedupeTripRoomActionCards(messages),
+    () => sanitizeTripRoomMessages(messages),
     [messages],
   );
 
@@ -163,9 +138,11 @@ export function TripChatRoomSheet({
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
+    const mentions = mentionUserIdsRef.current.slice();
     try {
-      await sendMessage({ content: text, messageType: "text" });
+      await sendMessage({ content: text, messageType: "text", mentionUserIds: mentions });
       setDraft("");
+      mentionUserIdsRef.current = [];
     } finally {
       setSending(false);
     }
@@ -222,15 +199,41 @@ export function TripChatRoomSheet({
           </Pressable>
         </View>
       ) : (
-        <FlatList
-          style={styles.list}
-          data={displayMessages}
-          inverted
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: 8, paddingTop: insets.bottom + 72 },
-          ]}
+        <>
+          <View style={styles.teamBar}>
+            <Feather name="users" size={13} color={Theme.textSecondary} />
+            <Text style={styles.teamBarLabel}>All trip parties · messages visible to everyone</Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.teamSyncBtn,
+                pressed && styles.teamSyncBtnPressed,
+                isSyncingTeam && styles.teamSyncBtnDisabled,
+              ]}
+              onPress={() => void syncTeam()}
+              disabled={isSyncingTeam}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh team members from trip assignment"
+            >
+              <Feather
+                name="refresh-cw"
+                size={13}
+                color={Theme.primary}
+                style={isSyncingTeam ? styles.teamSyncSpin : undefined}
+              />
+              <Text style={styles.teamSyncText}>
+                {isSyncingTeam ? "Syncing…" : "Sync team"}
+              </Text>
+            </Pressable>
+          </View>
+          <FlatList
+            style={styles.list}
+            data={displayMessages}
+            inverted
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: 8, paddingTop: insets.bottom + 72 },
+            ]}
             renderItem={({ item }) =>
               item.message_type === "action_card" ? (
                 <TripChatRoomActionCard
@@ -247,25 +250,19 @@ export function TripChatRoomSheet({
                   onClose={onClose}
                 />
               ) : (
-                <MessageBubble
-                  message={item}
-                  tripId={tripId!}
-                  composeTrip={composeTrip}
-                  driverProfiles={assignmentAuditMaps.driverProfiles}
-                  currentOrgId={currentOrgId}
-                  onClose={onClose}
-                />
+                <MessageBubble message={item} />
               )
             }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No messages yet</Text>
-              <Text style={styles.emptySub}>
-                Status updates, documents, and payments appear here automatically.
-              </Text>
-            </View>
-          }
-        />
+            ListEmptyComponent={
+              <View style={[styles.empty, { transform: [{ scaleY: -1 }] }]}>
+                <Text style={styles.emptyTitle}>No messages yet</Text>
+                <Text style={styles.emptySub}>
+                  Status updates, documents, and payments appear here automatically.
+                </Text>
+              </View>
+            }
+          />
+        </>
       )}
 
       <View
@@ -274,6 +271,16 @@ export function TripChatRoomSheet({
           { paddingBottom: Math.max(insets.bottom, 12) },
         ]}
       >
+        {/* @ stub — team member tagging UI wires here when ready */}
+        <Pressable
+          style={styles.mentionBtn}
+          disabled
+          accessibilityRole="button"
+          accessibilityLabel="Tag a team member (coming soon)"
+          accessibilityHint="Team member tagging is not yet available"
+        >
+          <Text style={styles.mentionBtnText}>@</Text>
+        </Pressable>
         <TextInput
           style={styles.input}
           placeholder="Message the trip team…"
@@ -342,6 +349,46 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
     minHeight: 0,
+  },
+  teamBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.border,
+    backgroundColor: Theme.cardWhite,
+  },
+  teamBarLabel: {
+    flex: 1,
+    fontSize: 12,
+    color: Theme.textSecondary,
+  },
+  teamSyncBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    backgroundColor: Theme.screenBackground,
+  },
+  teamSyncBtnPressed: {
+    opacity: 0.85,
+  },
+  teamSyncBtnDisabled: {
+    opacity: 0.55,
+  },
+  teamSyncText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.primary,
+  },
+  teamSyncSpin: {
+    opacity: 0.6,
   },
   header: {
     flexDirection: "row",
@@ -425,6 +472,18 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.border,
     backgroundColor: Theme.cardWhite,
   },
+  mentionBtn: {
+    width: 36,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.35,
+  },
+  mentionBtnText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: Theme.primary,
+  },
   input: {
     flex: 1,
     minHeight: 44,
@@ -472,7 +531,6 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   empty: {
-    transform: [{ scaleY: -1 }],
     padding: 32,
     alignItems: "center",
   },

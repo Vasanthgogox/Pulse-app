@@ -130,6 +130,56 @@ export const hubListCardStyles = StyleSheet.create({
     marginTop: 4,
     paddingHorizontal: 2,
   },
+  /** Desktop 2-row hub — matches chat people strip density. */
+  chatHubTile: {
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  chatHubAvatarWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chatHubAvatarRing: {
+    borderRadius: 999,
+    padding: 2,
+    borderWidth: 2,
+  },
+  chatHubAvatarCircle: {
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  chatHubOnlineDot: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Theme.positive,
+    borderWidth: 2,
+    borderColor: Theme.screenBackground,
+    zIndex: 3,
+  },
+  chatHubName: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.1,
+    textTransform: "none",
+    marginTop: 2,
+  },
+  chatHubRoleCue: {
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "700",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    textAlign: "center",
+    width: "100%",
+  },
   /** 3-up Your connections tile — avatar stacked above name only. */
   cardGridTile: {
     flexDirection: "column",

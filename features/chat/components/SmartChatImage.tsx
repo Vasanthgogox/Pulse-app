@@ -38,6 +38,7 @@ import {
 import {
   appendImageTransformQuery,
   buildSupabaseRenderImagePublicUrl,
+  isSupabasePublicRenderImageUrl,
 } from "../utils/storageRenderImageUrl";
 import { extractThinImagePayload } from "../utils/thinImageMetadata";
 import {
@@ -92,12 +93,12 @@ export function SmartChatImage({
   const thin = useMemo(() => extractThinImagePayload(message ?? undefined), [message]);
 
   const prebuiltThumb = useMemo(() => {
-    if (!thin.thumbUrl) return null;
+    if (!thin.thumbUrl || isSupabasePublicRenderImageUrl(thin.thumbUrl)) return null;
     return appendImageTransformQuery(thin.thumbUrl, thumbWidth, thumbQuality);
   }, [thin.thumbUrl, thumbWidth, thumbQuality]);
 
   const publicRenderThumb = useMemo(() => {
-    if (prebuiltThumb) return null;
+    if (prebuiltThumb || !storagePath) return null;
     return buildSupabaseRenderImagePublicUrl({
       storagePath,
       width: thumbWidth,
@@ -105,18 +106,20 @@ export function SmartChatImage({
     });
   }, [prebuiltThumb, storagePath, thumbWidth, thumbQuality]);
 
+  const cachedSignedThumb = storagePath
+    ? peekChatImageThumbnailUrl(
+        storagePath,
+        thumbWidth,
+        thumbHeight,
+        thumbQuality,
+        THUMB_RESIZE,
+      )
+    : null;
+
   const initialThumb =
+    cachedSignedThumb ??
     prebuiltThumb ??
-    publicRenderThumb ??
-    (storagePath
-      ? peekChatImageThumbnailUrl(
-          storagePath,
-          thumbWidth,
-          thumbHeight,
-          thumbQuality,
-          THUMB_RESIZE,
-        )
-      : null);
+    publicRenderThumb;
 
   const [thumbUri, setThumbUri] = useState<string | null>(initialThumb);
   const [thumbState, setThumbState] = useState<LoadState>(() => {
@@ -129,6 +132,7 @@ export function SmartChatImage({
   const [fullState, setFullState] = useState<LoadState>("idle");
   const [modalVisible, setModalVisible] = useState(false);
   const [publicFailed, setPublicFailed] = useState(false);
+  const [prebuiltFailed, setPrebuiltFailed] = useState(false);
 
   const inFlightRef = useRef<string | null>(null);
   /** Invalidates in-flight lightbox loads when `storagePath` changes (list recycle). */
@@ -138,6 +142,8 @@ export function SmartChatImage({
   // state so we never show another row's URL or skip `createSignedUrl` incorrectly.
   useEffect(() => {
     fullLightboxGenRef.current += 1;
+    setPublicFailed(false);
+    setPrebuiltFailed(false);
     if (!storagePath) {
       setFullUri(null);
       setFullState("idle");
@@ -164,18 +170,24 @@ export function SmartChatImage({
       thumbQuality,
       THUMB_RESIZE,
     );
-    const first =
-      prebuiltThumb ?? (!publicFailed ? publicRenderThumb : null) ?? fromPeek;
-    if (first) {
-      setThumbUri(first);
+    const instant =
+      fromPeek ??
+      cachedSignedThumb ??
+      (!prebuiltFailed ? prebuiltThumb : null) ??
+      (!publicFailed ? publicRenderThumb : null);
+
+    if (instant && !isSupabasePublicRenderImageUrl(instant)) {
+      setThumbUri(instant);
       setThumbState("ready");
-      void Image.prefetch(first, "memory-disk").catch(() => {});
-      return;
+      void Image.prefetch(instant, "memory-disk").catch(() => {});
+    } else if (!instant) {
+      setThumbState("loading");
     }
+
     if (inFlightRef.current === key) return;
     inFlightRef.current = key;
     let cancelled = false;
-    setThumbState("loading");
+
     void resolveChatImageThumbnail(
       storagePath,
       thumbWidth,
@@ -189,7 +201,7 @@ export function SmartChatImage({
         setThumbUri(url);
         setThumbState("ready");
         void Image.prefetch(url, "memory-disk").catch(() => {});
-      } else {
+      } else if (!instant || isSupabasePublicRenderImageUrl(instant)) {
         setThumbState("error");
       }
     });
@@ -205,13 +217,19 @@ export function SmartChatImage({
     prebuiltThumb,
     publicRenderThumb,
     publicFailed,
+    prebuiltFailed,
+    cachedSignedThumb,
   ]);
 
   const onThumbError = useCallback(() => {
+    if (prebuiltThumb && thumbUri === prebuiltThumb && !prebuiltFailed) {
+      setPrebuiltFailed(true);
+      return;
+    }
     if (publicRenderThumb && thumbUri === publicRenderThumb && !publicFailed) {
       setPublicFailed(true);
     }
-  }, [publicRenderThumb, thumbUri, publicFailed]);
+  }, [prebuiltThumb, publicRenderThumb, thumbUri, publicFailed, prebuiltFailed]);
 
   const placeholderSource = useMemo(() => {
     if (thin.thumbhash) return { thumbhash: thin.thumbhash };
