@@ -2430,9 +2430,10 @@ export default function TripDetailScreen({
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
+          isDesktop && styles.scrollContentDesktop,
           {
-            padding: isDesktop ? 8 : isMobile ? 14 : 18,
-            gap: isDesktop ? 20 : isMobile ? 12 : 16,
+            padding: isDesktop ? 24 : isMobile ? 14 : 18,
+            gap: isDesktop ? 24 : isMobile ? 12 : 16,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -4247,7 +4248,7 @@ export default function TripDetailScreen({
                 <View style={neoStyles.sideCard}>
                   <View style={neoStyles.sideSection}>
                     <View style={neoStyles.sideHeading}>
-                      <Feather name="activity" size={14} color="#cbd5e1" />
+                      <Feather name="activity" size={16} color="#cbd5e1" />
                       <Text style={neoStyles.sideHeadingText}>
                         Manifest Assets
                       </Text>
@@ -4300,6 +4301,7 @@ export default function TripDetailScreen({
                         Number(row.amount_in ?? 0) > 0,
                     )}
                     layoutVariant="registry"
+                    embeddedSidebar
                   />
                 </View>
               </View>
@@ -6787,15 +6789,14 @@ const neoStyles = StyleSheet.create({
     shadowRadius: 14,
   },
   shell: {
-    maxWidth: 1710,
-    width: "111.111%",
+    width: "125%",
     alignSelf: "center",
-    transform: [{ scale: 0.9 }],
+    transform: [{ scale: 0.8 }],
     transformOrigin: "top center" as never,
   },
   grid: {
     flexDirection: "row",
-    gap: 18,
+    gap: 24,
     alignItems: "flex-start",
   },
   mainCol: {
@@ -6804,10 +6805,11 @@ const neoStyles = StyleSheet.create({
     gap: 24,
   },
   sideCol: {
-    width: 340,
+    width: 420,
+    flexShrink: 0,
     position: "sticky" as never,
     top: 82,
-    gap: 18,
+    gap: 20,
   },
   hero: {
     position: "relative",
@@ -7021,9 +7023,8 @@ const neoStyles = StyleSheet.create({
     fontStyle: "italic",
   },
   tabShell: {
-    alignSelf: "center",
-    width: "64%",
-    minWidth: 480,
+    alignSelf: "stretch",
+    width: "100%",
     flexDirection: "row",
     gap: 8,
     padding: 8,
@@ -7061,19 +7062,19 @@ const neoStyles = StyleSheet.create({
   },
   journeyGrid: {
     flexDirection: "row",
-    gap: 18,
-    alignItems: "flex-start",
+    gap: 24,
+    alignItems: "stretch",
   },
   timelineCard: {
-    flex: 5,
-    minWidth: 300,
-    maxWidth: 480,
+    flex: 1,
+    minWidth: 340,
     alignSelf: "stretch",
     backgroundColor: "#fff",
     borderRadius: 32,
     borderWidth: 0,
     paddingVertical: 32,
     paddingHorizontal: 32,
+    minHeight: 540,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.04,
@@ -7350,10 +7351,10 @@ const neoStyles = StyleSheet.create({
     color: "#fff",
   },
   radarCard: {
-    flex: 7,
-    minWidth: 280,
-    minHeight: 480,
-    height: 520,
+    flex: 1.35,
+    minWidth: 420,
+    minHeight: 540,
+    alignSelf: "stretch",
     borderRadius: 42,
     overflow: "hidden",
     backgroundColor: "#0f172a",
@@ -9026,7 +9027,7 @@ const neoStyles = StyleSheet.create({
   sideCard: {
     backgroundColor: "#fff",
     borderRadius: 36,
-    padding: 22,
+    padding: 26,
     borderWidth: 1,
     borderColor: "#f1f5f9",
     shadowColor: "#0f172a",
@@ -9035,10 +9036,10 @@ const neoStyles = StyleSheet.create({
     shadowRadius: 24,
   },
   feedbackSideCard: {
-    paddingTop: 24,
+    paddingTop: 28,
   },
   sideSection: {
-    gap: 16,
+    gap: 18,
   },
   sideSectionBorder: {
     paddingTop: 28,
@@ -9053,13 +9054,13 @@ const neoStyles = StyleSheet.create({
   },
   sideHeadingText: {
     color: "#cbd5e1",
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
-    letterSpacing: 3.2,
+    letterSpacing: 2.6,
   },
   assetCardWrap: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   assetCard: {
     borderRadius: 28,
@@ -11664,6 +11665,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     gap: 20,
+  },
+  scrollContentDesktop: {
+    maxWidth: 1920,
+    width: "100%",
   },
 
   // ── Tracking tab layout ──

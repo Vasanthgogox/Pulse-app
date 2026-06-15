@@ -84,6 +84,8 @@ export interface TripRatingsBlockProps {
    * Default keeps the compact layout used on native.
    */
   layoutVariant?: 'default' | 'workspace' | 'registry';
+  /** Desktop manifest sidebar — larger registry cards inside the parent side panel. */
+  embeddedSidebar?: boolean;
   /**
    * `modalOnly` — TripFeedbackModal auto-popup only (e.g. chat overlay).
    * `inline` (default) — full ratings panel on trip detail + modals.
@@ -347,6 +349,7 @@ export function TripRatingsBlock({
   paymentCaptured = false,
   layoutVariant = 'default',
   surface = 'inline',
+  embeddedSidebar = false,
 }: TripRatingsBlockProps) {
   const { width } = useWindowDimensions();
   const { currentOrganization } = useOrganization();
@@ -1011,6 +1014,7 @@ export function TripRatingsBlock({
       : 'Fleet';
   const isWorkspace = layoutVariant === 'workspace';
   const isRegistry = layoutVariant === 'registry';
+  const isRegistrySidebar = isRegistry && embeddedSidebar;
   const isWidePanel = isWorkspace || isRegistry;
   const isCompactWorkspace = isWidePanel && width < 1100;
   const operationalTripLabel = getTripOperationalDisplay({
@@ -1291,12 +1295,12 @@ export function TripRatingsBlock({
       undefined;
 
     return (
-      <View style={styles.regCard}>
+      <View style={[styles.regCard, isRegistrySidebar && styles.regCardSidebar]}>
         <View style={styles.regCardTop}>
           <SharedPartyAvatar
             name={partyName}
             entityType={entityType}
-            size={28}
+            size={isRegistrySidebar ? 42 : 28}
             avatarUrl={avatarUrl}
             avatarSeed={partyAvatar?.avatarSeed ?? entitySeed ?? undefined}
             initialsColorSeed={entitySeed ?? partyAvatar?.avatarSeed ?? undefined}
@@ -1304,13 +1308,26 @@ export function TripRatingsBlock({
             organizationAvatarSeed={partyAvatar?.organizationAvatarSeed ?? undefined}
           />
           <View style={styles.regCardBody}>
-            <Text style={styles.regKicker} numberOfLines={1}>
+            <Text
+              style={[styles.regKicker, isRegistrySidebar && styles.regKickerSidebar]}
+              numberOfLines={1}
+            >
               {roleKicker.toUpperCase()}
             </Text>
-            <Text style={styles.regPartyName} numberOfLines={2}>
+            <Text
+              style={[styles.regPartyName, isRegistrySidebar && styles.regPartyNameSidebar]}
+              numberOfLines={2}
+            >
               {partyName}
             </Text>
-            <Text style={[styles.regPerfLbl, { color: perfColor }]} numberOfLines={1}>
+            <Text
+              style={[
+                styles.regPerfLbl,
+                isRegistrySidebar && styles.regPerfLblSidebar,
+                { color: perfColor },
+              ]}
+              numberOfLines={1}
+            >
               {perfLabel}
             </Text>
           </View>
@@ -1318,14 +1335,23 @@ export function TripRatingsBlock({
             <View
               style={[
                 styles.regTripScoreBlock,
+                isRegistrySidebar && styles.regTripScoreBlockSidebar,
                 tripScore == null && styles.regTripScoreBlockEmpty,
               ]}
             >
-              <Text style={styles.regTripEyebrow}>Trip</Text>
+              <Text
+                style={[
+                  styles.regTripEyebrow,
+                  isRegistrySidebar && styles.regTripEyebrowSidebar,
+                ]}
+              >
+                Trip
+              </Text>
               <View style={styles.regTripScoreRow}>
                 <Text
                   style={[
                     styles.regTripHeroScore,
+                    isRegistrySidebar && styles.regTripHeroScoreSidebar,
                     tripScore == null && styles.regTripHeroScoreEmpty,
                   ]}
                 >
@@ -1333,7 +1359,7 @@ export function TripRatingsBlock({
                 </Text>
                 <FontAwesome
                   name="star"
-                  size={10}
+                  size={isRegistrySidebar ? 12 : 10}
                   color={
                     tripScore != null
                       ? Theme.feedbackModalStarActive
@@ -1344,10 +1370,26 @@ export function TripRatingsBlock({
               </View>
             </View>
             <View style={styles.regAvgScoreBlock}>
-              <Text style={styles.regMetricEyebrowMuted}>Avg</Text>
+              <Text
+                style={[
+                  styles.regMetricEyebrowMuted,
+                  isRegistrySidebar && styles.regMetricEyebrowMutedSidebar,
+                ]}
+              >
+                Avg
+              </Text>
               <View style={styles.regGlobalPill}>
-                <FontAwesome name="star" size={7} color={Theme.feedbackModalStarActive} />
-                <Text style={styles.regGlobalPillText}>
+                <FontAwesome
+                  name="star"
+                  size={isRegistrySidebar ? 9 : 7}
+                  color={Theme.feedbackModalStarActive}
+                />
+                <Text
+                  style={[
+                    styles.regGlobalPillText,
+                    isRegistrySidebar && styles.regGlobalPillTextSidebar,
+                  ]}
+                >
                   {globalScore != null ? globalScore.toFixed(1) : '—'}
                 </Text>
               </View>
@@ -1375,7 +1417,7 @@ export function TripRatingsBlock({
             ) : null}
           </View>
         ) : null}
-        <View style={styles.regCardFoot}>
+        <View style={[styles.regCardFoot, isRegistrySidebar && styles.regCardFootSidebar]}>
           <View style={styles.regStarsRow}>
             {[1, 2, 3, 4, 5].map((step) => {
               const filled = tripScore != null && step <= filledStars;
@@ -1390,7 +1432,7 @@ export function TripRatingsBlock({
                 >
                   <FontAwesome
                     name={filled ? 'star' : 'star-o'}
-                    size={12}
+                    size={isRegistrySidebar ? 14 : 12}
                     color={filled ? Theme.feedbackModalStarActive : Theme.borderMedium}
                   />
                 </TouchableOpacity>
@@ -1403,10 +1445,20 @@ export function TripRatingsBlock({
             activeOpacity={0.85}
             style={styles.regAuditTap}
           >
-            <Text style={[styles.regAuditTxt, auditDisabled && styles.regAuditTxtDis]}>
+            <Text
+              style={[
+                styles.regAuditTxt,
+                isRegistrySidebar && styles.regAuditTxtSidebar,
+                auditDisabled && styles.regAuditTxtDis,
+              ]}
+            >
               {auditDisabled ? 'Unavailable' : 'Rate now'}
             </Text>
-            <Feather name="arrow-up-right" size={12} color={auditDisabled ? Theme.textMuted : Theme.primary} />
+            <Feather
+              name="arrow-up-right"
+              size={isRegistrySidebar ? 14 : 12}
+              color={auditDisabled ? Theme.textMuted : Theme.primary}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -1418,7 +1470,7 @@ export function TripRatingsBlock({
   return (
     <>
       {!isModalOnly ? (
-    <View style={[styles.wrapper, isWidePanel && styles.wsWrapper]}>
+    <View style={[styles.wrapper, isWidePanel && styles.wsWrapper, isRegistrySidebar && styles.wsWrapperSidebar]}>
       {!isWidePanel ? (
         <View style={styles.sectionHeading}>
           <View style={styles.sectionIconWrap}>
@@ -1435,6 +1487,7 @@ export function TripRatingsBlock({
           styles.card,
           isWidePanel && styles.wsCard,
           isRegistry && styles.wsCardRegistry,
+          isRegistrySidebar && styles.wsCardRegistrySidebar,
         ]}
       >
         {loading ? (
@@ -1445,16 +1498,32 @@ export function TripRatingsBlock({
         ) : (
           <>
             {isRegistry ? (
-              <View style={styles.regWrap}>
-                <View style={styles.regSectionHead}>
+              <View style={[styles.regWrap, isRegistrySidebar && styles.regWrapSidebar]}>
+                <View style={[styles.regSectionHead, isRegistrySidebar && styles.regSectionHeadSidebar]}>
                   <View>
-                    <Text style={styles.regSectionTitle}>Feedback</Text>
+                    <Text
+                      style={[
+                        styles.regSectionTitle,
+                        isRegistrySidebar && styles.regSectionTitleSidebar,
+                      ]}
+                    >
+                      Feedback
+                    </Text>
                   </View>
-                  <View style={styles.regMsgIconWrap}>
-                    <Feather name="message-square" size={16} color={Theme.primary} />
+                  <View
+                    style={[
+                      styles.regMsgIconWrap,
+                      isRegistrySidebar && styles.regMsgIconWrapSidebar,
+                    ]}
+                  >
+                    <Feather
+                      name="message-square"
+                      size={isRegistrySidebar ? 18 : 16}
+                      color={Theme.primary}
+                    />
                   </View>
                 </View>
-                <View style={styles.regStack}>
+                <View style={[styles.regStack, isRegistrySidebar && styles.regStackSidebar]}>
                   {showRegistryDriverParty
                     ? renderRegistryCard(
                         'Driver',
@@ -2246,6 +2315,9 @@ const styles = StyleSheet.create({
   wsWrapper: {
     marginBottom: 20,
   },
+  wsWrapperSidebar: {
+    marginBottom: 0,
+  },
   wsCard: {
     backgroundColor: Theme.screenBackground,
     borderWidth: 1,
@@ -2635,13 +2707,28 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 12,
   },
+  wsCardRegistrySidebar: {
+    padding: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: { boxShadow: 'none' },
+      default: {},
+    }),
+  },
   regWrap: { gap: 6 },
+  regWrapSidebar: { gap: 10 },
   regSectionHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 0,
     paddingBottom: 2,
+  },
+  regSectionHeadSidebar: {
+    paddingBottom: 6,
+    marginBottom: 2,
   },
   regSectionTitle: {
     ...FinanceTxnTypography.partyTitle,
@@ -2651,6 +2738,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.15,
     textTransform: 'uppercase',
   },
+  regSectionTitleSidebar: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
   regMsgIconWrap: {
     width: 28,
     height: 28,
@@ -2659,7 +2751,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  regMsgIconWrapSidebar: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+  },
   regStack: { gap: 5 },
+  regStackSidebar: { gap: 12 },
   regCard: {
     borderRadius: 10,
     borderWidth: 1,
@@ -2668,6 +2766,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 7,
     gap: 0,
+  },
+  regCardSidebar: {
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(248,250,252,0.72)',
+    borderColor: '#f1f5f9',
+    gap: 2,
   },
   regCardTop: {
     flexDirection: 'row',
@@ -2697,6 +2803,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
+  regTripScoreBlockSidebar: {
+    minWidth: 52,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
   regTripScoreBlockEmpty: {
     backgroundColor: 'transparent',
   },
@@ -2705,6 +2817,10 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: '700',
     lineHeight: 9,
+  },
+  regTripEyebrowSidebar: {
+    fontSize: 9,
+    lineHeight: 11,
   },
   regTripScoreRow: {
     flexDirection: 'row',
@@ -2719,6 +2835,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     lineHeight: 18,
     fontVariant: ['tabular-nums'],
+  },
+  regTripHeroScoreSidebar: {
+    fontSize: 20,
+    lineHeight: 22,
   },
   regTripHeroScoreEmpty: {
     fontSize: 15,
@@ -2738,12 +2858,20 @@ const styles = StyleSheet.create({
     fontSize: 8,
     lineHeight: 10,
   },
+  regKickerSidebar: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
   regPartyName: {
     ...FinanceTxnTypography.partyTitle,
     fontStyle: 'normal',
     fontWeight: '600',
     fontSize: 11,
     lineHeight: 13,
+  },
+  regPartyNameSidebar: {
+    fontSize: 15,
+    lineHeight: 18,
   },
   regGlobalPill: {
     flexDirection: 'row',
@@ -2755,6 +2883,10 @@ const styles = StyleSheet.create({
     fontSize: 7,
     lineHeight: 9,
   },
+  regMetricEyebrowMutedSidebar: {
+    fontSize: 9,
+    lineHeight: 11,
+  },
   regGlobalPillText: {
     ...FinanceTxnTypography.fieldValue,
     fontStyle: 'normal',
@@ -2763,12 +2895,21 @@ const styles = StyleSheet.create({
     lineHeight: 13,
     fontVariant: ['tabular-nums'],
   },
+  regGlobalPillTextSidebar: {
+    fontSize: 13,
+    lineHeight: 16,
+  },
   regPerfLbl: {
     ...FinanceTxnTypography.chipLabel,
     fontWeight: '500',
     fontSize: 7,
     lineHeight: 9,
     marginTop: 1,
+  },
+  regPerfLblSidebar: {
+    fontSize: 10,
+    lineHeight: 12,
+    marginTop: 2,
   },
   regCardFoot: {
     marginTop: 5,
@@ -2779,6 +2920,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 4,
+  },
+  regCardFootSidebar: {
+    marginTop: 10,
+    paddingTop: 10,
+    gap: 8,
   },
   regStarsRow: {
     flexDirection: 'row',
@@ -2841,6 +2987,10 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '600',
     color: Theme.primary,
+  },
+  regAuditTxtSidebar: {
+    fontSize: 11,
+    letterSpacing: 0.2,
   },
   regAuditTxtDis: { color: Theme.textMuted },
   wsPrimaryCta: {

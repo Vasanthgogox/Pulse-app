@@ -16,6 +16,8 @@ import {
 } from "react-native";
 
 const AVATAR_SIZE = 32;
+const AVATAR_SIZE_DESKTOP = 44;
+const VEHICLE_ICON_SIZE_DESKTOP = 44;
 
 type Props = {
   roleLabel: string;
@@ -54,13 +56,17 @@ function RatingMetaRow({
   ratingAvg,
   docsIssue,
   loading,
+  desktop = false,
 }: {
   ratingAvg: number | null | undefined;
   docsIssue: boolean;
   loading: boolean;
+  desktop?: boolean;
 }) {
   const docIconColor = docsIssue ? Theme.destructive : Theme.textMuted;
   const hasRating = ratingAvg != null && Number.isFinite(ratingAvg);
+  const docIconSize = desktop ? 14 : 12;
+  const starSize = desktop ? 13 : 11;
 
   if (loading) {
     return (
@@ -73,12 +79,15 @@ function RatingMetaRow({
   if (!hasRating) {
     return (
       <View style={styles.metaRow}>
-        <Text style={styles.metaText} numberOfLines={1}>
+        <Text
+          style={[styles.metaText, desktop && styles.metaTextDesktop]}
+          numberOfLines={1}
+        >
           No rating yet
         </Text>
         <Feather
           name="file-text"
-          size={12}
+          size={docIconSize}
           color={docIconColor}
           style={styles.docIcon}
         />
@@ -91,16 +100,19 @@ function RatingMetaRow({
       <View style={styles.ratingRow}>
         <FontAwesome
           name="star"
-          size={11}
+          size={starSize}
           color={Theme.feedbackModalStarActive}
         />
-        <Text style={styles.ratingValue} numberOfLines={1}>
+        <Text
+          style={[styles.ratingValue, desktop && styles.ratingValueDesktop]}
+          numberOfLines={1}
+        >
           {ratingAvg.toFixed(1)}
         </Text>
       </View>
       <Feather
         name="file-text"
-        size={12}
+        size={docIconSize}
         color={docIconColor}
         style={styles.docIcon}
         accessibilityLabel={
@@ -115,13 +127,16 @@ function VehicleTypeMetaRow({
   vehicleType,
   docsIssue,
   loading,
+  desktop = false,
 }: {
   vehicleType: string | null | undefined;
   docsIssue: boolean;
   loading: boolean;
+  desktop?: boolean;
 }) {
   const docIconColor = docsIssue ? Theme.destructive : Theme.textMuted;
   const typeLabel = vehicleType?.trim() || null;
+  const docIconSize = desktop ? 14 : 10;
 
   if (loading) {
     return (
@@ -134,7 +149,10 @@ function VehicleTypeMetaRow({
   return (
     <View style={styles.metaRow}>
       {typeLabel ? (
-        <Text style={styles.vehicleTypeText} numberOfLines={1}>
+        <Text
+          style={[styles.vehicleTypeText, desktop && styles.vehicleTypeTextDesktop]}
+          numberOfLines={1}
+        >
           {typeLabel}
         </Text>
       ) : (
@@ -142,7 +160,7 @@ function VehicleTypeMetaRow({
       )}
       <Feather
         name="file-text"
-        size={10}
+        size={docIconSize}
         color={docIconColor}
         style={styles.docIcon}
         accessibilityLabel={
@@ -192,11 +210,15 @@ export function ManifestRefAssetCard({
     isDriver && displayPrimary && displayPrimary !== "—" && displayPrimary !== "Unassigned"
       ? formatChatPartyInboxLine("driver", displayPrimary) ?? roleLabel
       : roleLabel;
+  const avatarSize = desktop ? AVATAR_SIZE_DESKTOP : AVATAR_SIZE;
 
   return (
     <View style={[styles.card, desktop && styles.cardDesktop, style]}>
       <View style={styles.headerRow}>
-        <Text style={styles.roleLabel} numberOfLines={1}>
+        <Text
+          style={[styles.roleLabel, desktop && styles.roleLabelDesktop]}
+          numberOfLines={1}
+        >
           {displayRoleLabel}
         </Text>
         {showChange && onChange ? (
@@ -208,7 +230,9 @@ export function ManifestRefAssetCard({
             accessibilityLabel={`Change ${roleLabel.toLowerCase()}`}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.changeBtnText}>Change</Text>
+            <Text style={[styles.changeBtnText, desktop && styles.changeBtnTextDesktop]}>
+              Change
+            </Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -216,14 +240,24 @@ export function ManifestRefAssetCard({
       <View style={styles.contentRow}>
         {!isDriver ? (
           <View
-            style={[styles.vehicleIcon, desktop && styles.vehicleIconDesktop]}
+            style={[
+              styles.vehicleIcon,
+              desktop && styles.vehicleIconDesktop,
+            ]}
           >
-            <Feather name="truck" size={14} color={Theme.textOnPrimary} />
+            <Feather
+              name="truck"
+              size={desktop ? 18 : 14}
+              color={Theme.textOnPrimary}
+            />
           </View>
         ) : null}
 
         <View style={styles.bodyCol}>
-          <Text style={styles.primaryText} numberOfLines={1}>
+          <Text
+            style={[styles.primaryText, desktop && styles.primaryTextDesktop]}
+            numberOfLines={1}
+          >
             {displayPrimary}
           </Text>
 
@@ -232,12 +266,14 @@ export function ManifestRefAssetCard({
               ratingAvg={ratingAvg}
               docsIssue={docsIssue}
               loading={insightsLoading}
+              desktop={desktop}
             />
           ) : (
             <VehicleTypeMetaRow
               vehicleType={displayVehicleType}
               docsIssue={docsIssue}
               loading={insightsLoading}
+              desktop={desktop}
             />
           )}
         </View>
@@ -247,7 +283,7 @@ export function ManifestRefAssetCard({
             <PartyAvatar
               name={driverName ?? displayPrimary}
               entityType="driver"
-              size={AVATAR_SIZE}
+              size={avatarSize}
               avatarUrl={driverAvatarUrl ?? undefined}
               avatarSeed={driverId ?? undefined}
               showIntegrationBadge={false}
@@ -287,16 +323,20 @@ const styles = StyleSheet.create({
   cardDesktop: {
     flex: undefined,
     width: "100%",
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 11,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderRadius: 22,
+    gap: 12,
+    backgroundColor: "rgba(248,250,252,0.72)",
+    borderColor: "#f1f5f9",
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
-    minHeight: 16,
+    gap: 8,
+    minHeight: 18,
   },
   roleLabel: {
     flex: 1,
@@ -306,6 +346,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     color: Theme.textMuted,
     lineHeight: 11,
+  },
+  roleLabelDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.55,
+    lineHeight: 13,
   },
   changeBtn: {
     flexShrink: 0,
@@ -319,10 +364,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
+  changeBtnTextDesktop: {
+    fontSize: 10,
+    letterSpacing: 0.55,
+  },
   contentRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 12,
     minWidth: 0,
   },
   bodyCol: {
@@ -338,12 +387,18 @@ const styles = StyleSheet.create({
     letterSpacing: -0.15,
     lineHeight: 16,
   },
+  primaryTextDesktop: {
+    fontSize: 16,
+    fontWeight: "700",
+    lineHeight: 21,
+    letterSpacing: -0.2,
+  },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
-    minHeight: 14,
+    gap: 8,
+    minHeight: 16,
     minWidth: 0,
   },
   ratingRow: {
@@ -378,6 +433,19 @@ const styles = StyleSheet.create({
     lineHeight: 9,
     marginTop: 1,
   },
+  ratingValueDesktop: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  metaTextDesktop: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  vehicleTypeTextDesktop: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 0,
+  },
   vehicleTypeSpacer: {
     flex: 1,
     minHeight: 9,
@@ -401,6 +469,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   vehicleIconDesktop: {
-    borderRadius: 10,
+    width: VEHICLE_ICON_SIZE_DESKTOP,
+    height: VEHICLE_ICON_SIZE_DESKTOP,
+    borderRadius: 12,
   },
 });
