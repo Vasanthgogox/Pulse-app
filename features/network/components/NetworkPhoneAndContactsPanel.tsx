@@ -527,76 +527,167 @@ export function NetworkPhoneAndContactsPanel({
   const HeroCalloutCtaIcon = heroCalloutConfig.ctaIcon;
 
   const detailsCardActive = phoneSearchActive || showContactSection;
+  const mobileDiscoverCluster = !heroBannerHorizontal;
+
+  const heroBannerBlock = (
+    <View
+      style={[
+        styles.heroBanner,
+        heroBannerHorizontal && styles.heroBannerHorizontal,
+        mobileDiscoverCluster && styles.heroBannerCluster,
+      ]}
+    >
+      {/* LEFT PANE — "FROM YOUR CONTACTS" */}
+      <View
+        style={[
+          styles.heroLeftPane,
+          heroBannerHorizontal && styles.heroLeftPaneHorizontal,
+        ]}
+      >
+        <View style={styles.heroIconBadge}>
+          <Contact size={18} color={Theme.primary} strokeWidth={2.2} />
+        </View>
+        <View style={styles.heroHeaderText}>
+          <Text style={styles.heroKicker}>{t("networkContactsTitleUpper")}</Text>
+          <Text style={styles.heroSubtitle}>{t("networkContactsSubtitle")}</Text>
+        </View>
+      </View>
+
+      {/* RIGHT PANE — "Available on mobile / Sync contacts" + CTA pill */}
+      <View
+        style={[
+          styles.heroRightPane,
+          heroBannerHorizontal && styles.heroRightPaneHorizontal,
+        ]}
+      >
+        <View style={styles.heroRightTextRow}>
+          <View style={styles.heroInnerIcon}>
+            <HeroCalloutIcon size={18} color={Theme.primary} strokeWidth={2.2} />
+          </View>
+          <View style={styles.heroInnerText}>
+            <Text style={styles.heroInnerTitle}>{heroCalloutConfig.title}</Text>
+            <Text style={styles.heroInnerBody}>{heroCalloutConfig.body}</Text>
+          </View>
+        </View>
+        {heroCalloutConfig.ctaLabel && heroCalloutConfig.onPress ? (
+          <Pressable
+            onPress={heroCalloutConfig.onPress}
+            disabled={heroCalloutConfig.disabled}
+            style={({ pressed }) => [
+              styles.heroInnerCta,
+              !heroBannerHorizontal && styles.heroInnerCtaStacked,
+              heroCalloutConfig.disabled && styles.heroInnerCtaDisabled,
+              pressed && !heroCalloutConfig.disabled && styles.heroInnerCtaPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={heroCalloutConfig.ctaLabel}
+          >
+            {HeroCalloutCtaIcon ? (
+              <HeroCalloutCtaIcon size={12} color={Theme.cardWhite} strokeWidth={2.4} />
+            ) : null}
+            <Text style={styles.heroInnerCtaText}>
+              {heroCalloutConfig.ctaLabel}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  const growInviteBlock = (
+    <View
+      style={[
+        styles.inviteRow,
+        mobileDiscoverCluster
+          ? styles.inviteRowCluster
+          : !heroBannerHorizontal
+            ? styles.inviteRowStacked
+            : null,
+      ]}
+    >
+      <NetworkGrowSummaryCard
+        discoverCount={discoverCount}
+        totalConnections={totalConnections}
+        todayInviteCount={todayInviteCount}
+        hideTitle={mobileDiscoverCluster}
+        variant={mobileDiscoverCluster ? "inline" : "card"}
+        style={
+          !heroBannerHorizontal && !mobileDiscoverCluster
+            ? styles.inviteRowChildStacked
+            : undefined
+        }
+      />
+      {mobileDiscoverCluster ? <View style={styles.discoverToolsDivider} /> : null}
+      <View
+        style={
+          mobileDiscoverCluster
+            ? styles.inviteSectionInline
+            : [
+                styles.inviteCard,
+                !heroBannerHorizontal && styles.inviteCardStacked,
+              ]
+        }
+      >
+        {!mobileDiscoverCluster ? (
+          <View style={styles.inviteGlow} pointerEvents="none" />
+        ) : null}
+        <View style={styles.inviteTopRow}>
+          <View style={styles.inviteIconWrap}>
+            <LinkIcon size={14} color={Theme.actionAccent} strokeWidth={2.2} />
+          </View>
+          <View style={styles.inviteContentCol}>
+            <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
+            <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
+            <View
+              style={[
+                styles.inviteCopyRow,
+                (mobileDiscoverCluster || windowWidth < 400) &&
+                  styles.inviteCopyRowStacked,
+              ]}
+            >
+              <Text style={styles.inviteUrlText} numberOfLines={2}>
+                {inviteUrl.display}
+              </Text>
+              <Pressable
+                onPress={() => void handleCopyInvite()}
+                style={({ pressed }) => [
+                  styles.inviteCopyBtn,
+                  (mobileDiscoverCluster || windowWidth < 400) &&
+                    styles.inviteCopyBtnStacked,
+                  pressed && styles.inviteCopyBtnPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  inviteCopied
+                    ? t("networkInviteCopied")
+                    : t("networkInviteCopy")
+                }
+              >
+                <Text style={styles.inviteCopyBtnText}>
+                  {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.wrap}>
-      {/* HERO BANNER — horizontal 1/3 + 2/3 split on wide screens (≥ 820px),
-       *  stacks to a single column on narrow screens. Left pane carries the
-       *  "FROM YOUR CONTACTS" eyebrow on a muted gray background; right pane
-       *  hosts the "Available on mobile / Sync contacts" callout and CTA
-       *  pinned to the far right.
-       */}
-      <View
-        style={[
-          styles.heroBanner,
-          heroBannerHorizontal && styles.heroBannerHorizontal,
-        ]}
-      >
-        {/* LEFT PANE — "FROM YOUR CONTACTS" */}
-        <View
-          style={[
-            styles.heroLeftPane,
-            heroBannerHorizontal && styles.heroLeftPaneHorizontal,
-          ]}
-        >
-          <View style={styles.heroIconBadge}>
-            <Contact size={18} color={Theme.primary} strokeWidth={2.2} />
-          </View>
-          <View style={styles.heroHeaderText}>
-            <Text style={styles.heroKicker}>{t("networkContactsTitleUpper")}</Text>
-            <Text style={styles.heroSubtitle}>{t("networkContactsSubtitle")}</Text>
-          </View>
+      {mobileDiscoverCluster ? (
+        <View style={styles.discoverToolsCard}>
+          {heroBannerBlock}
+          <View style={styles.discoverToolsDivider} />
+          {growInviteBlock}
         </View>
-
-        {/* RIGHT PANE — "Available on mobile / Sync contacts" + CTA pill */}
-        <View
-          style={[
-            styles.heroRightPane,
-            heroBannerHorizontal && styles.heroRightPaneHorizontal,
-          ]}
-        >
-          <View style={styles.heroRightTextRow}>
-            <View style={styles.heroInnerIcon}>
-              <HeroCalloutIcon size={18} color={Theme.primary} strokeWidth={2.2} />
-            </View>
-            <View style={styles.heroInnerText}>
-              <Text style={styles.heroInnerTitle}>{heroCalloutConfig.title}</Text>
-              <Text style={styles.heroInnerBody}>{heroCalloutConfig.body}</Text>
-            </View>
-          </View>
-          {heroCalloutConfig.ctaLabel && heroCalloutConfig.onPress ? (
-            <Pressable
-              onPress={heroCalloutConfig.onPress}
-              disabled={heroCalloutConfig.disabled}
-              style={({ pressed }) => [
-                styles.heroInnerCta,
-                !heroBannerHorizontal && styles.heroInnerCtaStacked,
-                heroCalloutConfig.disabled && styles.heroInnerCtaDisabled,
-                pressed && !heroCalloutConfig.disabled && styles.heroInnerCtaPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={heroCalloutConfig.ctaLabel}
-            >
-              {HeroCalloutCtaIcon ? (
-                <HeroCalloutCtaIcon size={12} color={Theme.cardWhite} strokeWidth={2.4} />
-              ) : null}
-              <Text style={styles.heroInnerCtaText}>
-                {heroCalloutConfig.ctaLabel}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+      ) : (
+        <>
+          {heroBannerBlock}
+          {growInviteBlock}
+        </>
+      )}
 
       {/* DETAILS CARD — phone search + contact recommendations. Lives in its
        *  own card below the banner now that the banner is a horizontal
@@ -845,65 +936,7 @@ export function NetworkPhoneAndContactsPanel({
         </View>
       ) : null}
 
-      {/* Grow summary + Invite via Link — side-by-side on wide, stacked on narrow. */}
-      <View
-        style={[
-          styles.inviteRow,
-          !heroBannerHorizontal && styles.inviteRowStacked,
-        ]}
-      >
-        <NetworkGrowSummaryCard
-          discoverCount={discoverCount}
-          totalConnections={totalConnections}
-          todayInviteCount={todayInviteCount}
-          style={!heroBannerHorizontal ? styles.inviteRowChildStacked : undefined}
-        />
-        <View
-          style={[
-            styles.inviteCard,
-            !heroBannerHorizontal && styles.inviteCardStacked,
-          ]}
-        >
-          <View style={styles.inviteGlow} pointerEvents="none" />
-          <View style={styles.inviteTopRow}>
-            <View style={styles.inviteIconWrap}>
-              <LinkIcon size={14} color={Theme.actionAccent} strokeWidth={2.2} />
-            </View>
-            <View style={styles.inviteContentCol}>
-              <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
-              <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
-              <View
-                style={[
-                  styles.inviteCopyRow,
-                  windowWidth < 400 && styles.inviteCopyRowStacked,
-                ]}
-              >
-                <Text style={styles.inviteUrlText} numberOfLines={1}>
-                  {inviteUrl.display}
-                </Text>
-                <Pressable
-                  onPress={() => void handleCopyInvite()}
-                  style={({ pressed }) => [
-                    styles.inviteCopyBtn,
-                    windowWidth < 400 && styles.inviteCopyBtnStacked,
-                    pressed && styles.inviteCopyBtnPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    inviteCopied
-                      ? t("networkInviteCopied")
-                      : t("networkInviteCopy")
-                  }
-                >
-                  <Text style={styles.inviteCopyBtnText}>
-                    {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
+      {!mobileDiscoverCluster ? growInviteBlock : null}
 
       <ConnectionRoleModal
         visible={roleModalOrgId != null}
@@ -985,6 +1018,46 @@ const styles = StyleSheet.create({
   heroBannerHorizontal: {
     flexDirection: "row",
     alignItems: "stretch",
+  },
+  heroBannerCluster: {
+    borderWidth: 0,
+    borderRadius: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: "hidden",
+    ...Platform.select({
+      web: { boxShadow: "none" },
+      default: {
+        shadowOpacity: 0,
+        elevation: 0,
+      },
+    }),
+  },
+  discoverToolsCard: {
+    width: "100%",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    overflow: "visible",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 14px rgba(15,23,42,0.06)",
+        boxSizing: "border-box",
+      },
+      default: {
+        shadowColor: "#0f172a",
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 2,
+      },
+    }),
+  },
+  discoverToolsDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Theme.borderLight,
+    width: "100%",
   },
   /** Left pane = recessed light-gray "label" strip. The slight
    *  contrast against the white right pane creates the two-tone
@@ -1187,6 +1260,11 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     width: "100%",
   },
+  inviteRowCluster: {
+    flexDirection: "column",
+    gap: 0,
+    width: "100%",
+  },
   inviteRowChildStacked: {
     flex: 0,
     flexGrow: 0,
@@ -1195,6 +1273,7 @@ const styles = StyleSheet.create({
   },
   inviteCard: {
     flex: 1,
+    flexShrink: 1,
     minWidth: 0,
     width: "100%",
     alignSelf: "stretch",
@@ -1202,7 +1281,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
-    overflow: "hidden",
+    overflow: "visible",
     padding: 18,
     position: "relative",
     ...Platform.select({
@@ -1219,9 +1298,23 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  inviteSectionInline: {
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 12,
+    gap: 8,
+    backgroundColor: "transparent",
+    overflow: "visible",
+  },
   inviteCardStacked: {
     flex: 0,
     flexGrow: 0,
+    flexShrink: 0,
   },
   inviteGlow: {
     position: "absolute",
@@ -1238,11 +1331,13 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
     width: "100%",
+    overflow: "visible",
   },
   inviteContentCol: {
     flex: 1,
     minWidth: 0,
     gap: 6,
+    overflow: "visible",
   },
   inviteIconWrap: {
     width: 30,
@@ -1253,6 +1348,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(99, 102, 241, 0.09)",
     borderWidth: 1,
     borderColor: "rgba(99, 102, 241, 0.14)",
+    flexShrink: 0,
   },
   inviteCardTitle: {
     fontSize: 14,
@@ -1280,7 +1376,7 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     minWidth: 0,
-    overflow: "hidden",
+    flexWrap: "wrap",
   },
   inviteCopyRowStacked: {
     flexDirection: "column",
@@ -1320,7 +1416,7 @@ const styles = StyleSheet.create({
     }),
   },
   inviteCopyBtnStacked: {
-    alignSelf: "flex-end",
+    alignSelf: "stretch",
   },
   inviteCopyBtnPressed: {
     opacity: 0.88,

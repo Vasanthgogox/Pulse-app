@@ -24,6 +24,10 @@ export type NetworkGrowSummaryCardProps = {
   todayInviteCount: number;
   dailyInviteLimit?: number;
   style?: ViewStyle;
+  /** Parent section already shows "Grow your network" — stats-only layout. */
+  hideTitle?: boolean;
+  /** Flat section inside a parent card (no nested border/shadow). */
+  variant?: "card" | "inline";
 };
 
 export function NetworkGrowSummaryCard({
@@ -32,27 +36,41 @@ export function NetworkGrowSummaryCard({
   todayInviteCount,
   dailyInviteLimit = DAILY_CONNECTION_INVITE_LIMIT,
   style,
+  hideTitle = false,
+  variant = "card",
 }: NetworkGrowSummaryCardProps) {
   const { t } = useLanguage();
   const invitePct = Math.min(
     100,
     Math.round((todayInviteCount / dailyInviteLimit) * 100),
   );
+  const statsLine = interpolate(t("networkGrowSummaryStats"), {
+    discover: discoverCount,
+    connected: totalConnections,
+  });
 
   return (
-    <View style={[styles.card, style]}>
-      <View style={styles.head}>
-        <View style={styles.iconWrap}>
-          <Sparkles size={13} color={Theme.primary} strokeWidth={2.1} />
+    <View
+      style={[
+        variant === "card" ? styles.card : styles.inlineSection,
+        style,
+      ]}
+    >
+      {hideTitle ? (
+        <View style={styles.statsPill}>
+          <Text style={styles.statsPillText}>{statsLine}</Text>
         </View>
-        <Text style={styles.title}>{t("networkDiscoverGrowSlots")}</Text>
-      </View>
-      <Text style={styles.sub}>
-        {interpolate(t("networkGrowSummaryStats"), {
-          discover: discoverCount,
-          connected: totalConnections,
-        })}
-      </Text>
+      ) : (
+        <>
+          <View style={styles.head}>
+            <View style={styles.iconWrap}>
+              <Sparkles size={13} color={Theme.primary} strokeWidth={2.1} />
+            </View>
+            <Text style={styles.title}>{t("networkDiscoverGrowSlots")}</Text>
+          </View>
+          <Text style={styles.sub}>{statsLine}</Text>
+        </>
+      )}
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${invitePct}%` }]} />
       </View>
@@ -75,8 +93,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(79, 70, 229, 0.12)",
     backgroundColor: "rgba(79, 70, 229, 0.04)",
     padding: 18,
-    gap: 8,
-    justifyContent: "center",
+    gap: 10,
     ...Platform.select({
       web: {
         boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
@@ -89,6 +106,17 @@ const styles = StyleSheet.create({
         elevation: 1,
       },
     }),
+  },
+  inlineSection: {
+    width: "100%",
+    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 10,
+    backgroundColor: "transparent",
   },
   head: {
     flexDirection: "row",
@@ -119,6 +147,22 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: Theme.textSecondary,
     lineHeight: 17,
+  },
+  statsPill: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "rgba(99, 102, 241, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(99, 102, 241, 0.14)",
+  },
+  statsPillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.primary,
+    lineHeight: 16,
   },
   progressTrack: {
     height: 5,

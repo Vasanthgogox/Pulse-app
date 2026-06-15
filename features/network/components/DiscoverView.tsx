@@ -83,9 +83,9 @@ interface DiscoverViewProps {
   onInviteCountChange?: (count: number, limit: number) => void;
   /** When true (e.g. header shows max invites), block Send request with daily-limit alert even if query count lags. */
   inviteDailyCapReached?: boolean;
+  /** When true with `embedded`, parent already shows the Grow section title — skip duplicate header. */
+  suppressGrowSectionHeader?: boolean;
 }
-
-// --- Scoring ---
 
 interface RecommendationSignal {
   type: 'mutual' | 'location' | 'lane';
@@ -293,6 +293,7 @@ export function DiscoverView({
   onPressMutual,
   onInviteCountChange,
   inviteDailyCapReached = false,
+  suppressGrowSectionHeader = false,
 }: DiscoverViewProps) {
   const { t } = useLanguage();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -712,17 +713,24 @@ export function DiscoverView({
   const embeddedHubGridBody = (
     <View style={styles.hubMobileListRoot}>
       {growNetworkRecommendations.length > 0 ? (
-        <View style={styles.hubMobileListSection}>
-          <View style={styles.hubMobileListSectionHeader}>
-            {splitStacked ? (
-              <>
-                <Text style={styles.mayKnowKicker}>{t("networkDiscoverAlliesKicker")}</Text>
-                <Text style={styles.mayKnowHeading}>{t("networkDiscoverGrowSlots")}</Text>
-              </>
-            ) : (
-              <Text style={styles.mayKnowHeading}>{t("networkDiscoverRecommended")}</Text>
-            )}
-          </View>
+        <View
+          style={[
+            styles.hubMobileListSection,
+            suppressGrowSectionHeader && styles.hubMobileListSectionFlush,
+          ]}
+        >
+          {!suppressGrowSectionHeader ? (
+            <View style={styles.hubMobileListSectionHeader}>
+              {splitStacked ? (
+                <>
+                  <Text style={styles.mayKnowKicker}>{t("networkDiscoverAlliesKicker")}</Text>
+                  <Text style={styles.mayKnowHeading}>{t("networkDiscoverGrowSlots")}</Text>
+                </>
+              ) : (
+                <Text style={styles.mayKnowHeading}>{t("networkDiscoverRecommended")}</Text>
+              )}
+            </View>
+          ) : null}
           {renderEmbeddedPaneListGrid(
             growNetworkRecommendations,
             "grow",
@@ -995,9 +1003,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     gap: 8,
   },
+  hubMobileListSectionFlush: {
+    marginTop: 4,
+  },
   hubMobileListSectionHeader: {
     width: "100%",
-    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
+    paddingHorizontal: 0,
     gap: 2,
     marginBottom: 4,
   },
