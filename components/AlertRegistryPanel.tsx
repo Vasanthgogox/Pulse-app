@@ -501,9 +501,7 @@ function RegistryFeedList({
                       />
                       <RegistryPrimaryButton
                         label={isTripBasedAttribution ? "Accept" : "Pay now"}
-                        onPress={() =>
-                          finance.onOpenDetail("salary", req.id, "active")
-                        }
+                        onPress={() => finance.onPaySalary(req)}
                       />
                     </RegistryCardActions>
                   ) : (

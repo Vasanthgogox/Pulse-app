@@ -1,12 +1,18 @@
 /**
- * Premium mobile bottom navigation — Slack-like permanence, Pulse brand visuals.
- * Navigation fires on press (no pre-animation); active state follows route.
+ * Compact mobile bottom navigation — flat five-tab row with underline selection.
  */
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import { Home, Package, Route, Wallet } from 'lucide-react-native';
+import {
+  DollarSign,
+  Home,
+  MessageSquare,
+  Signpost,
+  Truck,
+  type LucideIcon,
+} from 'lucide-react-native';
 
-import { AnimatedChatTabIcon } from '@/components/AnimatedChatTabIcon';
+import { WEB_TOP_NAV_ICON } from '@/components/demo/webTopNavIcon.tokens';
 import type { DemoTabId } from '@/components/demo/DemoTabBar';
 import Theme from '@/constants/Theme';
 import { pe } from '@/lib/platformViewStyle.util';
@@ -14,11 +20,9 @@ import { preloadPulseLoadsRoute, preloadTabScreen } from '@/lib/preloadRoutes';
 import type { PreloadableTab } from '@/lib/preloadRoutes';
 
 import {
-  MOBILE_EDGE_ICON_SIZE,
-  MOBILE_EDGE_ICON_SIZE_COMPACT,
-  CLUSTER_STROKE,
+  MOBILE_TAB_ICON_SIZE,
+  MOBILE_TAB_ICON_SIZE_COMPACT,
 } from './constants';
-import { PulseBottomTabCluster, type PulseClusterTab } from './PulseBottomTabCluster';
 import { PulseBottomTabSlot } from './PulseBottomTabSlot';
 
 export type PulseBottomTabBarProps = {
@@ -37,6 +41,24 @@ export type PulseBottomTabBarProps = {
   onWarmTab?: (tab: DemoTabId) => void;
 };
 
+function TabOutlineIcon({
+  Icon,
+  active,
+  size,
+}: {
+  Icon: LucideIcon;
+  active: boolean;
+  size: number;
+}) {
+  return (
+    <Icon
+      size={size}
+      color={active ? WEB_TOP_NAV_ICON.active : WEB_TOP_NAV_ICON.muted}
+      strokeWidth={WEB_TOP_NAV_ICON.stroke}
+    />
+  );
+}
+
 function PulseBottomTabBarInner({
   activeTab,
   isChatRoute,
@@ -51,8 +73,7 @@ function PulseBottomTabBarInner({
   onCollapseNetworkDock,
   onWarmTab,
 }: PulseBottomTabBarProps) {
-  const clusterActiveIndex =
-    activeTab === 'finance' ? 0 : activeTab === 'trips' ? 1 : activeTab === 'loadCenter' ? 2 : -1;
+  const iconSize = isCompactMobile ? MOBILE_TAB_ICON_SIZE_COMPACT : MOBILE_TAB_ICON_SIZE;
 
   const switchTab = useCallback(
     (tab: DemoTabId) => {
@@ -62,54 +83,17 @@ function PulseBottomTabBarInner({
     [onCollapseNetworkDock, onTabChange],
   );
 
-  const warmFinance = useCallback(() => {
-    preloadTabScreen('finance' as PreloadableTab);
-    onWarmTab?.('finance');
-  }, [onWarmTab]);
-
-  const warmTrips = useCallback(() => {
-    preloadTabScreen('trips' as PreloadableTab);
-    onWarmTab?.('trips');
-  }, [onWarmTab]);
-
-  const warmLoads = useCallback(() => {
-    preloadPulseLoadsRoute();
-    onWarmTab?.('loadCenter');
-  }, [onWarmTab]);
-
-  const clusterTabs = useMemo<PulseClusterTab[]>(
-    () => [
-      { id: 'finance', label: 'Cash', Icon: Wallet },
-      { id: 'trips', label: 'Trips', Icon: Route },
-      { id: 'loads', label: 'Loads', Icon: Package, badgeCount: activeLoadCount },
-    ],
-    [activeLoadCount],
-  );
-
-  const clusterWarmers = useMemo(
-    () => [warmFinance, warmTrips, warmLoads],
-    [warmFinance, warmTrips, warmLoads],
-  );
-
-  const onClusterPress = useCallback(
-    (index: number) => {
-      if (index === 0) switchTab('finance');
-      else if (index === 1) switchTab('trips');
-      else switchTab('loadCenter');
+  const warmTab = useCallback(
+    (tab: DemoTabId) => {
+      if (tab === 'loadCenter') {
+        preloadPulseLoadsRoute();
+      } else if (tab === 'finance' || tab === 'trips' || tab === 'network') {
+        preloadTabScreen(tab as PreloadableTab);
+      }
+      onWarmTab?.(tab);
     },
-    [switchTab],
+    [onWarmTab],
   );
-
-  const onClusterWarm = useCallback(
-    (index: number) => {
-      clusterWarmers[index]?.();
-    },
-    [clusterWarmers],
-  );
-
-  const edgeIconSize = isCompactMobile
-    ? MOBILE_EDGE_ICON_SIZE_COMPACT + 1
-    : MOBILE_EDGE_ICON_SIZE + 1;
 
   const shellSurface =
     Platform.OS === 'android'
@@ -129,24 +113,62 @@ function PulseBottomTabBarInner({
           badgeCount={pendingInvites}
           compact={isCompactMobile}
           onPress={() => switchTab('network')}
-          onPressIn={() => onWarmTab?.('network')}
-          style={styles.edgeSlot}
+          onPressIn={() => warmTab('network')}
           icon={
             <Home
-              size={edgeIconSize}
-              color={activeTab === 'network' ? Theme.textOnPrimary : Theme.pulseIndigo}
-              fill={activeTab === 'network' ? Theme.textOnPrimary : 'transparent'}
-              strokeWidth={activeTab === 'network' ? CLUSTER_STROKE + 0.1 : CLUSTER_STROKE}
-              opacity={activeTab === 'network' ? 1 : 0.58}
+              size={iconSize}
+              color={
+                activeTab === 'network'
+                  ? WEB_TOP_NAV_ICON.active
+                  : WEB_TOP_NAV_ICON.muted
+              }
+              fill={activeTab === 'network' ? WEB_TOP_NAV_ICON.active : 'transparent'}
+              strokeWidth={WEB_TOP_NAV_ICON.stroke}
             />
           }
         />
-        <PulseBottomTabCluster
-          tabs={clusterTabs}
-          activeIndex={clusterActiveIndex}
+        <PulseBottomTabSlot
+          label="Cash"
+          active={activeTab === 'finance'}
           compact={isCompactMobile}
-          onPressAt={onClusterPress}
-          onWarmAt={onClusterWarm}
+          onPress={() => switchTab('finance')}
+          onPressIn={() => warmTab('finance')}
+          icon={
+            <TabOutlineIcon
+              Icon={DollarSign}
+              active={activeTab === 'finance'}
+              size={iconSize}
+            />
+          }
+        />
+        <PulseBottomTabSlot
+          label="Trips"
+          active={activeTab === 'trips'}
+          compact={isCompactMobile}
+          onPress={() => switchTab('trips')}
+          onPressIn={() => warmTab('trips')}
+          icon={
+            <TabOutlineIcon
+              Icon={Signpost}
+              active={activeTab === 'trips'}
+              size={iconSize}
+            />
+          }
+        />
+        <PulseBottomTabSlot
+          label="Loads"
+          active={activeTab === 'loadCenter'}
+          badgeCount={activeLoadCount}
+          compact={isCompactMobile}
+          onPress={() => switchTab('loadCenter')}
+          onPressIn={() => warmTab('loadCenter')}
+          icon={
+            <TabOutlineIcon
+              Icon={Truck}
+              active={activeTab === 'loadCenter'}
+              size={iconSize}
+            />
+          }
         />
         <PulseBottomTabSlot
           label="Chat"
@@ -158,11 +180,8 @@ function PulseBottomTabBarInner({
             onCollapseNetworkDock();
             onOpenChat();
           }}
-          style={styles.edgeSlot}
           icon={
-            <View style={!isChatRoute ? styles.chatIconMuted : undefined}>
-              <AnimatedChatTabIcon active={isChatRoute} size={edgeIconSize} />
-            </View>
+            <TabOutlineIcon Icon={MessageSquare} active={isChatRoute} size={iconSize} />
           }
         />
       </View>
@@ -194,45 +213,36 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'stretch',
     backgroundColor: Theme.tabBarBg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.tabBarBorderTop,
-    paddingTop: 10,
-    paddingHorizontal: 4,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 4,
+    paddingHorizontal: 0,
   },
   shellIos: {
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
   },
   shellAndroid: {
-    elevation: 10,
+    elevation: 6,
   },
   shellWeb: {
-    shadowColor: Theme.pulseIndigo,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
   },
   bar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'center',
-    minHeight: 58,
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    gap: 10,
+    justifyContent: 'space-between',
+    minHeight: 46,
+    paddingHorizontal: 4,
+    paddingTop: 2,
   },
   barCompact: {
-    minHeight: 52,
-    paddingHorizontal: 10,
-    gap: 8,
+    minHeight: 42,
+    paddingHorizontal: 2,
   },
-  edgeSlot: {
-    width: 58,
-    maxWidth: 58,
-  },
-  chatIconMuted: { opacity: 0.55 },
 });

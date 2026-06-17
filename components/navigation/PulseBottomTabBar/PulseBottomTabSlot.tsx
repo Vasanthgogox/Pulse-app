@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { pe } from '@/lib/platformViewStyle.util';
 import {
   Pressable,
@@ -9,16 +9,14 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, {
-  Extrapolation,
-  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
 
 import Theme from '@/constants/Theme';
+import { WEB_TOP_NAV_ICON } from '@/components/demo/webTopNavIcon.tokens';
 import { TAB_PRESS_SCALE_ACTIVE, TAB_PRESS_SCALE_REST, TAB_PRESS_TIMING_MS } from '@/lib/mobileTabNav/constants';
-import { TAB_MOTION } from './constants';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -43,26 +41,7 @@ export const PulseBottomTabSlot = memo(function PulseBottomTabSlot({
   icon,
   style,
 }: PulseBottomTabSlotProps) {
-  const activeSV = useSharedValue(active ? 1 : 0);
   const pressSV = useSharedValue(TAB_PRESS_SCALE_REST);
-
-  useEffect(() => {
-    activeSV.value = withTiming(active ? 1 : 0, TAB_MOTION);
-  }, [active, activeSV]);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    opacity: activeSV.value,
-    transform: [
-      {
-        scale: interpolate(
-          activeSV.value,
-          [0, 1],
-          [0.97, 1],
-          Extrapolation.CLAMP,
-        ),
-      },
-    ],
-  }));
 
   const contentStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pressSV.value }],
@@ -86,7 +65,6 @@ export const PulseBottomTabSlot = memo(function PulseBottomTabSlot({
       accessibilityLabel={label}
     >
       <Animated.View style={[styles.iconWrap, contentStyle]}>
-        <Animated.View style={[styles.activePill, pillStyle, pe('none')]} />
         <View style={styles.iconForeground}>{icon}</View>
         {showBadge ? (
           <View style={styles.badge}>
@@ -106,31 +84,30 @@ export const PulseBottomTabSlot = memo(function PulseBottomTabSlot({
       >
         {label}
       </Text>
+      {active ? (
+        <View style={[styles.underline, pe('none')]} />
+      ) : (
+        <View style={styles.underlineSpacer} />
+      )}
     </AnimatedPressable>
   );
 });
 
 const styles = StyleSheet.create({
   slot: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 4,
-    minWidth: 56,
+    minWidth: 0,
+    paddingTop: 4,
+    paddingBottom: 2,
   },
   iconWrap: {
     position: 'relative',
-    width: 40,
-    height: 36,
+    width: 28,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-  },
-  activePill: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 12,
-    backgroundColor: Theme.pulseIndigo,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   iconForeground: {
     alignItems: 'center',
@@ -138,12 +115,12 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -2,
-    right: -4,
-    minWidth: 15,
-    height: 15,
-    borderRadius: 8,
-    paddingHorizontal: 3,
+    top: -3,
+    right: -7,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    paddingHorizontal: 2,
     backgroundColor: Theme.teslaRed,
     borderWidth: 1.5,
     borderColor: Theme.tabBarBg,
@@ -157,15 +134,29 @@ const styles = StyleSheet.create({
     lineHeight: 10,
   },
   label: {
-    fontSize: 11,
+    marginTop: 2,
+    fontSize: 10,
     fontWeight: '500',
-    color: Theme.textSecondary,
-    letterSpacing: -0.15,
+    color: WEB_TOP_NAV_ICON.muted,
+    letterSpacing: -0.1,
     textAlign: 'center',
   },
-  labelCompact: { fontSize: 10 },
+  labelCompact: {
+    fontSize: 9,
+  },
   labelActive: {
-    color: Theme.pulseIndigo,
-    fontWeight: '700',
+    color: WEB_TOP_NAV_ICON.active,
+    fontWeight: '600',
+  },
+  underline: {
+    marginTop: 4,
+    width: 22,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: WEB_TOP_NAV_ICON.active,
+  },
+  underlineSpacer: {
+    marginTop: 4,
+    height: 2,
   },
 });

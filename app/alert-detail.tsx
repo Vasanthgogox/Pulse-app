@@ -34,6 +34,6 @@ export default function AlertDetailRoute() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
   },
 });
