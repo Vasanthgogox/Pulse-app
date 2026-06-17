@@ -8,13 +8,13 @@ export class SignInPage {
   private readonly submitButton: Locator;
 
   constructor(private readonly page: Page) {
-    this.emailInput = page.getByPlaceholder('Email Address');
-    this.passwordInput = page.getByPlaceholder('Your Password');
+    this.emailInput = page.getByPlaceholder('you@example.com');
+    this.passwordInput = page.getByPlaceholder('Your password');
     this.submitButton = page.getByTestId('signin-submit-btn');
   }
 
   async goto(): Promise<void> {
-    await this.page.goto('/sign-in');
+    await this.page.goto('/sign-in', { waitUntil: 'commit' });
   }
 
   async waitForReady(): Promise<void> {
