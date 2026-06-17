@@ -580,6 +580,17 @@ function NetworkScreenInner() {
           : selectedProfileNode.status
       : null;
 
+  const handleOpenProfileFromConnection = useCallback(
+    (item: ConnectedOrg) => {
+      router.push(
+        connectedOrgLedgerDetailRoute(item) as Parameters<
+          typeof router.push
+        >[0],
+      );
+    },
+    [router],
+  );
+
   if (!orgId) {
     if (orgLoading) {
       return <SceneLoadingSplash variant="preparing" />;
@@ -633,17 +644,6 @@ function NetworkScreenInner() {
   }
 
   const trendPct = totalConnections > 0 ? Math.round((pendingCount / totalConnections) * 100) : 0;
-
-  const handleOpenProfileFromConnection = useCallback(
-    (item: ConnectedOrg) => {
-      router.push(
-        connectedOrgLedgerDetailRoute(item) as Parameters<
-          typeof router.push
-        >[0],
-      );
-    },
-    [router],
-  );
 
   const handleSendProtocolFromProfile = () => {
     if (!selectedProfileNode || !orgId) return;
