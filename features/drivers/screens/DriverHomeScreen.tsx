@@ -1185,8 +1185,7 @@ export default function DriverRadarScreen() {
     const isAssetRosterTrip = isRosterTrip(trip);
     const requiresOtp =
       !isAssetRosterTrip &&
-      (pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id) ||
-        (isAggregateTrip(trip) && isAssignedNotStarted(trip.status)));
+      pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id);
     if (requiresOtp) {
       openOtpClaim(trip);
       return;
@@ -1502,11 +1501,9 @@ export default function DriverRadarScreen() {
   const firstIncomingRequiresOtp = Boolean(
     effectiveFirstIncoming &&
     !isRosterTrip(effectiveFirstIncoming) &&
-    (pendingOtpTripsRequiringOtp.some(
+    pendingOtpTripsRequiringOtp.some(
       (t) => t.id === effectiveFirstIncoming.id,
-    ) ||
-      (isAggregateTrip(effectiveFirstIncoming) &&
-        isAssignedNotStarted(effectiveFirstIncoming.status))),
+    ),
   );
   const otpClaimTrip = otpClaimTripId
     ? ([
@@ -1622,8 +1619,7 @@ export default function DriverRadarScreen() {
         );
         const requiresOtp =
           !isRosterTrip(trip) &&
-          (pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id) ||
-            (isAggregateTrip(trip) && isAssignedNotStarted(trip.status)));
+          pendingOtpTripsRequiringOtp.some((t) => t.id === trip.id);
         const acceptedInviteForTrip =
           invites.find(
             (i) =>

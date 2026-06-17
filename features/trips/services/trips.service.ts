@@ -1858,13 +1858,9 @@ export async function assignTripDriverByPhone(
     return { ...assignment, otp: null };
   }
 
-  // Driver app lists phone-preassigned trips via get_pending_otp_trips (join on valid trip_otps).
-  const supplierId =
-    assignment.trip.supplier_id != null
-      ? String(assignment.trip.supplier_id).trim()
-      : "";
-  const needsTripOtp =
-    supplierId.length > 0 || driver.user_id == null;
+  // OTP only for drivers without app access (no user_id). Fleet drivers (user_id set)
+  // see the trip directly via driver_id without needing an OTP claim step.
+  const needsTripOtp = driver.user_id == null;
   let otp: TripOtpInfo | null = null;
   if (needsTripOtp) {
     const { generateTripOtp } = await import("./tripOtp.service");
