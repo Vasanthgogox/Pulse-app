@@ -67,6 +67,7 @@ function renderRequestCard(
   driversById: Map<string, { id: string; name?: string | null }>,
   busySalaryId: string | null,
   onOpenRequest: (req: SalaryRequestWithDriverRow) => void,
+  onAcceptRequest: (req: SalaryRequestWithDriverRow) => void,
   onReject: (requestId: string) => void,
   variant: "feed" | "tile",
 ) {
@@ -101,7 +102,7 @@ function renderRequestCard(
           />
           <RegistryPrimaryButton
             label="Accept"
-            onPress={() => onOpenRequest(req)}
+            onPress={() => onAcceptRequest(req)}
             disabled={busy}
           />
         </RegistryCardActions>
@@ -115,6 +116,7 @@ export type AttributionRequestsSectionProps = {
   orgId: string | null;
   busySalaryId: string | null;
   onOpenRequest: (req: SalaryRequestWithDriverRow) => void;
+  onAcceptRequest: (req: SalaryRequestWithDriverRow) => void;
   onReject: (requestId: string) => void;
 };
 
@@ -123,6 +125,7 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
   orgId,
   busySalaryId,
   onOpenRequest,
+  onAcceptRequest,
   onReject,
 }: AttributionRequestsSectionProps) {
   const { width: layoutWidth } = useWindowDimensions();
@@ -230,6 +233,7 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
                       driversById,
                       busySalaryId,
                       onOpenRequest,
+                      onAcceptRequest,
                       onReject,
                       "tile",
                     )}
@@ -248,6 +252,7 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
                       driversById,
                       busySalaryId,
                       onOpenRequest,
+                      onAcceptRequest,
                       onReject,
                       "tile",
                     )}
@@ -270,6 +275,7 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
                 driversById,
                 busySalaryId,
                 onOpenRequest,
+                onAcceptRequest,
                 onReject,
                 "feed",
               )}
@@ -285,6 +291,7 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
                 driversById,
                 busySalaryId,
                 onOpenRequest,
+                onAcceptRequest,
                 onReject,
                 "feed",
               )}

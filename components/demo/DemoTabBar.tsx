@@ -512,7 +512,7 @@ export function DemoTabBar({
 
   const isWeb = isWebEarly;
   const isDesktopWeb = isDesktopWebEarly;
-  const isCompactMobile = !isDesktopWeb && windowWidth < 390;
+  const isCompactMobile = !isDesktopWeb;
   const isFiscal = activeTab === "finance";
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";

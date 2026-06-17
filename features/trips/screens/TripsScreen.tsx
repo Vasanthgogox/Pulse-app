@@ -1609,6 +1609,7 @@ export default function TripsScreen() {
                 onOpenRequest={(req) =>
                   finance.onOpenDetail("salary", req.id, "active")
                 }
+                onAcceptRequest={finance.onPaySalary}
                 onReject={finance.onRejectSalary}
               />
             </View>
