@@ -481,7 +481,6 @@ export function AlertDetailScreen({
         ]}
       >
         <FullPageWizardFooter
-          actionVariant="registry"
           summary={footerPlan.summary}
           hint={footerPlan.hint}
           secondaryLabel={footerPlan.secondaryLabel}
