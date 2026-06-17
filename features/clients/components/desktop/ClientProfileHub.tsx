@@ -33,164 +33,40 @@ import { ROUTES } from "@/lib/routes";
 import { ClientProfileHubHero } from "@/features/clients/components/desktop/ClientProfileHubHero";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import { updateClient } from "@/features/clients/services/clients.service";
-import { ArrowLeft, Building2, FileText, Mail, MapPin, MessageSquare, MoreHorizontal, Phone, Plus, User } from "lucide-react-native";
+import { ArrowLeft, MessageSquare, Plus, User } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 type SidebarProps = {
   client: ClientRow;
-  bundle: ClientManagementBundle;
-  kycScore: number;
-  onTabChange: (tab: ClientProfileTab) => void;
-  onEdit: () => void;
 };
 
-function ClientPartyDetailSidebar({ client, bundle, kycScore, onTabChange, onEdit }: SidebarProps) {
-  const router = useRouter();
-  const isIntegrated = client.is_integrated ?? Boolean(client.linked_organization_id);
-  const locationLabel =
-    [bundle.client?.state, bundle.client?.country].filter(Boolean).join(", ") ||
-    bundle.warehouses[0]?.city || null;
-  const industry = (client as Record<string, unknown>).industry as string | null | undefined;
-  const clientStatus = (client as Record<string, unknown>).client_status as string | null | undefined;
-  const fp = bundle.finance_profile;
-
-  const statusBg = clientStatus === "inactive" ? "#FFF8DD" : clientStatus === "prospect" ? "#EEF6FF" : "#E8FFF3";
-  const statusColor = clientStatus === "inactive" ? "#F6C000" : clientStatus === "prospect" ? "#3E97FF" : "#50CD89";
-  const kycBg = kycScore >= 80 ? "#E8FFF3" : kycScore >= 50 ? "#FFF8DD" : "#FFF1F2";
-  const kycColor = kycScore >= 80 ? "#50CD89" : kycScore >= 50 ? "#F6C000" : "#F1416C";
+function ClientPartyDetailSidebar({ client }: SidebarProps) {
+  if (!client.phone && !client.email && !client.contact_person) {
+    return null;
+  }
 
   return (
-    <View>
-      {/* Highlights — KV label-value rows */}
-      <View style={cpStyles.sidebarCard}>
-        <Text style={cpStyles.sidebarCardTitle}>Highlights</Text>
-
-        {clientStatus ? (
-          <View style={cpStyles.sidebarKvRow}>
-            <Text style={cpStyles.sidebarKvLabel}>Status</Text>
-            <View style={[cpStyles.sidebarBadge, { backgroundColor: statusBg }]}>
-              <Text style={[cpStyles.sidebarBadgeText, { color: statusColor }]}>{clientStatus.toUpperCase()}</Text>
-            </View>
-          </View>
-        ) : null}
-
+    <View style={cpStyles.sidebarCard}>
+      <Text style={cpStyles.sidebarCardTitle}>Contact</Text>
+      {client.contact_person ? (
         <View style={cpStyles.sidebarKvRow}>
-          <Text style={cpStyles.sidebarKvLabel}>In App</Text>
-          <View style={[cpStyles.sidebarBadge, { backgroundColor: isIntegrated ? "#E8FFF3" : "#F1F1F4" }]}>
-            <Text style={[cpStyles.sidebarBadgeText, { color: isIntegrated ? "#50CD89" : METRONIC.subtle }]}>
-              {isIntegrated ? "INTEGRATED" : "NOT IN APP"}
-            </Text>
-          </View>
-        </View>
-
-        <View style={cpStyles.sidebarKvRow}>
-          <Text style={cpStyles.sidebarKvLabel}>KYC</Text>
-          <View style={[cpStyles.sidebarBadge, { backgroundColor: kycBg }]}>
-            <Text style={[cpStyles.sidebarBadgeText, { color: kycColor }]}>{kycScore}%</Text>
-          </View>
-        </View>
-
-        {locationLabel ? (
-          <View style={cpStyles.sidebarKvRow}>
-            <Text style={cpStyles.sidebarKvLabel}>Location</Text>
-            <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{locationLabel}</Text>
-          </View>
-        ) : null}
-
-        {industry ? (
-          <View style={cpStyles.sidebarKvRow}>
-            <Text style={cpStyles.sidebarKvLabel}>Sector</Text>
-            <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{industry}</Text>
-          </View>
-        ) : null}
-
-        {client.gstin ? (
-          <View style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]}>
-            <Text style={cpStyles.sidebarKvLabel}>GSTIN</Text>
-            <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{client.gstin}</Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Commercial — payment terms from finance profile */}
-      {fp ? (
-        <View style={cpStyles.sidebarCard}>
-          <Text style={cpStyles.sidebarCardTitle}>Commercial</Text>
-
-          {fp.credit_days ? (
-            <View style={cpStyles.sidebarKvRow}>
-              <Text style={cpStyles.sidebarKvLabel}>Credit days</Text>
-              <Text style={cpStyles.sidebarKvValue}>{fp.credit_days}d</Text>
-            </View>
-          ) : null}
-
-          {fp.invoice_frequency ? (
-            <View style={cpStyles.sidebarKvRow}>
-              <Text style={cpStyles.sidebarKvLabel}>Invoice freq.</Text>
-              <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{fp.invoice_frequency}</Text>
-            </View>
-          ) : null}
-
-          {(fp as Record<string, unknown>).payment_terms ? (
-            <View style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]}>
-              <Text style={cpStyles.sidebarKvLabel}>Payment</Text>
-              <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>
-                {String((fp as Record<string, unknown>).payment_terms)}
-              </Text>
-            </View>
-          ) : null}
+          <Text style={cpStyles.sidebarKvLabel}>Name</Text>
+          <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{client.contact_person}</Text>
         </View>
       ) : null}
-
-      {/* Actions */}
-      <View style={cpStyles.sidebarCard}>
-        <Text style={cpStyles.sidebarCardTitle}>Actions</Text>
-        <Pressable
-          style={[cpStyles.sidebarActionBtn, cpStyles.sidebarActionBtnPrimary]}
-          onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
-          accessibilityRole="button"
-        >
-          <Plus size={13} color="#fff" strokeWidth={2.5} />
-          <Text style={[cpStyles.sidebarActionBtnText, cpStyles.sidebarActionBtnTextPrimary]}>Create trip</Text>
+      {client.phone ? (
+        <Pressable style={cpStyles.sidebarKvRow} onPress={() => void Linking.openURL(`tel:${client.phone}`)}>
+          <Text style={cpStyles.sidebarKvLabel}>Phone</Text>
+          <Text style={[cpStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{client.phone}</Text>
         </Pressable>
-        <Pressable style={cpStyles.sidebarActionBtn} onPress={() => onTabChange("contracts")} accessibilityRole="button">
-          <FileText size={13} color={METRONIC.text} strokeWidth={2} />
-          <Text style={cpStyles.sidebarActionBtnText}>Contracts ({bundle.agreements.length})</Text>
+      ) : null}
+      {client.email ? (
+        <Pressable style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]} onPress={() => void Linking.openURL(`mailto:${client.email}`)}>
+          <Text style={cpStyles.sidebarKvLabel}>Email</Text>
+          <Text style={[cpStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{client.email}</Text>
         </Pressable>
-        <Pressable style={cpStyles.sidebarActionBtn} onPress={() => onTabChange("finance")} accessibilityRole="button">
-          <Text style={[cpStyles.sidebarActionBtnText, { fontSize: 13 }]}>₹</Text>
-          <Text style={cpStyles.sidebarActionBtnText}>Ledger</Text>
-        </Pressable>
-        <Pressable style={[cpStyles.sidebarActionBtn, { marginBottom: 0 }]} onPress={onEdit} accessibilityRole="button">
-          <Text style={cpStyles.sidebarActionBtnText}>Edit Profile</Text>
-        </Pressable>
-      </View>
-
-      {/* Contact */}
-      {(client.phone || client.email || client.contact_person) ? (
-        <View style={cpStyles.sidebarCard}>
-          <Text style={cpStyles.sidebarCardTitle}>Contact</Text>
-          {client.contact_person ? (
-            <View style={cpStyles.sidebarKvRow}>
-              <Text style={cpStyles.sidebarKvLabel}>Name</Text>
-              <Text style={cpStyles.sidebarKvValue} numberOfLines={1}>{client.contact_person}</Text>
-            </View>
-          ) : null}
-          {client.phone ? (
-            <Pressable style={cpStyles.sidebarKvRow} onPress={() => void Linking.openURL(`tel:${client.phone}`)}>
-              <Text style={cpStyles.sidebarKvLabel}>Phone</Text>
-              <Text style={[cpStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{client.phone}</Text>
-            </Pressable>
-          ) : null}
-          {client.email ? (
-            <Pressable style={[cpStyles.sidebarKvRow, { borderBottomWidth: 0 }]} onPress={() => void Linking.openURL(`mailto:${client.email}`)}>
-              <Text style={cpStyles.sidebarKvLabel}>Email</Text>
-              <Text style={[cpStyles.sidebarKvValue, { color: METRONIC.link }]} numberOfLines={1}>{client.email}</Text>
-            </Pressable>
-          ) : null}
-        </View>
       ) : null}
     </View>
   );
@@ -489,8 +365,13 @@ export function ClientProfileHub({
             >
               <Text style={{ fontSize: 11, fontWeight: "800", color: METRONIC.text }}>₹</Text>
             </Pressable>
-            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
-              <MoreHorizontal size={18} color={METRONIC.text} strokeWidth={2} />
+            <Pressable
+              style={mobile.tabActionIcon}
+              onPress={() => setEditOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+            >
+              <User size={18} color={METRONIC.text} strokeWidth={2} />
             </Pressable>
           </View>
         ) : (
@@ -530,8 +411,14 @@ export function ClientProfileHub({
             >
               <Text style={styles.tabActionBtnText}>Ledger</Text>
             </Pressable>
-            <Pressable style={styles.tabActionBtn} hitSlop={8}>
-              <MoreHorizontal size={16} color={Theme.textSecondary} strokeWidth={2} />
+            <Pressable
+              style={styles.tabActionBtn}
+              onPress={() => setEditOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+            >
+              <User size={14} color={Theme.textSecondary} strokeWidth={2} />
+              <Text style={styles.tabActionBtnText}>Edit</Text>
             </Pressable>
           </View>
         )}
@@ -555,15 +442,11 @@ export function ClientProfileHub({
 
       {compact ? panel : (
         <View style={cpStyles.hubBodyRow}>
-          <View style={cpStyles.hubSidebarCol}>
-            <ClientPartyDetailSidebar
-              client={client}
-              bundle={bundle}
-              kycScore={kyc.score}
-              onTabChange={setTab}
-              onEdit={() => setEditOpen(true)}
-            />
-          </View>
+          {(client.phone || client.email || client.contact_person) ? (
+            <View style={cpStyles.hubSidebarCol}>
+              <ClientPartyDetailSidebar client={client} />
+            </View>
+          ) : null}
           <View style={cpStyles.hubMainCol}>
             {panel}
           </View>

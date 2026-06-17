@@ -10,6 +10,7 @@ import type { ClientManagementBundle } from "@/features/clients/types/clientMana
 import { formatClientPhoneDisplay } from "@/features/clients/utils/clientManagement.util";
 import { NetworkDesktopHeadquarterMap } from "@/features/network/components/desktop/NetworkDesktopHeadquarterMap";
 import { hubStyles as styles, METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { PartyHighlightsCard } from "@/features/party/components/PartyHighlightsCard";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { formatINR } from "@/lib/format";
@@ -131,8 +132,27 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
   const billingContacts = bundle.contacts.filter((ct) => ct.is_billing);
 
   const canEdit = Boolean(orgId && clientId && onRefresh);
-  const [editing, setEditing] = useState(false);
+  const [kamEditing, setKamEditing] = useState(false);
+  const [commercialEditing, setCommercialEditing] = useState(false);
+  const [highlightsEditing, setHighlightsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const emptyStr = (v: unknown) => (str(v) === "—" ? "" : str(v));
+  const [highlightsForm, setHighlightsForm] = useState({
+    legal_name: emptyStr(c.legal_name ?? c.name),
+    trade_name: emptyStr(c.trade_name ?? c.name),
+    client_code: emptyStr(c.client_code),
+    gstin: emptyStr(c.gstin),
+    pan_number: emptyStr(c.pan_number),
+    tan_number: emptyStr(c.tan_number),
+    cin: emptyStr(c.cin),
+    iec_number: emptyStr(c.iec_number),
+    msme_number: emptyStr(c.msme_number),
+    industry: emptyStr(c.industry),
+    operating_regions: regions === "—" ? "" : regions,
+    registered_address: registered === "—" ? "" : registered,
+    billing_address: billing === "—" ? "" : billing,
+    corporate_address: corporate === "—" ? "" : corporate,
+  });
   const [form, setForm] = useState({
     kam_name: str(c.kam_name) === "—" ? "" : str(c.kam_name),
     kam_email: str(c.kam_email) === "—" ? "" : str(c.kam_email),
@@ -180,49 +200,189 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
       Alert.alert("Save failed", error.message);
       return;
     }
-    setEditing(false);
+    setKamEditing(false);
+    setCommercialEditing(false);
+    onRefresh();
+  };
+
+  const handleHighlightsSave = async () => {
+    if (!orgId || !clientId || !onRefresh) return;
+    setSaving(true);
+    const regionList = highlightsForm.operating_regions
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const { error } = await updateClientHubProfile(orgId, clientId, {
+      legal_name: highlightsForm.legal_name,
+      trade_name: highlightsForm.trade_name,
+      client_code: highlightsForm.client_code,
+      gstin: highlightsForm.gstin,
+      pan_number: highlightsForm.pan_number,
+      tan_number: highlightsForm.tan_number,
+      cin: highlightsForm.cin,
+      iec_number: highlightsForm.iec_number,
+      msme_number: highlightsForm.msme_number,
+      industry: highlightsForm.industry,
+      operating_regions: regionList.length ? regionList : null,
+      registered_address: highlightsForm.registered_address,
+      billing_address: highlightsForm.billing_address,
+      corporate_address: highlightsForm.corporate_address,
+    });
+    setSaving(false);
+    if (error) {
+      Alert.alert("Save failed", error.message);
+      return;
+    }
+    setHighlightsEditing(false);
     onRefresh();
   };
 
   const rowProps = { compact };
 
+  const highlightItems = [
+    { key: "legal_name", label: "Legal name", value: String(c.legal_name ?? c.name ?? "—") },
+    { key: "trade_name", label: "Trade name", value: tradeName },
+    { key: "client_code", label: "Client code", value: str(c.client_code) },
+    { key: "gstin", label: "GST", value: String(c.gstin ?? "—") },
+    { key: "pan_number", label: "PAN", value: String(c.pan_number ?? "—") },
+    { key: "tan_number", label: "TAN", value: str(c.tan_number) },
+    { key: "cin", label: "CIN", value: String(c.cin ?? "—") },
+    { key: "iec_number", label: "IEC", value: str(c.iec_number) },
+    { key: "msme_number", label: "MSME", value: String(c.msme_number ?? "—") },
+    { key: "industry", label: "Industry", value: String(c.industry ?? "—") },
+    { key: "regions", label: "Regions", value: regions },
+    {
+      key: "status",
+      label: "Status",
+      value: String(c.client_status ?? c.status ?? "—").toUpperCase(),
+    },
+  ];
+
+  const addressItems = [
+    { key: "registered", label: "Registered", value: registered },
+    { key: "billing", label: "Billing", value: billing },
+    { key: "corporate", label: "Corporate", value: corporate },
+  ];
+
   return (
     <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
       <View style={[styles.splitRow, compact && mobile.splitColumn]}>
         <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Highlights</Text>
-            <HighlightRow {...rowProps} label="Legal name" value={String(c.legal_name ?? c.name ?? "—")} />
-            <HighlightRow {...rowProps} label="Trade name" value={tradeName} />
-            <HighlightRow {...rowProps} label="Client code" value={str(c.client_code)} />
-            <HighlightRow {...rowProps} label="GST" value={String(c.gstin ?? "—")} />
-            <HighlightRow {...rowProps} label="PAN" value={String(c.pan_number ?? "—")} />
-            <HighlightRow {...rowProps} label="TAN" value={str(c.tan_number)} />
-            <HighlightRow {...rowProps} label="CIN" value={String(c.cin ?? "—")} />
-            <HighlightRow {...rowProps} label="IEC" value={str(c.iec_number)} />
-            <HighlightRow {...rowProps} label="MSME" value={String(c.msme_number ?? "—")} />
-            <HighlightRow {...rowProps} label="Industry" value={String(c.industry ?? "—")} />
-            <HighlightRow {...rowProps} label="Regions" value={regions} />
-            <HighlightRow {...rowProps} label="Status" value={String(c.client_status ?? c.status ?? "—").toUpperCase()} last />
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Addresses</Text>
-            <HighlightRow {...rowProps} label="Registered" value={registered} />
-            <HighlightRow {...rowProps} label="Billing" value={billing} />
-            <HighlightRow {...rowProps} label="Corporate" value={corporate} last />
-          </View>
+          {highlightsEditing ? (
+            <View style={styles.card}>
+              <View style={ov.cardTitleRow}>
+                <Text style={styles.cardTitle}>Edit highlights</Text>
+              </View>
+              <View style={ov.editBlock}>
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Legal name</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.legal_name} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, legal_name: v })} placeholder="Legal entity name" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Trade name</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.trade_name} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, trade_name: v })} placeholder="Trading / brand name" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                </View>
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Client code</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.client_code} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, client_code: v })} placeholder="Internal code" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>Industry</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.industry} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, industry: v })} placeholder="Sector" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                </View>
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>GST</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.gstin} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, gstin: v })} placeholder="27AAAAA0000A1Z5" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>PAN</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.pan_number} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, pan_number: v })} placeholder="AAAAA0000A" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
+                  </View>
+                </View>
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>TAN</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.tan_number} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, tan_number: v })} placeholder="ABCD12345E" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>CIN</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.cin} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, cin: v })} placeholder="U12345KA2020PTC123456" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
+                  </View>
+                </View>
+                <View style={ov.twoCol}>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>IEC</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.iec_number} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, iec_number: v })} placeholder="Import export code" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                  <View style={ov.fieldGroup}>
+                    <Text style={ov.fieldLabel}>MSME</Text>
+                    <TextInput style={ov.fieldInputPlain} value={highlightsForm.msme_number} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, msme_number: v })} placeholder="Udyam / MSME" placeholderTextColor={METRONIC.muted} />
+                  </View>
+                </View>
+                <View style={ov.fieldGroup}>
+                  <Text style={ov.fieldLabel}>Regions</Text>
+                  <TextInput style={ov.fieldInputPlain} value={highlightsForm.operating_regions} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, operating_regions: v })} placeholder="South, West (comma-separated)" placeholderTextColor={METRONIC.muted} />
+                </View>
+                <Text style={ov.sectionLabel}>Addresses</Text>
+                <View style={ov.fieldGroup}>
+                  <Text style={ov.fieldLabel}>Registered</Text>
+                  <TextInput style={[ov.fieldInputPlain, ov.fieldInputMulti]} value={highlightsForm.registered_address} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, registered_address: v })} placeholder="Registered office" placeholderTextColor={METRONIC.muted} multiline numberOfLines={2} />
+                </View>
+                <View style={ov.fieldGroup}>
+                  <Text style={ov.fieldLabel}>Billing</Text>
+                  <TextInput style={[ov.fieldInputPlain, ov.fieldInputMulti]} value={highlightsForm.billing_address} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, billing_address: v })} placeholder="Billing address" placeholderTextColor={METRONIC.muted} multiline numberOfLines={2} />
+                </View>
+                <View style={ov.fieldGroup}>
+                  <Text style={ov.fieldLabel}>Corporate</Text>
+                  <TextInput style={[ov.fieldInputPlain, ov.fieldInputMulti]} value={highlightsForm.corporate_address} onChangeText={(v) => setHighlightsForm({ ...highlightsForm, corporate_address: v })} placeholder="Corporate / HQ" placeholderTextColor={METRONIC.muted} multiline numberOfLines={2} />
+                </View>
+                <View style={ov.editActions}>
+                  <Pressable onPress={() => setHighlightsEditing(false)} style={ov.cancelBtn} disabled={saving}>
+                    <X size={13} color={METRONIC.subtle} strokeWidth={2} />
+                    <Text style={ov.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={handleHighlightsSave} style={ov.saveBtn} disabled={saving}>
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Save size={13} color="#fff" strokeWidth={2} />}
+                    <Text style={ov.saveBtnText}>Save</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <>
+              <PartyHighlightsCard
+                title="Highlights"
+                items={highlightItems}
+                compact={compact}
+                canEdit={canEdit}
+                onEdit={() => setHighlightsEditing(true)}
+                pinnedKeys={["legal_name", "trade_name", "status"]}
+              />
+              <PartyHighlightsCard
+                title="Addresses"
+                items={addressItems}
+                compact={compact}
+                canEdit={canEdit}
+                onEdit={() => setHighlightsEditing(true)}
+              />
+            </>
+          )}
 
           <View style={styles.card}>
             <View style={ov.cardTitleRow}>
               <Text style={styles.cardTitle}>KAM & billing</Text>
-              {canEdit && !editing ? (
-                <Pressable onPress={() => setEditing(true)} hitSlop={8}>
+              {canEdit && !kamEditing ? (
+                <Pressable onPress={() => setKamEditing(true)} hitSlop={8}>
                   <Text style={ov.editLink}>Edit</Text>
                 </Pressable>
               ) : null}
             </View>
-            {editing ? (
+            {kamEditing ? (
               <View style={ov.editBlock}>
                 <Text style={ov.sectionLabel}>Key account manager</Text>
                 <TextInput style={ov.fieldInput} value={form.kam_name} onChangeText={(v) => setForm({ ...form, kam_name: v })} placeholder="KAM name" placeholderTextColor={METRONIC.muted} />
@@ -233,7 +393,7 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
                 <TextInput style={ov.fieldInput} value={form.billing_contact_email} onChangeText={(v) => setForm({ ...form, billing_contact_email: v })} placeholder="Billing email" placeholderTextColor={METRONIC.muted} keyboardType="email-address" />
                 <TextInput style={ov.fieldInput} value={form.billing_contact_phone} onChangeText={(v) => setForm({ ...form, billing_contact_phone: v })} placeholder="Billing phone" placeholderTextColor={METRONIC.muted} keyboardType="phone-pad" />
                 <View style={ov.editActions}>
-                  <Pressable onPress={() => setEditing(false)} style={ov.cancelBtn} disabled={saving}>
+                  <Pressable onPress={() => setKamEditing(false)} style={ov.cancelBtn} disabled={saving}>
                     <X size={13} color={METRONIC.subtle} strokeWidth={2} />
                     <Text style={ov.cancelBtnText}>Cancel</Text>
                   </Pressable>
@@ -274,13 +434,13 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
           <View style={styles.card}>
             <View style={ov.cardTitleRow}>
               <Text style={styles.cardTitle}>Commercial snapshot</Text>
-              {canEdit && !editing ? (
-                <Pressable onPress={() => setEditing(true)} hitSlop={8}>
+              {canEdit && !commercialEditing ? (
+                <Pressable onPress={() => setCommercialEditing(true)} hitSlop={8}>
                   <Text style={ov.editLink}>Edit</Text>
                 </Pressable>
               ) : null}
             </View>
-            {editing ? (
+            {commercialEditing ? (
               <View style={ov.editBlock}>
                 <View style={ov.twoCol}>
                   <View style={ov.fieldGroup}>
@@ -311,6 +471,16 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
                 <View style={ov.fieldGroup}>
                   <Text style={ov.fieldLabel}>Remarks</Text>
                   <TextInput style={[ov.fieldInput, ov.fieldInputMulti]} value={form.remarks} onChangeText={(v) => setForm({ ...form, remarks: v })} placeholder="Onboarding notes…" placeholderTextColor={METRONIC.muted} multiline numberOfLines={3} />
+                </View>
+                <View style={ov.editActions}>
+                  <Pressable onPress={() => setCommercialEditing(false)} style={ov.cancelBtn} disabled={saving}>
+                    <X size={13} color={METRONIC.subtle} strokeWidth={2} />
+                    <Text style={ov.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={handleSave} style={ov.saveBtn} disabled={saving}>
+                    {saving ? <ActivityIndicator size="small" color="#fff" /> : <Save size={13} color="#fff" strokeWidth={2} />}
+                    <Text style={ov.saveBtnText}>Save</Text>
+                  </Pressable>
                 </View>
               </View>
             ) : (
@@ -404,6 +574,18 @@ const ov = {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "space-between" as const,
+  },
+  fieldInputPlain: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "#FAFAFA",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: METRONIC.text,
+    minHeight: 40,
   },
   fieldInputText: {
     fontSize: 13,

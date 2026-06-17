@@ -291,9 +291,9 @@ function vehiclePayloadFromInputs(
 }
 
 export function PartyRegistrationPortal(props: PartyRegistrationPortalProps) {
+  const { width } = useWindowDimensions();
   if (!props.visible) return null;
 
-  const { width } = useWindowDimensions();
   const isWide =
     props.forceFullPage !== true &&
     Platform.OS === "web" &&

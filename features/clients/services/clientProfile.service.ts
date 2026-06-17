@@ -1,6 +1,13 @@
 import { supabase } from '@/lib/supabase';
 
 export type UpdateClientHubProfileData = {
+  legal_name?: string | null;
+  trade_name?: string | null;
+  gstin?: string | null;
+  pan_number?: string | null;
+  cin?: string | null;
+  msme_number?: string | null;
+  industry?: string | null;
   tan_number?: string | null;
   kam_name?: string | null;
   kam_email?: string | null;
@@ -15,6 +22,9 @@ export type UpdateClientHubProfileData = {
   client_code?: string | null;
   iec_number?: string | null;
   operating_regions?: string[] | null;
+  registered_address?: string | null;
+  billing_address?: string | null;
+  corporate_address?: string | null;
   remarks?: string | null;
 };
 
@@ -30,6 +40,13 @@ export async function updateClientHubProfile(
 ): Promise<{ error: Error | null }> {
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
+  if (patch.legal_name !== undefined) updates.legal_name = trimOrNull(patch.legal_name);
+  if (patch.trade_name !== undefined) updates.trade_name = trimOrNull(patch.trade_name);
+  if (patch.gstin !== undefined) updates.gstin = trimOrNull(patch.gstin);
+  if (patch.pan_number !== undefined) updates.pan_number = trimOrNull(patch.pan_number);
+  if (patch.cin !== undefined) updates.cin = trimOrNull(patch.cin);
+  if (patch.msme_number !== undefined) updates.msme_number = trimOrNull(patch.msme_number);
+  if (patch.industry !== undefined) updates.industry = trimOrNull(patch.industry);
   if (patch.tan_number !== undefined) updates.tan_number = trimOrNull(patch.tan_number);
   if (patch.kam_name !== undefined) updates.kam_name = trimOrNull(patch.kam_name);
   if (patch.kam_email !== undefined) updates.kam_email = trimOrNull(patch.kam_email);
@@ -56,6 +73,15 @@ export async function updateClientHubProfile(
   if (patch.client_code !== undefined) updates.client_code = trimOrNull(patch.client_code);
   if (patch.iec_number !== undefined) updates.iec_number = trimOrNull(patch.iec_number);
   if (patch.operating_regions !== undefined) updates.operating_regions = patch.operating_regions;
+  if (patch.registered_address !== undefined) {
+    updates.registered_address = trimOrNull(patch.registered_address);
+  }
+  if (patch.billing_address !== undefined) {
+    updates.billing_address = trimOrNull(patch.billing_address);
+  }
+  if (patch.corporate_address !== undefined) {
+    updates.corporate_address = trimOrNull(patch.corporate_address);
+  }
   if (patch.remarks !== undefined) updates.notes = trimOrNull(patch.remarks);
 
   if (Object.keys(updates).length <= 1) return { error: null };

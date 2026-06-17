@@ -71,3 +71,12 @@ dist-test-bundle/
 # empty monorepo stubs
 apps/web/.next/
 h
+
+# OpenClaw (local agent workspace — not app source)
+.openclaw/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md

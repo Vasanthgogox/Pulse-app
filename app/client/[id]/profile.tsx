@@ -1,19 +1,17 @@
-import { ClientProfileScreen } from '@/features/clients/components/ClientProfileScreen';
-import { useLocalSearchParams } from 'expo-router';
-import { useSafeBack } from '@/lib/useSafeBack';
+import { ROUTES } from '@/lib/routes';
+import { Redirect, useLocalSearchParams, type Href } from 'expo-router';
 
-/** Metronic client profile hub — `/client/[id]/profile` */
-export default function ClientProfileRoute() {
+/** @deprecated Use `/party/customers/[id]` — kept for bookmarks and deep links. */
+export default function ClientProfileLegacyRedirect() {
   const { id, tab } = useLocalSearchParams<{ id: string; tab?: string }>();
-  const safeBack = useSafeBack();
   const clientId = typeof id === 'string' ? id : id?.[0] ?? '';
   const initialTab = typeof tab === 'string' ? tab : undefined;
 
+  if (!clientId) {
+    return <Redirect href={ROUTES.partyDirectory('customers')} />;
+  }
+
   return (
-    <ClientProfileScreen
-      clientId={clientId}
-      initialTab={initialTab}
-      onBack={safeBack}
-    />
+    <Redirect href={ROUTES.clientProfile(clientId, initialTab) as Href} />
   );
 }

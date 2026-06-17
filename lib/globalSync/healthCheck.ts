@@ -14,12 +14,10 @@ import { useGlobalSyncStore } from './useGlobalSyncStore';
 const HEALTH_LOG_INTERVAL_MS = 30_000;
 
 export function useGlobalSyncHealthCheck(): void {
-  if (!__DEV__) return;
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   _useHealthCheck();
 }
 
-/** Real implementation — only called in __DEV__. */
+/** Real implementation — logs only in __DEV__. */
 function _useHealthCheck(): void {
   const bootstrapStatus   = useGlobalSyncStore(s => s.bootstrapStatus);
   const bootstrapDuration = useGlobalSyncStore(s => s.bootstrapDuration);
@@ -33,6 +31,7 @@ function _useHealthCheck(): void {
   // Log once on bootstrap status change
   const prevStatusRef = useRef<string>('');
   useEffect(() => {
+    if (!__DEV__) return;
     if (bootstrapStatus === prevStatusRef.current) return;
     prevStatusRef.current = bootstrapStatus;
 
@@ -57,6 +56,7 @@ function _useHealthCheck(): void {
 
   // Periodic heartbeat
   useEffect(() => {
+    if (!__DEV__) return;
     if (bootstrapStatus !== 'ready') return;
 
     const id = setInterval(() => {
