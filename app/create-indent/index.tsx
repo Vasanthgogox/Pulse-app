@@ -856,7 +856,7 @@ export default function CreateIndentScreen() {
         );
         if (!error) {
           setLastSavedForm(form);
-          invalidateIndents(orgId);
+          invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
           if (indent?.id) {
             router.replace({
               pathname: ROUTES.TABS.NETWORK,
@@ -947,7 +947,7 @@ export default function CreateIndentScreen() {
         if (indent) {
           await AsyncStorage.removeItem(`indent_draft_${orgId}`);
           await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
-          invalidateIndents(orgId);
+          invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
           router.replace(
             `/indent/${indent.id}` as import("expo-router").Href,
           );
@@ -964,7 +964,7 @@ export default function CreateIndentScreen() {
       if (indent) {
         await AsyncStorage.removeItem(`indent_draft_${orgId}`);
         await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
-        invalidateIndents(orgId);
+        invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
         router.replace(
           `/indent/${indent.id}` as import("expo-router").Href,
         );

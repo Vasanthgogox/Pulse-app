@@ -236,7 +236,7 @@ export function IndentDetailScreen({
       return;
     }
     setConfirmShareVisible(false);
-    if (orgId) invalidateIndents(orgId);
+    if (orgId) invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
     await load();
     setIsBroadcasting(true);
     setTimeout(() => setIsBroadcasting(false), 1800);
@@ -318,7 +318,7 @@ export function IndentDetailScreen({
       }
       setSelectedQuoteId(null);
       if (orgId) {
-        invalidateIndents(orgId);
+        invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
         invalidatePosts();
       }
       queryClient.invalidateQueries({

@@ -14,6 +14,7 @@ import { findIndentInMarketList } from '@/features/indents/utils/findIndentInLis
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { STALE } from '@/lib/queryClient';
+import { supabase } from '@/lib/supabase';
 
 const loadIndentsService = () =>
   import('@/features/indents/services/indents.service');
@@ -53,8 +54,54 @@ export function useMarketIndentsQuery(orgId: string | null) {
       return res.indents;
     },
     enabled: !!orgId,
-    staleTime: STALE.moderate,
+    // Cross-org feed: partner shippers mutate indents outside this org's invalidation path.
+    staleTime: STALE.frequent,
+    refetchOnMount: 'always',
   });
+}
+
+/** Integrated supplier org ids linked to a shipper (for cross-org market cache bust). */
+export async function getIntegratedSupplierOrgIdsForShipper(
+  shipperOrgId: string,
+): Promise<string[]> {
+  const ids = new Set<string>();
+
+  const { data: relations } = await supabase()
+    .from('organization_relations')
+    .select('to_organization_id')
+    .eq('from_organization_id', shipperOrgId)
+    .eq('relation_type', 'client_supplier')
+    .eq('status', 'active');
+
+  for (const row of relations ?? []) {
+    const supplierOrgId = String(row.to_organization_id ?? '').trim();
+    if (supplierOrgId) ids.add(supplierOrgId);
+  }
+
+  const { data: suppliers } = await supabase()
+    .from('suppliers')
+    .select('linked_organization_id')
+    .eq('organization_id', shipperOrgId)
+    .not('linked_organization_id', 'is', null);
+
+  for (const row of suppliers ?? []) {
+    const supplierOrgId = String(row.linked_organization_id ?? '').trim();
+    if (supplierOrgId) ids.add(supplierOrgId);
+  }
+
+  return [...ids];
+}
+
+export function invalidateMarketIndentsForIntegratedSuppliers(
+  qc: ReturnType<typeof useQueryClient>,
+  shipperOrgId: string,
+  supplierOrgIds: string[],
+) {
+  for (const supplierOrgId of supplierOrgIds) {
+    if (!supplierOrgId || supplierOrgId === shipperOrgId) continue;
+    qc.invalidateQueries({ queryKey: queryKeys.indents.market(supplierOrgId) });
+    qc.invalidateQueries({ queryKey: ['q', 'indents', supplierOrgId, 'visible'] });
+  }
 }
 
 /** My direct quotes for GET LOAD views (carrier side). */
@@ -177,11 +224,17 @@ export function useIndentsInfiniteQuery(orgId: string | null, opts?: { pageSize?
 
 export function useInvalidateIndents() {
   const qc = useQueryClient();
-  return (orgId: string) => {
+  return (orgId: string, options?: { bustPartnerSupplierMarket?: boolean }) => {
     qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.indents.finite(orgId) });
     qc.invalidateQueries({ queryKey: ['q', 'indents', orgId, 'infinite'] });
     qc.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) });
     qc.invalidateQueries({ queryKey: ['q', 'indents', orgId, 'visible'] });
+
+    if (!options?.bustPartnerSupplierMarket) return;
+
+    void getIntegratedSupplierOrgIdsForShipper(orgId).then((supplierOrgIds) => {
+      invalidateMarketIndentsForIntegratedSuppliers(qc, orgId, supplierOrgIds);
+    });
   };
 }

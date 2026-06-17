@@ -76,7 +76,7 @@ import {
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { formatINR } from "@/lib/format";
 import { ROUTES } from "@/lib/routes";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
     useIndentOfferCountsQuery,
@@ -191,6 +191,13 @@ export function LoadCenterView({
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const invalidateIndents = useInvalidateIndents();
   const queryClient = useQueryClient();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!orgId) return;
+      void refetchMarketIndents();
+    }, [orgId, refetchMarketIndents]),
+  );
 
   const isClaimedTab = loadSubTab === "AWARDED";
   const loadSubTabIndex =

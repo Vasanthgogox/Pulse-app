@@ -157,6 +157,7 @@ export function useRealtimeNetworkInvalidation(organizationId: string | null) {
       qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(organizationId) });
       qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(organizationId) });
       qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(organizationId) });
+      qc.invalidateQueries({ queryKey: queryKeys.indents.market(organizationId) });
     };
 
     const isApproval = (payload: { eventType: string; new: unknown }) =>
