@@ -396,21 +396,19 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
           compact ? { paddingTop: insets.top, paddingBottom: insets.bottom } : undefined,
         ]}
       >
-        <View style={[compact ? styles.compactCard : styles.desktopCard]}>
+        <View style={[styles.hubCard, compact && styles.hubCardFullBleed]}>
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={compact ? styles.compactScroll : styles.desktopScroll}
+            contentContainerStyle={styles.hubScroll}
           >
             <View style={styles.hubHeader}>
               <View style={styles.hubHeaderText}>
                 <View style={styles.hubKickerRow}>
                   <View style={[styles.liveDot, { backgroundColor: focusAccent }]} />
-                  <Text style={[styles.hubKicker, compact && styles.hubKickerCompact]}>
-                    PROVISION ADJUST
-                  </Text>
+                  <Text style={styles.hubKicker}>PROVISION ADJUST</Text>
                 </View>
-                <Text style={[styles.hubTitle, compact && styles.hubTitleCompact]}>
+                <Text style={styles.hubTitle}>
                   {isClient
                     ? "Client sale"
                     : props.isAssetExecution
@@ -418,22 +416,17 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                       : "Supplier cost"}
                 </Text>
                 {entryContextLabel ? (
-                  <Text style={[styles.hubSub, compact && styles.hubSubLight]} numberOfLines={2}>
+                  <Text style={styles.hubSub} numberOfLines={2}>
                     {entryContextLabel}
                   </Text>
                 ) : null}
               </View>
-              <Pressable
-                onPress={props.onClose}
-                style={[styles.closeBtn, compact && styles.closeBtnLight]}
-                hitSlop={10}
-              >
-                <Feather name="x" size={18} color={compact ? "#64748b" : "#fff"} />
+              <Pressable onPress={props.onClose} style={styles.closeBtn} hitSlop={10}>
+                <Feather name="x" size={18} color="#64748b" />
               </Pressable>
             </View>
 
             <ProvisionRevisedPartiesCard
-              compact={compact}
               clientName={props.clientName}
               clientAvatarUrl={props.clientAvatarUrl}
               clientAvatarSeed={props.clientAvatarSeed}
@@ -450,16 +443,17 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
               costPartyEntityType={props.isAssetExecution ? "driver" : "supplier"}
               costBreakdownLines={props.costBreakdownLines}
               activeSide={side}
+              variant="modal"
             />
 
-            <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
+            <Text style={styles.sectionEyebrow}>
               {isAssetDriverCost
                 ? "Driver adjustment"
                 : `New ${isClient ? "sale" : "cost"} provision`}
             </Text>
-            <View style={styles.cnDnRow}>
+            <View style={[styles.cnDnRow, compact && styles.cnDnRowStacked]}>
               <Pressable
-                style={[styles.cnBtn, compact ? styles.cnBtnCreditLight : styles.cnBtnCredit]}
+                style={[styles.cnBtn, styles.cnBtnCredit]}
                 onPress={() =>
                   beginWizard({
                     type: isClient ? "revenue" : "cost",
@@ -472,17 +466,15 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                   size={18}
                   color="#4f46e5"
                 />
-                <Text style={[styles.cnDnLabel, compact && styles.cnDnLabelLight]}>
+                <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Deduct (CN)" : "Credit (CN)"}
                 </Text>
                 {isAssetDriverCost ? (
-                  <Text style={[styles.cnDnHint, compact && styles.cnDnHintLight]}>
-                    Damage · missing · late
-                  </Text>
+                  <Text style={styles.cnDnHint}>Damage · missing · late</Text>
                 ) : null}
               </Pressable>
               <Pressable
-                style={[styles.cnBtn, compact ? styles.cnBtnDebitLight : styles.cnBtnDebit]}
+                style={[styles.cnBtn, styles.cnBtnDebit]}
                 onPress={() =>
                   beginWizard({
                     type: isClient ? "revenue" : "cost",
@@ -495,52 +487,42 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                   size={18}
                   color="#e11d48"
                 />
-                <Text style={[styles.cnDnLabel, compact && styles.cnDnLabelLight]}>
+                <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Pay driver (DN)" : "Debit (DN)"}
                 </Text>
                 {isAssetDriverCost ? (
-                  <Text style={[styles.cnDnHint, compact && styles.cnDnHintLight]}>
-                    Tip · bonus · allowance
-                  </Text>
+                  <Text style={styles.cnDnHint}>Tip · bonus · allowance</Text>
                 ) : null}
               </Pressable>
             </View>
 
             {isAssetDriverCost ? (
               <>
-                <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
-                  Deduct from driver
-                </Text>
+                <Text style={styles.sectionEyebrow}>Deduct from driver</Text>
                 <View style={styles.chipWrap}>
                   {ASSET_DRIVER_DEDUCTION_PROTOCOL_CHIPS.map((chip) => (
                     <Pressable
                       key={chip.label}
-                      style={[styles.chip, compact && styles.chipLight]}
+                      style={styles.chip}
                       onPress={() => beginWizard(protocolAssetDriverDeductionAdjustment(chip))}
                     >
-                      <Text style={[styles.chipText, compact && styles.chipTextLight]}>
-                        {chip.label}
-                      </Text>
+                      <Text style={styles.chipText}>{chip.label}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
-                  Pay driver
-                </Text>
+                <Text style={styles.sectionEyebrow}>Pay driver</Text>
                 <View style={styles.chipWrap}>
                   {ASSET_DRIVER_PAYMENT_PROTOCOL_CHIPS.map((chip) => (
                     <Pressable
                       key={chip.label}
-                      style={[styles.chip, compact && styles.chipLight]}
+                      style={styles.chip}
                       onPress={() => beginWizard(protocolAssetDriverPaymentAdjustment(chip))}
                     >
-                      <Text style={[styles.chipText, compact && styles.chipTextLight]}>
-                        {chip.label}
-                      </Text>
+                      <Text style={styles.chipText}>{chip.label}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <Text style={[styles.hubFootnote, compact && styles.hubFootnoteLight]}>
+                <Text style={styles.hubFootnote}>
                   CN lowers revised trip cost (deduction from driver). DN adds tip or allowance on
                   this trip.
                   {sideAdjustments.length > 0
@@ -550,9 +532,7 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
               </>
             ) : (
               <>
-                <Text style={[styles.sectionEyebrow, compact && styles.sectionEyebrowLight]}>
-                  Quick protocol
-                </Text>
+                <Text style={styles.sectionEyebrow}>Quick protocol</Text>
                 <View style={styles.chipWrap}>
                   {FINANCE_PROTOCOL_CHIPS.map((chip) => {
                     const preset = isClient
@@ -561,12 +541,10 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                     return (
                       <Pressable
                         key={chip}
-                        style={[styles.chip, compact && styles.chipLight]}
+                        style={styles.chip}
                         onPress={() => beginWizard(preset)}
                       >
-                        <Text style={[styles.chipText, compact && styles.chipTextLight]}>
-                          {chip}
-                        </Text>
+                        <Text style={styles.chipText}>{chip}</Text>
                       </Pressable>
                     );
                   })}
@@ -575,7 +553,7 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
             )}
 
             {!isAssetDriverCost && sideAdjustments.length > 0 ? (
-              <Text style={[styles.hubFootnote, compact && styles.hubFootnoteLight]}>
+              <Text style={styles.hubFootnote}>
                 {sideAdjustments.length} existing line
                 {sideAdjustments.length === 1 ? "" : "s"} on summary — new lines appear in the
                 table after save.
@@ -593,38 +571,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
-  compactCard: {
-    flex: 1,
-  },
-  compactScroll: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
   desktopBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(15,23,42,0.58)",
+    backgroundColor: "rgba(15,23,42,0.48)",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
   },
-  desktopCard: {
+  hubCard: {
     width: "100%",
-    maxWidth: 620,
+    maxWidth: 520,
     maxHeight: "92%",
-    backgroundColor: "#171a20",
+    backgroundColor: "#f8fafc",
     borderRadius: 24,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  desktopScroll: {
-    padding: 18,
-    paddingBottom: 24,
+  hubCardFullBleed: {
+    flex: 1,
+    maxWidth: undefined,
+    maxHeight: undefined,
+    borderRadius: 0,
+    borderWidth: 0,
+  },
+  hubScroll: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 28,
+    gap: 0,
   },
   hubHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   hubHeaderText: { flex: 1, minWidth: 0 },
   hubKickerRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -636,225 +618,105 @@ const styles = StyleSheet.create({
     color: Theme.positive,
     textTransform: "uppercase",
   },
-  hubKickerCompact: { color: Theme.positive },
   hubTitle: {
     marginTop: 6,
     fontSize: 22,
     fontWeight: "800",
-    color: "#fff",
-    letterSpacing: -0.4,
-  },
-  hubTitleCompact: {
     color: "#0f172a",
+    letterSpacing: -0.4,
   },
   hubSub: {
     marginTop: 4,
     fontSize: 12,
     fontStyle: "italic",
-    color: "#94a3b8",
+    color: Theme.textMuted,
   },
-  hubSubLight: { color: Theme.textMuted },
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  closeBtnLight: {
     backgroundColor: "#f1f5f9",
+    flexShrink: 0,
   },
-  summaryCellLight: {
-    backgroundColor: "#fff",
-    borderColor: "#e2e8f0",
-  },
-  summaryLabelLight: { color: Theme.textMuted },
-  sectionEyebrowLight: { color: Theme.textMuted },
-  cnBtnCreditLight: {
-    borderColor: "rgba(99,102,241,0.35)",
-    backgroundColor: "rgba(99,102,241,0.08)",
-  },
-  cnBtnDebitLight: {
-    borderColor: "rgba(244,63,94,0.35)",
-    backgroundColor: "rgba(244,63,94,0.08)",
-  },
-  cnDnLabelLight: { color: "#334155" },
-  chipLight: {
-    borderColor: "#e2e8f0",
-    backgroundColor: "#fff",
-  },
-  chipTextLight: { color: "#334155" },
-  emptyLinesLight: { color: Theme.textMuted },
-  lineRowLight: { borderTopColor: "#e2e8f0" },
-  lineReasonLight: { color: "#0f172a" },
-  lineMetaLight: { color: Theme.textMuted },
-  heroCard: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    backgroundColor: "#fff",
-    marginBottom: 14,
-  },
-  heroLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: Theme.textMuted,
-  },
-  heroAmount: {
-    marginTop: 6,
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: -0.8,
-  },
-  heroMeta: {
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textMuted,
-  },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
-  summaryCell: {
-    flexGrow: 1,
-    flexBasis: "47%",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  summaryLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: "#64748b",
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  summarySale: { color: "#34d399" },
-  summaryCost: { color: "#fb7185" },
   sectionEyebrow: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: "#64748b",
-    marginBottom: 8,
-    marginTop: 4,
+    color: Theme.textMuted,
+    marginBottom: 10,
+    marginTop: 18,
   },
-  cnDnRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  cnDnRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 4,
+    alignItems: "stretch",
+  },
+  cnDnRowStacked: {
+    flexDirection: "column",
+  },
   cnBtn: {
     flex: 1,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 6,
   },
   cnBtnCredit: {
     borderColor: "rgba(99,102,241,0.35)",
-    backgroundColor: "rgba(99,102,241,0.1)",
+    backgroundColor: "rgba(99,102,241,0.08)",
   },
   cnBtnDebit: {
     borderColor: "rgba(244,63,94,0.35)",
-    backgroundColor: "rgba(244,63,94,0.1)",
+    backgroundColor: "rgba(244,63,94,0.08)",
   },
   cnDnLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: "#e2e8f0",
+    color: "#334155",
+    textAlign: "center",
   },
   cnDnHint: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "600",
-    color: "#94a3b8",
+    color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 11,
+    lineHeight: 12,
     marginTop: 2,
   },
-  cnDnHintLight: {
-    color: Theme.textMuted,
-  },
-  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#e2e8f0",
-  },
-  fullBtn: { alignSelf: "flex-start", paddingVertical: 8, marginBottom: 16 },
-  fullBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Theme.primary,
-  },
-  emptyLines: {
-    fontSize: 12,
-    color: "#94a3b8",
-    fontStyle: "italic",
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginBottom: 8,
   },
-  lineRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
+  chip: {
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.08)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
   },
-  lineMid: { flex: 1, minWidth: 0 },
-  lineReason: {
-    fontSize: 13,
+  chipText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: "#f1f5f9",
-  },
-  lineMeta: {
-    marginTop: 2,
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#64748b",
-    textTransform: "uppercase",
-  },
-  lineAmt: {
-    fontSize: 13,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
-  },
-  lineAmtSale: { color: "#34d399" },
-  lineAmtCost: { color: "#fb7185" },
-  lineStruck: {
-    opacity: 0.45,
-    textDecorationLine: "line-through",
+    color: "#334155",
   },
   hubFootnote: {
-    marginTop: 4,
+    marginTop: 12,
     fontSize: 11,
     fontWeight: "600",
-    color: "#64748b",
-    lineHeight: 16,
-  },
-  hubFootnoteLight: {
     color: Theme.textMuted,
+    lineHeight: 16,
   },
 });

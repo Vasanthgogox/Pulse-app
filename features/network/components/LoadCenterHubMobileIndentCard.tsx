@@ -13,13 +13,12 @@ import {
 } from "@/components/hub/hubGridCardLayout";
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
 import {
-  indentHubCardShadow,
   indentReviewHubLayout,
-  indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { getIndentDisplayNumber, type IndentRow } from "@/features/indents";
 import type { LoadCenterTicketCommerce } from "@/features/network/utils/loadCenter.model";
@@ -40,6 +39,13 @@ import { useRouter } from "expo-router";
 
 const ALLOCATION_AVATAR_SIZE = 24;
 
+const REF = {
+  ink: "#1c1c1e",
+  inkMid: "#3d4650",
+  muted: "#9aa3ad",
+  hairline: "#e8ecf0",
+} as const;
+
 /** @deprecated Use `HUB_GRID_CARD_MIN_HEIGHT` from `@/components/hub/hubGridCardLayout`. */
 export const LOAD_CENTER_GRID_CARD_MIN_HEIGHT = HUB_GRID_CARD_MIN_HEIGHT;
 
@@ -49,8 +55,9 @@ function asLabel(value: unknown): string {
   return s || "—";
 }
 
-function formatPartyName(value: string): string {
-  return asLabel(value).toUpperCase();
+function formatPartyName(value: string, hubTicket?: boolean): string {
+  const label = asLabel(value);
+  return hubTicket ? label : label.toUpperCase();
 }
 
 function stripCurrencyPrefix(formatted: string): string {
@@ -133,16 +140,19 @@ export function LoadCenterHubMobileIndentCard({
   const schedule = formatMobileTripSchedule(
     pickupIso ?? indent.pickup_date ?? indent.created_at,
   );
-  const displayName = formatPartyName(titleName);
+  const hubTicket = dense || fillGrid;
+  const displayName = formatPartyName(titleName, hubTicket);
   const avatarFb =
     (initialsColorSeed ?? avatarSeed ?? "").trim() ||
     (indent.client_id
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
   const bodyPadding =
-    dense || fillGrid
-      ? indentReviewHubLayout.hubCardPaddingDense
-      : indentReviewHubLayout.hubCardPaddingComfort;
+    fillGrid
+      ? 14
+      : dense
+        ? indentReviewHubLayout.hubCardPaddingDense
+        : indentReviewHubLayout.hubCardPaddingComfort;
   const useTicketStub = ticketCommerce != null;
   const commerce = ticketCommerce;
   const heroAmount =
@@ -170,22 +180,32 @@ export function LoadCenterHubMobileIndentCard({
         dense && styles.stubDense,
       ]}
     >
-      <IndentHubPerforation contentPadding={bodyPadding} />
+      {!fillGrid ? (
+        <IndentHubPerforation contentPadding={bodyPadding} />
+      ) : null}
       <View style={styles.refRow}>
-        <Text style={styles.refLine} numberOfLines={1}>
-          <Text style={styles.refId}>{indentNo}</Text>
-          <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+        <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
+          <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
+          <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
+            {` · ${schedule.time} · ${schedule.dateLine}`}
+          </Text>
         </Text>
       </View>
       <View style={[styles.stubRow, fillGrid && styles.stubRowGrid]}>
-        <Text style={styles.stubVehicle} numberOfLines={2}>
+        <Text
+          style={[styles.stubVehicle, hubTicket && styles.stubVehicleHub]}
+          numberOfLines={2}
+        >
           {leftFooterLabel}
         </Text>
         {heroAmount ? (
           <View style={styles.stubCommerce}>
             <View style={styles.stubCommerceTop}>
-              <Text style={styles.stubKicker} numberOfLines={1}>
-                {commerce?.kicker ?? "TARGET RATE"}
+              <Text
+                style={[styles.stubKicker, hubTicket && styles.stubKickerHub]}
+                numberOfLines={1}
+              >
+                {commerce?.kicker ?? "Target rate"}
               </Text>
               {statusStyles ? (
                 <View style={[styles.statusPill, statusStyles.pill]}>
@@ -200,9 +220,11 @@ export function LoadCenterHubMobileIndentCard({
               ) : null}
             </View>
             <View style={styles.stubAmountRow}>
-              <Text style={styles.stubCurrency}>₹</Text>
+              <Text style={[styles.stubCurrency, fillGrid && styles.stubCurrencyGrid]}>
+                ₹
+              </Text>
               <Text
-                style={styles.stubAmount}
+                style={[styles.stubAmount, fillGrid && styles.stubAmountGrid]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.75}
@@ -217,7 +239,10 @@ export function LoadCenterHubMobileIndentCard({
             ) : null}
           </View>
         ) : (
-          <Text style={styles.stubCaption} numberOfLines={2}>
+          <Text
+            style={[styles.stubCaption, hubTicket && styles.stubCaptionHub]}
+            numberOfLines={2}
+          >
             {rightCaption ?? rightFooterLabel}
           </Text>
         )}
@@ -229,17 +254,19 @@ export function LoadCenterHubMobileIndentCard({
     <View style={styles.metaBlockGrid}>
       <View style={styles.metaBlockGridGrow} />
       <View style={styles.refRow}>
-        <Text style={styles.refLine} numberOfLines={1}>
-          <Text style={styles.refId}>{indentNo}</Text>
-          <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+        <Text style={[styles.refLine, styles.refLineHub]} numberOfLines={1}>
+          <Text style={[styles.refId, styles.refIdHub]}>{indentNo}</Text>
+          <Text style={[styles.refMuted, styles.refMutedHub]}>
+            {` · ${schedule.time} · ${schedule.dateLine}`}
+          </Text>
         </Text>
       </View>
       <View style={[styles.partyRow, styles.partyRowGrid]}>
-        <Text style={styles.footerLabel} numberOfLines={1}>
+        <Text style={[styles.footerLabel, styles.footerLabelHub]} numberOfLines={1}>
           {leftFooterLabel}
         </Text>
         <Text
-          style={[styles.footerLabel, styles.footerLabelEnd]}
+          style={[styles.footerLabel, styles.footerLabelEnd, styles.footerLabelHub]}
           numberOfLines={1}
         >
           {rightFooterLabel}
@@ -249,17 +276,26 @@ export function LoadCenterHubMobileIndentCard({
   ) : (
     <>
       <View style={styles.refRow}>
-        <Text style={styles.refLine} numberOfLines={1}>
-          <Text style={styles.refId}>{indentNo}</Text>
-          <Text style={styles.refMuted}>{` · ${schedule.time} · ${schedule.dateLine}`}</Text>
+        <Text style={[styles.refLine, hubTicket && styles.refLineHub]} numberOfLines={1}>
+          <Text style={[styles.refId, hubTicket && styles.refIdHub]}>{indentNo}</Text>
+          <Text style={[styles.refMuted, hubTicket && styles.refMutedHub]}>
+            {` · ${schedule.time} · ${schedule.dateLine}`}
+          </Text>
         </Text>
       </View>
       <View style={styles.partyRow}>
-        <Text style={styles.footerLabel} numberOfLines={1}>
+        <Text
+          style={[styles.footerLabel, hubTicket && styles.footerLabelHub]}
+          numberOfLines={1}
+        >
           {leftFooterLabel}
         </Text>
         <Text
-          style={[styles.footerLabel, styles.footerLabelEnd]}
+          style={[
+            styles.footerLabel,
+            styles.footerLabelEnd,
+            hubTicket && styles.footerLabelHub,
+          ]}
           numberOfLines={1}
         >
           {rightFooterLabel}
@@ -276,12 +312,20 @@ export function LoadCenterHubMobileIndentCard({
         style,
       ]}
     >
-      <View style={[styles.card, fillGrid && styles.cardGrid]}>
+      <View
+        style={[
+          styles.card,
+          fillGrid && styles.cardGrid,
+          fillGrid && styles.cardGridElevated,
+        ]}
+      >
         <Pressable
           onPress={onPress}
           style={({ pressed }) => [
             styles.body,
-            dense && styles.bodyDense,
+            !fillGrid && dense && styles.bodyDense,
+            !fillGrid && !dense && styles.bodyComfort,
+            fillGrid && styles.bodyGridPad,
             fillGrid && styles.bodyGrid,
             pressed && styles.bodyPressed,
           ]}
@@ -301,20 +345,28 @@ export function LoadCenterHubMobileIndentCard({
                 size={HUB_CARD_HEAD_AVATAR}
               />
               <View style={styles.headText}>
-                <Text style={styles.brand} numberOfLines={1}>
+                <Text
+                  style={[styles.brand, hubTicket && styles.brandHub]}
+                  numberOfLines={1}
+                >
                   {displayName}
                 </Text>
               </View>
             </View>
-            <Text style={styles.headMeta} numberOfLines={1}>
-              {asLabel(statusLabel).toUpperCase()}
-            </Text>
+            <View style={styles.headMetaCol}>
+              <Text
+                style={[styles.headMeta, hubTicket && styles.headMetaHub]}
+                numberOfLines={1}
+              >
+                {asLabel(statusLabel).toUpperCase()}
+              </Text>
+            </View>
           </View>
 
           <LoadCardRouteRow
             origin={origin}
             destination={dest}
-            compact={dense || fillGrid}
+            compact={hubTicket}
             style={[
               styles.route,
               dense && styles.routeDense,
@@ -431,11 +483,22 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: indentReviewHubLayout.summaryCardRadius,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
-    ...indentHubCardShadow,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.05)",
+      } as ViewStyle,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 1,
+      },
+    }),
   },
   cardGrid: {
     flex: 1,
@@ -443,7 +506,26 @@ const styles = StyleSheet.create({
     minHeight: HUB_GRID_CARD_MIN_HEIGHT,
     flexDirection: "column",
   },
-  body: {
+  cardGridElevated: {
+    borderRadius: 14,
+    borderColor: "rgba(15, 23, 42, 0.06)",
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select({
+      web: {
+        boxShadow:
+          "0 8px 24px rgba(15, 23, 42, 0.07), 0 1px 4px rgba(15, 23, 42, 0.04)",
+      } as ViewStyle,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+        elevation: 2,
+      },
+    }),
+  },
+  body: {},
+  bodyComfort: {
     paddingHorizontal: indentReviewHubLayout.hubCardPaddingComfort,
     paddingTop: indentReviewHubLayout.hubCardPaddingComfort,
     paddingBottom: indentReviewHubLayout.hubCardPaddingComfort,
@@ -453,10 +535,14 @@ const styles = StyleSheet.create({
     paddingTop: indentReviewHubLayout.hubCardPaddingDense,
     paddingBottom: indentReviewHubLayout.hubCardPaddingDense,
   },
+  bodyGridPad: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+  },
   bodyGrid: {
     flex: 1,
     flexDirection: "column",
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   actionsSlot: {
     marginTop: "auto",
@@ -481,7 +567,7 @@ const styles = StyleSheet.create({
   },
   head: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
     marginBottom: 14,
@@ -503,22 +589,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brand: {
-    ...indentReviewHubText.partyTitle,
-    fontSize: 11,
-    lineHeight: 14,
-    letterSpacing: -0.15,
-    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: -0.1,
+    fontWeight: "500",
+    fontStyle: "normal",
+    color: REF.ink,
+  },
+  brandHub: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  headMetaCol: {
+    flexShrink: 0,
+    maxWidth: "42%",
+    alignItems: "flex-end",
   },
   headMeta: {
-    ...indentReviewHubText.chipLabel,
-    flexShrink: 0,
-    maxWidth: "38%",
-    marginTop: 2,
-    fontSize: 8,
-    lineHeight: 11,
-    color: Theme.textMuted,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "500",
+    color: REF.muted,
     textAlign: "right",
     textTransform: "uppercase",
+    letterSpacing: 0.25,
+    flexShrink: 0,
+  },
+  headMetaHub: {
+    maxWidth: "100%",
   },
   allocationRow: {
     flexDirection: "row",
@@ -598,7 +696,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
+    backgroundColor: REF.hairline,
     marginTop: 12,
     marginBottom: 10,
   },
@@ -610,41 +708,75 @@ const styles = StyleSheet.create({
   refRow: {
     minWidth: 0,
   },
-  refLine: indentReviewHubText.dateLine,
+  refLine: {
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.05,
+  },
+  refLineHub: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
   refId: {
-    ...indentReviewHubText.fieldValue,
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: 9,
+    fontWeight: "500",
+    color: REF.inkMid,
+    lineHeight: 12,
     fontVariant: ["tabular-nums"],
   },
+  refIdHub: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: REF.inkMid,
+  },
   refMuted: {
-    ...indentReviewHubText.dateLine,
+    fontSize: 9,
+    fontWeight: "400",
+    color: REF.muted,
+    lineHeight: 12,
     fontVariant: ["tabular-nums"],
+  },
+  refMutedHub: {
+    fontSize: 9,
+    fontWeight: "400",
+    color: REF.muted,
   },
   partyRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 8,
     marginTop: 6,
     minHeight: 18,
+    width: "100%",
   },
   partyRowGrid: {
     marginTop: 4,
-    minHeight: HUB_GRID_PARTY_MIN_HEIGHT,
+    minHeight: 24,
     flexShrink: 0,
+    alignItems: "flex-start",
   },
   footerLabel: {
-    ...indentReviewHubText.specLabel,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "400",
+    color: REF.muted,
+    letterSpacing: 0.1,
+  },
+  footerLabelHub: {
     flex: 1,
     minWidth: 0,
     fontSize: 8,
     lineHeight: 11,
-    textTransform: "uppercase",
-    color: Theme.textSecondary,
+    fontWeight: "500",
+    color: REF.inkMid,
+    letterSpacing: 0,
   },
   footerLabelEnd: {
     textAlign: "right",
+    alignItems: "flex-end",
   },
   stub: {
     minWidth: 0,
@@ -667,15 +799,19 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stubVehicle: {
-    ...indentReviewHubText.specLabel,
     flex: 1,
     minWidth: 0,
     maxWidth: "46%",
-    fontSize: 8,
-    lineHeight: 11,
-    textTransform: "uppercase",
-    color: Theme.textSecondary,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "400",
+    color: REF.muted,
     alignSelf: "center",
+  },
+  stubVehicleHub: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: REF.inkMid,
   },
   stubCommerce: {
     flex: 1,
@@ -691,8 +827,17 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   stubKicker: {
-    ...indentReviewHubText.fieldLabel,
+    fontSize: 8,
+    fontWeight: "500",
+    color: REF.muted,
+    letterSpacing: 0.25,
+    textTransform: "uppercase",
     flexShrink: 1,
+  },
+  stubKickerHub: {
+    fontSize: 8,
+    fontWeight: "500",
+    color: REF.muted,
   },
   stubAmountRow: {
     flexDirection: "row",
@@ -702,19 +847,29 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   stubCurrency: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    lineHeight: 18,
+    fontSize: 12,
+    fontWeight: "600",
+    color: REF.muted,
+    lineHeight: 16,
     marginBottom: 1,
   },
+  stubCurrencyGrid: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
   stubAmount: {
-    ...indentReviewHubText.freightAmount,
-    fontSize: 20,
-    lineHeight: 22,
-    color: Theme.textPrimaryDark,
+    fontSize: 16,
+    fontWeight: "600",
+    lineHeight: 18,
+    color: REF.ink,
     flexShrink: 1,
     textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  stubAmountGrid: {
+    fontSize: 14,
+    lineHeight: 16,
+    fontWeight: "600",
   },
   stubReference: {
     fontSize: 8,
@@ -724,16 +879,19 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   stubCaption: {
-    ...indentReviewHubText.specLabel,
     flex: 1,
     minWidth: 0,
     maxWidth: "52%",
-    fontSize: 8,
-    lineHeight: 11,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "400",
+    color: REF.muted,
     textAlign: "right",
+  },
+  stubCaptionHub: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: REF.inkMid,
   },
   statusPill: {
     paddingHorizontal: 6,

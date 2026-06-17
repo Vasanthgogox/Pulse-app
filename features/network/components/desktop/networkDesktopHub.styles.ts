@@ -3209,6 +3209,17 @@ export const networkDesktopHubStyles = StyleSheet.create({
       boxSizing: "border-box",
     } as object),
   },
+  goalsEntityTableGridKam: {
+    width: "100%",
+    minWidth: 760,
+    ...({
+      display: "grid",
+      gridTemplateColumns: "minmax(200px, 1.5fr) minmax(88px, 0.65fr) 96px 96px 72px 36px",
+      columnGap: 16,
+      alignItems: "center",
+      boxSizing: "border-box",
+    } as object),
+  },
   goalsEntityHeadCell: {
     fontSize: 10,
     fontWeight: "600",
@@ -3228,6 +3239,16 @@ export const networkDesktopHubStyles = StyleSheet.create({
   },
   goalsEntityColName: {
     minWidth: 0,
+  },
+  goalsEntityColKam: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    ...({
+      justifySelf: "start",
+      width: "100%",
+    } as object),
   },
   goalsEntityColActual: {
     minWidth: 0,

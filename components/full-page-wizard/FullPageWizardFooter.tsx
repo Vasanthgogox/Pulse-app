@@ -1,6 +1,9 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
+import { alertRegistryActionStyles } from "@/components/AlertRegistryCardActions";
 import { fullPageWizardStyles as styles } from "./fullPageWizardStyles";
+
+export type FullPageWizardFooterActionVariant = "wizard" | "registry";
 
 export interface FullPageWizardFooterProps {
   secondaryLabel?: string;
@@ -14,6 +17,8 @@ export interface FullPageWizardFooterProps {
   loading?: boolean;
   summary?: string;
   hint?: string | null;
+  /** Registry = notification / chat alert CTA chrome (Decline + Pay now). */
+  actionVariant?: FullPageWizardFooterActionVariant;
 }
 
 export function FullPageWizardFooter({
@@ -28,47 +33,95 @@ export function FullPageWizardFooter({
   loading = false,
   summary,
   hint,
+  actionVariant = "wizard",
 }: FullPageWizardFooterProps) {
   const disabled = primaryDisabled || loading;
+  const isRegistry = actionVariant === "registry";
+  const actionStyles = alertRegistryActionStyles;
 
   return (
     <View>
       {summary ? (
-        <Text style={styles.footerSummary} numberOfLines={2}>
+        <Text
+          style={isRegistry ? actionStyles.footerSummary : styles.footerSummary}
+          numberOfLines={2}
+        >
           {summary}
         </Text>
       ) : null}
-      <View style={styles.footerBar}>
+      <View style={isRegistry ? actionStyles.footerBar : styles.footerBar}>
         {onSecondaryPress ? (
-          <Pressable style={styles.cancelBtn} onPress={onSecondaryPress}>
-            <Text style={styles.cancelBtnText}>{secondaryLabel}</Text>
+          <Pressable
+            style={
+              isRegistry ? actionStyles.footerGhostBtn : styles.cancelBtn
+            }
+            onPress={onSecondaryPress}
+          >
+            <Text
+              style={
+                isRegistry
+                  ? actionStyles.footerGhostBtnText
+                  : styles.cancelBtnText
+              }
+            >
+              {secondaryLabel}
+            </Text>
           </Pressable>
         ) : null}
         {tertiaryLabel && onTertiaryPress ? (
           <Pressable
             style={[
-              styles.tertiaryBtn,
-              tertiaryDisabled && styles.tertiaryBtnDisabled,
+              isRegistry ? actionStyles.footerTertiaryBtn : styles.tertiaryBtn,
+              !isRegistry && tertiaryDisabled && styles.tertiaryBtnDisabled,
+              isRegistry &&
+                tertiaryDisabled &&
+                actionStyles.btnDisabled,
             ]}
             onPress={onTertiaryPress}
             disabled={tertiaryDisabled}
           >
-            <Text style={styles.tertiaryBtnText}>{tertiaryLabel}</Text>
+            <Text
+              style={
+                isRegistry
+                  ? actionStyles.footerTertiaryBtnText
+                  : styles.tertiaryBtnText
+              }
+            >
+              {tertiaryLabel}
+            </Text>
           </Pressable>
         ) : null}
         <Pressable
-          style={[styles.submitBtn, disabled && styles.submitBtnDisabled]}
+          style={[
+            isRegistry ? actionStyles.footerPrimaryBtn : styles.submitBtn,
+            disabled &&
+              (isRegistry
+                ? actionStyles.btnDisabled
+                : styles.submitBtnDisabled),
+          ]}
           onPress={onPrimaryPress}
           disabled={disabled}
         >
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.submitBtnText}>{primaryLabel}</Text>
+            <Text
+              style={
+                isRegistry
+                  ? actionStyles.footerPrimaryBtnText
+                  : styles.submitBtnText
+              }
+            >
+              {primaryLabel}
+            </Text>
           )}
         </Pressable>
       </View>
-      {hint ? <Text style={styles.footerHint}>{hint}</Text> : null}
+      {hint ? (
+        <Text style={isRegistry ? actionStyles.footerHint : styles.footerHint}>
+          {hint}
+        </Text>
+      ) : null}
     </View>
   );
 }

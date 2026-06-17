@@ -66,6 +66,10 @@ export type EntityGoalRow = {
   revenueProgressPct: number;
   tripProgressPct: number;
   hasTarget: boolean;
+  /** userId of assigned KAM (client focus only) */
+  kamUserId: string | null;
+  /** Region label (client focus only) */
+  region: string | null;
 };
 
 export type BalanceTrendPoint = {
@@ -244,10 +248,13 @@ export function computePayableReceivableSnapshot(
   drivers: readonly DriverRow[],
   trips: readonly TripRow[],
   transactions: readonly LedgerTx[],
+  monthKeys?: readonly string[],
 ): PayableReceivableSnapshot {
-  const customerAgg = aggregateCustomers(clients, trips, transactions);
-  const supplierAgg = aggregateSuppliers(suppliers, trips, transactions);
-  const driverAgg = aggregateDrivers(drivers, trips, transactions);
+  const scopedTrips =
+    monthKeys && monthKeys.length > 0 ? tripsInMonthKeys(trips, monthKeys) : trips;
+  const customerAgg = aggregateCustomers(clients, scopedTrips, transactions);
+  const supplierAgg = aggregateSuppliers(suppliers, scopedTrips, transactions);
+  const driverAgg = aggregateDrivers(drivers, scopedTrips, transactions);
 
   let receivableBilled = 0;
   let receivableCollected = 0;
@@ -453,6 +460,9 @@ export function buildEntityGoalRows(
     }
   }
 
+  const kamAssignments = store.kamAssignments ?? {};
+  const clientRegions = store.clientRegions ?? {};
+
   const rows: EntityGoalRow[] = [...actuals.entries()].map(([id, row]) => {
     const target = sumEntityTargetsForKeys(store, monthKeys, focus, id);
     const hasTarget = target.revenueInr > 0 || target.tripCount > 0;
@@ -470,6 +480,8 @@ export function buildEntityGoalRows(
       revenueProgressPct: progressPct(row.revenue, target.revenueInr),
       tripProgressPct: progressPct(row.trips, target.tripCount),
       hasTarget,
+      kamUserId: focus === "client" ? (kamAssignments[id] ?? null) : null,
+      region: focus === "client" ? (clientRegions[id] ?? null) : null,
     };
   });
 
@@ -545,12 +557,26 @@ export function buildPeriodSummary(
   };
 }
 
-/** Balance widget period maps to trailing month keys. */
-export function balancePeriodMonthKeys(period: SalesDateRange): string[] {
-  if (period === "3m") return getMonthKeys(3);
-  if (period === "6m") return getMonthKeys(6);
-  if (period === "12m") return getMonthKeys(12);
-  return getMonthKeys(18);
+/** Balance widget period maps to month keys anchored to selected month. */
+export function balancePeriodMonthKeys(
+  period: SalesDateRange,
+  anchorMonthKey?: string,
+): string[] {
+  const now = new Date();
+  const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const anchor = anchorMonthKey ?? fallback;
+  if (period === "3m") return [anchor];
+  if (period === "6m") return rollupMonthKeys(anchor, "quarter");
+  if (period === "12m") return rollupMonthKeys(anchor, "year");
+  const keys: string[] = [anchor];
+  let cursor = anchor;
+  for (let i = 0; i < 17; i += 1) {
+    const prev = previousMonthKey(cursor);
+    if (!prev) break;
+    keys.unshift(prev);
+    cursor = prev;
+  }
+  return keys;
 }
 
 export type EntityMonthPerformance = {

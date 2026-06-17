@@ -1,232 +1,261 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
-import { PartyAvatar } from "@/components/PartyAvatar";
+import { AlertRegistrySignalCard } from "@/components/AlertRegistrySignalCard";
+import {
+  RegistryCardActions,
+  RegistryGhostButton,
+  RegistryPrimaryButton,
+} from "@/components/AlertRegistryCardActions";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
+import { resolveSalaryRegistryAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import type { RegistryTag } from "@/lib/alertRegistry/registryAlertPresentation.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useDriverProfileImagesQuery } from "@/lib/queries/useDriverProfileImagesQuery";
+import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { ChevronDown, ChevronUp } from "lucide-react-native";
 
-const GRID_COLUMNS = 2;
-const GRID_GAP = 8;
-const LIST_MAX_HEIGHT = 248;
-const SCROLL_HINT_THRESHOLD = 3;
-const CARD_AVATAR_SIZE = 30;
-const CARD_MIN_HEIGHT = 108;
+const DESKTOP_BREAKPOINT = 1024;
+const DESKTOP_COLUMNS = 3;
+const SECTION_INSET = 16;
+const CARD_GAP = 12;
+const DESKTOP_CARD_MIN_WIDTH = 200;
+const LIST_MAX_HEIGHT = 420;
 
-function chunkRows<T>(items: T[], columns: number): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < items.length; i += columns) {
-    rows.push(items.slice(i, i + columns));
-  }
-  return rows;
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "Just now";
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "Just now";
+  const diffMs = Date.now() - ts;
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-export type AttributionRequestsSectionProps = {
-  requests: SalaryRequestWithDriverRow[];
-  orgId: string | null;
-  busySalaryId: string | null;
-  onAccept: (req: SalaryRequestWithDriverRow) => void;
-  onReject: (requestId: string) => void;
-};
+function formatSalaryAmount(amount: number | null | undefined): string {
+  return `₹${Number(amount ?? 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
 
-function formatRequestDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-  });
+function formatSalaryHighlight(req: SalaryRequestWithDriverRow): string {
+  return `₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`;
 }
 
 function pendingCountLabel(count: number): string {
   return count === 1 ? "1 pending" : `${count} pending`;
 }
 
-type AttributionRequestCardProps = {
-  req: SalaryRequestWithDriverRow;
-  avatarUrl?: string | null;
-  busy: boolean;
-  onAccept: (req: SalaryRequestWithDriverRow) => void;
-  onReject: (requestId: string) => void;
-};
-
-const AttributionRequestCard = memo(function AttributionRequestCard({
-  req,
-  avatarUrl,
-  busy,
-  onAccept,
-  onReject,
-}: AttributionRequestCardProps) {
+function renderRequestCard(
+  req: SalaryRequestWithDriverRow,
+  driversById: Map<string, { id: string; name?: string | null }>,
+  busySalaryId: string | null,
+  onOpenRequest: (req: SalaryRequestWithDriverRow) => void,
+  onReject: (requestId: string) => void,
+  variant: "feed" | "tile",
+) {
   const driverName = req.drivers?.name?.trim() || "Driver";
-  const amount = Number(req.amount ?? 0);
+  const busy = busySalaryId === req.id;
+  const salaryTags: RegistryTag[] = [
+    { label: "attribution", variant: "default" },
+    { label: "trip based", variant: "neutral" },
+  ];
 
   return (
-    <View style={styles.gridCell}>
-      <View style={styles.card}>
-        <View style={styles.cardTop}>
-          <PartyAvatar
-            name={driverName}
-            avatarUrl={avatarUrl ?? null}
-            avatarSeed={req.driver_id}
-            entityType="driver"
-            size={CARD_AVATAR_SIZE}
-            shape="rounded"
-          />
-          <View style={styles.cardBody}>
-            <View style={styles.nameAmountRow}>
-              <Text style={styles.driverName} numberOfLines={1}>
-                {driverName}
-              </Text>
-              <Text style={styles.amount} numberOfLines={1}>
-                ₹{amount.toLocaleString("en-IN")}
-              </Text>
-            </View>
-            <Text style={styles.cardMeta} numberOfLines={1}>
-              {formatRequestDate(req.created_at)} · Review
-            </Text>
-          </View>
-        </View>
-        <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.rejectBtn}
+    <AlertRegistrySignalCard
+      variant={variant}
+      mode="active"
+      onPress={() => onOpenRequest(req)}
+      avatar={resolveSalaryRegistryAvatar(req, driversById)}
+      actorName={driverName}
+      actionText="sent a trip for review on"
+      highlightText={formatSalaryHighlight(req)}
+      detailTitle={formatSalaryAmount(req.amount)}
+      detailSubtitle="Fleet trip attribution request"
+      timeLabel={formatRelativeTime(req.created_at)}
+      contextLabel="Fleet attribution"
+      tags={salaryTags}
+      isUnread
+      footer={
+        <RegistryCardActions>
+          <RegistryGhostButton
+            label="Decline"
             onPress={() => onReject(req.id)}
             disabled={busy}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel={`Reject attribution request from ${driverName}`}
-          >
-            <Text style={styles.rejectBtnText}>Reject</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.acceptBtn, busy && styles.acceptBtnDisabled]}
-            onPress={() => onAccept(req)}
+          />
+          <RegistryPrimaryButton
+            label="Accept"
+            onPress={() => onOpenRequest(req)}
             disabled={busy}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel={`Accept attribution request from ${driverName}`}
-          >
-            {busy ? (
-              <ActivityIndicator size="small" color={Theme.primary} />
-            ) : (
-              <Text style={styles.acceptBtnText}>Accept</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-});
-
-function RequestGrid({
-  requests,
-  driverAvatarById,
-  busySalaryId,
-  onAccept,
-  onReject,
-}: {
-  requests: SalaryRequestWithDriverRow[];
-  driverAvatarById: Record<string, string | null | undefined>;
-  busySalaryId: string | null;
-  onAccept: (req: SalaryRequestWithDriverRow) => void;
-  onReject: (requestId: string) => void;
-}) {
-  const requestRows = useMemo(
-    () => chunkRows(requests, GRID_COLUMNS),
-    [requests],
-  );
-
-  return (
-    <View style={styles.grid}>
-      {requestRows.map((row, rowIndex) => (
-        <View key={`attr-req-row-${rowIndex}`} style={styles.gridRow}>
-          {row.map((req) => (
-            <AttributionRequestCard
-              key={req.id}
-              req={req}
-              avatarUrl={driverAvatarById[req.driver_id] ?? null}
-              busy={busySalaryId === req.id}
-              onAccept={onAccept}
-              onReject={onReject}
-            />
-          ))}
-          {row.length < GRID_COLUMNS
-            ? Array.from({ length: GRID_COLUMNS - row.length }).map((_, i) => (
-                <View
-                  key={`attr-req-pad-${rowIndex}-${i}`}
-                  style={styles.gridCell}
-                  pointerEvents="none"
-                />
-              ))
-            : null}
-        </View>
-      ))}
-    </View>
+          />
+        </RegistryCardActions>
+      }
+    />
   );
 }
+
+export type AttributionRequestsSectionProps = {
+  requests: SalaryRequestWithDriverRow[];
+  orgId: string | null;
+  busySalaryId: string | null;
+  onOpenRequest: (req: SalaryRequestWithDriverRow) => void;
+  onReject: (requestId: string) => void;
+};
 
 export const AttributionRequestsSection = memo(function AttributionRequestsSection({
   requests,
   orgId,
   busySalaryId,
-  onAccept,
+  onOpenRequest,
   onReject,
 }: AttributionRequestsSectionProps) {
-  const salaryRequestsHasMore = useGlobalSyncStore((s) => s.salaryRequestsHasMore);
-  const loadMoreSalaryRequests = useGlobalSyncStore((s) => s.loadMoreSalaryRequests);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const { width: layoutWidth } = useWindowDimensions();
+  const orgCtx = useOrganization();
+  const resolvedOrgId = orgId ?? orgCtx.currentOrganization?.id ?? null;
+  const { data: drivers = [] } = useDriversQuery(resolvedOrgId);
+  const driversById = useMemo(
+    () => new Map(drivers.map((driver) => [driver.id, driver])),
+    [drivers],
+  );
 
   const driverIds = useMemo(
     () => [...new Set(requests.map((r) => r.driver_id).filter(Boolean))],
     [requests],
   );
-  const driverAvatarById = useDriverProfileImagesQuery(driverIds);
+  useDriverProfileImagesQuery(driverIds);
 
-  const showScrollHint = requests.length > SCROLL_HINT_THRESHOLD;
-  const showLoadMore = salaryRequestsHasMore && Boolean(orgId);
-  const useBoundedScroll = showScrollHint || showLoadMore;
+  const salaryRequestsHasMore = useGlobalSyncStore((s) => s.salaryRequestsHasMore);
+  const [expanded, setExpanded] = useState(true);
 
-  const handleLoadMore = useCallback(async () => {
-    if (!orgId || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      await loadMoreSalaryRequests(orgId);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [orgId, loadingMore, loadMoreSalaryRequests]);
+  const isDesktopRow =
+    Platform.OS === "web" && layoutWidth >= DESKTOP_BREAKPOINT;
+
+  const desktopTrackWidth = useMemo(() => {
+    if (!isDesktopRow) return null;
+    return layoutWidth - Layout.screenPaddingHorizontal * 2 - SECTION_INSET * 2;
+  }, [isDesktopRow, layoutWidth]);
+
+  const desktopCardWidth = useMemo(() => {
+    if (desktopTrackWidth == null) return null;
+    const gaps = (DESKTOP_COLUMNS - 1) * CARD_GAP;
+    return Math.max(
+      DESKTOP_CARD_MIN_WIDTH,
+      Math.floor((desktopTrackWidth - gaps) / DESKTOP_COLUMNS),
+    );
+  }, [desktopTrackWidth]);
 
   if (!requests.length) return null;
 
-  const grid = (
-    <RequestGrid
-      requests={requests}
-      driverAvatarById={driverAvatarById}
-      busySalaryId={busySalaryId}
-      onAccept={onAccept}
-      onReject={onReject}
-    />
-  );
+  const useDesktopHorizontalScroll =
+    isDesktopRow && requests.length > DESKTOP_COLUMNS;
+  const showScrollHint = useDesktopHorizontalScroll;
+  const showVerticalScrollHint =
+    !isDesktopRow && requests.length > 2;
 
   return (
     <View style={styles.section}>
-      <View style={styles.headerRow}>
+      <Pressable
+        style={[styles.headerRow, !expanded && styles.headerRowCollapsed]}
+        onPress={() => setExpanded((value) => !value)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={
+          expanded
+            ? "Hide attribution requests"
+            : `Show attribution requests, ${pendingCountLabel(requests.length)}`
+        }
+      >
         <Text style={styles.sectionTitle}>Attribution requests</Text>
-        <View style={styles.countBadge} accessibilityLabel={pendingCountLabel(requests.length)}>
-          <Text style={styles.countBadgeText}>{pendingCountLabel(requests.length)}</Text>
+        <View style={styles.headerActions}>
+          <View
+            style={styles.countBadge}
+            accessibilityLabel={pendingCountLabel(requests.length)}
+          >
+            <Text style={styles.countBadgeText}>
+              {pendingCountLabel(requests.length)}
+            </Text>
+          </View>
+          <View style={styles.collapseBtn}>
+            {expanded ? (
+              <ChevronUp size={14} color={Theme.textMuted} strokeWidth={2.2} />
+            ) : (
+              <ChevronDown size={14} color={Theme.textMuted} strokeWidth={2.2} />
+            )}
+            <Text style={styles.collapseBtnText}>
+              {expanded ? "Hide" : "Show"}
+            </Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.sectionSubtitle}>
-        Review and accept driver trip attribution requests from fleet home.
-      </Text>
+      </Pressable>
 
-      {useBoundedScroll ? (
+      {expanded ? (
+        <>
+          <Text style={styles.sectionSubtitle}>
+            Review and accept driver trip attribution requests from fleet home.
+          </Text>
+
+          {isDesktopRow && desktopCardWidth != null ? (
+            useDesktopHorizontalScroll ? (
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={Platform.OS === "web"}
+                keyboardShouldPersistTaps="handled"
+                style={styles.desktopScroll}
+                contentContainerStyle={styles.desktopScrollContent}
+              >
+                {requests.map((req) => (
+                  <View
+                    key={req.id}
+                    style={[styles.desktopCardCell, { width: desktopCardWidth }]}
+                  >
+                    {renderRequestCard(
+                      req,
+                      driversById,
+                      busySalaryId,
+                      onOpenRequest,
+                      onReject,
+                      "tile",
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.desktopRow}>
+                {requests.map((req) => (
+                  <View
+                    key={req.id}
+                    style={[styles.desktopCardCell, { width: desktopCardWidth }]}
+                  >
+                    {renderRequestCard(
+                      req,
+                      driversById,
+                      busySalaryId,
+                      onOpenRequest,
+                      onReject,
+                      "tile",
+                    )}
+                  </View>
+                ))}
+              </View>
+            )
+          ) : showVerticalScrollHint ? (
         <ScrollView
           style={[styles.listScroll, styles.listScrollBounded]}
           contentContainerStyle={styles.listContent}
@@ -234,28 +263,48 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
           showsVerticalScrollIndicator
           keyboardShouldPersistTaps="handled"
         >
-          {grid}
-          {showLoadMore ? (
-            <TouchableOpacity
-              style={styles.loadMoreBtn}
-              onPress={() => void handleLoadMore()}
-              disabled={loadingMore}
-              activeOpacity={0.85}
-            >
-              {loadingMore ? (
-                <ActivityIndicator size="small" color={Theme.primary} />
-              ) : (
-                <Text style={styles.loadMoreBtnText}>Load more requests</Text>
+          {requests.map((req) => (
+            <View key={req.id}>
+              {renderRequestCard(
+                req,
+                driversById,
+                busySalaryId,
+                onOpenRequest,
+                onReject,
+                "feed",
               )}
-            </TouchableOpacity>
-          ) : null}
+            </View>
+          ))}
         </ScrollView>
       ) : (
-        <View style={styles.listContent}>{grid}</View>
+        <View style={styles.listContent}>
+          {requests.map((req) => (
+            <View key={req.id}>
+              {renderRequestCard(
+                req,
+                driversById,
+                busySalaryId,
+                onOpenRequest,
+                onReject,
+                "feed",
+              )}
+            </View>
+          ))}
+        </View>
       )}
 
       {showScrollHint ? (
+        <Text style={styles.scrollHint}>Scroll sideways for more requests</Text>
+      ) : null}
+      {showVerticalScrollHint ? (
         <Text style={styles.scrollHint}>Scroll for more requests</Text>
+      ) : null}
+      {salaryRequestsHasMore ? (
+        <Text style={styles.scrollHint}>
+          More requests are available in Notifications.
+        </Text>
+      ) : null}
+        </>
       ) : null}
     </View>
   );
@@ -265,16 +314,25 @@ const styles = StyleSheet.create({
   section: {
     alignSelf: "stretch",
     width: "100%",
-    marginBottom: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    marginBottom: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    gap: 8,
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
     ...Platform.select({
-      web: { minWidth: 0, maxWidth: "100%" as const },
+      web: {
+        minWidth: 0,
+        maxWidth: "100%" as const,
+        boxShadow: "0 6px 24px rgba(15, 23, 42, 0.06)",
+      } as object,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 2,
+      },
     }),
   },
   headerRow: {
@@ -283,32 +341,108 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
     width: "100%",
+    paddingHorizontal: SECTION_INSET,
+    paddingTop: 14,
+  },
+  headerRowCollapsed: {
+    paddingBottom: 14,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  collapseBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+  },
+  collapseBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textMuted,
   },
   sectionTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
+    letterSpacing: -0.1,
   },
   countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
     backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
     flexShrink: 0,
   },
   countBadgeText: {
     fontSize: 10,
     fontWeight: "700",
     color: Theme.primary,
+    letterSpacing: 0.2,
   },
   sectionSubtitle: {
     fontSize: 12,
     color: Theme.textSecondary,
-    lineHeight: 17,
+    lineHeight: 18,
     width: "100%",
+    paddingHorizontal: SECTION_INSET,
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
+  desktopScroll: {
+    width: "100%",
+    flexGrow: 0,
+  },
+  desktopScrollContent: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: CARD_GAP,
+    paddingHorizontal: SECTION_INSET,
+    paddingBottom: 12,
+  },
+  desktopRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: CARD_GAP,
+    width: "100%",
+    paddingHorizontal: SECTION_INSET,
+    paddingBottom: 12,
+  },
+  desktopCardCell: {
+    flexShrink: 0,
+    flexGrow: 0,
+    alignSelf: "stretch",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+    minHeight: 168,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 16px rgba(15, 23, 42, 0.06)",
+      } as object,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
   listScroll: {
     alignSelf: "stretch",
@@ -321,151 +455,16 @@ const styles = StyleSheet.create({
   listContent: {
     width: "100%",
     alignSelf: "stretch",
-    gap: GRID_GAP,
     ...Platform.select({
       web: { minWidth: 0 },
     }),
-  },
-  grid: {
-    width: "100%",
-    alignSelf: "stretch",
-    gap: GRID_GAP,
-  },
-  gridRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: GRID_GAP,
-    width: "100%",
-    alignSelf: "stretch",
-  },
-  gridCell: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
-    alignSelf: "stretch",
-  },
-  card: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: CARD_MIN_HEIGHT,
-    alignSelf: "stretch",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    padding: 10,
-    gap: 8,
-    justifyContent: "space-between",
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    width: "100%",
-    minWidth: 0,
-  },
-  cardBody: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  nameAmountRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-    width: "100%",
-    minWidth: 0,
-  },
-  driverName: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 17,
-    color: Theme.textPrimaryDark,
-  },
-  amount: {
-    flexShrink: 0,
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 17,
-    color: Theme.textPrimaryDark,
-    textAlign: "right",
-  },
-  cardMeta: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: Theme.textMuted,
-  },
-  cardActions: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 6,
-    width: "100%",
-    marginTop: 2,
-  },
-  rejectBtn: {
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: 4,
-    paddingVertical: 7,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    minHeight: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rejectBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    letterSpacing: 0.1,
-  },
-  acceptBtn: {
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: 4,
-    paddingVertical: 7,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: Theme.primary,
-    backgroundColor: Theme.pulseIndigoWash,
-    minHeight: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  acceptBtnDisabled: {
-    opacity: 0.7,
-  },
-  acceptBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.primary,
-    letterSpacing: 0.1,
-  },
-  loadMoreBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.cardWhite,
-    minHeight: 36,
-    width: "100%",
-  },
-  loadMoreBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.primary,
   },
   scrollHint: {
     fontSize: 10,
     color: Theme.textMuted,
     textAlign: "center",
     width: "100%",
+    paddingHorizontal: SECTION_INSET,
+    paddingBottom: 10,
   },
 });

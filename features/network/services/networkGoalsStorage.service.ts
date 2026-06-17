@@ -3,6 +3,9 @@
  *
  * Targets are keyed by month (YYYY-MM). Each month can hold org aggregate targets
  * (revenue, trip count, margin %) plus per-client / per-vehicle / per-driver targets.
+ *
+ * v3 additions: KAM assignments (clientId→userId), client regions, annual and
+ * quarterly targets. Backward-compatible with v2 (missing fields default to empty).
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -28,8 +31,16 @@ export type NetworkGoalsMonthStore = {
 };
 
 export type NetworkGoalsStore = {
-  version: 2;
+  version: number;
   months: Record<string, NetworkGoalsMonthStore>;
+  /** clientId → userId of assigned Key Account Manager */
+  kamAssignments: Record<string, string>;
+  /** clientId → region label (e.g. "North", "Mumbai Zone") */
+  clientRegions: Record<string, string>;
+  /** "YYYY" → aggregate annual targets */
+  yearlyTargets: Record<string, SalesTargetMetrics>;
+  /** "YYYY-QN" → aggregate quarterly targets (e.g. "2026-Q2") */
+  quarterlyTargets: Record<string, SalesTargetMetrics>;
   updatedAt: string;
 };
 
@@ -45,13 +56,113 @@ export const EMPTY_ENTITY_TARGET: EntityTargetMetrics = {
 };
 
 export const DEFAULT_NETWORK_GOALS_STORE: NetworkGoalsStore = {
-  version: 2,
+  version: 3,
   months: {},
+  kamAssignments: {},
+  clientRegions: {},
+  yearlyTargets: {},
+  quarterlyTargets: {},
   updatedAt: "",
 };
 
 const STORAGE_KEY_V2 = (orgId: string) => `network-hub-goals:v2:${orgId}`;
 const STORAGE_KEY_V1 = (orgId: string) => `network-hub-goals:v1:${orgId}`;
+
+// ─── Period key helpers ────────────────────────────────────────────────────────
+
+/** "2026-06" → "2026" */
+export function yearFromMonthKey(monthKey: string): string {
+  return monthKey.split("-")[0] ?? String(new Date().getFullYear());
+}
+
+/** "2026-06" → "2026-Q2" */
+export function quarterKeyFromMonthKey(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  if (!y || !m) return `${new Date().getFullYear()}-Q1`;
+  const q = Math.ceil(m / 3);
+  return `${y}-Q${q}`;
+}
+
+/** All quarter keys for a year. */
+export function yearQuarterKeys(year: string): string[] {
+  return [`${year}-Q1`, `${year}-Q2`, `${year}-Q3`, `${year}-Q4`];
+}
+
+// ─── KAM + region helpers ──────────────────────────────────────────────────────
+
+export function patchKamAssignment(
+  store: NetworkGoalsStore,
+  clientId: string,
+  userId: string | null,
+): NetworkGoalsStore {
+  const next = { ...store.kamAssignments };
+  if (userId == null) {
+    delete next[clientId];
+  } else {
+    next[clientId] = userId;
+  }
+  return { ...store, kamAssignments: next };
+}
+
+export function patchClientRegion(
+  store: NetworkGoalsStore,
+  clientId: string,
+  region: string | null,
+): NetworkGoalsStore {
+  const next = { ...store.clientRegions };
+  if (!region?.trim()) {
+    delete next[clientId];
+  } else {
+    next[clientId] = region.trim();
+  }
+  return { ...store, clientRegions: next };
+}
+
+// ─── Yearly / quarterly target helpers ────────────────────────────────────────
+
+export function getYearlyTarget(
+  store: NetworkGoalsStore,
+  year: string,
+): SalesTargetMetrics {
+  return store.yearlyTargets[year] ?? { ...EMPTY_SALES_TARGET };
+}
+
+export function getQuarterlyTarget(
+  store: NetworkGoalsStore,
+  quarterKey: string,
+): SalesTargetMetrics {
+  return store.quarterlyTargets[quarterKey] ?? { ...EMPTY_SALES_TARGET };
+}
+
+export function patchYearlyTarget(
+  store: NetworkGoalsStore,
+  year: string,
+  patch: Partial<SalesTargetMetrics>,
+): NetworkGoalsStore {
+  const current = getYearlyTarget(store, year);
+  return {
+    ...store,
+    yearlyTargets: {
+      ...store.yearlyTargets,
+      [year]: safeMetrics({ ...current, ...patch }),
+    },
+  };
+}
+
+export function patchQuarterlyTarget(
+  store: NetworkGoalsStore,
+  quarterKey: string,
+  patch: Partial<SalesTargetMetrics>,
+): NetworkGoalsStore {
+  const current = getQuarterlyTarget(store, quarterKey);
+  return {
+    ...store,
+    quarterlyTargets: {
+      ...store.quarterlyTargets,
+      [quarterKey]: safeMetrics({ ...current, ...patch }),
+    },
+  };
+}
 
 function emptyMonthStore(): NetworkGoalsMonthStore {
   return {
@@ -225,7 +336,7 @@ async function migrateV1ToV2(orgId: string): Promise<NetworkGoalsStore | null> {
     const now = new Date();
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const store: NetworkGoalsStore = {
-      version: 2,
+      version: 3,
       months: {
         [monthKey]: {
           aggregate: {
@@ -242,6 +353,10 @@ async function migrateV1ToV2(orgId: string): Promise<NetworkGoalsStore | null> {
           drivers: {},
         },
       },
+      kamAssignments: {},
+      clientRegions: {},
+      yearlyTargets: {},
+      quarterlyTargets: {},
       updatedAt: new Date().toISOString(),
     };
     await saveNetworkGoalsStore(orgId, store);
@@ -262,9 +377,14 @@ export async function loadNetworkGoalsStore(
       for (const [key, val] of Object.entries(parsed.months ?? {})) {
         months[key] = parseMonthStore(val);
       }
+      // v2→v3: fill new fields if missing
       return {
-        version: 2,
+        version: 3,
         months,
+        kamAssignments: (parsed.kamAssignments ?? {}) as Record<string, string>,
+        clientRegions: (parsed.clientRegions ?? {}) as Record<string, string>,
+        yearlyTargets: (parsed.yearlyTargets ?? {}) as Record<string, SalesTargetMetrics>,
+        quarterlyTargets: (parsed.quarterlyTargets ?? {}) as Record<string, SalesTargetMetrics>,
         updatedAt: parsed.updatedAt ?? "",
       };
     }
@@ -284,7 +404,7 @@ export async function saveNetworkGoalsStore(
     STORAGE_KEY_V2(orgId),
     JSON.stringify({
       ...store,
-      version: 2,
+      version: 3,
       updatedAt: new Date().toISOString(),
     }),
   );

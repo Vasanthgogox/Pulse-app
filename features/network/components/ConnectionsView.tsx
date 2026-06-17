@@ -1371,8 +1371,8 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: "transparent",
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingTop: 6,
+    paddingBottom: 12,
     overflow: "visible",
   },
   metronicGridRoot: {
@@ -1404,8 +1404,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 12,
-    paddingHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
-    paddingBottom: 8,
+    paddingHorizontal: 24,
+    paddingBottom: 10,
     minHeight: 200,
   },
   metronicHorizontalCard: {

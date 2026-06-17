@@ -60,8 +60,40 @@ const VARIANT_BLOB: Record<BentoMetricVariant, string> = {
 /** Typography parity with `TripsHubViews` fleet / ledger cards. */
 const FS_CAPTION = 9;
 const FS_AMOUNT_LABEL = 8;
-const FS_COUNT_LARGE = 26;
-const FS_COUNT_SMALL = 20;
+const FS_COUNT_LARGE = 28;
+const FS_COUNT_SMALL = 22;
+
+/** Selected mission metric — matte black (trips hub / chat dark pill parity). */
+const BENTO_ACTIVE_BG = "#141416";
+const BENTO_ACTIVE_BORDER = "#2b2b30";
+const BENTO_ACTIVE_ICON_WASH = "rgba(255, 255, 255, 0.1)";
+const BENTO_ACTIVE_ICON_RING = "rgba(255, 255, 255, 0.16)";
+
+const CARD_SHADOW = Platform.select({
+  web: {
+    boxShadow: "0 6px 20px rgba(15, 23, 42, 0.07)",
+  } as object,
+  default: {
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+});
+
+const CARD_SHADOW_ACTIVE = Platform.select({
+  web: {
+    boxShadow: "0 12px 32px rgba(0, 0, 0, 0.24)",
+  } as object,
+  default: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 5,
+  },
+});
 
 const BENTO_LAYOUT: Record<
   ActiveMetricTabId,
@@ -128,6 +160,7 @@ function BentoMetricCard({
           styles.card,
           item.size === "large" && styles.cardLarge,
           active ? styles.cardActive : styles.cardIdle,
+          active ? CARD_SHADOW_ACTIVE : CARD_SHADOW,
           cardAnim,
         ]}
       >
@@ -141,8 +174,8 @@ function BentoMetricCard({
         <View
           style={[
             styles.cornerBlob,
-            { backgroundColor: blobColor },
-            active && styles.cornerBlobActive,
+            { backgroundColor: active ? "#ffffff" : blobColor },
+            active ? styles.cornerBlobActiveDark : null,
           ]}
           pointerEvents="none"
         />
@@ -169,18 +202,18 @@ function BentoMetricCard({
                 styles.iconOrb,
                 {
                   backgroundColor: active
-                    ? Theme.pulseIndigoWash
+                    ? BENTO_ACTIVE_ICON_WASH
                     : `${blobColor}14`,
                   borderColor: active
-                    ? Theme.pulseIndigoRing
+                    ? BENTO_ACTIVE_ICON_RING
                     : `${blobColor}28`,
                 },
               ]}
             >
               <FontAwesome
                 name={item.icon}
-                size={10}
-                color={active ? Theme.primary : blobColor}
+                size={11}
+                color={blobColor}
               />
             </View>
           </View>
@@ -388,7 +421,8 @@ function HistoryBentoMetricCard({
         style={[
           styles.card,
           active ? styles.cardActive : styles.cardIdle,
-          dueAttention && styles.cardDueAttention,
+          dueAttention && !active && styles.cardDueAttention,
+          active ? CARD_SHADOW_ACTIVE : CARD_SHADOW,
           cardAnim,
         ]}
       >
@@ -402,8 +436,8 @@ function HistoryBentoMetricCard({
         <View
           style={[
             styles.cornerBlob,
-            { backgroundColor: blobColor },
-            active && styles.cornerBlobActive,
+            { backgroundColor: active ? "#ffffff" : blobColor },
+            active ? styles.cornerBlobActiveDark : null,
           ]}
           pointerEvents="none"
         />
@@ -427,7 +461,7 @@ function HistoryBentoMetricCard({
                   active
                     ? styles.historyAmountActive
                     : styles.historyAmountIdle,
-                  item.amount > 0 && styles.historyAmountDue,
+                  !active && item.amount > 0 && styles.historyAmountDue,
                 ]}
                 numberOfLines={1}
               >
@@ -437,10 +471,15 @@ function HistoryBentoMetricCard({
               <View
                 style={[
                   styles.iconOrb,
-                  {
-                    backgroundColor: `${blobColor}18`,
-                    borderColor: `${blobColor}30`,
-                  },
+                  active
+                    ? {
+                        backgroundColor: BENTO_ACTIVE_ICON_WASH,
+                        borderColor: BENTO_ACTIVE_ICON_RING,
+                      }
+                    : {
+                        backgroundColor: `${blobColor}18`,
+                        borderColor: `${blobColor}30`,
+                      },
                 ]}
               >
                 <FontAwesome
@@ -574,34 +613,41 @@ export function TripsHubMetricGroupRail({
 const styles = StyleSheet.create({
   hub: {
     width: "100%" as const,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 2,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   missionPulse: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
   missionPulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Theme.primary,
-    opacity: 0.55,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: BENTO_ACTIVE_BG,
+    opacity: 0.92,
   },
   missionPulseText: {
-    fontSize: FS_CAPTION,
-    fontWeight: "600",
-    color: Theme.textSecondary,
-    letterSpacing: 0.15,
+    fontSize: FS_CAPTION + 1,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
   },
   sectionLabels: {
     flexDirection: "row",
@@ -618,7 +664,7 @@ const styles = StyleSheet.create({
   bentoRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 8,
+    gap: 10,
     width: "100%" as const,
   },
   mobileScroll: {
@@ -637,43 +683,43 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   cardPressable: {
-    minHeight: 92,
+    minHeight: 100,
     alignSelf: "stretch",
   },
   card: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     overflow: "hidden",
-    minHeight: 92,
+    minHeight: 100,
   },
   cardLarge: {
-    minHeight: 96,
+    minHeight: 104,
   },
   cardIdle: {
     borderColor: Theme.borderLight,
   },
   cardActive: {
-    borderColor: Theme.primary,
+    borderColor: BENTO_ACTIVE_BORDER,
     zIndex: 1,
   },
   cardIdleBg: {
     backgroundColor: Theme.cardWhite,
   },
   cardActiveBg: {
-    backgroundColor: Theme.pulseIndigoWash,
+    backgroundColor: BENTO_ACTIVE_BG,
   },
   cornerBlob: {
     position: "absolute",
     top: 0,
     right: 0,
-    width: 48,
-    height: 48,
-    borderBottomLeftRadius: 48,
-    opacity: 0.04,
-  },
-  cornerBlobActive: {
+    width: 56,
+    height: 56,
+    borderBottomLeftRadius: 56,
     opacity: 0.07,
+  },
+  cornerBlobActiveDark: {
+    opacity: 0.06,
   },
   cardBody: {
     flex: 1,
@@ -682,14 +728,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   cardBodyLarge: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 11,
+    paddingHorizontal: 15,
+    paddingTop: 13,
+    paddingBottom: 12,
   },
   cardBodySmall: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingHorizontal: 13,
+    paddingTop: 11,
+    paddingBottom: 11,
   },
   countRow: {
     flexDirection: "row",
@@ -718,15 +764,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
   },
   countActive: {
-    color: Theme.primary,
+    color: Theme.textOnDark,
   },
   countZero: {
     color: Theme.textMuted,
   },
   iconOrb: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -748,7 +794,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   labelActive: {
-    color: Theme.primary,
+    color: Theme.textOnDark,
   },
   sub: {
     fontSize: FS_AMOUNT_LABEL,
@@ -760,7 +806,7 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   subActive: {
-    color: Theme.textSecondary,
+    color: Theme.textOnDarkMuted,
   },
   historyAmount: {
     fontSize: FS_CAPTION + 1,
@@ -777,7 +823,7 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   historyAmountActive: {
-    color: Theme.primary,
+    color: Theme.textOnDark,
   },
   historyAmountDue: {
     color: Theme.teslaRed,

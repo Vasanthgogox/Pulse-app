@@ -58,6 +58,8 @@ export type AlertRegistrySignalCardProps = {
   isUnread?: boolean;
   onPress?: () => void;
   footer?: React.ReactNode;
+  /** Contained card for horizontal grids (no feed divider). */
+  variant?: "feed" | "tile";
 };
 
 function NotificationAvatar({
@@ -150,11 +152,18 @@ export function AlertRegistrySignalCard({
   isUnread = false,
   onPress,
   footer,
+  variant = "feed",
 }: AlertRegistrySignalCardProps) {
   const showDetailCard = Boolean(detailTitle || detailSubtitle || detail);
 
   const content = (
-    <View style={[styles.row, mode === "completed" && styles.rowCompleted]}>
+    <View
+      style={[
+        styles.row,
+        variant === "tile" && styles.rowTile,
+        mode === "completed" && styles.rowCompleted,
+      ]}
+    >
       <NotificationAvatar avatar={avatar} isUnread={isUnread} mode={mode} />
 
       <View style={styles.body}>
@@ -245,6 +254,11 @@ const styles = StyleSheet.create({
   },
   rowCompleted: {
     backgroundColor: "#FCFCFD",
+  },
+  rowTile: {
+    borderBottomWidth: 0,
+    flex: 1,
+    minHeight: 0,
   },
   avatarWrap: {
     width: AVATAR_SIZE,

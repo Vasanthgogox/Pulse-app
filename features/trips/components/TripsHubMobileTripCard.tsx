@@ -390,7 +390,13 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
 
   return (
     <View style={[styles.cardWrap, fillGrid && styles.cardWrapGrid, style]}>
-      <View style={[styles.card, fillGrid && styles.cardGrid]}>
+      <View
+        style={[
+          styles.card,
+          fillGrid && styles.cardGrid,
+          fillGrid && styles.cardGridElevated,
+        ]}
+      >
         <Pressable
           onPress={onPress}
           style={({ pressed }) => [
@@ -550,13 +556,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...Platform.select({
       web: {
-        boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
+        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.05)",
       } as ViewStyle,
       default: {
         shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
         elevation: 1,
       },
     }),
@@ -566,6 +572,24 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: HUB_GRID_CARD_MIN_HEIGHT,
     flexDirection: "column",
+  },
+  cardGridElevated: {
+    borderRadius: 14,
+    borderColor: "rgba(15, 23, 42, 0.08)",
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select({
+      web: {
+        boxShadow:
+          "0 12px 32px rgba(15, 23, 42, 0.09), 0 2px 8px rgba(15, 23, 42, 0.04)",
+      } as ViewStyle,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.09,
+        shadowRadius: 16,
+        elevation: 3,
+      },
+    }),
   },
   body: {
     paddingHorizontal: 18,

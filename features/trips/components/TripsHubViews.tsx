@@ -1301,6 +1301,9 @@ export function TripsHubTableView({
       style={[
         styles.auditTableWrap,
         mobileCardList && styles.auditTableWrapMobileCards,
+        mobileCardList &&
+          useDesktopToolbarRow &&
+          styles.auditTableWrapDesktopHub,
       ]}
     >
       <View
@@ -1310,6 +1313,10 @@ export function TripsHubTableView({
             !useDesktopToolbarRow &&
             styles.auditToolbarMobileCards,
           useDesktopToolbarRow && styles.auditToolbarDesktop,
+          mobileCardList &&
+            useDesktopToolbarRow &&
+            styles.auditToolbarDesktopHub,
+          mobileCardList && styles.auditToolbarCardListSpacing,
         ]}
       >
         {useDesktopToolbarRow ? (
@@ -1583,7 +1590,9 @@ export function TripsHubTableView({
       </View>
 
       {renderBody ? (
-        renderBody(rowsForTableBody)
+        <View style={styles.auditCardListBody}>
+          {renderBody(rowsForTableBody)}
+        </View>
       ) : (
         <>
           <View style={styles.manifestHeaderRow}>
@@ -3261,6 +3270,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     overflow: "visible",
   },
+  auditTableWrapDesktopHub: {
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    borderWidth: 0,
+    marginBottom: 20,
+    overflow: "visible",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   auditToolbar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -3275,7 +3293,29 @@ const styles = StyleSheet.create({
   },
   auditToolbarDesktop: {
     flexWrap: "nowrap",
-    paddingVertical: 10,
+    paddingVertical: 12,
+  },
+  auditToolbarDesktopHub: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(15, 23, 42, 0.07)",
+    marginBottom: 14,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 18px rgba(15, 23, 42, 0.06)",
+      } as object,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 2,
+      },
+    }),
   },
   auditToolbarDesktopRow: {
     flexDirection: "row",
@@ -3292,8 +3332,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingHorizontal: 0,
     paddingTop: 0,
-    paddingBottom: 6,
-    rowGap: 6,
+    paddingBottom: 10,
+    rowGap: 8,
+  },
+  auditToolbarCardListSpacing: {
+    paddingBottom: 14,
+  },
+  auditCardListBody: {
+    paddingTop: 2,
+    paddingHorizontal: 2,
+    paddingBottom: 4,
+    backgroundColor: "transparent",
   },
   auditToolbarCount: {
     fontSize: 12,
@@ -3435,13 +3484,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    minHeight: 34,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    minHeight: 36,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 999,
     backgroundColor: Theme.primary,
     borderWidth: 1,
     borderColor: Theme.primary,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 6px 16px rgba(79, 70, 229, 0.28)",
+      } as object,
+      default: {
+        shadowColor: Theme.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        elevation: 3,
+      },
+    }),
   },
   auditAddTripBtnText: {
     fontSize: 10,
