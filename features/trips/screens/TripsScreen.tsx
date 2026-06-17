@@ -1600,6 +1600,19 @@ export default function TripsScreen() {
             />
           }
         >
+          {tripFilter === "Active" && attributionRequests.length > 0 ? (
+            <View style={styles.attributionRequestsTop}>
+              <AttributionRequestsSection
+                requests={attributionRequests}
+                orgId={orgId}
+                busySalaryId={finance.busySalaryId}
+                onOpenRequest={(req) =>
+                  finance.onOpenDetail("salary", req.id, "active")
+                }
+                onReject={finance.onRejectSalary}
+              />
+            </View>
+          ) : null}
           <View
             style={
               isMobileViewport
@@ -1611,6 +1624,7 @@ export default function TripsScreen() {
               style={[
                 styles.tripsInlineFilterPanel,
                 isMobileViewport && styles.tripsInlineFilterPanelMobileLight,
+                !isMobileViewport && styles.tripsInlineFilterPanelDesktop,
               ]}
             >
               {isMobileViewport ? (
@@ -1894,16 +1908,6 @@ export default function TripsScreen() {
               />
             )}
           </View>
-
-          {tripFilter === "Active" && attributionRequests.length > 0 ? (
-            <AttributionRequestsSection
-              requests={attributionRequests}
-              orgId={orgId}
-              busySalaryId={finance.busySalaryId}
-              onAccept={finance.onPaySalary}
-              onReject={finance.onRejectSalary}
-            />
-          ) : null}
 
           {effectiveListLayout === "table" ? (
             <View>
@@ -2760,18 +2764,19 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginHorizontal: -10,
+    marginHorizontal: -6,
     alignItems: "stretch",
     paddingTop: 0,
     marginTop: 0,
+    rowGap: 4,
   },
   /** Desktop trips grid — 4 cards per row (25% each). */
   gridItem: {
     width: "25%",
     maxWidth: "25%",
     flexBasis: "25%",
-    paddingHorizontal: 10,
-    marginBottom: 20,
+    paddingHorizontal: 6,
+    marginBottom: 14,
     alignSelf: "stretch",
   },
   tripsTableHScrollContent: {
@@ -2869,16 +2874,19 @@ const styles = StyleSheet.create({
       web: { minWidth: 0, maxWidth: "100%" as const },
     }),
   },
+  attributionRequestsTop: {
+    width: "100%",
+    marginBottom: 4,
+  },
   /** Status + date filters (moved from header) — full-bleed strip above list/table */
   tripsBodyFiltersBleed: {
     marginHorizontal: -Layout.screenPaddingHorizontal,
-    marginBottom: 8,
+    marginBottom: 20,
     paddingTop: 8,
-    paddingBottom: 10,
+    paddingBottom: 4,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    backgroundColor: Theme.screenBackground,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    backgroundColor: "transparent",
+    borderBottomWidth: 0,
     ...Platform.select({
       web: { minWidth: 0 },
     }),
@@ -3046,6 +3054,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
   },
+  tripsInlineFilterPanelDesktop: {
+    marginBottom: 20,
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+    borderRadius: 16,
+    overflow: "visible",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 24px rgba(15, 23, 42, 0.06)",
+      } as object,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 2,
+      },
+    }),
+  },
   tripsInlineFilterPanelMobileLight: {
     marginBottom: 0,
     backgroundColor: Theme.screenBackground,
@@ -3064,9 +3092,9 @@ const styles = StyleSheet.create({
   },
   tripsInlineFilterPanelWeb: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 10,
+    paddingTop: 14,
+    paddingBottom: 14,
+    gap: 12,
   },
   tripsFilterHeaderCompact: {
     flexDirection: "column",
@@ -3282,10 +3310,9 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   tripMetricsScroll: {
-    marginBottom: 8,
-    paddingBottom: 2,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    marginBottom: 20,
+    paddingBottom: 0,
+    borderBottomWidth: 0,
   },
   tripMetricTabsScroll: {
     marginBottom: 10,

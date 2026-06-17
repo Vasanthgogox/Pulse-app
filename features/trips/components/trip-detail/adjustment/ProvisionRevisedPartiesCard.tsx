@@ -149,8 +149,13 @@ function PartyLaneCard({
   onPress,
   breakdownLines,
   layout = "mobile",
-}: ProvisionPartyLaneProps & { layout?: ProvisionFinanceLayout }) {
+  variant = "default",
+}: ProvisionPartyLaneProps & {
+  layout?: ProvisionFinanceLayout;
+  variant?: "default" | "modal";
+}) {
   const isDesktop = layout === "desktop";
+  const isModal = variant === "modal";
   const content = (
     <>
       <View style={styles.cardHead}>
@@ -159,30 +164,59 @@ function PartyLaneCard({
           avatarUrl={avatarUrl}
           avatarSeed={avatarSeed}
           entityType={entityType}
-          size={isDesktop ? 32 : 28}
+          size={isModal ? 36 : isDesktop ? 32 : 28}
           showIntegrationBadge={false}
         />
         <View style={styles.cardHeadText}>
-          <Text style={[styles.laneLabel, isDesktop && styles.laneLabelDesktop]}>
+          <Text
+            style={[
+              styles.laneLabel,
+              isDesktop && styles.laneLabelDesktop,
+              isModal && styles.laneLabelModal,
+            ]}
+          >
             {laneLabel}
           </Text>
           <Text
-            style={[styles.partyName, isDesktop && styles.partyNameDesktop]}
+            style={[
+              styles.partyName,
+              isDesktop && styles.partyNameDesktop,
+              isModal && styles.partyNameModal,
+            ]}
             numberOfLines={2}
           >
             {partyName}
           </Text>
         </View>
       </View>
-      <View style={[styles.metricsBar, isDesktop && styles.metricsBarDesktop]}>
-        <View style={[styles.metricCell, isDesktop && styles.metricCellDesktop]}>
-          <Text style={[styles.metricLabel, isDesktop && styles.metricLabelDesktop]}>
+      <View
+        style={[
+          styles.metricsBar,
+          isDesktop && styles.metricsBarDesktop,
+          isModal && styles.metricsBarModal,
+        ]}
+      >
+        <View
+          style={[
+            styles.metricCell,
+            isDesktop && styles.metricCellDesktop,
+            isModal && styles.metricCellModal,
+          ]}
+        >
+          <Text
+            style={[
+              styles.metricLabel,
+              isDesktop && styles.metricLabelDesktop,
+              isModal && styles.metricLabelModal,
+            ]}
+          >
             Base
           </Text>
           <Text
             style={[
               styles.metricValueMuted,
               isDesktop && styles.metricValueMutedDesktop,
+              isModal && styles.metricValueMutedModal,
             ]}
           >
             {formatINR(baseAmount)}
@@ -190,7 +224,7 @@ function PartyLaneCard({
         </View>
         <Feather
           name="arrow-right"
-          size={isDesktop ? 16 : 14}
+          size={isModal ? 16 : isDesktop ? 16 : 14}
           color={Theme.textMuted}
           style={[styles.metricArrow, isDesktop && styles.metricArrowDesktop]}
         />
@@ -199,6 +233,7 @@ function PartyLaneCard({
             styles.metricCell,
             styles.metricCellEnd,
             isDesktop && styles.metricCellEndDesktop,
+            isModal && styles.metricCellEndModal,
           ]}
         >
           <Text
@@ -206,6 +241,7 @@ function PartyLaneCard({
               styles.metricLabel,
               styles.metricLabelEnd,
               isDesktop && styles.metricLabelDesktop,
+              isModal && styles.metricLabelModal,
             ]}
           >
             Revised
@@ -214,6 +250,7 @@ function PartyLaneCard({
             style={[
               styles.metricValueHero,
               isDesktop && styles.metricValueHeroDesktop,
+              isModal && styles.metricValueHeroModal,
               { color: accentColor },
             ]}
           >
@@ -223,6 +260,7 @@ function PartyLaneCard({
             style={[
               styles.metricDeltaHero,
               isDesktop && styles.metricDeltaHeroDesktop,
+              isModal && styles.metricDeltaHeroModal,
               {
                 color:
                   delta < 0 && entityType === "client"
@@ -259,6 +297,7 @@ function PartyLaneCard({
         style={[
           styles.card,
           isDesktop && styles.cardDesktop,
+          isModal && styles.cardModal,
           active && { borderColor: accentColor, backgroundColor: `${accentColor}0c` },
         ]}
       >
@@ -268,7 +307,9 @@ function PartyLaneCard({
   }
 
   return (
-    <View style={[styles.card, isDesktop && styles.cardDesktop]}>{content}</View>
+    <View style={[styles.card, isDesktop && styles.cardDesktop, isModal && styles.cardModal]}>
+      {content}
+    </View>
   );
 }
 
@@ -295,6 +336,8 @@ export interface ProvisionRevisedPartiesCardProps {
   onSelectSide?: (side: "client" | "supplier") => void;
   compact?: boolean;
   layout?: ProvisionFinanceLayout;
+  /** Modal hub — roomier single-lane card aligned with mobile wizard. */
+  variant?: "default" | "modal";
 }
 
 export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedPartiesCard(
@@ -304,6 +347,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
   const showSupplier = props.activeSide !== "client";
   const layout = props.layout ?? "mobile";
   const isDesktop = layout === "desktop";
+  const variant = props.variant ?? "default";
 
   return (
     <View
@@ -311,6 +355,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
         styles.wrap,
         props.compact && styles.wrapCompact,
         isDesktop && styles.wrapDesktop,
+        variant === "modal" && styles.wrapModal,
       ]}
     >
       {showClient ? (
@@ -327,6 +372,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           active={props.activeSide === "client"}
           onPress={props.onSelectSide ? () => props.onSelectSide!("client") : undefined}
           layout={layout}
+          variant={variant}
         />
       ) : null}
       {showSupplier ? (
@@ -344,6 +390,7 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           onPress={props.onSelectSide ? () => props.onSelectSide!("supplier") : undefined}
           breakdownLines={props.costBreakdownLines}
           layout={layout}
+          variant={variant}
         />
       ) : null}
     </View>
@@ -353,6 +400,10 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
 const styles = StyleSheet.create({
   wrap: { gap: 6 },
   wrapCompact: { gap: 6 },
+  wrapModal: {
+    gap: 0,
+    marginBottom: 4,
+  },
   wrapDesktop: {
     flexDirection: "row",
     alignItems: "stretch",
@@ -373,6 +424,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 8,
   },
+  cardModal: {
+    padding: 14,
+    borderRadius: 16,
+    gap: 10,
+    marginBottom: 0,
+  },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -392,6 +449,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     lineHeight: 12,
   },
+  laneLabelModal: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
   partyName: {
     fontSize: 11,
     fontWeight: "600",
@@ -403,11 +464,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
   },
+  partyNameModal: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
   metricsBar: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 10,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingBottom: 4,
     paddingHorizontal: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -418,10 +484,17 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 6,
   },
-  metricCell: { flex: 1, minWidth: 0, maxWidth: 148, gap: 3 },
-  metricCellDesktop: { maxWidth: 168 },
+  metricsBarModal: {
+    gap: 12,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  metricCell: { flex: 1, minWidth: 0, gap: 4 },
+  metricCellDesktop: { maxWidth: undefined },
+  metricCellModal: { flex: 1, minWidth: 0 },
   metricCellEnd: { alignItems: "flex-end" },
   metricCellEndDesktop: { marginLeft: "auto" as const },
+  metricCellEndModal: { flex: 1.1, minWidth: 0 },
   metricArrow: { flexShrink: 0 },
   metricArrowDesktop: { marginHorizontal: 2 },
   metricLabel: {
@@ -433,6 +506,10 @@ const styles = StyleSheet.create({
     lineHeight: 10,
   },
   metricLabelDesktop: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  metricLabelModal: {
     fontSize: 10,
     lineHeight: 12,
   },
@@ -451,6 +528,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
   },
+  metricValueMutedModal: {
+    fontSize: 17,
+    lineHeight: 21,
+  },
   metricValueHero: {
     fontSize: 22,
     fontWeight: "900",
@@ -462,6 +543,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 28,
   },
+  metricValueHeroModal: {
+    fontSize: 26,
+    lineHeight: 30,
+  },
   metricDeltaHero: {
     marginTop: 1,
     fontSize: 12,
@@ -471,6 +556,10 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   metricDeltaHeroDesktop: {
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  metricDeltaHeroModal: {
     fontSize: 13,
     lineHeight: 16,
   },

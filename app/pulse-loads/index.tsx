@@ -3,9 +3,9 @@
  * Lives outside the Network tab so Network stays: connections, invites, discover, stories strip only.
  */
 import { ChromeBelowTopNavLoadingScreen } from "@/components/chromeLoadingScreens";
-import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
+import { LOADS_HUB_PAGE_BG } from "@/features/network/components/LoadCenterHubMobileShell";
 import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import type { IndentRow } from "@/features/indents/services/indents.service";
 import { useInvalidateNetwork } from "@/lib/queries/useNetworkQueries";
@@ -60,5 +60,5 @@ export default function PulseLoadsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Theme.surface },
+  root: { flex: 1, backgroundColor: LOADS_HUB_PAGE_BG },
 });

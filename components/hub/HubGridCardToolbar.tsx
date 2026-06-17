@@ -1,12 +1,12 @@
 /**
  * Shared single-row toolbar for 4-column hub grid cards (trips, indents).
  */
-import Theme from "@/constants/Theme";
 import {
-  HUB_GRID_TOOLBAR_PULSE_SLOT_W,
+  HUB_GRID_TOOLBAR_AWARDED_SLOT_W,
   HUB_GRID_TOOLBAR_ROW_HEIGHT,
   HUB_GRID_TOOLBAR_STATUS_SLOT_W,
 } from "@/components/hub/hubGridCardLayout";
+import Theme from "@/constants/Theme";
 import { Children, type ReactNode } from "react";
 import {
   Platform,
@@ -42,15 +42,26 @@ export function HubGridToolbarRow({
   share,
   primary,
   trailing,
+  statusSlot = "default",
 }: {
   status: ReactNode;
   share?: ReactNode | null;
   primary: ReactNode;
   trailing?: ReactNode | null;
+  /** Widen the left status column for amount / awarded chips. */
+  statusSlot?: "default" | "wide" | "amount";
 }) {
   return (
     <View style={styles.denseRow}>
-      <View style={styles.toolbarStatusSlot}>{status}</View>
+      <View
+        style={[
+          styles.toolbarStatusSlot,
+          statusSlot === "wide" && styles.toolbarStatusSlotWide,
+          statusSlot === "amount" && styles.toolbarStatusSlotAmount,
+        ]}
+      >
+        {status}
+      </View>
       {share ?? <View style={styles.sharePlaceholder} />}
       <View style={styles.ctaGroup}>
         <View style={styles.primarySlot}>{primary}</View>
@@ -144,6 +155,7 @@ export function HubGridStatusChip({
   amountLine,
   accessibilityLabel,
   wide,
+  amount,
   fill,
   compact,
 }: {
@@ -153,6 +165,8 @@ export function HubGridStatusChip({
   amountLine?: boolean;
   accessibilityLabel?: string;
   wide?: boolean;
+  /** Full-width amount chip (awarded rate in load grid footer). */
+  amount?: boolean;
   /** Grow to fill parent (metrics row cells). */
   fill?: boolean;
   /** Trip finance footer — smaller amount + label type. */
@@ -163,6 +177,7 @@ export function HubGridStatusChip({
       style={[
         styles.statusChip,
         wide && styles.statusChipWide,
+        amount && styles.statusChipAmountSlot,
         fill && styles.statusChipFill,
       ]}
       accessibilityLabel={accessibilityLabel}
@@ -178,6 +193,8 @@ export function HubGridStatusChip({
           ]}
           numberOfLines={1}
           ellipsizeMode="tail"
+          adjustsFontSizeToFit={amountLine || amount}
+          minimumFontScale={0.72}
         >
           {line1}
         </Text>
@@ -219,6 +236,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT + 16,
     justifyContent: "center",
+    backgroundColor: Theme.surface,
+    borderTopColor: "rgba(15, 23, 42, 0.06)",
   },
   denseRow: {
     flexDirection: "row",
@@ -236,6 +255,12 @@ const styles = StyleSheet.create({
     width: HUB_GRID_TOOLBAR_STATUS_SLOT_W,
     flexShrink: 0,
     alignItems: "flex-start",
+  },
+  toolbarStatusSlotWide: {
+    width: 64,
+  },
+  toolbarStatusSlotAmount: {
+    width: HUB_GRID_TOOLBAR_AWARDED_SLOT_W,
   },
   ctaGroup: {
     flex: 1,
@@ -322,6 +347,12 @@ const styles = StyleSheet.create({
     maxWidth: 64,
     minWidth: 48,
   },
+  statusChipAmountSlot: {
+    maxWidth: HUB_GRID_TOOLBAR_AWARDED_SLOT_W,
+    minWidth: HUB_GRID_TOOLBAR_AWARDED_SLOT_W - 4,
+    width: "100%",
+    paddingHorizontal: 4,
+  },
   statusChipFill: {
     flex: 1,
     width: "100%",
@@ -373,8 +404,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   statusChipAmountCompact: {
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 9,
+    lineHeight: 11,
     fontWeight: "600",
   },
   statusChipLine2: {

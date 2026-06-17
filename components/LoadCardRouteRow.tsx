@@ -1,56 +1,71 @@
-import Typography from '@/constants/Typography';
-import Theme from '@/constants/Theme';
-import { splitHubRouteLocationDisplay } from '@/features/trips/utils/tripLocationDisplay.util';
-import { ChevronRight } from 'lucide-react-native';
-import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Theme from "@/constants/Theme";
+import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+
+const REF = {
+  ink: "#1c1c1e",
+  muted: "#9aa3ad",
+} as const;
+
+const ROUTE_ARROW_TOP = 2;
+const ROUTE_PIN_SIZE = 8;
 
 export type LoadCardRouteRowProps = {
   origin: string;
   destination: string;
   /** Merged with the root row (e.g. margin overrides). */
   style?: StyleProp<ViewStyle>;
-  /** Tighter type scale for indent detail / dense grids */
+  /** Tighter type scale for hub grid / dense cards (matches trip ticket cards). */
   compact?: boolean;
 };
 
 function asRouteLabel(value: string): string {
-  const t = (value || '—').trim();
-  return t ? t.toUpperCase() : '—';
+  const t = (value || "—").trim();
+  return t ? t.toUpperCase() : "—";
+}
+
+function RoutePin({ variant }: { variant: "origin" | "dest" }) {
+  return (
+    <View
+      style={[
+        styles.routePin,
+        variant === "origin" ? styles.routePinOrigin : styles.routePinDest,
+      ]}
+    />
+  );
 }
 
 function RouteLeg({
   location,
+  variant,
   align,
   compact,
-  showDestDot,
 }: {
   location: string;
-  align: 'left' | 'right';
+  variant: "origin" | "dest";
+  align: "left" | "right";
   compact?: boolean;
-  /** When true, render the green destination dot (right leg). */
-  showDestDot?: boolean;
 }) {
   const { city, state } = splitHubRouteLocationDisplay(location);
-  const end = align === 'right';
+  const end = align === "right";
 
   return (
-    <View style={[styles.endWrap, end && styles.endWrapRight, compact && styles.endWrapCompact]}>
+    <View style={[styles.leg, end && styles.legEnd]}>
       <View style={[styles.legRow, end && styles.legRowEnd]}>
-        {!end && !showDestDot ? (
-          <View
-            style={[
-              styles.dot,
-              styles.dotOrigin,
-              compact && styles.dotCompact,
-            ]}
-          />
-        ) : null}
-        <View style={[styles.legTextBlock, end && styles.legTextBlockEnd]}>
+        {!end ? <RoutePin variant={variant} /> : null}
+        <View style={[styles.legText, end && styles.legTextEnd]}>
           <Text
             style={[
               styles.legCity,
               compact && styles.legCityCompact,
-              end && styles.legTextAlignEnd,
+              end && styles.textEnd,
             ]}
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -61,24 +76,16 @@ function RouteLeg({
             style={[
               styles.legState,
               compact && styles.legStateCompact,
-              end && styles.legTextAlignEnd,
+              end && styles.textEnd,
               !state && styles.legStatePlaceholder,
             ]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {state ? asRouteLabel(state) : '\u00a0'}
+            {state ? asRouteLabel(state) : "\u00a0"}
           </Text>
         </View>
-        {showDestDot ? (
-          <View
-            style={[
-              styles.dot,
-              styles.dotDest,
-              compact && styles.dotCompact,
-            ]}
-          />
-        ) : null}
+        {end ? <RoutePin variant={variant} /> : null}
       </View>
     </View>
   );
@@ -86,7 +93,7 @@ function RouteLeg({
 
 /**
  * Origin → destination row used on Load Center cards and indent detail.
- * City in bold large type; state in smaller muted type (`splitHubRouteLocationDisplay`).
+ * Aligned with `TripsHubMobileTripCard` route leg typography.
  */
 export function LoadCardRouteRow({
   origin,
@@ -96,16 +103,15 @@ export function LoadCardRouteRow({
 }: LoadCardRouteRowProps) {
   return (
     <View style={[styles.row, compact && styles.rowCompact, style]}>
-      <RouteLeg location={origin} align="left" compact={compact} />
-      <View style={[styles.mid, compact && styles.midCompact, { pointerEvents: 'none' }]}>
-        <View style={styles.midLine} />
-        <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2.4} />
+      <RouteLeg location={origin} variant="origin" align="left" compact={compact} />
+      <View style={[styles.routeMid, compact && styles.routeMidCompact]}>
+        <Text style={styles.routeArrow}>→</Text>
       </View>
       <RouteLeg
         location={destination}
+        variant="dest"
         align="right"
         compact={compact}
-        showDestDot
       />
     </View>
   );
@@ -113,111 +119,109 @@ export function LoadCardRouteRow({
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 4,
     marginBottom: 8,
+    width: "100%",
+    maxWidth: "100%",
+    overflow: "hidden",
     zIndex: 1,
   },
   rowCompact: {
-    minHeight: 48,
-    marginBottom: 6,
-    paddingTop: 2,
+    minHeight: 30,
+    marginBottom: 0,
+    gap: 3,
   },
-  endWrap: {
+  leg: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 0,
+    maxWidth: "48%",
+    overflow: "hidden",
   },
-  endWrapRight: {
-    alignItems: 'flex-end',
+  legEnd: {
+    alignItems: "flex-end",
   },
-  endWrapCompact: {},
   legRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 6,
     minWidth: 0,
   },
   legRowEnd: {
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
   },
-  dotCompact: {
-    marginTop: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    flexShrink: 0,
-    marginTop: 4,
-  },
-  dotOrigin: {
-    backgroundColor: Theme.textPrimaryDark,
-    opacity: 0.75,
-  },
-  dotDest: {
-    backgroundColor: Theme.positive,
-  },
-  legTextBlock: {
+  legText: {
     flex: 1,
     minWidth: 0,
-    overflow: 'hidden',
+    overflow: "hidden",
     ...Platform.select({
-      web: { width: '100%' } as ViewStyle,
+      web: { width: "100%" } as ViewStyle,
       default: {},
     }),
   },
-  legTextBlockEnd: {
-    alignItems: 'flex-end',
+  legTextEnd: {
+    alignItems: "flex-end",
+  },
+  routePin: {
+    width: ROUTE_PIN_SIZE,
+    height: ROUTE_PIN_SIZE,
+    borderRadius: ROUTE_PIN_SIZE / 2,
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  routePinOrigin: {
+    backgroundColor: "#1a73e8",
+  },
+  routePinDest: {
+    backgroundColor: Theme.positive,
   },
   legCity: {
-    ...Typography.networkLoadRouteCity,
-    color: Theme.textPrimaryDark,
-    lineHeight: 19,
-    width: '100%',
+    fontSize: 12,
+    fontWeight: "600",
+    color: REF.ink,
+    letterSpacing: -0.1,
+    lineHeight: 15,
+    textTransform: "uppercase",
+    width: "100%",
   },
   legCityCompact: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '800',
-    fontStyle: 'normal',
+    fontSize: 10,
+    lineHeight: 13,
   },
   legState: {
     marginTop: 1,
-    fontSize: 10,
-    fontWeight: '500',
-    color: Theme.textSecondary,
-    lineHeight: 13,
-    letterSpacing: 0.2,
-    textTransform: 'uppercase',
-    width: '100%',
+    fontSize: 9,
+    fontWeight: "400",
+    color: REF.muted,
+    lineHeight: 12,
+    width: "100%",
   },
   legStateCompact: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: '500',
+    fontSize: 8,
+    lineHeight: 11,
   },
   legStatePlaceholder: {
     opacity: 0,
   },
-  legTextAlignEnd: {
-    textAlign: 'right',
+  textEnd: {
+    textAlign: "right",
   },
-  mid: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  routeMid: {
+    width: 24,
+    paddingTop: ROUTE_ARROW_TOP,
+    alignItems: "center",
+    justifyContent: "flex-start",
     flexShrink: 0,
-    gap: 0,
-    marginTop: 6,
   },
-  midLine: {
-    width: 10,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: Theme.borderMedium,
-    marginRight: -2,
+  routeMidCompact: {
+    paddingTop: ROUTE_ARROW_TOP,
   },
-  midCompact: {
-    marginTop: 8,
+  routeArrow: {
+    fontSize: 16,
+    fontWeight: "300",
+    color: REF.muted,
+    lineHeight: 18,
   },
 });

@@ -29,6 +29,11 @@ import {
   marketLoadIndentAvatarProps,
 } from "@/features/network/utils/indentCardAvatar.util";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import {
+  CHAT_FILTER_MUTED,
+  CHAT_FILTER_TRAY_BORDER,
+  chatFilterChromeStyles as chatChrome,
+} from "@/constants/ChatFilterChrome";
 import Layout from "@/constants/Layout";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import Theme from "@/constants/Theme";
@@ -106,8 +111,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
-    Animated,
-    Easing,
     Image,
     Modal,
     Platform,
@@ -155,8 +158,6 @@ export function LoadCenterView({
   const scrollRef = useRef<FlashListRef<IndentRow>>(null);
 
   const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
-  const [loadTabsWrapWidth, setLoadTabsWrapWidth] = useState(0);
-  const loadTabsActiveAnim = useRef(new Animated.Value(0)).current;
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
   const [doneSubTab, setDoneSubTab] = useState<DoneSubTab>("REJECTED");
@@ -170,7 +171,6 @@ export function LoadCenterView({
   const [localBidHistoryByIndentId, setLocalBidHistoryByIndentId] = useState<
     Record<string, { amount: number; updatedAt: string }[]>
   >({});
-  const isSingleRowHeader = Platform.OS === "web" && width >= 1024;
   const isCompactModalLayout = Platform.OS === "web" && width < 920;
 
   const { data: indents = [], isLoading } = useIndentsQuery(orgId);
@@ -200,16 +200,11 @@ export function LoadCenterView({
   );
 
   const isClaimedTab = loadSubTab === "AWARDED";
-  const loadSubTabIndex =
-    loadSubTab === "GIVE_LOAD" ? 0 : loadSubTab === "GET_LOAD" ? 1 : 2;
-  useEffect(() => {
-    Animated.timing(loadTabsActiveAnim, {
-      toValue: loadSubTabIndex,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [loadSubTabIndex, loadTabsActiveAnim]);
+
+  const formatLoadTabLabel = useCallback(
+    (label: string, count: number) => `${label} (${count})`,
+    [],
+  );
 
   /** Desktop web: 5 indent cards per row (mobile <820 uses hub list cards). */
   const useGridLayout = Platform.OS === "web" && width >= 1024;
@@ -278,6 +273,28 @@ export function LoadCenterView({
     doneSubTabCounts,
     statusTabCounts,
   } = filters;
+
+  const mainLoadTabs = useMemo(
+    () =>
+      [
+        {
+          key: "GIVE_LOAD" as const,
+          label: "Give load",
+          count: hirePartnerLoads.length,
+        },
+        {
+          key: "GET_LOAD" as const,
+          label: "Get load",
+          count: findWorkLoads.length,
+        },
+        {
+          key: "AWARDED" as const,
+          label: "Claimed",
+          count: awardedLoads.length,
+        },
+      ] as const,
+    [hirePartnerLoads.length, findWorkLoads.length, awardedLoads.length],
+  );
 
   const driverProfileById = useMemo(() => {
     const m = new Map<string, LoadCenterDriverProfile>();
@@ -440,36 +457,68 @@ export function LoadCenterView({
   const renderDoneSubTabs = () => {
     if (statusFilterTab !== "DONE") return null;
     return (
-      <View style={styles.doneSubTabWrap}>
+      <View
+        style={[
+          isMobileView ? styles.doneSubTabWrap : chatChrome.tabRow,
+          !isMobileView && styles.loadsDoneTabRow,
+        ]}
+      >
         {DONE_SUB_TABS.map((tab) => {
           const isActive = doneSubTab === tab.id;
           const count = doneSubTabCounts[tab.id];
+          if (isMobileView) {
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[
+                  styles.doneSubTabChip,
+                  isActive && styles.doneSubTabChipActive,
+                ]}
+                onPress={() => setDoneSubTab(tab.id)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.doneSubTabChipText,
+                    isActive && styles.doneSubTabChipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.doneSubTabChipCount,
+                    isActive && styles.doneSubTabChipCountActive,
+                  ]}
+                >
+                  {count}
+                </Text>
+              </TouchableOpacity>
+            );
+          }
           return (
             <TouchableOpacity
               key={tab.id}
               style={[
-                styles.doneSubTabChip,
-                isActive && styles.doneSubTabChipActive,
+                chatChrome.tabPill,
+                chatChrome.tabPillHug,
+                isActive && chatChrome.tabPillActive,
               ]}
               onPress={() => setDoneSubTab(tab.id)}
-              activeOpacity={0.85}
+              activeOpacity={0.75}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
             >
               <Text
                 style={[
-                  styles.doneSubTabChipText,
-                  isActive && styles.doneSubTabChipTextActive,
+                  chatChrome.tabPillLabel,
+                  chatChrome.tabPillLabelHug,
+                  isActive && chatChrome.tabPillLabelActive,
                 ]}
                 numberOfLines={1}
               >
-                {tab.label}
-              </Text>
-              <Text
-                style={[
-                  styles.doneSubTabChipCount,
-                  isActive && styles.doneSubTabChipCountActive,
-                ]}
-              >
-                {count}
+                {formatLoadTabLabel(tab.label, count)}
               </Text>
             </TouchableOpacity>
           );
@@ -477,6 +526,126 @@ export function LoadCenterView({
       </View>
     );
   };
+
+  const renderDesktopStatusTabs = () => {
+    if (statusTabsForRole.length === 0) return null;
+    return (
+      <View style={[chatChrome.tabRow, styles.loadsStatusTabRow]}>
+        {statusTabsForRole.map((tab) => {
+          const count = statusTabCounts[tab.id];
+          const isActive = statusFilterTab === tab.id;
+          const tabLabel = getLoadCenterStatusTabLabel(
+            loadSubTab,
+            tab.id,
+            tab.label,
+          );
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[
+                chatChrome.tabPill,
+                chatChrome.tabPillHug,
+                isActive && chatChrome.tabPillActive,
+              ]}
+              onPress={() => setStatusFilterTab(tab.id)}
+              activeOpacity={0.75}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+            >
+              <Text
+                style={[
+                  chatChrome.tabPillLabel,
+                  chatChrome.tabPillLabelHug,
+                  isActive && chatChrome.tabPillLabelActive,
+                ]}
+              >
+                {formatLoadTabLabel(tabLabel, count)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderDesktopFilterPanel = () => (
+    <View style={styles.loadsBodyFiltersBleed}>
+      <View style={styles.loadsInlineFilterPanelDesktop}>
+        <View style={styles.loadsInlineFilterPanelInner}>
+          <View style={chatChrome.filterHeaderRow}>
+          <View style={styles.loadsFilterActions}>
+            {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
+            {onMyNetworkPress ? (
+              <TouchableOpacity
+                style={styles.loadsNetworkBtn}
+                onPress={onMyNetworkPress}
+                activeOpacity={0.85}
+                accessibilityLabel="My network"
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              >
+                <Users size={16} color={Theme.textPrimaryDark} strokeWidth={2.1} />
+                <Text style={styles.loadsNetworkBtnLabel}>Network</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <View style={chatChrome.filterHeaderRight}>
+            <View style={[chatChrome.tabRow, chatChrome.tabRowHug]}>
+              {mainLoadTabs.map((tab) => {
+                const active = loadSubTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[
+                      chatChrome.tabPill,
+                      chatChrome.tabPillHug,
+                      active && chatChrome.tabPillActive,
+                    ]}
+                    onPress={() => setLoadSubTab(tab.key)}
+                    activeOpacity={0.75}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`${tab.label}, ${tab.count} loads`}
+                  >
+                    <Text
+                      style={[
+                        chatChrome.tabPillLabel,
+                        chatChrome.tabPillLabelHug,
+                        active && chatChrome.tabPillLabelActive,
+                      ]}
+                    >
+                      {formatLoadTabLabel(tab.label, tab.count)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+        <View style={chatChrome.searchScopeStrip}>
+          <View style={chatChrome.searchWrap}>
+            <FontAwesome
+              name="search"
+              size={13}
+              color={CHAT_FILTER_MUTED}
+              style={styles.loadsSearchIcon}
+            />
+            <TextInput
+              style={chatChrome.searchInput}
+              placeholder="Search loads by route, load ID, client..."
+              placeholderTextColor={CHAT_FILTER_MUTED}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+        {renderDesktopStatusTabs()}
+        {renderDoneSubTabs()}
+        </View>
+      </View>
+    </View>
+  );
 
   const renderAddLoadButton = () => (
     <TouchableOpacity
@@ -696,9 +865,11 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={
-            bidCount > 0
-              ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
-              : loadTypeDetail
+            isAwardedPendingTrip && awardedAmount != null
+              ? formatINR(awardedAmount)
+              : bidCount > 0
+                ? `${bidCount} bid${bidCount === 1 ? "" : "s"}`
+                : loadTypeDetail
           }
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
@@ -723,6 +894,7 @@ export function LoadCenterView({
                   awardedAmountLabel={
                     awardedAmount != null ? formatINR(awardedAmount) : null
                   }
+                  awardedAmount={awardedAmount}
                   onShareToNetwork={onShareToNetwork}
                   onIndentPress={onIndentPress}
                   onShareIndent={handleShareIndent}
@@ -939,11 +1111,6 @@ export function LoadCenterView({
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}
-          ticketCommerce={{
-            kicker: isDone ? "COMPLETED" : "AWARDED",
-            amountInr: isDone ? null : supplierRate,
-            rightCaption: isDone ? "On books" : null,
-          }}
           avatarUrl={avatar.avatarUrl}
           avatarSeed={avatar.avatarSeed}
           organizationImageUrl={avatar.organizationImageUrl}
@@ -1167,266 +1334,9 @@ export function LoadCenterView({
           showStatusTabs={!isClaimedTab}
           onCreateIndentPress={onCreateIndentPress}
         />
-      ) : (
-      <View
-        style={[
-          styles.loadDarkHeader,
-          isClaimedTab && styles.loadDarkHeaderClaimed,
-        ]}
-      >
-        {/* Sub-tabs: GIVE LOAD | GET LOAD | CLAIMED */}
-        <View
-          style={[
-            styles.loadFilterHeaderRow,
-            isSingleRowHeader && styles.loadFilterHeaderRowSingle,
-          ]}
-        >
-          <View
-            style={[
-              styles.loadSubTabsWrap,
-              isSingleRowHeader && styles.loadSubTabsWrapSingle,
-            ]}
-          >
-            <View
-              style={styles.loadMainTabsPillWrap}
-              onLayout={(e) => setLoadTabsWrapWidth(e.nativeEvent.layout.width)}
-            >
-              {loadTabsWrapWidth > 0 ? (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.loadMainTabActiveBg,
-                    {
-                      width: (loadTabsWrapWidth - 8) / 3,
-                      transform: [
-                        {
-                          translateX: loadTabsActiveAnim.interpolate({
-                            inputRange: [0, 1, 2],
-                            outputRange: [
-                              0,
-                              (loadTabsWrapWidth - 8) / 3,
-                              ((loadTabsWrapWidth - 8) / 3) * 2,
-                            ],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                />
-              ) : null}
-              {[
-                {
-                  key: "GIVE_LOAD" as const,
-                  label: "GIVE LOAD",
-                  count: hirePartnerLoads.length,
-                },
-                {
-                  key: "GET_LOAD" as const,
-                  label: "GET LOAD",
-                  count: findWorkLoads.length,
-                },
-                {
-                  key: "AWARDED" as const,
-                  label: "CLAIMED",
-                  count: awardedLoads.length,
-                },
-              ].map((tab) => {
-                const active = loadSubTab === tab.key;
-                return (
-                  <TouchableOpacity
-                    key={tab.key}
-                    style={[
-                      styles.loadMainTabPill,
-                      active && styles.loadMainTabPillActive,
-                    ]}
-                    onPress={() => setLoadSubTab(tab.key)}
-                    activeOpacity={0.8}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text
-                      style={[
-                        styles.loadMainTabPillText,
-                        active && styles.loadMainTabPillTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {tab.label}
-                    </Text>
-                    {tab.count > 0 ? (
-                      <View
-                        style={[
-                          styles.loadMainTabBadge,
-                          active && styles.loadMainTabBadgeActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.loadMainTabBadgeText,
-                            active && styles.loadMainTabBadgeTextActive,
-                          ]}
-                        >
-                          {tab.count}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-          {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
-          {onMyNetworkPress ? (
-            <TouchableOpacity
-              style={styles.loadMyNetworkBtn}
-              onPress={onMyNetworkPress}
-              activeOpacity={0.85}
-              accessibilityLabel="My network"
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            >
-              <Users size={18} color={Theme.textOnDark} strokeWidth={2.1} />
-              <Text style={styles.loadMyNetworkBtnLabel}>Network</Text>
-            </TouchableOpacity>
-          ) : null}
-          {isSingleRowHeader ? (
-            <>
-              <View
-                style={[styles.loadSearchWrap, styles.loadSearchWrapSingle]}
-              >
-                <FontAwesome
-                  name="search"
-                  size={15}
-                  color={Theme.textSecondary}
-                  style={styles.loadSearchIcon}
-                />
-                <TextInput
-                  style={styles.loadSearchInput}
-                  placeholder="Search loads by route, load ID, client..."
-                  placeholderTextColor={Theme.textSecondary}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-              {statusTabsForRole.length > 0 ? (
-                <View style={styles.loadTypeFilterWrap}>
-                  {statusTabsForRole.map((tab) => {
-                    const count = statusTabCounts[tab.id];
-                    const isActive = statusFilterTab === tab.id;
-                    const tabLabel = getLoadCenterStatusTabLabel(
-                      loadSubTab,
-                      tab.id,
-                      tab.label,
-                    );
-                    return (
-                      <TouchableOpacity
-                        key={tab.id}
-                        style={[
-                          styles.loadTypeFilterChip,
-                          isActive && styles.loadTypeFilterChipActive,
-                        ]}
-                        onPress={() => setStatusFilterTab(tab.id)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.loadTypeFilterChipText,
-                            isActive && styles.loadTypeFilterChipTextActive,
-                          ]}
-                        >
-                          {tabLabel}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.loadTypeFilterChipCount,
-                            isActive && styles.loadTypeFilterChipCountActive,
-                          ]}
-                        >
-                          {count}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
-              {renderDoneSubTabs()}
-            </>
-          ) : null}
-        </View>
-        {/* Search + Status filters (same layout as Manage Network: search + filter chips) */}
-        {!isSingleRowHeader ? (
-          <View
-            style={[
-              styles.loadSearchRow,
-              isClaimedTab && styles.loadSearchRowClaimed,
-            ]}
-          >
-            <View style={styles.loadSearchWrap}>
-              <FontAwesome
-                name="search"
-                size={15}
-                color={Theme.textSecondary}
-                style={styles.loadSearchIcon}
-              />
-              <TextInput
-                style={styles.loadSearchInput}
-                placeholder="Search loads by route, load ID, client..."
-                placeholderTextColor={Theme.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-            {statusTabsForRole.length > 0 ? (
-              <View style={styles.loadTypeFilterWrap}>
-                {statusTabsForRole.map((tab) => {
-                  const count = statusTabCounts[tab.id];
-                  const isActive = statusFilterTab === tab.id;
-                  const tabLabel = getLoadCenterStatusTabLabel(
-                    loadSubTab,
-                    tab.id,
-                    tab.label,
-                  );
-                  return (
-                    <TouchableOpacity
-                      key={tab.id}
-                      style={[
-                        styles.loadTypeFilterChip,
-                        isActive && styles.loadTypeFilterChipActive,
-                      ]}
-                      onPress={() => setStatusFilterTab(tab.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.loadTypeFilterChipText,
-                          isActive && styles.loadTypeFilterChipTextActive,
-                        ]}
-                      >
-                        {tabLabel}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.loadTypeFilterChipCount,
-                          isActive && styles.loadTypeFilterChipCountActive,
-                        ]}
-                      >
-                        {count}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : null}
-            {renderDoneSubTabs()}
-          </View>
-        ) : null}
-      </View>
-      )}
+      ) : null}
 
-      {/* Content area: rounded top, light bg — reference overlap */}
+      {/* Content area — gray hub canvas (matches Trips page) */}
       <View
         style={[
           styles.loadContentWrap,
@@ -1453,6 +1363,7 @@ export function LoadCenterView({
             ) : undefined
           }
         >
+          {!isMobileView ? renderDesktopFilterPanel() : null}
           {isMobileView && statusFilterTab === "DONE" ? (
             <View style={styles.doneSubTabWrapMobile}>
               {renderDoneSubTabs()}
@@ -1922,151 +1833,85 @@ export function LoadCenterView({
   );
 }
 
-/** Reference: content bg #f4f5f7 */
-const LOAD_CONTENT_BG = "#f4f5f7";
+/** Load hub page canvas — aligned with Trips (`#eef2f6`). */
+const LOAD_CONTENT_BG = LOADS_HUB_PAGE_BG;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.darkBackground },
+  container: { flex: 1, backgroundColor: LOADS_HUB_PAGE_BG },
   containerMobileHub: {
     backgroundColor: LOADS_HUB_PAGE_BG,
   },
-  loadDarkHeader: {
-    backgroundColor: Theme.screenBackground,
+  loadsBodyFiltersBleed: {
+    marginHorizontal: -Layout.screenPaddingHorizontal,
+    marginBottom: 20,
+    paddingTop: 4,
+    paddingBottom: 4,
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    backgroundColor: "transparent",
+    ...Platform.select({
+      web: { minWidth: 0 },
+    }),
   },
-  loadDarkHeaderClaimed: {
-    paddingBottom: 2,
-  },
-  loadFilterHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    paddingTop: 8,
-    gap: 10,
-  },
-  loadFilterHeaderRowSingle: {
-    alignItems: "center",
-    flexWrap: "nowrap",
-    gap: 8,
-  },
-  loadSubTabsWrap: {
-    flex: 1,
-    minWidth: 0,
-    paddingBottom: 2,
-  },
-  loadSubTabsWrapSingle: {
-    flex: 0,
-    minWidth: 380,
-    maxWidth: 420,
-    paddingBottom: 0,
-  },
-  loadMainTabsPillWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    position: "relative",
-    backgroundColor: Theme.liquidPillBg,
-    borderWidth: 1,
-    borderColor: Theme.liquidPillBorder,
-    borderRadius: 999,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  loadMainTabActiveBg: {
-    position: "absolute",
-    left: 4,
-    top: 4,
-    bottom: 4,
-    borderRadius: 999,
-    backgroundColor: Theme.darkBackground,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
-    shadowRadius: 7,
-    elevation: 3,
-  },
-  loadMainTabPill: {
-    minWidth: 0,
-    flex: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+  loadsInlineFilterPanelDesktop: {
+    marginBottom: 0,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 16,
+    overflow: "visible",
     ...Platform.select({
       web: {
-        outlineStyle: "none",
-      } as any,
+        boxShadow: "0 4px 24px rgba(15, 23, 42, 0.06)",
+      } as object,
+      default: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 2,
+      },
     }),
   },
-  loadMainTabPillActive: {
-    backgroundColor: "transparent",
+  loadsInlineFilterPanelInner: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 14,
+    paddingBottom: 14,
+    gap: 12,
   },
-  loadMainTabPillText: {
-    fontSize: 8.5,
-    fontWeight: "900",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    flexShrink: 1,
-  },
-  loadMainTabPillTextActive: {
-    color: Theme.textOnDark,
-  },
-  loadMainTabBadge: {
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+  loadsFilterActions: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
+    gap: 8,
+    flexShrink: 0,
+    minWidth: 0,
   },
-  loadMainTabBadgeActive: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  loadMainTabBadgeText: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: Theme.textSecondary,
-  },
-  loadMainTabBadgeTextActive: {
-    color: Theme.textOnDark,
-  },
-  loadMyNetworkBtn: {
+  loadsNetworkBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 40,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    minHeight: 34,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    borderColor: CHAT_FILTER_TRAY_BORDER,
+    backgroundColor: "#ffffff",
     flexShrink: 0,
-    marginBottom: 2,
   },
-  loadMyNetworkBtnLabel: {
-    ...Typography.networkDarkHeaderNav,
+  loadsNetworkBtnLabel: {
+    fontSize: 8,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    ...Platform.select({
-      android: { includeFontPadding: false as const },
-      default: {},
-    }),
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+  },
+  loadsSearchIcon: { marginRight: 8 },
+  loadsStatusTabRow: {
+    alignSelf: "stretch",
+    flexWrap: "wrap",
+  },
+  loadsDoneTabRow: {
+    alignSelf: "stretch",
+    flexWrap: "wrap",
   },
   /** Inline "Add Load" pill that sits next to the Live chip on the
    *  "Your active indents" section header. Matches Add Trip / Add Indent. */
@@ -2242,7 +2087,7 @@ const styles = StyleSheet.create({
   },
   loadContentWrap: {
     flex: 1,
-    backgroundColor: LOAD_CONTENT_BG,
+    backgroundColor: LOADS_HUB_PAGE_BG,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
     marginTop: 0,
@@ -2257,10 +2102,15 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 0,
     marginTop: 0,
   },
-  scroll: { flex: 1 },
+  scroll: { flex: 1, backgroundColor: LOADS_HUB_PAGE_BG },
   scrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    paddingTop: 4,
+    flexGrow: 1,
+    backgroundColor: LOADS_HUB_PAGE_BG,
+    ...Platform.select({
+      web: { minWidth: 0, maxWidth: "100%" as const },
+    }),
   },
   scrollContentMobileHub: {
     paddingHorizontal: 0,
@@ -2287,12 +2137,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   loadSectionTitle: {
-    fontSize: 11,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.textPrimaryDark,
+    fontSize: 10,
+    fontWeight: "600",
+    fontStyle: "normal",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 1.2,
+    letterSpacing: 0.55,
     flex: 1,
     minWidth: 0,
   },
@@ -2556,10 +2406,10 @@ const styles = StyleSheet.create({
    *  — same pattern as the trips page. */
   loadsBottomBar: {
     flexShrink: 0,
-    backgroundColor: LOAD_CONTENT_BG,
+    backgroundColor: LOADS_HUB_PAGE_BG,
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
-    paddingHorizontal: 14,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 6,
     paddingBottom: 10,
   },

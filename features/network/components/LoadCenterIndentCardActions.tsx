@@ -3,6 +3,17 @@
  *
  * Dense / grid: single row — [status chip] [share] [primary] [pulse?]
  */
+import {
+  HUB_GRID_TOOLBAR_ROW_HEIGHT,
+} from "@/components/hub/hubGridCardLayout";
+import {
+  HubGridCardFooter,
+  HubGridPrimaryButton,
+  HubGridShareButton,
+  HubGridStatusChip,
+  HubGridToolbarPlaceholder,
+  HubGridToolbarRow,
+} from "@/components/hub/HubGridCardToolbar";
 import { FontAwesome } from "@expo/vector-icons";
 import Theme from "@/constants/Theme";
 import { formatINRChip } from "@/lib/format";
@@ -31,49 +42,31 @@ export type LoadCenterIndentCardActionsLayout = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Card footer wrapper — dense mode is a single toolbar row only. */
+/** Card footer wrapper — dense mode uses shared hub grid footer. */
 export function LoadCenterIndentCardFooter({
   dense,
   style,
   children,
 }: LoadCenterIndentCardActionsLayout & { children: ReactNode }) {
+  if (dense) {
+    return (
+      <HubGridCardFooter dense style={style}>
+        {children}
+      </HubGridCardFooter>
+    );
+  }
   return (
-    <View style={[styles.footer, dense && styles.footerDense, style]}>
+    <View style={[styles.footer, style]}>
       {children}
     </View>
   );
 }
 
-/** Fixed toolbar: status | share | [primary + trailing actions with gap]. */
-function GridToolbarRow({
-  status,
-  share,
-  primary,
-  pulse,
-}: {
-  status: ReactNode;
-  share: ReactNode;
-  primary: ReactNode;
-  pulse?: ReactNode | null;
-}) {
-  return (
-    <View style={styles.denseRow}>
-      <View style={styles.toolbarStatusSlot}>{status}</View>
-      {share}
-      <View style={styles.ctaGroup}>
-        <View style={styles.primarySlot}>{primary}</View>
-        {pulse ? <View style={styles.trailingSlot}>{pulse}</View> : null}
-      </View>
-    </View>
-  );
-}
-
 function PrimaryToolbarPlaceholder({ dense }: { dense?: boolean }) {
-  return (
-    <View
-      style={[styles.primaryToolbarPlaceholder, dense && styles.primaryBtnDense]}
-    />
-  );
+  if (dense) {
+    return <HubGridToolbarPlaceholder />;
+  }
+  return <View style={styles.primaryToolbarPlaceholder} />;
 }
 
 function InlineActionRow({ children }: { children: ReactNode }) {
@@ -89,14 +82,25 @@ function ShareIconButton({
   onPress: () => void;
   label: string;
 }) {
+  if (dense) {
+    return (
+      <HubGridShareButton
+        onPress={onPress}
+        label={label}
+        icon={
+          <Share2 size={14} color={Theme.textMuted} strokeWidth={2.2} />
+        }
+      />
+    );
+  }
   return (
     <TouchableOpacity
-      style={[styles.shareBtn, dense && styles.shareBtnDense]}
+      style={styles.shareBtn}
       onPress={onPress}
       activeOpacity={0.88}
       accessibilityLabel={label}
     >
-      <Share2 size={dense ? 14 : 18} color={Theme.textMuted} strokeWidth={2.2} />
+      <Share2 size={18} color={Theme.textMuted} strokeWidth={2.2} />
     </TouchableOpacity>
   );
 }
@@ -115,6 +119,15 @@ function PrimaryButton({
   /** Flex within a single toolbar row (grid). */
   inline?: boolean;
 }) {
+  if (dense && inline) {
+    return (
+      <HubGridPrimaryButton
+        label={label}
+        onPress={onPress}
+        disabled={disabled}
+      />
+    );
+  }
   return (
     <TouchableOpacity
       style={[
@@ -152,17 +165,34 @@ function PulseButton({
       activeOpacity={0.85}
       accessibilityLabel="Broadcast indent to Pulse network as story"
     >
-      <Zap size={dense ? 10 : 13} color="#fff" fill="#fff" />
-      <Text style={[styles.pulseBtnText, dense && styles.pulseBtnTextDense]}>
-        Pulse
-      </Text>
+      <Zap
+        size={dense ? 10 : 12}
+        color={Theme.pulseIndigo}
+        strokeWidth={2.2}
+      />
+      {dense ? (
+        <Text style={[styles.pulseBtnText, styles.pulseBtnTextDense]}>
+          Pulse
+        </Text>
+      ) : (
+        <Text style={styles.pulseBtnText}>Pulse</Text>
+      )}
     </TouchableOpacity>
   );
 }
 
 function PendingChip({ dense }: { dense?: boolean }) {
+  if (dense) {
+    return (
+      <View style={styles.pendingChipDenseBtn}>
+        <Text style={styles.pendingTextDense} numberOfLines={1}>
+          Pending
+        </Text>
+      </View>
+    );
+  }
   return (
-    <View style={[styles.pendingChip, dense && styles.pendingChipDense]}>
+    <View style={styles.pendingChip}>
       <Text style={styles.pendingText} numberOfLines={1}>
         Pending
       </Text>
@@ -176,12 +206,14 @@ export function GiveLoadBidChip({
   isDone,
   isAwardedPendingTrip,
   awardedAmountLabel,
+  awardedAmount,
   dense,
 }: {
   bidCount: number;
   isDone: boolean;
   isAwardedPendingTrip: boolean;
   awardedAmountLabel?: string | null;
+  awardedAmount?: number | null;
   dense?: boolean;
 }) {
   let icon: ReactNode;
@@ -211,32 +243,62 @@ export function GiveLoadBidChip({
     line2 = bidCount === 1 ? "bid" : "bids";
   }
 
+  if (dense && isAwardedPendingTrip) {
+    const amountText =
+      awardedAmount != null && Number.isFinite(awardedAmount)
+        ? formatINRChip(awardedAmount)
+        : (awardedAmountLabel?.replace(/\s/g, "") ?? "—");
+    return (
+      <HubGridStatusChip
+        amount
+        amountLine
+        compact
+        icon={
+          <FontAwesome name="trophy" size={9} color={Theme.driverGold} />
+        }
+        line1={amountText}
+        line2="awarded"
+        accessibilityLabel={`Awarded ${amountText}`}
+      />
+    );
+  }
+
+  if (dense) {
+    return (
+      <HubGridStatusChip
+        wide={false}
+        icon={icon}
+        line1={line1}
+        line2={line2 || undefined}
+        accessibilityLabel={
+          isDone
+            ? "Completed"
+            : `${bidCount} bids`
+        }
+      />
+    );
+  }
+
   return (
     <View
-      style={[styles.statusChip, dense && styles.statusChipDense]}
+      style={styles.statusChip}
       accessibilityLabel={
         isDone
           ? "Completed"
           : isAwardedPendingTrip
-            ? "Supplier claimed"
+            ? "Supplier awarded"
             : `${bidCount} bids`
       }
     >
-      <View style={[styles.statusChipIcon, dense && styles.statusChipIconDense]}>
+      <View style={styles.statusChipIcon}>
         {icon}
       </View>
       <View style={styles.statusChipTextWrap}>
-        <Text
-          style={[styles.statusChipLine1, dense && styles.statusChipLine1Dense]}
-          numberOfLines={1}
-        >
+        <Text style={styles.statusChipLine1} numberOfLines={1}>
           {line1}
         </Text>
         {line2 ? (
-          <Text
-            style={[styles.statusChipLine2, dense && styles.statusChipLine2Dense]}
-            numberOfLines={1}
-          >
+          <Text style={styles.statusChipLine2} numberOfLines={1}>
             {line2}
           </Text>
         ) : null}
@@ -291,27 +353,32 @@ export function GetLoadQuoteChip({
       break;
   }
 
+  const icon = (
+    <Package
+      size={dense ? 10 : 12}
+      color={hasQuote ? Theme.textPrimaryDark : Theme.textMuted}
+      strokeWidth={2.2}
+    />
+  );
+
+  if (dense) {
+    return (
+      <HubGridStatusChip
+        icon={icon}
+        line1={line1}
+        line2={line2 || undefined}
+        amountLine={amountLine}
+      />
+    );
+  }
+
   return (
-    <View
-      style={[
-        styles.statusChip,
-        styles.statusChipQuote,
-        dense && styles.statusChipDense,
-        dense && styles.statusChipQuoteDense,
-      ]}
-    >
-      <View style={[styles.statusChipIcon, dense && styles.statusChipIconDense]}>
-        <Package
-          size={dense ? 10 : 12}
-          color={hasQuote ? Theme.textPrimaryDark : Theme.textMuted}
-          strokeWidth={2.2}
-        />
-      </View>
+    <View style={[styles.statusChip, styles.statusChipQuote]}>
+      <View style={styles.statusChipIcon}>{icon}</View>
       <View style={styles.statusChipTextWrap}>
         <Text
           style={[
             styles.statusChipLine1,
-            dense && styles.statusChipLine1Dense,
             amountLine && styles.statusChipAmount,
           ]}
           numberOfLines={1}
@@ -320,10 +387,7 @@ export function GetLoadQuoteChip({
           {line1}
         </Text>
         {line2 ? (
-          <Text
-            style={[styles.statusChipLine2, dense && styles.statusChipLine2Dense]}
-            numberOfLines={1}
-          >
+          <Text style={styles.statusChipLine2} numberOfLines={1}>
             {line2}
           </Text>
         ) : null}
@@ -346,6 +410,7 @@ export type GiveLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout &
   onBroadcastDraft: (load: IndentRow) => void;
   onOpenAwardModal: (load: IndentRow) => void;
   awardedAmountLabel?: string | null;
+  awardedAmount?: number | null;
 };
 
 export function GiveLoadIndentCardActions({
@@ -362,6 +427,7 @@ export function GiveLoadIndentCardActions({
   onBroadcastDraft,
   onOpenAwardModal,
   awardedAmountLabel,
+  awardedAmount,
   dense,
   style,
 }: GiveLoadIndentCardActionsProps) {
@@ -374,6 +440,7 @@ export function GiveLoadIndentCardActions({
       isDone={isDone}
       isAwardedPendingTrip={isAwardedPendingTrip}
       awardedAmountLabel={awardedAmountLabel}
+      awardedAmount={awardedAmount}
       dense={dense}
     />
   );
@@ -419,11 +486,12 @@ export function GiveLoadIndentCardActions({
   if (dense) {
     return (
       <View style={style}>
-        <GridToolbarRow
+        <HubGridToolbarRow
+          statusSlot={isAwardedPendingTrip ? "amount" : "default"}
           status={statusChip}
           share={share}
           primary={primarySlot}
-          pulse={pulse}
+          trailing={pulse}
         />
       </View>
     );
@@ -529,7 +597,7 @@ export function GetLoadIndentCardActions({
   if (dense) {
     return (
       <View style={style}>
-        <GridToolbarRow
+        <HubGridToolbarRow
           status={statusChip}
           share={share}
           primary={primary}
@@ -568,20 +636,29 @@ export function ClaimedIndentCardActions({
   dense,
   style,
 }: ClaimedIndentCardActionsProps) {
-  const statusChip = (
-    <View style={[styles.statusChip, dense && styles.statusChipDense]}>
-      <View style={[styles.statusChipIcon, dense && styles.statusChipIconDense]}>
+  const statusChip = dense ? (
+    <HubGridStatusChip
+      icon={
         <FontAwesome
           name={isDone ? "check-circle" : "truck"}
-          size={dense ? 10 : 12}
+          size={9}
+          color={isDone ? Theme.positive : Theme.textMuted}
+        />
+      }
+      line1={isDone ? "Done" : "Ready"}
+      accessibilityLabel={isDone ? "Completed" : "Ready to assign"}
+    />
+  ) : (
+    <View style={styles.statusChip}>
+      <View style={styles.statusChipIcon}>
+        <FontAwesome
+          name={isDone ? "check-circle" : "truck"}
+          size={12}
           color={isDone ? Theme.positive : Theme.textMuted}
         />
       </View>
       <View style={styles.statusChipTextWrap}>
-        <Text
-          style={[styles.statusChipLine1, dense && styles.statusChipLine1Dense]}
-          numberOfLines={1}
-        >
+        <Text style={styles.statusChipLine1} numberOfLines={1}>
           {isDone ? "Done" : "Ready"}
         </Text>
       </View>
@@ -595,13 +672,17 @@ export function ClaimedIndentCardActions({
       onPress={() => onShareIndent(load)}
     />
   );
-  const primary = (
+  const primary = dense ? (
+    <HubGridPrimaryButton
+      label={isDone ? "View" : assigning ? "…" : "Assign"}
+      onPress={() => (isDone ? onIndentPress(load) : onAssignDeploy(load))}
+      disabled={assigning}
+    />
+  ) : (
     <PrimaryButton
-      dense={dense}
-      inline={dense}
-      label={
-        isDone ? "View" : assigning ? "…" : "Assign vehicle"
-      }
+      dense={false}
+      inline={false}
+      label={isDone ? "View" : assigning ? "…" : "Assign vehicle"}
       onPress={() => (isDone ? onIndentPress(load) : onAssignDeploy(load))}
       disabled={assigning}
     />
@@ -610,7 +691,7 @@ export function ClaimedIndentCardActions({
   if (dense) {
     return (
       <View style={style}>
-        <GridToolbarRow
+        <HubGridToolbarRow
           status={statusChip}
           share={share}
           primary={primary}
@@ -800,29 +881,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 4,
     flexShrink: 0,
     flexGrow: 0,
     minWidth: 52,
     height: ROW_HEIGHT,
-    backgroundColor: "#6366f1",
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
     borderRadius: 8,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
   },
   pulseBtnDense: {
     minWidth: 48,
     maxWidth: TOOLBAR_PULSE_SLOT_W,
     height: ROW_HEIGHT,
     paddingHorizontal: 6,
+    gap: 3,
   },
   pulseBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.pulseIndigo,
     letterSpacing: 0.1,
   },
   pulseBtnTextDense: {
-    fontSize: 9,
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.05,
   },
   primaryBtn: {
     backgroundColor: TESLA_BLACK,
@@ -859,25 +945,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   pendingChip: {
-    flex: 1,
-    minWidth: 0,
-    height: ROW_HEIGHT,
-    borderRadius: 8,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
   },
-  pendingChipDense: {
-    height: ROW_HEIGHT,
+  pendingChipDenseBtn: {
+    width: "100%",
+    minHeight: HUB_GRID_TOOLBAR_ROW_HEIGHT,
+    height: HUB_GRID_TOOLBAR_ROW_HEIGHT,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
   },
   pendingText: {
     fontSize: 8,
-    fontWeight: 700,
+    fontWeight: "700",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.35,
+  },
+  pendingTextDense: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.2,
   },
 });

@@ -36,10 +36,10 @@ export function buildSalaryAlertFooterPlan(
 
   if (isTripBasedAttribution(req)) {
     return {
-      primaryLabel: "Accept trip",
+      primaryLabel: "Accept",
       secondaryLabel: "Decline",
       summary: "Review fleet trip attribution before accepting.",
-      hint: "Accepting opens the attribution wizard.",
+      hint: "Accept opens the full attribution flow.",
     };
   }
 

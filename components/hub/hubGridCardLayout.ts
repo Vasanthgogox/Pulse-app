@@ -16,6 +16,8 @@ export const HUB_GRID_DIVIDER_MARGIN_BOTTOM = 8;
 export const HUB_GRID_PARTY_MIN_HEIGHT = HUB_CARD_PARTY_CHIP_AVATAR;
 export const HUB_GRID_TOOLBAR_ROW_HEIGHT = 32;
 export const HUB_GRID_TOOLBAR_STATUS_SLOT_W = 52;
+/** Awarded / amount status chips need room for ₹ values in 4-column grid. */
+export const HUB_GRID_TOOLBAR_AWARDED_SLOT_W = 80;
 export const HUB_GRID_TOOLBAR_PULSE_SLOT_W = 48;
 
 /** Desktop hub grid list pagination (trips + load center). */
