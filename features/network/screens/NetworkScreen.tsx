@@ -1,3 +1,4 @@
+
 /**
  * Network tab — Allies hub (stories, connections, discover) and embedded Load center.
  * Full-width layout; top bar switches Network ↔ Load (no left sidebar on web).
@@ -89,7 +90,7 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useSegments } from "expo-router";
 import {
   Alert,
   Image,
@@ -222,7 +223,8 @@ function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
-  const searchParams = useLocalSearchParams<{ view?: string; hub?: string; hubTab?: string }>();
+  const searchParams = useLocalSearchParams<{ view?: string; hub?: string; hubTab?: string; tab?: string }>();
+  const segments = useSegments();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const isDesktopMatrix = width >= 1100;
   const isMobileLayout = width < 820;
@@ -311,10 +313,11 @@ function NetworkScreenInner() {
   const animatedSupplierCount = useAnimatedCount(supplierCount);
   const animatedDriverCount = useAnimatedCount(driverCount);
   const totalConnectionsDisplay = String(animatedTotalConnections).padStart(2, "0");
-  const hubTabParam = searchParams.hubTab;
+  const hubTabParam = searchParams.hubTab ?? searchParams.tab;
   const hubParam = searchParams.hub;
-  /** Metronic org public profile hub — workspace avatar deep-link; all viewports. */
+  /** Hub mode: /network/hub route, or legacy ?hub=1, or legacy ?hubTab=X query param. */
   const showDesktopHub = useMemo(() => {
+    if ((segments as string[]).includes('hub')) return true;
     if (hubParam === "1" || hubParam === "true") return true;
     const tab = hubTabParam;
     return (
@@ -328,7 +331,7 @@ function NetworkScreenInner() {
       tab === "grow" ||
       tab === "chat"
     );
-  }, [hubParam, hubTabParam]);
+  }, [segments, hubParam, hubTabParam]);
   const onCreatePost = () => router.push("/(modals)/create-post");
   useEffect(() => {
     if (searchParams.view !== "requests") return;

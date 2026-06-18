@@ -527,7 +527,6 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
 const styles = StyleSheet.create({
   mapHost: {
-    position: "relative",
     overflow: "hidden",
   },
 });

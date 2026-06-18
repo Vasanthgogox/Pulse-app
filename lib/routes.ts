@@ -69,10 +69,10 @@ export const ROUTES = {
       | "connections"
       | "grow"
       | "chat" = "details",
-  ) => {
-    const q = new URLSearchParams({ hub: "1", hubTab: tab });
-    return `/(tabs)/network?${q.toString()}` as const;
-  },
+  ) =>
+    tab === "details"
+      ? ("/(tabs)/network/hub" as const)
+      : (`/(tabs)/network/hub?tab=${tab}` as const),
   /** Business intelligence command center with cross-filter analytics. */
   BUSINESS_PULSE:    '/business-pulse'    as const,
   /** Personal identity: name, email, phone, personal avatar */

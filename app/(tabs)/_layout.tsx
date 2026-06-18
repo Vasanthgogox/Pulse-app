@@ -61,12 +61,9 @@ function DemoCustomTabBar(
       }
       if (tab === 'network') {
         const hub = options?.networkLayout === 'hub';
-        router.replace({
-          pathname: ROUTES.TABS.NETWORK,
-          params: hub
-            ? { hub: '1', hubTab: 'details' }
-            : { hub: '', hubTab: '' },
-        } as Parameters<typeof router.replace>[0]);
+        router.replace(
+          (hub ? ROUTES.networkOrgHub('details') : ROUTES.TABS.NETWORK) as Parameters<typeof router.replace>[0],
+        );
         navigation.navigate('network');
         return;
       }
