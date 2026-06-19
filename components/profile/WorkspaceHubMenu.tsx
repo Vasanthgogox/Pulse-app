@@ -45,6 +45,8 @@ import {
   HelpCircle,
   LogOut,
   MapPin,
+  Settings,
+  Shield,
   Sparkles,
   Truck,
   User,
@@ -223,6 +225,33 @@ export function WorkspaceHubMenu({
       ),
       panelId: "region",
       valuePill: regionLabel,
+    },
+  ];
+
+  const workspaceRows: HubRow[] = [
+    {
+      id: "ws-kyc",
+      label: "Org Identity & KYC",
+      icon: (
+        <Shield
+          size={MENU_ICON_SIZE}
+          color={HUB_MENU_ICON}
+          strokeWidth={MENU_ICON_STROKE}
+        />
+      ),
+      panelId: "kyc",
+    },
+    {
+      id: "ws-settings",
+      label: "Settings",
+      icon: (
+        <Settings
+          size={MENU_ICON_SIZE}
+          color={HUB_MENU_ICON}
+          strokeWidth={MENU_ICON_STROKE}
+        />
+      ),
+      panelId: "settings",
     },
   ];
 
@@ -443,6 +472,7 @@ export function WorkspaceHubMenu({
             </View>
           </View>
 
+          {renderHubSection("Workspace", workspaceRows)}
           {renderHubSection("Preferences", preferenceRows)}
           {renderHubSection("Party", partyRows)}
 
