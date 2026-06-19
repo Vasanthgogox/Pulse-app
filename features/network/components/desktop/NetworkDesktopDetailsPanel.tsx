@@ -27,16 +27,25 @@ import {
 } from "@/features/network/utils/organizationLocationDisplay.util";
 import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
 import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
+import { getWorkspaceKyc } from "@/features/organization/services/organization.service";
+import { profileCompletionPct } from "@/features/organization/components/workspace/workspacePanelUi";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "expo-router";
+import { ROUTES } from "@/lib/routes";
 import {
   useClientsQuery,
   useDriversQuery,
   useSuppliersQuery,
 } from "@/lib/queries";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useOrganizationLocationsQuery } from "@/lib/queries/useOrganizationLocationsQuery";
 import { useOrganizationWorkspaceProfileQuery } from "@/lib/queries/useOrganizationWorkspaceProfileQuery";
 import {
   Briefcase,
   Calendar,
+  Eye,
+  EyeOff,
+  ExternalLink,
   Globe,
   Mail,
   MapPin,
@@ -44,17 +53,19 @@ import {
   Pencil,
   Phone,
   Plus,
+  ShieldCheck,
   Truck,
   User,
   UserPlus,
   Users,
 } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   View,
   type ViewStyle,
@@ -332,6 +343,7 @@ export function NetworkDesktopDetailsPanel({
 }: Props) {
   const layout = useProfileHubCompactLayout();
   const compact = layout.compact;
+  const router = useRouter();
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] =
     useState<OrganizationWorkspaceLocation | null>(null);
@@ -348,6 +360,29 @@ export function NetworkDesktopDetailsPanel({
   >();
   const [profileEditSection, setProfileEditSection] =
     useState<WorkspaceProfileEditSection | null>(null);
+
+  const { profile: authProfile } = useAuth();
+  const isDriver = authProfile?.role === 'driver';
+  const [kyc, setKyc] = useState<{ gstin?: string | null; business_pan?: string | null; cin?: string | null; verification_status?: string | null } | null>(null);
+  const [complianceVisible, setComplianceVisible] = useState(false);
+  const [showEmptyHighlights, setShowEmptyHighlights] = useState(false);
+
+  useEffect(() => {
+    if (isDriver || !orgId) return;
+    AsyncStorage.getItem('@pulse/hub_compliance_visible').then((v) => {
+      if (v === 'true') setComplianceVisible(true);
+    });
+    getWorkspaceKyc(orgId).then(({ kyc: k }) => { if (k) setKyc(k); });
+  }, [isDriver, orgId]);
+
+  const toggleComplianceVisible = () => {
+    const next = !complianceVisible;
+    setComplianceVisible(next);
+    AsyncStorage.setItem('@pulse/hub_compliance_visible', String(next));
+  };
+
+  const maskGstin = (v: string) => complianceVisible ? v : v.slice(0, 2) + '*****' + v.slice(-3);
+  const maskPan = (v: string) => complianceVisible ? v : v.slice(0, 5) + '****' + v.slice(-1);
 
   const profileQ = useOrganizationWorkspaceProfileQuery(orgId);
   const officeMapQ = useOrganizationOfficeMap(orgId);
@@ -569,20 +604,91 @@ export function NetworkDesktopDetailsPanel({
         <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
           <View style={[styles.card, compact && mobile.cardCompact]}>
             <CardHeader
-              title="Highlights"
+              title="Overview"
               onEdit={() => setProfileEditSection("highlights")}
               compact={compact}
             />
-            <HighlightRow label="Locations" value={locationCountLabel} {...rowProps} />
-            <HighlightRow label="Founded" value={derived.foundedYear} {...rowProps} />
-            <HighlightRow
-              label="Status"
-              valueNode={<StatusPill label="Subscribed" />}
-              {...rowProps}
-            />
-            <HighlightRow label="Area" value={derived.area} {...rowProps} />
-            <HighlightRow label="CEO" value={derived.ceo} link {...rowProps} />
-            <HighlightRow label="Sector" value={derived.sector} last {...rowProps} />
+            {(() => {
+              const p = profileQ.data;
+              const hasLocations = locationCountLabel !== 'Add locations';
+              const hasYear = p?.founded_year != null;
+              const hasArea = !!(p?.profile_area?.trim() || p?.zone?.trim());
+              const hasCeo = !!p?.profile_ceo_name?.trim();
+              const hasSector = !!p?.profile_sector?.trim();
+              const hasAbout = !!p?.profile_about?.trim();
+              const hasProducts = (p?.profile_products?.length ?? 0) > 0;
+              const hasGstin = !!kyc?.gstin;
+
+              type RowDef = { key: string; label: string; value?: string; link?: boolean; valueNode?: React.ReactNode };
+              type EmptyDef = { key: string; label: string; onFill: () => void };
+              const filledRows: RowDef[] = [];
+              const emptyFields: EmptyDef[] = [];
+
+              filledRows.push({ key: 'status', label: 'Status', valueNode: <StatusPill label="Subscribed" /> });
+
+              if (organization?.operatingModel) {
+                filledRows.push({ key: 'model', label: 'Model', value: modelLabel });
+              }
+
+              if (hasYear) filledRows.push({ key: 'yr', label: 'Founded', value: derived.foundedYear });
+              else emptyFields.push({ key: 'yr', label: 'Founded', onFill: () => setProfileEditSection('highlights') });
+
+              if (hasArea) filledRows.push({ key: 'area', label: 'Area', value: derived.area });
+              else emptyFields.push({ key: 'area', label: 'Area', onFill: () => setProfileEditSection('highlights') });
+
+              if (hasCeo) filledRows.push({ key: 'ceo', label: 'CEO', value: derived.ceo, link: true });
+              else emptyFields.push({ key: 'ceo', label: 'CEO / Owner', onFill: () => setProfileEditSection('highlights') });
+
+              if (hasSector) filledRows.push({ key: 'sec', label: 'Sector', value: derived.sector });
+              else emptyFields.push({ key: 'sec', label: 'Sector', onFill: () => setProfileEditSection('highlights') });
+
+              if (hasLocations) filledRows.push({ key: 'loc', label: 'Locations', value: locationCountLabel });
+              else emptyFields.push({ key: 'loc', label: 'Locations', onFill: () => openAddLocation() });
+
+              if (!hasAbout) emptyFields.push({ key: 'about', label: 'About', onFill: () => setProfileEditSection('about') });
+              if (!hasProducts) emptyFields.push({ key: 'prod', label: 'Products', onFill: () => setProfileEditSection('products') });
+              if (!hasGstin) emptyFields.push({ key: 'gstin', label: 'GSTIN', onFill: () => router.push({ pathname: ROUTES.WORKSPACE as Parameters<typeof router.push>[0], params: { panel: 'kyc' } }) });
+
+              const noEmpty = emptyFields.length === 0;
+              return (
+                <>
+                  {filledRows.map((row, i) => (
+                    <HighlightRow
+                      key={row.key}
+                      label={row.label}
+                      value={row.value}
+                      valueNode={row.valueNode}
+                      link={row.link}
+                      last={noEmpty && i === filledRows.length - 1}
+                      {...rowProps}
+                    />
+                  ))}
+                  {emptyFields.length > 0 ? (
+                    <>
+                      {showEmptyHighlights ? (
+                        emptyFields.map((f, i) => (
+                          <Pressable key={f.key} onPress={f.onFill} style={overviewStyles.emptyRow} hitSlop={4}>
+                            <Text style={overviewStyles.emptyLabel}>{f.label}</Text>
+                            <Text style={overviewStyles.emptyAction}>+ Add →</Text>
+                          </Pressable>
+                        ))
+                      ) : null}
+                      <Pressable
+                        onPress={() => setShowEmptyHighlights((v) => !v)}
+                        style={overviewStyles.toggleRow}
+                        hitSlop={6}
+                      >
+                        <Text style={overviewStyles.toggleText}>
+                          {showEmptyHighlights
+                            ? `▲ Hide`
+                            : `+ ${emptyFields.length} field${emptyFields.length > 1 ? 's' : ''} not filled`}
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+                </>
+              );
+            })()}
           </View>
 
           <View style={[styles.card, compact && mobile.cardCompact]}>
@@ -614,17 +720,6 @@ export function NetworkDesktopDetailsPanel({
           </View>
 
           <View style={[styles.card, compact && mobile.cardCompact]}>
-            <CardHeader
-              title="Network"
-              onEdit={() => setProfileEditSection("contact")}
-              compact={compact}
-            />
-            <NetworkLinkRow icon={Globe} value={derived.website} compact={compact} />
-            <NetworkLinkRow icon={Mail} value={email} compact={compact} />
-            <NetworkLinkRow icon={Phone} value={phoneDisplay} compact={compact} />
-          </View>
-
-          <View style={[styles.card, compact && mobile.cardCompact]}>
             <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>Tags</Text>
             <View style={styles.tagWrap}>
               {activeCapabilityTags.map((tag) => (
@@ -636,6 +731,51 @@ export function NetworkDesktopDetailsPanel({
               ))}
             </View>
           </View>
+
+          {!isDriver && kyc && (kyc.gstin || kyc.business_pan || kyc.cin) ? (
+            <View style={[styles.card, compact && mobile.cardCompact]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={14} color={kyc.verification_status === 'verified' ? '#50CD89' : METRONIC.subtle} strokeWidth={2} />
+                  <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact, { marginBottom: 0 }]}>Identity & Compliance</Text>
+                </View>
+                <Pressable onPress={toggleComplianceVisible} hitSlop={8}>
+                  {complianceVisible
+                    ? <EyeOff size={14} color={METRONIC.subtle} strokeWidth={2} />
+                    : <Eye size={14} color={METRONIC.subtle} strokeWidth={2} />}
+                </Pressable>
+              </View>
+              {kyc.gstin ? (
+                <HighlightRow label="GSTIN" value={maskGstin(kyc.gstin)} {...{ compact }} />
+              ) : null}
+              {kyc.business_pan ? (
+                <HighlightRow label="PAN" value={maskPan(kyc.business_pan)} {...{ compact }} />
+              ) : null}
+              {kyc.cin ? (
+                <HighlightRow label="CIN" value={kyc.cin} {...{ compact }} />
+              ) : null}
+              {kyc.verification_status ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                  <View style={{
+                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
+                    backgroundColor: kyc.verification_status === 'verified' ? '#E8FFF3' : kyc.verification_status === 'pending' ? '#FFF8DD' : '#F1F1F4',
+                  }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: kyc.verification_status === 'verified' ? '#50CD89' : kyc.verification_status === 'pending' ? '#F6C000' : METRONIC.subtle }}>
+                      {kyc.verification_status.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+              <Pressable
+                onPress={() => router.push({ pathname: ROUTES.WORKSPACE as Parameters<typeof router.push>[0], params: { panel: 'kyc' } })}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 }}
+                hitSlop={8}
+              >
+                <ExternalLink size={12} color={METRONIC.link} strokeWidth={2} />
+                <Text style={{ fontSize: 12, color: METRONIC.link }}>Manage KYC</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.mainCol, compact && mobile.mainColFull]}>
@@ -645,6 +785,51 @@ export function NetworkDesktopDetailsPanel({
               onEdit={() => setProfileEditSection("contact")}
               compact={compact}
             />
+
+            {(() => {
+              const hasAddress = !!(derived.addressLine || derived.city || derived.state);
+              const hasWebsite = !!profileQ.data?.profile_website;
+              const pct = profileCompletionPct({
+                address_line: derived.addressLine || null,
+                city: derived.city || null,
+                state: derived.state || null,
+                profile_website: profileQ.data?.profile_website ?? null,
+              });
+              if (pct === 100) return null;
+              const barColor = pct > 33 ? '#F6C000' : '#F64E60';
+              return (
+                <View style={profileCompletionStyles.banner}>
+                  <View style={profileCompletionStyles.topRow}>
+                    <Text style={profileCompletionStyles.label}>
+                      Profile {pct}% complete
+                    </Text>
+                  </View>
+                  <View style={profileCompletionStyles.track}>
+                    <View style={[profileCompletionStyles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: barColor }]} />
+                  </View>
+                  <View style={profileCompletionStyles.actionRow}>
+                    {!hasWebsite ? (
+                      <Pressable
+                        onPress={() => setProfileEditSection("contact")}
+                        style={profileCompletionStyles.actionChip}
+                        hitSlop={6}
+                      >
+                        <Text style={profileCompletionStyles.actionChipText}>+ Add website</Text>
+                      </Pressable>
+                    ) : null}
+                    {!hasAddress ? (
+                      <Pressable
+                        onPress={() => setProfileEditSection("contact")}
+                        style={profileCompletionStyles.actionChip}
+                        hitSlop={6}
+                      >
+                        <Text style={profileCompletionStyles.actionChipText}>+ Add address</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })()}
 
             <Text style={[styles.sectionHeading, compact && mobile.sectionHeadingCompact]}>
               Headquarter
@@ -691,9 +876,15 @@ export function NetworkDesktopDetailsPanel({
                 <Text style={[styles.cardEditBtnText, compact && { fontSize: 10 }]}>Edit</Text>
               </Pressable>
             </View>
-            <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
-              {derived.about}
-            </Text>
+            {profileQ.data?.profile_about?.trim() ? (
+              <Text style={[styles.aboutBody, compact && mobile.aboutBodyCompact]}>
+                {profileQ.data.profile_about.trim()}
+              </Text>
+            ) : (
+              <Pressable onPress={() => setProfileEditSection("about")} style={emptyStateStyles.row}>
+                <Text style={emptyStateStyles.text}>No about text — tap to add a description</Text>
+              </Pressable>
+            )}
 
             <View style={styles.cardHeaderRow}>
               <Text
@@ -714,15 +905,21 @@ export function NetworkDesktopDetailsPanel({
                 <Text style={[styles.cardEditBtnText, compact && { fontSize: 10 }]}>Edit</Text>
               </Pressable>
             </View>
-            <View style={styles.tagWrap}>
-              {derived.products.map((product) => (
-                <View key={product} style={styles.productPill}>
-                  <Text style={[styles.productPillText, compact && mobile.tagPillTextCompact]}>
-                    {product}
-                  </Text>
-                </View>
-              ))}
-            </View>
+            {(profileQ.data?.profile_products?.length ?? 0) > 0 ? (
+              <View style={styles.tagWrap}>
+                {(profileQ.data?.profile_products ?? []).map((product) => (
+                  <View key={product} style={styles.productPill}>
+                    <Text style={[styles.productPillText, compact && mobile.tagPillTextCompact]}>
+                      {product}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Pressable onPress={() => setProfileEditSection("products")} style={emptyStateStyles.row}>
+                <Text style={emptyStateStyles.text}>No products listed — tap to add</Text>
+              </Pressable>
+            )}
           </View>
 
           <View style={[styles.card, compact && mobile.cardCompact]}>
@@ -1034,3 +1231,109 @@ export function NetworkDesktopDetailsPanel({
     </View>
   );
 }
+
+const emptyStateStyles = StyleSheet.create({
+  row: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  text: {
+    fontSize: 12,
+    color: METRONIC.muted,
+    fontStyle: 'italic',
+  },
+});
+
+const overviewStyles = StyleSheet.create({
+  toggleRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: METRONIC.border,
+  },
+  toggleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: METRONIC.link,
+    letterSpacing: 0.1,
+  },
+  emptyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: METRONIC.border,
+    backgroundColor: '#FAFBFC',
+  },
+  emptyLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: METRONIC.muted,
+  },
+  emptyAction: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: METRONIC.link,
+  },
+});
+
+const profileCompletionStyles = StyleSheet.create({
+  banner: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 10,
+    backgroundColor: '#FFFBF0',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F6C00033',
+    gap: 6,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B07D00',
+    letterSpacing: 0.2,
+  },
+  hint: {
+    fontSize: 10,
+    color: METRONIC.muted,
+    fontWeight: '500',
+  },
+  track: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#EFF2F5',
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginTop: 2,
+  },
+  actionChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#FFF3CD',
+    borderWidth: 1,
+    borderColor: '#F6C00066',
+  },
+  actionChipText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#B07D00',
+    letterSpacing: 0.2,
+  },
+});

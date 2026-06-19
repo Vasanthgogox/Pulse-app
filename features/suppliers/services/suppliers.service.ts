@@ -253,7 +253,17 @@ export async function getLinkedOrgProfileForSupplier(
   linkedOrganizationId: string
 ): Promise<{
   error: Error | null;
-  profile: { organizationName: string; contactPerson: string; phone: string; email: string; avatarUrl?: string; avatarSeed?: string } | null;
+  profile: {
+    organizationName: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+    avatarUrl?: string;
+    avatarSeed?: string;
+    gstin?: string | null;
+    address?: string | null;
+    website?: string | null;
+  } | null;
 }> {
   const { data, error } = await supabase().rpc('get_connection_partner_display', {
     p_linked_organization_id: linkedOrganizationId,
@@ -264,7 +274,17 @@ export async function getLinkedOrgProfileForSupplier(
   if (data == null || typeof data !== 'object') {
     return { error: null, profile: null };
   }
-  const raw = data as { organizationName?: string; contactPerson?: string; phone?: string; email?: string; avatarUrl?: string; avatarSeed?: string };
+  const raw = data as {
+    organizationName?: string;
+    contactPerson?: string;
+    phone?: string;
+    email?: string;
+    avatarUrl?: string;
+    avatarSeed?: string;
+    gstin?: string | null;
+    address?: string | null;
+    website?: string | null;
+  };
   return {
     error: null,
     profile: {
@@ -274,6 +294,9 @@ export async function getLinkedOrgProfileForSupplier(
       email: (raw.email ?? '').trim(),
       avatarUrl: (raw.avatarUrl ?? '').trim(),
       avatarSeed: (raw.avatarSeed ?? '').trim(),
+      gstin: raw.gstin ?? null,
+      address: raw.address ?? null,
+      website: raw.website ?? null,
     },
   };
 }

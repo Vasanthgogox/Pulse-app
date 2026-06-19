@@ -14,7 +14,7 @@ import { PartyHighlightsCard } from "@/features/party/components/PartyHighlights
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { formatINR } from "@/lib/format";
-import { CheckCircle2, ChevronDown, Globe, Mail, MapPin, Phone, Save, X } from "lucide-react-native";
+import { CheckCircle2, ChevronDown, Download, Globe, Mail, MapPin, Phone, Save, X } from "lucide-react-native";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -30,6 +30,9 @@ type Props = {
   orgId?: string;
   clientId?: string;
   onRefresh?: () => void;
+  isIntegrated?: boolean;
+  linkedOrgId?: string | null;
+  onImportFromProfile?: () => Promise<void>;
 };
 
 function HighlightRow({
@@ -118,7 +121,7 @@ function SelectInline({
   );
 }
 
-export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh }: Props) {
+export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh, isIntegrated, linkedOrgId, onImportFromProfile }: Props) {
   const compact = useProfileHubCompact();
   const c = bundle.client ?? {};
   const tradeName = String(c.trade_name ?? c.name ?? "Client");
@@ -132,6 +135,7 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
   const billingContacts = bundle.contacts.filter((ct) => ct.is_billing);
 
   const canEdit = Boolean(orgId && clientId && onRefresh);
+  const [importing, setImporting] = useState(false);
   const [kamEditing, setKamEditing] = useState(false);
   const [commercialEditing, setCommercialEditing] = useState(false);
   const [highlightsEditing, setHighlightsEditing] = useState(false);
@@ -372,6 +376,32 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh 
               />
             </>
           )}
+
+          {isIntegrated && linkedOrgId && onImportFromProfile ? (
+            <View style={styles.card}>
+              <View style={ov.cardTitleRow}>
+                <Download size={14} color={METRONIC.subtle} strokeWidth={2} />
+                <Text style={[styles.cardTitle, { marginLeft: 6 }]}>Platform profile</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: METRONIC.muted, marginBottom: 10 }}>
+                This client is on Pulse. Import their verified GSTIN, address, and website directly from their profile.
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  setImporting(true);
+                  await onImportFromProfile();
+                  setImporting(false);
+                }}
+                disabled={importing}
+                style={[ov.saveBtn, { alignSelf: 'flex-start' }]}
+              >
+                {importing
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Download size={13} color="#fff" strokeWidth={2} />}
+                <Text style={ov.saveBtnText}>{importing ? 'Importing…' : 'Import from profile'}</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <View style={styles.card}>
             <View style={ov.cardTitleRow}>

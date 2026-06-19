@@ -1042,16 +1042,19 @@ export default function SupplierDetailScreen({
       const { error: profileErr, profile } =
         await getLinkedOrgProfileForSupplier(linkedId);
       if (!profileErr && profile) {
-        const { organizationName, contactPerson, phone, email } = profile;
+        const { organizationName, contactPerson, phone, email, gstin, address } = profile;
+        const patch: UpdateSupplierData = {
+          company_name: organizationName || undefined,
+          contact_person: contactPerson || undefined,
+          phone: phone || undefined,
+          email: email || undefined,
+        };
+        if (gstin && !supplier.gst_number) patch.gstin = gstin;
+        if (address && !supplier.address) patch.address = address;
         const { error: updateErr, supplier: updated } = await updateSupplier(
           currentOrganization.id,
           supplier.id,
-          {
-            company_name: organizationName || undefined,
-            contact_person: contactPerson || undefined,
-            phone: phone || undefined,
-            email: email || undefined,
-          },
+          patch,
         );
         if (!updateErr && updated) {
           setSupplier(updated);
@@ -1060,6 +1063,8 @@ export default function SupplierDetailScreen({
             contactPerson: updated.contact_person ?? updated.contact ?? "",
             phone: updated.phone ?? "",
             email: updated.email ?? "",
+            gstin: updated.gst_number ?? undefined,
+            address: updated.address ?? undefined,
           };
         }
       }
@@ -1074,6 +1079,8 @@ export default function SupplierDetailScreen({
       contactPerson: latest.contact_person ?? latest.contact ?? "",
       phone: latest.phone ?? "",
       email: latest.email ?? "",
+      gstin: latest.gst_number ?? undefined,
+      address: latest.address ?? undefined,
     };
   };
 

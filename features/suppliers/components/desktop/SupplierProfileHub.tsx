@@ -37,7 +37,7 @@ import { SupplierProfileHubHero } from "@/features/suppliers/components/desktop/
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
-import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
+import { getLinkedOrgProfileForSupplier, updateSupplier } from "@/features/suppliers/services/suppliers.service";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
@@ -321,7 +321,27 @@ export function SupplierProfileHub({
   const panel = (() => {
     switch (tab) {
       case "overview":
-        return <SupplierProfileOverviewPanel bundle={bundle} />;
+        return (
+          <SupplierProfileOverviewPanel
+            bundle={bundle}
+            isIntegrated={isIntegrated}
+            linkedOrgId={supplier.linked_organization_id}
+            onImportFromProfile={isIntegrated && supplier.linked_organization_id ? async () => {
+              const { error, profile } = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id!);
+              if (error || !profile) return;
+              const patch: Parameters<typeof updateSupplier>[2] = {
+                company_name: profile.organizationName || undefined,
+                contact_person: profile.contactPerson || undefined,
+                phone: profile.phone || undefined,
+                email: profile.email || undefined,
+              };
+              if (profile.gstin && !supplier.gst_number) patch.gstin = profile.gstin;
+              if (profile.address && !supplier.address) patch.address = profile.address;
+              await updateSupplier(orgId, supplier.id, patch);
+              onRefresh?.();
+            } : undefined}
+          />
+        );
       case "kyc":
         return <SupplierProfileKycPanel {...sharedProps} onUploadDoc={handleUploadDoc} />;
       case "compliance":
@@ -341,7 +361,27 @@ export function SupplierProfileHub({
       case "timeline":
         return <SupplierProfileTimelinePanel bundle={bundle} />;
       default:
-        return <SupplierProfileOverviewPanel bundle={bundle} />;
+        return (
+          <SupplierProfileOverviewPanel
+            bundle={bundle}
+            isIntegrated={isIntegrated}
+            linkedOrgId={supplier.linked_organization_id}
+            onImportFromProfile={isIntegrated && supplier.linked_organization_id ? async () => {
+              const { error, profile } = await getLinkedOrgProfileForSupplier(supplier.linked_organization_id!);
+              if (error || !profile) return;
+              const patch: Parameters<typeof updateSupplier>[2] = {
+                company_name: profile.organizationName || undefined,
+                contact_person: profile.contactPerson || undefined,
+                phone: profile.phone || undefined,
+                email: profile.email || undefined,
+              };
+              if (profile.gstin && !supplier.gst_number) patch.gstin = profile.gstin;
+              if (profile.address && !supplier.address) patch.address = profile.address;
+              await updateSupplier(orgId, supplier.id, patch);
+              onRefresh?.();
+            } : undefined}
+          />
+        );
     }
   })();
 

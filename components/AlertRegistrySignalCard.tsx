@@ -225,7 +225,7 @@ export function AlertRegistrySignalCard({
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [styles.pressable, pressed && styles.pressablePressed]}
-        accessibilityRole="button"
+        accessibilityRole={footer ? "none" : "button"}
       >
         {content}
       </Pressable>

@@ -16,17 +16,22 @@ import {
   InfoRow,
   KycFieldRow,
   KycProgressBlock,
+  ProfileFieldRow,
   modelLabel,
   kycCompletionPct,
+  profileCompletionPct,
   orgInitials,
   OrgIdCopyRow,
   SectionHeader,
   workspacePanelStyles as styles,
   type KycField,
+  type OrgProfileSnapshot,
 } from "@/features/organization/components/workspace/workspacePanelUi";
 import {
   getWorkspaceKyc,
   updateWorkspaceKyc,
+  getOrgProfileFields,
+  type OrgProfileFields,
 } from "@/features/organization/services/organization.service";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
 import * as Clipboard from "expo-clipboard";
@@ -51,11 +56,15 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
   const [copying, setCopying] = useState(false);
   const [kyc, setKyc] = useState<WorkspaceKyc | null>(null);
   const [kycSaving, setKycSaving] = useState(false);
+  const [orgProfile, setOrgProfile] = useState<OrgProfileFields | null>(null);
 
   useEffect(() => {
     if (!orgId) return;
     getWorkspaceKyc(orgId).then(({ kyc: data }) => {
       if (data) setKyc(data);
+    });
+    getOrgProfileFields(orgId).then(({ profile }) => {
+      if (profile) setOrgProfile(profile);
     });
   }, [orgId]);
 
@@ -147,6 +156,39 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
             canEdit={canEdit}
             onSave={handleSaveKycField}
           />
+        </View>
+
+        <View style={styles.detailCard}>
+          {(() => {
+            const snap: OrgProfileSnapshot = {
+              address_line: orgProfile?.address_line,
+              city: orgProfile?.city,
+              state: orgProfile?.state,
+              profile_website: orgProfile?.profile_website,
+            };
+            const pct = profileCompletionPct(snap);
+            const barColor = pct === 100 ? GREEN : pct > 0 ? AMBER : '#ef4444';
+            const accent = pct === 100 ? GREEN : AMBER;
+            const addressValue = [orgProfile?.address_line, orgProfile?.city, orgProfile?.state]
+              .filter(Boolean)
+              .join(', ');
+            return (
+              <>
+                <SectionHeader label="Partner Profile" color={accent} />
+                <KycProgressBlock pct={pct} barColor={barColor} />
+                <ProfileFieldRow
+                  label="Address"
+                  value={addressValue}
+                  filled={!!addressValue}
+                />
+                <ProfileFieldRow
+                  label="Website"
+                  value={orgProfile?.profile_website ?? ''}
+                  filled={!!orgProfile?.profile_website}
+                />
+              </>
+            );
+          })()}
         </View>
 
         <View style={styles.detailCard}>

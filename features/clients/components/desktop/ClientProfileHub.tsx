@@ -32,7 +32,7 @@ import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
 import { ClientProfileHubHero } from "@/features/clients/components/desktop/ClientProfileHubHero";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
-import { updateClient } from "@/features/clients/services/clients.service";
+import { getLinkedOrgProfile, updateClient } from "@/features/clients/services/clients.service";
 import { ArrowLeft, MessageSquare, Plus, User } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
@@ -179,6 +179,22 @@ export function ClientProfileHub({
             orgId={orgId}
             clientId={clientId}
             onRefresh={onRefresh}
+            isIntegrated={isIntegrated}
+            linkedOrgId={client.linked_organization_id}
+            onImportFromProfile={isIntegrated && client.linked_organization_id ? async () => {
+              const { error, profile } = await getLinkedOrgProfile(client.linked_organization_id!);
+              if (error || !profile) return;
+              const patch: Parameters<typeof updateClient>[2] = {
+                organization_name: profile.organizationName || undefined,
+                contact_person: profile.contactPerson || undefined,
+                phone: profile.phone || undefined,
+                email: profile.email || undefined,
+              };
+              if (profile.gstin && !client.gstin) patch.gstin = profile.gstin;
+              if (profile.address && !client.address) patch.address = profile.address;
+              await updateClient(orgId, clientId, patch);
+              onRefresh?.();
+            } : undefined}
           />
         );
       case "contacts":
@@ -211,6 +227,22 @@ export function ClientProfileHub({
             orgId={orgId}
             clientId={clientId}
             onRefresh={onRefresh}
+            isIntegrated={isIntegrated}
+            linkedOrgId={client.linked_organization_id}
+            onImportFromProfile={isIntegrated && client.linked_organization_id ? async () => {
+              const { error, profile } = await getLinkedOrgProfile(client.linked_organization_id!);
+              if (error || !profile) return;
+              const patch: Parameters<typeof updateClient>[2] = {
+                organization_name: profile.organizationName || undefined,
+                contact_person: profile.contactPerson || undefined,
+                phone: profile.phone || undefined,
+                email: profile.email || undefined,
+              };
+              if (profile.gstin && !client.gstin) patch.gstin = profile.gstin;
+              if (profile.address && !client.address) patch.address = profile.address;
+              await updateClient(orgId, clientId, patch);
+              onRefresh?.();
+            } : undefined}
           />
         );
     }
@@ -473,6 +505,28 @@ export function ClientProfileHub({
           setEditOpen(false);
           onRefresh?.();
         }}
+        onSyncLatest={isIntegrated && client.linked_organization_id ? async () => {
+          const { error, profile } = await getLinkedOrgProfile(client.linked_organization_id!);
+          if (error || !profile) return undefined;
+          const patch: Parameters<typeof updateClient>[2] = {
+            organization_name: profile.organizationName || undefined,
+            contact_person: profile.contactPerson || undefined,
+            phone: profile.phone || undefined,
+            email: profile.email || undefined,
+          };
+          if (profile.gstin && !client.gstin) patch.gstin = profile.gstin;
+          if (profile.address && !client.address) patch.address = profile.address;
+          await updateClient(orgId, clientId, patch);
+          onRefresh?.();
+          return {
+            companyName: profile.organizationName,
+            contactPerson: profile.contactPerson,
+            phone: profile.phone,
+            email: profile.email,
+            gstin: profile.gstin ?? undefined,
+            address: profile.address ?? undefined,
+          };
+        } : undefined}
       />
     </>
   );

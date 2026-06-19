@@ -314,6 +314,28 @@ export async function getOrganizationLocationsByNames(orgNames: string[]): Promi
   return { error: null, locations };
 }
 
+// ─── Workspace Profile Fields ─────────────────────────────────────────────────
+
+export type OrgProfileFields = {
+  address_line: string | null;
+  city: string | null;
+  state: string | null;
+  profile_website: string | null;
+};
+
+export async function getOrgProfileFields(orgId: string): Promise<{
+  error: Error | null;
+  profile: OrgProfileFields | null;
+}> {
+  const { data, error } = await supabase()
+    .from('organizations')
+    .select('address_line, city, state, profile_website')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), profile: null };
+  return { error: null, profile: (data as OrgProfileFields) ?? null };
+}
+
 // ─── Workspace KYC ────────────────────────────────────────────────────────────
 
 export async function getWorkspaceKyc(orgId: string): Promise<{

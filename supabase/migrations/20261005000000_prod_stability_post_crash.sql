@@ -83,6 +83,6 @@ $$;
 -- discover_organizations queries all posts WHERE is_active = true AND type = 'LOAD'.
 -- The existing idx_posts_active only covers is_active; type is filtered in a
 -- subsequent heap scan. A partial index cuts the scan to the exact working set.
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_active_load
+CREATE INDEX IF NOT EXISTS idx_posts_active_load
   ON public.posts (organization_id, origin, destination)
   WHERE is_active = true AND type = 'LOAD';

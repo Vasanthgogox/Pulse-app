@@ -47,6 +47,9 @@ export interface LinkedOrgProfile {
   contactPerson?: string;
   phone?: string;
   email?: string;
+  gstin?: string | null;
+  address?: string | null;
+  website?: string | null;
 }
 
 export interface EditSupplierModalProps {
@@ -135,6 +138,8 @@ export function EditSupplierModal({
           setContactPerson(normalizeContactDisplay(result.contactPerson));
         if (result.phone != null) setPhone(normalizePhoneDisplay(result.phone));
         if (result.email != null) setEmail((result.email ?? "").trim());
+        if (result.gstin && !gstin.trim()) setGstin(result.gstin.trim());
+        if (result.address && !address.trim()) setAddress(result.address.trim());
       } catch {
         // Ignore; user can still tap "Sync latest details" manually
       }
@@ -164,6 +169,8 @@ export function EditSupplierModal({
           setContactPerson(normalizeContactDisplay(result.contactPerson));
         if (result.phone != null) setPhone(normalizePhoneDisplay(result.phone));
         if (result.email != null) setEmail((result.email ?? "").trim());
+        if (result.gstin) setGstin(result.gstin.trim());
+        if (result.address) setAddress(result.address.trim());
       }
     } catch (err: unknown) {
       setError(

@@ -55,6 +55,9 @@ export interface EditClientModalProps {
         contactPerson?: string;
         phone?: string;
         email?: string;
+        gstin?: string | null;
+        address?: string | null;
+        website?: string | null;
       }
     | void
   >;
@@ -119,6 +122,8 @@ export function EditClientModal({
         if (result.email != null) {
           setEmail((result.email ?? "").trim());
         }
+        if (result.gstin && !gstin.trim()) setGstin(result.gstin.trim());
+        if (result.address && !address.trim()) setAddress(result.address.trim());
       } catch {
         // Ignore; user can still tap "Sync latest details" manually.
       }
@@ -153,6 +158,8 @@ export function EditClientModal({
         if (result.email != null) {
           setEmail((result.email ?? "").trim());
         }
+        if (result.gstin) setGstin(result.gstin.trim());
+        if (result.address) setAddress(result.address.trim());
       }
     } catch (err: unknown) {
       setError(

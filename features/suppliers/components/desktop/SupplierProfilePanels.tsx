@@ -38,6 +38,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  Download,
   FileCheck,
   FileText,
   Flag,
@@ -151,7 +152,12 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ── TAB 1: Overview ───────────────────────────────────────────────────────────
 
-export function SupplierProfileOverviewPanel({ bundle }: BundleProps) {
+export function SupplierProfileOverviewPanel({ bundle, isIntegrated, linkedOrgId, onImportFromProfile }: BundleProps & {
+  isIntegrated?: boolean;
+  linkedOrgId?: string | null;
+  onImportFromProfile?: () => Promise<void>;
+}) {
+  const [importing, setImporting] = useState(false);
   const { supplier, trips, transactions, performance } = bundle;
   const completed = trips.filter((t) =>
     ["completed", "done", "delivered"].includes(t.status ?? ""),
@@ -201,8 +207,34 @@ export function SupplierProfileOverviewPanel({ bundle }: BundleProps) {
           </View>
         </View>
 
-        {/* Right: Performance */}
+        {/* Right: Performance + Import */}
         <View style={spStyles.overviewRight}>
+          {isIntegrated && linkedOrgId && onImportFromProfile ? (
+            <View style={spStyles.dataCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Download size={14} color={METRONIC.subtle} strokeWidth={2} />
+                <Text style={[styles.sectionTitle, { marginLeft: 6, marginBottom: 0 }]}>Platform profile</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: METRONIC.muted, marginBottom: 10 }}>
+                This supplier is on Pulse. Import their verified GSTIN, address, and website directly from their profile.
+              </Text>
+              <Pressable
+                onPress={async () => {
+                  setImporting(true);
+                  await onImportFromProfile();
+                  setImporting(false);
+                }}
+                disabled={importing}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: METRONIC.link, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, alignSelf: 'flex-start' }}
+              >
+                {importing
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Download size={13} color="#fff" strokeWidth={2} />}
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#fff' }}>{importing ? 'Importing…' : 'Import from profile'}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {performance ? (
             <View style={spStyles.dataCard}>
               <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Performance scorecard</Text>

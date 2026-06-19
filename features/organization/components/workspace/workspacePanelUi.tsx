@@ -96,6 +96,21 @@ export function kycCompletionPct(kyc: WorkspaceKyc | null): number {
   return Math.round((fields.filter((f) => !!kyc[f]).length / fields.length) * 100);
 }
 
+export type OrgProfileSnapshot = {
+  gstin?: string | null;
+  address_line?: string | null;
+  city?: string | null;
+  state?: string | null;
+  profile_website?: string | null;
+};
+
+export function profileCompletionPct(snap: OrgProfileSnapshot | null): number {
+  if (!snap) return 0;
+  const hasAddress = !!(snap.address_line || snap.city || snap.state);
+  const hasWebsite = !!snap.profile_website;
+  return Math.round(([hasAddress, hasWebsite].filter(Boolean).length / 2) * 100);
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 export function SectionHeader({ label, color = PURPLE }: { label: string; color?: string }) {
@@ -200,6 +215,70 @@ const ir = StyleSheet.create({
     minWidth: 0,
     letterSpacing: -0.05,
   },
+});
+
+export function ProfileFieldRow({
+  label,
+  value,
+  filled,
+}: {
+  label: string;
+  value: string;
+  filled: boolean;
+}) {
+  return (
+    <View style={pf.row}>
+      <View style={[pf.dot, { backgroundColor: filled ? GREEN_TINT : Theme.surfaceGray }]}>
+        {filled ? (
+          <CheckCircle2 size={12} color={GREEN} strokeWidth={2.2} />
+        ) : (
+          <CircleDashed size={12} color={Theme.textMuted} strokeWidth={2} />
+        )}
+      </View>
+      <View style={pf.text}>
+        <Text style={pf.label}>{label}</Text>
+        <Text style={[pf.value, !filled && pf.valueMissing]} numberOfLines={1}>
+          {filled ? value : 'Not filled'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const pf = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  dot: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  text: { flex: 1, minWidth: 0 },
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 1,
+  },
+  value: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.05,
+  },
+  valueMissing: { color: Theme.textMuted, fontStyle: 'italic' },
 });
 
 export function OrgIdCopyRow({
