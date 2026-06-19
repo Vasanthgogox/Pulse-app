@@ -61,10 +61,11 @@ function DemoCustomTabBar(
       }
       if (tab === 'network') {
         const hub = options?.networkLayout === 'hub';
+        // Href-only: nested network stack (index | hub) — navigation.navigate('network')
+        // is a no-op when already on the tab and blocks hub ↔ feed switches.
         router.replace(
           (hub ? ROUTES.networkOrgHub('details') : ROUTES.TABS.NETWORK) as Parameters<typeof router.replace>[0],
         );
-        navigation.navigate('network');
         return;
       }
       navigation.navigate(tab);
