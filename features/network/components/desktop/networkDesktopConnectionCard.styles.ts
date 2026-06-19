@@ -282,6 +282,15 @@ export const growConnectionCardStyles = StyleSheet.create({
     gap: 8,
     alignSelf: "stretch",
     paddingHorizontal: 2,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  mutualFacepileSlot: {
+    flexShrink: 0,
+    minWidth: 0,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    paddingRight: 4,
   },
   appTag: {
     paddingHorizontal: 8,

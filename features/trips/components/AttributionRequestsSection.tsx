@@ -18,20 +18,25 @@ import {
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
+import {
+  getTripDisplayNumber,
+  type TripRow,
+} from "@/features/trips/services/trips.service";
+import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import { resolveSalaryRegistryAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
-import type { RegistryTag } from "@/lib/alertRegistry/registryAlertPresentation.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { useDriverProfileImagesQuery } from "@/lib/queries/useDriverProfileImagesQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
+import { useTripsQuery } from "@/lib/queries/useTripsQuery";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 
 const DESKTOP_BREAKPOINT = 1024;
-const DESKTOP_COLUMNS = 3;
-const SECTION_INSET = 16;
-const CARD_GAP = 12;
-const DESKTOP_CARD_MIN_WIDTH = 200;
-const LIST_MAX_HEIGHT = 420;
+const DESKTOP_COLUMNS = 4;
+const SECTION_INSET = 14;
+const CARD_GAP = 10;
+const DESKTOP_CARD_MIN_WIDTH = 168;
+const LIST_MAX_HEIGHT = 360;
 
 function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return "Just now";
@@ -54,8 +59,37 @@ function formatSalaryAmount(amount: number | null | undefined): string {
   })}`;
 }
 
-function formatSalaryHighlight(req: SalaryRequestWithDriverRow): string {
-  return `₹${Number(req.amount ?? 0).toLocaleString("en-IN")}`;
+function formatHubRouteCity(
+  location: string | null | undefined,
+): string {
+  const { city, state } = splitHubRouteLocationDisplay(location);
+  if (!state) return city;
+  return `${city}, ${state}`;
+}
+
+function formatAttributionRouteLabel(trip: TripRow | undefined): string {
+  if (!trip) return "Route unavailable";
+  const origin = formatHubRouteCity(trip.pickup_area);
+  const dest = formatHubRouteCity(trip.drop_location);
+  return `${origin} → ${dest}`;
+}
+
+function resolveAttributionTripId(req: SalaryRequestWithDriverRow): string | null {
+  const tripId = req.trip_ids?.[0];
+  return typeof tripId === "string" && tripId.trim() ? tripId : null;
+}
+
+function buildAttributionMetaLabel(
+  req: SalaryRequestWithDriverRow,
+  trip: TripRow | undefined,
+  orgId: string | null,
+): string {
+  const parts: string[] = [];
+  if (trip) {
+    parts.push(getTripDisplayNumber(trip, orgId));
+  }
+  parts.push(formatRelativeTime(req.created_at));
+  return parts.join(" · ");
 }
 
 function pendingCountLabel(count: number): string {
@@ -65,6 +99,8 @@ function pendingCountLabel(count: number): string {
 function renderRequestCard(
   req: SalaryRequestWithDriverRow,
   driversById: Map<string, { id: string; name?: string | null }>,
+  tripsById: Map<string, TripRow>,
+  orgId: string | null,
   busySalaryId: string | null,
   onOpenRequest: (req: SalaryRequestWithDriverRow) => void,
   onAcceptRequest: (req: SalaryRequestWithDriverRow) => void,
@@ -73,35 +109,34 @@ function renderRequestCard(
 ) {
   const driverName = req.drivers?.name?.trim() || "Driver";
   const busy = busySalaryId === req.id;
-  const salaryTags: RegistryTag[] = [
-    { label: "attribution", variant: "default" },
-    { label: "trip based", variant: "neutral" },
-  ];
+  const tripId = resolveAttributionTripId(req);
+  const trip = tripId ? tripsById.get(tripId) : undefined;
+  const isTile = variant === "tile";
 
   return (
     <AlertRegistrySignalCard
       variant={variant}
+      compact={isTile}
       mode="active"
       onPress={() => onOpenRequest(req)}
       avatar={resolveSalaryRegistryAvatar(req, driversById)}
       actorName={driverName}
-      actionText="sent a trip for review on"
-      highlightText={formatSalaryHighlight(req)}
-      detailTitle={formatSalaryAmount(req.amount)}
-      detailSubtitle="Fleet trip attribution request"
-      timeLabel={formatRelativeTime(req.created_at)}
-      contextLabel="Fleet attribution"
-      tags={salaryTags}
+      actionText="requested trip attribution"
+      detailTitle={formatAttributionRouteLabel(trip)}
+      detailSubtitle={formatSalaryAmount(req.amount)}
+      timeLabel={buildAttributionMetaLabel(req, trip, orgId)}
       isUnread
       footer={
-        <RegistryCardActions>
+        <RegistryCardActions compact={isTile}>
           <RegistryGhostButton
             label="Decline"
+            compact={isTile}
             onPress={() => onReject(req.id)}
             disabled={busy}
           />
           <RegistryPrimaryButton
             label="Accept"
+            compact={isTile}
             onPress={() => onAcceptRequest(req)}
             disabled={busy}
           />
@@ -132,9 +167,14 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
   const orgCtx = useOrganization();
   const resolvedOrgId = orgId ?? orgCtx.currentOrganization?.id ?? null;
   const { data: drivers = [] } = useDriversQuery(resolvedOrgId);
+  const { data: trips = [] } = useTripsQuery(resolvedOrgId);
   const driversById = useMemo(
     () => new Map(drivers.map((driver) => [driver.id, driver])),
     [drivers],
+  );
+  const tripsById = useMemo(
+    () => new Map(trips.map((trip) => [trip.id, trip as TripRow])),
+    [trips],
   );
 
   const driverIds = useMemo(
@@ -231,6 +271,8 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
                     {renderRequestCard(
                       req,
                       driversById,
+                      tripsById,
+                      resolvedOrgId,
                       busySalaryId,
                       onOpenRequest,
                       onAcceptRequest,
@@ -250,6 +292,8 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
                     {renderRequestCard(
                       req,
                       driversById,
+                      tripsById,
+                      resolvedOrgId,
                       busySalaryId,
                       onOpenRequest,
                       onAcceptRequest,
@@ -273,6 +317,8 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
               {renderRequestCard(
                 req,
                 driversById,
+                tripsById,
+                resolvedOrgId,
                 busySalaryId,
                 onOpenRequest,
                 onAcceptRequest,
@@ -289,6 +335,8 @@ export const AttributionRequestsSection = memo(function AttributionRequestsSecti
               {renderRequestCard(
                 req,
                 driversById,
+                tripsById,
+                resolvedOrgId,
                 busySalaryId,
                 onOpenRequest,
                 onAcceptRequest,
@@ -401,13 +449,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   sectionSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: Theme.textSecondary,
-    lineHeight: 18,
+    lineHeight: 16,
     width: "100%",
     paddingHorizontal: SECTION_INSET,
-    paddingTop: 4,
-    paddingBottom: 10,
+    paddingTop: 2,
+    paddingBottom: 8,
   },
   desktopScroll: {
     width: "100%",
@@ -432,12 +480,12 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     flexGrow: 0,
     alignSelf: "stretch",
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
     overflow: "hidden",
-    minHeight: 168,
+    minHeight: 132,
     ...Platform.select({
       web: {
         boxShadow: "0 4px 16px rgba(15, 23, 42, 0.06)",

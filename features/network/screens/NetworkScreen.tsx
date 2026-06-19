@@ -103,10 +103,10 @@ import {
   TextInput,
   TouchableOpacity,
   type TextStyle,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
+import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
@@ -221,7 +221,7 @@ function useAnimatedCount(target: number, durationMs = 720): number {
 function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
-  const { width } = useWindowDimensions();
+  const width = useWebLayoutWidth();
   const searchParams = useLocalSearchParams<{ view?: string; hub?: string; hubTab?: string }>();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
   const isDesktopMatrix = width >= 1100;

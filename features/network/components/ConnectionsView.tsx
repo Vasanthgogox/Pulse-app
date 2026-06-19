@@ -59,9 +59,9 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    useWindowDimensions,
     View,
 } from "react-native";
+import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
 
 export type ConnectionFilterTab = "ALL" | "CLIENT" | "SUPPLIER" | "DRIVER";
 
@@ -438,7 +438,7 @@ export function ConnectionsView({
   desktopMetronicHorizontalScroll = false,
   onChatIntegrated,
 }: ConnectionsViewProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useWebLayoutWidth();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ConnectionFilterTab>("ALL");
   const [isGrid, setIsGrid] = useState(!hubMode);

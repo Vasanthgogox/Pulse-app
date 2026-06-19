@@ -43,7 +43,10 @@ import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
-import { ChevronDown, Settings2, X } from "lucide-react-native";
+import type { AlertDetailMode } from "@/lib/alertRegistry/alertDetailRoute.util";
+import type { RegistryFeedKind } from "@/lib/globalSync/registryFeed.util";
+import { AlertDetailScreen } from "@/features/alertRegistry/components/AlertDetailScreen";
+import { ChevronDown, ChevronLeft, Settings2, X } from "lucide-react-native";
 import {
   ActivityIndicator,
   Platform,
@@ -193,6 +196,16 @@ export type AlertRegistryPanelProps = {
   layout?: AlertRegistryPanelLayout;
   topInset?: number;
   bottomInset?: number;
+  /** When false, clears any in-panel detail view (drawer closed). */
+  isOpen?: boolean;
+  /** Close the notifications shell when a detail action navigates away. */
+  onDetailNavigateAway?: () => void;
+};
+
+type AlertDetailSelection = {
+  kind: RegistryFeedKind;
+  id: string;
+  mode: AlertDetailMode;
 };
 
 function sharedTagVariant(label: string): RegistryTag["variant"] {
@@ -550,6 +563,8 @@ export function AlertRegistryPanel({
   layout = "popover",
   topInset = 0,
   bottomInset = 0,
+  isOpen = true,
+  onDetailNavigateAway,
 }: AlertRegistryPanelProps) {
   const isFullscreen = layout === "fullscreen";
   const isDrawer = layout === "drawer";
@@ -559,6 +574,25 @@ export function AlertRegistryPanel({
   const [syncSpin, setSyncSpin] = useState(false);
   const [visibleCount, setVisibleCount] = useState(REGISTRY_PAGE_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [detail, setDetail] = useState<AlertDetailSelection | null>(null);
+
+  const panelFinance = useMemo(
+    (): AlertRegistryFinanceHandlers => ({
+      ...finance,
+      onOpenDetail: (kind, id, mode = "active") => {
+        setDetail({ kind, id, mode });
+      },
+    }),
+    [finance],
+  );
+
+  useEffect(() => {
+    if (!isOpen) setDetail(null);
+  }, [isOpen]);
+
+  useEffect(() => {
+    setDetail(null);
+  }, [filterTab]);
 
   const salaryRequestsHasMore = useGlobalSyncStore((s) => s.salaryRequestsHasMore);
   const loadMoreSalaryRequests = useGlobalSyncStore((s) => s.loadMoreSalaryRequests);
@@ -664,6 +698,46 @@ export function AlertRegistryPanel({
       }
     : undefined;
 
+  if (detail) {
+    return (
+      <View style={[styles.shell, fullscreenShell, popoverShell, drawerShell]}>
+        <View style={[styles.header, isFullscreen && { paddingTop: 16 + topInset }]}>
+          <Pressable
+            onPress={() => setDetail(null)}
+            style={styles.detailBackBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back to notifications"
+            hitSlop={8}
+          >
+            <ChevronLeft size={18} color={METRONIC.muted} strokeWidth={2.2} />
+          </Pressable>
+          <Text style={[styles.headerTitle, styles.headerTitleCentered]}>
+            Notification
+          </Text>
+          <Pressable
+            onPress={onClose}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close notifications"
+            hitSlop={8}
+          >
+            <X size={16} color={METRONIC.muted} strokeWidth={2} />
+          </Pressable>
+        </View>
+        <AlertDetailScreen
+          variant="panel"
+          kind={detail.kind}
+          alertId={detail.id}
+          mode={detail.mode}
+          onBack={() => setDetail(null)}
+          finance={panelFinance}
+          bottomInset={isDrawer || isFullscreen ? bottomInset : 0}
+          onNavigateAway={onDetailNavigateAway}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.shell, fullscreenShell, popoverShell, drawerShell]}>
       <View style={[styles.header, isFullscreen && { paddingTop: 16 + topInset }]}>
@@ -749,7 +823,7 @@ export function AlertRegistryPanel({
         <RegistryFeedList
           filterTab={filterTab}
           visibleCount={visibleCount}
-          finance={finance}
+          finance={panelFinance}
         />
         {showLoadMore ? (
           <Pressable
@@ -814,12 +888,24 @@ const styles = StyleSheet.create({
     color: METRONIC.primaryBtn,
     letterSpacing: -0.1,
   },
+  headerTitleCentered: {
+    flex: 1,
+    textAlign: "center",
+  },
   closeBtn: {
     width: 28,
     height: 28,
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+  },
+  detailBackBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 4,
   },
   tabBar: {
     flexDirection: "row",

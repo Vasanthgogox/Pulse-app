@@ -3,7 +3,7 @@
  * Private Book = driver/vehicle assigned by you; Shared Ledger = assigned by another user.
  */
 import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
-import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
+import { HubScreenShell } from "@/components/hub/HubScreenShell";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
 import { HUB_GRID_DEFAULT_PAGE_SIZE } from "@/components/hub/hubGridCardLayout";
 import { DateRangePickerModal } from "@/components/DateRangePickerModal";
@@ -249,7 +249,10 @@ export default function TripsScreen() {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const screenTopPad =
     Platform.OS === "web" ? 0 : insets.top + Layout.headerPaddingBelowInset;
-  const tripsScrollBottomPad = layout.scrollBottomPadding(40);
+  const tripsScrollBottomPad =
+    Platform.OS === "web" && !isMobileViewport
+      ? 12
+      : layout.scrollBottomPadding(40);
   const router = useRouter();
   const { openTripDetail } = useOpenTripDetail();
   const tripsHubLayoutCompact = width > 0 && width < 640;
@@ -1522,6 +1525,33 @@ export default function TripsScreen() {
   }
 
   return (
+    <HubScreenShell
+      footer={
+        Platform.OS === "web" && !isMobileViewport ? (
+          <TripsHubAuditFooter
+            onExportLedger={() => setTripLedgerExportOpen(true)}
+            tr={tr}
+            pagination={
+              showTripsPaginationFooter
+                ? {
+                    page: tripsTablePageSafe,
+                    totalPages: tripsTableTotalPages,
+                    totalItems: tripsHubPaginationTotal,
+                    pageSize: tripsTablePageSize,
+                    onPageSizeChange: setTripsTablePageSize,
+                    itemLabel: "trips",
+                    onPrev: () => setTripsTablePage((p) => Math.max(0, p - 1)),
+                    onNext: () =>
+                      setTripsTablePage((p) =>
+                        Math.min(tripsTableTotalPages - 1, p + 1),
+                      ),
+                  }
+                : undefined
+            }
+          />
+        ) : null
+      }
+    >
     <View style={[styles.container, { paddingTop: screenTopPad }]}>
       <TripsFilterBottomSheet
         visible={showSortModal}
@@ -2211,33 +2241,6 @@ export default function TripsScreen() {
             </View>
           )}
         </ScrollView>
-      {Platform.OS === "web" && !isMobileViewport ? (
-        <View style={styles.tripsBottomBar}>
-          <TripsHubAuditFooter
-            onExportLedger={() => setTripLedgerExportOpen(true)}
-            tr={tr}
-            paginationSlot={
-              showTripsPaginationFooter ? (
-                <HubListPaginationBar
-                  embedded
-                  page={tripsTablePageSafe}
-                  totalPages={tripsTableTotalPages}
-                  totalItems={tripsHubPaginationTotal}
-                  pageSize={tripsTablePageSize}
-                  onPageSizeChange={setTripsTablePageSize}
-                  itemLabel="trips"
-                  onPrev={() => setTripsTablePage((p) => Math.max(0, p - 1))}
-                  onNext={() =>
-                    setTripsTablePage((p) =>
-                      Math.min(tripsTableTotalPages - 1, p + 1),
-                    )
-                  }
-                />
-              ) : null
-            }
-          />
-        </View>
-      ) : null}
       <TripsLedgerExportModalGate
         active={tripLedgerExportOpen}
         visible={tripLedgerExportOpen}
@@ -2248,16 +2251,12 @@ export default function TripsScreen() {
         customReport={tripLedgerExportReport}
       />
     </View>
+    </HubScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: TRIPS_PAGE_BG },
-  /** Web: pinned bottom bar — Fleet Confidence, pagination, and Export Ledger in one row. */
-  tripsBottomBar: {
-    flexShrink: 0,
-    width: "100%",
-  },
+  container: { flex: 1, minHeight: 0, backgroundColor: TRIPS_PAGE_BG },
   centered: {
     flex: 1,
     justifyContent: "center",

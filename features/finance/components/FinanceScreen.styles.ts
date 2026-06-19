@@ -10,6 +10,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     minWidth: 0,
+    minHeight: 0,
     backgroundColor: Theme.screenBackground,
   },
   centered: {

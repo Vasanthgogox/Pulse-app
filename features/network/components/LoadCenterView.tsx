@@ -5,6 +5,8 @@
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { Typography } from "@/constants/Typography";
 import { HubListPaginationBar } from "@/components/hub/HubListPaginationBar";
+import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
+import { HubScreenShell } from "@/components/hub/HubScreenShell";
 import { useHubGridPagination } from "@/components/hub/useHubGridPagination";
 import { LoadCardRouteRow } from "@/components/LoadCardRouteRow";
 import { LoadCardSpecsRow } from "@/components/LoadCardSpecsRow";
@@ -708,10 +710,12 @@ export function LoadCenterView({
   );
 
   // Add Load: mobile hub header + desktop Give Load header; empty state CTA when no rows.
-  const paddingBottom = useMemo(
-    () => layout.scrollBottomPadding(36),
-    [layout],
-  );
+  const paddingBottom = useMemo(() => {
+    if (Platform.OS === "web" && !isMobileView && useGridLayout) {
+      return 12;
+    }
+    return layout.scrollBottomPadding(36);
+  }, [isMobileView, layout, useGridLayout]);
   const statusTabsForRole = useMemo(() => {
     if (!isClaimedTab) return STATUS_TABS;
     return STATUS_TABS.filter((t) => t.id === "AWARDED" || t.id === "DONE");
@@ -1291,6 +1295,46 @@ export function LoadCenterView({
   };
 
   return (
+    <HubScreenShell
+      footer={
+        !isMobileView && useGridLayout
+          ? (() => {
+              const activePagination =
+                loadSubTab === "GIVE_LOAD"
+                  ? giveLoadGridPagination
+                  : loadSubTab === "GET_LOAD"
+                    ? findWorkGridPagination
+                    : loadSubTab === "AWARDED"
+                      ? claimedGridPagination
+                      : null;
+              if (!activePagination || activePagination.totalItems <= 0) {
+                return null;
+              }
+              return (
+                <HubScreenBottomBar>
+                  <HubListPaginationBar
+                    embedded
+                    page={activePagination.page}
+                    totalPages={activePagination.totalPages}
+                    totalItems={activePagination.totalItems}
+                    pageSize={activePagination.pageSize}
+                    onPageSizeChange={activePagination.setPageSize}
+                    itemLabel="loads"
+                    onPrev={() =>
+                      activePagination.setPage((p) => Math.max(0, p - 1))
+                    }
+                    onNext={() =>
+                      activePagination.setPage((p) =>
+                        Math.min(activePagination.totalPages - 1, p + 1),
+                      )
+                    }
+                  />
+                </HubScreenBottomBar>
+              );
+            })()
+          : null
+      }
+    >
     <View
       style={[
         styles.container,
@@ -1678,46 +1722,6 @@ export function LoadCenterView({
         </ScrollView>
       </View>
 
-      {/* Fixed-bottom pagination bar — pinned to the viewport like the
-       *  trips page so the user can change page/size without scrolling
-       *  back. Only renders on desktop grid layouts. The active
-       *  pagination state switches with the current load sub-tab. */}
-      {!isMobileView && useGridLayout
-        ? (() => {
-            const activePagination =
-              loadSubTab === "GIVE_LOAD"
-                ? giveLoadGridPagination
-                : loadSubTab === "GET_LOAD"
-                  ? findWorkGridPagination
-                  : loadSubTab === "AWARDED"
-                    ? claimedGridPagination
-                    : null;
-            if (!activePagination || activePagination.totalItems <= 0) {
-              return null;
-            }
-            return (
-              <View style={styles.loadsBottomBar}>
-                <HubListPaginationBar
-                  page={activePagination.page}
-                  totalPages={activePagination.totalPages}
-                  totalItems={activePagination.totalItems}
-                  pageSize={activePagination.pageSize}
-                  onPageSizeChange={activePagination.setPageSize}
-                  itemLabel="loads"
-                  onPrev={() =>
-                    activePagination.setPage((p) => Math.max(0, p - 1))
-                  }
-                  onNext={() =>
-                    activePagination.setPage((p) =>
-                      Math.min(activePagination.totalPages - 1, p + 1),
-                    )
-                  }
-                />
-              </View>
-            );
-          })()
-        : null}
-
       {/* Success overlay */}
       {showSuccess && (
         <View style={styles.successOverlay}>
@@ -1823,6 +1827,7 @@ export function LoadCenterView({
       />
 
     </View>
+    </HubScreenShell>
   );
 }
 
@@ -1830,7 +1835,7 @@ export function LoadCenterView({
 const LOAD_CONTENT_BG = LOADS_HUB_PAGE_BG;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: LOADS_HUB_PAGE_BG },
+  container: { flex: 1, minHeight: 0, backgroundColor: LOADS_HUB_PAGE_BG },
   containerMobileHub: {
     backgroundColor: LOADS_HUB_PAGE_BG,
   },
@@ -2392,19 +2397,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginTop: 4,
     marginBottom: 8,
-  },
-  /** Desktop: pinned bottom bar that hosts the loads pagination controls.
-   *  Sits as a flex sibling below the scrolling content area so it stays
-   *  anchored to the bottom of the viewport regardless of scroll position
-   *  — same pattern as the trips page. */
-  loadsBottomBar: {
-    flexShrink: 0,
-    backgroundColor: LOADS_HUB_PAGE_BG,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 6,
-    paddingBottom: 10,
   },
   loadCardGrid: {
     flex: 1,

@@ -3,6 +3,12 @@
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import {
+  formatHubListPaginationMeta,
+  HubListPaginationBar,
+  type HubListPaginationBarProps,
+} from "@/components/hub/HubListPaginationBar";
+import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -2765,6 +2771,18 @@ export function TripsHubTableView({
   );
 }
 
+export type TripsHubAuditFooterPagination = Pick<
+  HubListPaginationBarProps,
+  | "page"
+  | "totalPages"
+  | "totalItems"
+  | "pageSize"
+  | "onPageSizeChange"
+  | "onPrev"
+  | "onNext"
+  | "itemLabel"
+>;
+
 /**
  * Fleet Confidence / Export Ledger + optional pagination — single bottom bar row.
  *
@@ -2775,51 +2793,79 @@ export function TripsHubTableView({
 export function TripsHubAuditFooter({
   onExportLedger,
   tr,
-  paginationSlot,
+  pagination,
 }: {
   onExportLedger?: () => void;
   tr: (key: string) => string;
-  /** Pagination controls rendered inline between Fleet Confidence and Export. */
-  paginationSlot?: ReactNode;
+  pagination?: TripsHubAuditFooterPagination;
 }) {
   if (Platform.OS !== "web") return null;
+
+  const paginationMeta = pagination
+    ? formatHubListPaginationMeta(
+        pagination.page,
+        pagination.totalPages,
+        pagination.totalItems,
+        pagination.itemLabel ?? "trips",
+      )
+    : null;
+
   return (
-    <View style={styles.auditFooter}>
-      <View style={styles.auditFooterLeft}>
-        <View style={styles.auditFooterIcon}>
-          <FontAwesome name="line-chart" size={16} color={Theme.positive} />
-        </View>
-        <View style={styles.auditFooterText}>
-          <Text style={styles.auditFooterTitle}>
-            {tr("tripsHubFleetConfidence")}
+    <HubScreenBottomBar
+      left={
+        <>
+          <View style={styles.auditFooterIcon}>
+            <FontAwesome name="line-chart" size={16} color={Theme.positive} />
+          </View>
+          <View style={styles.auditFooterText}>
+            <Text style={styles.auditFooterTitle}>
+              {tr("tripsHubFleetConfidence")}
+            </Text>
+            <Text style={styles.auditFooterSub} numberOfLines={2}>
+              {paginationMeta
+                ? `${tr("tripsHubNetworkMirror")} · ${paginationMeta}`
+                : tr("tripsHubNetworkMirror")}
+            </Text>
+          </View>
+        </>
+      }
+      center={
+        pagination ? (
+          <HubListPaginationBar
+            embedded
+            layoutMode="controls-only"
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.totalItems}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.onPageSizeChange}
+            onPrev={pagination.onPrev}
+            onNext={pagination.onNext}
+            itemLabel={pagination.itemLabel}
+          />
+        ) : null
+      }
+      right={
+        <TouchableOpacity
+          style={[
+            styles.auditExportBtn,
+            !onExportLedger && styles.auditExportBtnDisabled,
+          ]}
+          onPress={() => onExportLedger?.()}
+          disabled={!onExportLedger}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.auditExportBtnText}>
+            {tr("tripsHubExportLedger")}
           </Text>
-          <Text style={styles.auditFooterSub}>
-            {tr("tripsHubNetworkMirror")}
-          </Text>
-        </View>
-      </View>
-      {paginationSlot ? (
-        <View style={styles.auditFooterPagination}>{paginationSlot}</View>
-      ) : null}
-      <TouchableOpacity
-        style={[
-          styles.auditExportBtn,
-          !onExportLedger && styles.auditExportBtnDisabled,
-        ]}
-        onPress={() => onExportLedger?.()}
-        disabled={!onExportLedger}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.auditExportBtnText}>
-          {tr("tripsHubExportLedger")}
-        </Text>
-        <FontAwesome
-          name="cloud-download"
-          size={14}
-          color={Theme.textSecondary}
-        />
-      </TouchableOpacity>
-    </View>
+          <FontAwesome
+            name="cloud-download"
+            size={14}
+            color={Theme.textSecondary}
+          />
+        </TouchableOpacity>
+      }
+    />
   );
 }
 
@@ -4725,34 +4771,6 @@ const styles = StyleSheet.create({
     opacity: 0.88,
     transform: [{ scale: 0.98 }],
   },
-  auditFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.surface,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    gap: 12,
-    width: "100%",
-  },
-  auditFooterLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flexShrink: 0,
-    maxWidth: 220,
-  },
-  auditFooterText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  auditFooterPagination: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-  },
   auditFooterIcon: {
     padding: 8,
     borderRadius: 10,
@@ -4760,6 +4778,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     flexShrink: 0,
+  },
+  auditFooterText: {
+    flex: 1,
+    minWidth: 0,
   },
   auditFooterTitle: {
     fontSize: FS_BODY,

@@ -37,7 +37,6 @@ import {
 } from "@/lib/chatUnreadSignal";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
-import { alertDetailRoute } from "@/lib/alertRegistry/alertDetailRoute.util";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
 import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
@@ -431,18 +430,6 @@ export function DemoTabBar({
     useDemoTabBarVisibilityProgressOptional() ?? fallbackDockVisibilityProgress;
   const scrollHideVersion = useDemoTabBarScrollHideVersion();
 
-  const openAlertDetail = useCallback(
-    (
-      kind: "salary" | "shared" | "ops",
-      id: string,
-      mode: "active" | "archive" = "active",
-    ) => {
-      setShowNotifications(false);
-      router.push(alertDetailRoute(kind, id, mode));
-    },
-    [router],
-  );
-
   const openLedgerForSalaryPayment = useCallback(
     (req: SalaryRequestWithDriverRow) => {
       const isTripBasedAttribution =
@@ -814,13 +801,15 @@ export function DemoTabBar({
         <Suspense fallback={null}>
         <AlertRegistryPanel
           layout="drawer"
+          isOpen={showNotifications}
           filterTab={notifTab}
           onFilterTabChange={setNotifTab}
           onClose={() => setShowNotifications(false)}
           onSync={refreshRegistry}
           syncing={notifActionId != null}
+          onDetailNavigateAway={() => setShowNotifications(false)}
           finance={{
-            onOpenDetail: openAlertDetail,
+            onOpenDetail: () => {},
             onRejectSalary: (id) => void handleSalaryReject(id),
             onPaySalary: openLedgerForSalaryPayment,
             onViewSalaryArchive: handleViewSalaryArchive,
@@ -1264,9 +1253,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.8)",
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
     zIndex: 200,
     elevation: 20,
     shadowColor: "#0f172a",
@@ -1278,13 +1267,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 18,
+    gap: 14,
   },
   webBrandWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minWidth: 230,
+    minWidth: 200,
+    flexShrink: 0,
     paddingRight: 8,
     ...Platform.select({
       web: { cursor: "pointer" as const },
@@ -1299,17 +1289,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   webBrandTitle: {
-    fontSize: 34,
+    fontSize: 30,
     fontWeight: "900",
     color: "#0f172a",
     fontStyle: "italic",
-    letterSpacing: -1,
-    lineHeight: 36,
+    letterSpacing: -0.9,
+    lineHeight: 32,
   },
   webBrandDotText: {
     color: Theme.darkGreen,
-    fontSize: 38,
-    lineHeight: 38,
+    fontSize: 32,
+    lineHeight: 32,
   },
   webBrandSub: {
     marginTop: 1,
