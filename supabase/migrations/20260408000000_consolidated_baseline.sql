@@ -1,0 +1,3 @@
+-- Consolidated baseline migration applied directly to remote DB.
+-- This stub exists to satisfy migration history tracking only.
+-- All schema changes are covered by the subsequent per-feature migration files.
