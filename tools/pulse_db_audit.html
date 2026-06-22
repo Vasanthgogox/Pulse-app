@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pulse_db_audit — Live</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g:#0D1117;--s1:#161B22;--s2:#21262D;--s3:#2D333B;
+  --bd:#30363D;--bdl:#21262D;
+  --tx:#CDD9E5;--txm:#768390;--txd:#545D68;
+  --ac:#E3A007;--acd:#3D2800;
+  --ins:#1A9A7E;--insb:#0A1F1C;
+  --upd:#4B8BDB;--updb:#0D1B30;
+  --del:#E05C4B;--delb:#2A0F0B;
+  --trg:#A371D6;--trgb:#1E0E30;
+  --na:#3A3F4B;--nab:#161B22;
+  --f:'Courier New',Courier,monospace
+}
+html,body{height:100%;background:var(--g);color:var(--tx);font-family:var(--f);font-size:12px;overflow:hidden}
+
+/* ── CONFIG MODAL ── */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);
+  display:flex;align-items:center;justify-content:center;z-index:1000
+}
+.modal-bg.hidden{display:none}
+.modal-box{
+  background:var(--s1);border:1px solid var(--bd);
+  border-top:3px solid var(--ac);padding:32px;width:440px
+}
+.modal-title{font-size:14px;color:var(--ac);letter-spacing:.12em;text-transform:uppercase;margin-bottom:24px}
+.modal-field{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
+.modal-label{font-size:10px;color:var(--txm);letter-spacing:.1em;text-transform:uppercase}
+.modal-input{
+  background:var(--s2);border:1px solid var(--bd);color:var(--tx);
+  padding:8px 12px;font-family:var(--f);font-size:12px;outline:none
+}
+.modal-input:focus{border-color:var(--ac)}
+.modal-btn{
+  width:100%;background:var(--acd);border:1px solid var(--ac);color:var(--ac);
+  padding:10px;font-family:var(--f);font-size:12px;letter-spacing:.1em;
+  text-transform:uppercase;cursor:pointer;margin-top:8px;transition:.15s
+}
+.modal-btn:hover{background:var(--ac);color:#000}
+.modal-err{font-size:11px;color:var(--del);margin-top:8px;min-height:16px}
+.modal-hint{font-size:10px;color:var(--txd);margin-top:16px;line-height:1.7;letter-spacing:.04em}
+.modal-hint a{color:var(--upd);text-decoration:none}
+
+/* ── APP SHELL ── */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* titlebar */
+.titlebar{
+  background:#010409;border-bottom:1px solid var(--bd);
+  padding:0 14px;height:38px;display:flex;align-items:center;gap:10px;flex-shrink:0
+}
+.dots{display:flex;gap:6px;flex-shrink:0}
+.dot{width:12px;height:12px;border-radius:50%}
+.dot.r{background:#FF5F57}.dot.y{background:#FFBD2E}.dot.gr{background:#28CA41}
+.tbar-name{color:var(--txm);font-size:11px;letter-spacing:.08em;flex:1;text-align:center}
+.tbar-name em{color:var(--ac);font-style:normal}
+.conn-badge{
+  font-size:10px;letter-spacing:.06em;padding:2px 8px;border-radius:0;
+  display:flex;align-items:center;gap:5px;flex-shrink:0
+}
+.conn-badge.on{color:var(--ins);border:1px solid var(--ins)}
+.conn-badge.off{color:var(--del);border:1px solid var(--del)}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
+.tbar-tester{font-size:10px;color:var(--txd);letter-spacing:.06em;flex-shrink:0}
+
+/* ribbon */
+.ribbon{
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  padding:0 10px;height:34px;display:flex;align-items:center;gap:1px;
+  flex-shrink:0;overflow-x:auto
+}
+.rg{display:flex;align-items:center;gap:1px;padding:0 10px;border-right:1px solid var(--bd)}
+.rg:last-child{border-right:none}
+.rg-label{font-size:9px;color:var(--txd);letter-spacing:.12em;padding:0 4px;text-transform:uppercase}
+.rbtn{
+  background:none;border:1px solid transparent;color:var(--txm);
+  padding:2px 9px;cursor:pointer;font-family:var(--f);font-size:10px;
+  letter-spacing:.05em;transition:.1s all
+}
+.rbtn:hover{border-color:var(--bd);color:var(--tx);background:var(--s2)}
+.rbtn.on{background:var(--acd);border-color:var(--ac);color:var(--ac)}
+.rbtn.snap-on{background:var(--insb);border-color:var(--ins);color:var(--ins)}
+
+/* formula bar */
+.fbar{
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  height:28px;display:flex;align-items:stretch;flex-shrink:0
+}
+.namebox{
+  width:88px;border-right:1px solid var(--bd);padding:0 10px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--tx);font-size:11px;flex-shrink:0;background:var(--s2);letter-spacing:.04em
+}
+.fx-label{
+  padding:0 10px;display:flex;align-items:center;
+  color:var(--ac);font-size:12px;border-right:1px solid var(--bd);
+  flex-shrink:0;font-style:italic
+}
+.formula-wrap{flex:1;display:flex;align-items:center;overflow:hidden;position:relative;cursor:pointer}
+.formula-wrap:hover::after{
+  content:'📋 COPY';position:absolute;right:8px;
+  font-size:9px;color:var(--ac);letter-spacing:.08em
+}
+.formula{
+  flex:1;padding:0 12px;color:var(--ins);font-size:11px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis
+}
+.formula.hint{color:var(--txd)}
+
+/* main area */
+.main-area{flex:1;display:flex;overflow:hidden}
+.gridarea{flex:1;overflow:auto;background:var(--g);position:relative}
+
+/* loading bar */
+.loading-bar{
+  position:sticky;top:0;left:0;right:0;height:2px;z-index:50;
+  background:var(--ac);width:0;transition:width .3s
+}
+.loading-bar.active{width:70%;animation:loadbar 1.5s ease-in-out infinite}
+@keyframes loadbar{0%{width:0;opacity:1}70%{width:85%}100%{width:100%;opacity:0}}
+
+/* snapshot panel */
+.snap-panel{
+  width:0;overflow:hidden;background:var(--s1);
+  border-left:1px solid var(--bd);flex-shrink:0;
+  transition:width .2s ease;display:flex;flex-direction:column
+}
+.snap-panel.open{width:320px}
+.snap-head{
+  background:var(--s2);border-bottom:1px solid var(--bd);
+  padding:10px 14px;display:flex;justify-content:space-between;align-items:center;
+  flex-shrink:0
+}
+.snap-title{font-size:11px;color:var(--ac);letter-spacing:.1em;text-transform:uppercase}
+.snap-close{
+  background:none;border:none;color:var(--txm);cursor:pointer;
+  font-size:14px;font-family:var(--f)
+}
+.snap-close:hover{color:var(--tx)}
+.snap-btns{
+  display:flex;gap:8px;padding:12px 14px;flex-shrink:0;
+  border-bottom:1px solid var(--bd)
+}
+.snap-btn{
+  flex:1;background:var(--s2);border:1px solid var(--bd);color:var(--txm);
+  padding:6px 8px;cursor:pointer;font-family:var(--f);font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase;transition:.15s
+}
+.snap-btn:hover{border-color:var(--ac);color:var(--ac)}
+.snap-btn.taken{border-color:var(--ins);color:var(--ins);background:var(--insb)}
+.snap-body{flex:1;overflow-y:auto;padding:12px 14px}
+.snap-ts{font-size:9px;color:var(--txd);letter-spacing:.06em;margin-bottom:8px}
+.snap-table{border-collapse:collapse;width:100%}
+.snap-table th{
+  background:var(--s2);border:1px solid var(--bd);
+  padding:5px 8px;font-size:9px;color:var(--ac);
+  letter-spacing:.1em;text-transform:uppercase
+}
+.snap-table td{
+  border:1px solid var(--bdl);padding:5px 8px;
+  font-size:11px;color:var(--tx)
+}
+.snap-table tr:hover td{background:rgba(227,160,7,.04)}
+.snap-tbl{color:#CDB4DB;font-size:10px}
+.snap-num{text-align:right;font-size:11px}
+.diff-pos{color:var(--ins);text-align:right;font-weight:bold}
+.diff-neg{color:var(--del);text-align:right;font-weight:bold}
+.diff-zero{color:var(--txd);text-align:right}
+.diff-na{color:var(--txd);text-align:right}
+
+/* sheet tabs */
+.sheettabs{
+  background:#010409;border-top:1px solid var(--bd);
+  display:flex;align-items:stretch;height:30px;flex-shrink:0;overflow-x:auto
+}
+.tab{
+  background:var(--s2);border:none;border-top:2px solid transparent;
+  color:var(--txm);padding:0 14px;cursor:pointer;font-family:var(--f);
+  font-size:10px;letter-spacing:.1em;transition:.1s all;
+  white-space:nowrap;display:flex;align-items:center;border-right:1px solid var(--bd)
+}
+.tab:hover{background:var(--s3);color:var(--tx)}
+.tab.active{background:var(--g);color:var(--ac);border-top-color:var(--ac)}
+
+/* toast */
+.toast{
+  position:fixed;bottom:24px;right:24px;z-index:2000;
+  background:var(--s2);border:1px solid var(--bd);
+  padding:10px 16px;font-size:11px;letter-spacing:.06em;
+  opacity:0;transition:opacity .25s;pointer-events:none;max-width:320px
+}
+.toast.show{opacity:1}
+.toast.t-ok{border-color:var(--ins);color:var(--ins)}
+.toast.t-err{border-color:var(--del);color:var(--del)}
+.toast.t-info{border-color:var(--upd);color:var(--upd)}
+
+/* ── TABLE ENGINE ── */
+.xtable{border-collapse:collapse;width:max-content;min-width:100%}
+.xtable .cl-row th{
+  background:var(--s2);border:1px solid var(--bd);color:var(--txd);
+  text-align:center;height:22px;padding:0 4px;font-size:10px;
+  position:sticky;top:0;z-index:30;letter-spacing:.06em
+}
+.xtable .cl-row th.corner{width:46px;min-width:46px;z-index:36}
+.xtable .dh-row td{
+  background:var(--s2);border:1px solid var(--bd);color:var(--ac);
+  font-size:10px;font-weight:bold;letter-spacing:.1em;padding:5px 10px;
+  height:32px;position:sticky;top:22px;z-index:25;
+  white-space:nowrap;text-transform:uppercase
+}
+.xtable td.rn,.xtable th.rn{
+  background:var(--s2);border:1px solid var(--bd);color:var(--txd);
+  text-align:right;width:46px;min-width:46px;padding:0 8px;
+  font-size:10px;position:sticky;left:0;z-index:20
+}
+.xtable thead td.rn,.xtable thead th.rn{z-index:36}
+.xtable .dh-row td.rn{z-index:26}
+.xtable .cl-row th.rn{z-index:36}
+.xtable tbody tr{cursor:pointer}
+.xtable tbody tr:hover td{background:rgba(227,160,7,.05)}
+.xtable tbody tr.sel td{background:rgba(227,160,7,.1)!important}
+.xtable tbody tr.sel td.rn{background:var(--acd)!important;color:var(--ac)}
+.xtable tbody td{
+  border:1px solid var(--bdl);padding:4px 10px;
+  font-size:11px;color:var(--tx);white-space:nowrap;height:26px
+}
+.xtable tbody td.rn{background:var(--s2)!important;border-color:var(--bd)}
+
+.stats-strip{
+  background:var(--s1);border-bottom:2px solid var(--ac);
+  display:flex;align-items:center;padding:10px 16px;gap:32px;flex-wrap:wrap
+}
+.stat-item{display:flex;flex-direction:column;gap:2px}
+.stat-val{font-size:22px;color:var(--ac);letter-spacing:-.01em}
+.stat-val.ins{color:var(--ins)}.stat-val.upd{color:var(--upd)}
+.stat-val.del{color:var(--del)}.stat-val.trg{color:var(--trg)}
+.stat-label{font-size:9px;color:var(--txd);letter-spacing:.1em;text-transform:uppercase}
+.stat-divider{width:1px;height:36px;background:var(--bd)}
+
+.badge{
+  display:inline-flex;align-items:center;padding:1px 5px;
+  font-size:9px;letter-spacing:.08em;font-weight:bold;
+  border-radius:0;vertical-align:middle
+}
+.b-ins{background:var(--insb);color:var(--ins);border:1px solid var(--ins)}
+.b-upd{background:var(--updb);color:var(--upd);border:1px solid var(--upd)}
+.b-trg{background:var(--trgb);color:var(--trg);border:1px solid var(--trg)}
+.b-hi{background:var(--delb);color:var(--del);border:1px solid var(--del)}
+.b-md{background:var(--acd);color:var(--ac);border:1px solid var(--ac)}
+.b-lo{background:var(--nab);color:var(--txm);border:1px solid var(--txm)}
+.b-pass{background:var(--insb);color:var(--ins);border:1px solid var(--ins)}
+.b-fail{background:var(--delb);color:var(--del);border:1px solid var(--del)}
+.b-partial{background:var(--acd);color:var(--ac);border:1px solid var(--ac)}
+
+.cell-code{color:#A5D6FF;font-size:10px}
+.cell-file{color:#CDB4DB;font-size:10px}
+.cell-dim{color:var(--txm)}
+.cell-num{color:var(--ac);font-weight:bold}
+.cell-action{font-weight:bold}
+
+/* ── STATE MACHINE ── */
+.sm-sheet{padding:40px 48px;background:var(--g);min-height:100%}
+.sm-title{font-size:13px;letter-spacing:.14em;color:var(--ac);text-transform:uppercase;margin-bottom:4px}
+.sm-sub{font-size:10px;color:var(--txm);letter-spacing:.06em;margin-bottom:48px}
+.sm-flow{display:flex;align-items:center;margin-bottom:48px;flex-wrap:wrap;gap:0}
+.sm-node{border:2px solid var(--bd);padding:16px 20px;min-width:140px;text-align:center;flex-shrink:0}
+.sm-node.pending{border-color:#545D68;background:var(--s1)}
+.sm-node.assigned{border-color:var(--upd);background:var(--updb)}
+.sm-node.started{border-color:var(--ac);background:var(--acd)}
+.sm-node.completed{border-color:var(--ins);background:var(--insb)}
+.sm-node.cancelled{border-color:var(--del);background:var(--delb)}
+.sm-node-status{font-size:13px;font-weight:bold;letter-spacing:.1em;text-transform:uppercase}
+.sm-node.pending .sm-node-status{color:#CDD9E5}
+.sm-node.assigned .sm-node-status{color:var(--upd)}
+.sm-node.started .sm-node-status{color:var(--ac)}
+.sm-node.completed .sm-node-status{color:var(--ins)}
+.sm-node.cancelled .sm-node-status{color:var(--del)}
+.sm-node-desc{font-size:9px;color:var(--txm);margin-top:4px;letter-spacing:.04em}
+.sm-arrow{display:flex;flex-direction:column;align-items:center;gap:3px;padding:0 6px;flex-shrink:0}
+.sm-arr-line{width:48px;height:2px;background:var(--bd);position:relative}
+.sm-arr-line::after{content:'▶';position:absolute;right:-7px;top:-7px;color:var(--bd);font-size:13px}
+.sm-arr-label{font-size:9px;color:var(--txd);white-space:nowrap;letter-spacing:.05em;text-align:center}
+.sm-cancel-row{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:48px}
+.sm-cancel-box{border:1px dashed var(--del);padding:20px 24px;background:var(--delb)}
+.sm-cancel-title{font-size:10px;color:var(--del);letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px}
+.sm-cancel-list{list-style:none;display:flex;flex-direction:column;gap:6px}
+.sm-cancel-list li{font-size:11px;color:var(--txm);display:flex;align-items:center;gap:8px}
+.sm-cancel-list li::before{content:'→';color:var(--del)}
+.sm-db-table{border-collapse:collapse;width:100%;max-width:760px}
+.sm-db-table th{background:var(--s2);border:1px solid var(--bd);padding:7px 14px;font-size:10px;color:var(--ac);letter-spacing:.1em;text-transform:uppercase;text-align:left}
+.sm-db-table td{border:1px solid var(--bdl);padding:7px 14px;font-size:11px;color:var(--tx)}
+.sm-db-table tr:hover td{background:rgba(227,160,7,.04)}
+.sm-db-table .trans{font-weight:bold;color:var(--upd)}
+.sm-db-table .ta{color:var(--trg);font-size:10px}
+
+/* ── AUDIT COVERAGE ── */
+.cov-sheet{padding:40px 48px;background:var(--g);min-height:100%}
+.cov-title{font-size:13px;letter-spacing:.14em;color:var(--ac);text-transform:uppercase;margin-bottom:4px}
+.cov-sub{font-size:10px;color:var(--txm);letter-spacing:.06em;margin-bottom:32px}
+.cov-summary{display:flex;gap:24px;margin-bottom:36px;flex-wrap:wrap}
+.cov-stat{background:var(--s1);border:1px solid var(--bd);padding:14px 20px;min-width:120px;text-align:center}
+.cov-stat-val{font-size:28px;letter-spacing:-.01em}
+.v-ins{color:var(--ins)}.v-del{color:var(--del)}.v-trg{color:var(--trg)}.v-ac{color:var(--ac)}
+.cov-stat-label{font-size:9px;color:var(--txd);letter-spacing:.1em;text-transform:uppercase;margin-top:3px}
+.cov-table{border-collapse:collapse;width:100%}
+.cov-table th{background:var(--s2);border:1px solid var(--bd);padding:7px 14px;font-size:10px;color:var(--ac);letter-spacing:.1em;text-transform:uppercase;text-align:left;white-space:nowrap}
+.cov-table th.center{text-align:center}
+.cov-table td{border:1px solid var(--bdl);padding:7px 14px;font-size:11px;vertical-align:middle}
+.cov-table td.center{text-align:center}
+.cov-table tr:hover td{background:rgba(227,160,7,.04)}
+.cov-table .tname{color:#CDB4DB;font-size:11px}
+.cov-check{color:var(--ins);font-size:14px}.cov-x{color:var(--del);font-size:14px}
+.cov-trgs{font-size:10px;color:var(--trg)}
+.pbar{display:flex;align-items:center;gap:8px}
+.pbar-track{width:72px;height:7px;background:var(--s3);flex-shrink:0}
+.pbar-fill{height:100%}
+.pbar-fill.hi{background:var(--ins)}.pbar-fill.md{background:var(--ac)}.pbar-fill.lo{background:var(--del)}
+.pbar-txt{font-size:10px;min-width:32px;letter-spacing:.04em}
+
+/* ── SNAPSHOT SQL ── */
+.sql-sheet{padding:40px 48px;background:var(--g);min-height:100%}
+.sql-title{font-size:13px;letter-spacing:.14em;color:var(--ac);text-transform:uppercase;margin-bottom:4px}
+.sql-sub{font-size:10px;color:var(--txm);letter-spacing:.06em;margin-bottom:32px}
+.sql-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:800px){.sql-grid{grid-template-columns:1fr}}
+.sql-block{background:var(--s1);border:1px solid var(--bd)}
+.sql-block-head{background:var(--s2);border-bottom:1px solid var(--bd);padding:9px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.sql-block-head:hover .copy-hint{opacity:1}
+.copy-hint{font-size:9px;color:var(--ac);letter-spacing:.06em;opacity:0;transition:.15s}
+.sql-block-name{font-size:11px;color:var(--ac);letter-spacing:.08em;text-transform:uppercase}
+.sql-block-tag{font-size:9px;color:var(--txd);letter-spacing:.06em}
+.sql-code{padding:16px;font-size:11px;line-height:1.9;overflow-x:auto;white-space:pre}
+.sk{color:#FF7B72}.sf{color:#D2A8FF}.ss{color:#A5D6FF}.st{color:#7EE787}
+.sc{color:#CDB4DB}.sm2{color:var(--txd);font-style:italic}
+
+/* ── VERIFY LOG ── */
+.vl-sheet{padding:40px 48px;background:var(--g);min-height:100%}
+.vl-title{font-size:13px;letter-spacing:.14em;color:var(--ac);text-transform:uppercase;margin-bottom:4px}
+.vl-sub{font-size:10px;color:var(--txm);letter-spacing:.06em;margin-bottom:28px}
+.vl-progress{
+  background:var(--s1);border:1px solid var(--bd);border-left:3px solid var(--ac);
+  padding:16px 24px;margin-bottom:32px;display:flex;align-items:center;gap:32px;flex-wrap:wrap
+}
+.vl-prog-main{display:flex;align-items:baseline;gap:6px}
+.vl-prog-n{font-size:36px;color:var(--ac);letter-spacing:-.02em}
+.vl-prog-total{font-size:16px;color:var(--txm)}
+.vl-prog-bar{flex:1;min-width:160px;height:4px;background:var(--s3)}
+.vl-prog-fill{height:100%;background:var(--ac);transition:.4s width}
+.vl-prog-pct{font-size:24px;color:var(--ins);letter-spacing:-.01em}
+.vl-prog-label{font-size:9px;color:var(--txd);letter-spacing:.1em;text-transform:uppercase}
+.vl-table{border-collapse:collapse;width:100%}
+.vl-table th{background:var(--s2);border:1px solid var(--bd);padding:7px 14px;font-size:10px;color:var(--ac);letter-spacing:.1em;text-transform:uppercase;text-align:left;white-space:nowrap}
+.vl-table td{border:1px solid var(--bdl);padding:6px 14px;font-size:11px;vertical-align:middle}
+.vl-table tr:hover td{background:rgba(227,160,7,.04)}
+.vl-table tr.vl-done td{opacity:.6}
+.vl-table tr.vl-done td:first-child{opacity:1}
+.vl-chk{width:15px;height:15px;accent-color:var(--ins);cursor:pointer}
+.vl-note-input{
+  background:transparent;border:none;border-bottom:1px solid var(--bdl);
+  color:var(--txm);font-family:var(--f);font-size:11px;width:220px;
+  padding:2px 4px;outline:none
+}
+.vl-note-input:focus{border-bottom-color:var(--ac);color:var(--tx)}
+.vl-status-select{
+  background:var(--s2);border:1px solid var(--bd);color:var(--tx);
+  font-family:var(--f);font-size:10px;padding:2px 4px;cursor:pointer;outline:none
+}
+.vl-status-select:focus{border-color:var(--ac)}
+.vl-date-cell{font-size:10px;color:var(--txd);letter-spacing:.04em}
+.vl-tester{font-size:10px;color:var(--upd)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ── INLINE CELL EDITING ── */
+.cell-edit-input{
+  background:var(--s2);border:1px solid var(--ac);color:var(--tx);
+  font-family:var(--f);font-size:11px;padding:2px 6px;outline:none;
+  width:100%;min-width:60px;box-sizing:border-box
+}
+select.cell-edit-input{cursor:pointer;background:var(--s2)}
+.editable:hover{background:rgba(227,160,7,.08)!important;cursor:cell}
+.editable-hint{font-size:9px;color:var(--txd);letter-spacing:.06em;margin-left:4px}
+.del-btn{
+  background:none;border:none;color:var(--del);cursor:pointer;
+  font-size:13px;padding:0 4px;opacity:0;transition:.1s;
+  line-height:1;position:absolute;right:1px;top:50%;transform:translateY(-50%)
+}
+.xtable tbody tr:hover .del-btn{opacity:1}
+.del-btn:hover{color:#fff;background:var(--del);border-radius:0}
+.add-row-tr td{
+  background:var(--insb)!important;border:1px dashed var(--ins)!important;
+  cursor:pointer;text-align:center;color:var(--ins);
+  font-size:10px;letter-spacing:.1em;padding:7px!important
+}
+.add-row-tr:hover td{background:rgba(26,154,126,.18)!important}
+
+/* SQL EDIT MODAL */
+.sql-modal-box{width:640px}
+#sql-textarea{
+  background:var(--g);border:1px solid var(--bd);color:var(--ins);
+  font-family:var(--f);font-size:11px;padding:12px;line-height:1.8;
+  resize:vertical;outline:none;width:100%
+}
+#sql-textarea:focus{border-color:var(--ac)}
+
+/* formula bar edit button */
+.fbar-actions{display:flex;gap:4px;padding:0 8px;flex-shrink:0;align-items:center}
+.fbar-btn{
+  background:none;border:1px solid var(--bd);color:var(--txm);
+  padding:1px 8px;cursor:pointer;font-family:var(--f);font-size:9px;
+  letter-spacing:.06em;transition:.1s
+}
+.fbar-btn:hover:not(:disabled){border-color:var(--ac);color:var(--ac)}
+.fbar-btn:disabled{opacity:.3;cursor:default}
+</style>
+</head>
+<body>
+
+<!-- ── CONFIG MODAL ── -->
+<div class="modal-bg" id="cfg-modal">
+  <div class="modal-box">
+    <div class="modal-title">Connect to Supabase</div>
+    <div class="modal-field">
+      <div class="modal-label">Project URL</div>
+      <input class="modal-input" id="cfg-url" placeholder="https://xxxx.supabase.co" spellcheck="false">
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Anon Key</div>
+      <input class="modal-input" id="cfg-key" type="password" placeholder="eyJhbGci..." spellcheck="false">
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Your Name (tester)</div>
+      <input class="modal-input" id="cfg-name" placeholder="e.g. nihas" spellcheck="false">
+    </div>
+    <button class="modal-btn" id="cfg-btn">Connect</button>
+    <div class="modal-err" id="cfg-err"></div>
+    <div class="modal-hint">
+      Find your URL + anon key in<br>
+      Supabase → Project Settings → API.<br>
+      These are saved in localStorage — never in the DB.
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div class="app" id="app" style="display:none">
+
+  <!-- title bar -->
+  <div class="titlebar">
+    <div class="dots"><div class="dot r"></div><div class="dot y"></div><div class="dot gr"></div></div>
+    <div class="tbar-name">pulse_db_audit.html &nbsp;—&nbsp; <em>Pulse Logistics · DBA Audit System</em></div>
+    <span class="tbar-tester" id="tbar-tester"></span>
+    <div class="conn-badge off" id="conn-badge"><div class="conn-dot"></div><span id="conn-text">CONNECTING</span></div>
+  </div>
+
+  <!-- ribbon -->
+  <div class="ribbon">
+    <div class="rg">
+      <span class="rg-label">Home</span>
+      <button class="rbtn" onclick="loadAllData()">⟳ Refresh</button>
+      <button class="rbtn on">Freeze Panes</button>
+    </div>
+    <div class="rg">
+      <span class="rg-label">Edit</span>
+      <button class="rbtn" onclick="addNewAction()">+ Add Row</button>
+      <button class="rbtn" id="edit-sql-btn" onclick="openSQLEdit()" disabled>✎ Edit SQL</button>
+    </div>
+    <div class="rg">
+      <span class="rg-label">DBA</span>
+      <button class="rbtn" id="snap-toggle-btn" onclick="toggleSnapPanel()">📸 Snapshot</button>
+      <button class="rbtn" onclick="takeLiveSnapshot('before')">◀ Before</button>
+      <button class="rbtn" onclick="takeLiveSnapshot('after')">After ▶</button>
+    </div>
+    <div class="rg">
+      <span class="rg-label">Session</span>
+      <button class="rbtn" onclick="showCfg()">⚙ Settings</button>
+      <button class="rbtn" onclick="resetVerifications()">Reset Log</button>
+    </div>
+    <div class="rg">
+      <span class="rg-label">Status</span>
+      <span id="ribbon-status" style="font-size:10px;color:var(--txd);padding:0 4px">—</span>
+    </div>
+  </div>
+
+  <!-- formula bar -->
+  <div class="fbar">
+    <div class="namebox" id="namebox">C1</div>
+    <div class="fx-label">fx</div>
+    <div class="formula-wrap" onclick="copyFormula()" style="cursor:pointer">
+      <div class="formula hint" id="formula">-- Click any row to load its verification SQL</div>
+    </div>
+    <div class="fbar-actions">
+      <button class="fbar-btn" onclick="copyFormula()">COPY</button>
+      <button class="fbar-btn" id="fbar-edit-btn" onclick="openSQLEdit()" disabled>EDIT SQL</button>
+    </div>
+  </div>
+
+  <!-- main area -->
+  <div class="main-area">
+    <div class="gridarea" id="gridarea">
+      <div class="loading-bar" id="lbar"></div>
+    </div>
+    <!-- snapshot panel -->
+    <div class="snap-panel" id="snap-panel">
+      <div class="snap-head">
+        <div class="snap-title">DB Snapshot Compare</div>
+        <button class="snap-close" onclick="toggleSnapPanel()">✕</button>
+      </div>
+      <div class="snap-btns">
+        <button class="snap-btn" id="snap-before-btn" onclick="takeLiveSnapshot('before')">📸 Take Before</button>
+        <button class="snap-btn" id="snap-after-btn" onclick="takeLiveSnapshot('after')">📸 Take After</button>
+      </div>
+      <div class="snap-body" id="snap-body">
+        <div style="font-size:11px;color:var(--txd);line-height:1.8;padding:8px 0">
+          1. Click "Take Before" before your action<br>
+          2. Perform the action in the app<br>
+          3. Click "Take After"<br>
+          4. See what changed ↓
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- sheet tabs -->
+  <div class="sheettabs">
+    <button class="tab active" data-sheet="flow">📋 DATA FLOW MATRIX</button>
+    <button class="tab" data-sheet="state">🔄 TRIP STATE MACHINE</button>
+    <button class="tab" data-sheet="coverage">🛡 AUDIT COVERAGE</button>
+    <button class="tab" data-sheet="sql">🔍 SNAPSHOT SQL</button>
+    <button class="tab" data-sheet="log">✅ VERIFY LOG</button>
+  </div>
+</div>
+
+<!-- ── SQL EDIT MODAL ── -->
+<div class="modal-bg hidden" id="sql-modal">
+  <div class="modal-box sql-modal-box">
+    <div class="modal-title">Edit Verification SQL</div>
+    <div class="modal-field">
+      <div class="modal-label">Action: <span id="sql-modal-label" style="color:var(--tx);text-transform:none;letter-spacing:0"></span></div>
+      <textarea class="modal-input" id="sql-textarea" rows="13" spellcheck="false" placeholder="-- Enter verification SQL..."></textarea>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:4px">
+      <button class="modal-btn" onclick="saveSQLEdit()" style="flex:1">Save SQL</button>
+      <button class="modal-btn" onclick="closeSQLModal()" style="flex:0 0 110px;background:var(--s2);border-color:var(--bd);color:var(--txm)">Cancel</button>
+    </div>
+    <div class="modal-err" id="sql-err"></div>
+  </div>
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const S = {
+  sb: null,
+  actions: [],
+  vers: {},       // { [action_id]: row }
+  coverage: [],
+  snap: { before: null, after: null },
+  selRow: null,
+  sheet: 'flow',
+  tester: '',
+  realtime: null
+};
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+(function init() {
+  // Bind tabs and cfg-btn first — before any early return
+  document.getElementById('cfg-btn').addEventListener('click', onCfgSubmit);
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      S.sheet = t.dataset.sheet;
+      renderSheet(S.sheet);
+      clearFormula();
+    });
+  });
+  if (window.__SB_URL__ && window.__SB_KEY__) {
+    connect(window.__SB_URL__, window.__SB_KEY__, getCfg().name || 'dev');
+    return;
+  }
+  const cfg = getCfg();
+  if (cfg.url && cfg.key) {
+    connect(cfg.url, cfg.key, cfg.name);
+  } else {
+    document.getElementById('cfg-modal').classList.remove('hidden');
+  }
+})();
+
+function getCfg() {
+  try { return JSON.parse(localStorage.getItem('pulse_audit_cfg') || '{}'); }
+  catch { return {}; }
+}
+
+async function onCfgSubmit() {
+  const url  = document.getElementById('cfg-url').value.trim();
+  const key  = document.getElementById('cfg-key').value.trim();
+  const name = document.getElementById('cfg-name').value.trim();
+  const err  = document.getElementById('cfg-err');
+  if (!url || !key) { err.textContent = 'URL and anon key are required.'; return; }
+  err.textContent = '';
+  document.getElementById('cfg-btn').textContent = 'Connecting...';
+  await connect(url, key, name);
+}
+
+async function connect(url, key, name) {
+  S.sb = window.supabase.createClient(url, key, {
+    auth: { persistSession: false }
+  });
+  S.tester = name || 'unknown';
+  localStorage.setItem('pulse_audit_cfg', JSON.stringify({ url, key, name }));
+  document.getElementById('tbar-tester').textContent = `tester: ${S.tester}`;
+  setConnStatus('loading');
+  const ok = await loadAllData();
+  if (ok) {
+    document.getElementById('cfg-modal').classList.add('hidden');
+    document.getElementById('app').style.display = 'flex';
+    subscribeRealtime();
+  } else {
+    document.getElementById('cfg-btn').textContent = 'Connect';
+  }
+}
+
+function showCfg() {
+  const cfg = getCfg();
+  document.getElementById('cfg-url').value = cfg.url || '';
+  document.getElementById('cfg-key').value = cfg.key || '';
+  document.getElementById('cfg-name').value = cfg.name || '';
+  document.getElementById('cfg-err').textContent = '';
+  document.getElementById('cfg-btn').textContent = 'Connect';
+  document.getElementById('cfg-modal').classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════════
+async function loadAllData() {
+  setLoading(true);
+  try {
+    const [aRes, vRes] = await Promise.all([
+      S.sb.from('pulse_audit_actions').select('*').order('seq'),
+      S.sb.from('pulse_audit_verifications').select('*')
+    ]);
+    if (aRes.error) throw aRes.error;
+    S.actions = aRes.data || [];
+    S.vers = Object.fromEntries((vRes.data || []).map(v => [v.action_id, v]));
+    setConnStatus('ok');
+    setRibbonStatus(`${S.actions.length} actions · ${Object.keys(S.vers).length} verified`);
+    renderSheet(S.sheet);
+    return true;
+  } catch(e) {
+    setConnStatus('err');
+    showToast('Load failed: ' + e.message, 'err');
+    document.getElementById('cfg-err').textContent = e.message;
+    return false;
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function loadCoverage() {
+  if (S.coverage.length) return;
+  setLoading(true);
+  const { data, error } = await S.sb.rpc('get_trigger_coverage');
+  setLoading(false);
+  if (error) { showToast('Coverage load failed: ' + error.message, 'err'); return; }
+  S.coverage = data || [];
+  renderSheet('coverage');
+}
+
+// ═══════════════════════════════════════════════════════
+// SNAPSHOT
+// ═══════════════════════════════════════════════════════
+async function takeLiveSnapshot(type) {
+  setLoading(true);
+  const { data, error } = await S.sb.rpc('get_db_snapshot');
+  setLoading(false);
+  if (error) { showToast('Snapshot failed: ' + error.message, 'err'); return; }
+  S.snap[type] = data;
+  const btn = document.getElementById(`snap-${type}-btn`);
+  if (btn) btn.classList.add('taken');
+  renderSnapPanel();
+  showToast(`${type === 'before' ? 'Before' : 'After'} snapshot taken`, 'ok');
+  if (!document.getElementById('snap-panel').classList.contains('open')) {
+    toggleSnapPanel();
+  }
+}
+
+function renderSnapPanel() {
+  const { before, after } = S.snap;
+  const body = document.getElementById('snap-body');
+  if (!before && !after) return;
+  const tables = Object.keys(before || after || {}).filter(k => k !== 'snapped_at');
+  let html = '';
+  if (before) html += `<div class="snap-ts">BEFORE: ${new Date(before.snapped_at).toLocaleTimeString()}</div>`;
+  if (after)  html += `<div class="snap-ts">AFTER:  ${new Date(after.snapped_at).toLocaleTimeString()}</div>`;
+  html += `<table class="snap-table" style="margin-top:12px">
+    <tr><th>TABLE</th><th>B</th><th>A</th><th>ΔDIFF</th></tr>`;
+  tables.forEach(t => {
+    const b  = before ? (before[t] ?? '—') : '—';
+    const a  = after  ? (after[t]  ?? '—') : '—';
+    const diff = (after && before && typeof a === 'number' && typeof b === 'number') ? (a - b) : null;
+    const diffStr = diff === null ? '<span class="diff-na">—</span>'
+                  : diff > 0     ? `<span class="diff-pos">+${diff}</span>`
+                  : diff < 0     ? `<span class="diff-neg">${diff}</span>`
+                  :                `<span class="diff-zero">0</span>`;
+    const highlight = diff && diff !== 0 ? 'background:rgba(227,160,7,.05);' : '';
+    html += `<tr style="${highlight}">
+      <td class="snap-tbl">${t}</td>
+      <td class="snap-num">${b}</td>
+      <td class="snap-num">${after ? a : '—'}</td>
+      <td>${diffStr}</td>
+    </tr>`;
+  });
+  html += '</table>';
+  body.innerHTML = html;
+}
+
+function toggleSnapPanel() {
+  const p = document.getElementById('snap-panel');
+  const btn = document.getElementById('snap-toggle-btn');
+  p.classList.toggle('open');
+  btn.classList.toggle('snap-on');
+}
+
+// ═══════════════════════════════════════════════════════
+// REALTIME
+// ═══════════════════════════════════════════════════════
+function subscribeRealtime() {
+  if (S.realtime) S.sb.removeChannel(S.realtime);
+  S.realtime = S.sb.channel('pulse-audit-rt')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pulse_audit_verifications' },
+      ({ eventType, new: n, old: o }) => {
+        if (eventType === 'INSERT' || eventType === 'UPDATE') {
+          S.vers[n.action_id] = n;
+        } else if (eventType === 'DELETE') {
+          delete S.vers[o.action_id];
+        }
+        updateStatsStrip();
+        if (S.sheet === 'log') renderSheet('log');
+        setRibbonStatus(`${S.actions.length} actions · ${Object.keys(S.vers).length} verified`);
+      })
+    .subscribe();
+}
+
+// ═══════════════════════════════════════════════════════
+// VERIFY ACTIONS
+// ═══════════════════════════════════════════════════════
+async function toggleVerify(actionId, checked) {
+  if (checked) {
+    const { error } = await S.sb.from('pulse_audit_verifications').upsert({
+      action_id: actionId,
+      tester_name: S.tester,
+      status: 'pass',
+      verified_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'action_id' });
+    if (error) { showToast('Verify failed: ' + error.message, 'err'); return; }
+    S.vers[actionId] = { action_id: actionId, tester_name: S.tester, status: 'pass' };
+    showToast(`✔ Action ${actionId} marked verified`, 'ok');
+  } else {
+    const { error } = await S.sb.from('pulse_audit_verifications').delete().eq('action_id', actionId);
+    if (error) { showToast('Remove failed: ' + error.message, 'err'); return; }
+    delete S.vers[actionId];
+    showToast(`Action ${actionId} unverified`, 'info');
+  }
+  updateStatsStrip();
+  setRibbonStatus(`${S.actions.length} actions · ${Object.keys(S.vers).length} verified`);
+}
+
+async function updateVerField(actionId, field, value) {
+  const current = S.vers[actionId];
+  const upsertData = {
+    action_id: actionId,
+    tester_name: S.tester,
+    status: 'pass',
+    ...current,
+    [field]: value,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await S.sb.from('pulse_audit_verifications').upsert(upsertData, { onConflict: 'action_id' });
+  if (error) { showToast('Update failed: ' + error.message, 'err'); return; }
+  S.vers[actionId] = { ...S.vers[actionId], [field]: value };
+}
+
+async function resetVerifications() {
+  if (!confirm('Delete ALL verification records? This cannot be undone.')) return;
+  const { error } = await S.sb.from('pulse_audit_verifications').delete().not('id', 'is', null);
+  if (error) { showToast('Reset failed: ' + error.message, 'err'); return; }
+  S.vers = {};
+  updateStatsStrip();
+  renderSheet(S.sheet);
+  showToast('All verifications cleared', 'info');
+}
+
+// ═══════════════════════════════════════════════════════
+// FORMULA BAR
+// ═══════════════════════════════════════════════════════
+function setFormula(action) {
+  const el = document.getElementById('formula');
+  const nb = document.getElementById('namebox');
+  if (!action) return;
+  el.textContent = (action.verify_sql || '').replace(/\n/g, ' ');
+  el.classList.remove('hint');
+  el._sql = action.verify_sql;
+  el._actionId = action.id;
+  nb.textContent = `C${action.seq + 1}`;
+  // Enable Edit SQL buttons
+  ['edit-sql-btn','fbar-edit-btn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = false;
+  });
+}
+
+function clearFormula() {
+  const el = document.getElementById('formula');
+  el.textContent = '-- Click any row to load its verification SQL';
+  el.classList.add('hint');
+  el._sql = null;
+  el._actionId = null;
+  document.getElementById('namebox').textContent = 'C1';
+  ['edit-sql-btn','fbar-edit-btn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = true;
+  });
+}
+
+function copyFormula() {
+  const el = document.getElementById('formula');
+  const sql = el._sql;
+  if (!sql) return;
+  navigator.clipboard.writeText(sql).then(() => showToast('SQL copied to clipboard', 'ok'));
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDERING — SHARED HELPERS
+// ═══════════════════════════════════════════════════════
+function badge(text, cls) {
+  return `<span class="badge ${cls}">${text}</span>`;
+}
+function opCell(arr, cls) {
+  if (!arr || !arr.length) return `<span class="cell-dim">—</span>`;
+  return arr.map(t => `<span class="badge ${cls}" style="margin:1px">${t}</span>`).join(' ');
+}
+function priB(p) {
+  const m = { HIGH: 'b-hi', MEDIUM: 'b-md', LOW: 'b-lo' };
+  return badge(p, m[p] || 'b-lo');
+}
+function statusB(status) {
+  const m = { pass: 'b-pass', fail: 'b-fail', partial: 'b-partial' };
+  return badge(status.toUpperCase(), m[status] || 'b-lo');
+}
+
+// ═══════════════════════════════════════════════════════
+// SHEET: DATA FLOW MATRIX
+// ═══════════════════════════════════════════════════════
+function renderFlow() {
+  const acts = S.actions;
+  const withTrigger = acts.filter(a => a.trigger_name).length;
+  const withAudit   = acts.filter(a => a.audit_table).length;
+  const vCount      = Object.keys(S.vers).length;
+
+  const stats = `<div class="stats-strip">
+    <div class="stat-item"><div class="stat-val">${acts.length}</div><div class="stat-label">Total Actions</div></div>
+    <div class="stat-divider"></div>
+    <div class="stat-item"><div class="stat-val ins">${withTrigger}</div><div class="stat-label">Auto Triggers</div></div>
+    <div class="stat-divider"></div>
+    <div class="stat-item"><div class="stat-val upd">${withAudit}</div><div class="stat-label">Audit-Covered</div></div>
+    <div class="stat-divider"></div>
+    <div class="stat-item"><div class="stat-val del" id="ss-blind">${acts.length - withAudit}</div><div class="stat-label">Blind Spots</div></div>
+    <div class="stat-divider"></div>
+    <div class="stat-item"><div class="stat-val trg" id="ss-ver">${vCount}/${acts.length}</div><div class="stat-label">Verified</div></div>
+  </div>`;
+
+  const letters = ['','A','B','C','D','E','F','G','H','I','J','K','L'];
+  const cols = ['#','ACTION','ROUTE','SERVICE','INSERTS','UPDATES','TRIGGER','AUDIT TABLE','PRI','DATA WRITTEN','✓'];
+
+  const clRow = `<tr class="cl-row">
+    <th class="corner rn"></th>
+    ${letters.slice(1).map(l => `<th>${l}</th>`).join('')}
+  </tr>`;
+  const dhRow = `<tr class="dh-row">
+    <td class="rn">1</td>
+    ${cols.map(c => `<td>${c}</td>`).join('')}
+  </tr>`;
+
+  const rows = acts.map((a, i) => {
+    const v = S.vers[a.id];
+    const checked = v ? 'checked' : '';
+    const ins = (a.ins_tables||[]).join(', ') || '—';
+    const upd = (a.upd_tables||[]).join(', ') || '—';
+    return `<tr data-id="${a.id}" class="${S.selRow === a.id ? 'sel' : ''}">
+      <td class="rn" style="position:relative">${i + 2}<button class="del-btn" onclick="deleteAction('${a.id}',event)" title="Delete row">×</button></td>
+      <td class="cell-num">${a.id}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','action')">${a.action}</td>
+      <td class="editable cell-file" ondblclick="startCellEdit(this,'${a.id}','route')">${a.route||'—'}</td>
+      <td class="editable cell-code" ondblclick="startCellEdit(this,'${a.id}','service')">${a.service||'—'}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','ins_tables')">${opCell(a.ins_tables,'b-ins')}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','upd_tables')">${opCell(a.upd_tables,'b-upd')}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','trigger_name')">${a.trigger_name?badge(a.trigger_name,'b-trg'):'<span class="cell-dim">—</span>'}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','audit_table')">${a.audit_table?badge(a.audit_table,'b-trg'):'<span class="cell-dim">—</span>'}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','priority')">${priB(a.priority)}</td>
+      <td class="editable" ondblclick="startCellEdit(this,'${a.id}','data_detail')" style="max-width:280px;white-space:normal">${a.data_detail ? `<span style="font-size:10px;color:#7EE787;line-height:1.6">${a.data_detail}</span>` : '<span class="cell-dim">—</span>'}</td>
+      <td style="text-align:center"><input type="checkbox" ${checked} data-verify-id="${a.id}" class="vl-chk"></td>
+    </tr>`;
+  }).join('');
+
+  const addRow = `<tr class="add-row-tr" onclick="addNewAction()">
+    <td class="rn"></td>
+    <td colspan="11">＋ click to add new action row</td>
+  </tr>`;
+
+  return stats + `<table class="xtable">
+    <thead>${clRow}${dhRow}</thead>
+    <tbody>${rows}${addRow}</tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SHEET: STATE MACHINE (static — schema knowledge)
+// ═══════════════════════════════════════════════════════
+function renderState() {
+  const transitions = [
+    { from: '—',       to: 'pending',   action: 'Trip created by dispatcher', actor: 'dispatcher' },
+    { from: 'pending',   to: 'assigned',  action: 'Driver + vehicle assigned',  actor: 'dispatcher' },
+    { from: 'assigned',  to: 'started',   action: 'OTP verified at pickup',      actor: 'driver' },
+    { from: 'started',   to: 'completed', action: 'Delivery done + POD upload',  actor: 'driver/dispatcher' },
+    { from: 'pending',   to: 'cancelled', action: 'Manual cancellation',         actor: 'dispatcher' },
+    { from: 'assigned',  to: 'cancelled', action: 'Manual cancellation',         actor: 'dispatcher' },
+    { from: 'started',   to: 'cancelled', action: 'Emergency cancellation',      actor: 'dispatcher' },
+  ];
+
+  return `<div class="sm-sheet">
+    <div class="sm-title">Trip Lifecycle — State Machine</div>
+    <div class="sm-sub">trips.status · trigger: trg_trip_status_audit → trip_status_audit · trigger: trg_log_trip_completed → trip_workflow_events</div>
+    <div class="sm-flow">
+      <div class="sm-node pending"><div class="sm-node-status">pending</div><div class="sm-node-desc">trip created</div></div>
+      <div class="sm-arrow"><div class="sm-arr-line"></div><div class="sm-arr-label">assign driver<br>+ vehicle</div></div>
+      <div class="sm-node assigned"><div class="sm-node-status">assigned</div><div class="sm-node-desc">driver + vehicle set</div></div>
+      <div class="sm-arrow"><div class="sm-arr-line"></div><div class="sm-arr-label">OTP verified<br>at pickup</div></div>
+      <div class="sm-node started"><div class="sm-node-status">started</div><div class="sm-node-desc">in transit</div></div>
+      <div class="sm-arrow"><div class="sm-arr-line"></div><div class="sm-arr-label">delivery done<br>+ POD</div></div>
+      <div class="sm-node completed"><div class="sm-node-status">completed</div><div class="sm-node-desc">→ trip_workflow_events</div></div>
+    </div>
+    <div class="sm-cancel-row">
+      <div class="sm-cancel-box">
+        <div class="sm-cancel-title">Cancellation rules</div>
+        <ul class="sm-cancel-list">
+          <li>From <strong>pending</strong> — any dispatcher, no constraints</li>
+          <li>From <strong>assigned</strong> — dispatcher only, driver notified</li>
+          <li>From <strong>started</strong> — emergency only, reason required</li>
+          <li>From <strong>completed</strong> — NOT ALLOWED (immutable)</li>
+        </ul>
+      </div>
+      <div class="sm-cancel-box" style="border-color:var(--upd);background:var(--updb)">
+        <div class="sm-cancel-title" style="color:var(--upd)">Payment status (parallel track)</div>
+        <ul class="sm-cancel-list" style="--del:var(--upd)">
+          <li>pending → paid (full settlement)</li>
+          <li>pending → partial (advance only)</li>
+          <li>partial → paid (balance cleared)</li>
+          <li>any → cancelled (trip cancelled)</li>
+        </ul>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--ac);letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px">DB writes per status transition</div>
+    <table class="sm-db-table">
+      <thead><tr><th>Transition</th><th>trips UPDATE fields</th><th>Trigger fires</th><th>Audit table</th></tr></thead>
+      <tbody>
+        ${transitions.map(t => `<tr>
+          <td><span class="trans">${t.from} → ${t.to}</span></td>
+          <td class="cell-code">status, updated_at${t.to === 'completed' ? ', completed_at' : ''}</td>
+          <td class="ta">${t.to === 'completed' ? 'trg_log_trip_completed' : 'trg_trip_status_audit'}</td>
+          <td class="ta">${t.to === 'completed' ? 'trip_workflow_events' : 'trip_status_audit'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SHEET: AUDIT COVERAGE (live from pg_catalog via RPC)
+// ═══════════════════════════════════════════════════════
+function renderCoverage() {
+  if (!S.coverage.length) {
+    loadCoverage();
+    return `<div style="padding:40px 48px;font-size:11px;color:var(--txm)">Loading coverage from pg_catalog…</div>`;
+  }
+
+  const covered   = S.coverage.filter(r => r.trg_count > 1).length;
+  const partial   = S.coverage.filter(r => r.trg_count === 1).length;
+  const uncovered = S.coverage.filter(r => r.trg_count === 0).length;
+
+  return `<div class="cov-sheet">
+    <div class="cov-title">Audit Coverage — Live from pg_catalog</div>
+    <div class="cov-sub">Real data from get_trigger_coverage() RPC · refresh to update</div>
+    <div class="cov-summary">
+      <div class="cov-stat"><div class="cov-stat-val v-ins">${covered}</div><div class="cov-stat-label">Multi-trigger</div></div>
+      <div class="cov-stat"><div class="cov-stat-val v-ac">${partial}</div><div class="cov-stat-label">Single Trigger</div></div>
+      <div class="cov-stat"><div class="cov-stat-val v-del">${uncovered}</div><div class="cov-stat-label">No Triggers</div></div>
+      <div class="cov-stat"><div class="cov-stat-val v-trg">${S.coverage.filter(r => r.has_rls).length}/${S.coverage.length}</div><div class="cov-stat-label">RLS Enabled</div></div>
+    </div>
+    <table class="cov-table">
+      <thead><tr>
+        <th>TABLE</th>
+        <th class="center">RLS</th>
+        <th>TRIGGERS (live)</th>
+        <th>TRIGGER COUNT</th>
+        <th>COVERAGE</th>
+      </tr></thead>
+      <tbody>
+        ${S.coverage.map(r => {
+          const pct = Math.min(100, r.trg_count * 30 + (r.has_rls ? 20 : 0));
+          const cls = pct >= 70 ? 'hi' : pct >= 30 ? 'md' : 'lo';
+          return `<tr>
+            <td class="tname">${r.tbl}</td>
+            <td class="center">${r.has_rls ? '<span class="cov-check">✔</span>' : '<span class="cov-x">✘</span>'}</td>
+            <td class="cov-trgs">${r.trg_names ? r.trg_names.join(', ') : '<span class="cell-dim">—</span>'}</td>
+            <td style="text-align:center;color:${r.trg_count > 0 ? 'var(--ins)' : 'var(--del)'}">${r.trg_count}</td>
+            <td><div class="pbar"><div class="pbar-track"><div class="pbar-fill ${cls}" style="width:${pct}%"></div></div><span class="pbar-txt">${pct}%</span></div></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SHEET: SNAPSHOT SQL (from DB verify_sql fields)
+// ═══════════════════════════════════════════════════════
+function highlight(sql) {
+  if (!sql) return '';
+  const kw = ['SELECT','FROM','JOIN','LEFT','INNER','WHERE','ORDER','BY','LIMIT','INSERT','UPDATE',
+               'DELETE','INTO','VALUES','SET','ON','AND','OR','NOT','IS','IN','AS','DESC','ASC',
+               'COUNT','NULL','COALESCE','GROUP','HAVING','CASE','WHEN','THEN','ELSE','END'];
+  let s = sql.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  kw.forEach(k => { s = s.replace(new RegExp(`\\b${k}\\b`, 'g'), `<span class="sk">${k}</span>`); });
+  s = s.replace(/'([^']*)'/g, `<span class="ss">'$1'</span>`);
+  s = s.replace(/(--[^\n]*)/g, `<span class="sm2">$1</span>`);
+  return s;
+}
+
+function renderSQL() {
+  const GLOBAL_SQL = `SELECT
+  (SELECT COUNT(*) FROM trips)                      AS trips,
+  (SELECT COUNT(*) FROM trip_assignment_audit)      AS assignment_audit,
+  (SELECT COUNT(*) FROM trip_workflow_events)       AS workflow_events,
+  (SELECT COUNT(*) FROM trip_status_audit)          AS status_audit,
+  (SELECT COUNT(*) FROM trip_location_checkpoints)  AS loc_pings,
+  (SELECT COUNT(*) FROM trip_documents)             AS documents,
+  (SELECT COUNT(*) FROM transactions)               AS transactions,
+  (SELECT COUNT(*) FROM workspace_audit_log)        AS workspace_audit,
+  (SELECT COUNT(*) FROM indents)                    AS indents,
+  (SELECT COUNT(*) FROM network_bids)               AS bids;`;
+
+  const RECON_SQL = `-- Finance reconciliation: completed trips without matching events
+SELECT t.trip_number, t.status, t.client_price,
+  MAX(CASE WHEN w.event_type = 'invoice.generated' THEN 1 ELSE 0 END) AS has_invoice,
+  MAX(CASE WHEN w.event_type = 'supplier.paid'     THEN 1 ELSE 0 END) AS supplier_paid,
+  MAX(CASE WHEN w.event_type = 'pod.uploaded'      THEN 1 ELSE 0 END) AS has_pod
+FROM trips t
+LEFT JOIN trip_workflow_events w ON w.trip_id = t.id
+WHERE t.status = 'completed'
+GROUP BY t.id, t.trip_number, t.status, t.client_price
+ORDER BY t.completed_at DESC
+LIMIT 20;`;
+
+  const RLS_SQL = `-- Verify RLS enforcement (run as anon role)
+SET ROLE anon;
+SELECT COUNT(*) AS exposed_trips    FROM trips;
+SELECT COUNT(*) AS exposed_txns     FROM transactions;
+SELECT COUNT(*) AS exposed_drivers  FROM drivers;
+RESET ROLE;`;
+
+  const ORPHAN_SQL = `-- Find orphan audit records (referencing deleted trips)
+SELECT 'trip_assignment_audit' AS src, a.trip_id, a.changed_at
+FROM trip_assignment_audit a
+LEFT JOIN trips t ON t.id = a.trip_id
+WHERE t.id IS NULL
+UNION ALL
+SELECT 'trip_workflow_events', w.trip_id, w.created_at
+FROM trip_workflow_events w
+LEFT JOIN trips t ON t.id = w.trip_id
+WHERE t.id IS NULL
+UNION ALL
+SELECT 'trip_status_audit', s.trip_id, s.changed_at
+FROM trip_status_audit s
+LEFT JOIN trips t ON t.id = s.trip_id
+WHERE t.id IS NULL;`;
+
+  const actBlocks = S.actions.slice(0, 8).map(a => `
+    <div class="sql-block">
+      <div class="sql-block-head" onclick="copySQL(this, \`${(a.verify_sql||'').replace(/`/g,"'")}\`)">
+        <div>
+          <div class="sql-block-name">${a.id}. ${a.action}</div>
+          <div class="sql-block-tag">${(a.ins_tables||[]).concat(a.upd_tables||[]).join(', ')}</div>
+        </div>
+        <span class="copy-hint">COPY</span>
+      </div>
+      <div class="sql-code">${highlight(a.verify_sql)}</div>
+    </div>`).join('');
+
+  return `<div class="sql-sheet">
+    <div style="grid-column:1/-1"><div class="sql-title">Snapshot SQL Reference</div>
+    <div class="sql-sub">Click any block header to copy SQL · Actions load from DB · Global queries hardcoded</div></div>
+    <div class="sql-block">
+      <div class="sql-block-head" onclick="copySQL(this, \`${GLOBAL_SQL.replace(/`/g,"'")}\`)">
+        <div><div class="sql-block-name">Global State Snapshot</div><div class="sql-block-tag">before/after any action</div></div>
+        <span class="copy-hint">COPY</span>
+      </div>
+      <div class="sql-code">${highlight(GLOBAL_SQL)}</div>
+    </div>
+    <div class="sql-block">
+      <div class="sql-block-head" onclick="copySQL(this, \`${RECON_SQL.replace(/`/g,"'")}\`)">
+        <div><div class="sql-block-name">Finance Reconciliation</div><div class="sql-block-tag">completed trips audit</div></div>
+        <span class="copy-hint">COPY</span>
+      </div>
+      <div class="sql-code">${highlight(RECON_SQL)}</div>
+    </div>
+    <div class="sql-block">
+      <div class="sql-block-head" onclick="copySQL(this, \`${RLS_SQL.replace(/`/g,"'")}\`)">
+        <div><div class="sql-block-name">RLS Enforcement Check</div><div class="sql-block-tag">run as anon role</div></div>
+        <span class="copy-hint">COPY</span>
+      </div>
+      <div class="sql-code">${highlight(RLS_SQL)}</div>
+    </div>
+    <div class="sql-block">
+      <div class="sql-block-head" onclick="copySQL(this, \`${ORPHAN_SQL.replace(/`/g,"'")}\`)">
+        <div><div class="sql-block-name">Orphan Audit Records</div><div class="sql-block-tag">data integrity check</div></div>
+        <span class="copy-hint">COPY</span>
+      </div>
+      <div class="sql-code">${highlight(ORPHAN_SQL)}</div>
+    </div>
+    ${actBlocks}
+  </div>`;
+}
+
+function copySQL(el, sql) {
+  navigator.clipboard.writeText(sql).then(() => {
+    const hint = el.querySelector('.copy-hint');
+    if (hint) { hint.textContent = 'COPIED!'; setTimeout(() => { hint.textContent = 'COPY'; }, 1500); }
+    showToast('SQL copied', 'ok');
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// SHEET: VERIFY LOG
+// ═══════════════════════════════════════════════════════
+function renderLog() {
+  const vCount = Object.keys(S.vers).length;
+  const total  = S.actions.length;
+  const pct    = total ? Math.round(vCount / total * 100) : 0;
+
+  const rows = S.actions.map(a => {
+    const v = S.vers[a.id];
+    const done = !!v;
+    const statusOpts = ['pass','fail','partial'].map(s =>
+      `<option value="${s}" ${v?.status === s ? 'selected' : ''}>${s}</option>`
+    ).join('');
+    const date = v?.verified_at ? new Date(v.verified_at).toISOString().slice(0, 10) : '';
+    return `<tr class="${done ? 'vl-done' : ''}" data-vl="${a.id}">
+      <td><input type="checkbox" class="vl-chk" ${done ? 'checked' : ''} data-verify-id="${a.id}"></td>
+      <td class="cell-num">${a.id}</td>
+      <td style="font-weight:bold">${a.action}</td>
+      <td>${priB(a.priority)}</td>
+      <td class="cell-code" style="font-size:10px">${(a.ins_tables||[]).concat(a.upd_tables||[]).slice(0,3).join(', ')}</td>
+      <td>${a.audit_table ? badge(a.audit_table, 'b-trg') : '<span class="cell-dim">—</span>'}</td>
+      <td>${done ? `<select class="vl-status-select" onchange="updateVerField('${a.id}','status',this.value)">${statusOpts}</select>` : '<span class="cell-dim">—</span>'}</td>
+      <td class="vl-date-cell">${date}</td>
+      <td>${done ? `<span class="vl-tester">${v.tester_name || '—'}</span>` : '<span class="cell-dim">—</span>'}</td>
+      <td><input class="vl-note-input" placeholder="add notes…" value="${done && v.notes ? v.notes : ''}"
+           onblur="if(this.value !== '${done && v.notes ? v.notes.replace(/'/g,"\\'") : ''}') updateVerField('${a.id}','notes',this.value)"></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="vl-sheet">
+    <div class="vl-title">Verification Log</div>
+    <div class="vl-sub">Live — syncs across all browsers via Supabase Realtime · tester: ${S.tester}</div>
+    <div class="vl-progress">
+      <div>
+        <div class="vl-prog-label">Verified</div>
+        <div class="vl-prog-main"><span class="vl-prog-n" id="vl-n">${vCount}</span><span class="vl-prog-total">/ ${total}</span></div>
+      </div>
+      <div class="vl-prog-bar"><div class="vl-prog-fill" id="vl-bar" style="width:${pct}%"></div></div>
+      <div>
+        <div class="vl-prog-label">Coverage</div>
+        <span class="vl-prog-pct" id="vl-pct">${pct}%</span>
+      </div>
+    </div>
+    <table class="vl-table">
+      <thead><tr>
+        <th>✓</th><th>#</th><th>ACTION</th><th>PRI</th>
+        <th>TABLES</th><th>AUDIT TABLE</th><th>STATUS</th>
+        <th>DATE</th><th>TESTER</th><th>NOTES</th>
+      </tr></thead>
+      <tbody id="vl-tbody">${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MAIN RENDER ROUTER
+// ═══════════════════════════════════════════════════════
+function renderSheet(name) {
+  S.sheet = name;
+  const ga = document.getElementById('gridarea');
+  const bar = document.getElementById('lbar');
+  let html = '';
+  switch (name) {
+    case 'flow':     html = renderFlow();     break;
+    case 'state':    html = renderState();    break;
+    case 'coverage': html = renderCoverage(); break;
+    case 'sql':      html = renderSQL();      break;
+    case 'log':      html = renderLog();      break;
+  }
+  // Preserve loading bar
+  ga.innerHTML = `<div class="loading-bar" id="lbar"></div>` + html;
+  if (bar && bar.classList.contains('active')) {
+    document.getElementById('lbar').classList.add('active');
+  }
+  bindGridEvents();
+}
+
+function updateStatsStrip() {
+  const vCount = Object.keys(S.vers).length;
+  const el = document.getElementById('ss-ver');
+  if (el) el.textContent = `${vCount}/${S.actions.length}`;
+  const vlN = document.getElementById('vl-n');
+  const vlBar = document.getElementById('vl-bar');
+  const vlPct = document.getElementById('vl-pct');
+  if (vlN) {
+    const pct = S.actions.length ? Math.round(vCount / S.actions.length * 100) : 0;
+    vlN.textContent = vCount;
+    if (vlBar) vlBar.style.width = pct + '%';
+    if (vlPct) vlPct.textContent = pct + '%';
+  }
+}
+
+function bindGridEvents() {
+  // Row click → formula bar
+  document.querySelectorAll('.xtable tbody tr[data-id]').forEach(tr => {
+    tr.addEventListener('click', e => {
+      if (e.target.type === 'checkbox') return;
+      document.querySelectorAll('.xtable tbody tr').forEach(r => r.classList.remove('sel'));
+      tr.classList.add('sel');
+      S.selRow = tr.dataset.id;
+      const a = S.actions.find(x => x.id === tr.dataset.id);
+      if (a) setFormula(a);
+    });
+  });
+
+  // Verify checkboxes (both in flow matrix and verify log)
+  document.querySelectorAll('[data-verify-id]').forEach(chk => {
+    chk.addEventListener('change', e => {
+      e.stopPropagation();
+      toggleVerify(chk.dataset.verifyId, chk.checked);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════
+function setConnStatus(s) {
+  const b = document.getElementById('conn-badge');
+  const t = document.getElementById('conn-text');
+  if (!b) return;
+  b.className = 'conn-badge ' + (s === 'ok' ? 'on' : 'off');
+  t.textContent = s === 'ok' ? 'CONNECTED' : s === 'loading' ? 'CONNECTING…' : 'ERROR';
+}
+
+function setRibbonStatus(msg) {
+  const el = document.getElementById('ribbon-status');
+  if (el) el.textContent = msg;
+}
+
+function setLoading(v) {
+  const bar = document.getElementById('lbar');
+  if (bar) bar.classList.toggle('active', v);
+}
+
+let toastTimer;
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show t-${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ═══════════════════════════════════════════════════════
+// INLINE CELL CRUD
+// ═══════════════════════════════════════════════════════
+
+function startCellEdit(td, actionId, field) {
+  if (td.querySelector('input,select')) return; // already editing
+  const a = S.actions.find(x => x.id === actionId);
+  if (!a) return;
+  const origHTML = td.innerHTML;
+  const rawVal   = a[field];
+
+  let input;
+  if (field === 'priority') {
+    input = document.createElement('select');
+    input.className = 'cell-edit-input';
+    ['HIGH','MEDIUM','LOW'].forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      if (v === rawVal) o.selected = true;
+      input.appendChild(o);
+    });
+  } else {
+    input = document.createElement('input');
+    input.className = 'cell-edit-input';
+    const isArr = field === 'ins_tables' || field === 'upd_tables' || field === 'del_tables';
+    input.value = isArr
+      ? (Array.isArray(rawVal) ? rawVal.join(', ') : '')
+      : (rawVal || '');
+    if (isArr) input.placeholder = 'table1, table2';
+  }
+
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  if (input.tagName === 'INPUT') { try { input.select(); } catch(_) {} }
+
+  const commit = () => {
+    const isArr = field === 'ins_tables' || field === 'upd_tables' || field === 'del_tables';
+    let val = input.value.trim();
+    if (isArr) val = val ? val.split(',').map(s => s.trim()).filter(Boolean) : [];
+    else if (!val) val = null;
+    commitCellEdit(actionId, field, val, td, origHTML);
+  };
+
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); td.innerHTML = origHTML; input.removeEventListener('blur', commit); }
+  });
+}
+
+async function commitCellEdit(actionId, field, value, td, origHTML) {
+  const { error } = await S.sb.from('pulse_audit_actions')
+    .update({ [field]: value })
+    .eq('id', actionId);
+
+  if (error) {
+    showToast('Save failed: ' + error.message, 'err');
+    td.innerHTML = origHTML;
+    return;
+  }
+  const a = S.actions.find(x => x.id === actionId);
+  if (a) a[field] = value;
+  showToast(`Saved`, 'ok');
+  renderSheet(S.sheet);
+}
+
+async function addNewAction() {
+  const maxSeq = S.actions.length ? Math.max(...S.actions.map(a => a.seq)) : 0;
+  const newSeq = maxSeq + 1;
+  const newId  = String(newSeq).padStart(2, '0');
+  const row = {
+    id: newId, seq: newSeq,
+    action: 'New Action',
+    route: '', service: '',
+    ins_tables: [], upd_tables: [], del_tables: [],
+    trigger_name: null, audit_table: null,
+    priority: 'MEDIUM',
+    verify_sql: '-- Add verification SQL here'
+  };
+  const { error } = await S.sb.from('pulse_audit_actions').insert(row);
+  if (error) { showToast('Insert failed: ' + error.message, 'err'); return; }
+  S.actions.push(row);
+  renderSheet(S.sheet);
+  showToast(`Row ${newId} added — double-click any cell to edit`, 'ok');
+  // Scroll to new row and focus action cell
+  requestAnimationFrame(() => {
+    const tr = document.querySelector(`.xtable tbody tr[data-id="${newId}"]`);
+    if (tr) {
+      tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const actionCell = tr.querySelectorAll('td')[2];
+      if (actionCell) startCellEdit(actionCell, newId, 'action');
+    }
+  });
+}
+
+async function deleteAction(actionId, e) {
+  e.stopPropagation();
+  const a = S.actions.find(x => x.id === actionId);
+  if (!confirm(`Delete "${a?.action}"?\n\nThis also removes any verification record for this action.`)) return;
+  const { error } = await S.sb.from('pulse_audit_actions').delete().eq('id', actionId);
+  if (error) { showToast('Delete failed: ' + error.message, 'err'); return; }
+  S.actions = S.actions.filter(x => x.id !== actionId);
+  delete S.vers[actionId];
+  if (S.selRow === actionId) { S.selRow = null; clearFormula(); }
+  renderSheet(S.sheet);
+  showToast(`Deleted`, 'info');
+}
+
+// ── SQL EDIT MODAL ──
+function openSQLEdit() {
+  const fm = document.getElementById('formula');
+  const actionId = fm._actionId;
+  if (!actionId) return;
+  const a = S.actions.find(x => x.id === actionId);
+  if (!a) return;
+  document.getElementById('sql-modal-label').textContent = `${a.id}. ${a.action}`;
+  document.getElementById('sql-textarea').value = a.verify_sql || '';
+  document.getElementById('sql-err').textContent = '';
+  document.getElementById('sql-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('sql-textarea').focus(), 50);
+}
+
+function closeSQLModal() {
+  document.getElementById('sql-modal').classList.add('hidden');
+}
+
+async function saveSQLEdit() {
+  const fm       = document.getElementById('formula');
+  const actionId = fm._actionId;
+  if (!actionId) return;
+  const sql = document.getElementById('sql-textarea').value.trim();
+  const errEl = document.getElementById('sql-err');
+  errEl.textContent = '';
+
+  const { error } = await S.sb.from('pulse_audit_actions')
+    .update({ verify_sql: sql })
+    .eq('id', actionId);
+
+  if (error) { errEl.textContent = error.message; return; }
+
+  const a = S.actions.find(x => x.id === actionId);
+  if (a) {
+    a.verify_sql = sql;
+    setFormula(a);
+  }
+  closeSQLModal();
+  showToast('SQL saved', 'ok');
+}
+
+// Close SQL modal on backdrop click
+document.getElementById('sql-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSQLModal();
+});
+// Ctrl+Enter in textarea saves
+document.getElementById('sql-textarea').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveSQLEdit();
+});
+</script>
+</body>
+</html>

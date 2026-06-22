@@ -42,6 +42,7 @@
     "assets:optimize": "node scripts/optimize-assets.js",
     "db:audit": "bash scripts/sql/audit/run-linked.sh",
     "db:push": "supabase db push",
+    "audit": "node tools/serve.js",
     "db:push-both": "bash scripts/push-both-dbs.sh",
     "functions:deploy": "supabase functions deploy",
     "functions:deploy-both": "bash scripts/push-both-dbs.sh"
