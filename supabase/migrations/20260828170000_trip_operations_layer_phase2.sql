@@ -1,4 +1,4 @@
-s-- Phase 2: Trip Operations Layer foundation (fuel + toll, lightweight).
+-- Phase 2: Trip Operations Layer foundation (fuel + toll, lightweight).
 -- Additive only; does not alter trip lifecycle/status logic.
 
 -- Extend trip_documents typed categories for operations receipts.

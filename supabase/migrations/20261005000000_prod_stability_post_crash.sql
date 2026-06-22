@@ -34,6 +34,7 @@
 -- both call ops.capture_db_health_snapshot(). Keep the 5-min job; drop the 15-min one.
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN RETURN; END IF;
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'ops_capture_health') THEN
     PERFORM cron.unschedule('ops_capture_health');
   END IF;
@@ -41,10 +42,9 @@ END;
 $$;
 
 -- ── 2. Slow analyze-pg-catalog from every 10 min → every 6 hours ─────────────
--- Running ANALYZE on pg_proc/pg_class every 10 minutes is excessive.
--- Statistics on catalog tables are stable enough for 6-hourly updates.
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN RETURN; END IF;
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'analyze-pg-catalog') THEN
     PERFORM cron.unschedule('analyze-pg-catalog');
   END IF;

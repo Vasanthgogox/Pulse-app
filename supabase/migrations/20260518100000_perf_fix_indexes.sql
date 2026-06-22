@@ -16,13 +16,19 @@ CREATE INDEX IF NOT EXISTS idx_trips_assigned_by_user_id
 CREATE INDEX IF NOT EXISTS idx_indents_created_by_user_id
   ON indents(created_by_user_id);
 
-CREATE INDEX IF NOT EXISTS idx_transactions_chat_mirror
-  ON transactions(chat_mirror_of_transaction_id)
-  WHERE chat_mirror_of_transaction_id IS NOT NULL;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'transactions' AND column_name = 'chat_mirror_of_transaction_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_transactions_chat_mirror
+      ON transactions(chat_mirror_of_transaction_id)
+      WHERE chat_mirror_of_transaction_id IS NOT NULL;
+  END IF;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_trip_messages_context_trip_id
-  ON trip_messages(context_trip_id)
-  WHERE context_trip_id IS NOT NULL;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='trip_messages' AND column_name='context_trip_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_trip_messages_context_trip_id ON trip_messages(context_trip_id) WHERE context_trip_id IS NOT NULL;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_trip_documents_uploaded_by
   ON trip_documents(uploaded_by)
@@ -38,8 +44,11 @@ CREATE INDEX IF NOT EXISTS idx_driver_ledger_created_by
 CREATE INDEX IF NOT EXISTS idx_story_views_viewer_user_id
   ON story_views(viewer_user_id);
 
-CREATE INDEX IF NOT EXISTS idx_accounting_books_organization_id
-  ON accounting_books(organization_id);
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='accounting_books') THEN
+    CREATE INDEX IF NOT EXISTS idx_accounting_books_organization_id ON accounting_books(organization_id);
+  END IF;
+END $$;
 
 -- ── Critical composite indexes for core query patterns (PERF-5) ────────────
 CREATE INDEX IF NOT EXISTS idx_trips_org_status_date

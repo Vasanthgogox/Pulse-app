@@ -56,7 +56,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY public.dashboard_trip_metrics;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY private.dashboard_trip_metrics;
 END;
 $$;
 

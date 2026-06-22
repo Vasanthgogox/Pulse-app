@@ -16,6 +16,10 @@
 -- ── 1. Fix ops.db_health_snapshots column names ──────────────────────────────
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'ops' AND table_name = 'db_health_snapshots') THEN
+    RETURN; -- table not yet created; later migration will handle it
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'ops'

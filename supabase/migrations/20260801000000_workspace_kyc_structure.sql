@@ -66,6 +66,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_cin_unique
 -- ============================================================
 -- STEP 3: workspaces VIEW (maps org columns to workspace names)
 -- ============================================================
+DROP VIEW IF EXISTS public.workspaces;
 CREATE OR REPLACE VIEW public.workspaces AS
 SELECT
   id,

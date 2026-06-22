@@ -7,48 +7,38 @@
 
 
 -- ── 1. operational_sequences: enable RLS + lock down anon ────────────────────
--- Table stores per-org sequence counters (trip numbers, invoice IDs, etc.).
--- Without RLS, any unauthenticated caller with the anon key can read or
--- corrupt every org's counters via the REST API.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'operational_sequences') THEN
+    RETURN; -- table created in a later migration; security applied there
+  END IF;
 
-ALTER TABLE public.operational_sequences ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE public.operational_sequences ENABLE ROW LEVEL SECURITY;
+  REVOKE ALL ON public.operational_sequences FROM anon;
 
--- anon must never touch sequence data — revoke all
-REVOKE ALL ON public.operational_sequences FROM anon;
+  DROP POLICY IF EXISTS "operational_sequences_select" ON public.operational_sequences;
+  CREATE POLICY "operational_sequences_select"
+    ON public.operational_sequences FOR SELECT TO authenticated
+    USING (public.is_org_member(organization_id));
 
--- Org members can read their own org's sequences (e.g. display "next #")
-DROP POLICY IF EXISTS "operational_sequences_select" ON public.operational_sequences;
-CREATE POLICY "operational_sequences_select"
-  ON public.operational_sequences FOR SELECT
-  TO authenticated
-  USING (public.is_org_member(organization_id));
+  DROP POLICY IF EXISTS "operational_sequences_update" ON public.operational_sequences;
+  CREATE POLICY "operational_sequences_update"
+    ON public.operational_sequences FOR UPDATE TO authenticated
+    USING  (public.is_org_member(organization_id))
+    WITH CHECK (public.is_org_member(organization_id));
 
--- Org members can increment their own org's sequence counters
--- (fired on trip/invoice/etc creation)
-DROP POLICY IF EXISTS "operational_sequences_update" ON public.operational_sequences;
-CREATE POLICY "operational_sequences_update"
-  ON public.operational_sequences FOR UPDATE
-  TO authenticated
-  USING  (public.is_org_member(organization_id))
-  WITH CHECK (public.is_org_member(organization_id));
-
--- Only org admins/owners may create new sequence types for their org
-DROP POLICY IF EXISTS "operational_sequences_insert" ON public.operational_sequences;
-CREATE POLICY "operational_sequences_insert"
-  ON public.operational_sequences FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = operational_sequences.organization_id
-        AND om.user_id = (SELECT auth.uid())
-        AND om.role IN ('owner', 'admin')
-        AND om.status = 'active'
-    )
-  );
-
--- No one deletes sequence rows from the app (service_role only)
--- No DELETE policy = authenticated role cannot delete.
+  DROP POLICY IF EXISTS "operational_sequences_insert" ON public.operational_sequences;
+  CREATE POLICY "operational_sequences_insert"
+    ON public.operational_sequences FOR INSERT TO authenticated
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM public.organization_members om
+        WHERE om.organization_id = operational_sequences.organization_id
+          AND om.user_id = (SELECT auth.uid())
+          AND om.role IN ('owner', 'admin')
+          AND om.status = 'active'
+      )
+    );
+END $$;
 
 
 -- ── 2. workspace_members: replace SECURITY DEFINER with security_invoker ─────
@@ -97,17 +87,11 @@ AS
     zone,
     business_type,
     employee_count,
-    business_pan,
-    gstin,
-    cin,
-    verification_status,
-    verified_at,
-    verified_by,
-    kyc_rejected_reason,
     deleted_at,
     created_at,
     updated_at
   FROM public.organizations;
+  -- KYC columns (business_pan, gstin, cin, etc.) added by 20260801000000_workspace_kyc_structure
 
 -- anon must not enumerate org/KYC data
 REVOKE ALL ON public.workspaces FROM anon;
