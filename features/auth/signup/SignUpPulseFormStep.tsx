@@ -11,6 +11,7 @@ import {
 
 import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 
+import { SignUpPulseFormStepProvider } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
 import { SignUpPulseTitle } from './SignUpPulseTitle';
 import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
@@ -105,24 +106,30 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   );
 
   return (
-    <View style={styles.root}>
-      {keyboardAware && Platform.OS !== 'web' ? (
-        <KeyboardAvoidingView
-          style={styles.keyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={8}
-        >
-          {scroll}
-        </KeyboardAvoidingView>
-      ) : (
-        scroll
-      )}
-      {!inlinePrimary ? (
-        <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.bg }]}>
-          {cta}
-        </View>
-      ) : null}
-    </View>
+    <SignUpPulseFormStepProvider
+      onPrimary={onPrimary}
+      primaryDisabled={primaryDisabled}
+      primaryLoading={primaryLoading}
+    >
+      <View style={styles.root}>
+        {keyboardAware && Platform.OS !== 'web' ? (
+          <KeyboardAvoidingView
+            style={styles.keyboardAvoid}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={8}
+          >
+            {scroll}
+          </KeyboardAvoidingView>
+        ) : (
+          scroll
+        )}
+        {!inlinePrimary ? (
+          <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.bg }]}>
+            {cta}
+          </View>
+        ) : null}
+      </View>
+    </SignUpPulseFormStepProvider>
   );
 });
 

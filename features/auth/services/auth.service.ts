@@ -142,6 +142,8 @@ export interface SignUpOptions {
   role?: UserRole;
   operatingModel?: OperatingModel;
   addressLine?: string;
+  locality?: string;
+  pincode?: string;
   city?: string;
   state?: string;
   zone?: string;
@@ -164,6 +166,8 @@ export interface PendingOAuthOnboardingMetadata {
   role?: UserRole;
   operatingModel?: OperatingModel;
   addressLine?: string;
+  locality?: string;
+  pincode?: string;
   city?: string;
   state?: string;
   zone?: string;
@@ -185,6 +189,8 @@ export async function signUp({
   role = "user",
   operatingModel: operatingModelOption,
   addressLine,
+  locality,
+  pincode,
   city,
   state,
   zone,
@@ -229,6 +235,11 @@ export async function signUp({
     if (companyName != null && companyName.trim())
       metadata.company_name = companyName.trim();
     if (addressLine?.trim()) metadata.address_line = addressLine.trim();
+    if (locality?.trim()) metadata.locality = locality.trim();
+    if (pincode?.trim()) {
+      const digits = pincode.replace(/\D/g, '');
+      if (digits) metadata.pincode = digits;
+    }
     if (city?.trim()) metadata.city = city.trim();
     if (state?.trim()) metadata.state = state.trim();
     if (zone?.trim()) metadata.zone = zone.trim();
@@ -582,6 +593,11 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
   if (pending.fullName?.trim()) authData.full_name = pending.fullName.trim();
   if (pending.companyName?.trim()) authData.company_name = pending.companyName.trim();
   if (pending.addressLine?.trim()) authData.address_line = pending.addressLine.trim();
+  if (pending.locality?.trim()) authData.locality = pending.locality.trim();
+  if (pending.pincode?.trim()) {
+    const digits = pending.pincode.replace(/\D/g, '');
+    if (digits) authData.pincode = digits;
+  }
   if (pending.city?.trim()) authData.city = pending.city.trim();
   if (pending.state?.trim()) authData.state = pending.state.trim();
   if (pending.zone?.trim()) authData.zone = pending.zone.trim();
@@ -623,6 +639,11 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
     if (pending.companyName?.trim()) orgUpdates.name = pending.companyName.trim();
     if (pending.operatingModel) orgUpdates.operating_model = pending.operatingModel;
     if (pending.addressLine?.trim()) orgUpdates.address_line = pending.addressLine.trim();
+    if (pending.locality?.trim()) orgUpdates.locality = pending.locality.trim();
+    if (pending.pincode?.trim()) {
+      const digits = pending.pincode.replace(/\D/g, '');
+      if (digits) orgUpdates.pincode = digits;
+    }
     if (pending.city?.trim()) orgUpdates.city = pending.city.trim();
     if (pending.state?.trim()) orgUpdates.state = pending.state.trim();
     if (pending.zone?.trim()) orgUpdates.zone = pending.zone.trim();

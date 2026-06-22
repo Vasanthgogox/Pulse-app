@@ -25,7 +25,13 @@ import {
   normalizeIndianPhoneForMetadata,
   validatePhone,
 } from '@/lib/phoneValidation';
-import { validateFullName, validatePassword } from '@/lib/validation';
+import {
+  validateAddressLocality,
+  validateFullName,
+  validateIndianPincode,
+  validatePassword,
+  validateStreetAddress,
+} from '@/lib/validation';
 import {
   pickAndUploadAvatar,
   pickAndUploadOrgLogo,
@@ -95,7 +101,9 @@ export function useBusinessSignUpFlow() {
   const [operatingModel, setOperatingModelRaw] = useState<OperatingModel>('HYBRID');
   const [fleetSize, setFleetSize] = useState<FleetSize | null>(null);
   const [monthlyVolume, setMonthlyVolume] = useState<MonthlyVolume | null>(null);
-  const [addressLine, setAddressLine] = useState('');
+  const [streetAddress, setStreetAddress] = useState('');
+  const [locality, setLocality] = useState('');
+  const [pincode, setPincode] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<IndiaLocation | null>(null);
 
   // Step 4
@@ -154,8 +162,16 @@ export function useBusinessSignUpFlow() {
   }), [businessType, fleetSize, monthlyVolume, employeeCount, operatingModel]);
 
   const step4Errors = useMemo(() => ({
+    street: validateStreetAddress(streetAddress),
+    locality: validateAddressLocality(locality),
+    pincode: validateIndianPincode(pincode),
     city: !selectedLocation ? 'Select your city.' : null,
-  }), [selectedLocation]);
+  }), [streetAddress, locality, pincode, selectedLocation]);
+
+  const step4Valid = useMemo(
+    () => !step4Errors.street && !step4Errors.locality && !step4Errors.pincode && !step4Errors.city,
+    [step4Errors],
+  );
 
   const step5Errors = useMemo(() => ({
     fullName: validateFullName(true)(fullName),
@@ -429,7 +445,7 @@ export function useBusinessSignUpFlow() {
 
   const continueCompanyLocation = () => {
     setStep4Attempted(true);
-    if (step4Errors.city) return;
+    if (!step4Valid) return;
     goToPage(5);
   };
 
@@ -485,7 +501,9 @@ export function useBusinessSignUpFlow() {
       phone: storedPhone,
       operatingModel,
       companyName: orgName.trim(),
-      addressLine: addressLine.trim() || undefined,
+      addressLine: streetAddress.trim(),
+      locality: locality.trim() || undefined,
+      pincode: pincode.replace(/\D/g, ''),
       city: selectedLocation?.city,
       state: selectedLocation?.state,
       zone: selectedLocation?.zone,
@@ -531,7 +549,9 @@ export function useBusinessSignUpFlow() {
       companyName: orgName.trim(),
       role: 'user',
       operatingModel,
-      addressLine: addressLine.trim() || undefined,
+      addressLine: streetAddress.trim(),
+      locality: locality.trim() || undefined,
+      pincode: pincode.replace(/\D/g, ''),
       city: selectedLocation?.city,
       state: selectedLocation?.state,
       zone: selectedLocation?.zone,
@@ -761,16 +781,21 @@ export function useBusinessSignUpFlow() {
     setFleetSize,
     monthlyVolume,
     setMonthlyVolume,
-    addressLine,
-    setAddressLine,
-    selectedLocation,
-    setSelectedLocation,
     step3Attempted,
     step3Errors,
 
     // step 4 (location)
+    streetAddress,
+    setStreetAddress,
+    locality,
+    setLocality,
+    pincode,
+    setPincode,
+    selectedLocation,
+    setSelectedLocation,
     step4Attempted,
     step4Errors,
+    step4Valid,
 
     // step 5 (account)
     fullName,

@@ -17,6 +17,10 @@ export const VALIDATION = {
   PHONE_DIGITS: 10,
   CLIENT_SUPPLIER_NAME_MAX_LENGTH: 200,
   ADDRESS_MAX_LENGTH: 500,
+  STREET_ADDRESS_MIN_LENGTH: 5,
+  STREET_ADDRESS_MAX_LENGTH: 200,
+  LOCALITY_MAX_LENGTH: 100,
+  PINCODE_LENGTH: 6,
   NOTES_MAX_LENGTH: 1000,
   DESCRIPTION_MAX_LENGTH: 500,
   PARTY_NAME_MAX_LENGTH: 255,
@@ -160,6 +164,49 @@ export function validatePasswordForSignIn(value: string | null | undefined): str
     return 'Enter your password.';
   }
   return null;
+}
+
+/** Indian postal PIN: 6 digits, first digit 1–9. */
+export function validateIndianPincode(value: string | null | undefined): string | null {
+  const digits = (value ?? '').replace(/\D/g, '');
+  if (digits.length === 0) return 'PIN code is required.';
+  if (!/^[1-9]\d{5}$/.test(digits)) return 'Enter a valid 6-digit PIN code.';
+  return null;
+}
+
+/** Optional Indian PIN (empty allowed). */
+export function optionalIndianPincode(value: string | null | undefined): string | null {
+  const digits = (value ?? '').replace(/\D/g, '');
+  if (digits.length === 0) return null;
+  return validateIndianPincode(digits);
+}
+
+/** Street / building line for office address. */
+export function validateStreetAddress(value: string | null | undefined): string | null {
+  return runValidators(value ?? '', [
+    required('Street address is required.'),
+    maxLength(
+      VALIDATION.STREET_ADDRESS_MAX_LENGTH,
+      `Street address must be at most ${VALIDATION.STREET_ADDRESS_MAX_LENGTH} characters.`,
+    ),
+    (v) => {
+      const t = v.trim();
+      if (t.length > 0 && t.length < VALIDATION.STREET_ADDRESS_MIN_LENGTH) {
+        return `Street address must be at least ${VALIDATION.STREET_ADDRESS_MIN_LENGTH} characters.`;
+      }
+      return null;
+    },
+  ]);
+}
+
+/** Area / locality (optional). */
+export function validateAddressLocality(value: string | null | undefined): string | null {
+  const t = (value ?? '').trim();
+  if (t.length === 0) return null;
+  return maxLength(
+    VALIDATION.LOCALITY_MAX_LENGTH,
+    `Locality must be at most ${VALIDATION.LOCALITY_MAX_LENGTH} characters.`,
+  )(t);
 }
 
 /** Full name: 2–100 chars when non-empty. */

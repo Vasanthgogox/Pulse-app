@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
 
 import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/signupPasswordInput.util';
 
+import { useSignUpPulseFormStepContext } from './SignUpPulseFormStepContext';
 import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
 
 export interface SignUpPulseFieldProps extends TextInputProps {
@@ -35,6 +36,10 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   passwordField,
   dense = false,
   style,
+  onSubmitEditing,
+  returnKeyType,
+  blurOnSubmit,
+  multiline = false,
   ...inputProps
 }: SignUpPulseFieldProps) {
   const hasError = !!errorMessage;
@@ -42,6 +47,46 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   const passwordAutofillProps = passwordField
     ? signUpPasswordInputProps(passwordField)
     : {};
+  const formStep = useSignUpPulseFormStepContext();
+  const registerField = formStep?.registerField;
+  const unregisterField = formStep?.unregisterField;
+  const isLastSingleLineFieldFn = formStep?.isLastSingleLineField;
+  const handleFieldSubmitFn = formStep?.handleFieldSubmit;
+  const fieldRevision = formStep?.revision ?? 0;
+  const inputRef = useRef<TextInput>(null);
+  const fieldIdRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!registerField || !unregisterField) return undefined;
+    const id = registerField(inputRef, !!multiline);
+    fieldIdRef.current = id;
+    return () => {
+      unregisterField(id);
+      if (fieldIdRef.current === id) {
+        fieldIdRef.current = null;
+      }
+    };
+  }, [registerField, unregisterField, multiline]);
+
+  const fieldId = fieldIdRef.current;
+  const isLastSingleLineField = useMemo(() => {
+    if (!isLastSingleLineFieldFn || fieldId == null || multiline) return false;
+    return isLastSingleLineFieldFn(fieldId);
+  }, [isLastSingleLineFieldFn, fieldId, multiline, fieldRevision]);
+
+  const resolvedReturnKeyType =
+    returnKeyType ??
+    (registerField && !multiline ? (isLastSingleLineField ? 'done' : 'next') : undefined);
+
+  const resolvedBlurOnSubmit =
+    blurOnSubmit ?? (registerField && !multiline ? isLastSingleLineField : undefined);
+
+  const handleSubmitEditing: TextInputProps['onSubmitEditing'] = (event) => {
+    onSubmitEditing?.(event);
+    if (!multiline && handleFieldSubmitFn && fieldId != null) {
+      handleFieldSubmitFn(fieldId);
+    }
+  };
 
   return (
     <View style={fieldStyles.wrap}>
@@ -57,8 +102,13 @@ export const SignUpPulseField = memo(function SignUpPulseField({
         ]}
       >
         <TextInput
+          ref={inputRef}
           {...passwordAutofillProps}
           {...inputProps}
+          multiline={multiline}
+          returnKeyType={resolvedReturnKeyType}
+          blurOnSubmit={resolvedBlurOnSubmit}
+          onSubmitEditing={handleSubmitEditing}
           style={[
             fieldStyles.input,
             inputProps.multiline && fieldStyles.inputMultiline,

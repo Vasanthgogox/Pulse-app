@@ -180,6 +180,8 @@ export type OrganizationLocation = {
   city: string | null;
   state: string | null;
   address_line: string | null;
+  locality?: string | null;
+  pincode?: string | null;
 };
 
 /** Best-effort: set organizations.owner_id when null but caller is active owner member. */

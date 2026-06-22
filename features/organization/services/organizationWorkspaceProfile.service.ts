@@ -4,6 +4,8 @@ export type OrganizationWorkspaceProfile = {
   id: string;
   name: string;
   address_line: string | null;
+  locality: string | null;
+  pincode: string | null;
   city: string | null;
   state: string | null;
   zone: string | null;
@@ -30,12 +32,14 @@ export type UpdateOrganizationWorkspaceProfileData = {
   profile_youtube?: string | null;
   profile_products?: string[];
   address_line?: string | null;
+  locality?: string | null;
+  pincode?: string | null;
   city?: string | null;
   state?: string | null;
 };
 
 const PROFILE_SELECT =
-  'id,name,address_line,city,state,zone,created_at,profile_about,profile_website,profile_ceo_name,profile_sector,profile_area,founded_year,profile_facebook,profile_youtube,profile_products';
+  'id,name,address_line,locality,pincode,city,state,zone,created_at,profile_about,profile_website,profile_ceo_name,profile_sector,profile_area,founded_year,profile_facebook,profile_youtube,profile_products';
 
 export async function getOrganizationWorkspaceProfile(
   orgId: string,
@@ -96,6 +100,13 @@ export async function updateOrganizationWorkspaceProfile(
   }
   if (payload.address_line !== undefined) {
     patch.address_line = payload.address_line?.trim() || null;
+  }
+  if (payload.locality !== undefined) {
+    patch.locality = payload.locality?.trim() || null;
+  }
+  if (payload.pincode !== undefined) {
+    const digits = payload.pincode?.replace(/\D/g, '') ?? '';
+    patch.pincode = digits || null;
   }
   if (payload.city !== undefined) patch.city = payload.city?.trim() || null;
   if (payload.state !== undefined) patch.state = payload.state?.trim() || null;

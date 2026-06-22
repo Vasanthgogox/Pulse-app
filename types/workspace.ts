@@ -20,6 +20,8 @@ export interface Workspace {
   operating_model: 'ASSET_BASED' | 'NON_ASSET' | 'HYBRID';
   // Address
   address_line: string | null;
+  locality: string | null;
+  pincode: string | null;
   city: string | null;
   state: string | null;
   zone: string | null;

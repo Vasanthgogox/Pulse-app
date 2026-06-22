@@ -1,5 +1,7 @@
 import { StyleSheet, Text } from 'react-native';
 
+import { VALIDATION } from '@/lib/validation';
+
 import type { SignUpFlow } from '../hooks/useBusinessSignUpFlow';
 import { CityPicker } from '../components/CityPicker';
 import { SignUpPulseField } from '../SignUpPulseField';
@@ -7,6 +9,10 @@ import { SignUpPulseFormStep } from '../SignUpPulseFormStep';
 import { PULSE_SIGNUP } from '../signUpPulseTheme';
 
 export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
+  const showStreetError = flow.step4Attempted ? flow.step4Errors.street : null;
+  const showLocalityError = flow.step4Attempted ? flow.step4Errors.locality : null;
+  const showPincodeError = flow.step4Attempted ? flow.step4Errors.pincode : null;
+
   return (
     <SignUpPulseFormStep
       title="Office location"
@@ -17,17 +23,42 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
       }
       primaryLabel="Continue"
       onPrimary={flow.continueCompanyLocation}
-      primaryDisabled={!flow.selectedLocation}
+      primaryDisabled={!flow.step4Valid}
+      keyboardAware
     >
       <SignUpPulseField
-        label="Office Address"
-        value={flow.addressLine}
-        onChangeText={flow.setAddressLine}
-        placeholder="Building, street, area"
-        multiline
-        numberOfLines={4}
-        textAlignVertical="top"
-        autoCapitalize="sentences"
+        label="Building / Street"
+        required
+        value={flow.streetAddress}
+        onChangeText={flow.setStreetAddress}
+        placeholder="e.g. Old Gingee Road"
+        autoCapitalize="words"
+        autoFocus
+        errorMessage={showStreetError}
+        dense
+      />
+
+      <SignUpPulseField
+        label="Area / Locality"
+        value={flow.locality}
+        onChangeText={flow.setLocality}
+        placeholder="e.g. Near bus stand"
+        autoCapitalize="words"
+        errorMessage={showLocalityError}
+        dense
+      />
+
+      <SignUpPulseField
+        label="PIN Code"
+        required
+        value={flow.pincode}
+        onChangeText={(text) => flow.setPincode(text.replace(/\D/g, '').slice(0, VALIDATION.PINCODE_LENGTH))}
+        placeholder="605602"
+        keyboardType="number-pad"
+        inputMode="numeric"
+        maxLength={VALIDATION.PINCODE_LENGTH}
+        errorMessage={showPincodeError}
+        dense
       />
 
       <Text style={styles.cityLabel}>
