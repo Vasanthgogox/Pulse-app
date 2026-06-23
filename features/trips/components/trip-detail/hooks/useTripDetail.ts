@@ -815,6 +815,7 @@ export function useTripDetail({
   const computedTripDocs = useMemo<TripDocItem[]>(() => {
     const hasVehicleDoc = vehiclePreviewDocs.some((doc) => !!doc.storagePath);
 
+    const lrDocs = tripDocuments.filter((d) => d.document_type === 'lr');
     const manifestDocs = tripDocuments.filter((d) => d.document_type === 'manifest');
     const rawPodDocs = tripDocuments.filter((d) => d.document_type === 'pod');
 
@@ -858,7 +859,27 @@ export function useTripDetail({
             },
           ];
 
+    const lrCard: TripDocItem =
+      lrDocs.length > 0
+        ? {
+            id: `lr-${lrDocs[0].id}`,
+            label: 'LR Document',
+            type: (lrDocs[0].mime_type ?? '').includes('pdf') ? 'PDF' : 'JPG',
+            status: 'Uploaded' as const,
+            storagePath: lrDocs[0].storage_path,
+            documentId: lrDocs[0].id,
+            category: 'lr' as const,
+          }
+        : {
+            id: 'lr',
+            label: 'LR Document',
+            type: 'PDF',
+            status: 'Pending' as const,
+            category: 'lr' as const,
+          };
+
     return [
+      lrCard,
       manifestCard,
       {
         id: "vehicle-documents",

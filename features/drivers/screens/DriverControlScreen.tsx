@@ -29,6 +29,9 @@ import { useSafeBack } from "@/lib/useSafeBack";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import * as salaryRequestsService from "@/features/drivers/services/salaryRequests.service";
 import { getOptimalRoute } from "@/lib/routingService";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import * as tripsService from "@/features/trips/services/trips.service";
 import { useTripVerificationSync } from "@/features/trips/verification";
@@ -173,6 +176,7 @@ export default function DriverControlScreen() {
   const [attributeSalaryRequests, setAttributeSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const [attributeLoading, setAttributeLoading] = useState(false);
 
+  const [lrUploading, setLrUploading] = useState(false);
   const [viewingPodUrl, setViewingPodUrl] = useState<string | null>(null);
   const [viewingPodLoading, setViewingPodLoading] = useState(false);
   const [viewingPodError, setViewingPodError] = useState(false);
@@ -285,6 +289,109 @@ export default function DriverControlScreen() {
 
   const safeBack = useSafeBack("/(driver)");
   const goToRadar = safeBack;
+
+  const readLrFileAsArrayBuffer = useCallback(async (uri: string): Promise<ArrayBuffer> => {
+    if (Platform.OS === "web") {
+      const res = await fetch(uri);
+      return res.arrayBuffer();
+    }
+    const b64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" as const });
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+  }, []);
+
+  const handleDriverLRUpload = useCallback(async (onSuccess: () => void) => {
+    const id = trip?.id ?? tripId;
+    const uid = profile?.uid;
+    if (!id || !uid || lrUploading) return;
+    try {
+      let uri: string | null = null;
+      let fileName = `lr-${Date.now()}.jpg`;
+      let mimeType = "image/jpeg";
+
+      if (Platform.OS === "web") {
+        const res = await DocumentPicker.getDocumentAsync({
+          multiple: false,
+          copyToCacheDirectory: true,
+          type: ["application/pdf", "image/*"],
+        });
+        if (res.canceled || !res.assets?.[0]) return;
+        uri = res.assets[0].uri;
+        fileName = res.assets[0].name || fileName;
+        mimeType = res.assets[0].mimeType || "application/pdf";
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          const cam = await ImagePicker.requestCameraPermissionsAsync();
+          if (!cam.granted) {
+            Alert.alert("Permission required", "Camera or photo library access needed to upload LR.");
+            return;
+          }
+          const res = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.85 });
+          if (res.canceled || !res.assets?.[0]) return;
+          uri = res.assets[0].uri;
+          fileName = res.assets[0].fileName ?? fileName;
+          mimeType = res.assets[0].mimeType ?? "image/jpeg";
+        } else {
+          const res = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: false,
+            quality: 0.85,
+          });
+          if (res.canceled || !res.assets?.[0]) return;
+          uri = res.assets[0].uri;
+          fileName = res.assets[0].fileName ?? fileName;
+          mimeType = res.assets[0].mimeType ?? "image/jpeg";
+        }
+      }
+
+      if (!uri) return;
+      setLrUploading(true);
+      const arrayBuffer = await readLrFileAsArrayBuffer(uri);
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        Alert.alert("Upload failed", "Could not read the selected file.");
+        return;
+      }
+
+      const { error } = await tripDocumentsService.uploadTripDocument(
+        id, uid, { arrayBuffer, fileName, mimeType }, "lr",
+      );
+      if (error) {
+        Alert.alert("Upload failed", error.message);
+        return;
+      }
+      onSuccess();
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setLrUploading(false);
+    }
+  }, [trip?.id, tripId, profile?.uid, lrUploading, readLrFileAsArrayBuffer]);
+
+  const handleEngageTransit = useCallback(async () => {
+    const id = trip?.id ?? tripId;
+    if (!id) return;
+    const hasLr = await tripDocumentsService.hasLrDocument(id);
+    if (hasLr) {
+      engageTransit();
+      return;
+    }
+    Alert.alert(
+      "Upload LR first?",
+      "Lorry Receipt confirms goods are loaded. Upload it now before going in transit.",
+      [
+        {
+          text: "Upload LR",
+          onPress: () => handleDriverLRUpload(engageTransit),
+        },
+        {
+          text: "Skip & Proceed",
+          style: "destructive",
+          onPress: engageTransit,
+        },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  }, [trip?.id, tripId, engageTransit, handleDriverLRUpload]);
 
   if (loading) {
     return <CenteredLoadingView message="Loading…" />;
@@ -1098,14 +1205,16 @@ export default function DriverControlScreen() {
                 style={[
                   styles.primaryBtn,
                   { backgroundColor: colors.emerald },
-                  stepLoading && styles.primaryBtnDisabled,
+                  (stepLoading || lrUploading) && styles.primaryBtnDisabled,
                 ]}
-                onPress={engageTransit}
-                disabled={stepLoading}
+                onPress={() => void handleEngageTransit()}
+                disabled={stepLoading || lrUploading}
                 activeOpacity={0.8}
               >
-                {stepLoading ? (
-                  <Text style={styles.primaryBtnText}>Updating…</Text>
+                {stepLoading || lrUploading ? (
+                  <Text style={styles.primaryBtnText}>
+                    {lrUploading ? "Uploading LR…" : "Updating…"}
+                  </Text>
                 ) : (
                   <>
                     <FontAwesome

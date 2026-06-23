@@ -4,7 +4,7 @@
  * them without creating an inverted dependency on a UI component.
  */
 
-export type DocCategory = "vehicle" | "trip" | "driver";
+export type DocCategory = "vehicle" | "trip" | "driver" | "lr";
 
 export interface TripDocItem {
   id: string;
