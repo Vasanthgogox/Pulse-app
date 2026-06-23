@@ -54,6 +54,7 @@ function randomUUID(): string {
 }
 
 export type TripDocumentType =
+  | 'lr'
   | 'pod'
   | 'manifest'
   | 'invoice'
@@ -158,6 +159,7 @@ export async function getDocumentsByTripId(
   // from subfolder entries (no dot). Old-style uploads are at tripId/uuid.jpg;
   // new-style uploads are inside tripId/{type}/uuid.jpg and appear as folder entries.
   const KNOWN_SUBFOLDER_TYPES: TripDocumentType[] = [
+    'lr',
     'pod',
     'manifest',
     'invoice',
@@ -387,6 +389,21 @@ export async function hasPodDocument(tripId: string): Promise<boolean> {
     .select('id')
     .eq('trip_id', tripId)
     .eq('document_type', 'pod')
+    .limit(1);
+  if (error) return false;
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Check if a trip has an LR (Lorry Receipt) uploaded.
+ * Used to confirm goods are picked up / in transit.
+ */
+export async function hasLrDocument(tripId: string): Promise<boolean> {
+  const { data, error } = await supabase()
+    .from('trip_documents')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('document_type', 'lr')
     .limit(1);
   if (error) return false;
   return (data ?? []).length > 0;

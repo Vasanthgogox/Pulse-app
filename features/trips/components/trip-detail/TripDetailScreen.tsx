@@ -1171,6 +1171,7 @@ export default function TripDetailScreen({
         const CATEGORY_TO_DOC_TYPE: Record<string, tripDocumentsService.TripDocumentType> = {
           driver: 'pod',
           trip: 'manifest',
+          lr: 'lr',
         };
         const { error } = await tripDocumentsService.uploadTripDocument(
           tripIdForUpload,
@@ -1200,6 +1201,69 @@ export default function TripDetailScreen({
       readFileAsArrayBuffer,
     ],
   );
+
+  const handleLRUpload = useCallback(async () => {
+    const tripIdForUpload = detail.trip?.id;
+    const uploaderId = detail.currentUserId;
+    const currentStatus = detail.trip?.status ?? '';
+    if (!tripIdForUpload || !uploaderId || uploadingDocId) return;
+
+    let uri: string | null = null;
+    let fileName = `lr-${Date.now()}.pdf`;
+    let mimeType = 'application/pdf';
+
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+        copyToCacheDirectory: true,
+        type: ['application/pdf', 'image/*'],
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      uri = asset.uri;
+      fileName = asset.name || fileName;
+      mimeType = asset.mimeType || 'application/pdf';
+
+      setUploadingDocId('lr');
+      const arrayBuffer = await readFileAsArrayBuffer(uri);
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        Alert.alert('Upload failed', 'Could not read the selected file.');
+        return;
+      }
+
+      const { error: uploadError } = await tripDocumentsService.uploadTripDocument(
+        tripIdForUpload,
+        uploaderId,
+        { arrayBuffer, fileName, mimeType },
+        'lr',
+      );
+      if (uploadError) {
+        Alert.alert('Upload failed', uploadError.message);
+        return;
+      }
+
+      // LR upload marks goods as in transit — advance status when trip is underway but not yet in_transit
+      const advanceable = ['started', 'assigned', 'in_progress', 'picked_up', 's_out', 'source_out'].includes(
+        currentStatus.toLowerCase(),
+      );
+      if (advanceable) {
+        await updateTripStatus(tripIdForUpload, { status: 'in_transit' });
+      }
+
+      detail.handleRefresh();
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setUploadingDocId(null);
+    }
+  }, [
+    detail.trip?.id,
+    detail.trip?.status,
+    detail.currentUserId,
+    detail.handleRefresh,
+    uploadingDocId,
+    readFileAsArrayBuffer,
+  ]);
 
   const journeyLogs = useMemo((): ManifestJourneyLogEntry[] => {
     const tr = detail.trip;
@@ -2163,6 +2227,10 @@ export default function TripDetailScreen({
       if (trip.vehicle_id) {
         router.push(`/vehicle/${trip.vehicle_id}` as never);
       }
+      return;
+    }
+    if (doc.id === "lr" || doc.category === "lr") {
+      if (canUploadTripDocs) void handleLRUpload();
       return;
     }
     if (canUploadTripDocs) {
@@ -4928,7 +4996,7 @@ export default function TripDetailScreen({
                             : undefined,
                         };
                       })}
-                      onUpdateLR={openTripDocumentsFlow}
+                      onUpdateLR={() => void handleLRUpload()}
                       onAddDocument={openTripDocumentsFlow}
                     />
                     </Suspense>
