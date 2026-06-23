@@ -1276,7 +1276,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   actionBtnPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderWidth: 0,
   },
   actionBtnPrimaryText: {

@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
     alignItems: "center",

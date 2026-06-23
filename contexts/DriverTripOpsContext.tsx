@@ -47,7 +47,7 @@ function useDriverOpsTripsQuery(userId: string | null, driverIdsKey: string, ena
     queryKey: ["driver-ops-trips", userId, driverIdsKey],
     queryFn: async () => {
       if (driverIds.length === 0) return [] as tripsService.TripRow[];
-      const res = await tripsService.getTripsByDriverIds(driverIds);
+      const res = await tripsService.getDriverUiTripsByDriverIds(driverIds);
       if (res.error) throw res.error;
       return res.trips ?? [];
     },

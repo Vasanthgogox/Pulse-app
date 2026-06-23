@@ -1326,7 +1326,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
   },
-  primaryBtnText: { ...sheetStyles.bodyBtnText, letterSpacing: 0.1, color: '#fff' },
+  primaryBtnText: { ...sheetStyles.bodyBtnText, letterSpacing: 0.1, color: Theme.buttonDarkText },
   primaryBtn: {
     marginTop: 6,
     minHeight: TRIP_SHEET_BTN_HEIGHT,

@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: Theme.teslaRed,
   },
-  bidBtnText: { fontSize: 11, fontWeight: '800', color: Theme.textOnPrimary, letterSpacing: 0.2 },
+  bidBtnText: { fontSize: 11, fontWeight: '800', color: Theme.buttonPrimaryText, letterSpacing: 0.2 },
 
   viewBidsBtn: {
     backgroundColor: 'rgba(255,255,255,0.09)',

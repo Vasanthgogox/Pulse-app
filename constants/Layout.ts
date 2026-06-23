@@ -61,12 +61,16 @@ export const Layout = {
    * (Chat hub and other screens may still use 1024 for their own split layouts.)
    */
   webDesktopMinWidth: 900,
+  /**
+   * Max width for the desktop hub shell (`#root` on web). Keeps finance / trips /
+   * network / loads from stretching on ultrawide viewports; header + footers align.
+   */
+  desktopHubMaxWidth: 1680,
+  /** @deprecated CSS zoom removed — always 1. Kept for callers that read the constant. */
+  webDesktopUiScale: 1,
   /** Width of the Live Operations sidebar — keep `GlobalOperationsToast` `left` in sync */
   liveOpsShelfWidth: 300,
-  /**
-   * Desktop web top navigation reserve height.
-   * Keep scene content below the fixed Pulse header shell.
-   */
+  /** Desktop web top navigation reserve height (layout px below fixed header). */
   desktopTopNavOffset: 84,
   /**
    * @deprecated Static estimate only — ignores safe area on mobile web.

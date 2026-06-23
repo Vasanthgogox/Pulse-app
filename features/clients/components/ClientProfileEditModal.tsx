@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#ffffff',
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.8,
   },
   cancelBtn: {

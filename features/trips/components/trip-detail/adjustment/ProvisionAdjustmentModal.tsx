@@ -464,7 +464,7 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                 <Feather
                   name={isAssetDriverCost ? "minus-circle" : "plus"}
                   size={18}
-                  color="#4f46e5"
+                  color="#4D3636"
                 />
                 <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Deduct (CN)" : "Credit (CN)"}

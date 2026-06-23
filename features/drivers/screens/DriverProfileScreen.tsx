@@ -135,7 +135,7 @@ export default function DriverProfileScreen() {
           setLoadingTrips(false);
           return;
         }
-        return tripsService.getTripsByDriverIds(allRows.map((d) => d.id)).then((tRes) => {
+        return tripsService.getDriverUiTripsByDriverIds(allRows.map((d) => d.id)).then((tRes) => {
           setTrips(tRes.trips ?? []);
         });
       })

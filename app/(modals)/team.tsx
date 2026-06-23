@@ -143,12 +143,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   inviteBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   inviteBtnPlaceholder: { width: 38 },
 

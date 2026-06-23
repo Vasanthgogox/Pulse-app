@@ -86,8 +86,8 @@ function InboxSvg({
   active: boolean;
   gid: string;
 }) {
-  const deep = active ? "#3730a3" : "#4f46e5";
-  const mid = active ? "#6366f1" : "#818cf8";
+  const deep = active ? "#3730a3" : "#4D3636";
+  const mid = active ? "#4D3636" : "#818cf8";
   const light = active ? "#c7d2fe" : "#a5b4fc";
   const accent = active ? "#22d3ee" : "#38bdf8";
 
@@ -95,8 +95,8 @@ function InboxSvg({
     <Svg width={size} height={size} viewBox={`0 0 ${VIEW} ${VIEW}`}>
       <Defs>
         <LinearGradient id={`${gid}-shadow`} x1="0%" y1="0%" x2="0%" y2="100%">
-          <Stop offset="0%" stopColor="#4338ca" stopOpacity="0" />
-          <Stop offset="100%" stopColor="#4338ca" stopOpacity="0.35" />
+          <Stop offset="0%" stopColor="#4D3636" stopOpacity="0" />
+          <Stop offset="100%" stopColor="#4D3636" stopOpacity="0.35" />
         </LinearGradient>
         <LinearGradient id={`${gid}-tray`} x1="0%" y1="0%" x2="100%" y2="100%">
           <Stop offset="0%" stopColor={light} />

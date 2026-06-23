@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderTopLeftRadius: 16,

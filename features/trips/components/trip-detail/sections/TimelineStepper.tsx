@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderMedium,
   },
   connectorFilled: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   dot: {
     width: DOT_SIZE,
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   },
   dotCompleted: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   dotActive: {
     borderColor: Theme.primary,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   label: {
     fontSize: 10,

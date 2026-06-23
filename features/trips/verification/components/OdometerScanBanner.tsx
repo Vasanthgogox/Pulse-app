@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   rescanBtnText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.15,
   },
   inlineActionRow: {

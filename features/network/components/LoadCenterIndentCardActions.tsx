@@ -935,7 +935,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 10,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     textAlign: "center",

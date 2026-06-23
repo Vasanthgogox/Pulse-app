@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   deductBtnText: {
     fontSize: 9,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },

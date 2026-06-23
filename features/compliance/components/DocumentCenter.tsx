@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   tabPillActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   tabLabel: {

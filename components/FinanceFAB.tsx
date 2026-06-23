@@ -5,6 +5,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { FAB_ICON_ASSETS, type FABIconName } from "@/lib/fabIconAssets";
 import { useGlobalFabAnimation } from "@/lib/hooks/useGlobalFabAnimation";
 import {
   Building2,
@@ -31,17 +32,7 @@ import {
 } from "react-native";
 import Reanimated from "react-native-reanimated";
 
-export type FABIconName =
-  | "plus"
-  | "receipt-text"
-  | "credit-card"
-  | "user"
-  | "user-plus"
-  | "building"
-  | "warehouse"
-  | "truck"
-  | "road"
-  | "package";
+export type { FABIconName } from "@/lib/fabIconAssets";
 
 export interface FinanceFABProps {
   onPress: () => void;
@@ -126,11 +117,34 @@ export function FinanceFAB({
   };
 
   const fabBgColor = Theme.darkBackground;
-  const fabIconColor = "#ffffff";
+  const fabIconColor = Theme.buttonDarkText;
+  const assetGlyph = FAB_ICON_ASSETS[icon];
   const IconComponent = getLucideIcon(icon);
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
 
   const MainIcon = icon === "receipt-text" || icon === "credit-card" ? Receipt : IconComponent;
+
+  const chipSize = Math.round(size * 0.56);
+  const assetGlyphSize = Math.round(
+    chipSize * (assetGlyph?.glyphScale ?? 0.74),
+  );
+
+  const mainGlyph = assetGlyph ? (
+    <View
+      style={[
+        styles.assetChip,
+        {
+          width: chipSize,
+          height: chipSize,
+          borderRadius: chipSize / 2,
+        },
+      ]}
+    >
+      <assetGlyph.Asset width={assetGlyphSize} height={assetGlyphSize} />
+    </View>
+  ) : (
+    <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />
+  );
 
   return (
     <Reanimated.View
@@ -168,10 +182,10 @@ export function FinanceFAB({
               pe("none"),
             ]}
           />
-          <MainIcon size={Math.max(18, iconSize)} color={fabIconColor} strokeWidth={2.4} />
+          {mainGlyph}
           {shouldShowPlus ? (
             <View style={styles.addBadge}>
-              <CirclePlus size={14} color={fabIconColor} strokeWidth={2.5} />
+              <CirclePlus size={14} color={Theme.brandBlueInk} strokeWidth={2.5} />
             </View>
           ) : null}
         </RNAnimated.View>
@@ -191,7 +205,7 @@ const styles = StyleSheet.create({
     height: Layout.fabSize,
     borderRadius: Layout.fabBorderRadius,
     borderWidth: 2.5,
-    borderColor: "#ffffff",
+    borderColor: Theme.cardWhite,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: Theme.darkBackground,
@@ -205,6 +219,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.8)",
   },
+  assetChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+    shadowColor: Theme.darkBackground,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   addBadge: {
     position: "absolute",
     right: -4,
@@ -213,10 +238,15 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     paddingHorizontal: 4,
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.accentGold,
     borderWidth: 2,
-    borderColor: "#ffffff",
+    borderColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: Theme.darkBackground,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });

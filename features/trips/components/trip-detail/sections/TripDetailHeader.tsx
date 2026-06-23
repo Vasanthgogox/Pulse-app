@@ -169,6 +169,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
 });

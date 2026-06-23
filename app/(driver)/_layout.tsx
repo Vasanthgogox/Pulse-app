@@ -12,6 +12,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DriverAvatarProvider } from '@/contexts/DriverAvatarContext';
 import { DriverThemeProvider } from '@/contexts/DriverThemeContext';
 import { DriverCommunicationProvider } from '@/features/driver/communication';
+import {
+  consumePendingDriverInviteAfterAuth,
+} from '@/lib/driverInviteDeepLink.util';
 import { ROUTES } from '@/lib/routes';
 import {
   hydrateDriverSignupSuccessFlag,
@@ -96,6 +99,11 @@ export default function DriverAppLayout() {
   useEffect(() => {
     void hydrateDriverSignupSuccessFlag();
   }, []);
+
+  useEffect(() => {
+    if (loading || !user || profile?.role !== 'driver') return;
+    void consumePendingDriverInviteAfterAuth();
+  }, [loading, user, profile?.role]);
 
   useEffect(() => {
     if (loading) return;

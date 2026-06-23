@@ -22,7 +22,21 @@ export type HubListPaginationBarProps = {
   itemLabel?: string;
   /** When true, removes outer margins for embedding in a parent bar row. */
   embedded?: boolean;
+  /**
+   * `full` — meta + controls (default).
+   * `controls-only` — page size + prev/next for split hub footers.
+   */
+  layoutMode?: "full" | "controls-only";
 };
+
+export function formatHubListPaginationMeta(
+  page: number,
+  totalPages: number,
+  totalItems: number,
+  itemLabel = "items",
+): string {
+  return `Page ${page + 1}/${totalPages} · ${totalItems} ${itemLabel}`;
+}
 
 export function HubListPaginationBar({
   page,
@@ -34,56 +48,69 @@ export function HubListPaginationBar({
   onNext,
   itemLabel = "items",
   embedded = false,
+  layoutMode = "full",
 }: HubListPaginationBarProps) {
   const atFirst = page <= 0;
   const atLast = page >= totalPages - 1;
+  const controls = (
+    <View style={styles.right}>
+      <View style={styles.pageSizeWrap}>
+        {HUB_GRID_PAGE_SIZE_OPTIONS.map((n) => (
+          <TouchableOpacity
+            key={n}
+            style={[
+              styles.pageSizePill,
+              pageSize === n && styles.pageSizePillActive,
+            ]}
+            onPress={() => onPageSizeChange(n)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ selected: pageSize === n }}
+          >
+            <Text
+              style={[
+                styles.pageSizeText,
+                pageSize === n && styles.pageSizeTextActive,
+              ]}
+            >
+              {n}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <TouchableOpacity
+        style={[styles.navBtn, atFirst && styles.navBtnDisabled]}
+        onPress={onPrev}
+        disabled={atFirst}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.navText}>Prev</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.navBtn, atLast && styles.navBtnDisabled]}
+        onPress={onNext}
+        disabled={atLast}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.navText}>Next</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (layoutMode === "controls-only") {
+    return (
+      <View style={[styles.controlsOnlyRow, embedded && styles.rowEmbedded]}>
+        {controls}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.row, embedded && styles.rowEmbedded]}>
       <Text style={styles.meta}>
-        {`Page ${page + 1}/${totalPages} · ${totalItems} ${itemLabel}`}
+        {formatHubListPaginationMeta(page, totalPages, totalItems, itemLabel)}
       </Text>
-      <View style={styles.right}>
-        <View style={styles.pageSizeWrap}>
-          {HUB_GRID_PAGE_SIZE_OPTIONS.map((n) => (
-            <TouchableOpacity
-              key={n}
-              style={[
-                styles.pageSizePill,
-                pageSize === n && styles.pageSizePillActive,
-              ]}
-              onPress={() => onPageSizeChange(n)}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityState={{ selected: pageSize === n }}
-            >
-              <Text
-                style={[
-                  styles.pageSizeText,
-                  pageSize === n && styles.pageSizeTextActive,
-                ]}
-              >
-                {n}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <TouchableOpacity
-          style={[styles.navBtn, atFirst && styles.navBtnDisabled]}
-          onPress={onPrev}
-          disabled={atFirst}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.navText}>Prev</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.navBtn, atLast && styles.navBtnDisabled]}
-          onPress={onNext}
-          disabled={atLast}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.navText}>Next</Text>
-        </TouchableOpacity>
-      </View>
+      {controls}
     </View>
   );
 }
@@ -103,6 +130,13 @@ const styles = StyleSheet.create({
     marginTop: 0,
     marginBottom: 0,
     paddingHorizontal: 0,
+  },
+  controlsOnlyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    width: "100%",
   },
   meta: {
     fontSize: 9,

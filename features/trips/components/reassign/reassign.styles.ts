@@ -71,7 +71,7 @@ export const reassignStyles = StyleSheet.create({
   },
   segmentPillActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   segmentText: {
     fontSize: 13,
@@ -79,7 +79,7 @@ export const reassignStyles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   segmentTextActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   list: {
     maxHeight: 280,
@@ -110,12 +110,12 @@ export const reassignStyles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -145,10 +145,10 @@ export const reassignStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   emptyCtaText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -191,7 +191,7 @@ export const reassignStyles = StyleSheet.create({
   },
   typeChipActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   typeChipText: {
     fontSize: 12,
@@ -199,11 +199,14 @@ export const reassignStyles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   typeChipTextActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   primaryBtn: {
     marginTop: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -212,7 +215,7 @@ export const reassignStyles = StyleSheet.create({
     opacity: 0.45,
   },
   primaryBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 15,
   },
@@ -234,6 +237,9 @@ export const reassignStyles = StyleSheet.create({
   },
   confirmBtn: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -242,7 +248,7 @@ export const reassignStyles = StyleSheet.create({
     opacity: 0.5,
   },
   confirmBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 16,
   },
@@ -283,10 +289,13 @@ export const reassignStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   retryBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontWeight: '700',
     fontSize: 14,
   },

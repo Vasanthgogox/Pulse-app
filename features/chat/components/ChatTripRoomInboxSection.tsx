@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   badgeText: {
     fontSize: 11,

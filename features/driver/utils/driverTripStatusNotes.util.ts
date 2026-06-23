@@ -81,14 +81,14 @@ export async function appendDriverStatusNote(
   const entry = `[UPDATE|${step}|${now}|${message}]`;
 
   const { data: row, error: fetchError } = await supabase()
-    .from('trips')
-    .select('notes')
+    .from('trips_driver_view')
+    .select('instructions')
     .eq('id', id)
     .maybeSingle();
 
   if (fetchError) return { error: fetchError.message };
 
-  const existing = row?.notes?.trim() || '';
+  const existing = (row as { instructions?: string | null } | null)?.instructions?.trim() || '';
   const { error } = await supabase()
     .from('trips')
     .update({ notes: existing ? `${existing}\n${entry}` : entry })

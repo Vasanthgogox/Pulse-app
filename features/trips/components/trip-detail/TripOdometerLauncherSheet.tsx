@@ -43,7 +43,7 @@ const OPTIONS = [
     title: "Start & end",
     subtitle: "Record both readings in one flow",
     Icon: Layers,
-    iconTint: "#4338ca",
+    iconTint: "#4D3636",
     iconBg: "rgba(99,102,241,0.12)",
   },
 ];

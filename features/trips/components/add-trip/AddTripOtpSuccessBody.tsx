@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
   actionBtnTextPrimary: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.2,
   },
   actionBtnTextSecondary: {

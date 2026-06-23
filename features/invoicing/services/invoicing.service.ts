@@ -4,7 +4,8 @@
  */
 import {
   getTripsWhereOrgIsSupplier,
-  type TripRow
+  supplierRowToTripRow,
+  type TripRow,
 } from "@/features/trips/services/trips.service";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
@@ -95,6 +96,7 @@ function resolveSupplierName(
 
 export function getTripStringId(row: TripRecord): string {
   const r = row as {
+    booking_ref?: string | null;
     trip_operational_code?: string;
     trip_code?: string;
     trip_id?: string;
@@ -102,6 +104,7 @@ export function getTripStringId(row: TripRecord): string {
     trip_number?: string;
     id?: string;
   };
+  if (r.booking_ref?.trim()) return r.booking_ref.trim();
   const operationalRef = getTripOperationalDisplay({
     trip_operational_code: r.trip_operational_code ?? null,
     trip_code: r.trip_code ?? null,
@@ -207,7 +210,7 @@ export async function fetchInvoicingTrips(
     if (supRes.error) return { error: supRes.error, trips: [] };
 
     const ownerRows = (ownerRes.data ?? []) as TripRecord[];
-    const supRows = (supRes.trips ?? []) as TripRecord[];
+    const supRows = (supRes.trips ?? []).map(supplierRowToTripRow) as TripRecord[];
 
     const map = new Map<string, TripRecord>();
     for (const t of [...ownerRows, ...supRows]) {

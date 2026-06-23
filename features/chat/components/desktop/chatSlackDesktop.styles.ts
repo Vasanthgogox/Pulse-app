@@ -113,7 +113,7 @@ export const slackDesktopStyles = StyleSheet.create({
   sidebarBrandDot: {
     fontSize: 17,
     fontWeight: "900",
-    color: "#6366F1",
+    color: "#4D3636",
     letterSpacing: -0.35,
     ...(Platform.OS === "web"
       ? { textShadow: "0px 0px 8px rgba(99, 102, 241, 0.45)" }
@@ -231,7 +231,7 @@ export const slackDesktopStyles = StyleSheet.create({
     paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   streamNavBadgeText: {
     fontSize: 9,
@@ -436,7 +436,7 @@ export const slackDesktopStyles = StyleSheet.create({
     marginTop: 1,
   },
   sidebarRowTimeActive: {
-    color: "#6366F1",
+    color: "#4D3636",
     fontWeight: "500",
   },
   sidebarRowPartyLine: {

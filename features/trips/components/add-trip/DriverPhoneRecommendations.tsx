@@ -92,7 +92,7 @@ export const DriverPhoneRecommendations = memo(function DriverPhoneRecommendatio
             accessibilityState={{ selected: active }}
           >
             <View style={[styles.avatar, active && styles.avatarActive]}>
-              <User size={16} color={active ? Theme.textOnPrimary : Theme.iconPrimary} />
+              <User size={16} color={active ? Theme.buttonPrimaryText : Theme.iconPrimary} />
             </View>
             <View style={styles.rowText}>
               <Text
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   },
   rowActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   avatar: {
     width: 36,
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   nameActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   meta: {
     fontSize: 11,

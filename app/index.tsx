@@ -165,7 +165,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 12,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   retryLabel: {
     fontSize: 16,

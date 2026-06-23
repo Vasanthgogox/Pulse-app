@@ -930,7 +930,19 @@ export async function inviteDriver(
       .single();
 
     if (updateErr) return { error: new Error(updateErr.message), driver: null, inviteSent: false };
-    return { error: null, driver: updated as DriverRow, inviteSent: false };
+    const rosterInvite = await inviteRosterDriver(
+      phoneNorm,
+      (data.name || "").trim() || "—",
+      orgId,
+    );
+    if (rosterInvite.error && __DEV__) {
+      console.warn("[inviteDriver] inviteRosterDriver:", rosterInvite.error.message);
+    }
+    return {
+      error: null,
+      driver: updated as DriverRow,
+      inviteSent: Boolean(rosterInvite.inviteId),
+    };
   }
 
   const payload = {
@@ -950,7 +962,19 @@ export async function inviteDriver(
     .single();
   if (error)
     return { error: new Error(error.message), driver: null, inviteSent: false };
-  return { error: null, driver: row as DriverRow, inviteSent: false };
+  const rosterInvite = await inviteRosterDriver(
+    phoneNorm,
+    (data.name || "").trim() || "—",
+    orgId,
+  );
+  if (rosterInvite.error && __DEV__) {
+    console.warn("[inviteDriver] inviteRosterDriver:", rosterInvite.error.message);
+  }
+  return {
+    error: null,
+    driver: row as DriverRow,
+    inviteSent: Boolean(rosterInvite.inviteId),
+  };
 }
 
 export interface EnsureDriverRowByPhoneOptions {
@@ -1472,6 +1496,43 @@ export async function resetDriverSignupInvite(
     error: new Error("Unable to reset invitation right now. Please try again shortly."),
     reset: false,
   };
+}
+
+/**
+ * Dispatcher-led roster invite for drivers without a platform account yet.
+ * Creates/finds roster row + pending driver_invites row; returns invite UUID for deep link.
+ */
+export async function inviteRosterDriver(
+  phone: string,
+  name: string,
+  orgId: string,
+): Promise<{ inviteId: string | null; error: Error | null }> {
+  const { data, error } = await supabase().rpc("invite_driver", {
+    p_phone: phone,
+    p_name: name,
+    p_org_id: orgId,
+  });
+  if (error) {
+    return { inviteId: null, error: new Error(error.message) };
+  }
+  const inviteId = typeof data === "string" ? data : null;
+  return { inviteId, error: null };
+}
+
+/**
+ * Consume a phone-based roster invite after driver OTP auth (deep link token).
+ * Sets drivers.user_id = auth.uid() when phone matches.
+ */
+export async function consumeDriverInvite(
+  inviteId: string,
+): Promise<{ success: boolean; error: Error | null }> {
+  const { data, error } = await supabase().rpc("consume_driver_invite", {
+    p_invite_id: inviteId,
+  });
+  if (error) {
+    return { success: false, error: new Error(error.message) };
+  }
+  return { success: data === true, error: null };
 }
 
 /**

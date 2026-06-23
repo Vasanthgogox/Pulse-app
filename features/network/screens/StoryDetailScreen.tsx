@@ -82,7 +82,7 @@ const INK = Theme.textPrimaryDark;
 const MUTED = Theme.textSecondary;
 
 const PALETTE = [
-  "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
+  "#4D3636", "#8b5cf6", "#ec4899", "#f43f5e",
   "#10b981", "#3b82f6", "#f59e0b", "#0ea5e9",
 ];
 function seedColor(id: string): string {
@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     marginBottom: 6,
   },
-  authorizeBtnText: { fontSize: 10, fontWeight: "900", color: "#fff", letterSpacing: 0.9, textTransform: "uppercase" },
+  authorizeBtnText: { fontSize: 10, fontWeight: "900", color: Theme.buttonPrimaryText, letterSpacing: 0.9, textTransform: "uppercase" },
   messageGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
   messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
   shareWaBtn: {

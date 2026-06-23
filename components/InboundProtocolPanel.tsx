@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
     right: 0,
     height: 2,
     borderRadius: 1,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   tabUnreadDot: {
     position: "absolute",

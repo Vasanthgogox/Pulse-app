@@ -55,6 +55,8 @@ import { tripDayIso } from "@/lib/dateRangePresets";
 import { formatLedgerDate } from "@/lib/format";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useDriverProfileImagesQuery } from "@/lib/queries/useDriverProfileImagesQuery";
+import { useRealtimeTransactionsInvalidation } from "@/lib/queries/useRealtimeInvalidation";
+import { useInvalidateTransactions } from "@/lib/queries/useTransactionsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
 import { clearAllDomainCacheMetaForOrg } from "@/lib/cache/cacheMetadataStore";
@@ -136,6 +138,7 @@ export function FinanceScreen() {
     isLoading: isOrgLoading,
   } = useOrganization();
   const queryClient = useQueryClient();
+  const invalidateTransactions = useInvalidateTransactions();
   const [entitiesRefreshKey, setEntitiesRefreshKey] = useState(0);
   const [financeSubTab, setFinanceSubTab] = useState<FinanceSubTab>("cash");
   const entities = useFinanceEntities({
@@ -160,6 +163,9 @@ export function FinanceScreen() {
     clients: entities.clientRows,
     suppliers: entities.supplierRows,
   });
+  useRealtimeTransactionsInvalidation(
+    canAccess ? (currentOrganization?.id ?? null) : null,
+  );
   const {
     clients,
     clientRows,
@@ -239,6 +245,7 @@ export function FinanceScreen() {
     setSearchQuery,
     filteredLedger,
     filteredLedgerForDisplay,
+    filteredLedgerForKanban,
     ledgerTotalsData,
     ledgerCategoryCounts,
     tripCountByParty,
@@ -247,6 +254,9 @@ export function FinanceScreen() {
     tripDetailsMap,
     clearFilters: ledgerClearFilters,
     isAnyFilterActive: ledgerAnyFilterActive,
+    fetchNextLedgerPage,
+    hasNextLedgerPage,
+    ledgerPageLoading,
   } = ledger;
 
   const financeDateOpts = useMemo(
@@ -340,6 +350,44 @@ export function FinanceScreen() {
     ledgerClearFilters();
     setEntityFilter("all");
   }, [ledgerClearFilters]);
+
+  const openAddPartyForSubTab = useCallback(
+    (subTab: "customers" | "suppliers" | "garage" | "drivers") => {
+      const partyKind = financeSubTabToPartyKind(subTab);
+      const routeAdd =
+        subTab === "customers"
+          ? () => router.push("/(modals)/add-client" as const)
+          : subTab === "suppliers"
+            ? () => router.push("/(modals)/add-supplier" as const)
+            : subTab === "garage"
+              ? () =>
+                  router.push({
+                    pathname: "/(modals)/add-vehicle",
+                    params: { returnTo: "/(tabs)/finance" },
+                  })
+              : () => router.push("/(modals)/add-driver" as const);
+      if (partyKind && usePartyPortalOnWeb) {
+        setPartyPortalKind(partyKind);
+        setPartyPortalOpen(true);
+        return;
+      }
+      routeAdd();
+    },
+    [router, usePartyPortalOnWeb],
+  );
+
+  const handleAddPartyPress = useCallback(() => {
+    if (
+      financeSubTab === "customers" ||
+      financeSubTab === "suppliers" ||
+      financeSubTab === "garage" ||
+      financeSubTab === "drivers"
+    ) {
+      openAddPartyForSubTab(financeSubTab);
+    }
+  }, [financeSubTab, openAddPartyForSubTab]);
+
+  const handleKanbanPartyAddPress = openAddPartyForSubTab;
 
   const [showEntityListModal, setShowEntityListModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -1317,8 +1365,8 @@ export function FinanceScreen() {
           queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all(org) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.trips.all(org) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.indents.all(org) }),
-          queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all(org) }),
         ]);
+        await invalidateTransactions(org);
         await Promise.all([
           queryClient.refetchQueries({ queryKey: queryKeys.clients.finite(org) }),
           queryClient.refetchQueries({ queryKey: queryKeys.suppliers.finite(org) }),
@@ -1331,7 +1379,16 @@ export function FinanceScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [currentOrganization?.id, queryClient, refetchLedger]);
+  }, [currentOrganization?.id, queryClient, refetchLedger, invalidateTransactions]);
+
+  /** Refetch ledger when Finance regains focus (e.g. after ledger-sync modal). */
+  useFocusEffect(
+    useCallback(() => {
+      const org = currentOrganization?.id;
+      if (!canAccess || !org) return;
+      void refetchLedger();
+    }, [canAccess, currentOrganization?.id, refetchLedger]),
+  );
 
   /** Recover from persisted empty party caches — once per org + sub-tab per session. */
   const partyRecoveryAttempted = useRef(new Set<string>());
@@ -1395,15 +1452,10 @@ export function FinanceScreen() {
 
   const orgId = currentOrganization?.id ?? null;
 
-  /** Show UI when org is ready and ledger is cached or fetched; entity lists can hydrate after. */
-  const financeDataLoading =
-    isOrgLoading || (ledgerTransactions === null && ledgerLoading);
-
-  if (financeDataLoading) {
-    return <SceneLoadingSplash variant="preparing" />;
-  }
-
   if (!orgId) {
+    if (isOrgLoading) {
+      return <SceneLoadingSplash variant="preparing" />;
+    }
     return (
       <View style={[styles.container, { paddingTop: screenTopPad }]}>
         <View style={[styles.centered, { flex: 1, paddingTop: 24 }]}>
@@ -1536,10 +1588,16 @@ export function FinanceScreen() {
               ledgerTransactions={ledgerTransactions}
               ledgerForEntityAggregation={filteredLedger}
               filteredLedgerForDisplay={filteredLedgerForDisplay}
+              filteredLedgerForKanban={filteredLedgerForKanban}
+              fetchNextLedgerPage={fetchNextLedgerPage}
+              hasNextLedgerPage={hasNextLedgerPage}
+              ledgerPageLoading={ledgerPageLoading}
               ledgerRefreshKey={ledgerRefreshKey}
               onAddTransactionPress={() =>
                 router.push("/(modals)/ledger-sync" as const)
               }
+              onAddPartyPress={handleAddPartyPress}
+              onKanbanPartyAddPress={handleKanbanPartyAddPress}
               onLedgerRowSelect={handleLedgerRowSelect}
               getVehicleNumberForTripId={getVehicleNumberForTripId}
               tripOptions={filteredTripOptionsForFinance}
@@ -1606,7 +1664,7 @@ export function FinanceScreen() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                tintColor={Theme.teslaRed}
+                tintColor={Theme.loaderAccent}
               />
             }
             {...tabBarScrollProps}

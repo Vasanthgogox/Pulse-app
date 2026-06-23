@@ -31,8 +31,8 @@ export function useTripControl(tripId: string | undefined) {
     setStepError(null);
     setLoading(true);
     try {
-      const res = await tripsService.getTripById(tripId);
-      setTrip(res.trip ?? null);
+      const res = await tripsService.getDriverTripById(tripId);
+      setTrip(res.trip ? tripsService.driverRowToTripRow(res.trip) : null);
 
       if (res.trip) {
         const s = (res.trip.status ?? "").toLowerCase();

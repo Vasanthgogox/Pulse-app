@@ -645,7 +645,10 @@ const styles = StyleSheet.create({
   },
   pendingBtnPrimary: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   pendingBtnText: {
     fontSize: 11,
@@ -655,7 +658,7 @@ const styles = StyleSheet.create({
   pendingBtnTextPrimary: {
     fontSize: 11,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   linkRow: { gap: 6 },
   linkCard: {
@@ -703,7 +706,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   emptyCtaText: {
     fontSize: 12,

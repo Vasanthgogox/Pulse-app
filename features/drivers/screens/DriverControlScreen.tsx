@@ -189,7 +189,7 @@ export default function DriverControlScreen() {
       setLinkedDriversFull(drivers);
       setLinkedDriversLoaded(true);
       if (drivers.length === 0) return;
-      tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
+      tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
         const tripsList = tRes.trips ?? [];
         setDriverTripNumberById(buildDriverTripNumberMap(tripsList));
         const count = tripsList.filter((t) =>
@@ -2139,7 +2139,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   transitActions: {
     flexDirection: "row",
@@ -2221,7 +2221,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.5,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   podModalBackdrop: {
     flex: 1,

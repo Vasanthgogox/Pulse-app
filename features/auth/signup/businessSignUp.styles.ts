@@ -210,7 +210,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center', marginTop: 10,
   },
   primaryBtnDisabled: { opacity: 0.55 },
-  primaryBtnText: { fontSize: 15, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700', color: Theme.buttonPrimaryText, letterSpacing: 0.3 },
 
   // Alt text / links
   altRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16 },

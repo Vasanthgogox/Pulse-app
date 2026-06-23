@@ -157,7 +157,7 @@ function HubCardIncoming({
             </Pressable>
           </View>
         ) : busy ? (
-          <LoadingIndicator size="small" color={Theme.teslaRed} />
+          <LoadingIndicator size="small" color={Theme.loaderAccent} />
         ) : null}
       </View>
     </View>
@@ -413,7 +413,7 @@ export function InvitationsView({
   if (receivedQ.isLoading && sentQ.isLoading) {
     return (
       <View style={styles.centered}>
-        <LoadingIndicator color={Theme.teslaRed} />
+        <LoadingIndicator color={Theme.loaderAccent} />
       </View>
     );
   }
@@ -539,7 +539,7 @@ export function InvitationsView({
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.teslaRed} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
       }
     >
       {isHub && hubSearchBar}
@@ -945,7 +945,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3,
     borderBottomColor: "transparent",
   },
-  hubSubTabOn: { borderBottomColor: Theme.teslaRed },
+  hubSubTabOn: { borderBottomColor: Theme.accentGold },
   hubSubTabText: {
     fontSize: 11,
     fontWeight: "800",

@@ -76,28 +76,20 @@ export const networkHubListCardChromeStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  /** Phone / narrow web — 3-up connection tiles (transparent, avatar + name). */
+  /** Phone / narrow web — hub grid tile (avatar + name in a compact sub-card). */
   cardMobileGrid: {
     width: "100%",
     alignSelf: "stretch",
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    borderRadius: 0,
-    paddingHorizontal: 4,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: NETWORK_HUB_RADIUS.card,
+    paddingHorizontal: 6,
     paddingVertical: 10,
     minHeight: 0,
     alignItems: "center",
-    overflow: "visible",
-    ...Platform.select({
-      ios: {
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        shadowOffset: { width: 0, height: 0 },
-      },
-      android: { elevation: 0 },
-      web: { boxShadow: "none" } as object,
-      default: {},
-    }),
+    overflow: "hidden",
+    ...cardShadow,
   },
   cardDesktopPane: {
     paddingHorizontal: 14,

@@ -99,6 +99,7 @@ import {
     getTripById,
     getTripDisplayNumber,
     getTripsWhereOrgIsSupplier,
+    supplierRowToTripRow,
     isTripCompleted,
     type TripRow,
 } from "../../../services/trips.service";
@@ -949,13 +950,14 @@ export function useTripDetail({
         if (supplierRes.error) return;
         const found = supplierRes.trips.find((t) => t.id === tripId);
         if (found) {
+          const mapped = supplierRowToTripRow(found);
           const current = tripRef.current;
           const unchanged =
             current?.id === found.id &&
             current?.updated_at === found.updated_at &&
             (current?.status ?? "") === (found.status ?? "");
           if (!unchanged) {
-            setTrip(found);
+            setTrip(mapped);
             setError(null);
           }
         }

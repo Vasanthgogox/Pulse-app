@@ -9,15 +9,15 @@ import { Platform, StyleSheet } from "react-native";
 
 export { METRONIC };
 
-/** Deep violet → indigo gradient stops for the workspace header band. */
-export const HUB_HEADER_GRADIENT = ["#4C1D95", "#5B21B6", "#6366F1"] as const;
+/** Pastel blue gradient stops for the workspace header band. */
+export const HUB_HEADER_GRADIENT = ["#B9E2F5", "#CDE9F7", "#E5F4FB"] as const;
 
-export const HUB_PURPLE = "#5B21B6";
-export const HUB_PURPLE_DEEP = "#4C1D95";
-export const HUB_PURPLE_VIVID = "#7C3AED";
+export const HUB_PURPLE = Theme.brandBlueInk;
+export const HUB_PURPLE_DEEP = "#9ACEEB";
+export const HUB_PURPLE_VIVID = Theme.brandBluePressed;
 export const HUB_PURPLE_LIGHT = Theme.primaryLight;
-export const HUB_PURPLE_TINT = "rgba(91, 33, 182, 0.09)";
-export const HUB_PURPLE_BORDER = "rgba(91, 33, 182, 0.18)";
+export const HUB_PURPLE_TINT = Theme.pulseIndigoWash;
+export const HUB_PURPLE_BORDER = Theme.pulseIndigoRing;
 export const HUB_MENU_ICON = METRONIC.subtle;
 
 const HEADER_GLASS_WEB =

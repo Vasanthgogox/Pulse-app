@@ -516,13 +516,13 @@ export default function DriverTripsScreen() {
       if (drivers.length > 0) {
         setDriver(activeDriver);
         Promise.all([
-          tripsService.getTripsByDriverIds(drivers.map((d) => d.id)),
+          tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)),
           driversService.getDriverInvitesReceived(),
         ])
           .then(([tRes, invitesRes]) => {
             if (cancelled) return;
             if (tRes.error && __DEV__) {
-              console.warn("[trip-history] getTripsByDriverIds:", tRes.error.message);
+              console.warn("[trip-history] getDriverUiTripsByDriverIds:", tRes.error.message);
             }
             if (invitesRes.error && __DEV__) {
               console.warn("[trip-history] getDriverInvitesReceived:", invitesRes.error.message);
@@ -1777,7 +1777,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(16,185,129,0.30)",
   },
   tripTypeBadgeOpen: {
-    color: "#4f46e5",
+    color: "#4D3636",
     backgroundColor: "rgba(99,102,241,0.10)",
     borderColor: "rgba(99,102,241,0.30)",
   },

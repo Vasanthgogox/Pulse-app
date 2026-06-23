@@ -424,7 +424,10 @@ const styles = StyleSheet.create({
   },
   typeBtnActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   typeBtnText: {
     fontSize: 11,
@@ -432,7 +435,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: "uppercase",
   },
-  typeBtnTextActive: { color: Theme.textOnPrimary },
+  typeBtnTextActive: { color: Theme.buttonPrimaryText },
   impactRow: { flexDirection: "row", gap: 10, marginBottom: 24 },
   impactBtn: {
     flex: 1,
@@ -461,7 +464,7 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textTransform: "uppercase",
   },
-  impactBtnTextActive: { color: Theme.textOnPrimary },
+  impactBtnTextActive: { color: Theme.buttonPrimaryText },
   amountWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -549,7 +552,7 @@ const styles = StyleSheet.create({
   commitBtnText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },

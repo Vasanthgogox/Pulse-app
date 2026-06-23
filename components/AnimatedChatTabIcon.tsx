@@ -35,14 +35,11 @@ function ChatBubbleSvg({
   size: number;
   active: boolean;
 }) {
-  /* When the edge chat tab is active it sits on a solid indigo chip,
-   *  so the SVG bubble flips to a white / pale-indigo palette to read
-   *  on the deep purple background. Inactive keeps the muted slate
-   *  tones used by the rest of the bar. */
-  const accent = active ? "#FFFFFF" : Theme.pulseIndigo;
-  const accentDeep = active ? "#C7D2FE" : Theme.actionAccentBorder;
-  const highlight = active ? "#FFFFFF" : "#A5B4FC";
-  const face = active ? "#FFFFFF" : "#EEF2FF";
+  /* Active chat tab sits on pastel blue chip — ink bubble reads on light fill. */
+  const accent = active ? Theme.brandBlueInk : Theme.pulseIndigo;
+  const accentDeep = active ? Theme.loadAddButtonBorder : Theme.actionAccentBorder;
+  const highlight = active ? Theme.brandBlueSoft : "#B9E2F5";
+  const face = active ? "#FFFFFF" : Theme.brandBlueSoft;
 
   return (
     <Svg

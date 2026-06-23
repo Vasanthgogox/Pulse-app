@@ -318,7 +318,7 @@ const s = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 14,
     marginVertical: 8,
-    shadowColor: "#4338ca",
+    shadowColor: "#4D3636",
     shadowOpacity: 0.06,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
@@ -488,7 +488,7 @@ const s = StyleSheet.create({
   submitBtnText: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },

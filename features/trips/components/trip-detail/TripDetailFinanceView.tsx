@@ -3293,7 +3293,7 @@ const styles = StyleSheet.create({
     width: 3,
     height: 14,
     borderRadius: 3,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   sectionKicker: {
     fontSize: 9,
@@ -3492,7 +3492,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   assignmentActionBtnText: {
     fontSize: 9,
@@ -3602,7 +3605,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
   },
   progressSegmentActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   trackingFooter: {
     flexDirection: "row",
@@ -4432,13 +4435,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 10,
   },
   entryPreviewPrimaryBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   financeSection: {
     marginBottom: 0,
@@ -4773,7 +4779,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
@@ -4845,7 +4851,10 @@ const styles = StyleSheet.create({
   },
   inlineTypeBtnActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   inlineTypeBtnText: {
     fontSize: 10,
@@ -4854,7 +4863,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   inlineTypeBtnTextActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   inlineImpactPlus: {
     borderColor: Theme.borderLight,
@@ -4938,7 +4947,10 @@ const styles = StyleSheet.create({
   inlineSaveBtn: {
     marginTop: 4,
     borderRadius: 12,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
@@ -4949,7 +4961,7 @@ const styles = StyleSheet.create({
   inlineSaveBtnText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },

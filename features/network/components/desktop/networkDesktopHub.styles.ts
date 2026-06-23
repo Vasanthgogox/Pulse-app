@@ -287,7 +287,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
     color: METRONIC.text,
   },
   tabActionBtnTextOn: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
   tabActionIconBtn: {
     width: 36,
@@ -671,7 +671,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
   offerLocationBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   locationsGrid: {
     flexDirection: "row",
@@ -2340,7 +2340,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
   growToolbarFilterBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   growToolbarBottom: {
     flexDirection: "row",
@@ -3603,7 +3603,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
     color: METRONIC.link,
   },
   goalsWizardOptionBtnTextOn: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   goalsWizardCarryCard: {
     flexDirection: "row",
@@ -3740,7 +3740,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
   teamInviteBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   teamInviteCancelBtn: {
     flexDirection: "row",
@@ -3792,7 +3792,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
     borderColor: METRONIC.accent,
   },
   tabActionBtnTextInvitesOn: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
   profileSplitRow: {
     flexDirection: "row",
@@ -3913,7 +3913,7 @@ export const networkDesktopHubStyles = StyleSheet.create({
   profileSaveBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   profilePresetGrid: {
     flexDirection: "row",

@@ -490,7 +490,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   submitBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     padding: 14,
     borderRadius: 8,
     alignItems: 'center',

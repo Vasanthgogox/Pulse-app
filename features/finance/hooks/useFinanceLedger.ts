@@ -1,25 +1,28 @@
 /**
  * Ledger state and derived data for the Finance screen. Uses TanStack Query cache.
  */
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import {
+    isAggregateExecutionTrip,
+    isAssetExecutionTrip,
+} from "@/features/trips/domain/tripExecutionModel";
 import { getTripDisplayNumber, type TripRow } from "@/features/trips/services/trips.service";
 import {
-  buildUniqueLinkedOrgIdMap,
-  isCrossOrgIntegrationTrip,
-  isLoadBasedTrip,
+    buildUniqueLinkedOrgIdMap,
+    isCrossOrgIntegrationTrip,
+    isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
-import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
-import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
+import { useTransactionsQuery } from "@/lib/queries/useTransactionsQuery";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  filterLedgerByPeriod,
-  type LedgerPeriodFilterOptions,
+    filterLedgerByPeriod,
+    type LedgerPeriodFilterOptions,
 } from "../lib/filterLedgerByPeriod";
 import { ledgerTotals } from "../lib/ledgerTotals";
 import type { LedgerRow } from "../services/finance.service";
-import type { ClientRow } from "@/features/clients/services/clients.service";
-import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import {
     LEDGER_CATEGORIES,
     LEDGER_CATEGORY_STORAGE_KEY,
@@ -70,6 +73,8 @@ export interface UseFinanceLedgerResult {
   filteredLedger: LedgerRow[];
   filteredLedgerBySource: LedgerRow[];
   filteredLedgerForDisplay: LedgerRow[];
+  /** Kanban columns — period/source/search only (not ledger category or cash-in/out chips). */
+  filteredLedgerForKanban: LedgerRow[];
   ledgerTotalsData: { totalIn: number; totalOut: number };
   ledgerCategoryCounts: Record<LedgerCategory, number>;
   selectedEntityTotals: {
@@ -121,15 +126,14 @@ export function useFinanceLedger({
 }: UseFinanceLedgerArgs): UseFinanceLedgerResult {
   const orgId = canAccess ? organizationId : null;
   const {
-    data: ledgerData,
-    isPending: ledgerLoading,
+    data: ledgerTransactionsData,
+    isLoading: ledgerQueryLoading,
     refetch,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useTransactionsInfiniteQuery(orgId);
-  const ledgerTransactions =
-    ledgerData?.pages.flatMap((p) => p.transactions) ?? null;
+    isFetching: ledgerRefetching,
+  } = useTransactionsQuery(orgId);
+  const ledgerTransactions = ledgerTransactionsData ?? null;
+  /** isLoading — first fetch only; keeps cached rows visible while refetching. */
+  const ledgerLoading = Boolean(orgId) && ledgerQueryLoading;
 
   const [ledgerRefreshKey, setLedgerRefreshKeyState] = useState(0);
   const setLedgerRefreshKey = useCallback(
@@ -333,11 +337,16 @@ export function useFinanceLedger({
   const filteredLedgerBySource = useMemo(() => {
     if (sourceSupplyFilter === "all") return filteredLedger;
     return filteredLedger.filter((r) => {
-      if (!r.trip_id) return true;
+      if (!r.trip_id) {
+        // Party-level postings without a trip link belong on aggregate cash view.
+        return sourceSupplyFilter === "aggregate";
+      }
       const trip = tripById.get(r.trip_id);
-      if (!trip) return true;
-      const isAggregate = resolveTripLedgerTripType(trip) === "market";
-      return sourceSupplyFilter === "aggregate" ? isAggregate : !isAggregate;
+      if (!trip) return sourceSupplyFilter === "aggregate";
+      const isAggregate = isAggregateExecutionTrip(trip);
+      return sourceSupplyFilter === "aggregate"
+        ? isAggregate
+        : isAssetExecutionTrip(trip);
     });
   }, [filteredLedger, sourceSupplyFilter, tripById]);
 
@@ -417,6 +426,57 @@ export function useFinanceLedger({
     ledgerRowsByCategory,
     selectedLedgerCategory,
     cashDirectionFilter,
+    ledgerSearchLower,
+    ledgerSortKey,
+    ledgerSortDir,
+    getVehicleNumberForTripId,
+  ]);
+
+  const filteredLedgerForKanban = useMemo(() => {
+    let base = filteredLedgerBySource;
+    if (ledgerSearchLower) {
+      base = base.filter(
+        (r) =>
+          (r.party_name || "").toLowerCase().includes(ledgerSearchLower) ||
+          (r.description || "").toLowerCase().includes(ledgerSearchLower) ||
+          (r.trip_number || "").toLowerCase().includes(ledgerSearchLower) ||
+          (getVehicleNumberForTripId(r.trip_id ?? null) || "")
+            .toLowerCase()
+            .includes(ledgerSearchLower),
+      );
+    }
+    const mult = ledgerSortDir === "asc" ? 1 : -1;
+    return [...base].sort((a, b) => {
+      if (ledgerSortKey === "entity") {
+        const entityFor = (r: LedgerRow) =>
+          (r.amount_out ?? 0) > 0
+            ? getVehicleNumberForTripId(r.trip_id ?? null) || r.party_name || ""
+            : r.party_name || "";
+        const nameCmp = entityFor(a).localeCompare(entityFor(b), undefined, {
+          sensitivity: "base",
+        });
+        if (nameCmp !== 0) return mult * nameCmp;
+        return mult * (a.description || "").localeCompare(b.description || "");
+      }
+      if (ledgerSortKey === "source") {
+        const sourceA =
+          a.trip_number || getVehicleNumberForTripId(a.trip_id ?? null) || "";
+        const sourceB =
+          b.trip_number || getVehicleNumberForTripId(b.trip_id ?? null) || "";
+        return mult * sourceA.localeCompare(sourceB);
+      }
+      if (ledgerSortKey === "cash_in") {
+        return mult * ((a.amount_in ?? 0) - (b.amount_in ?? 0));
+      }
+      if (ledgerSortKey === "cash_out") {
+        return mult * ((a.amount_out ?? 0) - (b.amount_out ?? 0));
+      }
+      const dateA = a.transaction_date || a.created_at || "";
+      const dateB = b.transaction_date || b.created_at || "";
+      return mult * dateA.localeCompare(dateB);
+    });
+  }, [
+    filteredLedgerBySource,
     ledgerSearchLower,
     ledgerSortKey,
     ledgerSortDir,
@@ -586,6 +646,7 @@ export function useFinanceLedger({
     filteredLedger,
     filteredLedgerBySource,
     filteredLedgerForDisplay,
+    filteredLedgerForKanban,
     ledgerTotalsData,
     ledgerCategoryCounts,
     selectedEntityTotals,
@@ -596,8 +657,8 @@ export function useFinanceLedger({
     tripDetailsMap,
     clearFilters,
     isAnyFilterActive,
-    fetchNextLedgerPage: fetchNextPage,
-    hasNextLedgerPage: hasNextPage ?? false,
-    ledgerPageLoading: isFetchingNextPage,
+    fetchNextLedgerPage: () => {},
+    hasNextLedgerPage: false,
+    ledgerPageLoading: ledgerRefetching,
   };
 }

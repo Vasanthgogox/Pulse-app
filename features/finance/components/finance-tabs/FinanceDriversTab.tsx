@@ -23,6 +23,7 @@ export function FinanceDriversTab(props: FinanceTabBodyProps) {
     driverViewTab,
     onDriverViewTabChange,
     embedInParentScroll,
+    onAddPartyPress,
   } = props;
 
   return (
@@ -51,6 +52,7 @@ export function FinanceDriversTab(props: FinanceTabBodyProps) {
       onViewTabChange={onDriverViewTabChange}
       hideSummaryRow
       embedInParentScroll={embedInParentScroll}
+      onAddPartyPress={onAddPartyPress}
     />
   );
 }

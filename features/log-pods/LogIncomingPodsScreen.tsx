@@ -1455,7 +1455,10 @@ const styles = StyleSheet.create({
   cancelBtn: { paddingHorizontal: 16, paddingVertical: 8 },
   cancelText: { fontSize: 14, fontWeight: "600", color: Theme.textMuted },
   headerLogBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -1646,7 +1649,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   viewModeBtnActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   viewModeText: {
     fontSize: 12,
@@ -1784,7 +1790,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   tableCheckBoxOn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   tableActionBtn: {
@@ -1867,9 +1873,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
   },
-  checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  checkBoxOn: { backgroundColor: Theme.buttonPrimary, borderColor: Theme.primary },
   checkBoxPartial: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   dash: { color: "#fff", fontSize: 12, fontWeight: "800" },
@@ -1953,7 +1959,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  lrCheckOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  lrCheckOn: { backgroundColor: Theme.buttonPrimary, borderColor: Theme.primary },
   lrText: {
     fontSize: 12,
     fontWeight: "700",
@@ -1992,7 +1998,10 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
   },
   logBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -2061,7 +2070,10 @@ const styles = StyleSheet.create({
   blockedBody: { fontSize: 14, color: Theme.textSecondary, marginBottom: 20 },
   blockedBtn: {
     alignSelf: "flex-start",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,

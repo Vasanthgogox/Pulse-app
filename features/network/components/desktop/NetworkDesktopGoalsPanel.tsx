@@ -410,7 +410,7 @@ const goalsExtra = StyleSheet.create({
   },
   hierarchySaveBtnText: {
     fontSize: 14,
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     fontWeight: "700",
   },
   hierarchyCancelBtn: {
@@ -647,7 +647,7 @@ const goalsExtra = StyleSheet.create({
   regionSaveBtnText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
 });
 

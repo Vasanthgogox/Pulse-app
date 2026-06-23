@@ -19,12 +19,12 @@ export type SignUpTheme = {
   deviceBorder: string;
 };
 
-/** Business / workspace signup — Pulse indigo-purple. */
+/** Business / workspace signup — Pulse pastel blue + ink. */
 export const PULSE_SIGNUP: SignUpTheme = {
   primary: Theme.actionAccent,
   primaryDark: Theme.actionAccentBorder,
   primaryLight: Theme.primaryLight,
-  primaryTint: '#EEF2FF',
+  primaryTint: Theme.brandBlueSoft,
   canvas: '#f3f4f6',
   bg: '#ffffff',
   text: '#111827',
@@ -41,7 +41,7 @@ export const PULSE_SIGNUP: SignUpTheme = {
 
 export const PULSE_SIGNUP_RADIUS = {
   input: 16,
-  button: 16,
+  button: 999,
   pill: 14,
   card: 20,
   device: 48,

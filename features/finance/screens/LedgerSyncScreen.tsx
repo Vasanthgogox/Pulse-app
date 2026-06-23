@@ -30,7 +30,7 @@ import {
 import { buildLedgerSyncDescriptionLine } from "@/features/finance/ledger/ledgerEntryModel";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips/services/trips.service";
+import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, supplierRowToTripRow, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles/services/vehicles.service";
 import { updateSalaryRequestStatus } from "@/features/drivers/services/salaryRequests.service";
@@ -39,6 +39,7 @@ import { formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { ROUTES } from "@/lib/routes";
+import { useInvalidateTransactions } from "@/lib/queries/useTransactionsQuery";
 import { useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -217,6 +218,7 @@ export default function LedgerSyncScreen() {
 
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
+  const invalidateTransactions = useInvalidateTransactions();
 
   useEffect(() => {
     if (!orgId) {
@@ -250,7 +252,7 @@ export default function LedgerSyncScreen() {
       ]).then(([ownedRes, asClientRes, asSupplierRes]) => {
         const owned = ownedRes?.error ? [] : (ownedRes?.trips ?? []);
         const asClient = asClientRes?.error ? [] : (asClientRes?.trips ?? []);
-        const asSupplier = asSupplierRes?.error ? [] : (asSupplierRes?.trips ?? []);
+        const asSupplier = asSupplierRes?.error ? [] : (asSupplierRes?.trips ?? []).map(supplierRowToTripRow);
         const seen = new Set<string>();
         const merged: TripRow[] = [];
         for (const t of owned) {
@@ -819,7 +821,7 @@ export default function LedgerSyncScreen() {
         throw new Error(error.message);
       }
 
-      void queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
+      await invalidateTransactions(orgId);
       const refreshTripId = payload.trip_id ?? params.tripId ?? null;
       if (refreshTripId) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(refreshTripId) });
@@ -881,6 +883,7 @@ export default function LedgerSyncScreen() {
     [
       orgId,
       queryClient,
+      invalidateTransactions,
       editingEntry?.transaction_date,
       profile?.uid,
       router,

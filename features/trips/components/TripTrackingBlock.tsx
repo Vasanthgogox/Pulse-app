@@ -107,7 +107,7 @@ function getTripProgressPct(trip: TripRow): number {
   return 0;
 }
 
-const NEON_COLOR = Theme.teslaRed;
+const NEON_COLOR = Theme.accentGold;
 
 export function TripTrackingBlock({ trip, driverName, vehicleLabel, driverRating, reassignmentEntries }: TripTrackingBlockProps) {
   const missionLog = useMemo(() => {

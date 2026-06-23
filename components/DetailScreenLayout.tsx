@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   header: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingBottom: 16,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -381,6 +381,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     borderRadius: 8,
     gap: 8,
@@ -401,7 +404,7 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 });
 

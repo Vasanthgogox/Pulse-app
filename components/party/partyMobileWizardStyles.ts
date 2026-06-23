@@ -152,7 +152,7 @@ export const partyMobileWizardStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingVertical: 13,
     paddingHorizontal: 16,
     minHeight: Layout.minTouchTargetSize,
@@ -163,7 +163,7 @@ export const partyMobileWizardStyles = StyleSheet.create({
   importPrimaryText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.3,
   },
   importError: {

@@ -18,7 +18,7 @@ import {
 import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-export const PURPLE = '#4F46E5';
+export const PURPLE = '#4D3636';
 export const PURPLE_MID = '#312e81';
 export const PURPLE_TINT = 'rgba(79,70,229,0.08)';
 export const PURPLE_BORDER = 'rgba(79,70,229,0.18)';

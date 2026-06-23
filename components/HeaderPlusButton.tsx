@@ -1,11 +1,12 @@
 /**
- * Header plus button — square black button with white plus icon.
- * Matches Trip Details / entity detail header style. Use in header right corner instead of floating FAB.
+ * Header plus button — illustration pill with ink plus icon.
+ * Use in header right corner instead of floating FAB.
  */
-import { SemanticAddIcon } from "@/components/SemanticAddIcon";
-import { StyleSheet, TouchableOpacity } from "react-native";
+import { pulsePillButtonContainerIconOnly, pulsePillButtonPressed } from "@/constants/PulsePillButtonChrome";
 import Theme from "@/constants/Theme";
+import { SemanticAddIcon } from "@/components/SemanticAddIcon";
 import { Plus, type LucideIcon } from "lucide-react-native";
+import { Pressable, StyleSheet } from "react-native";
 
 export interface HeaderPlusButtonProps {
   onPress: () => void;
@@ -20,39 +21,38 @@ export function HeaderPlusButton({
   IconComponent = Plus,
 }: HeaderPlusButtonProps) {
   return (
-    <TouchableOpacity
-      style={styles.btn}
+    <Pressable
+      style={({ pressed }) => [
+        styles.btn,
+        pulsePillButtonContainerIconOnly,
+        pressed && pulsePillButtonPressed,
+      ]}
       onPress={onPress}
-      activeOpacity={0.8}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
     >
       {IconComponent === Plus ? (
-        <Plus size={16} color={Theme.textOnPrimary} strokeWidth={2.5} />
+        <Plus size={16} color={Theme.buttonPrimaryText} strokeWidth={2.5} />
       ) : (
         <SemanticAddIcon
           IconComponent={IconComponent}
           iconSize={16}
-          iconColor={Theme.textOnPrimary}
+          iconColor={Theme.buttonPrimaryText}
           badgeSize={16}
           badgeIconSize={11}
-          badgeBackgroundColor={Theme.textOnPrimary}
-          badgeIconColor={Theme.darkBackground}
+          badgeBackgroundColor={Theme.buttonPrimaryText}
+          badgeIconColor={Theme.buttonPrimary}
           badgeOffsetX={-7}
           badgeOffsetY={-5}
         />
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   btn: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: Theme.darkBackground,
     alignItems: "center",
     justifyContent: "center",
   },

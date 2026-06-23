@@ -124,6 +124,9 @@ export interface ProvisionPartyLaneProps {
   partyName: string;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  isIntegrated?: boolean;
   entityType: "client" | "supplier" | "driver";
   laneLabel: string;
   baseAmount: number;
@@ -139,6 +142,9 @@ function PartyLaneCard({
   partyName,
   avatarUrl,
   avatarSeed,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  isIntegrated,
   entityType,
   laneLabel,
   baseAmount,
@@ -163,6 +169,9 @@ function PartyLaneCard({
           name={partyName}
           avatarUrl={avatarUrl}
           avatarSeed={avatarSeed}
+          organizationImageUrl={organizationImageUrl}
+          organizationAvatarSeed={organizationAvatarSeed}
+          isIntegrated={isIntegrated}
           entityType={entityType}
           size={isModal ? 36 : isDesktop ? 32 : 28}
           showIntegrationBadge={false}
@@ -319,12 +328,18 @@ export interface ProvisionRevisedPartiesCardProps {
   clientName: string;
   clientAvatarUrl?: string | null;
   clientAvatarSeed?: string | null;
+  clientOrganizationImageUrl?: string | null;
+  clientOrganizationAvatarSeed?: string | null;
+  clientIntegrated?: boolean;
   sales: number;
   adjSales: number;
   revenueSideDelta: number;
   supplierName: string;
   supplierAvatarUrl?: string | null;
   supplierAvatarSeed?: string | null;
+  supplierOrganizationImageUrl?: string | null;
+  supplierOrganizationAvatarSeed?: string | null;
+  supplierIntegrated?: boolean;
   cost: number;
   adjCost: number;
   costSideDelta: number;
@@ -363,6 +378,9 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           partyName={props.clientName}
           avatarUrl={props.clientAvatarUrl}
           avatarSeed={props.clientAvatarSeed}
+          organizationImageUrl={props.clientOrganizationImageUrl}
+          organizationAvatarSeed={props.clientOrganizationAvatarSeed}
+          isIntegrated={props.clientIntegrated}
           entityType="client"
           laneLabel="Revised sale"
           baseAmount={props.sales}
@@ -380,6 +398,9 @@ export const ProvisionRevisedPartiesCard = memo(function ProvisionRevisedParties
           partyName={props.supplierName}
           avatarUrl={props.supplierAvatarUrl}
           avatarSeed={props.supplierAvatarSeed}
+          organizationImageUrl={props.supplierOrganizationImageUrl}
+          organizationAvatarSeed={props.supplierOrganizationAvatarSeed}
+          isIntegrated={props.supplierIntegrated}
           entityType={props.costPartyEntityType ?? "supplier"}
           laneLabel={props.costLaneLabel ?? "Revised cost"}
           baseAmount={props.cost}

@@ -1595,7 +1595,7 @@ export default function ClientDetailScreen({
     return (
       <CenteredLoadingView
         message={t("loadingClient")}
-        color={Theme.teslaRed}
+        color={Theme.loaderAccent}
       />
     );
   }
@@ -1763,7 +1763,7 @@ export default function ClientDetailScreen({
               setRefreshing(true);
               load();
             }}
-            tintColor={Theme.teslaRed}
+            tintColor={Theme.loaderAccent}
           />
         }
       >
@@ -3124,13 +3124,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     paddingVertical: 14,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 14,
   },
   profileEditBtnText: {
     fontSize: 10,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 1,
     textTransform: "uppercase",
   },
@@ -3574,7 +3577,10 @@ const styles = StyleSheet.create({
   sharedBtnPrimary: {
     flex: 1,
     paddingVertical: 14,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",

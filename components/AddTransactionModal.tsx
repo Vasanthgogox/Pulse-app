@@ -13,6 +13,7 @@ import {
 } from "@/components/ledger/ledgerPaymentVisuals";
 import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
+import { LedgerTripSettlementNote } from "@/components/ledger/LedgerTripSettlementNote";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
@@ -48,6 +49,7 @@ import {
     type LedgerFlowGuardAlertContent,
     type LedgerLockedEntityType,
 } from "@/lib/ledgerPartySmartTagPolicy";
+import { resolveLedgerTripSettlementPreview } from "@/lib/ledgerTripSettlementPreview.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { dateISO, VALIDATION } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -1684,6 +1686,21 @@ export function AddTransactionModal({
     type,
     ledgerLockedEntityType,
     resolveTripOptionById,
+  ]);
+
+  const ledgerWizardTripLedgerPreview = useMemo(() => {
+    const tid = selectedTripIds[0];
+    if (!tid) return null;
+    return resolveLedgerTripSettlementPreview(
+      tripFinancialPreviewByTripId[tid],
+      type,
+      ledgerLockedEntityType,
+    );
+  }, [
+    selectedTripIds,
+    tripFinancialPreviewByTripId,
+    type,
+    ledgerLockedEntityType,
   ]);
 
   const selectMissionTrip = useCallback(
@@ -3779,7 +3796,15 @@ export function AddTransactionModal({
           ]}
         >
           <View style={styles.syncAmountGlow} pointerEvents="none" />
-          {selectedTripNoDueNotice ? (
+          {ledgerWizardTripLedgerPreview ? (
+            <View style={styles.ledgerTripPreviewWrap}>
+              <LedgerTripSettlementNote
+                preview={ledgerWizardTripLedgerPreview}
+                enteredInr={amount}
+                compact={mob}
+              />
+            </View>
+          ) : selectedTripNoDueNotice ? (
             <View style={[styles.ledgerSyncNoDueBanner, mob && styles.ledgerMobNoDueBanner]}>
               <CircleEllipsis
                 size={mob ? 12 : 13}
@@ -5121,6 +5146,7 @@ export function AddTransactionModal({
                 onClose={onClose}
                 flowSessionKey={ledgerWizardFlowSessionKey}
                 compact
+                tripLedgerPreview={ledgerWizardTripLedgerPreview}
               />
             </View>
           </View>
@@ -6054,7 +6080,7 @@ export function AddTransactionModal({
                               {t.trip_number}
                             </Text>
                             {t.is_cross_org_supplier ? (
-                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#6366f1", backgroundColor: "#ede9fe", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
+                              <Text style={{ fontSize: 10, fontWeight: "700", color: "#4D3636", backgroundColor: "#ede9fe", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4 }}>
                                 SUPPLIER
                               </Text>
                             ) : null}
@@ -6729,7 +6755,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.2,
   },
-  toggleBtnTextActive: { color: Theme.textOnPrimary },
+  toggleBtnTextActive: { color: Theme.buttonPrimaryText },
   entryContextLabel: {
     fontSize: 10,
     marginTop: 4,
@@ -7303,6 +7329,9 @@ const styles = StyleSheet.create({
   },
   submitBtnOut: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   submitBtnDisabled: { opacity: 0.5 },
   submitBtnText: {
@@ -8026,7 +8055,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   ledgerWebDatePickerBtnPrimaryText: {
     fontSize: 15,
@@ -8760,6 +8792,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(148, 163, 184, 0.2)",
     borderLeftWidth: 3,
     borderLeftColor: LedgerSyncPalette.indigo,
+  },
+  ledgerTripPreviewWrap: {
+    width: "100%",
+    marginBottom: 12,
   },
   ledgerSyncNoDueBannerText: {
     flex: 1,

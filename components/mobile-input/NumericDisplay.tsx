@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   cursor: {
     width: 2,
     height: 36,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderRadius: 2,
     marginLeft: 4,
     alignSelf: 'center',

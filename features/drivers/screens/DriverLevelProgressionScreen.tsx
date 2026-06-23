@@ -65,7 +65,7 @@ export default function LevelProgressionScreen() {
       // Experience is cumulative — include ALL driver rows (including left fleets).
       const drivers = res.drivers ?? [];
       if (drivers.length > 0) {
-        tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
+        tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
           const list = tRes.trips ?? [];
           setTripsCount(list.filter((t) => isCompleted(t.status)).length);
           setLoading(false);
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   statCardDark: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   statCardDecoDark: {

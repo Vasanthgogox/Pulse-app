@@ -85,7 +85,7 @@ export function ExpensesTable({
         {onViewAll && (
           <TouchableOpacity onPress={onViewAll} style={styles.viewAllBtn} activeOpacity={0.7}>
             <Text style={styles.viewAllText}>View All</Text>
-            <FontAwesome name="chevron-right" size={9} color="#6366f1" />
+            <FontAwesome name="chevron-right" size={9} color="#4D3636" />
           </TouchableOpacity>
         )}
       </View>
@@ -187,7 +187,7 @@ function NativeList({ expenses }: { expenses: ExpenseRow[] }) {
             <View style={styles.nativeActions}>
               {row.onView && (
                 <TouchableOpacity onPress={row.onView} style={[styles.nativeActionBtn, styles.btnView]} activeOpacity={0.7}>
-                  <FontAwesome name="eye" size={11} color="#6366f1" />
+                  <FontAwesome name="eye" size={11} color="#4D3636" />
                 </TouchableOpacity>
               )}
               {row.onEdit && (
@@ -276,7 +276,7 @@ function ActionsCell({ row, width }: { row: ExpenseRow; width?: number }) {
     <View style={[styles.tableCell, { width }, styles.actionsCell]}>
       {row.onView && (
         <TouchableOpacity onPress={row.onView} style={[styles.actionIconBtn, styles.btnView]} activeOpacity={0.75}>
-          <FontAwesome name="eye" size={11} color="#6366f1" />
+          <FontAwesome name="eye" size={11} color="#4D3636" />
         </TouchableOpacity>
       )}
       {row.onEdit && (
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
   addBtnText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonDarkText,
   },
 
   // ── Summary bar ──
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6366f1",
+    color: "#4D3636",
   },
 
   // ── Table ──
@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
   mono: {
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     fontSize: 11,
-    color: "#6366f1",
+    color: "#4D3636",
   },
   boldCell: {
     fontWeight: "700",
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
   nativeExpenseId: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6366f1",
+    color: "#4D3636",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   nativeAmount: {

@@ -75,7 +75,7 @@ export const partnerProfileDashboardStyles = StyleSheet.create({
     }),
   },
   editProfileBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     fontSize: 11,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -272,7 +272,7 @@ export const partnerProfileDashboardStyles = StyleSheet.create({
     width: 4,
     height: 28,
     borderRadius: 4,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   accentEmerald: {
     width: 4,

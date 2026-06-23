@@ -15,6 +15,9 @@ export const layout = {
   tabBarClearanceEstimate: 88,
   desktopTopNav: 84,
   webDesktopMinWidth: 900,
+  /** Matches `Layout.desktopHubMaxWidth` — desktop hub shell max width on web. */
+  desktopHubMaxWidth: 1680,
+  webDesktopUiScale: 1,
 } as const;
 
 export default layout;

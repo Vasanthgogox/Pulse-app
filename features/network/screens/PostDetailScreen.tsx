@@ -44,7 +44,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ORG_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
+  '#4D3636', '#8b5cf6', '#ec4899', '#f43f5e',
   '#f59e0b', '#10b981', '#3b82f6', '#0ea5e9',
 ];
 function orgColor(id: string): string {
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderRadius: 14,
     paddingVertical: 16,
   },

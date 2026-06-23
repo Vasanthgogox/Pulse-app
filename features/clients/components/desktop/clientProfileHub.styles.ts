@@ -170,7 +170,7 @@ export const clientProfileStyles = StyleSheet.create({
   kycUploadBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     letterSpacing: 0.3,
   },
   dataTable: {
@@ -552,7 +552,7 @@ export const clientProfileStyles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   sidebarActionBtnTextPrimary: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   sidebarBadge: {
     paddingHorizontal: 8,

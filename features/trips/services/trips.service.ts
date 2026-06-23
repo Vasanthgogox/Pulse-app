@@ -17,6 +17,11 @@ import {
   selectTripOperationalReference,
 } from "@/features/operations/numbering";
 import { getTripOperationalDisplayCode } from "@/features/operations/display";
+import type { DriverTripRow, SupplierTripRow } from "@/types/trip-views";
+import { driverRowToTripRow, supplierRowToTripRow } from "@/types/trip-views";
+
+export type { DriverTripRow, SupplierTripRow } from "@/types/trip-views";
+export { driverRowToTripRow, supplierRowToTripRow } from "@/types/trip-views";
 
 export interface TripRow {
   id: string;
@@ -124,6 +129,8 @@ export interface TripRow {
   indent_number?: string | null;
   /** Globally unique booking reference assigned when a trip is created from an indent award (BKG-XXXXXX). */
   booking_ref?: string | null;
+  /** Per-supplier-org sequence for indent-awarded trips (Job #N in supplier UI). */
+  supplier_trip_sequence?: number | null;
 }
 
 type TripIndentJoin = {
@@ -313,16 +320,14 @@ export async function getTripsWhereOrgIsClient(orgId: string): Promise<{
  */
 export async function getTripsWhereOrgIsSupplier(orgId: string): Promise<{
   error: Error | null;
-  trips: TripRow[];
+  trips: SupplierTripRow[];
 }> {
   const { data, error } = await supabase().rpc(
     "get_trips_where_org_is_supplier",
     { p_org_id: orgId },
   );
   if (error) return { error: new Error(error.message), trips: [] };
-  const trips = ((data ?? []) as TripRow[]).map((row) =>
-    normalizeTripRowWithIndent(row as TripRow & { indents?: TripIndentJoin | null }),
-  );
+  const trips = (data ?? []) as SupplierTripRow[];
   return { error: null, trips };
 }
 
@@ -362,7 +367,13 @@ export async function getShipperDisplayNamesForSupplierTrips(
  * booking_ref (BKG-XXXXXX) to avoid org-local trip_number/indent_number collisions.
  * Every org's first trip = TRP001, every org's first indent = IND001 — only booking_ref is global.
  */
-export function getTripDisplayNumber(row: TripRow, viewerOrgId?: string | null): string {
+export function getTripDisplayNumber(
+  row: TripRow | SupplierTripRow,
+  viewerOrgId?: string | null,
+): string {
+  if (!("trip_number" in row)) {
+    return row.booking_ref?.trim() || row.id;
+  }
   if (
     viewerOrgId &&
     row.organization_id &&
@@ -372,6 +383,32 @@ export function getTripDisplayNumber(row: TripRow, viewerOrgId?: string | null):
     return row.booking_ref;
   }
   return getTripOperationalDisplayCode(row);
+}
+
+/**
+ * Optional secondary label for cross-org supplier viewers (e.g. "Job #26").
+ * Primary label remains `getTripDisplayNumber()`.
+ */
+export function getTripDisplayMeta(
+  row: TripRow | SupplierTripRow,
+  viewerOrgId?: string | null,
+): { secondaryLabel?: string } {
+  if (!("organization_id" in row)) {
+    if (row.supplier_trip_sequence != null && row.supplier_trip_sequence > 0) {
+      return { secondaryLabel: `Job #${row.supplier_trip_sequence}` };
+    }
+    return {};
+  }
+  if (
+    viewerOrgId &&
+    row.organization_id &&
+    row.organization_id !== viewerOrgId &&
+    row.supplier_trip_sequence != null &&
+    row.supplier_trip_sequence > 0
+  ) {
+    return { secondaryLabel: `Job #${row.supplier_trip_sequence}` };
+  }
+  return {};
 }
 
 /**
@@ -414,6 +451,19 @@ export async function getTripById(
     | null;
   const trip: TripRow | null = raw ? normalizeTripRowWithIndent(raw) : null;
   return { error: null, trip };
+}
+
+/** Driver-safe trip fetch (trips_driver_view). */
+export async function getDriverTripById(
+  tripId: string,
+): Promise<{ error: Error | null; trip: DriverTripRow | null }> {
+  const { data, error } = await supabase()
+    .from("trips_driver_view")
+    .select("*")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), trip: null };
+  return { error: null, trip: (data as DriverTripRow | null) ?? null };
 }
 
 /** Trip row without indent embeds — safe for driver operations summaries under indent RLS. */
@@ -470,7 +520,11 @@ export async function driverRejectTrip(
   });
   if (error) return { error: new Error(error.message), trip: null };
   // Fetch updated row for local UI consistency (RPC may not return the trip row).
-  return await getTripById(tripId);
+  const refreshed = await getDriverTripById(tripId);
+  return {
+    error: null,
+    trip: refreshed.trip ? driverRowToTripRow(refreshed.trip) : null,
+  };
 }
 
 /** Trips assigned to a driver (driver app). RLS must allow driver to SELECT where driver_id = self. */
@@ -507,11 +561,11 @@ export async function getTripsByDriver(
 export async function getTripsByDriverIds(
   driverIds: string[],
   opts?: PageOpts,
-): Promise<{ error: Error | null; trips: TripRow[]; hasMore?: boolean }> {
+): Promise<{ error: Error | null; trips: DriverTripRow[]; hasMore?: boolean }> {
   if (driverIds.length === 0) return { error: null, trips: [] };
   const base = () =>
     supabase()
-      .from("trips")
+      .from("trips_driver_view")
       .select("*")
       .in("driver_id", driverIds)
       .order("created_at", { ascending: false });
@@ -520,18 +574,31 @@ export async function getTripsByDriverIds(
     const offset = opts.offset ?? 0;
     const { data, error } = await base().range(offset, offset + limit);
     if (error) return { error: new Error(error.message), trips: [] };
-    const raw = ((data ?? []) as TripRow[]).map((row) =>
-      normalizeTripRowWithIndent(row as TripRow & { indents?: TripIndentJoin | null }),
-    );
+    const raw = (data ?? []) as DriverTripRow[];
     const hasMore = raw.length > limit;
-    return { error: null, trips: hasMore ? raw.slice(0, limit) : raw, hasMore };
+    return {
+      error: null,
+      trips: hasMore ? raw.slice(0, limit) : raw,
+      hasMore,
+    };
   }
   const { data, error } = await base();
   if (error) return { error: new Error(error.message), trips: [] };
-  const trips = ((data ?? []) as TripRow[]).map((row) =>
-    normalizeTripRowWithIndent(row as TripRow & { indents?: TripIndentJoin | null }),
-  );
-  return { error: null, trips };
+  return { error: null, trips: (data ?? []) as DriverTripRow[] };
+}
+
+/** Legacy driver screens: safe read via view, mapped to TripRow for UI. */
+export async function getDriverUiTripsByDriverIds(
+  driverIds: string[],
+  opts?: PageOpts,
+): Promise<{ error: Error | null; trips: TripRow[]; hasMore?: boolean }> {
+  const res = await getTripsByDriverIds(driverIds, opts);
+  if (res.error) return { error: res.error, trips: [] };
+  return {
+    error: null,
+    trips: res.trips.map(driverRowToTripRow),
+    hasMore: res.hasMore,
+  };
 }
 
 /** Create trip payload. Manual trip: pickup, drop, client, prices. */
@@ -1333,10 +1400,10 @@ export async function createTrip(
   const normalizedVehicleId = normalizeNullableUuid(data.vehicle_id);
   const inferredTripPayoutMode =
     data.trip_payout_mode ??
-    (normalizedDriverId || normalizedVehicleId
-      ? "asset"
-      : normalizedSupplierId
-        ? "market"
+    (normalizedSupplierId
+      ? "market"
+      : normalizedDriverId || normalizedVehicleId
+        ? "asset"
         : "asset");
 
   // Sequential trip trigger writes user_counters(user_id) with FK -> public.users(id).
@@ -2054,11 +2121,8 @@ function resolveTripPayoutModeForCompletion(
     .trim()
     .toLowerCase();
   if (raw === "market" || raw === "asset") return raw;
-  const hasAssignedFleet =
-    String(trip?.driver_id ?? "").trim().length > 0 ||
-    String(trip?.vehicle_id ?? "").trim().length > 0;
-  if (hasAssignedFleet) return "asset";
-  return String(trip?.supplier_id ?? "").trim() ? "market" : "asset";
+  if (String(trip?.supplier_id ?? "").trim()) return "market";
+  return "asset";
 }
 
 async function ensureAssetCompletionAutoEntries(

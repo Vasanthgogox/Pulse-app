@@ -3646,7 +3646,10 @@ const styles = StyleSheet.create({
   },
   modalBtnPrimary: {
     flex: 1,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: "center",
@@ -3706,7 +3709,10 @@ const styles = StyleSheet.create({
   confirmModalConfirmBtn: {
     flex: 1,
     minHeight: 44,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",

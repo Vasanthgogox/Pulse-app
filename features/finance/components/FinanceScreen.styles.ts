@@ -10,6 +10,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     minWidth: 0,
+    minHeight: 0,
     backgroundColor: Theme.screenBackground,
   },
   centered: {
@@ -749,6 +750,12 @@ export const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginHorizontal: 0,
     marginBottom: 8,
+  },
+  financeEmptyBannerWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   tableBodyWrap: {
     flex: 1,

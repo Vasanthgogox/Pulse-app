@@ -1,3 +1,5 @@
+import Layout from '@/constants/Layout';
+
 /**
  * Single source for the web HTML shell customizations. Consumed two ways:
  * - app/+html.tsx inlines these into the statically rendered HTML
@@ -128,6 +130,20 @@ textarea,
 select {
   -webkit-appearance: none;
   appearance: none;
+}
+
+/*
+  Desktop web (fine pointer): cap hub width so columns/cards do not stretch on
+  ultrawide monitors. Centered shell keeps header, content, and pinned footers aligned.
+  Mobile web is unchanged.
+*/
+@media (min-width: ${Layout.webDesktopMinWidth}px) and (hover: hover) and (pointer: fine) {
+  #root {
+    max-width: ${Layout.desktopHubMaxWidth}px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 `;
 

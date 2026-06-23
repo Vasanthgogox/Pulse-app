@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   actionBtnTextUpload: {
     fontSize: 11,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
   modalBackdrop: {
     flex: 1,

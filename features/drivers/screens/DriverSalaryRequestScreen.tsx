@@ -200,7 +200,7 @@ export default function SalaryRequestScreen() {
       if (drivers.length > 0) {
         const driverIds = drivers.map((d) => d.id);
         Promise.all([
-          tripsService.getTripsByDriverIds(driverIds),
+          tripsService.getDriverUiTripsByDriverIds(driverIds),
           driversService.getDriverLedgerByDriverIds(driverIds),
           salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
         ]).then(([tRes, ledgerRes, salaryReqRes]) => {
@@ -1877,7 +1877,7 @@ const styles = StyleSheet.create({
   successDoneBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.2,
   },
   successFooterTrust: {
@@ -2088,7 +2088,7 @@ const styles = StyleSheet.create({
   emptyStateButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   section: { marginBottom: 10 },
   sectionLabel: {
@@ -2819,6 +2819,6 @@ const styles = StyleSheet.create({
   modalDoneBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 });

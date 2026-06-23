@@ -61,6 +61,7 @@ import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { safePreventAutoHideAsync } from '@/lib/safeSplashScreen.util';
 import { useQueryClient } from '@tanstack/react-query';
+import { installDriverInviteDeepLinkListener } from '@/lib/driverInviteDeepLink.util';
 import { useEffect, useMemo } from 'react';
 import { AppBootGate } from '@/components/AppBootGate';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
@@ -263,6 +264,10 @@ export default function RootLayout() {
     installWebDeployRecoveryListener();
     if (Platform.OS !== 'web') return;
     return installWebViewportHeight();
+  }, []);
+
+  useEffect(() => {
+    return installDriverInviteDeepLinkListener();
   }, []);
 
   const [loaded, error] = useFonts({

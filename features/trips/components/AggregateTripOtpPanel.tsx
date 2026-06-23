@@ -43,7 +43,7 @@ export function AggregateTripOtpPanel({
   return (
     <View style={s.card}>
       <View style={s.headerRow}>
-        <FontAwesome name="shield" size={14} color={variant === "sheet" ? "#4f46e5" : "#64748b"} />
+        <FontAwesome name="shield" size={14} color={variant === "sheet" ? "#4D3636" : "#64748b"} />
         <Text style={s.title}>Driver OTP · {tripNumber}</Text>
       </View>
       {aggregateOtpState === "verified" ? (

@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   searchSection: {
     gap: 8,
@@ -582,7 +582,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionBtnPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   actionBtnPrimaryText: {
     fontSize: 14,

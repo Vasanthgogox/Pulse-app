@@ -21,7 +21,7 @@ const INDIA: LocaleOption["region"] = "india";
 const SOUTHEAST_ASIA: LocaleOption["region"] = "southeast_asia";
 const OTHER: LocaleOption["region"] = "other";
 
-const ACCENT = "#4f46e5";
+const ACCENT = "#4D3636";
 const TEXT = "#0f172a";
 const MUTED = "#94a3b8";
 const BORDER = "#e5e7eb";

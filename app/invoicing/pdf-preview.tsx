@@ -298,7 +298,10 @@ const styles = StyleSheet.create({
   },
   blockedBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,

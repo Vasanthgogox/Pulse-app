@@ -6,6 +6,7 @@ import {
     getTripsWhereOrgIsClient,
     getTripsWhereOrgIsSupplier,
     getShipperDisplayNamesForSupplierTrips,
+    supplierRowToTripRow,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import { getTripOperationalDisplay } from "@/features/operations/display";
@@ -216,7 +217,7 @@ export async function fetchTripsForLogPods(
     if (cliRes.error) return { error: cliRes.error, trips: [] };
 
     const ownerRows = (ownerRes.data ?? []) as TripRecord[];
-    const supRows = (supRes.trips ?? []) as TripRecord[];
+    const supRows = (supRes.trips ?? []).map(supplierRowToTripRow) as TripRecord[];
     const cliRows = (cliRes.trips ?? []) as TripRecord[];
     const shipperNameByTripId = shipperNamesRes.shipperNameByTripId ?? {};
 

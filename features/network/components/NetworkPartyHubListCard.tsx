@@ -280,6 +280,7 @@ export function NetworkPartyHubListCard({
                     avatarSeed={avatarSeed}
                     avatarUrl={avatarUrl}
                     entityType={entityType}
+                    isIntegrated={showOnline}
                     size={gridAvatarSize}
                   />
                 </PartyEntityAvatarGlow>
@@ -340,6 +341,7 @@ export function NetworkPartyHubListCard({
                 avatarSeed={avatarSeed}
                 avatarUrl={avatarUrl}
                 entityType={entityType}
+                isIntegrated={showOnline}
                 size={avatarSize}
               />
             </View>
@@ -456,6 +458,7 @@ export function NetworkPartyHubListCard({
                 avatarSeed={avatarSeed}
                 avatarUrl={avatarUrl}
                 entityType={entityType}
+                isIntegrated={showOnline}
                 size={avatarSize}
               />
             </View>

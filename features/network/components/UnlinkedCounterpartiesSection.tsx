@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 5,

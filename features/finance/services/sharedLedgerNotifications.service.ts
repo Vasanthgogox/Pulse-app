@@ -14,6 +14,7 @@ import {
   getTripsByOrganization,
   getTripsWhereOrgIsClient,
   getTripsWhereOrgIsSupplier,
+  supplierRowToTripRow,
 } from "@/features/trips/services/trips.service";
 import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { supabase } from "@/lib/supabase";
@@ -211,7 +212,7 @@ async function getLoadBasedTripIdsForSharedLedger(
   const allTrips = [
     ...(ownedRes.error ? [] : (ownedRes.trips ?? [])),
     ...(clientRes.error ? [] : (clientRes.trips ?? [])),
-    ...(supplierRes.error ? [] : (supplierRes.trips ?? [])),
+    ...(supplierRes.error ? [] : (supplierRes.trips ?? []).map(supplierRowToTripRow)),
   ];
   return new Set(
     allTrips

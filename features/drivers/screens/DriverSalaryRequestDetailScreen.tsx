@@ -78,8 +78,10 @@ export default function DriverSalaryRequestDetailScreen() {
         ? driversService.getLinkedDriversForCurrentUser(profile.uid)
         : Promise.resolve({ drivers: [] }),
       tripIds.length > 0
-        ? Promise.all(tripIds.map((id) => tripsService.getTripById(id))).then((rows) =>
-            rows.map((r) => r.trip).filter(Boolean) as tripsService.TripRow[],
+        ? Promise.all(tripIds.map((id) => tripsService.getDriverTripById(id))).then((rows) =>
+            rows
+              .map((r) => (r.trip ? tripsService.driverRowToTripRow(r.trip) : null))
+              .filter(Boolean) as tripsService.TripRow[],
           )
         : Promise.resolve([]),
     ]);

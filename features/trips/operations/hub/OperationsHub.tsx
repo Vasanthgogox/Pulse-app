@@ -228,7 +228,7 @@ function makeDriverHubStyles(c: OperationsHubDriverTheme): HubVariantStyles {
       fontWeight: "800",
       textTransform: "uppercase",
       letterSpacing: 0.5,
-      color: "#fff",
+      color: Theme.buttonDarkText,
     },
     timelineWrap: {
       borderTopColor: c.border,
@@ -1039,7 +1039,10 @@ const styles = StyleSheet.create({
   expenseControlBtn: {
     borderWidth: 1,
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -1282,7 +1285,7 @@ const pulseStyles = StyleSheet.create({
     color: "#334155",
   },
   actionTextPrimary: {
-    color: "#4338ca",
+    color: "#4D3636",
   },
   actionTextOnDark: {
     color: "#fff",

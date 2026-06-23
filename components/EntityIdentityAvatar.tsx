@@ -5,6 +5,7 @@ import Theme from "@/constants/Theme";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { resolvedIdentityToEntityAvatarProps } from "@/lib/entityIdentity";
 import { partyAvatarHasRenderableOutput } from "@/lib/partyAvatarDisplay";
+import { shouldUseOfflinePartyRoleAvatar } from "@/lib/partyOfflineRoleAvatar";
 import { StyleSheet, Text, View } from "react-native";
 import { EntityAvatar } from "./EntityAvatar";
 
@@ -27,14 +28,20 @@ export function EntityIdentityAvatar({
 }: EntityIdentityAvatarProps) {
   const px = SIZES[size];
   const props = resolvedIdentityToEntityAvatarProps(identity);
-  const showAvatar = partyAvatarHasRenderableOutput({
-    name: props.name,
-    organizationImageUrl: props.organizationImageUrl,
-    organizationAvatarSeed: props.organizationAvatarSeed,
-    avatarUrl: props.avatarUrl,
-    avatarSeed: props.avatarSeed,
-    entityType: props.entityType,
-  });
+  const useOfflineRoleIcon = shouldUseOfflinePartyRoleAvatar(
+    identity.isIntegrated,
+    props.entityType ?? "client",
+  );
+  const showAvatar =
+    useOfflineRoleIcon ||
+    partyAvatarHasRenderableOutput({
+      name: props.name,
+      organizationImageUrl: props.organizationImageUrl,
+      organizationAvatarSeed: props.organizationAvatarSeed,
+      avatarUrl: props.avatarUrl,
+      avatarSeed: props.avatarSeed,
+      entityType: props.entityType,
+    });
 
   if (!showAvatar && !showName) {
     return null;
@@ -62,6 +69,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    overflow: "visible",
+    flexShrink: 0,
   },
   rowWithName: {
     gap: 8,

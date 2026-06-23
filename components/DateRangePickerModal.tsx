@@ -595,7 +595,10 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   applyBtnDisabled: {
     backgroundColor: Theme.borderMedium,
@@ -603,7 +606,7 @@ const styles = StyleSheet.create({
   applyBtnText: {
     fontSize: 12,
     fontWeight: "900",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 3,
   },
   applyBtnTextDisabled: {

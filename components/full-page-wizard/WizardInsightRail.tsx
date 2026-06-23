@@ -20,9 +20,9 @@ const accentStyles: Record<
   { stripe: string; wash: string; eyebrow: string }
 > = {
   indigo: {
-    stripe: Theme.primary,
-    wash: "rgba(79, 70, 229, 0.08)",
-    eyebrow: Theme.primary,
+    stripe: Theme.brandBlueInk,
+    wash: Theme.pulseIndigoWash,
+    eyebrow: Theme.brandBlueInk,
   },
   green: {
     stripe: Theme.positive,

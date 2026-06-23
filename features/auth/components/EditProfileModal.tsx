@@ -1457,7 +1457,7 @@ const styles = StyleSheet.create({
   driverSaveChangesBtnText: {
     fontSize: 11,
     fontWeight: '900',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
@@ -1699,7 +1699,10 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1804,6 +1807,6 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 });

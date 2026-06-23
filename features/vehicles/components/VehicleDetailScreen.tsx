@@ -46,6 +46,7 @@ import {
   getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
   getTripDisplayNumber,
+  supplierRowToTripRow,
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { VehicleHealthBadge } from "@/features/ai";
@@ -170,7 +171,7 @@ export default function VehicleDetailScreen({
         setVehicle(res.vehicle ?? null);
       }
       const ownerTrips = ownerRes.error ? [] : ownerRes.trips ?? [];
-      const supplierTrips = supplierRes.error ? [] : supplierRes.trips ?? [];
+      const supplierTrips = supplierRes.error ? [] : (supplierRes.trips ?? []).map(supplierRowToTripRow);
       const byId = new Map(ownerTrips.map((t) => [t.id, t]));
       for (const t of supplierTrips) if (!byId.has(t.id)) byId.set(t.id, t);
       setTrips(Array.from(byId.values()));
@@ -569,7 +570,7 @@ export default function VehicleDetailScreen({
               runOperationalCashLedgerBackfill();
               load();
             }}
-            tintColor={Theme.teslaRed}
+            tintColor={Theme.loaderAccent}
           />
         }
       >
@@ -1120,7 +1121,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },

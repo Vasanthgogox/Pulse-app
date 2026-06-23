@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   routeDotPickup: { backgroundColor: '#10b981' },
-  routeDotDrop: { backgroundColor: '#6366f1' },
+  routeDotDrop: { backgroundColor: Theme.brandBluePressed },
   desktopRoutePrimary: {
     fontSize: 16,
     fontWeight: '900',
@@ -727,13 +727,13 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
   },
   rateChip: {
-    backgroundColor: '#6366f118',
-    borderColor: '#6366f130',
+    backgroundColor: 'rgba(205, 233, 247, 0.35)',
+    borderColor: 'rgba(77, 54, 54, 0.18)',
   },
   rateChipText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#6366f1',
+    color: Theme.brandBlueInk,
   },
   inputGroup: { marginBottom: 16 },
   inputLabel: {
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   currencyBadge: {
     paddingHorizontal: 14,
     paddingVertical: 14,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   currencyBadgeDesktop: {
     paddingHorizontal: 18,
@@ -838,7 +838,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 14,
     paddingVertical: 16,
     marginTop: 4,
@@ -852,7 +855,7 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#fff',
+    color: Theme.buttonPrimaryText,
     letterSpacing: -0.3,
   },
   errorText: {

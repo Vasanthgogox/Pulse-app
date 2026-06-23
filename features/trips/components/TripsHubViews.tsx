@@ -3,6 +3,12 @@
  * Styling aligns with fleet hub / reference; data bindings mirror TripExpandableCard.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import {
+  formatHubListPaginationMeta,
+  HubListPaginationBar,
+  type HubListPaginationBarProps,
+} from "@/components/hub/HubListPaginationBar";
+import { HubScreenBottomBar } from "@/components/hub/HubScreenBottomBar";
 import Theme from "@/constants/Theme";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -2765,6 +2771,18 @@ export function TripsHubTableView({
   );
 }
 
+export type TripsHubAuditFooterPagination = Pick<
+  HubListPaginationBarProps,
+  | "page"
+  | "totalPages"
+  | "totalItems"
+  | "pageSize"
+  | "onPageSizeChange"
+  | "onPrev"
+  | "onNext"
+  | "itemLabel"
+>;
+
 /**
  * Fleet Confidence / Export Ledger + optional pagination — single bottom bar row.
  *
@@ -2775,51 +2793,79 @@ export function TripsHubTableView({
 export function TripsHubAuditFooter({
   onExportLedger,
   tr,
-  paginationSlot,
+  pagination,
 }: {
   onExportLedger?: () => void;
   tr: (key: string) => string;
-  /** Pagination controls rendered inline between Fleet Confidence and Export. */
-  paginationSlot?: ReactNode;
+  pagination?: TripsHubAuditFooterPagination;
 }) {
   if (Platform.OS !== "web") return null;
+
+  const paginationMeta = pagination
+    ? formatHubListPaginationMeta(
+        pagination.page,
+        pagination.totalPages,
+        pagination.totalItems,
+        pagination.itemLabel ?? "trips",
+      )
+    : null;
+
   return (
-    <View style={styles.auditFooter}>
-      <View style={styles.auditFooterLeft}>
-        <View style={styles.auditFooterIcon}>
-          <FontAwesome name="line-chart" size={16} color={Theme.positive} />
-        </View>
-        <View style={styles.auditFooterText}>
-          <Text style={styles.auditFooterTitle}>
-            {tr("tripsHubFleetConfidence")}
+    <HubScreenBottomBar
+      left={
+        <>
+          <View style={styles.auditFooterIcon}>
+            <FontAwesome name="line-chart" size={16} color={Theme.positive} />
+          </View>
+          <View style={styles.auditFooterText}>
+            <Text style={styles.auditFooterTitle}>
+              {tr("tripsHubFleetConfidence")}
+            </Text>
+            <Text style={styles.auditFooterSub} numberOfLines={2}>
+              {paginationMeta
+                ? `${tr("tripsHubNetworkMirror")} · ${paginationMeta}`
+                : tr("tripsHubNetworkMirror")}
+            </Text>
+          </View>
+        </>
+      }
+      center={
+        pagination ? (
+          <HubListPaginationBar
+            embedded
+            layoutMode="controls-only"
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            totalItems={pagination.totalItems}
+            pageSize={pagination.pageSize}
+            onPageSizeChange={pagination.onPageSizeChange}
+            onPrev={pagination.onPrev}
+            onNext={pagination.onNext}
+            itemLabel={pagination.itemLabel}
+          />
+        ) : null
+      }
+      right={
+        <TouchableOpacity
+          style={[
+            styles.auditExportBtn,
+            !onExportLedger && styles.auditExportBtnDisabled,
+          ]}
+          onPress={() => onExportLedger?.()}
+          disabled={!onExportLedger}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.auditExportBtnText}>
+            {tr("tripsHubExportLedger")}
           </Text>
-          <Text style={styles.auditFooterSub}>
-            {tr("tripsHubNetworkMirror")}
-          </Text>
-        </View>
-      </View>
-      {paginationSlot ? (
-        <View style={styles.auditFooterPagination}>{paginationSlot}</View>
-      ) : null}
-      <TouchableOpacity
-        style={[
-          styles.auditExportBtn,
-          !onExportLedger && styles.auditExportBtnDisabled,
-        ]}
-        onPress={() => onExportLedger?.()}
-        disabled={!onExportLedger}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.auditExportBtnText}>
-          {tr("tripsHubExportLedger")}
-        </Text>
-        <FontAwesome
-          name="cloud-download"
-          size={14}
-          color={Theme.textSecondary}
-        />
-      </TouchableOpacity>
-    </View>
+          <FontAwesome
+            name="cloud-download"
+            size={14}
+            color={Theme.textSecondary}
+          />
+        </TouchableOpacity>
+      }
+    />
   );
 }
 
@@ -3274,53 +3320,54 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     borderRadius: 0,
     borderWidth: 0,
-    marginBottom: 20,
+    marginBottom: 4,
     overflow: "visible",
     shadowOpacity: 0,
     elevation: 0,
+    flexGrow: 1,
   },
   auditToolbar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     flexWrap: "wrap",
-    rowGap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    rowGap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: Theme.screenBackground,
     borderBottomWidth: 1,
     borderBottomColor: Theme.surfaceBorder,
   },
   auditToolbarDesktop: {
     flexWrap: "nowrap",
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   auditToolbarDesktopHub: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(15, 23, 42, 0.07)",
-    marginBottom: 14,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 14,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
     ...Platform.select({
       web: {
-        boxShadow: "0 4px 18px rgba(15, 23, 42, 0.06)",
+        boxShadow: "0 2px 12px rgba(15, 23, 42, 0.05)",
       } as object,
       default: {
         shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 1,
       },
     }),
   },
   auditToolbarDesktopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     width: "100%",
     minWidth: 0,
     flexWrap: "nowrap",
@@ -3336,13 +3383,15 @@ const styles = StyleSheet.create({
     rowGap: 8,
   },
   auditToolbarCardListSpacing: {
-    paddingBottom: 14,
+    paddingBottom: 10,
   },
   auditCardListBody: {
     paddingTop: 2,
     paddingHorizontal: 2,
     paddingBottom: 4,
     backgroundColor: "transparent",
+    flexGrow: 1,
+    minHeight: 0,
   },
   auditToolbarCount: {
     fontSize: 12,
@@ -3371,14 +3420,14 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   auditToolbarCountInlineText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textRouteCard,
   },
   auditToolbarCountInlineDesktop: {
-    maxWidth: 168,
-    height: 34,
-    paddingHorizontal: 10,
+    maxWidth: 148,
+    height: 30,
+    paddingHorizontal: 8,
   },
   auditToolbarControls: {
     flexDirection: "row",
@@ -3404,16 +3453,17 @@ const styles = StyleSheet.create({
   auditSearchWrap: {
     flexGrow: 1,
     flexShrink: 1,
-    minWidth: 180,
-    maxWidth: 420,
+    minWidth: 140,
+    maxWidth: 360,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f8fafc",
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e8ecf1",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    minHeight: 30,
   },
   auditSearchWrapMobile: {
     width: "100%",
@@ -3464,10 +3514,10 @@ const styles = StyleSheet.create({
   auditToolbarBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    minHeight: 34,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    gap: 5,
+    minHeight: 30,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#e8ecf1",
@@ -3483,42 +3533,42 @@ const styles = StyleSheet.create({
   auditAddTripBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    minHeight: 36,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    gap: 6,
+    minHeight: 32,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderWidth: 1,
     borderColor: Theme.primary,
     ...Platform.select({
       web: {
-        boxShadow: "0 6px 16px rgba(79, 70, 229, 0.28)",
+        boxShadow: "0 4px 12px rgba(79, 70, 229, 0.22)",
       } as object,
       default: {
         shadowColor: Theme.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.28,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.22,
+        shadowRadius: 6,
+        elevation: 2,
       },
     }),
   },
   auditAddTripBtnText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.25,
+    color: Theme.buttonPrimaryText,
+    letterSpacing: 0.2,
     textTransform: "uppercase",
   },
   /** Matches Chat `tabRow` — date presets + calendar (+ mobile sort) live inside this tray. */
   auditDatePresetTray: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingVertical: 3,
-    paddingHorizontal: 3,
-    borderRadius: 14,
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+    borderRadius: 12,
     backgroundColor: Theme.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -3534,7 +3584,7 @@ const styles = StyleSheet.create({
   auditDatePresetRowInner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
     flexWrap: "nowrap",
     flexShrink: 1,
     minWidth: 0,
@@ -3554,9 +3604,9 @@ const styles = StyleSheet.create({
   },
   /** Matches Chat `tabPill` / `tabPillActive` / labels. */
   auditDateChip: {
-    minHeight: 28,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    minHeight: 26,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -3570,10 +3620,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.pulseIndigoWash,
   },
   auditDateChipText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "600",
     color: Theme.textRouteCard,
-    letterSpacing: 0.35,
+    letterSpacing: 0.3,
     textTransform: "uppercase",
     textAlign: "center",
   },
@@ -3581,10 +3631,10 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   auditDateIconBtn: {
-    minHeight: 28,
-    minWidth: 28,
-    paddingHorizontal: 7,
-    paddingVertical: 5,
+    minHeight: 26,
+    minWidth: 26,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -4038,7 +4088,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.warning,
   },
   manifestHealthDotBad: {
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
   },
   auditHeaderRow: {
     flexDirection: "row",
@@ -4718,40 +4768,12 @@ const styles = StyleSheet.create({
     borderColor: Theme.textPrimaryDark,
   },
   auditOrbWarn: {
-    backgroundColor: Theme.teslaRed,
-    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
+    borderColor: Theme.accentGold,
   },
   auditCtaPressed: {
     opacity: 0.88,
     transform: [{ scale: 0.98 }],
-  },
-  auditFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: Theme.surface,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    gap: 12,
-    width: "100%",
-  },
-  auditFooterLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flexShrink: 0,
-    maxWidth: 220,
-  },
-  auditFooterText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  auditFooterPagination: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
   },
   auditFooterIcon: {
     padding: 8,
@@ -4760,6 +4782,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.borderLight,
     flexShrink: 0,
+  },
+  auditFooterText: {
+    flex: 1,
+    minWidth: 0,
   },
   auditFooterTitle: {
     fontSize: FS_BODY,

@@ -9523,6 +9523,7 @@ export type Database = {
         Returns: {
           address_line: string
           avatar_seed: string
+          avatar_url: string
           average_rating: number
           city: string
           connection_status: string

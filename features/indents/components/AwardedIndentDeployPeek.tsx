@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     flexShrink: 0,
   },
   queueBadgeText: {

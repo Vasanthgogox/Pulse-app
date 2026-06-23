@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   generateBtnText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   panelBody: {
     padding: 20,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   markPaidBtnText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonDarkText,
   },
   termsSection: {
     gap: 10,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   saveTermsBtnText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonDarkText,
   },
   invoiceSummary: {
     gap: 6,

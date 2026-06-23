@@ -2,9 +2,7 @@
  * Filter/tab chrome shared with Chat (`ChatScreen` list header).
  * Use for Finance cash toolbar, Trips filters, etc.
  *
- * Selected pill background uses the Pulse purple (`Theme.primary`) so
- * tab selection in Trips, Chat and Finance all match the brand accent
- * rather than the prior dark navy.
+ * Selected pill uses pastel blue wash + ink label (Add Load family).
  */
 import { StyleSheet } from "react-native";
 import Theme from "@/constants/Theme";
@@ -50,7 +48,7 @@ export const chatFilterChromeStyles = StyleSheet.create({
     minHeight: 34,
   },
   tabPillActive: {
-    borderColor: CHAT_FILTER_ACTIVE_BG,
+    borderColor: Theme.loadAddButtonBorder,
     backgroundColor: Theme.pulseIndigoWash,
   },
   /** Size to label + count — use on Trips / toolbars where equal flex causes truncation. */
