@@ -127,6 +127,8 @@ GRANT SELECT ON public.trips_driver_view TO authenticated;
 -- Views use security_invoker so underlying trips RLS applies.
 
 -- Supplier RPC now returns the safe projection (row filter still uses p_org_id + is_org_member).
+DROP FUNCTION IF EXISTS public.get_trips_where_org_is_supplier(uuid);
+
 CREATE OR REPLACE FUNCTION public.get_trips_where_org_is_supplier(p_org_id uuid)
 RETURNS SETOF public.trips_supplier_view
 LANGUAGE sql

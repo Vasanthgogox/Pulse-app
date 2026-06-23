@@ -300,6 +300,19 @@ ALTER TABLE public.transactions
 ALTER TABLE public.transactions
   ADD COLUMN IF NOT EXISTS payment_ref text;
 
+-- FK requires a full UNIQUE constraint (partial index from Phase A is not enough).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'trips_booking_ref_key'
+  ) THEN
+    ALTER TABLE public.trips
+      ADD CONSTRAINT trips_booking_ref_key UNIQUE (booking_ref);
+  END IF;
+END $$;
+
 DO $$
 BEGIN
   IF NOT EXISTS (

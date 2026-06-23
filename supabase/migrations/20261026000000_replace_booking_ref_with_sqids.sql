@@ -124,7 +124,7 @@ AS $$
 DECLARE
   alphabet text;
   len      int;
-  offset   int := 0;
+  v_offset int := 0;
   i        int;
   c        text;
   parts    text[] := ARRAY[]::text[];
@@ -150,12 +150,12 @@ BEGIN
     IF num < 0 THEN
       RAISE EXCEPTION 'sqids_encode_numbers: negative value at index %', i;
     END IF;
-    offset := offset + (ascii(substr(alphabet, (num % len)::int + 1, 1)) + (i - 1));
+    v_offset := v_offset + (ascii(substr(alphabet, (num % len)::int + 1, 1)) + (i - 1));
   END LOOP;
-  offset := (offset + array_length(p_numbers, 1)) % len;
-  offset := (offset + p_attempt) % len;
+  v_offset := (v_offset + array_length(p_numbers, 1)) % len;
+  v_offset := (v_offset + p_attempt) % len;
 
-  c := substr(alphabet, offset + 1) || substr(alphabet, 1, offset);
+  c := substr(alphabet, v_offset + 1) || substr(alphabet, 1, v_offset);
   parts := array_append(parts, substr(c, 1, 1));
   c := reverse(c);
 
