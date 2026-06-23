@@ -1,9 +1,10 @@
 import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
+import type { WorkspaceKyc } from "@/types/organization";
 
 export type NetworkHubProfileCompletionInput = {
   profile?: OrganizationWorkspaceProfile | null;
   locationCount?: number;
-  hasGstin?: boolean;
+  kyc?: WorkspaceKyc | null;
 };
 
 export type NetworkHubProfileGap = {
@@ -11,6 +12,13 @@ export type NetworkHubProfileGap = {
   label: string;
   section: "contact" | "highlights" | "about" | "products" | "kyc" | "locations";
 };
+
+const KYC_FIELDS = ["gstin", "business_pan", "cin"] as const;
+
+function isKycComplete(kyc?: WorkspaceKyc | null): boolean {
+  if (!kyc) return false;
+  return KYC_FIELDS.every((field) => !!kyc[field]);
+}
 
 /** Matches Overview + Company profile fields (excludes always-on Status / Model). */
 export function networkHubProfileCompletion(
@@ -55,8 +63,8 @@ export function networkHubProfileCompletion(
       gap: { key: "products", label: "Products", section: "products" },
     },
     {
-      filled: !!input.hasGstin,
-      gap: { key: "gstin", label: "GSTIN", section: "kyc" },
+      filled: isKycComplete(input.kyc),
+      gap: { key: "kyc", label: "Compliance & KYC", section: "kyc" },
     },
   ];
 
