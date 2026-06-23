@@ -13,7 +13,7 @@ export const PULSE_WATERMARK_PRINT_CSS = `
     font-weight: 900;
     font-style: italic;
     letter-spacing: 0.42em;
-    color: #4f46e5;
+    color: #4D3636;
     opacity: 0.07;
     z-index: 0;
     pointer-events: none;

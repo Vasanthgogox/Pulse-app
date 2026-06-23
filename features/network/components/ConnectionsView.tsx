@@ -46,7 +46,7 @@ import {
     Users,
     Zap,
 } from "lucide-react-native";
-import { FeatureBanner } from "@/components/FeatureBanner";
+import { NetworkGrowBanner } from "@/features/network/components/NetworkGrowBanner";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlashList } from "@shopify/flash-list";
 import {
@@ -1255,7 +1255,9 @@ export function ConnectionsView({
         <LoadingIndicator color={Theme.primary} style={{ marginTop: 48 }} />
       ) : useHubLayout ? (
         connections.length === 0 ? (
-          <EmptyState />
+          <View style={styles.listContent}>
+            <EmptyState />
+          </View>
         ) : (
           <View style={[styles.listContent, networkCompactListStyle]}>
             {renderHubConnectionsBody()}
@@ -1307,19 +1309,9 @@ export function ConnectionsView({
 
 function EmptyState() {
   return (
-    <FeatureBanner
-      title="Grow your network"
-      description="Connect with clients, suppliers, and fleet owners you already work with."
-      illustration="🤝"
-      accentColor="#4f46e5"
-      bullets={[
-        { label: "Real-time trip sharing" },
-        { label: "Shared invoicing" },
-        { label: "Discover partners" },
-        { label: "Instant messaging" },
-      ]}
-      style={styles.emptyBanner}
-    />
+    <View style={styles.emptyBanner}>
+      <NetworkGrowBanner />
+    </View>
   );
 }
 
@@ -1365,14 +1357,18 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingTop: 4,
   },
-  embeddedEmptyWrap: { minHeight: 200, paddingBottom: 16 },
-  /** Avatar grid sits on the white Operations pulse panel (parent sectionBodyConnections). */
+  embeddedEmptyWrap: {
+    minHeight: 200,
+    paddingBottom: 16,
+    paddingHorizontal: 14,
+  },
+  /** Avatar grid sits inside the connections hub card shell. */
   connectionsPhotoSurface: {
     width: "100%",
     alignSelf: "stretch",
     backgroundColor: "transparent",
-    paddingTop: 6,
-    paddingBottom: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
     overflow: "visible",
   },
   metronicGridRoot: {
@@ -1484,7 +1480,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   viewToggleActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
 
@@ -1503,7 +1499,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.networkCardBorder,
   },
   filterTabActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   filterTabText: {
@@ -1512,7 +1508,7 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     letterSpacing: 0.5,
   },
-  filterTabTextActive: { color: Theme.textOnPrimary },
+  filterTabTextActive: { color: Theme.buttonPrimaryText },
 
   // Grid layout
   gridList: { paddingHorizontal: 8, paddingBottom: 40 },
@@ -1672,7 +1668,9 @@ const styles = StyleSheet.create({
   },
 
   emptyBanner: {
-    margin: 16,
-    marginTop: 24,
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 4,
+    paddingBottom: 8,
   },
 });

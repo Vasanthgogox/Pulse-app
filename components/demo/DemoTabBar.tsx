@@ -1102,7 +1102,7 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     paddingHorizontal: 4,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderWidth: 2,
     borderColor: "#ffffff",
     alignItems: "center",
@@ -1185,7 +1185,10 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#0f172a",
@@ -1493,7 +1496,7 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
   },
   webPopoverTabBtnTextActive: {
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
   webPopoverScroll: {
     maxHeight: 520,
@@ -1625,7 +1628,7 @@ const styles = StyleSheet.create({
   webNotifPayBtnText: {
     fontSize: 9,
     fontWeight: "900",
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
     textTransform: "uppercase",
   },
   webNotifStatus: {
@@ -1707,7 +1710,7 @@ const styles = StyleSheet.create({
   webInvitePrimaryBtnText: {
     fontSize: 9,
     fontWeight: "900",
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
     textTransform: "uppercase",
   },
   webPopoverEmpty: {
@@ -1783,7 +1786,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderWidth: 1.5,
     borderColor: "#ffffff",
   },

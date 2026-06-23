@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { EntityAvatar } from "@/components/EntityAvatar";
@@ -11,24 +11,32 @@ export interface SettlementLaneProps {
   partyName: string;
   avatarUrl?: string | null;
   avatarSeed?: string | null;
+  organizationImageUrl?: string | null;
+  organizationAvatarSeed?: string | null;
+  isIntegrated?: boolean;
   entityType: "client" | "supplier" | "driver";
   laneLabel: string;
   revisedAmount: number;
   settledAmount: number;
   dueAmount: number;
   accentColor: string;
+  onPress?: () => void;
 }
 
 function SettlementLaneCard({
   partyName,
   avatarUrl,
   avatarSeed,
+  organizationImageUrl,
+  organizationAvatarSeed,
+  isIntegrated,
   entityType,
   laneLabel,
   revisedAmount,
   settledAmount,
   dueAmount,
   accentColor,
+  onPress,
   layout = "mobile",
 }: SettlementLaneProps & { layout?: ProvisionFinanceLayout }) {
   const isDesktop = layout === "desktop";
@@ -36,14 +44,23 @@ function SettlementLaneCard({
   const dueColor = isSettled ? Theme.textMuted : accentColor;
   const settledDeltaColor =
     entityType === "client" ? Theme.positive : accentColor;
+  const canPreview = settledAmount > 0 && Boolean(onPress);
+  const cardStyle = [
+    styles.card,
+    isDesktop && styles.cardDesktop,
+    canPreview && styles.cardPressable,
+  ];
 
-  return (
-    <View style={[styles.card, isDesktop && styles.cardDesktop]}>
+  const content = (
+    <>
       <View style={styles.cardHead}>
         <EntityAvatar
           name={partyName}
           avatarUrl={avatarUrl}
           avatarSeed={avatarSeed}
+          organizationImageUrl={organizationImageUrl}
+          organizationAvatarSeed={organizationAvatarSeed}
+          isIntegrated={isIntegrated}
           entityType={entityType}
           size={isDesktop ? 32 : 28}
           showIntegrationBadge={false}
@@ -128,8 +145,26 @@ function SettlementLaneCard({
           ) : null}
         </View>
       </View>
-    </View>
+    </>
   );
+
+  if (canPreview) {
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          ...cardStyle,
+          pressed && styles.cardPressed,
+        ]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Preview ${laneLabel.toLowerCase()} transactions for ${partyName}`}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={cardStyle}>{content}</View>;
 }
 
 export interface TripPayableReceivableSummaryCardProps {
@@ -137,6 +172,9 @@ export interface TripPayableReceivableSummaryCardProps {
   clientName: string;
   clientAvatarUrl?: string | null;
   clientAvatarSeed?: string | null;
+  clientOrganizationImageUrl?: string | null;
+  clientOrganizationAvatarSeed?: string | null;
+  clientIntegrated?: boolean;
   revisedReceivable: number;
   collectedAmount: number;
   receivableDue: number;
@@ -144,12 +182,17 @@ export interface TripPayableReceivableSummaryCardProps {
   payablePartyName: string;
   payableAvatarUrl?: string | null;
   payableAvatarSeed?: string | null;
+  payableOrganizationImageUrl?: string | null;
+  payableOrganizationAvatarSeed?: string | null;
+  payableIntegrated?: boolean;
   payableEntityType?: "supplier" | "driver";
   payableLaneLabel?: string;
   revisedPayable: number;
   paidAmount: number;
   payableDue: number;
   layout?: ProvisionFinanceLayout;
+  onPressReceivable?: () => void;
+  onPressPayable?: () => void;
 }
 
 export const TripPayableReceivableSummaryCard = memo(
@@ -167,12 +210,16 @@ export const TripPayableReceivableSummaryCard = memo(
             partyName={props.clientName}
             avatarUrl={props.clientAvatarUrl}
             avatarSeed={props.clientAvatarSeed}
+            organizationImageUrl={props.clientOrganizationImageUrl}
+            organizationAvatarSeed={props.clientOrganizationAvatarSeed}
+            isIntegrated={props.clientIntegrated}
             entityType="client"
             laneLabel="Receivable"
             revisedAmount={props.revisedReceivable}
             settledAmount={props.collectedAmount}
             dueAmount={props.receivableDue}
             accentColor={Theme.primary}
+            onPress={props.onPressReceivable}
             layout={layout}
           />
         ) : null}
@@ -181,12 +228,16 @@ export const TripPayableReceivableSummaryCard = memo(
             partyName={props.payablePartyName}
             avatarUrl={props.payableAvatarUrl}
             avatarSeed={props.payableAvatarSeed}
+            organizationImageUrl={props.payableOrganizationImageUrl}
+            organizationAvatarSeed={props.payableOrganizationAvatarSeed}
+            isIntegrated={props.payableIntegrated}
             entityType={props.payableEntityType ?? "supplier"}
             laneLabel={props.payableLaneLabel ?? "Payable"}
             revisedAmount={props.revisedPayable}
             settledAmount={props.paidAmount}
             dueAmount={props.payableDue}
             accentColor="#0f766e"
+            onPress={props.onPressPayable}
             layout={layout}
           />
         ) : null}
@@ -217,6 +268,13 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 14,
     gap: 8,
+  },
+  cardPressable: {
+    cursor: "pointer",
+  },
+  cardPressed: {
+    opacity: 0.92,
+    backgroundColor: Theme.surface,
   },
   cardHead: {
     flexDirection: "row",

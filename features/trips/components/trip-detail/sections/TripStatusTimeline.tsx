@@ -782,7 +782,7 @@ const styles = StyleSheet.create({
   nextBtnText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonDarkText,
   },
   // ── Map ──
   mapSection: {

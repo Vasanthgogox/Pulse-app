@@ -70,7 +70,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
   ghostBtnCompact: {
     minHeight: 30,
@@ -170,7 +170,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   footerPrimaryBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
   footerTertiaryBtn: {
     minHeight: FOOTER_BTN.minHeight,

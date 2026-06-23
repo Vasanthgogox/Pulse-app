@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     bottom: 8,
     width: 3,
     borderRadius: 2,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   iconWrap: {
     width: 34,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,

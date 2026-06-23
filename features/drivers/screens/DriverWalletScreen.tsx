@@ -2253,8 +2253,8 @@ export default function DriverWalletScreen() {
                   }}
                   activeOpacity={0.8}
                 >
-                  <FontAwesome name="road" size={10} color={tripsSubTab === 'open' ? '#6366f1' : colors.textMuted} />
-                  <Text style={[styles.tripsSubTabText, { color: tripsSubTab === 'open' ? '#6366f1' : colors.textMuted }]}>
+                  <FontAwesome name="road" size={10} color={tripsSubTab === 'open' ? '#4D3636' : colors.textMuted} />
+                  <Text style={[styles.tripsSubTabText, { color: tripsSubTab === 'open' ? '#4D3636' : colors.textMuted }]}>
                     Open trips
                   </Text>
                 </TouchableOpacity>
@@ -2330,7 +2330,7 @@ export default function DriverWalletScreen() {
                         <Text
                           style={[
                             styles.tripsTabTagText,
-                            { color: active ? (tripsSubTab === 'open' ? '#6366f1' : Theme.driverEmerald) : colors.textMuted },
+                            { color: active ? (tripsSubTab === 'open' ? '#4D3636' : Theme.driverEmerald) : colors.textMuted },
                           ]}
                         >
                           {chip.label}
@@ -2681,7 +2681,7 @@ export default function DriverWalletScreen() {
                     },
                   ]}
                 >
-                  <FontAwesome name="road" size={14} color="#6366f1" />
+                  <FontAwesome name="road" size={14} color="#4D3636" />
                 </View>
                 <View style={styles.fleetCardBody}>
                   <Text style={[styles.fleetCardTitle, { color: colors.text }]} numberOfLines={1}>
@@ -2701,7 +2701,7 @@ export default function DriverWalletScreen() {
                   },
                 ]}
               >
-                <Text style={[styles.fleetStatusTextNew, { color: '#6366f1' }]}>
+                <Text style={[styles.fleetStatusTextNew, { color: '#4D3636' }]}>
                   ₹{directTripStats.pending.toLocaleString('en-IN')} due
                 </Text>
               </View>
@@ -2731,7 +2731,7 @@ export default function DriverWalletScreen() {
                       directTripStats.pending > 0
                         ? isDark
                           ? 'rgba(129,140,248,0.65)'
-                          : '#6366f1'
+                          : '#4D3636'
                         : isDark
                           ? colors.borderSubtle
                           : 'rgba(226,232,240,0.8)',
@@ -2748,7 +2748,7 @@ export default function DriverWalletScreen() {
                         directTripStats.pending > 0
                           ? isDark
                             ? '#a5b4fc'
-                            : '#6366f1'
+                            : '#4D3636'
                           : colors.textMuted,
                     },
                   ]}
@@ -3128,7 +3128,7 @@ export default function DriverWalletScreen() {
                                     </Text>
                                   ) : (
                                     // Open/direct trip — not sent to fleet owner yet
-                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.10)', color: '#6366f1', borderColor: 'rgba(99,102,241,0.30)' }]}>
+                                    <Text style={[styles.tripsDirectBadge, { backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.10)', color: '#4D3636', borderColor: 'rgba(99,102,241,0.30)' }]}>
                                       OPEN TRIP
                                     </Text>
                                   )}
@@ -4245,7 +4245,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   ledgerSection: {
     paddingTop: 12,
@@ -5039,7 +5039,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
     letterSpacing: -0.05,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   tripsExpanded: {
     paddingHorizontal: 12,
@@ -5779,7 +5779,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   referenceExpandedButtonText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2,

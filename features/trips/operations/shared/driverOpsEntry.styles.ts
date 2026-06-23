@@ -66,7 +66,7 @@ export const driverOpsEntryStyles = StyleSheet.create({
   attachBtnText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.15,
   },
   attachThumbBtn: {
@@ -113,7 +113,7 @@ export const driverOpsEntryStyles = StyleSheet.create({
   headerScanBtnText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   heroRow: {
     flexDirection: "row",

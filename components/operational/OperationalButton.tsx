@@ -1,7 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -10,10 +9,17 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import {
+  PULSE_PILL_BUTTON_BORDER_WIDTH,
+  PULSE_PILL_BUTTON_RADIUS,
+  pulsePillButtonContainerDefault,
+  pulsePillButtonContainerFullWidth,
+  pulsePillButtonPressed,
+} from '@/constants/PulsePillButtonChrome';
+import Theme from '@/constants/Theme';
 import { colors } from '@/design-system/colors';
-import { radius } from '@/design-system/radius';
-import { space, touchTargetMin } from '@/design-system/spacing';
 import { type DensityTier } from '@/design-system/density';
+import { space, touchTargetMin } from '@/design-system/spacing';
 
 /**
  * Operational button intents — not generic “primary/secondary”.
@@ -70,6 +76,9 @@ export const OperationalButton = memo(function OperationalButton({
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.base,
+        intent === 'primary' || intent === 'bottomSticky'
+          ? pulsePillButtonContainerDefault
+          : null,
         {
           backgroundColor: config.background,
           borderColor: config.border,
@@ -79,7 +88,12 @@ export const OperationalButton = memo(function OperationalButton({
           minHeight: intent === 'list' ? 36 : touchTargetMin,
           opacity: isDisabled ? 0.5 : pressed ? 0.92 : 1,
         },
+        (intent === 'primary' || intent === 'bottomSticky') &&
+          pressed &&
+          !isDisabled &&
+          pulsePillButtonPressed,
         shouldFill && styles.fullWidth,
+        shouldFill && pulsePillButtonContainerFullWidth,
         intent === 'bottomSticky' && styles.bottomSticky,
         style,
       ]}
@@ -117,15 +131,15 @@ const INTENT_STYLES: Record<
   }
 > = {
   primary: {
-    background: colors.brand,
-    border: colors.brand,
-    borderWidth: 0,
-    text: colors.textOnBrand,
+    background: Theme.buttonPrimary,
+    border: Theme.buttonPrimaryBorder,
+    borderWidth: PULSE_PILL_BUTTON_BORDER_WIDTH,
+    text: Theme.buttonPrimaryText,
     fontSize: 15,
   },
   approval: {
-    background: colors.revenue,
-    border: colors.revenue,
+    background: Theme.success,
+    border: Theme.success,
     borderWidth: 0,
     text: '#ffffff',
     fontSize: 15,
@@ -152,35 +166,25 @@ const INTENT_STYLES: Record<
     fontSize: 13,
   },
   bottomSticky: {
-    background: colors.brand,
-    border: colors.brand,
-    borderWidth: 0,
-    text: colors.textOnBrand,
+    background: Theme.buttonPrimary,
+    border: Theme.buttonPrimaryBorder,
+    borderWidth: PULSE_PILL_BUTTON_BORDER_WIDTH,
+    text: Theme.buttonPrimaryText,
     fontSize: 16,
   },
 };
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: radius.md,
+    borderRadius: PULSE_PILL_BUTTON_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 2,
-      },
-      android: { elevation: 1 },
-      default: {},
-    }),
   },
   fullWidth: {
     width: '100%',
   },
   bottomSticky: {
-    borderRadius: radius.lg,
+    borderRadius: PULSE_PILL_BUTTON_RADIUS,
     minHeight: 48,
   },
   inner: {

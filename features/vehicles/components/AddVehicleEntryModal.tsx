@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  toggleBtnTextActive: { color: Theme.textOnPrimary },
+  toggleBtnTextActive: { color: Theme.buttonPrimaryText },
   entryContextLabel: {
     fontSize: 11,
     color: Theme.textSecondary,

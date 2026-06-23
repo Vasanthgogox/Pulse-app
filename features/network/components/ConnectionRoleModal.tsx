@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   radioSelected: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   footer: {
     paddingHorizontal: 24,
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     letterSpacing: 1.6,
     textTransform: "uppercase",
   },

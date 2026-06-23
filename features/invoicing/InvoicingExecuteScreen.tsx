@@ -1518,7 +1518,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 4,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   clientRowTop: {
     flexDirection: "row",
@@ -1925,7 +1925,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkBoxOn: { backgroundColor: Theme.primary, borderColor: Theme.primary },
+  checkBoxOn: { backgroundColor: Theme.buttonPrimary, borderColor: Theme.primary },
   checkBoxDisabled: {
     backgroundColor: Theme.surfaceBorder,
     borderColor: Theme.borderLight,
@@ -2051,7 +2051,10 @@ const styles = StyleSheet.create({
     borderTopColor: Theme.borderLight,
   },
   footerBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -2100,7 +2103,10 @@ const styles = StyleSheet.create({
   blockedBody: { fontSize: 14, color: Theme.textSecondary, marginBottom: 20 },
   blockedBtn: {
     alignSelf: "flex-start",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,

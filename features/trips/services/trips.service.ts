@@ -1333,10 +1333,10 @@ export async function createTrip(
   const normalizedVehicleId = normalizeNullableUuid(data.vehicle_id);
   const inferredTripPayoutMode =
     data.trip_payout_mode ??
-    (normalizedDriverId || normalizedVehicleId
-      ? "asset"
-      : normalizedSupplierId
-        ? "market"
+    (normalizedSupplierId
+      ? "market"
+      : normalizedDriverId || normalizedVehicleId
+        ? "asset"
         : "asset");
 
   // Sequential trip trigger writes user_counters(user_id) with FK -> public.users(id).
@@ -2058,11 +2058,8 @@ function resolveTripPayoutModeForCompletion(
     .trim()
     .toLowerCase();
   if (raw === "market" || raw === "asset") return raw;
-  const hasAssignedFleet =
-    String(trip?.driver_id ?? "").trim().length > 0 ||
-    String(trip?.vehicle_id ?? "").trim().length > 0;
-  if (hasAssignedFleet) return "asset";
-  return String(trip?.supplier_id ?? "").trim() ? "market" : "asset";
+  if (String(trip?.supplier_id ?? "").trim()) return "market";
+  return "asset";
 }
 
 async function ensureAssetCompletionAutoEntries(

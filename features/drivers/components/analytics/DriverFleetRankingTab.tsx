@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   sortPillActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   sortPillPressed: {

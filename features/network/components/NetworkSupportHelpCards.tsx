@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   },
   cardCtaText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "400",
     color: Theme.primary,
   },
 });

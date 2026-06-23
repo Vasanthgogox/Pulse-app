@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   doneBtnText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.3,
   },
 });

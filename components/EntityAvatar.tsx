@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { partyAvatarHasRenderableOutput } from "@/lib/partyAvatarDisplay";
+import { shouldUseOfflinePartyRoleAvatar } from "@/lib/partyOfflineRoleAvatar";
 import { StyleSheet, View } from "react-native";
 
 export interface EntityAvatarProps {
@@ -35,10 +36,18 @@ export function EntityAvatar({
   isIntegrated = false,
   showIntegrationBadge = true,
 }: EntityAvatarProps) {
-  const badgeSize = Math.round(size * 0.28);
-  const badgeOffset = Math.round(size * 0.02);
+  const badgeSize = Math.max(8, Math.round(size * 0.28));
+  /** Space for the status dot on the bottom-right corner (inside layout box). */
+  const badgePad = Math.ceil(badgeSize * 0.4);
+  const frame = size + badgePad;
+
+  const useOfflineRoleIcon = shouldUseOfflinePartyRoleAvatar(
+    isIntegrated,
+    entityType,
+  );
 
   if (
+    !useOfflineRoleIcon &&
     !partyAvatarHasRenderableOutput({
       name,
       organizationImageUrl,
@@ -59,17 +68,20 @@ export function EntityAvatar({
       avatarUrl={avatarUrl}
       avatarSeed={avatarSeed}
       entityType={entityType}
+      isIntegrated={isIntegrated}
       size={size}
     />
   );
 
   if (!showIntegrationBadge) {
-    return <View style={{ width: size, height: size }}>{avatar}</View>;
+    return (
+      <View style={[styles.frame, { width: size, height: size }]}>{avatar}</View>
+    );
   }
 
   return (
-    <View style={{ width: size, height: size }}>
-      {avatar}
+    <View style={[styles.frame, { width: frame, height: frame }]}>
+      <View style={{ width: size, height: size }}>{avatar}</View>
       <View
         style={[
           styles.badge,
@@ -77,8 +89,6 @@ export function EntityAvatar({
             width: badgeSize,
             height: badgeSize,
             borderRadius: badgeSize / 2,
-            bottom: badgeOffset,
-            right: badgeOffset,
             backgroundColor: isIntegrated ? Theme.darkGreen : Theme.iconSlate,
           },
         ]}
@@ -88,9 +98,17 @@ export function EntityAvatar({
 }
 
 const styles = StyleSheet.create({
+  frame: {
+    position: "relative",
+    overflow: "visible",
+    flexShrink: 0,
+  },
   badge: {
     position: "absolute",
+    right: 0,
+    bottom: 0,
     borderWidth: 1.5,
-    borderColor: "#fff",
+    borderColor: Theme.cardWhite,
+    zIndex: 2,
   },
 });

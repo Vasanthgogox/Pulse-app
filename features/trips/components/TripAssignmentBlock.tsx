@@ -2094,7 +2094,7 @@ export function TripAssignmentBlock({
                 >
                   <View style={styles.phoneOtpRevealCard}>
                     <View style={styles.phoneOtpRevealIconWrap}>
-                      <FontAwesome name="key" size={22} color="#4f46e5" />
+                      <FontAwesome name="key" size={22} color="#4D3636" />
                     </View>
                     <Text style={styles.phoneOtpRevealTitle}>Verification code</Text>
                     <Text style={styles.phoneOtpRevealCode}>
@@ -2224,7 +2224,7 @@ export function TripAssignmentBlock({
                   />
                   <View style={styles.phoneProtocolCard}>
                     <View style={styles.phoneProtocolIconWrap}>
-                      <FontAwesome name="mobile" size={18} color="#4f46e5" />
+                      <FontAwesome name="mobile" size={18} color="#4D3636" />
                     </View>
                     <View style={styles.phoneProtocolBody}>
                       <Text style={styles.phoneProtocolTitle}>Secure assignment</Text>
@@ -2329,13 +2329,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     justifyContent: "center",
   },
   aggregateRedirectBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   card: {
     backgroundColor: Theme.screenBackground,
@@ -2479,7 +2482,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
-  actionBtnTextPrimary: { color: "#fff" },
+  actionBtnTextPrimary: { color: Theme.buttonPrimaryText },
   actionBtnTextSecondary: { color: Theme.textPrimaryDark },
   actionBtnTextSecondaryAlt: { color: Theme.textPrimaryDark },
 
@@ -2713,6 +2716,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 4,
@@ -2885,7 +2891,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 8,
-    backgroundColor: "#6366f1",
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2895,7 +2904,7 @@ const styles = StyleSheet.create({
   assignAdhocVehicleBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   assignCard: {
     flexDirection: "row",
@@ -2926,7 +2935,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   assignDriverAvatarSelected: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   assignDriverInitial: {
     fontSize: 12,
@@ -2979,7 +2988,7 @@ const styles = StyleSheet.create({
   },
   assignCheckWrapSelected: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   assignVehicleIconWrap: {
     width: 34,
@@ -2990,7 +2999,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   assignVehicleIconWrapSelected: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   assignVehicleInput: {
     borderRadius: 10,
@@ -3916,7 +3925,7 @@ const styles = StyleSheet.create({
   allocExecuteBtnText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
     letterSpacing: 0.2,
   },
   allocVerifyHint: {

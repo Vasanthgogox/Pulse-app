@@ -5,6 +5,7 @@
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import Theme from "@/constants/Theme";
+import { FinancePromoCard } from "@/features/finance/components/FinancePromoCard";
 import { useQuery } from "@tanstack/react-query";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
@@ -82,6 +83,7 @@ export interface GarrageTabProps {
   /** Desktop finance parity: hide summary strip under hero/cards. */
   hideSummaryRow?: boolean;
   embedInParentScroll?: boolean;
+  onAddPartyPress?: () => void;
 }
 
 function formatCurrency(amount: number): string {
@@ -113,6 +115,7 @@ export function GarrageTab({
   bottomInset = 100,
   hideSummaryRow = false,
   embedInParentScroll = false,
+  onAddPartyPress,
 }: GarrageTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -371,6 +374,33 @@ export function GarrageTab({
     return <Text style={styles.loading}>Loading…</Text>;
   }
 
+  if (vehicles.length === 0) {
+    return (
+      <ScrollView
+        contentContainerStyle={[
+          styles.emptyFleetState,
+          { paddingBottom: bottomInset + insets.bottom, flexGrow: 1 },
+        ]}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.loaderAccent}
+            />
+          ) : undefined
+        }
+      >
+        {topContent}
+        <FinancePromoCard
+          variant="garage"
+          onCtaPress={onAddPartyPress}
+          style={styles.emptyBanner}
+        />
+      </ScrollView>
+    );
+  }
+
   const handleRowPress = (row: VehiclePnLRow) => {
     if (!onRowSelect) return;
     const vehicleRow = row;
@@ -627,7 +657,7 @@ export function GarrageTab({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Theme.teslaRed}
+              tintColor={Theme.loaderAccent}
             />
           ) : undefined
         }
@@ -827,6 +857,16 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   loading: { padding: 24, textAlign: "center", color: Theme.textSecondary },
+  emptyFleetState: {
+    alignItems: "stretch",
+    flexGrow: 1,
+  },
+  emptyBanner: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
   emptyState: { paddingVertical: 24, alignItems: "center" },
   emptyText: {
     fontSize: 10,

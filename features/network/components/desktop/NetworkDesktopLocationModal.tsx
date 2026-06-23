@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxOn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   checkmark: {
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 12,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   deleteBtn: {
     paddingVertical: 10,

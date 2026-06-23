@@ -3,6 +3,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { PulsePillButton } from "@/components/PulsePillButton";
 import Theme from "@/constants/Theme";
 import {
   ConnectionRoleModal,
@@ -638,35 +639,28 @@ export function NetworkPhoneAndContactsPanel({
           <View style={styles.inviteContentCol}>
             <Text style={styles.inviteCardTitle}>{t("networkInviteHeading")}</Text>
             <Text style={styles.inviteCardBody}>{t("networkInviteBody")}</Text>
-            <View
-              style={[
-                styles.inviteCopyRow,
-                (mobileDiscoverCluster || windowWidth < 400) &&
-                  styles.inviteCopyRowStacked,
-              ]}
-            >
-              <Text style={styles.inviteUrlText} numberOfLines={2}>
+            <View style={styles.inviteCopyRow}>
+              <Text
+                style={styles.inviteUrlText}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
                 {inviteUrl.display}
               </Text>
-              <Pressable
+              <PulsePillButton
+                size="compact"
+                label={
+                  inviteCopied
+                    ? t("networkInviteCopied")
+                    : t("networkInviteCopy")
+                }
                 onPress={() => void handleCopyInvite()}
-                style={({ pressed }) => [
-                  styles.inviteCopyBtn,
-                  (mobileDiscoverCluster || windowWidth < 400) &&
-                    styles.inviteCopyBtnStacked,
-                  pressed && styles.inviteCopyBtnPressed,
-                ]}
-                accessibilityRole="button"
                 accessibilityLabel={
                   inviteCopied
                     ? t("networkInviteCopied")
                     : t("networkInviteCopy")
                 }
-              >
-                <Text style={styles.inviteCopyBtnText}>
-                  {inviteCopied ? t("networkInviteCopied") : t("networkInviteCopy")}
-                </Text>
-              </Pressable>
+              />
             </View>
           </View>
         </View>
@@ -1176,14 +1170,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     flexShrink: 0,
     ...Platform.select({
       web: {
         boxShadow: "0 4px 12px rgba(79,70,229,0.22)",
       },
       default: {
-        shadowColor: "#4F46E5",
+        shadowColor: "#4D3636",
         shadowOpacity: 0.22,
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 3 },
@@ -1238,14 +1232,10 @@ const styles = StyleSheet.create({
     }),
   },
 
-  /* ── Invite via Link card (light surface, purple CTA) ─────────────
+  /* ── Invite via Link card (light surface + global pill CTA) ─────
    *
-   *  Color swap counterpart to the hero banner: this card used to be a
-   *  deep purple panel with a white "Copy" pill. It now mirrors the
-   *  surface treatment that the hero banner had — light card surface
-   *  (cardWhite) with dark text — and the "Copy" pill inverts to purple
-   *  with white text. The decorative top-right glow goes from translucent
-   *  white to a faint indigo wash so it still adds depth on the light bg.
+   *  Light card surface with dark text; Copy uses PulsePillButton chrome
+   *  (pastel blue fill, ink outline, dark label).
    */
   inviteRow: {
     width: "100%",
@@ -1365,8 +1355,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
@@ -1374,13 +1364,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     minWidth: 0,
-    flexWrap: "wrap",
-  },
-  inviteCopyRowStacked: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: 8,
-    paddingVertical: 8,
   },
   inviteUrlText: {
     flex: 1,
@@ -1393,37 +1376,6 @@ const styles = StyleSheet.create({
       web: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
       default: {},
     }),
-  },
-  inviteCopyBtn: {
-    flexShrink: 0,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: Theme.actionAccent,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 2px 6px rgba(99,102,241,0.20)",
-      },
-      default: {
-        shadowColor: Theme.actionAccent,
-        shadowOpacity: 0.20,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 1,
-      },
-    }),
-  },
-  inviteCopyBtnStacked: {
-    alignSelf: "stretch",
-  },
-  inviteCopyBtnPressed: {
-    opacity: 0.88,
-  },
-  inviteCopyBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 0.3,
-    color: Theme.cardWhite,
   },
 
   /* ── Inline sections (phone search / contact recs) inside hero ── */

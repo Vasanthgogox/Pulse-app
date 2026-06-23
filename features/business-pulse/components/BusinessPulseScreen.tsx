@@ -450,7 +450,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
   );
 
   const revenueSegmentSlices = useMemo(() => {
-    const palette = ["#4F46E5", "#3B82F6", "#6366F1", "#71717A", "#A1A1AA"];
+    const palette = ["#4D3636", "#3B82F6", "#4D3636", "#71717A", "#A1A1AA"];
     const top = clientProfitability.slice(0, 4);
     const otherRevenue = clientProfitability
       .slice(4)
@@ -2153,7 +2153,7 @@ export function BusinessPulseScreen({ embedded = false, topInset }: BusinessPuls
                     slices={routePerf.slice(0, 5).map((row, index) => ({
                       label: row.route.length > 24 ? `${row.route.slice(0, 22)}…` : row.route,
                       value: row.trips,
-                      color: ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#6366f1"][index % 5]!,
+                      color: ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#4D3636"][index % 5]!,
                     }))}
                     emptyMessage="No lane activity in scope."
                   />
@@ -2470,7 +2470,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   filterChipActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   filterChipText: {

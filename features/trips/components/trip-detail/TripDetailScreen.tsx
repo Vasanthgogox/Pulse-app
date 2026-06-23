@@ -16,7 +16,9 @@ import {
   pushTripLedgerQuickEntry,
 } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import { TripPayableReceivableSummaryCard } from "@/features/trips/components/trip-detail/adjustment/TripPayableReceivableSummaryCard";
+import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { latestTripSettlementLedgerEntry } from "@/features/trips/utils/tripSettlementLedgerEntries.util";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
 import { resolveTripLedgerTripType } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { TripRatingsBlock } from "@/features/ratings/components/TripRatingsBlock";
@@ -383,6 +385,7 @@ function ManifestHeroBridgePartyEnd({
   avatarSeed,
   organizationImageUrl,
   organizationAvatarSeed,
+  isIntegrated,
   vehicleLabel,
   vehicleId,
 }: {
@@ -394,6 +397,7 @@ function ManifestHeroBridgePartyEnd({
   avatarSeed?: string | null;
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
+  isIntegrated?: boolean;
   vehicleLabel?: string | null;
   vehicleId?: string | null;
 }) {
@@ -441,7 +445,7 @@ function ManifestHeroBridgePartyEnd({
             avatarSeed={avatarSeed ?? undefined}
             organizationImageUrl={organizationImageUrl ?? undefined}
             organizationAvatarSeed={organizationAvatarSeed ?? undefined}
-            showIntegrationBadge={false}
+            isIntegrated={isIntegrated}
           />
           {showVehicleBadge ? (
             <View
@@ -473,6 +477,7 @@ function NeoManifestHeroBridgePartyEnd({
   avatarSeed,
   organizationImageUrl,
   organizationAvatarSeed,
+  isIntegrated,
   vehicleLabel,
   vehicleId,
   styles: neo,
@@ -486,6 +491,7 @@ function NeoManifestHeroBridgePartyEnd({
   avatarSeed?: string | null;
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
+  isIntegrated?: boolean;
   vehicleLabel?: string | null;
   vehicleId?: string | null;
   styles: {
@@ -532,7 +538,7 @@ function NeoManifestHeroBridgePartyEnd({
           avatarSeed={avatarSeed ?? undefined}
           organizationImageUrl={organizationImageUrl ?? undefined}
           organizationAvatarSeed={organizationAvatarSeed ?? undefined}
-          showIntegrationBadge={false}
+          isIntegrated={isIntegrated}
         />
         {showVehicleBadge ? (
           <View
@@ -574,6 +580,9 @@ export default function TripDetailScreen({
   const [financeSubTab, setFinanceSubTab] = useState<
     "summary" | "transactions"
   >("summary");
+  const [previewLedgerTx, setPreviewLedgerTx] = useState<LedgerRow | null>(
+    null,
+  );
   const expenseTabAutoSelectedRef = useRef(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
@@ -1895,6 +1904,8 @@ export default function TripDetailScreen({
       ? allocatedDriverName
       : detail.driverName?.trim() || "Driver"
     : supplierNameForParty;
+  const clientPartyIntegrated = detail.clientPartyRes?.integrated ?? false;
+  const supplierPartyIntegrated = detail.supplierPartyRes?.integrated ?? false;
   const hasLinkedClient = Boolean((clientIdFromContext ?? trip.client_id)?.trim());
   const showPayableSettlementLane =
     showRecordSupplierPayoutCta || isAssetTripFinance;
@@ -1908,31 +1919,85 @@ export default function TripDetailScreen({
     driverDisplayName: detail.driverName ?? null,
   };
   const financeLayout = isDesktop ? "desktop" : "mobile";
+  const openSettlementLanePreview = (lane: "receivable" | "payable") => {
+    const payableEntityType = isAssetTripFinance ? "driver" : "supplier";
+    const tx = latestTripSettlementLedgerEntry(
+      detail.tripLedgerEntries,
+      lane,
+      payableEntityType,
+    );
+    if (tx) {
+      setPreviewLedgerTx(tx);
+      return;
+    }
+    setActiveTab("finance");
+    setFinanceSubTab("transactions");
+  };
   const financeCapturePaymentSlot = (
     <View style={neoStyles.capturePaymentSlot}>
       <TripPayableReceivableSummaryCard
         layout={financeLayout}
         showReceivable={hasLinkedClient || adjSales > 0}
         clientName={clientNameForParty}
-        clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
+        clientAvatarUrl={detail.clientPartyAvatarFields?.avatarUrl}
+        clientAvatarSeed={
+          detail.clientPartyAvatarFields?.avatarSeed ??
+          clientIdFromContext ??
+          trip.client_id ??
+          null
+        }
+        clientOrganizationImageUrl={
+          detail.clientPartyAvatarFields?.organizationImageUrl
+        }
+        clientOrganizationAvatarSeed={
+          detail.clientPartyAvatarFields?.organizationAvatarSeed
+        }
+        clientIntegrated={clientPartyIntegrated}
         revisedReceivable={adjSales}
         collectedAmount={collectedFromClient}
         receivableDue={receivableAfterAdjustments}
         showPayable={showPayableSettlementLane}
         payablePartyName={provisionCostPartyName}
         payableAvatarUrl={
-          isAssetTripFinance ? detail.driverAvatarUri : undefined
+          isAssetTripFinance
+            ? detail.driverAvatarUri
+            : detail.supplierPartyAvatarFields?.avatarUrl
         }
         payableAvatarSeed={
           isAssetTripFinance
             ? (trip.driver_id ?? null)
-            : (trip.supplier_id ?? null)
+            : (detail.supplierPartyAvatarFields?.avatarSeed ??
+              trip.supplier_id ??
+              null)
+        }
+        payableOrganizationImageUrl={
+          isAssetTripFinance
+            ? undefined
+            : detail.supplierPartyAvatarFields?.organizationImageUrl
+        }
+        payableOrganizationAvatarSeed={
+          isAssetTripFinance
+            ? undefined
+            : detail.supplierPartyAvatarFields?.organizationAvatarSeed
+        }
+        payableIntegrated={
+          isAssetTripFinance ? undefined : supplierPartyIntegrated
         }
         payableEntityType={isAssetTripFinance ? "driver" : "supplier"}
         payableLaneLabel={isAssetTripFinance ? "Driver payable" : "Payable"}
         revisedPayable={adjCost}
         paidAmount={supplierPaid}
         payableDue={supplierDueAfterAdjustments}
+        onPressReceivable={
+          collectedFromClient > 0
+            ? () => openSettlementLanePreview("receivable")
+            : undefined
+        }
+        onPressPayable={
+          supplierPaid > 0
+            ? () => openSettlementLanePreview("payable")
+            : undefined
+        }
       />
       <TouchableOpacity
         style={neoStyles.capturePaymentBtn}
@@ -2013,11 +2078,45 @@ export default function TripDetailScreen({
       adjCost={adjCost}
       costSideDelta={costSideDelta}
       clientName={clientNameForParty}
-      clientAvatarSeed={clientIdFromContext ?? trip.client_id ?? null}
+      clientAvatarUrl={detail.clientPartyAvatarFields?.avatarUrl}
+      clientAvatarSeed={
+        detail.clientPartyAvatarFields?.avatarSeed ??
+        clientIdFromContext ??
+        trip.client_id ??
+        null
+      }
+      clientOrganizationImageUrl={
+        detail.clientPartyAvatarFields?.organizationImageUrl
+      }
+      clientOrganizationAvatarSeed={
+        detail.clientPartyAvatarFields?.organizationAvatarSeed
+      }
+      clientIntegrated={clientPartyIntegrated}
       supplierName={provisionCostPartyName}
-      supplierAvatarUrl={isAssetTripFinance ? detail.driverAvatarUri : undefined}
+      supplierAvatarUrl={
+        isAssetTripFinance
+          ? detail.driverAvatarUri
+          : detail.supplierPartyAvatarFields?.avatarUrl
+      }
       supplierAvatarSeed={
-        isAssetTripFinance ? (trip.driver_id ?? null) : (trip.supplier_id ?? null)
+        isAssetTripFinance
+          ? (trip.driver_id ?? null)
+          : (detail.supplierPartyAvatarFields?.avatarSeed ??
+            trip.supplier_id ??
+            null)
+      }
+      supplierOrganizationImageUrl={
+        isAssetTripFinance
+          ? undefined
+          : detail.supplierPartyAvatarFields?.organizationImageUrl
+      }
+      supplierOrganizationAvatarSeed={
+        isAssetTripFinance
+          ? undefined
+          : detail.supplierPartyAvatarFields?.organizationAvatarSeed
+      }
+      supplierIntegrated={
+        isAssetTripFinance ? undefined : supplierPartyIntegrated
       }
       isAssetExecution={isAssetTripFinance}
       costLaneLabel={isAssetTripFinance ? "Revised trip cost" : undefined}
@@ -2469,6 +2568,7 @@ export default function TripDetailScreen({
                       avatarSeed={
                         detail.clientPartyAvatarFields?.avatarSeed ?? undefined
                       }
+                      isIntegrated={clientPartyIntegrated}
                     />
                   </View>
                   <View style={styles.refHeroBridgeTextCol}>
@@ -2510,6 +2610,7 @@ export default function TripDetailScreen({
                     organizationAvatarSeed={
                       detail.supplierPartyAvatarFields?.organizationAvatarSeed
                     }
+                    isIntegrated={supplierPartyIntegrated}
                   />
                 )}
               </View>
@@ -2935,7 +3036,14 @@ export default function TripDetailScreen({
                       />
                     </View>
                     {filteredFinanceRows.map((row) => (
-                      <View key={row.key} style={styles.refTxnRow}>
+                      <TouchableOpacity
+                        key={row.key}
+                        style={styles.refTxnRow}
+                        activeOpacity={0.85}
+                        onPress={() => setPreviewLedgerTx(row.tx)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Preview transaction"
+                      >
                         <View style={styles.refTxnLeft}>
                           <View
                             style={[
@@ -2973,7 +3081,7 @@ export default function TripDetailScreen({
                         >
                           {formatINR(row.amount)}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     ))}
                   </>
                 )}
@@ -3029,7 +3137,7 @@ export default function TripDetailScreen({
               <View style={styles.refVaultWrap}>
                 <View style={styles.refVaultHeader}>
                   <View style={styles.refVaultHeaderIcon}>
-                    <Feather name="shield" size={16} color="#4f46e5" />
+                    <Feather name="shield" size={16} color="#4D3636" />
                   </View>
                   <View>
                     <Text style={styles.refVaultTitle}>Asset Vault</Text>
@@ -3135,7 +3243,7 @@ export default function TripDetailScreen({
                                 size={11}
                                 color={
                                   isPending && canUploadTripDocs
-                                    ? "#4f46e5"
+                                    ? "#4D3636"
                                     : "#64748b"
                                 }
                               />
@@ -3188,6 +3296,7 @@ export default function TripDetailScreen({
                           detail.clientPartyAvatarFields?.avatarSeed ??
                           undefined
                         }
+                        isIntegrated={clientPartyIntegrated}
                       />
                       <View style={neoStyles.heroPartyText}>
                         <Text style={neoStyles.heroKicker}>CLIENT</Text>
@@ -3233,6 +3342,7 @@ export default function TripDetailScreen({
                           detail.supplierPartyAvatarFields
                             ?.organizationAvatarSeed
                         }
+                        isIntegrated={supplierPartyIntegrated}
                         styles={neoStyles}
                         partyStyles={manifestHeroBridgePartyStyles}
                       />
@@ -3824,7 +3934,7 @@ export default function TripDetailScreen({
                                   <Feather
                                     name="chevron-right"
                                     size={14}
-                                    color="#4f46e5"
+                                    color="#4D3636"
                                   />
                                 </TouchableOpacity>
                               </View>
@@ -3857,12 +3967,16 @@ export default function TripDetailScreen({
                                   </Text>
                                 ) : (
                                   financeHistoryRows.slice(0, 8).map((row) => (
-                                    <View
+                                    <TouchableOpacity
                                       key={row.key}
                                       style={[
                                         neoStyles.financePreviewTxnRow,
                                         isDesktop && neoStyles.financePreviewTxnRowDesktop,
                                       ]}
+                                      activeOpacity={0.85}
+                                      onPress={() => setPreviewLedgerTx(row.tx)}
+                                      accessibilityRole="button"
+                                      accessibilityLabel="Preview transaction"
                                     >
                                       <View
                                         style={[
@@ -3924,7 +4038,7 @@ export default function TripDetailScreen({
                                       >
                                         {formatINR(row.amount)}
                                       </Text>
-                                    </View>
+                                    </TouchableOpacity>
                                   ))
                                 )}
                               </ScrollView>
@@ -4093,7 +4207,14 @@ export default function TripDetailScreen({
                           </Text>
                         ) : (
                           filteredFinanceRows.map((row) => (
-                            <View key={row.key} style={neoStyles.txnRow}>
+                            <TouchableOpacity
+                              key={row.key}
+                              style={neoStyles.txnRow}
+                              activeOpacity={0.85}
+                              onPress={() => setPreviewLedgerTx(row.tx)}
+                              accessibilityRole="button"
+                              accessibilityLabel="Preview transaction"
+                            >
                               <View
                                 style={[
                                   neoStyles.txnIcon,
@@ -4131,7 +4252,7 @@ export default function TripDetailScreen({
                               >
                                 {formatINR(row.amount)}
                               </Text>
-                            </View>
+                            </TouchableOpacity>
                           ))
                         )}
                       </View>
@@ -5626,6 +5747,16 @@ export default function TripDetailScreen({
           </View>
         </View>
       </Modal>
+
+      <TripLedgerTransactionPreviewModal
+        visible={previewLedgerTx != null}
+        transaction={previewLedgerTx}
+        onClose={() => setPreviewLedgerTx(null)}
+        onViewAll={() => {
+          setActiveTab("finance");
+          setFinanceSubTab("transactions");
+        }}
+      />
 
       <Suspense fallback={null}>
         <LiveTrackingModal
@@ -7436,9 +7567,9 @@ const neoStyles = StyleSheet.create({
     width: "68%",
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#6366f1",
+    backgroundColor: Theme.buttonPrimary,
     transform: [{ rotate: "-39deg" }],
-    shadowColor: "#6366f1",
+    shadowColor: "#4D3636",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.75,
     shadowRadius: 14,
@@ -7454,7 +7585,7 @@ const neoStyles = StyleSheet.create({
   radarNodeOrigin: {
     left: "16%",
     bottom: "18%",
-    backgroundColor: "#4f46e5",
+    backgroundColor: Theme.buttonPrimary,
   },
   radarNodeDestination: {
     right: "17%",
@@ -7692,7 +7823,7 @@ const neoStyles = StyleSheet.create({
   financeLedgerPreviewLinkText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#4f46e5",
+    color: "#4D3636",
   },
   financeLedgerPreviewSub: {
     fontSize: 11,
@@ -7859,7 +7990,7 @@ const neoStyles = StyleSheet.create({
     bottom: -1,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#4f46e5",
+    backgroundColor: Theme.buttonPrimary,
   },
   yieldCard: {
     position: "relative",
@@ -8251,7 +8382,10 @@ const neoStyles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   capturePaymentBtnText: {
     color: Theme.buttonPrimaryText,
@@ -8887,7 +9021,7 @@ const neoStyles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 11,
     alignItems: "center",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   provisionConfirmOkText: {
     color: "#fff",
@@ -9015,10 +9149,13 @@ const neoStyles = StyleSheet.create({
     paddingVertical: 7,
   },
   vaultBtnUpload: {
-    backgroundColor: "#4f46e5",
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   vaultBtnText: {
-    color: "#fff",
+    color: Theme.buttonDarkText,
     fontSize: 8,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -9305,7 +9442,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 8,
-    backgroundColor: "#4f46e5",
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -9437,7 +9574,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   refTabBtnTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   refFinanceSubTabs: {
     flexDirection: "row",
@@ -9463,7 +9600,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     height: 2,
     borderRadius: 999,
-    backgroundColor: "#6366f1",
+    backgroundColor: Theme.buttonPrimary,
   },
   refSettleMetaRow: {
     marginTop: 12,
@@ -9757,7 +9894,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   refVaultViewTextPrimary: {
-    color: "#4f46e5",
+    color: "#4D3636",
   },
   refHeroCard: {
     marginBottom: 12,
@@ -10002,7 +10139,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 1,
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
   refHeroPartyValue: {
     marginTop: 2,
@@ -10223,7 +10360,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   refOtpBtnText: {
-    color: "#fff",
+    color: Theme.buttonDarkText,
     fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -10386,7 +10523,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   refAssignInlineBtnText: {
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.4,
@@ -10795,7 +10932,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.04)",
   },
   refInlineAdjustBtnActive: {
-    borderColor: "#4f46e5",
+    borderColor: "#4D3636",
     backgroundColor: "rgba(79,70,229,0.2)",
   },
   refInlineAdjustImpactPlus: {
@@ -10814,7 +10951,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   refInlineAdjustBtnTextActive: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   refInlineAmountRow: {
     borderWidth: 1,
@@ -10856,7 +10993,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   refInlineReasonChipActive: {
-    borderColor: "#4f46e5",
+    borderColor: "#4D3636",
     backgroundColor: "rgba(79,70,229,0.12)",
   },
   refInlineReasonChipTxt: {
@@ -10889,7 +11026,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    backgroundColor: "#4f46e5",
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   refInlineSaveBtnDisabled: {
     opacity: 0.45,
@@ -11495,7 +11635,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#34d399",
   },
   navMobileDotIndigo: {
-    backgroundColor: "#6366f1",
+    backgroundColor: Theme.buttonPrimary,
   },
   navLeft: {
     flexDirection: "row",
@@ -11635,7 +11775,7 @@ const styles = StyleSheet.create({
     color: "#60a5fa",
   },
   tabBtnTextActiveCompact: {
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
   tabUnderline: {
     position: "absolute",
@@ -11929,7 +12069,7 @@ const styles = StyleSheet.create({
   otpResendBtnText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -11947,7 +12087,7 @@ const styles = StyleSheet.create({
   otpDisabledBtnText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -12261,7 +12401,7 @@ const styles = StyleSheet.create({
   retryBtnText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#fff",
+    color: Theme.buttonDarkText,
   },
 
   // ── Finance two-col layout ──
@@ -12515,7 +12655,10 @@ const styles = StyleSheet.create({
   },
   financeAdjustmentsBtn: {
     borderRadius: 999,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: "row",
@@ -12792,7 +12935,7 @@ const styles = StyleSheet.create({
   },
   docGalleryDotActive: {
     width: 18,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   docGalleryDotInactive: {
     backgroundColor: "#e2e8f0",
@@ -12813,7 +12956,7 @@ const styles = StyleSheet.create({
   docModalFooterBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.buttonDarkText,
   },
 });
 
@@ -13057,7 +13200,10 @@ const elStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,

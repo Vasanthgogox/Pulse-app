@@ -31,7 +31,7 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-const PURPLE = "#4F46E5";
+const PURPLE = "#4D3636";
 const PURPLE_TINT = "rgba(79,70,229,0.08)";
 const PURPLE_BORDER = "rgba(79,70,229,0.18)";
 const TEAL = "#0f766e";
@@ -343,7 +343,7 @@ export function WorkspaceAccountPanel({
         <SectionHeader label="How your identity works" />
         <View style={styles.identityRow}>
           <View style={[styles.identityIconBox, { backgroundColor: "rgba(99,102,241,0.1)" }]}>
-            <MessageSquare size={14} color="#4f46e5" strokeWidth={2.2} />
+            <MessageSquare size={14} color="#4D3636" strokeWidth={2.2} />
           </View>
           <View style={styles.identityText}>
             <Text style={styles.identityTitle}>Chat & team communications</Text>

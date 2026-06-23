@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   body: { maxHeight: 420 },
   bodyContent: {
@@ -523,7 +523,10 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: 'center',
     justifyContent: 'center',
   },

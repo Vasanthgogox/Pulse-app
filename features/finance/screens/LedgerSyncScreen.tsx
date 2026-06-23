@@ -39,6 +39,7 @@ import { formatLedgerDate, normalizeVehicleNumberForMatch } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useSafeBack } from "@/lib/useSafeBack";
 import { ROUTES } from "@/lib/routes";
+import { useInvalidateTransactions } from "@/lib/queries/useTransactionsQuery";
 import { useQueryClient } from "@tanstack/react-query";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -217,6 +218,7 @@ export default function LedgerSyncScreen() {
 
   const orgId = currentOrganization?.id ?? null;
   const queryClient = useQueryClient();
+  const invalidateTransactions = useInvalidateTransactions();
 
   useEffect(() => {
     if (!orgId) {
@@ -819,7 +821,7 @@ export default function LedgerSyncScreen() {
         throw new Error(error.message);
       }
 
-      void queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
+      await invalidateTransactions(orgId);
       const refreshTripId = payload.trip_id ?? params.tripId ?? null;
       if (refreshTripId) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(refreshTripId) });
@@ -881,6 +883,7 @@ export default function LedgerSyncScreen() {
     [
       orgId,
       queryClient,
+      invalidateTransactions,
       editingEntry?.transaction_date,
       profile?.uid,
       router,

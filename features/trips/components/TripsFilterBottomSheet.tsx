@@ -129,7 +129,7 @@ function FilterChip({
         <FontAwesome
           name={icon}
           size={10}
-          color={active ? Theme.textOnPrimary : Theme.textRouteCard}
+          color={active ? Theme.buttonPrimaryText : Theme.textRouteCard}
           style={styles.chipIcon}
         />
       ) : null}
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   chipActive: {
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.pulseIndigo,
   },
   chipIcon: {
@@ -447,18 +447,21 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   chipTextActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontWeight: "700",
   },
   applyBtn: {
     marginTop: 12,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
   },
   applyBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 1.2,

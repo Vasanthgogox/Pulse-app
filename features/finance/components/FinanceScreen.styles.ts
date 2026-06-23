@@ -751,6 +751,12 @@ export const styles = StyleSheet.create({
     marginHorizontal: 0,
     marginBottom: 8,
   },
+  financeEmptyBannerWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
   tableBodyWrap: {
     flex: 1,
     minHeight: 0,

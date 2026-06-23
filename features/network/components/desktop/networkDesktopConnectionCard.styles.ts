@@ -181,7 +181,10 @@ export const connectionCardStyles = StyleSheet.create({
     minWidth: 52,
   },
   actionBtnInvite: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   actionBtnInviteText: {
     fontSize: 9,

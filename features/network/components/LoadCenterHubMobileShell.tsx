@@ -3,7 +3,9 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { LoadCenterUnderlineTabStrip } from "@/features/network/components/LoadCenterUnderlineTabStrip";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { PulsePillButton } from "@/components/PulsePillButton";
 import { useEffect, useRef, useState } from "react";
 import {
   Platform,
@@ -15,53 +17,11 @@ import {
   View,
 } from "react-native";
 
-export const LOADS_HUB_PAGE_BG = "#eef2f6";
-export const LOADS_HUB_ACCENT = Theme.pulseIndigo;
+export const LOADS_HUB_PAGE_BG = Theme.screenBackground;
 
 const SEARCH_FONT_SIZE = 13;
 const SEARCH_LINE_HEIGHT = 18;
 const SEARCH_ROW_HEIGHT = 34;
-
-export function LoadHubMmtUnderlineTab({
-  label,
-  isActive,
-  onPress,
-  compact,
-  accessibilityLabel,
-}: {
-  label: string;
-  isActive: boolean;
-  onPress: () => void;
-  compact?: boolean;
-  accessibilityLabel?: string;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.mmtTabItem, compact && styles.mmtTabItemCompact]}
-      onPress={onPress}
-      activeOpacity={0.7}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: isActive }}
-      accessibilityLabel={accessibilityLabel ?? label}
-    >
-      <Text
-        style={[
-          styles.mmtTabLabel,
-          compact && styles.mmtTabLabelCompact,
-          isActive && styles.mmtTabLabelActive,
-        ]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-      {isActive ? (
-        <View
-          style={[styles.mmtTabUnderline, compact && styles.mmtTabUnderlineCompact]}
-        />
-      ) : null}
-    </TouchableOpacity>
-  );
-}
 
 type MainTab = {
   key: "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
@@ -70,6 +30,12 @@ type MainTab = {
 };
 
 type StatusTab = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+type DoneSubTabItem = {
   id: string;
   label: string;
   count: number;
@@ -85,6 +51,10 @@ export function LoadCenterHubMobileShell({
   activeStatusTab,
   onStatusTabChange,
   showStatusTabs,
+  doneSubTabs,
+  activeDoneSubTab,
+  onDoneSubTabChange,
+  showDoneSubTabs = false,
   onCreateIndentPress,
 }: {
   searchQuery: string;
@@ -96,6 +66,10 @@ export function LoadCenterHubMobileShell({
   activeStatusTab: string;
   onStatusTabChange: (id: string) => void;
   showStatusTabs: boolean;
+  doneSubTabs?: DoneSubTabItem[];
+  activeDoneSubTab?: string;
+  onDoneSubTabChange?: (id: string) => void;
+  showDoneSubTabs?: boolean;
   onCreateIndentPress: () => void;
 }) {
   const searchInputRef = useRef<TextInput>(null);
@@ -132,18 +106,13 @@ export function LoadCenterHubMobileShell({
       {/* Row 1 — title + add (matches Trips mobile header) */}
       <View style={styles.mmtScreenHeaderRow}>
         <Text style={styles.mmtScreenTitle}>My Loads</Text>
-        <TouchableOpacity
-          style={styles.mmtAddBtn}
+        <PulsePillButton
+          label="Add Load"
+          showPlusIcon
+          size="compact"
           onPress={onCreateIndentPress}
-          activeOpacity={0.88}
-          accessibilityRole="button"
           accessibilityLabel="Add load"
-        >
-          <View style={styles.mmtAddIconBadge}>
-            <FontAwesome name="cube" size={9} color={LOADS_HUB_ACCENT} />
-          </View>
-          <Text style={styles.mmtAddText}>Add Load</Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {/* Row 2 — search + primary tabs (matches Trips filter + Active/History row) */}
@@ -164,28 +133,21 @@ export function LoadCenterHubMobileShell({
             size={15}
             color={
               searchOpen || hasSearchQuery
-                ? LOADS_HUB_ACCENT
+                ? Theme.loadMainTabBorder
                 : Theme.textPrimaryDark
             }
           />
         </TouchableOpacity>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          contentContainerStyle={styles.mmtPrimaryTabsContent}
+        <LoadCenterUnderlineTabStrip
+          variant="yellow"
+          scrollable
+          tabs={mainTabs}
+          activeKey={activeMainTab}
+          onChange={(key) => onMainTabChange(key as MainTab["key"])}
+          formatLabel={(label, count) => `${label} (${count})`}
           style={styles.mmtPrimaryTabsScroll}
-        >
-          {mainTabs.map((tab) => (
-            <LoadHubMmtUnderlineTab
-              key={tab.key}
-              label={`${tab.label}${tab.count > 0 ? ` (${tab.count})` : ""}`}
-              isActive={activeMainTab === tab.key}
-              onPress={() => onMainTabChange(tab.key)}
-            />
-          ))}
-        </ScrollView>
+          contentStyle={styles.mmtPrimaryTabsContent}
+        />
       </View>
 
       <View style={styles.mmtTabDivider} />
@@ -228,18 +190,42 @@ export function LoadCenterHubMobileShell({
           horizontal
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.mmtMetricTabsContent}
+          contentContainerStyle={[
+            styles.mmtMetricTabsContent,
+            showDoneSubTabs && styles.mmtMetricTabsContentSpread,
+          ]}
           style={styles.mmtMetricTabsScroll}
         >
-          {statusTabs.map((tab) => (
-            <LoadHubMmtUnderlineTab
-              key={tab.id}
-              label={`${tab.label} (${tab.count})`}
-              isActive={activeStatusTab === tab.id}
+          <LoadCenterUnderlineTabStrip
+            variant="blue"
+            compact
+            tabs={statusTabs.map((tab) => ({
+              key: tab.id,
+              label: tab.label,
+              count: tab.count,
+            }))}
+            activeKey={activeStatusTab}
+            onChange={onStatusTabChange}
+            formatLabel={(label, count) => `${label} (${count})`}
+          />
+          {showDoneSubTabs && doneSubTabs?.length ? (
+            <View style={styles.mmtMetricTabDivider} />
+          ) : null}
+          {showDoneSubTabs && doneSubTabs && onDoneSubTabChange ? (
+            <LoadCenterUnderlineTabStrip
+              variant="pink"
               compact
-              onPress={() => onStatusTabChange(tab.id)}
+              tabs={doneSubTabs.map((tab) => ({
+                key: tab.id,
+                label: tab.label,
+                count: tab.count,
+              }))}
+              activeKey={activeDoneSubTab ?? ""}
+              onChange={onDoneSubTabChange}
+              formatLabel={(label, count) => `${label} (${count})`}
+              style={styles.mmtDoneSubTabGroup}
             />
-          ))}
+          ) : null}
         </ScrollView>
       ) : null}
     </View>
@@ -267,38 +253,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.4,
-  },
-  mmtAddBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexShrink: 0,
-    height: 28,
-    paddingLeft: 4,
-    paddingRight: 9,
-    borderRadius: 14,
-    backgroundColor: LOADS_HUB_ACCENT,
-    borderWidth: 1,
-    borderColor: LOADS_HUB_ACCENT,
-    shadowColor: LOADS_HUB_ACCENT,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  mmtAddIconBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: Theme.textOnPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mmtAddText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textOnPrimary,
-    letterSpacing: -0.1,
   },
   searchRow: {
     flexDirection: "row",
@@ -356,50 +310,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     paddingRight: 4,
   },
-  mmtTabItem: {
-    position: "relative",
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 8,
-    marginRight: 2,
-    justifyContent: "flex-end",
-    minHeight: 34,
-  },
-  mmtTabItemCompact: {
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 7,
-    minHeight: 30,
-    marginRight: 0,
-  },
-  mmtTabLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.textRouteCard,
-    letterSpacing: -0.2,
-  },
-  mmtTabLabelCompact: {
-    fontSize: 11,
-    letterSpacing: -0.25,
-  },
-  mmtTabLabelActive: {
-    fontWeight: "600",
-    color: LOADS_HUB_ACCENT,
-  },
-  mmtTabUnderline: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 0,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: LOADS_HUB_ACCENT,
-  },
-  mmtTabUnderlineCompact: {
-    left: 8,
-    right: 8,
-    height: 2,
-  },
   mmtTabDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
@@ -415,5 +325,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     paddingRight: 4,
+    paddingBottom: 0,
+    gap: 0,
+  },
+  mmtMetricTabsContentSpread: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+  },
+  mmtDoneSubTabGroup: {
+    marginLeft: "auto",
+  },
+  mmtMetricTabDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: Theme.borderLight,
+    marginVertical: 4,
+    marginHorizontal: 2,
   },
 });

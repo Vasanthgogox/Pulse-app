@@ -2,6 +2,7 @@
  * Treasury Financial Summary — Suppliers tab. O(n): due = trips only, paid = ledger only, unsettled = max(0, due - paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
+import { FinancePromoCard } from "@/features/finance/components/FinancePromoCard";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
@@ -72,6 +73,7 @@ export interface SuppliersTabProps {
   viewTab?: SuppliersViewTab;
   onViewTabChange?: (v: SuppliersViewTab) => void;
   embedInParentScroll?: boolean;
+  onAddPartyPress?: () => void;
 }
 
 export function SuppliersTab({
@@ -95,6 +97,7 @@ export function SuppliersTab({
   viewTab,
   onViewTabChange,
   embedInParentScroll = false,
+  onAddPartyPress,
 }: SuppliersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -179,11 +182,28 @@ export function SuppliersTab({
   const hasSuppliers = filteredRows.length > 0;
   if (!hasSuppliers) {
     return (
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>
-          No suppliers. Add suppliers from Home.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={[
+          styles.emptyState,
+          { paddingBottom: bottomInset + insets.bottom, flexGrow: 1 },
+        ]}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.loaderAccent}
+            />
+          ) : undefined
+        }
+      >
+        {topContent}
+        <FinancePromoCard
+          variant="suppliers"
+          onCtaPress={onAddPartyPress}
+          style={styles.emptyBanner}
+        />
+      </ScrollView>
     );
   }
 
@@ -326,7 +346,7 @@ export function SuppliersTab({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Theme.teslaRed}
+              tintColor={Theme.loaderAccent}
             />
           ) : undefined
         }
@@ -503,7 +523,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: "right",
   },
-  emptyState: { paddingVertical: 24, alignItems: "center" },
+  emptyState: {
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: "stretch",
+    flexGrow: 1,
+  },
+  emptyBanner: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
   emptyText: {
     fontSize: 10,
     fontWeight: "700",

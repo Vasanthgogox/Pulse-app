@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     height: 13,
     borderRadius: 7,
     paddingHorizontal: 2,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
     borderWidth: 1.5,
     borderColor: Theme.pulseTabClusterTrackBg,
     alignItems: 'center',
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 8,
     fontWeight: '600',
-    color: Theme.textOnPrimary,
+    color: Theme.brandBlueInk,
     lineHeight: 10,
   },
 });

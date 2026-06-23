@@ -580,7 +580,10 @@ const sl = StyleSheet.create({
     marginBottom: 1,
   },
   sendBtnActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   sendArrow: {
     fontSize: 18,

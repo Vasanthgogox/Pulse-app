@@ -6003,7 +6003,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tripStatementActionBtnPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderWidth: 0,
   },
   tripStatementActionBtnPrimaryText: {
@@ -6080,7 +6083,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   driverRequestBtnPay: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   driverRequestBtnPayText: {
     fontSize: 11,
@@ -6236,12 +6242,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   driverAssignVehicleBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.5,
   },
   vehiclePickerBackdrop: {

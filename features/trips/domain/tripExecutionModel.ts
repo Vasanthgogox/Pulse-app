@@ -16,12 +16,12 @@ export function getTripExecutionModel(trip: TripRow): TripExecutionModel {
   const payoutMode = normalizePayoutMode(trip.trip_payout_mode);
   if (payoutMode === "asset") return "asset";
   if (payoutMode === "market") return "aggregate";
-  /** Unset mode: own roster (driver or vehicle) wins over bookkeeping supplier_id. */
-  const hasAssignedFleet =
-    Boolean(String(trip.driver_id ?? "").trim()) ||
-    Boolean(String(trip.vehicle_id ?? "").trim());
-  if (hasAssignedFleet) return "asset";
-  return trip.supplier_id ? "aggregate" : "asset";
+  /**
+   * Unset mode: supplier-linked trips stay aggregate even after subcontractor driver assign.
+   * Integrated asset loads with bookkeeping supplier_id must set trip_payout_mode = asset.
+   */
+  if (String(trip.supplier_id ?? "").trim()) return "aggregate";
+  return "asset";
 }
 
 export function isAssetExecutionTrip(trip: TripRow): boolean {

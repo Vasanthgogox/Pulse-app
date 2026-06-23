@@ -231,7 +231,7 @@ export const signUpMobileStyles = StyleSheet.create({
   primaryBtnText: {
     fontSize: T.btnFontSize,
     fontWeight: '600',
-    color: '#fff',
+    color: Theme.buttonPrimaryText,
   },
   orRow: {
     flexDirection: 'row',

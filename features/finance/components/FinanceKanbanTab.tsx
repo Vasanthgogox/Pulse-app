@@ -6,6 +6,12 @@
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
 import { EntityIdentityAvatar } from "@/components/EntityIdentityAvatar";
 import Theme from '@/constants/Theme';
+import {
+  FINANCE_KANBAN_COLUMN_EMPTY,
+  FINANCE_KANBAN_COLUMN_PROMO_VARIANT,
+  type FinanceKanbanColumnType,
+} from '@/lib/financePromoAssets';
+import { FinancePromoCard } from './FinancePromoCard';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatIndianVehicleNumber, formatLedgerAmount } from '@/lib/format';
 import { getTripOperationalDisplay } from "@/features/operations/display";
@@ -71,6 +77,9 @@ export interface FinanceKanbanTabProps {
   >;
   profileImages: Record<string, string>;
   linkedOrgDisplayMap?: Record<string, LinkedOrgDisplay>;
+  /** When true, empty columns show full party promo cards (ledger empty on cash desktop). */
+  showPartyPromosInColumns?: boolean;
+  onKanbanPartyAddPress?: (column: FinanceKanbanColumnType) => void;
 }
 
 const COLUMN_TYPES = ['customers', 'suppliers', 'garage', 'drivers'] as const;
@@ -250,11 +259,20 @@ function KanbanCard({
   );
 }
 
-function KanbanColumn({ type, transactions, t, renderCard }: { 
-  type: ColumnType; 
-  transactions: LedgerRow[]; 
-  t: any; 
-  renderCard: (row: LedgerRow, index: number) => React.ReactNode 
+function KanbanColumn({
+  type,
+  transactions,
+  t,
+  renderCard,
+  showPartyPromosInColumns,
+  onKanbanPartyAddPress,
+}: {
+  type: ColumnType;
+  transactions: LedgerRow[];
+  t: any;
+  renderCard: (row: LedgerRow, index: number) => React.ReactNode;
+  showPartyPromosInColumns?: boolean;
+  onKanbanPartyAddPress?: (column: FinanceKanbanColumnType) => void;
 }) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -295,9 +313,31 @@ function KanbanColumn({ type, transactions, t, renderCard }: {
         contentContainerStyle={{ paddingRight: 0 }}
       >
         {transactions.length === 0 ? (
-          <View style={styles.emptyColumn}>
-            <Text style={styles.emptyText}>{t('noLedgerEntriesYet')}</Text>
-          </View>
+          showPartyPromosInColumns ? (
+            <FinancePromoCard
+              variant={FINANCE_KANBAN_COLUMN_PROMO_VARIANT[type]}
+              layout="column"
+              onCtaPress={
+                onKanbanPartyAddPress
+                  ? () => onKanbanPartyAddPress(type)
+                  : undefined
+              }
+            />
+          ) : (
+            <View style={styles.emptyColumn}>
+              {(() => {
+                const { label, Icon } = FINANCE_KANBAN_COLUMN_EMPTY[type];
+                return (
+                  <>
+                    <View style={styles.emptyColumnIconWrap}>
+                      <Icon size={16} color={Theme.primary} strokeWidth={2} />
+                    </View>
+                    <Text style={styles.emptyText}>{label}</Text>
+                  </>
+                );
+              })()}
+            </View>
+          )
         ) : (
           transactions.map((row, index) => renderCard(row, index))
         )}
@@ -317,6 +357,8 @@ export function FinanceKanbanTab({
   tripPartyMap = {},
   profileImages,
   linkedOrgDisplayMap = {},
+  showPartyPromosInColumns = false,
+  onKanbanPartyAddPress,
 }: FinanceKanbanTabProps) {
   const { t } = useLanguage();
   const router = useRouter();
@@ -389,9 +431,10 @@ export function FinanceKanbanTab({
     const hasAmtOut = (row.amount_out ?? 0) > 0;
     const contactType = row.contact_type;
     const driverName = (row.driver_name ?? "").trim();
-    const isDriver = contactType === "driver" || driverName !== "";
 
-    if (isDriver) return 'drivers';
+    if (contactType === "client") return "customers";
+    if (contactType === "supplier") return "suppliers";
+    if (contactType === "driver" || driverName !== "") return "drivers";
 
     let resolvedContactType = contactType;
     if (!resolvedContactType && row.trip_id && tripPartyMap[row.trip_id]) {
@@ -400,22 +443,26 @@ export function FinanceKanbanTab({
       if (hasAmtOut && pm.supplier_id) resolvedContactType = 'supplier';
     }
 
-    const isClient = resolvedContactType === "client";
-    if (isClient || (hasAmtIn && !resolvedContactType)) return 'customers';
+    if (resolvedContactType === "client" || (hasAmtIn && !resolvedContactType)) {
+      return "customers";
+    }
 
-    const vehicleNum = row.vehicle_number ?? (row.trip_id != null ? (getVehicleNumberForTripId?.(row.trip_id) ?? null) : null);
+    const vehicleNum =
+      row.vehicle_number ??
+      (row.trip_id != null ? getVehicleNumberForTripId?.(row.trip_id) ?? null : null);
     const isVehicle =
       (resolvedContactType as string | undefined) === "vehicle" ||
-      (!!vehicleNum && !isClient && resolvedContactType !== "supplier");
-    if (isVehicle) return 'garage';
+      (!!vehicleNum && resolvedContactType !== "supplier");
+    if (isVehicle) return "garage";
 
-    const isSupplier = resolvedContactType === "supplier";
-    if (isSupplier || (hasAmtOut && !resolvedContactType)) return 'suppliers';
+    if (resolvedContactType === "supplier" || (hasAmtOut && !resolvedContactType)) {
+      return "suppliers";
+    }
 
-    if (hasAmtIn) return 'customers';
-    if (hasAmtOut) return 'suppliers';
+    if (hasAmtIn) return "customers";
+    if (hasAmtOut) return "suppliers";
 
-    return 'other';
+    return "other";
   }, [tripPartyMap, getVehicleNumberForTripId]);
 
   // O(n) trip-rows index — eliminates the O(n²) scan in buildFinancialRowData.
@@ -624,6 +671,8 @@ export function FinanceKanbanTab({
                 transactions={columns[type]}
                 t={t}
                 renderCard={renderCard}
+                showPartyPromosInColumns={showPartyPromosInColumns}
+                onKanbanPartyAddPress={onKanbanPartyAddPress}
               />
           ))}
         </View>
@@ -639,13 +688,15 @@ const styles = StyleSheet.create({
   },
   kanbanContainer: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 4,
     flexDirection: 'row',
     gap: 12,
     width: '100%',
-    minHeight: 0,
+    minHeight: 280,
     alignItems: 'stretch',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
   cardWithInlineReceipt: {
     marginBottom: 8,
@@ -673,17 +724,10 @@ const styles = StyleSheet.create({
     flexBasis: 0,
     maxWidth: 360,
     minWidth: 220,
-    backgroundColor: Theme.surfaceGray,
+    backgroundColor: Theme.cardWhite,
     borderRadius: 12,
-    padding: 8,
+    padding: 10,
     minHeight: 0,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
   },
   columnHeader: {
     flexDirection: 'row',
@@ -701,7 +745,7 @@ const styles = StyleSheet.create({
   columnAccent: {
     width: 3,
     height: 12,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.buttonPrimary,
     borderRadius: 2,
   },
   /** Kanban column headers — uppercase muted caps (matches mobile board). */
@@ -731,7 +775,7 @@ const styles = StyleSheet.create({
   },
   timelineCard: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     backgroundColor: Theme.screenBackground,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -745,6 +789,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 1,
     position: 'relative',
+    overflow: 'visible',
   },
   cardExpanded: {
     borderBottomLeftRadius: 0,
@@ -780,6 +825,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
     gap: 2,
+    paddingTop: 4,
   },
   /** Org / party — italic, uppercase, medium weight, dark (mobile cash list). */
   timelineCardParty: {
@@ -814,6 +860,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     minWidth: 0,
+    paddingTop: 4,
   },
   /** Amount — compact, regular weight; green / red from amountIn / amountOut. */
   amount: {
@@ -882,16 +929,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   emptyColumn: {
-    paddingVertical: 60,
+    paddingVertical: 28,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+  },
+  emptyColumnIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(79, 70, 229, 0.08)',
   },
   emptyText: {
-    fontSize: 10,
-    fontWeight: "300",
+    fontSize: 11,
+    fontWeight: '500',
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    textAlign: "center",
+    letterSpacing: -0.1,
+    textAlign: 'center',
+    lineHeight: 16,
   },
 });

@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   addIndentBtnText: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.9,
     textTransform: "uppercase",
   },

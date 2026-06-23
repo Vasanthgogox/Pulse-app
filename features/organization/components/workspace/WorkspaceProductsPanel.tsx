@@ -702,7 +702,7 @@ const s = StyleSheet.create({
     bottom: 0,
     height: 2,
     borderRadius: 1,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
 
   catalogIntro: {
@@ -1060,7 +1060,7 @@ const s = StyleSheet.create({
   submitBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.4,
   },
 
@@ -1101,7 +1101,7 @@ const s = StyleSheet.create({
   successBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.4,
   },
 });

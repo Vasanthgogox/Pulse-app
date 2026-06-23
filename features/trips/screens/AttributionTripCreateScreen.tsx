@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   shipperNewBadgeText: {
-    color: "#4f46e5",
+    color: "#4D3636",
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.45,
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shipperWarningText: {
-    color: "#4338ca",
+    color: "#4D3636",
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "600",

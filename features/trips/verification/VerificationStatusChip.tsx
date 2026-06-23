@@ -39,7 +39,7 @@ function resolveChipTone(state: OdometerVerificationState): {
   text: string;
 } {
   if (state === "gps_verified") {
-    return { bg: "#eef2ff", border: "#c7d2fe", text: "#4338ca" };
+    return { bg: "#eef2ff", border: "#c7d2fe", text: "#4D3636" };
   }
   if (state === "business_verified") {
     return { bg: "#ecfdf3", border: "#bbf7d0", text: "#15803d" };

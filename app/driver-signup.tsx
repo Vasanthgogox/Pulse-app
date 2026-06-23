@@ -1723,7 +1723,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#ffffff',
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.5,
   },
   googleBtn: {

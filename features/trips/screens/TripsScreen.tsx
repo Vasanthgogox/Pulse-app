@@ -2,6 +2,7 @@
  * Trips Control — demo2 trips tab. Active | History, trip cards, Add Trip.
  * Private Book = driver/vehicle assigned by you; Shared Ledger = assigned by another user.
  */
+import { PulsePillButton } from "@/components/PulsePillButton";
 import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
@@ -21,6 +22,9 @@ import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFinanceHandlers";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { TripsLedgerExportModalGate } from "@/features/trips/components/TripsLedgerExportModalGate";
+import {
+  resolveTripsPromoVariant,
+} from "@/lib/tripsPromoAssets";
 import { AttributionRequestsSection } from "@/features/trips/components/AttributionRequestsSection";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import {
@@ -92,7 +96,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FeatureBanner } from "@/components/FeatureBanner";
+import { TripsPromoCard } from "@/features/trips/components/TripsPromoCard";
 import {
     NativeScrollEvent,
     NativeSyntheticEvent,
@@ -126,7 +130,7 @@ type ToolbarDateFilter = Exclude<DateFilter, "tomorrow">;
 type TripsListLayout = "cards" | "table";
 type ActiveMetricTabId = TripMetricId | "all";
 /** Mobile hub list — light page; white ticket cards only (no list shell). */
-const TRIPS_PAGE_BG = "#eef2f6";
+const TRIPS_PAGE_BG = Theme.screenBackground;
 const TRIPS_LIST_LAYOUT_KEY = "@pulse/trips-list-layout";
 /** Mobile hub accent — matches filter sheet / Pulse indigo. */
 const TRIPS_HUB_ACCENT = Theme.pulseIndigo;
@@ -237,7 +241,7 @@ function historyTripDueState(
 }
 
 export default function TripsScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   /** Desktop card grid — hub ticket cards (4 per row), aligned with Load Center. */
   const isLargeScreen = Platform.OS === "web" && width >= 1024;
   const isCompactWeb = Platform.OS === "web" && width < 1180;
@@ -792,6 +796,47 @@ export default function TripsScreen() {
     tripFinanceAdjForHub,
     hubSubcontractRateByTripId,
   ]);
+
+  const hasNonMetricTripFilters =
+    supplyFilter !== "all" ||
+    attributionFilter !== "all" ||
+    paymentFilter !== "all" ||
+    loadTypeFilter !== "all" ||
+    dateRangeFilter !== "all" ||
+    searchQuery.trim().length > 0;
+
+  const tripsEmptyPromoVariant = useMemo(
+    () =>
+      resolveTripsPromoVariant({
+        showCompletedList,
+        tripsInTabCount: tripsByStatus.length,
+        allTripsCount: trips.length,
+        activeMetricTab,
+        activeHistoryMetricTab,
+        hasNonMetricFilters: hasNonMetricTripFilters,
+        metricCounts,
+      }),
+    [
+      showCompletedList,
+      tripsByStatus.length,
+      trips.length,
+      activeMetricTab,
+      activeHistoryMetricTab,
+      hasNonMetricTripFilters,
+      metricCounts,
+    ],
+  );
+
+  const emptyBannerStageStyle = useMemo(
+    () => [
+      styles.emptyBannerStage,
+      Platform.OS === "web" &&
+        !isMobileViewport && {
+          minHeight: Math.max(380, Math.round(height * 0.44)),
+        },
+    ],
+    [height, isMobileViewport],
+  );
 
   const tripsTableResetKey = useMemo(
     () =>
@@ -1662,22 +1707,13 @@ export default function TripsScreen() {
                 <>
                   <View style={styles.mmtScreenHeaderRow}>
                     <Text style={styles.mmtScreenTitle}>{tr("myTrips")}</Text>
-                    <TouchableOpacity
-                      style={styles.mmtAddTripBtn}
+                    <PulsePillButton
+                      label={tr("addTrip")}
+                      showPlusIcon
+                      size="compact"
                       onPress={() => router.push("/add-trip")}
-                      activeOpacity={0.88}
-                      accessibilityRole="button"
                       accessibilityLabel={tr("addTrip")}
-                    >
-                      <View style={styles.mmtAddTripIconBadge}>
-                        <FontAwesome
-                          name="plus"
-                          size={9}
-                          color={Theme.pulseIndigo}
-                        />
-                      </View>
-                      <Text style={styles.mmtAddTripText}>{tr("addTrip")}</Text>
-                    </TouchableOpacity>
+                    />
                   </View>
                   <View style={styles.mmtTabHeaderRow}>
                     <TouchableOpacity
@@ -1719,17 +1755,25 @@ export default function TripsScreen() {
                   <View
                     style={[
                       chatChrome.filterHeaderRow,
+                      styles.tripsFilterHeaderRowCompact,
                       isCompactWeb && styles.tripsFilterHeaderCompact,
                     ]}
                   >
                     {!isMobile ? (
-                      <View style={[chatChrome.tabRow, chatChrome.tabRowHug]}>
+                      <View
+                        style={[
+                          chatChrome.tabRow,
+                          chatChrome.tabRowHug,
+                          styles.tripsFilterTabRowCompact,
+                        ]}
+                      >
                         {subTabs.map((tab) => (
                           <TouchableOpacity
                             key={tab.id}
                             style={[
                               chatChrome.tabPill,
                               chatChrome.tabPillHug,
+                              styles.tripsFilterTabPillCompact,
                               tab.isActive && chatChrome.tabPillActive,
                             ]}
                             onPress={tab.onPress}
@@ -1741,6 +1785,7 @@ export default function TripsScreen() {
                               style={[
                                 chatChrome.tabPillLabel,
                                 chatChrome.tabPillLabelHug,
+                                styles.tripsFilterTabLabelCompact,
                                 tab.isActive && chatChrome.tabPillLabelActive,
                               ]}
                             >
@@ -1756,13 +1801,20 @@ export default function TripsScreen() {
                         isCompactWeb && styles.tripsFilterHeaderRightCompact,
                       ]}
                     >
-                      <View style={[chatChrome.tabRow, chatChrome.tabRowHug]}>
+                      <View
+                        style={[
+                          chatChrome.tabRow,
+                          chatChrome.tabRowHug,
+                          styles.tripsFilterTabRowCompact,
+                        ]}
+                      >
                         {mainTabs.map((tab) => (
                           <TouchableOpacity
                             key={tab.id}
                             style={[
                               chatChrome.tabPill,
                               chatChrome.tabPillHug,
+                              styles.tripsFilterTabPillCompact,
                               tab.isActive && chatChrome.tabPillActive,
                             ]}
                             onPress={tab.onPress}
@@ -1775,6 +1827,7 @@ export default function TripsScreen() {
                               style={[
                                 chatChrome.tabPillLabel,
                                 chatChrome.tabPillLabelHug,
+                                styles.tripsFilterTabLabelCompact,
                                 tab.isActive && chatChrome.tabPillLabelActive,
                               ]}
                             >
@@ -1785,12 +1838,16 @@ export default function TripsScreen() {
                       </View>
                       {!isMobileViewport ? (
                         <View
-                          style={chatChrome.iconToggleTray}
+                          style={[
+                            chatChrome.iconToggleTray,
+                            styles.tripsFilterIconTrayCompact,
+                          ]}
                           accessibilityRole="tablist"
                         >
                           <TouchableOpacity
                             style={[
                               chatChrome.iconToggleBtn,
+                              styles.tripsFilterIconBtnCompact,
                               listLayout === "cards" &&
                                 chatChrome.iconToggleBtnActive,
                             ]}
@@ -1817,6 +1874,7 @@ export default function TripsScreen() {
                           <TouchableOpacity
                             style={[
                               chatChrome.iconToggleBtn,
+                              styles.tripsFilterIconBtnCompact,
                               listLayout === "table" &&
                                 chatChrome.iconToggleBtnActive,
                             ]}
@@ -1886,12 +1944,6 @@ export default function TripsScreen() {
                   getTitle={(id) => tripMetricCopy[id].title}
                   getSubtitle={(id) => tripMetricVisual[id].micro}
                   getIcon={(id) => tripMetricVisual[id].icon}
-                  missionPulseLabel={tr("tripsHubMissionStatus")}
-                  sectionLabels={[
-                    tr("all"),
-                    tr("tripsHubMetricGroupIntake"),
-                    tr("tripsHubMetricGroupInMotion"),
-                  ]}
                   isDesktop={isLargeScreen}
                 style={styles.tripMetricsScroll}
                 />
@@ -1988,26 +2040,28 @@ export default function TripsScreen() {
                   partyMetaByTripId={tripHubPartyMetaByTripId}
                 />
                 {filtered.length === 0 ? (
-                  <FeatureBanner
-                    title={showCompletedList ? "No completed trips yet" : "No active trips"}
-                    description={showCompletedList ? "Trips you mark as completed will appear here." : "Create your first trip to start tracking revenue, costs, and driver activity."}
-                    illustration={showCompletedList ? "✅" : "🚚"}
-                    accentColor="#4f46e5"
-                    bullets={[
-                      { label: "Live GPS tracking" },
-                      { label: "Driver coordination" },
-                      { label: "Auto-invoicing" },
-                      { label: "Trip P&L" },
-                    ]}
-                    cta={canAccess && !showCompletedList ? { label: "Create first trip →", onPress: () => router.push("/add-trip") } : undefined}
-                    style={styles.emptyBanner}
-                  />
+                  <View style={emptyBannerStageStyle}>
+                    <TripsPromoCard
+                      variant={tripsEmptyPromoVariant}
+                      onCtaPress={
+                        canAccess && tripsEmptyPromoVariant === "first_trip"
+                          ? () => router.push("/add-trip")
+                          : undefined
+                      }
+                    />
+                  </View>
                 ) : null}
               </View>
             </ScrollView>
             </View>
           ) : (
-            <View>
+            <View
+              style={
+                Platform.OS === "web" && !isMobileViewport
+                  ? styles.tripsHubListShell
+                  : undefined
+              }
+            >
               <TripsHubTableView
                 trips={filtered}
                 pagination={tripsListPagination}
@@ -2036,20 +2090,16 @@ export default function TripsScreen() {
                 partyMetaByTripId={tripHubPartyMetaByTripId}
                 renderBody={(rows) =>
                   rows.length === 0 ? (
-                    <FeatureBanner
-                      title={showCompletedList ? "No completed trips yet" : "No active trips"}
-                      description={showCompletedList ? "Trips you mark as completed will appear here." : "Create your first trip to start tracking revenue, costs, and driver activity."}
-                      illustration={showCompletedList ? "✅" : "🚚"}
-                      accentColor="#4f46e5"
-                      bullets={[
-                        { label: "Live GPS tracking" },
-                        { label: "Driver coordination" },
-                        { label: "Auto-invoicing" },
-                        { label: "Trip P&L" },
-                      ]}
-                      cta={canAccess && !showCompletedList ? { label: "Create first trip →", onPress: () => router.push("/add-trip") } : undefined}
-                      style={styles.emptyBanner}
-                    />
+                    <View style={emptyBannerStageStyle}>
+                      <TripsPromoCard
+                        variant={tripsEmptyPromoVariant}
+                        onCtaPress={
+                          canAccess && tripsEmptyPromoVariant === "first_trip"
+                            ? () => router.push("/add-trip")
+                            : undefined
+                        }
+                      />
+                    </View>
                   ) : isLargeScreen ? (
                   <View style={styles.gridContainer}>
                     {rows.map((t) => {
@@ -2385,7 +2435,7 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     height: 2.5,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.tabUnderline,
     borderRadius: 999,
   },
   /** Native: one horizontal track for main (underline) + sub (pills) — no double underline. */
@@ -2571,12 +2621,12 @@ const styles = StyleSheet.create({
     height: 15,
     borderRadius: 999,
     paddingHorizontal: 3,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
     alignItems: "center",
     justifyContent: "center",
   },
   tripsFilterCountBadgeText: {
-    color: Theme.textOnDark,
+    color: Theme.brandBlueInk,
     fontSize: 8,
     fontWeight: "800",
     lineHeight: 10,
@@ -2631,8 +2681,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.22)",
   },
   tripsDateChipCustom: {
-    backgroundColor: Theme.teslaRed,
-    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
+    borderColor: Theme.accentGold,
     gap: 6,
   },
   tripsDateChipCustomIcon: {
@@ -2666,8 +2716,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   tripsDateRangeIconBtnActive: {
-    backgroundColor: Theme.teslaRed,
-    borderColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
+    borderColor: Theme.accentGold,
   },
   dropdownItem: {
     flexDirection: "row",
@@ -2686,7 +2736,7 @@ const styles = StyleSheet.create({
     bottom: 10,
     width: 3,
     borderRadius: 2,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
   },
   dropdownItemIconWrap: {
     width: 26,
@@ -2879,9 +2929,9 @@ const styles = StyleSheet.create({
   /** Status + date filters (moved from header) — full-bleed strip above list/table */
   tripsBodyFiltersBleed: {
     marginHorizontal: -Layout.screenPaddingHorizontal,
-    marginBottom: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    marginBottom: 4,
+    paddingTop: 4,
+    paddingBottom: 0,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     backgroundColor: "transparent",
     borderBottomWidth: 0,
@@ -2916,38 +2966,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.4,
-  },
-  mmtAddTripBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexShrink: 0,
-    height: 28,
-    paddingLeft: 4,
-    paddingRight: 9,
-    borderRadius: 14,
-    backgroundColor: Theme.pulseIndigo,
-    borderWidth: 1,
-    borderColor: Theme.pulseIndigo,
-    shadowColor: Theme.pulseIndigo,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  mmtAddTripIconBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: Theme.textOnPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mmtAddTripText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textOnPrimary,
-    letterSpacing: -0.1,
   },
   mmtTabHeaderRow: {
     flexDirection: "row",
@@ -3044,7 +3062,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.separatorDark,
   },
   tripsInlineFilterPanel: {
-    marginBottom: 12,
+    marginBottom: 4,
     backgroundColor: Theme.screenBackground,
     borderTopWidth: 1,
     borderBottomWidth: 1,
@@ -3053,22 +3071,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   tripsInlineFilterPanelDesktop: {
-    marginBottom: 20,
+    marginBottom: 4,
     backgroundColor: Theme.cardWhite,
     borderTopWidth: 0,
     borderBottomWidth: 0,
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: "visible",
     ...Platform.select({
       web: {
-        boxShadow: "0 4px 24px rgba(15, 23, 42, 0.06)",
+        boxShadow: "0 2px 14px rgba(15, 23, 42, 0.05)",
       } as object,
       default: {
         shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 1,
       },
     }),
   },
@@ -3090,21 +3108,50 @@ const styles = StyleSheet.create({
   },
   tripsInlineFilterPanelWeb: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 14,
-    paddingBottom: 14,
-    gap: 12,
+    paddingTop: 6,
+    paddingBottom: 4,
+    gap: 4,
   },
   tripsFilterHeaderCompact: {
     flexDirection: "column",
     alignItems: "stretch",
-    gap: 8,
+    gap: 6,
   },
   tripsFilterHeaderRightCompact: {
     marginLeft: 0,
     width: "100%",
     justifyContent: "flex-end",
     flexWrap: "wrap",
-    rowGap: 8,
+    rowGap: 6,
+  },
+  tripsFilterHeaderRowCompact: {
+    gap: 8,
+  },
+  tripsFilterTabRowCompact: {
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 3,
+    borderRadius: 14,
+  },
+  tripsFilterTabPillCompact: {
+    minHeight: 30,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  tripsFilterTabLabelCompact: {
+    fontSize: 7.5,
+    letterSpacing: 0.45,
+  },
+  tripsFilterIconTrayCompact: {
+    gap: 3,
+    paddingVertical: 3,
+    paddingHorizontal: 3,
+    borderRadius: 14,
+  },
+  tripsFilterIconBtnCompact: {
+    width: 30,
+    height: 30,
   },
   tripsTopHeaderRowWeb: {
     flexDirection: "row",
@@ -3308,12 +3355,12 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   tripMetricsScroll: {
-    marginBottom: 20,
+    marginBottom: 2,
     paddingBottom: 0,
     borderBottomWidth: 0,
   },
   tripMetricTabsScroll: {
-    marginBottom: 10,
+    marginBottom: 4,
     borderRadius: 22,
     backgroundColor: Theme.darkBackground,
     borderWidth: 1,
@@ -3340,7 +3387,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
   },
   tripMetricTabPillDarkActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   tripMetricTabText: {
@@ -3566,7 +3613,7 @@ const styles = StyleSheet.create({
     width: 3,
     borderTopRightRadius: 3,
     borderBottomRightRadius: 3,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     opacity: 0.85,
     zIndex: 2,
   },
@@ -3764,9 +3811,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(99, 102, 241, 0.12)",
   },
   historyMetricTileAttention: {
-    borderColor: Theme.teslaRed,
+    borderColor: Theme.accentGold,
     borderWidth: 1.5,
-    shadowColor: "rgba(220, 38, 38, 0.2)",
+    shadowColor: Theme.accentGoldMuted,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -3898,7 +3945,7 @@ const styles = StyleSheet.create({
     left: 8,
     right: 8,
     height: 2,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.loaderAccent,
     borderRadius: 1,
   },
   tripsBodyDateFilterRow: {
@@ -3960,9 +4007,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  emptyBanner: {
-    margin: 16,
-    marginTop: 12,
+  emptyBannerStage: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    minHeight: 280,
+    flexGrow: 1,
+    backgroundColor: "transparent",
+  },
+  tripsHubListShell: {
+    flexGrow: 1,
+    minHeight: 0,
+    width: "100%",
   },
   empty: {
     padding: 24,

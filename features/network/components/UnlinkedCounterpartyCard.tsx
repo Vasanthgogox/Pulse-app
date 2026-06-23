@@ -167,7 +167,10 @@ const styles = StyleSheet.create({
   connectBtn: {
     minHeight: 30,
     borderRadius: 8,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",

@@ -133,7 +133,7 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
             },
           );
         }
-        // Still invalidate aggregates keyed under transactions root.
+        void qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(organizationId) });
         qc.invalidateQueries({ queryKey: queryKeys.transactions.all(organizationId) });
       },
     );

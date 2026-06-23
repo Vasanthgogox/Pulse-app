@@ -116,11 +116,11 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   wizardStepCircleActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   wizardStepCircleDone: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   wizardStepCircleText: {
     fontSize: 11,
@@ -128,7 +128,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     color: Theme.textMuted,
   },
   wizardStepCircleTextActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   wizardStepText: {
     fontSize: 10,
@@ -303,7 +303,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 14,
     paddingVertical: 10,
     alignItems: "center",
@@ -314,7 +317,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     opacity: 0.55,
   },
   submitBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontSize: 12,
     fontWeight: "800",
   },
@@ -597,7 +600,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 8,
   },
   shipperWarningText: {
-    color: "#4338ca",
+    color: "#4D3636",
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "600",

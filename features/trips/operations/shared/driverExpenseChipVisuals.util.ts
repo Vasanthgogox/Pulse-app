@@ -75,7 +75,7 @@ const OTHER_CATEGORY_VISUALS: Record<TripOtherExpenseCategory, DriverChipVisual>
   },
   fastag: {
     Icon: Radio,
-    tint: "#4338ca",
+    tint: "#4D3636",
     tintBg: "rgba(99,102,241,0.12)",
     activeTintBg: "rgba(4,120,87,0.18)",
   },
@@ -114,7 +114,7 @@ const DRIVER_EXPENSE_CATEGORY_VISUALS: Record<string, DriverChipVisual> = {
   },
   toll: {
     Icon: MapPin,
-    tint: "#4338ca",
+    tint: "#4D3636",
     tintBg: "rgba(99,102,241,0.12)",
     activeTintBg: "rgba(4,120,87,0.18)",
   },
@@ -130,7 +130,7 @@ const PAYMENT_MODE_VISUALS: Record<OperationalPaymentMode, DriverChipVisual> = {
   },
   fastag: {
     Icon: Radio,
-    tint: "#4338ca",
+    tint: "#4D3636",
     tintBg: "rgba(99,102,241,0.12)",
     activeTintBg: "rgba(4,120,87,0.18)",
   },
@@ -196,7 +196,7 @@ const TOLL_ENTRY_VISUALS: Record<"actual" | "estimated", DriverChipVisual> = {
   },
   estimated: {
     Icon: MoreHorizontal,
-    tint: "#6366f1",
+    tint: "#4D3636",
     tintBg: "rgba(99,102,241,0.12)",
     activeTintBg: "rgba(4,120,87,0.18)",
   },

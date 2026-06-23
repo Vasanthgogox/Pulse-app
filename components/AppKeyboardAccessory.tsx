@@ -192,7 +192,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minHeight: 36,
     borderRadius: 8,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     justifyContent: "center",
   },
   nextSpacer: {
@@ -201,6 +204,6 @@ const styles = StyleSheet.create({
   nextText: {
     fontSize: 15,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 });

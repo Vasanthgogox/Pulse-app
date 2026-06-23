@@ -48,20 +48,20 @@ export type BentoMetricItem = {
 };
 
 const VARIANT_BLOB: Record<BentoMetricVariant, string> = {
-  indigo: "#6366f1",
+  indigo: "#9ACEEB",
   slate: "#64748b",
   cyan: "#38bdf8",
   emerald: "#10b981",
-  orange: "#f59e0b",
-  purple: "#a855f7",
-  active: "#6366f1",
+  orange: Theme.accentGold,
+  purple: "#9ACEEB",
+  active: "#9ACEEB",
 };
 
 /** Typography parity with `TripsHubViews` fleet / ledger cards. */
-const FS_CAPTION = 9;
-const FS_AMOUNT_LABEL = 8;
-const FS_COUNT_LARGE = 28;
-const FS_COUNT_SMALL = 22;
+const FS_CAPTION = 8;
+const FS_AMOUNT_LABEL = 7;
+const FS_COUNT_LARGE = 22;
+const FS_COUNT_SMALL = 18;
 
 /** Selected mission metric — matte black (trips hub / chat dark pill parity). */
 const BENTO_ACTIVE_BG = "#141416";
@@ -212,7 +212,7 @@ function BentoMetricCard({
             >
               <FontAwesome
                 name={item.icon}
-                size={11}
+                size={10}
                 color={blobColor}
               />
             </View>
@@ -275,8 +275,6 @@ export type TripsHubBentoMetricsProps = {
   getTitle: (id: ActiveMetricTabId) => string;
   getSubtitle: (id: ActiveMetricTabId) => string;
   getIcon: (id: ActiveMetricTabId) => React.ComponentProps<typeof FontAwesome>["name"];
-  missionPulseLabel: string;
-  sectionLabels: string[];
   isDesktop: boolean;
   style?: StyleProp<ViewStyle>;
 };
@@ -289,8 +287,6 @@ export function TripsHubBentoMetrics({
   getTitle,
   getSubtitle,
   getIcon,
-  missionPulseLabel,
-  sectionLabels,
   isDesktop,
   style,
 }: TripsHubBentoMetricsProps) {
@@ -335,10 +331,6 @@ export function TripsHubBentoMetrics({
 
   return (
     <View style={[styles.hub, style]}>
-      <BentoSectionHeader
-        missionLabel={missionPulseLabel}
-        sections={sectionLabels}
-      />
       <View style={styles.bentoRow}>{items.map(renderCard)}</View>
     </View>
   );
@@ -613,7 +605,7 @@ export function TripsHubMetricGroupRail({
 const styles = StyleSheet.create({
   hub: {
     width: "100%" as const,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   headerRow: {
     flexDirection: "row",
@@ -664,37 +656,37 @@ const styles = StyleSheet.create({
   bentoRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: 10,
+    gap: 6,
     width: "100%" as const,
   },
   mobileScroll: {
     flexDirection: "row",
-    gap: 10,
+    gap: 6,
     paddingHorizontal: 2,
-    paddingBottom: 4,
+    paddingBottom: 2,
   },
   flexLarge: {
-    flex: 1.22,
-    minWidth: 100,
-    maxWidth: "16%" as const,
+    flex: 1.15,
+    minWidth: 88,
+    maxWidth: "15%" as const,
   },
   flexSmall: {
     flex: 1,
     minWidth: 0,
   },
   cardPressable: {
-    minHeight: 100,
+    minHeight: 76,
     alignSelf: "stretch",
   },
   card: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     overflow: "hidden",
-    minHeight: 100,
+    minHeight: 76,
   },
   cardLarge: {
-    minHeight: 104,
+    minHeight: 80,
   },
   cardIdle: {
     borderColor: Theme.borderLight,
@@ -713,9 +705,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     right: 0,
-    width: 56,
-    height: 56,
-    borderBottomLeftRadius: 56,
+    width: 44,
+    height: 44,
+    borderBottomLeftRadius: 44,
     opacity: 0.07,
   },
   cornerBlobActiveDark: {
@@ -728,22 +720,22 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   cardBodyLarge: {
-    paddingHorizontal: 15,
-    paddingTop: 13,
-    paddingBottom: 12,
+    paddingHorizontal: 11,
+    paddingTop: 9,
+    paddingBottom: 8,
   },
   cardBodySmall: {
-    paddingHorizontal: 13,
-    paddingTop: 11,
-    paddingBottom: 11,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   countRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 8,
-    minHeight: 28,
+    gap: 6,
+    marginBottom: 4,
+    minHeight: 22,
   },
   count: {
     fontWeight: "700",
@@ -770,16 +762,16 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   iconOrb: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
   },
   labelBlock: {
-    gap: 3,
+    gap: 2,
     minWidth: 0,
     width: "100%" as const,
   },

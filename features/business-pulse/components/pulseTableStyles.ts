@@ -206,7 +206,10 @@ export const pulseTableStyles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   footerNavBtnActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderColor: Theme.primary,
   },
   footerNavBtnText: {
@@ -215,7 +218,7 @@ export const pulseTableStyles = StyleSheet.create({
     color: PULSE_METRONIC.muted,
   },
   footerNavBtnTextActive: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   empty: {
     fontSize: 12,

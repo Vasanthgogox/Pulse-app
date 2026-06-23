@@ -24,12 +24,12 @@ const CLIENT_ACCENT: PartyEntityAccent = {
   tint: Theme.networkClientTintBg,
 };
 
-/** Supply-side partners — brown / amber (finance fleet partner tone). */
+/** Supply-side partners — golden yellow on dark ink (offline / hub tiles). */
 const SUPPLIER_ACCENT: PartyEntityAccent = {
-  ring: Theme.networkBadgeDriverText,
-  glow: "rgba(180, 83, 9, 0.34)",
-  glowCore: "rgba(245, 158, 11, 0.16)",
-  tint: Theme.networkDriverTintBg,
+  ring: Theme.brandBlueInk,
+  glow: "rgba(255, 206, 68, 0.34)",
+  glowCore: Theme.accentGoldMuted,
+  tint: Theme.accentGoldMuted,
 };
 
 /** Fleet drivers — green (finance supplier-cost / positive lane tone). */

@@ -965,7 +965,7 @@ const styles = StyleSheet.create({
     right: 0,
     height: 2,
     borderRadius: 1,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   /** Metronic tab unread — small green dot, no solid count pill. */
   tabUnreadDot: {

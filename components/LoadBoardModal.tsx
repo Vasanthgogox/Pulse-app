@@ -147,7 +147,7 @@ export function LoadBoardModal({
         >
           {loading ? (
             <View style={styles.loadingWrap}>
-              <LoadingIndicator size="small" color={Theme.teslaRed} />
+              <LoadingIndicator size="small" color={Theme.loaderAccent} />
               <Text style={styles.loadingText}>Loading…</Text>
             </View>
           ) : showNetworkExpansionEmpty ? (
@@ -384,6 +384,9 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 16,
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Theme.shadow,
@@ -528,6 +531,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 16,
     marginTop: 8,
     gap: 8,

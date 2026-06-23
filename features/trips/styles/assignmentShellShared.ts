@@ -303,7 +303,7 @@ export const assignmentShellStyles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   supplySegBtnTextActive: {
-    color: "#ffffff",
+    color: Theme.buttonPrimaryText,
   },
 
   supplyAssignLaterOuter: {
@@ -499,7 +499,7 @@ export const assignmentShellStyles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderTopLeftRadius: 12,
     borderBottomLeftRadius: 12,
   },
@@ -551,7 +551,10 @@ export const assignmentShellStyles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   assignEmptyActionBtnText: {
     fontSize: 12,

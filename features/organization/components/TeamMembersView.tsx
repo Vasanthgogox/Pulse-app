@@ -535,7 +535,7 @@ export function TeamMembersView({
   if (query.isLoading && !query.data) {
     return (
       <View style={styles.centered}>
-        <LoadingIndicator color={Theme.teslaRed} />
+        <LoadingIndicator color={Theme.loaderAccent} />
       </View>
     );
   }
@@ -624,7 +624,7 @@ export function TeamMembersView({
                 <View key={m.id} style={styles.gridCell}>
                   {actionId === m.id ? (
                     <View style={[styles.gridCell, styles.busyCard]}>
-                      <LoadingIndicator color={Theme.teslaRed} />
+                      <LoadingIndicator color={Theme.loaderAccent} />
                     </View>
                   ) : (
                     <MemberCard
@@ -676,7 +676,7 @@ export function TeamMembersView({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.teslaRed} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Theme.loaderAccent} />
       }
     >
       {body}
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3,
     borderBottomColor: "transparent",
   },
-  tabOn: { borderBottomColor: Theme.teslaRed },
+  tabOn: { borderBottomColor: Theme.accentGold },
   tabText: { ...Typography.subTabLabel, color: Theme.textSection },
   tabTextOn: { color: Theme.textPrimaryDark },
   tabBadge: {
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 4,
   },
-  tabBadgeOn: { backgroundColor: Theme.teslaRed },
+  tabBadgeOn: { backgroundColor: Theme.accentGold },
   tabBadgeText: { fontSize: 9, fontWeight: "700", color: Theme.textSecondary },
   tabBadgeTextOn: { color: Theme.textOnPrimary },
 
@@ -770,12 +770,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 11,
     borderRadius: 24,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   emptyInviteBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.2,
   },
 

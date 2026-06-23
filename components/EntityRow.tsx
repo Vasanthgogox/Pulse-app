@@ -4,6 +4,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
 import type { PartyEntityType } from '@/lib/partyAvatarDisplay';
 import { partyAvatarHasRenderableOutput } from '@/lib/partyAvatarDisplay';
+import { shouldUseOfflinePartyRoleAvatar } from '@/lib/partyOfflineRoleAvatar';
 
 export interface EntityRowProps {
   title: string;
@@ -68,13 +69,22 @@ export function EntityRow({
 }: EntityRowProps) {
   const initial = getInitial(title);
   const avatar = getAvatarStyle();
-  const partyAvatar = partyAvatarHasRenderableOutput({
-    name: title,
-    organizationImageUrl,
-    avatarUrl,
-    avatarSeed,
-    entityType,
-  });
+  const isIntegrated =
+    integrationStatus === 'integrated'
+      ? true
+      : integrationStatus === 'offline'
+        ? false
+        : undefined;
+  const useOfflineRoleIcon = shouldUseOfflinePartyRoleAvatar(isIntegrated, entityType);
+  const partyAvatar =
+    useOfflineRoleIcon ||
+    partyAvatarHasRenderableOutput({
+      name: title,
+      organizationImageUrl,
+      avatarUrl,
+      avatarSeed,
+      entityType,
+    });
   const amountStyle =
     amountColor === 'green' ? styles.amountPositive : amountColor === 'red' ? styles.amountNegative : styles.amountDefault;
   const labelStyle =
@@ -98,6 +108,7 @@ export function EntityRow({
               avatarUrl={avatarUrl}
               avatarSeed={avatarSeed}
               entityType={entityType}
+              isIntegrated={isIntegrated}
               size={40}
             />
           ) : (

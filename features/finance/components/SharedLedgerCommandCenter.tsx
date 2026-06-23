@@ -3764,7 +3764,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   pendingActionBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -3883,7 +3886,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   chipOn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   chipDot: { width: 7, height: 7, borderRadius: 4 },

@@ -2030,7 +2030,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 1,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   transitActions: {
     flexDirection: "row",
@@ -2112,7 +2112,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.5,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   podModalBackdrop: {
     flex: 1,

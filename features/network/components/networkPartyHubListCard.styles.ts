@@ -188,7 +188,6 @@ export const hubListCardStyles = StyleSheet.create({
     justifyContent: "flex-start",
     gap: 6,
     width: "100%",
-    backgroundColor: "transparent",
   },
   gridTileAvatarCol: {
     width: 70,

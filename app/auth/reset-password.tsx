@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryBtnText: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     fontSize: 16,
     fontWeight: '600',
   },

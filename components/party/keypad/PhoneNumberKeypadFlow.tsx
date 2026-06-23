@@ -153,6 +153,6 @@ const styles = StyleSheet.create({
   },
   cursorWizard: {
     height: 28,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
 });

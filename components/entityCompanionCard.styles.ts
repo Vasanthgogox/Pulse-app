@@ -246,7 +246,7 @@ export const entityCompanionCardStyles = StyleSheet.create({
     backgroundColor: Theme.surfaceBorder,
   },
   dossierWorkloadBarOn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   eyebrow: {
     fontSize: 9,

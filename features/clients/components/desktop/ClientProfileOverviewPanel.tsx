@@ -5,6 +5,7 @@ import {
   INVOICE_FREQUENCY_OPTIONS,
   PAYMENT_TERMS_OPTIONS,
 } from "@/features/clients/constants/clientReference.constants";
+import Theme from "@/constants/Theme";
 import { updateClientHubProfile } from "@/features/clients/services/clientProfile.service";
 import type { ClientManagementBundle } from "@/features/clients/types/clientManagement.types";
 import { formatClientPhoneDisplay } from "@/features/clients/utils/clientManagement.util";
@@ -462,7 +463,7 @@ const ov = {
     borderRadius: 8,
     backgroundColor: METRONIC.text,
   },
-  saveBtnText: { fontSize: 12, fontWeight: "700" as const, color: "#fff" },
+  saveBtnText: { fontSize: 12, fontWeight: "700" as const, color: Theme.buttonDarkText },
   snapshotGrid: {
     flexDirection: "row" as const,
     flexWrap: "wrap" as const,

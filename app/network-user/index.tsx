@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   establishBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },

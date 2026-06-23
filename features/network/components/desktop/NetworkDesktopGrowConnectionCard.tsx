@@ -54,7 +54,10 @@ function roleTone(pendingRole: ConnectionInviteRole | null | undefined) {
 }
 
 export type NetworkDesktopGrowConnectionCardProps = {
-  org: Pick<DiscoverOrg, "id" | "name" | "avatar_seed" | "connection_status">;
+  org: Pick<
+    DiscoverOrg,
+    "id" | "name" | "avatar_seed" | "avatar_url" | "connection_status"
+  >;
   locationLabel: string;
   ratingValue?: number | null;
   mutualCount?: number;
@@ -157,8 +160,10 @@ export function NetworkDesktopGrowConnectionCard({
       <View style={[styles.avatarWrap, growStyles.avatarWrap]}>
         <PartyAvatar
           name={org.name}
-          entityType="client"
+          initialsColorSeed={org.id}
+          avatarUrl={org.avatar_url}
           avatarSeed={org.avatar_seed}
+          entityType="client"
           size={52}
           shape="circle"
         />

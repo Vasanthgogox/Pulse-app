@@ -28,6 +28,8 @@ export interface FinanceTabBodyProps {
   ledgerTransactions: LedgerRow[] | null;
   ledgerForEntityAggregation?: LedgerRow[] | null;
   filteredLedgerForDisplay: LedgerRow[];
+  /** Cash kanban — all party columns; ignores toolbar ledger category + in/out chips. */
+  filteredLedgerForKanban: LedgerRow[];
   ledgerRefreshKey: number;
   onLedgerRowSelect: (data: FinancialRowData) => void;
   getVehicleNumberForTripId: (tripId: string | null) => string | null;
@@ -86,6 +88,15 @@ export interface FinanceTabBodyProps {
   onSupplierViewTabChange: (v: SuppliersViewTab) => void;
   onTripSelect: (tripId: string) => void;
   onAddTransactionPress?: () => void;
+  /** Opens add-party flow for customers / suppliers / drivers / garage (matches Finance FAB). */
+  onAddPartyPress?: () => void;
+  /** Cash kanban column CTAs when ledger is empty (desktop). */
+  onKanbanPartyAddPress?: (
+    column: "customers" | "suppliers" | "garage" | "drivers",
+  ) => void;
+  fetchNextLedgerPage?: () => void;
+  hasNextLedgerPage?: boolean;
+  ledgerPageLoading?: boolean;
   topContent?: ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;

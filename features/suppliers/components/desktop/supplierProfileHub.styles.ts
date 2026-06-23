@@ -343,7 +343,7 @@ export const supplierStyles = StyleSheet.create({
   addBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     letterSpacing: 0.2,
   },
 
@@ -729,7 +729,7 @@ export const supplierStyles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   sidebarActionBtnTextPrimary: {
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   sidebarBadge: {
     paddingHorizontal: 8,

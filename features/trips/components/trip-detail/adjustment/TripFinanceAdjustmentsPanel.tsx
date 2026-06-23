@@ -30,9 +30,15 @@ export interface TripFinanceAdjustmentsPanelProps {
   clientName: string;
   clientAvatarUrl?: string | null;
   clientAvatarSeed?: string | null;
+  clientOrganizationImageUrl?: string | null;
+  clientOrganizationAvatarSeed?: string | null;
+  clientIntegrated?: boolean;
   supplierName: string;
   supplierAvatarUrl?: string | null;
   supplierAvatarSeed?: string | null;
+  supplierOrganizationImageUrl?: string | null;
+  supplierOrganizationAvatarSeed?: string | null;
+  supplierIntegrated?: boolean;
   /** Asset execution: cost lane is driver labor + posted trip expenses. */
   isAssetExecution?: boolean;
   costLaneLabel?: string;
@@ -110,12 +116,18 @@ export const TripFinanceAdjustmentsPanel = memo(function TripFinanceAdjustmentsP
         clientName={props.clientName}
         clientAvatarUrl={props.clientAvatarUrl}
         clientAvatarSeed={props.clientAvatarSeed}
+        clientOrganizationImageUrl={props.clientOrganizationImageUrl}
+        clientOrganizationAvatarSeed={props.clientOrganizationAvatarSeed}
+        clientIntegrated={props.clientIntegrated}
         sales={props.sales}
         adjSales={props.adjSales}
         revenueSideDelta={props.revenueSideDelta}
         supplierName={props.supplierName}
         supplierAvatarUrl={props.supplierAvatarUrl}
         supplierAvatarSeed={props.supplierAvatarSeed}
+        supplierOrganizationImageUrl={props.supplierOrganizationImageUrl}
+        supplierOrganizationAvatarSeed={props.supplierOrganizationAvatarSeed}
+        supplierIntegrated={props.supplierIntegrated}
         cost={props.cost}
         adjCost={props.adjCost}
         costSideDelta={props.costSideDelta}
@@ -639,7 +651,10 @@ const styles = StyleSheet.create({
   },
   rowActionBtnPrimary: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   rowActionBtnPressed: {
     opacity: 0.88,
@@ -653,7 +668,7 @@ const styles = StyleSheet.create({
   rowActionBtnTextPrimary: {
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.2,
   },
   trVoided: { opacity: 0.55 },
@@ -737,7 +752,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
   },
-  noteCn: { color: "#4f46e5" },
+  noteCn: { color: "#4D3636" },
   noteDn: { color: "#e11d48" },
   tdReason: {
     fontWeight: "500",

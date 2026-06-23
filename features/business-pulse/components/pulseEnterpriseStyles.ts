@@ -114,7 +114,7 @@ export const pulseEnterpriseStyles = StyleSheet.create({
     bottom: -1,
     height: 2,
     borderRadius: 1,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
 
   surfaceCard: {

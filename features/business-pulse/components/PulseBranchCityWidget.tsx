@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   barFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   revenue: {
     fontSize: 12,

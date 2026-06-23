@@ -1056,9 +1056,9 @@ const TRACKING = {
     bannerBg: "#EEF2FF",
     bannerBorder: "#C7D2FE",
     iconBg: Theme.pulseIndigo,
-    chipBg: "#4338CA",
+    chipBg: "#4D3636",
     chipText: Theme.textOnPrimary,
-    progress: "#6366F1",
+    progress: "#4D3636",
     rowBg: "#F5F3FF",
     rowBorder: Theme.pulseIndigoRing,
     badgeBg: Theme.pulseIndigo,
@@ -1253,7 +1253,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1394,7 +1394,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 6,
     borderRadius: 14,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -1560,7 +1560,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionBtnPrimary: {
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     ...Platform.select({
       ios: {
         shadowColor: Theme.pulseIndigo,
@@ -1715,7 +1718,7 @@ const styles = StyleSheet.create({
   },
   timelineDotActive: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   timelineDotInner: {
     width: 6,

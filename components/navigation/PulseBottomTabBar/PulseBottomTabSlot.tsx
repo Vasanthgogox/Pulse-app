@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 7,
     paddingHorizontal: 2,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
     borderWidth: 1.5,
     borderColor: Theme.tabBarBg,
     alignItems: 'center',
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 8,
     fontWeight: '600',
-    color: Theme.textOnPrimary,
+    color: Theme.brandBlueInk,
     lineHeight: 10,
   },
   label: {
