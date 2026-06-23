@@ -7,6 +7,7 @@ export { DriverAnalyticsFullScreen } from './components/DriverAnalyticsFullScree
 export {
     acceptDriverInvite,
     attachDriverByContact,
+    consumeDriverInvite,
     createDriver,
     createDriverLedgerEntry,
     DRIVER_LEDGER_TYPES,
@@ -18,6 +19,7 @@ export {
     getDriverOffersByOrganization,
     getDriversByOrganization,
     inviteDriver,
+    inviteRosterDriver,
     linkPhoneToDriver,
     rejectDriverInvite,
     searchExistingDriversByPhone,
