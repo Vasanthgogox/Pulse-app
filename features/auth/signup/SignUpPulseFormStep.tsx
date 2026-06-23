@@ -95,7 +95,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
       ]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-      keyboardDismissMode="on-drag"
+      keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
     >
       <SignUpPulseTitle title={title} subtitle={subtitle} />
       {children}

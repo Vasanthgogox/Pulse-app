@@ -766,12 +766,12 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollAccountFieldIntoView = () => {
-    // On web, wait for the Android keyboard animation (~350ms) before scrolling
-    // so keyboardHeight is measured and bottomPad is applied first.
-    const delay = Platform.OS === 'web' ? 420 : CONFIRM_SCROLL_DELAY_MS;
     setTimeout(() => {
-      accountScrollRef.current?.scrollToEnd({ animated: true });
-    }, delay);
+      // Use animated: false on web — animated scrolling fires scroll events that
+      // trigger keyboardDismissMode="on-drag" blur even with mode="none" as a
+      // belt-and-suspenders guard. Instant scroll has no scroll event sequence.
+      accountScrollRef.current?.scrollToEnd({ animated: Platform.OS !== 'web' });
+    }, CONFIRM_SCROLL_DELAY_MS);
   };
 
   return {
