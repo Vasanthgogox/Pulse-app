@@ -766,11 +766,11 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollAccountFieldIntoView = () => {
+    // Web: browser natively scrolls the focused input into view when the keyboard
+    // opens — calling scrollToEnd fights that and lands at the wrong position.
+    if (Platform.OS === 'web') return;
     setTimeout(() => {
-      // Use animated: false on web — animated scrolling fires scroll events that
-      // trigger keyboardDismissMode="on-drag" blur even with mode="none" as a
-      // belt-and-suspenders guard. Instant scroll has no scroll event sequence.
-      accountScrollRef.current?.scrollToEnd({ animated: Platform.OS !== 'web' });
+      accountScrollRef.current?.scrollToEnd({ animated: true });
     }, CONFIRM_SCROLL_DELAY_MS);
   };
 
