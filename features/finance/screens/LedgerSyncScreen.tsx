@@ -30,7 +30,7 @@ import {
 import { buildLedgerSyncDescriptionLine } from "@/features/finance/ledger/ledgerEntryModel";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, type TripRow } from "@/features/trips/services/trips.service";
+import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, supplierRowToTripRow, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles/services/vehicles.service";
 import { updateSalaryRequestStatus } from "@/features/drivers/services/salaryRequests.service";
@@ -250,7 +250,7 @@ export default function LedgerSyncScreen() {
       ]).then(([ownedRes, asClientRes, asSupplierRes]) => {
         const owned = ownedRes?.error ? [] : (ownedRes?.trips ?? []);
         const asClient = asClientRes?.error ? [] : (asClientRes?.trips ?? []);
-        const asSupplier = asSupplierRes?.error ? [] : (asSupplierRes?.trips ?? []);
+        const asSupplier = asSupplierRes?.error ? [] : (asSupplierRes?.trips ?? []).map(supplierRowToTripRow);
         const seen = new Set<string>();
         const merged: TripRow[] = [];
         for (const t of owned) {

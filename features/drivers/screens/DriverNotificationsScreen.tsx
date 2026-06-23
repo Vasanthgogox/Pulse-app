@@ -163,7 +163,7 @@ export default function DriverNotificationsScreen() {
         const primaryDriver = drivers[0];
         setDriver(primaryDriver);
         const driverIds = drivers.map((d) => d.id);
-        const tRes = await tripsService.getTripsByDriverIds(driverIds);
+        const tRes = await tripsService.getDriverUiTripsByDriverIds(driverIds);
         setAllTrips(tRes.trips ?? []);
       } else {
         setDriver(null);

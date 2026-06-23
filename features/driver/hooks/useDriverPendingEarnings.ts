@@ -86,7 +86,7 @@ export function useDriverPendingEarnings() {
         }
         const driverIds = drivers.map((d) => d.id);
         return Promise.all([
-          tripsService.getTripsByDriverIds(driverIds),
+          tripsService.getDriverUiTripsByDriverIds(driverIds),
           driversService.getDriverLedgerByDriverIds(driverIds),
           salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
         ]).then(([tRes, ledgerRes, salaryRes]) => {

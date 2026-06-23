@@ -104,7 +104,7 @@ export default function DriverRequestsScreen() {
         return Promise.resolve();
       }
       return Promise.all([
-        tripsService.getTripsByDriverIds(driverIds),
+        tripsService.getDriverUiTripsByDriverIds(driverIds),
         driversService.getDriverLedgerByDriverIds(driverIds),
       ]).then(([tRes, ledgerRes]) => {
         setAllTrips(tRes.trips ?? []);

@@ -12,6 +12,7 @@ import {
   getTripsByOrganization,
   getTripsWhereOrgIsClient,
   getTripsWhereOrgIsSupplier,
+  supplierRowToTripRow,
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { getTripSubcontracts } from "@/features/finance/services/tripSubcontracts.service";
@@ -46,7 +47,7 @@ export function useSupplierAnalyticsData(supplierId: string) {
     });
     const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then(async (res) => {
       if (res.error) return { sharedTrips: [] as TripRow[], subcontracts: [] };
-      const sharedTrips = res.trips ?? [];
+      const sharedTrips = (res.trips ?? []).map(supplierRowToTripRow);
       const tripIds = sharedTrips.map((trip) => trip.id);
       if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
       const subRes = await getTripSubcontracts({ viewerOrgId: orgId, tripIds });

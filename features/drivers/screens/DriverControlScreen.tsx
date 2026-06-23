@@ -189,7 +189,7 @@ export default function DriverControlScreen() {
       setLinkedDriversFull(drivers);
       setLinkedDriversLoaded(true);
       if (drivers.length === 0) return;
-      tripsService.getTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
+      tripsService.getDriverUiTripsByDriverIds(drivers.map((d) => d.id)).then((tRes) => {
         const tripsList = tRes.trips ?? [];
         setDriverTripNumberById(buildDriverTripNumberMap(tripsList));
         const count = tripsList.filter((t) =>

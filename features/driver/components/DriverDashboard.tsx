@@ -486,7 +486,7 @@ export default function DriverDashboard() {
         const primaryDriver = drivers[0];
         setDriver(primaryDriver);
         const driverIds = drivers.map((d) => d.id);
-        return tripsService.getTripsByDriverIds(driverIds).then((tRes) => {
+        return tripsService.getDriverUiTripsByDriverIds(driverIds).then((tRes) => {
           const trips = tRes.trips ?? [];
           const currentIds = new Set(trips.map((t) => t.id));
           const disappearedLabels: string[] = [];

@@ -46,6 +46,7 @@ import {
   getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
   getTripDisplayNumber,
+  supplierRowToTripRow,
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { VehicleHealthBadge } from "@/features/ai";
@@ -170,7 +171,7 @@ export default function VehicleDetailScreen({
         setVehicle(res.vehicle ?? null);
       }
       const ownerTrips = ownerRes.error ? [] : ownerRes.trips ?? [];
-      const supplierTrips = supplierRes.error ? [] : supplierRes.trips ?? [];
+      const supplierTrips = supplierRes.error ? [] : (supplierRes.trips ?? []).map(supplierRowToTripRow);
       const byId = new Map(ownerTrips.map((t) => [t.id, t]));
       for (const t of supplierTrips) if (!byId.has(t.id)) byId.set(t.id, t);
       setTrips(Array.from(byId.values()));

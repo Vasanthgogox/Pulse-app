@@ -200,7 +200,7 @@ export default function SalaryRequestScreen() {
       if (drivers.length > 0) {
         const driverIds = drivers.map((d) => d.id);
         Promise.all([
-          tripsService.getTripsByDriverIds(driverIds),
+          tripsService.getDriverUiTripsByDriverIds(driverIds),
           driversService.getDriverLedgerByDriverIds(driverIds),
           salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
         ]).then(([tRes, ledgerRes, salaryReqRes]) => {

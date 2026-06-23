@@ -158,9 +158,9 @@ export function DriverTripHistoryDetailScreen({
 
   const loadTrip = useCallback(async (isMounted: () => boolean) => {
     if (isMounted()) setLoading(true);
-    const res = await tripsService.getTripById(tripId);
+    const res = await tripsService.getDriverTripById(tripId);
     if (!isMounted()) return;
-    setTrip(res.trip ?? null);
+    setTrip(res.trip ? tripsService.driverRowToTripRow(res.trip) : null);
     setLoading(false);
   }, [tripId]);
 

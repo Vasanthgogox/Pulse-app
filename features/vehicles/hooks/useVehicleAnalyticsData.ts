@@ -10,6 +10,7 @@ import {
   getTripsByOrganization,
   getTripsWhereOrgIsSupplier,
   getTripDisplayNumber,
+  supplierRowToTripRow,
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
@@ -50,7 +51,7 @@ export function useVehicleAnalyticsData(vehicleId: string) {
         setVehicle(res.vehicle ?? null);
       }
       const ownerTrips = ownerRes.error ? [] : ownerRes.trips ?? [];
-      const supplierTrips = supplierRes.error ? [] : supplierRes.trips ?? [];
+      const supplierTrips = supplierRes.error ? [] : (supplierRes.trips ?? []).map(supplierRowToTripRow);
       const byId = new Map(ownerTrips.map((trip) => [trip.id, trip]));
       for (const trip of supplierTrips) {
         if (!byId.has(trip.id)) byId.set(trip.id, trip);

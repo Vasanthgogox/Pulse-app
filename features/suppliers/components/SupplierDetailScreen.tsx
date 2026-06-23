@@ -51,6 +51,7 @@ import {
     getTripsByOrganization,
     getTripsWhereOrgIsClient,
     getTripsWhereOrgIsSupplier,
+    supplierRowToTripRow,
     type TripRow,
 } from "@/features/trips/services/trips.service";
 import { adjustedCost } from "@/features/trips/services/tripAdjustments";
@@ -424,7 +425,7 @@ export default function SupplierDetailScreen({
     const subcontractsPromise = getTripsWhereOrgIsSupplier(orgId).then(
       (res) => {
         if (res.error) return { sharedTrips: [], subcontracts: [] };
-        const sharedTrips = res.trips ?? [];
+        const sharedTrips = (res.trips ?? []).map(supplierRowToTripRow);
         const tripIds = sharedTrips.map((t) => t.id);
         if (tripIds.length === 0) return { sharedTrips, subcontracts: [] };
         return getTripSubcontracts({ viewerOrgId: orgId, tripIds }).then(

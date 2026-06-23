@@ -804,7 +804,7 @@ export default function DriverRadarScreen() {
 
       const primaryDriver = active[0];
       const driverIds = active.map((d) => d.id);
-      const tRes = await tripsService.getTripsByDriverIds(driverIds);
+      const tRes = await tripsService.getDriverUiTripsByDriverIds(driverIds);
       if (cancelled || tripsSyncGenRef.current !== gen) return;
 
       const trips = tRes.trips ?? [];
