@@ -41,7 +41,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, useWindowDimensions } from 'react-native';
+import { Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
 import {
@@ -279,6 +279,30 @@ export function useBusinessSignUpFlow() {
     if (orgCheckRef.current) clearTimeout(orgCheckRef.current);
   }, []);
 
+  // ─── Web browser history (Android back gesture) ──────────────────────────
+  // Push a history entry per step (1-5) so Android back gesture = previous step,
+  // not browser navigation away from the page.
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    window.history.replaceState({ signupStep: step }, '');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPop = (e: PopStateEvent) => {
+      // Post-auth steps: block browser back to avoid landing on a submitted form.
+      if (step >= 6) {
+        window.history.pushState({ signupStep: step }, '');
+        return;
+      }
+      const target = typeof e.state?.signupStep === 'number' ? e.state.signupStep : Math.max(0, step - 1);
+      setStep(target);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [step]);
+
   // ─── Navigation ──────────────────────────────────────────────────────────
 
   const goToPage = (index: number) => {
@@ -286,6 +310,11 @@ export function useBusinessSignUpFlow() {
     if (index >= 6 && index <= 8) {
       setBusinessSignupBrandingActive(true);
       void persistBusinessSignupBrandingStep(index);
+    }
+    // Push history for forward navigation on steps 1-5 so Android back gesture
+    // goes to the previous signup step instead of leaving the page.
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && index > step && index <= 5) {
+      window.history.pushState({ signupStep: index }, '');
     }
     scrollRef.current?.scrollTo({ x: index * pageWidth, animated: true });
   };
@@ -305,6 +334,12 @@ export function useBusinessSignUpFlow() {
     if (step === 6) {
       clearBusinessSignupBranding();
       router.replace('/');
+      return;
+    }
+    // On web, use browser history.back() so the history stack stays consistent
+    // with the pushState entries added in goToPage.
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.history.back();
       return;
     }
     goToPage(step - 1);
@@ -731,9 +766,12 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollAccountFieldIntoView = () => {
+    // On web, wait for the Android keyboard animation (~350ms) before scrolling
+    // so keyboardHeight is measured and bottomPad is applied first.
+    const delay = Platform.OS === 'web' ? 420 : CONFIRM_SCROLL_DELAY_MS;
     setTimeout(() => {
       accountScrollRef.current?.scrollToEnd({ animated: true });
-    }, CONFIRM_SCROLL_DELAY_MS);
+    }, delay);
   };
 
   return {
