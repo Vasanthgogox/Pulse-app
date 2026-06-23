@@ -6,11 +6,21 @@
  */
 
 export const Theme = {
-  // ---- Primary (Pulse indigo for headers and primary actions) ----
-  /** Active tab, FAB, primary actions, headers — same as Add Trip / bottom nav. */
-  primary: "#4F46E5",
-  /** Lighter gradient stop; kept in the same indigo-600 family as `primary`. */
-  primaryLight: "#4F46E5",
+  // ---- Brand (illustration pastel blue + ink — replaces legacy purple/indigo) ----
+  brandBlue: "#CDE9F7",
+  brandBluePressed: "#B9E2F5",
+  brandBlueInk: "#4D3636",
+  brandBlueRing: "rgba(77, 54, 54, 0.22)",
+  brandBlueWash: "rgba(205, 233, 247, 0.55)",
+  brandBlueWashSubtle: "rgba(205, 233, 247, 0.35)",
+  brandBlueSoft: "#E5F4FB",
+  brandBlueShadow: "rgba(77, 54, 54, 0.12)",
+
+  // ---- Primary (ink accent on light UI; fills use buttonPrimary / brandBlue) ----
+  /** Active tab labels, links, icon accents on white surfaces. */
+  primary: "#4D3636",
+  /** Pastel blue fills and light washes (legacy `primaryLight` indigo slot). */
+  primaryLight: "#CDE9F7",
   /** Dark gray for strong text */
   primaryText: "#1a1a1a",
 
@@ -18,7 +28,7 @@ export const Theme = {
   analyticsHeroBg: "#2B3171",
   /** Analytics page canvas */
   analyticsCanvas: "#F8F9FB",
-  analyticsHeroSubtitle: "#C7D2FE",
+  analyticsHeroSubtitle: "#B9E2F5",
 
   // ---- Backgrounds ----
   screenBackground: "#ffffff",
@@ -49,13 +59,13 @@ export const Theme = {
   darkSurface: "#1a1a1a",
   darkInputBg: "#333333",
 
-  // ---- Action accent (Pulse purple — matches Add Trip `pulseIndigo`) ----
-  /** Canonical Pulse purple: Add Trip, bottom nav cluster, CTA pills. */
-  actionAccent: "#4F46E5",
-  /** Indigo-700 rim for 1px borders on pills (subtle depth, same hue family). */
-  actionAccentBorder: "#4338CA",
-  /** Indigo-600 shadow tint under action pills and tab bar. */
-  actionAccentShadow: "rgba(79, 70, 229, 0.32)",
+  // ---- Action accent (pastel blue pills — Add Load / Add Trip family) ----
+  /** Canonical brand fill: Add Trip, bottom nav cluster, CTA pills. */
+  actionAccent: "#CDE9F7",
+  /** Ink rim for 1px borders on pills. */
+  actionAccentBorder: "#4D3636",
+  /** Soft shadow under action pills and tab bar. */
+  actionAccentShadow: "rgba(77, 54, 54, 0.12)",
 
   /** White card background (legacy alias; prefer surface for new code) */
   cardWhite: "#ffffff",
@@ -117,6 +127,13 @@ export const Theme = {
   iconSlate: "#666666",
   iconPrimary: "#000000",
   iconSecondary: "#666666",
+  /** Golden yellow — icons and highlights on dark/black UI (replaces legacy red chrome). */
+  accentGold: "#FFCE44",
+  accentGoldPressed: "#F0BE28",
+  accentGoldMuted: "rgba(255, 206, 68, 0.22)",
+  accentGoldBorder: "rgba(255, 206, 68, 0.42)",
+  /** Spinners and pull-to-refresh on light/dark surfaces. */
+  loaderAccent: "#FFCE44",
 
   // ---- Semantic (demo: Tesla red / dark green) ----
   /** Demo accent; positive/credit */
@@ -141,7 +158,7 @@ export const Theme = {
   /** Aggregate (partner) trip pill — distinct from asset/own fleet */
   aggregatePillBg: "rgba(99,102,241,0.12)",
   aggregatePillBorder: "rgba(99,102,241,0.35)",
-  aggregatePillText: "#4338ca",
+  aggregatePillText: "#4D3636",
   /** Partner column label on dark mirror cells (shared ledger hub). */
   ledgerPartnerLabelOnDark: "#A5B4FC",
 
@@ -155,8 +172,8 @@ export const Theme = {
 
   /** Finance table: integrated party icon (link) — green = synced */
   integratedIcon: "#15803D",
-  /** Finance table: non-integrated party icon (unlink) — red = not linked */
-  nonIntegratedIcon: "#dc2626",
+  /** Finance table: non-integrated party icon (unlink) — gold on dark lists */
+  nonIntegratedIcon: "#FFCE44",
 
   /** Shared ledger: full-width Net Trip Due bar (reference navy) */
   ledgerNetBarBg: "#121626",
@@ -169,14 +186,20 @@ export const Theme = {
   avatarSlate: "#e5e5e5",
   avatarSlateText: "#333333",
 
-  // ---- Buttons ----
-  buttonPrimary: "#4F46E5",
-  buttonPrimaryText: "#ffffff",
+  // ---- Buttons (illustration pill — pastel blue + ink outline) ----
+  buttonPrimary: "#CDE9F7",
+  buttonPrimaryPressed: "#B9E2F5",
+  buttonPrimaryBorder: "#4D3636",
+  buttonPrimaryText: "#4D3636",
+  buttonPrimaryRadius: 999,
+  buttonPrimaryBorderWidth: 2,
   buttonSecondaryBackground: "#4b5563", // Temporary comment to force refresh
   buttonSecondary: "#047857",
   buttonSecondaryText: "#ffffff",
   buttonMatteBlack: "#151515",
   buttonMatteBlackText: "#ffffff",
+  /** Text/icons on dark/black filled CTAs (hub grid, registry, matte black). Not pastel-blue pills. */
+  buttonDarkText: "#ffffff",
   fabBackground: "#151515",
   fabText: "#ffffff",
   buttonDestructive: "#E82127",
@@ -189,45 +212,83 @@ export const Theme = {
   placeholder: "#999999",
   separatorLight: "#e5e5e5",
   separatorDark: "rgba(255,255,255,0.1)",
-  /** Active tab underline (demo: red) */
-  tabUnderline: "#E82127",
+  /** Active tab underline on light surfaces */
+  tabUnderline: "#FFCE44",
   /** Trips hub: unassigned pill — soft slate wash, black border (Tesla-like, not amber) */
   tripHubUnassignedPillBg: "rgba(15, 23, 42, 0.06)",
-  /** Treasury/Fiscal bottom nav active pill background (light indigo) */
-  fiscalTabActiveBg: "#e8eaf6",
+  /** Treasury/Fiscal bottom nav active pill background (light blue) */
+  fiscalTabActiveBg: "#E5F4FB",
 
-  /** Pulse loader + mobile tab bar accent (indigo) */
-  pulseIndigo: "#4F46E5",
-  pulseIndigoRing: "rgba(79, 70, 229, 0.22)",
-  pulseIndigoWash: "rgba(79, 70, 229, 0.12)",
+  /** Pulse loader + mobile tab bar accent (brand ink on light / blue fills) */
+  pulseIndigo: "#4D3636",
+  pulseIndigoRing: "rgba(77, 54, 54, 0.22)",
+  pulseIndigoWash: "rgba(205, 233, 247, 0.35)",
+  /** Load Center Add Load — aliases global button pill tokens */
+  loadAddButtonBg: "#CDE9F7",
+  loadAddButtonBgPressed: "#B9E2F5",
+  loadAddButtonBorder: "#4D3636",
+  loadAddButtonText: "#4D3636",
+  /** Load Center status tabs — illustration pastel blue + ink outline */
+  loadStatusTabBg: "#CDE9F7",
+  loadStatusTabBgIdle: "#E5F4FB",
+  loadStatusTabTrayBg: "#F5FBFF",
+  loadStatusTabTrayBorder: "rgba(77, 54, 54, 0.12)",
+  loadStatusTabBorder: "#4D3636",
+  loadStatusTabBorderSoft: "rgba(77, 54, 54, 0.22)",
+  loadStatusTabText: "#4D3636",
+  loadStatusTabTextMuted: "#6B7A85",
+  /** Load Center done sub-tabs — illustration pink heart + ink outline */
+  loadDoneSubTabBg: "#FEAABC",
+  loadDoneSubTabBgIdle: "#FFF0F4",
+  loadDoneSubTabTrayBg: "#FFFAFB",
+  loadDoneSubTabTrayBorder: "rgba(77, 54, 54, 0.12)",
+  loadDoneSubTabBorder: "#4D3636",
+  loadDoneSubTabBorderSoft: "rgba(77, 54, 54, 0.22)",
+  loadDoneSubTabText: "#4D3636",
+  loadDoneSubTabTextMuted: "#8A6E76",
+  /** Load Center main tabs — illustration yellow + ink outline */
+  loadMainTabBg: "#FFE566",
+  loadMainTabBgIdle: "#FFF8D6",
+  loadMainTabTrayBg: "#FFFCF0",
+  loadMainTabTrayBorder: "rgba(77, 54, 54, 0.12)",
+  loadMainTabBorder: "#4D3636",
+  loadMainTabBorderSoft: "rgba(77, 54, 54, 0.22)",
+  loadMainTabText: "#4D3636",
+  loadMainTabTextMuted: "#8A7560",
+  /** @deprecated Use loadMainTab* tokens */
+  loadGetTabBg: "#FFE566",
+  loadGetTabBgIdle: "#FFF8D6",
+  loadGetTabBorder: "#4D3636",
+  loadGetTabText: "#4D3636",
+  loadGetTabTextMuted: "#8A7560",
   /** Mobile footer active pill + icon ring */
-  pulseTabActiveBg: "rgba(79, 70, 229, 0.10)",
-  pulseTabActiveBorder: "rgba(79, 70, 229, 0.28)",
+  pulseTabActiveBg: "rgba(205, 233, 247, 0.35)",
+  pulseTabActiveBorder: "rgba(77, 54, 54, 0.22)",
   /** Ops cluster — light track (matches tab bar shell); Slack-style sliding thumb. */
-  pulseTabClusterTrackTop: "#F5F6FC",
-  pulseTabClusterTrackBottom: "#E8EBF5",
-  pulseTabClusterTrackBg: "#F0F2FA",
+  pulseTabClusterTrackTop: "#F5FBFF",
+  pulseTabClusterTrackBottom: "#E5F4FB",
+  pulseTabClusterTrackBg: "#F5FBFF",
   pulseTabClusterTrackBorder: "rgba(148, 163, 184, 0.32)",
   pulseTabClusterTrackInnerGlow: "rgba(255, 255, 255, 0.7)",
   pulseTabClusterTrackRim: "rgba(255, 255, 255, 0.95)",
-  /** Sliding thumb — Pulse indigo (same as Add Trip / reference screenshot). */
-  pulseTabClusterThumbSolid: "#4F46E5",
-  pulseTabClusterThumbGlassTop: "#5652E8",
-  pulseTabClusterThumbGlassBottom: "#4338CA",
-  pulseTabClusterThumbSpecular: "rgba(255, 255, 255, 0.22)",
-  pulseTabClusterThumbBorder: "rgba(67, 56, 202, 0.5)",
-  pulseTabClusterThumbInnerBorder: "rgba(255, 255, 255, 0.18)",
-  pulseTabClusterThumbShadow: "rgba(79, 70, 229, 0.28)",
-  /** Icon + label on the purple thumb. */
-  pulseTabClusterIconOnThumb: "#FFFFFF",
-  pulseTabClusterLabelOnThumb: "#FFFFFF",
+  /** Sliding thumb — pastel blue (Add Load / Add Trip family). */
+  pulseTabClusterThumbSolid: "#CDE9F7",
+  pulseTabClusterThumbGlassTop: "#E5F4FB",
+  pulseTabClusterThumbGlassBottom: "#B9E2F5",
+  pulseTabClusterThumbSpecular: "rgba(255, 255, 255, 0.35)",
+  pulseTabClusterThumbBorder: "rgba(77, 54, 54, 0.22)",
+  pulseTabClusterThumbInnerBorder: "rgba(255, 255, 255, 0.45)",
+  pulseTabClusterThumbShadow: "rgba(77, 54, 54, 0.12)",
+  /** Icon + label on the blue thumb. */
+  pulseTabClusterIconOnThumb: "#4D3636",
+  pulseTabClusterLabelOnThumb: "#4D3636",
   /** Icon + label on the light track (inactive). */
   pulseTabClusterIconInactive: "#94A3B8",
   pulseTabClusterLabelInactive: "#94A3B8",
 
   /** Demo tab bar: bar background, top border, pill and FAB (use Layout for radii/shadows) */
   tabBarBg: "#FAFAFF",
-  tabBarBorderTop: "rgba(79, 70, 229, 0.12)",
+  tabBarBorderTop: "rgba(205, 233, 247, 0.55)",
   tabBarPillActiveBg: "#F4F4F4",
   tabBarActiveIconBorder: "#E82127",
 
@@ -340,7 +401,7 @@ export const Theme = {
   networkSectionLabel: "#64748B",
   networkClientTintBg: "rgba(79,70,229,0.10)",
   networkSupplierTintBg: "rgba(21,128,61,0.10)",
-  networkDriverTintBg: "rgba(180,83,9,0.12)",
+  networkDriverTintBg: "rgba(255, 206, 68, 0.22)",
   networkMessageTintBg: "rgba(79,70,229,0.08)",
   networkMessageTintBorder: "rgba(79,70,229,0.20)",
   /** Frosted glass surfaces (Load Marketplace quick cards). */
@@ -362,15 +423,15 @@ export const Theme = {
   /** Solid-fill hub role badges — glass gradient + rim (connections list). */
   networkBadgeClientBg: "#E4E8F4",
   networkBadgeClientGradientTop: "#F5F6FC",
-  networkBadgeClientText: "#4338CA",
+  networkBadgeClientText: "#4D3636",
   networkBadgeClientBorder: "rgba(255,255,255,0.85)",
   networkBadgeSupplierBg: "#D8F5E4",
   networkBadgeSupplierGradientTop: "#F0FDF6",
   networkBadgeSupplierText: "#166534",
   networkBadgeSupplierBorder: "rgba(255,255,255,0.88)",
-  networkBadgeDriverBg: "#FFE9D0",
-  networkBadgeDriverGradientTop: "#FFF8F1",
-  networkBadgeDriverText: "#B45309",
+  networkBadgeDriverBg: "#FFF4CC",
+  networkBadgeDriverGradientTop: "#FFFBEB",
+  networkBadgeDriverText: "#FFCE44",
   networkBadgeDriverBorder: "rgba(255,255,255,0.88)",
   networkBadgeIntegratedBg: "#1E293B",
   networkBadgeIntegratedGradientTop: "#334155",
@@ -413,7 +474,7 @@ export const Theme = {
    *  (`EXPENSE_COLOR_MAP`) — meaning we can later replace those literals
    *  with `Theme.chartSeries.series1..4` without changing rendered hues.
    *  When you need more than 6 series, cycle back to series1. */
-  chartSeries1: "#4F46E5", // indigo  — primary metric (revenue, headline)
+  chartSeries1: "#9ACEEB", // brand blue — primary metric (revenue, headline)
   chartSeries2: "#15803D", // green   — positive (profit, on-time, paid)
   chartSeries3: "#E82127", // red     — negative (expense, outstanding)
   chartSeries4: "#F97316", // orange  — secondary (fuel, advance)
@@ -423,7 +484,7 @@ export const Theme = {
   /** Soft fills for grouped/stacked bars (alpha-blended series above).
    *  Use these as the "area" under a line chart or as the bar fill when
    *  the stroke is `chartSeriesN`. */
-  chartFill1: "rgba(79,70,229,0.14)",
+  chartFill1: "rgba(205, 233, 247, 0.45)",
   chartFill2: "rgba(21,128,61,0.14)",
   chartFill3: "rgba(232,33,39,0.14)",
   chartFill4: "rgba(249,115,22,0.14)",

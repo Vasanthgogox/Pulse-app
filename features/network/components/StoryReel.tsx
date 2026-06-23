@@ -1,14 +1,14 @@
 /**
  * Network stories row — circular avatars with gradient rings (unseen / seen).
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { PartyAvatar } from "@/components/PartyAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { type PostRow } from "@/features/network/services/posts.service";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { Plus } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -59,12 +59,12 @@ function storyMetricsFor(embedded: boolean): StoryMetrics {
   return embedded ? STORY_METRICS_EMBEDDED : STORY_METRICS_DEFAULT;
 }
 
-const RING_UNSEEN = ["#f43f5e", "#f59e0b", "#a855f7", "#6366f1"] as const;
+const RING_UNSEEN = ["#f43f5e", "#f59e0b", Theme.brandBluePressed, Theme.brandBlueInk] as const;
 const RING_SEEN = ["#cbd5e1", "#94a3b8"] as const;
-const RING_MINE_ACTIVE = ["#6366f1", "#22d3ee", "#10b981"] as const;
+const RING_MINE_ACTIVE = ["#4D3636", "#22d3ee", "#10b981"] as const;
 const RING_MINE_IDLE = ["#e2e8f0", "#cbd5e1"] as const;
 
-const ACCENT_TOKENS = [Theme.teslaRed, Theme.darkGreen, Theme.primary, "#8b5cf6"] as const;
+const ACCENT_TOKENS = [Theme.accentGold, Theme.darkGreen, Theme.primary, Theme.brandBluePressed] as const;
 
 function seedColor(id: string): string {
   let h = 0;
@@ -390,7 +390,7 @@ export function StoryReel({
               {...(Platform.OS !== "web" && { accessibilityRole: "button" as const })}
               accessibilityLabel="Add story"
             >
-              <Plus size={metrics.plusSize} color={Theme.textOnPrimary} strokeWidth={2.6} />
+              <Plus size={metrics.plusSize} color={Theme.textPrimaryDark} strokeWidth={2.6} />
             </View>
           }
         >
@@ -549,12 +549,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -2,
     bottom: -2,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.loadMainTabBg,
     borderWidth: 2,
     borderColor: Theme.screenBackground,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: Theme.primary,
+    shadowColor: Theme.loadMainTabBg,
     shadowOpacity: 0.35,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },

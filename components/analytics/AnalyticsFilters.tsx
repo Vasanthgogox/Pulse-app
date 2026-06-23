@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   pickerPillActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   pickerPillPressed: {
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   chipCountActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   chipCountText: {
     fontSize: 10,

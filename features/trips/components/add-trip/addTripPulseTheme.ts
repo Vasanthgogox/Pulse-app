@@ -2,11 +2,13 @@
  * Pulse BI / chat reference palette for Create Trip UI.
  * Layout and flow unchanged — visual tokens only.
  */
+import Theme from "@/constants/Theme";
+
 export const PULSE_TRIP = {
-  indigo: "#4f46e5",
-  indigoLight: "#eef2ff",
-  indigoMuted: "rgba(79, 70, 229, 0.12)",
-  indigoShadow: "rgba(79, 70, 229, 0.2)",
+  indigo: Theme.brandBlueInk,
+  indigoLight: Theme.brandBlueSoft,
+  indigoMuted: Theme.pulseIndigoWash,
+  indigoShadow: Theme.brandBlueShadow,
   screenBg: "#F8F9FB",
   cardBg: "#ffffff",
   border: "#e2e8f0",

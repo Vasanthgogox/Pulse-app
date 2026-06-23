@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,

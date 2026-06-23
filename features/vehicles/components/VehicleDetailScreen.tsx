@@ -570,7 +570,7 @@ export default function VehicleDetailScreen({
               runOperationalCashLedgerBackfill();
               load();
             }}
-            tintColor={Theme.teslaRed}
+            tintColor={Theme.loaderAccent}
           />
         }
       >
@@ -1121,7 +1121,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },

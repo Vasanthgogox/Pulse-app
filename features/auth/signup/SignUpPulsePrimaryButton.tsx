@@ -8,7 +8,17 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { PULSE_SIGNUP, PULSE_SIGNUP_RADIUS, type SignUpTheme } from './signUpPulseTheme';
+import {
+  PULSE_PILL_BUTTON_BORDER_WIDTH,
+  PULSE_PILL_BUTTON_RADIUS,
+  pulsePillButtonContainerFullWidth,
+  pulsePillButtonContainerLarge,
+  pulsePillButtonDisabled,
+  pulsePillButtonLabelLarge,
+  pulsePillButtonPressed,
+} from '@/constants/PulsePillButtonChrome';
+import Theme from '@/constants/Theme';
+import { PULSE_SIGNUP, type SignUpTheme } from './signUpPulseTheme';
 
 export interface SignUpPulsePrimaryButtonProps {
   label: string;
@@ -40,12 +50,21 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
       disabled={inactive}
       style={({ pressed }) => [
         styles.btn,
+        pulsePillButtonContainerLarge,
+        pulsePillButtonContainerFullWidth,
         inactive
-          ? { backgroundColor: theme.disabledBg }
+          ? { backgroundColor: theme.disabledBg, borderColor: theme.disabledText }
           : variant === 'ready'
-            ? { backgroundColor: theme.primaryLight }
-            : { backgroundColor: theme.primary },
-        pressed && !inactive && styles.btnPressed,
+            ? {
+                backgroundColor: theme.primaryLight,
+                borderColor: theme.primaryDark,
+              }
+            : {
+                backgroundColor: theme.primary,
+                borderColor: theme.primaryDark,
+              },
+        pressed && !inactive && pulsePillButtonPressed,
+        inactive && pulsePillButtonDisabled,
         style,
       ]}
       accessibilityRole="button"
@@ -53,9 +72,16 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
       accessibilityState={{ disabled: inactive, busy: loading }}
     >
       {loading ? (
-        <ActivityIndicator color="#fff" size="small" />
+        <ActivityIndicator color={Theme.buttonPrimaryText} size="small" />
       ) : (
-        <Text style={[styles.label, inactive && { color: theme.disabledText }]}>{label}</Text>
+        <Text
+          style={[
+            pulsePillButtonLabelLarge,
+            inactive && { color: theme.disabledText },
+          ]}
+        >
+          {label}
+        </Text>
       )}
     </Pressable>
   );
@@ -63,20 +89,10 @@ export const SignUpPulsePrimaryButton = memo(function SignUpPulsePrimaryButton({
 
 const styles = StyleSheet.create({
   btn: {
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: PULSE_SIGNUP_RADIUS.button,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: PULSE_PILL_BUTTON_RADIUS,
+    borderWidth: PULSE_PILL_BUTTON_BORDER_WIDTH,
     minHeight: 52,
-  },
-  btnPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#ffffff',
   },
 });

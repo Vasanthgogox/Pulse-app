@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 3,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   meta: {
     fontSize: 11,

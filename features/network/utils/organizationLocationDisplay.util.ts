@@ -6,7 +6,7 @@ export const LOCATION_TYPE_GRADIENTS: Record<
   OrganizationLocationType,
   { bg: string; accent: string; label: string }
 > = {
-  registered_office: { bg: '#EEF2FF', accent: '#4F46E5', label: 'Registered office' },
+  registered_office: { bg: '#EEF2FF', accent: '#4D3636', label: 'Registered office' },
   branch_office:    { bg: '#FFF8DD', accent: '#F6C000', label: 'Branch office' },
   primary_hub:      { bg: '#E8FFF3', accent: '#50CD89', label: 'Primary hub' },
   regional_office:  { bg: '#F8F5FF', accent: '#7239EA', label: 'Regional office' },

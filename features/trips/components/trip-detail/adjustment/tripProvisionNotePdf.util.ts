@@ -65,7 +65,7 @@ function effectDescription(ctx: ProvisionNotePdfContext): string {
 }
 
 function headBg(lane: "sale" | "cost"): string {
-  return lane === "sale" ? "#4f46e5" : "#0f766e";
+  return lane === "sale" ? "#4D3636" : "#0f766e";
 }
 
 type TicketParts = {
@@ -124,7 +124,7 @@ function buildTicketParts(ctx: ProvisionNotePdfContext): TicketParts {
 /** Table-based ticket — reliable in WKWebView → PDF. */
 function buildTicketTableHtml(p: TicketParts): string {
   const hb = headBg(p.headLane);
-  const laneColor = p.valLane === "sale" ? "#4f46e5" : "#0f766e";
+  const laneColor = p.valLane === "sale" ? "#4D3636" : "#0f766e";
   const amtColor = p.amountClass === "cn" ? "#be123c" : "#047857";
 
   return `

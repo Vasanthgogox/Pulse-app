@@ -6,7 +6,7 @@ import { Text, View } from "react-native";
 export function FinanceCashKanbanPanel({
   ledgerLoading,
   ledgerTransactions,
-  filteredLedgerForDisplay,
+  filteredLedgerForKanban,
   getVehicleNumberForTripId,
   tripDetailsMap,
   clientRows,
@@ -16,6 +16,7 @@ export function FinanceCashKanbanPanel({
   profileImages,
   linkedOrgDisplayMap,
   onTripSelect,
+  onKanbanPartyAddPress,
 }: FinanceTabBodyProps) {
   return (
     <View style={styles.tableBodyWrap}>
@@ -23,7 +24,7 @@ export function FinanceCashKanbanPanel({
         <Text style={styles.ledgerLoading}>Loading…</Text>
       ) : (
         <FinanceKanbanTab
-          transactions={filteredLedgerForDisplay}
+          transactions={filteredLedgerForKanban}
           getVehicleNumberForTripId={getVehicleNumberForTripId}
           tripDetailsMap={tripDetailsMap}
           clientRows={clientRows}
@@ -35,6 +36,8 @@ export function FinanceCashKanbanPanel({
             if (row.trip_id) onTripSelect(row.trip_id);
           }}
           profileImages={profileImages}
+          showPartyPromosInColumns
+          onKanbanPartyAddPress={onKanbanPartyAddPress}
         />
       )}
     </View>

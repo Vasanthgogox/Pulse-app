@@ -100,7 +100,7 @@ export const renderInvoiceToHtml = ({
           .logo {
             font-size: 24px;
             font-weight: bold;
-            color: #4F46E5; /* Theme.primary */
+            color: #4D3636; /* Theme.primary */
           }
           .logo-image {
             max-height: 34px;
@@ -194,7 +194,7 @@ export const renderInvoiceToHtml = ({
             font-weight: bold;
           }
           .trip-id {
-            color: #4F46E5; /* Theme.primary */
+            color: #4D3636; /* Theme.primary */
             font-weight: bold;
           }
           .trip-date {
@@ -246,13 +246,13 @@ export const renderInvoiceToHtml = ({
           .total-label {
             font-size: 18px;
             font-weight: bold;
-            color: #4F46E5; /* Theme.primary */
+            color: #4D3636; /* Theme.primary */
             text-transform: uppercase;
           }
           .total-value {
             font-size: 28px;
             font-weight: bold;
-            color: #4F46E5; /* Theme.primary */
+            color: #4D3636; /* Theme.primary */
           }
           .footer {
             text-align: center;

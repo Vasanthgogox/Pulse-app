@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   noHistoryRoot: {
     alignItems: 'center',

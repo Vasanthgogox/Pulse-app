@@ -1,5 +1,5 @@
 /**
- * Pulse-style loading chrome (indigo node + expanding rings + heartbeat icon).
+ * Pulse-style loading chrome (brand blue node + expanding rings + heartbeat icon).
  * React Native port of the Pulse web loader — use via `LoadingIndicator` or `CenteredLoadingView`.
  */
 import { LinearGradient } from "expo-linear-gradient";

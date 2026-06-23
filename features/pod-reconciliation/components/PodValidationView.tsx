@@ -1186,8 +1186,11 @@ const styles = StyleSheet.create({
   attachmentItem: { width: 140, backgroundColor: Theme.cardWhite, borderRadius: 12, padding: 12, alignItems: 'stretch', gap: 8, borderWidth: 1, borderColor: Theme.borderLight },
   attachmentName: { fontSize: 10, color: Theme.textPrimaryDark, fontWeight: '600', textAlign: 'center' },
   emptyText: { fontSize: 13, color: Theme.textMuted, fontStyle: 'italic' },
-  scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Theme.primary, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, width: '100%', marginTop: 8 },
-  scanBtnText: { color: '#fff', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+  scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, width: '100%', marginTop: 8 },
+  scanBtnText: { color: Theme.buttonPrimaryText, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
 
   // Summary & Footer
   summaryContainer: { marginBottom: 16, gap: 8 },
@@ -1204,9 +1207,9 @@ const styles = StyleSheet.create({
   actionButtonsRow: { flexDirection: 'row', gap: 12 },
   disputeBtn: { flex: 1, backgroundColor: Theme.screenBackground, borderWidth: 1, borderColor: '#ef4444', height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   disputeBtnText: { color: '#ef4444', fontSize: 14, fontWeight: '800', textTransform: 'uppercase' },
-  submitBtn: { backgroundColor: Theme.primary, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  submitBtn: { backgroundColor: Theme.buttonPrimary, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   submitBtnDisabled: { opacity: 0.5 },
-  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  submitBtnText: { color: Theme.buttonPrimaryText, fontSize: 16, fontWeight: '800' },
   
   // Tabs
   tabContainer: { flexDirection: 'row', gap: 12, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: Theme.borderLight, paddingHorizontal: 20 },
@@ -1219,13 +1222,13 @@ const styles = StyleSheet.create({
   chatSection: { flex: 1, minHeight: 300, paddingBottom: 24 },
   chatHistory: { flex: 1, marginBottom: 16 },
   chatBubble: { padding: 12, borderRadius: 12, maxWidth: '85%', marginBottom: 12 },
-  chatBubbleUser: { backgroundColor: Theme.primary, alignSelf: 'flex-end', borderBottomRightRadius: 2 },
+  chatBubbleUser: { backgroundColor: Theme.buttonPrimary, alignSelf: 'flex-end', borderBottomRightRadius: 2 },
   chatBubbleAssistant: { backgroundColor: Theme.cardWhite, alignSelf: 'flex-start', borderBottomLeftRadius: 2, borderWidth: 1, borderColor: Theme.borderLight },
-  chatText: { fontSize: 13, color: '#fff', fontWeight: '500' },
+  chatText: { fontSize: 13, color: Theme.buttonPrimaryText, fontWeight: '500' },
   chatTextAssistant: { fontSize: 13, color: Theme.textPrimaryDark, fontWeight: '500' },
   chatInputWrapper: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   chatInput: { flex: 1, backgroundColor: Theme.cardWhite, borderWidth: 1, borderColor: Theme.borderInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16 },
-  chatSendBtn: { backgroundColor: Theme.primary, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  chatSendBtn: { backgroundColor: Theme.buttonPrimary, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 
   mobileDocViewer: { marginTop: 24, marginBottom: 24 },
 
@@ -1247,7 +1250,7 @@ const styles = StyleSheet.create({
   btnDangerOutline: { paddingHorizontal: 24, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#fecaca', backgroundColor: Theme.screenBackground },
   btnDangerOutlineText: { fontSize: 10, fontWeight: '800', color: '#ef4444', letterSpacing: 1 },
   btnPrimaryFilled: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 32, paddingVertical: 8, borderRadius: 12, backgroundColor: Theme.primary },
-  btnPrimaryFilledText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 2 },
+  btnPrimaryFilledText: { fontSize: 10, fontWeight: '800', color: Theme.buttonPrimaryText, letterSpacing: 2 },
 
   tabletMainLayout: { flex: 1, flexDirection: 'row', overflow: 'hidden' },
   tabletLeftCol: { width: 450, backgroundColor: Theme.cardWhite, borderRightWidth: 1, borderRightColor: Theme.borderLight, zIndex: 10, elevation: 1 },

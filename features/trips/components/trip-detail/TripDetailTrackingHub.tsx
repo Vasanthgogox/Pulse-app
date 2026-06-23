@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     width: 2,
     borderTopRightRadius: 2,
     borderBottomRightRadius: 2,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
   },
   liveIconWrap: {
     width: 22,
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     width: ETA_BADGE,
     height: ETA_BADGE,
     borderRadius: 8,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 2,

@@ -150,7 +150,7 @@ function resolveStatusStyle(status: string): {
     return { label: "Completed", bg: Theme.positiveMuted, text: Theme.positive };
   }
   if (status === "in_progress" || status === "in_transit" || status === "picked_up") {
-    return { label: "In Progress", bg: "rgba(99,102,241,0.1)", text: "#4338ca" };
+    return { label: "In Progress", bg: "rgba(99,102,241,0.1)", text: "#4D3636" };
   }
   if (status === "arrived" || status === "at_destination" || status === "at_drop") {
     return { label: "Arrived", bg: "rgba(251,191,36,0.15)", text: Theme.warning };

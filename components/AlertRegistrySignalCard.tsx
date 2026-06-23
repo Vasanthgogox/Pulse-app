@@ -60,20 +60,26 @@ export type AlertRegistrySignalCardProps = {
   footer?: React.ReactNode;
   /** Contained card for horizontal grids (no feed divider). */
   variant?: "feed" | "tile";
+  /** Tighter padding and typography for hub tile grids. */
+  compact?: boolean;
 };
 
 function NotificationAvatar({
   avatar,
   isUnread,
   mode,
+  size = AVATAR_SIZE,
+  compact = false,
 }: {
   avatar: RegistryNotificationAvatar;
   isUnread?: boolean;
   mode: RegistryCardMode;
+  size?: number;
+  compact?: boolean;
 }) {
   const showUnread = mode === "active" && isUnread;
   return (
-    <View style={styles.avatarWrap}>
+    <View style={[styles.avatarWrap, { width: size, height: size }]}>
       <PartyAvatar
         name={avatar.name}
         entityType={avatar.entityType ?? "client"}
@@ -82,12 +88,13 @@ function NotificationAvatar({
         organizationImageUrl={avatar.organizationImageUrl}
         organizationAvatarSeed={avatar.organizationAvatarSeed}
         initialsColorSeed={avatar.initialsColorSeed}
-        size={AVATAR_SIZE}
+        size={size}
         shape="circle"
       />
       <View
         style={[
           styles.statusDot,
+          compact && styles.statusDotCompact,
           showUnread ? styles.statusDotUnread : styles.statusDotRead,
         ]}
       />
@@ -134,6 +141,7 @@ export function RegistryTagPill({ tag }: { tag: RegistryTag }) {
 }
 
 const AVATAR_SIZE = 36;
+const COMPACT_AVATAR_SIZE = 28;
 
 export function AlertRegistrySignalCard({
   avatar,
@@ -153,21 +161,33 @@ export function AlertRegistrySignalCard({
   onPress,
   footer,
   variant = "feed",
+  compact = false,
 }: AlertRegistrySignalCardProps) {
   const showDetailCard = Boolean(detailTitle || detailSubtitle || detail);
+  const avatarSize = compact && variant === "tile" ? COMPACT_AVATAR_SIZE : AVATAR_SIZE;
 
   const content = (
     <View
       style={[
         styles.row,
         variant === "tile" && styles.rowTile,
+        compact && variant === "tile" && styles.rowTileCompact,
         mode === "completed" && styles.rowCompleted,
       ]}
     >
-      <NotificationAvatar avatar={avatar} isUnread={isUnread} mode={mode} />
+      <NotificationAvatar
+        avatar={avatar}
+        isUnread={isUnread}
+        mode={mode}
+        size={avatarSize}
+        compact={compact && variant === "tile"}
+      />
 
-      <View style={styles.body}>
-        <Text style={styles.headline} numberOfLines={4}>
+      <View style={[styles.body, compact && variant === "tile" && styles.bodyCompact]}>
+        <Text
+          style={[styles.headline, compact && variant === "tile" && styles.headlineCompact]}
+          numberOfLines={compact ? 2 : 4}
+        >
           <Text style={styles.actorName}>{actorName}</Text>
           <Text style={styles.actionText}> {actionText}</Text>
           {highlightText ? (
@@ -178,20 +198,40 @@ export function AlertRegistrySignalCard({
           ) : null}
         </Text>
 
-        <Text style={styles.metaLine} numberOfLines={1}>
+        <Text
+          style={[styles.metaLine, compact && variant === "tile" && styles.metaLineCompact]}
+          numberOfLines={1}
+        >
           {timeLabel}
           {contextLabel ? <Text style={styles.metaContext}> · {contextLabel}</Text> : null}
         </Text>
 
         {showDetailCard ? (
-          <View style={styles.detailCard}>
+          <View
+            style={[
+              styles.detailCard,
+              compact && variant === "tile" && styles.detailCardCompact,
+            ]}
+          >
             {detailTitle ? (
-              <Text style={styles.detailTitle} numberOfLines={2}>
+              <Text
+                style={[
+                  styles.detailTitle,
+                  compact && variant === "tile" && styles.detailTitleCompact,
+                ]}
+                numberOfLines={2}
+              >
                 {detailTitle}
               </Text>
             ) : null}
             {detailSubtitle ? (
-              <Text style={styles.detailSubtitle} numberOfLines={3}>
+              <Text
+                style={[
+                  styles.detailSubtitle,
+                  compact && variant === "tile" && styles.detailSubtitleCompact,
+                ]}
+                numberOfLines={2}
+              >
                 {detailSubtitle}
               </Text>
             ) : null}
@@ -204,7 +244,12 @@ export function AlertRegistrySignalCard({
         ) : null}
 
         {tags?.length || statusPill || footer ? (
-          <View style={styles.metaBlock}>
+          <View
+            style={[
+              styles.metaBlock,
+              compact && variant === "tile" && styles.metaBlockCompact,
+            ]}
+          >
             <View style={styles.metaLeft}>
               {tags?.map((tag) => (
                 <RegistryTagPill key={tag.label} tag={tag} />
@@ -213,7 +258,16 @@ export function AlertRegistrySignalCard({
                 <RegistryStatusPill label={statusPill.label} tone={statusPill.tone} />
               ) : null}
             </View>
-            {footer ? <View style={styles.metaActions}>{footer}</View> : null}
+            {footer ? (
+              <View
+                style={[
+                  styles.metaActions,
+                  compact && variant === "tile" && styles.metaActionsCompact,
+                ]}
+              >
+                {footer}
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -260,6 +314,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  rowTileCompact: {
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
   avatarWrap: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
@@ -282,15 +341,28 @@ const styles = StyleSheet.create({
   statusDotRead: {
     backgroundColor: METRONIC.muted,
   },
+  statusDotCompact: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    borderWidth: 1.5,
+  },
   body: {
     flex: 1,
     minWidth: 0,
     gap: 4,
   },
+  bodyCompact: {
+    gap: 3,
+  },
   headline: {
     fontSize: 13,
     lineHeight: 19,
     color: METRONIC.primaryBtn,
+  },
+  headlineCompact: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   actorName: {
     fontWeight: "600",
@@ -310,6 +382,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: METRONIC.muted,
   },
+  metaLineCompact: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
   metaContext: {
     color: "#78829D",
     fontWeight: "500",
@@ -322,17 +398,32 @@ const styles = StyleSheet.create({
     backgroundColor: METRONIC.quoteBg,
     gap: 2,
   },
+  detailCardCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 1,
+  },
   detailTitle: {
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "600",
     color: METRONIC.primaryBtn,
   },
+  detailTitleCompact: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
   detailSubtitle: {
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "500",
     color: "#78829D",
+  },
+  detailSubtitleCompact: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+    color: METRONIC.link,
   },
   detailBody: {
     fontSize: 12,
@@ -359,6 +450,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
     alignSelf: "stretch",
   },
+  metaBlockCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 6,
+    marginTop: 2,
+  },
   metaLeft: {
     flexDirection: "row",
     alignItems: "center",
@@ -373,5 +470,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     flexShrink: 0,
     marginLeft: "auto",
+  },
+  metaActionsCompact: {
+    width: "100%",
+    marginLeft: 0,
+    justifyContent: "stretch",
   },
 });

@@ -1178,7 +1178,7 @@ const styles = StyleSheet.create({
     width: 3,
     borderTopRightRadius: 3,
     borderBottomRightRadius: 3,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
   },
   ledgerHeroBody: {
     paddingHorizontal: 10,
@@ -1337,7 +1337,7 @@ const styles = StyleSheet.create({
     width: 3,
     borderTopRightRadius: 3,
     borderBottomRightRadius: 3,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
   },
   driverPayIconWrap: {
     width: 28,
@@ -1753,7 +1753,10 @@ const styles = StyleSheet.create({
   },
   actionBtnPrimary: {
     borderColor: Theme.primary,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     ...Platform.select({
       ios: {
         shadowColor: Theme.pulseIndigo,
@@ -1780,7 +1783,7 @@ const styles = StyleSheet.create({
   actionBtnTextPrimary: {
     fontSize: 8,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   emptyCard: {
     borderRadius: 14,

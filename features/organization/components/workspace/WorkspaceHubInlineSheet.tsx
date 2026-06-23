@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   accentBar: {
     height: 3,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   header: {
     flexDirection: "row",

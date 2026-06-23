@@ -2080,7 +2080,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1.8,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   ledgerSection: {
     paddingTop: 16,
@@ -2375,7 +2375,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   cashPremiumWrap: {
     gap: 16,

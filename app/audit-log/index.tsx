@@ -113,7 +113,7 @@ export default function AuditLogScreen() {
 
       {loading && !refreshing ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#6366f1" />
+          <ActivityIndicator size="large" color="#4D3636" />
           <Text style={styles.loadingText}>Loading audit log…</Text>
         </View>
       ) : error ? (
@@ -132,7 +132,7 @@ export default function AuditLogScreen() {
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366f1" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4D3636" />}
           showsVerticalScrollIndicator={false}
         >
           {entries.map((entry, index) => (
@@ -141,7 +141,7 @@ export default function AuditLogScreen() {
                 <FontAwesome
                   name={(EVENT_ICONS[entry.event_type] ?? 'circle') as never}
                   size={14}
-                  color="#6366f1"
+                  color="#4D3636"
                 />
               </View>
               <View style={styles.entryBody}>

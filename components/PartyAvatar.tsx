@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
+import { Building2, Truck } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import {
   partyAvatarBackgroundColor,
@@ -9,6 +10,11 @@ import {
   resolvePartyPhotoUriAsync,
   type PartyEntityType,
 } from "@/lib/partyAvatarDisplay";
+import {
+  offlinePartyRoleIconSize,
+  offlinePartyRolePresentation,
+  shouldUseOfflinePartyRoleAvatar,
+} from "@/lib/partyOfflineRoleAvatar";
 
 export type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 export type PartyAvatarShape = "circle" | "rounded" | "square";
@@ -29,6 +35,8 @@ export type PartyAvatarProps = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   entityType?: PartyEntityType;
+  /** When `false`, client/supplier show a role icon on a tinted plate (offline party). */
+  isIntegrated?: boolean;
   size: number;
   /** `rounded` matches attribution / shipper picker tiles (not full circle). */
   shape?: PartyAvatarShape;
@@ -47,12 +55,42 @@ export function PartyAvatar({
   avatarUrl,
   avatarSeed,
   entityType = "client",
+  isIntegrated,
   size,
   shape = "circle",
   style,
   borderStyle,
 }: PartyAvatarProps) {
   const radius = partyAvatarRadius(size, shape);
+
+  if (shouldUseOfflinePartyRoleAvatar(isIntegrated, entityType)) {
+    const roleType = entityType as "client" | "supplier";
+    const { accent, iconColor, accessibilityLabel } = offlinePartyRolePresentation(roleType);
+    const Icon = roleType === "supplier" ? Truck : Building2;
+    return (
+      <View
+        accessibilityLabel={accessibilityLabel}
+        style={[
+          styles.offlineRoleWrap,
+          {
+            width: size,
+            height: size,
+            borderRadius: radius,
+            backgroundColor: accent.tint,
+            borderColor: accent.ring,
+          },
+          style,
+        ]}
+      >
+        <Icon
+          size={offlinePartyRoleIconSize(size)}
+          color={iconColor}
+          strokeWidth={2.2}
+        />
+      </View>
+    );
+  }
+
   const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const hasRawPhotoField = Boolean(
@@ -157,6 +195,12 @@ export function PartyAvatar({
 }
 
 const styles = StyleSheet.create({
+  offlineRoleWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    flexShrink: 0,
+  },
   initialsWrap: {
     alignItems: "center",
     justifyContent: "center",

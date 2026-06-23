@@ -30,9 +30,11 @@ import {
 } from "@/components/operational";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
+import type { LedgerTripSettlementPreview } from "@/lib/ledgerTripSettlementPreview.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { partyMobileWizardStyles as shell } from "@/components/party/partyMobileWizardStyles";
 import { LedgerReviewTicket } from "@/components/ledger/LedgerReviewTicket";
+import { LedgerTripSettlementNote } from "@/components/ledger/LedgerTripSettlementNote";
 import {
   isLedgerCashPaymentMode,
   LEDGER_PAYMENT_MODES,
@@ -125,6 +127,8 @@ export interface LedgerMobileWizardProps {
   /** Changes when parent re-opens the flow — resets step index. */
   flowSessionKey?: string;
   compact?: boolean;
+  /** Trip ledger lines for duplicate-avoidance preview on amount + review steps. */
+  tripLedgerPreview?: LedgerTripSettlementPreview | null;
 }
 
 function parseAmount(raw: string): number {
@@ -601,7 +605,13 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             />
           </View>
 
-          {dueTotalInr > 0 ? (
+          {props.tripLedgerPreview ? (
+            <LedgerTripSettlementNote
+              preview={props.tripLedgerPreview}
+              enteredInr={parseAmount(props.amountStr)}
+              compact
+            />
+          ) : dueTotalInr > 0 ? (
             <View style={styles.amountDueChip}>
               <Text style={styles.amountDueChipLabel}>{dueLabel}</Text>
               <Text style={[styles.amountDueChipValue, { color: accent }]}>
@@ -928,6 +938,14 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
 
   const renderReview = () => (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.reviewScroll}>
+      {props.tripLedgerPreview ? (
+        <View style={styles.reviewLedgerNoteWrap}>
+          <LedgerTripSettlementNote
+            preview={props.tripLedgerPreview}
+            enteredInr={parseAmount(props.amountStr)}
+          />
+        </View>
+      ) : null}
       <LedgerReviewTicket
         type={props.type}
         amountStr={props.amountStr}
@@ -1135,6 +1153,9 @@ const styles = StyleSheet.create({
   },
   reviewScroll: {
     paddingBottom: 8,
+  },
+  reviewLedgerNoteWrap: {
+    marginBottom: 10,
   },
   errorBarCompact: {
     marginHorizontal: 16,
@@ -1772,7 +1793,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonDarkText,
     letterSpacing: 0.3,
   },
 });

@@ -2,38 +2,38 @@
  * Treasury Financial Summary — Ledger tab. Table view (default) or Transaction view (GPay-style).
  * When transactions prop is provided, uses it (single read from parent); otherwise uses TanStack Query cache.
  */
-import { FeatureBanner } from "@/components/FeatureBanner";
 import { ALL_LEDGER_CATEGORY_VALUES } from "@/components/AddTransactionModal";
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { PartyAvatar } from "@/components/PartyAvatar";
-import { getTripOperationalDisplay } from "@/features/operations/display";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
-  type LedgerIdentityContext,
-  resolveLedgerRowPartyIdentity,
-  resolvedIdentityToEntityAvatarProps,
+    buildFinancialRowDataForLedgerRow,
+    formatLedgerEntryDate,
+    formatLedgerRoute,
+    formatLedgerTripDateForDisplay,
+    resolveLedgerPartyName,
+} from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
+import { getTripOperationalDisplay } from "@/features/operations/display";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import {
+    type LedgerIdentityContext,
+    resolveLedgerRowPartyIdentity,
+    resolvedIdentityToEntityAvatarProps,
 } from "@/lib/entityIdentity";
+import { useDisputeMapQuery, useDriverProfileImagesQuery } from "@/lib/queries";
+import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
-import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
+import { FinancePromoCard } from "./FinancePromoCard";
+import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
-import type { ClientRow } from "@/features/clients/services/clients.service";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
-import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
-import { useDisputeMapQuery, useDriverProfileImagesQuery } from "@/lib/queries";
-import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
-import {
-  buildFinancialRowDataForLedgerRow,
-  formatLedgerEntryDate,
-  formatLedgerRoute,
-  formatLedgerTripDateForDisplay,
-  resolveLedgerPartyName,
-} from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -215,20 +215,12 @@ export function LedgerTab({
   }
   if (rows.length === 0) {
     return (
-      <FeatureBanner
-        title={isViewOnly ? "No entries yet" : "Your ledger is empty"}
-        description={isViewOnly ? "Transactions for this party will appear here once recorded." : "Log your first transaction to start tracking income and expenses."}
-        illustration="💰"
-        accentColor="#7c3aed"
-        bullets={[
-          { label: "Income & expenses" },
-          { label: "Trip-linked entries" },
-          { label: "Party statements" },
-          { label: "GST-ready reports" },
-        ]}
-        cta={!isViewOnly && onAddTransactionPress ? { label: "Add first entry →", onPress: onAddTransactionPress } : undefined}
-        style={styles.emptyBanner}
-      />
+      <View style={styles.emptyState}>
+        <FinancePromoCard
+          variant={isViewOnly ? "ledgerViewOnly" : "ledger"}
+          onCtaPress={isViewOnly ? undefined : onAddTransactionPress}
+        />
+      </View>
     );
   }
 
@@ -604,34 +596,25 @@ const styles = StyleSheet.create({
     color: Theme.textMutedDemo,
     letterSpacing: 0.5,
   },
-  emptyBanner: {
-    margin: 16,
-    marginTop: 12,
-  },
   emptyState: {
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMutedDemo,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    textAlign: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    width: "100%",
   },
   emptyStateAddBtn: {
     marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 8,
   },
   emptyStateAddBtnText: {
     fontSize: 13,
     fontWeight: "600",
-    color: Theme.textOnPrimary ?? "#fff",
+    color: Theme.buttonPrimaryText ?? "#fff",
   },
   inlineReceiptWrap: {
     marginTop: 0,

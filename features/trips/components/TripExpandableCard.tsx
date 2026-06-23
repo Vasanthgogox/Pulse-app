@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   cardIdPill: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   stagePillText: {
     fontSize: 7,

@@ -39,7 +39,7 @@ import {
   View,
 } from "react-native";
 
-const PURPLE = "#4F46E5";
+const PURPLE = "#4D3636";
 const PURPLE_TINT = "rgba(79,70,229,0.08)";
 const PURPLE_BORDER = "rgba(79,70,229,0.22)";
 const DEFAULT_AVATAR_SEED = "driver-1";
@@ -733,14 +733,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     alignItems: "center",
     justifyContent: "center",
   },
   saveBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: Theme.textOnPrimary ?? "#ffffff",
+    color: Theme.buttonPrimaryText ?? "#ffffff",
     letterSpacing: 0.2,
   },
 });

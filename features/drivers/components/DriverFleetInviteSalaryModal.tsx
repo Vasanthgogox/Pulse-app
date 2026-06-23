@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#fff',
+    color: Theme.buttonPrimaryText,
     letterSpacing: -0.2,
   },
   btnDisabled: {

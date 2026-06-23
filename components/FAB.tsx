@@ -33,8 +33,8 @@ export function FAB({
   const IconComponent = LucideIconComponent ?? Plus;
   const shouldRenderLucideIcon = LucideIconComponent != null;
   const shouldShowPlus = shouldRenderLucideIcon && showPlusSuffix && IconComponent !== Plus;
-  const primaryIconColor = Theme.textOnPrimary;
-  const plusBadgeColor = "#0f172a";
+  const primaryIconColor = Theme.buttonPrimaryText;
+  const plusBadgeColor = Theme.buttonPrimaryText;
 
   return (
     <Animated.View
@@ -62,7 +62,7 @@ export function FAB({
               badgeSize={16}
               badgeIconSize={12}
               badgeBackgroundColor={plusBadgeColor}
-              badgeIconColor={Theme.textOnPrimary}
+              badgeIconColor={Theme.buttonPrimary}
               badgeOffsetX={-7}
               badgeOffsetY={-5}
             />
@@ -85,13 +85,13 @@ const styles = StyleSheet.create({
     width: Layout.fabSize,
     height: Layout.fabSize,
     borderRadius: Layout.fabBorderRadius,
-    backgroundColor: Theme.darkBackground,
-    borderWidth: 2.5,
-    borderColor: '#ffffff',
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: Layout.fabElevation,
-    shadowColor: Theme.darkBackground,
+    shadowColor: Theme.buttonPrimaryBorder,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.32,
     shadowRadius: 16,
@@ -107,6 +107,6 @@ const styles = StyleSheet.create({
     height: Layout.fabSize - 10,
     borderRadius: (Layout.fabSize - 10) / 2,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(77, 54, 54, 0.15)',
   },
 });

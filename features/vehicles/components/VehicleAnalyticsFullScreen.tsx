@@ -85,7 +85,7 @@ export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string })
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refresh}
-            tintColor={Theme.teslaRed}
+            tintColor={Theme.loaderAccent}
           />
         }
       >

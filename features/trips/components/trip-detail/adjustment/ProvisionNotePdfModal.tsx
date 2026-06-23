@@ -310,7 +310,10 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   toolBtnPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderColor: Theme.primary,
   },
   toolBtnPrimaryWide: {
@@ -322,6 +325,6 @@ const styles = StyleSheet.create({
     color: Theme.primary,
   },
   toolBtnTextPrimary: {
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
 });

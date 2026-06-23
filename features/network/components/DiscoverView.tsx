@@ -61,6 +61,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 
 interface DiscoverViewProps {
   orgId: string;
@@ -242,6 +243,9 @@ function OrgCard({
         locationLabel={businessLocation || t("networkDiscoverLocationNotSet")}
         ratingValue={ratingValue ?? org.rating ?? org.average_rating ?? null}
         mutualCount={mutuals}
+        viewerOrgId={viewerOrgId}
+        onPressMutuals={onPressMutuals}
+        onPressMutual={onPressMutual}
         pendingRole={pendingRole}
         connecting={loading}
         onOpenProfile={onOpenProfile}
@@ -296,7 +300,8 @@ export function DiscoverView({
   suppressGrowSectionHeader = false,
 }: DiscoverViewProps) {
   const { t } = useLanguage();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const windowWidth = useWebLayoutWidth();
+  const { height: windowHeight } = useWindowDimensions();
   const isNativeApp = Platform.OS !== "web";
   const [internalSearch, setInternalSearch] = useState("");
   const [connecting, setConnecting] = useState<string | null>(null);

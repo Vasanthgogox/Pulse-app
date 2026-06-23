@@ -35,6 +35,11 @@ export const alertRegistryActionStyles = StyleSheet.create({
     gap: 8,
     flexShrink: 0,
   },
+  actionsCompact: {
+    width: "100%",
+    justifyContent: "space-between",
+    gap: 6,
+  },
   ghostBtn: {
     height: BTN.height,
     minWidth: BTN.minWidth,
@@ -65,7 +70,30 @@ export const alertRegistryActionStyles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 10,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
+  },
+  ghostBtnCompact: {
+    minHeight: 30,
+    height: 30,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  primaryBtnCompact: {
+    minHeight: 30,
+    height: 30,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  ghostBtnTextCompact: {
+    fontSize: 10,
+  },
+  primaryBtnTextCompact: {
+    fontSize: 10,
+  },
+  btnCompactFlex: {
+    flex: 1,
   },
   viewBtn: {
     height: BTN.height,
@@ -142,7 +170,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   footerPrimaryBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
   footerTertiaryBtn: {
     minHeight: FOOTER_BTN.minHeight,
@@ -177,8 +205,23 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
 });
 
-export function RegistryCardActions({ children }: { children: React.ReactNode }) {
-  return <View style={alertRegistryActionStyles.actions}>{children}</View>;
+export function RegistryCardActions({
+  children,
+  compact = false,
+}: {
+  children: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <View
+      style={[
+        alertRegistryActionStyles.actions,
+        compact && alertRegistryActionStyles.actionsCompact,
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
 export function RegistryGhostButton({
@@ -186,11 +229,13 @@ export function RegistryGhostButton({
   onPress,
   disabled,
   style,
+  compact = false,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   style?: ViewStyle;
+  compact?: boolean;
 }) {
   return (
     <Pressable
@@ -198,12 +243,21 @@ export function RegistryGhostButton({
       disabled={disabled}
       style={[
         alertRegistryActionStyles.ghostBtn,
+        compact && alertRegistryActionStyles.ghostBtnCompact,
         disabled && alertRegistryActionStyles.btnDisabled,
+        compact && alertRegistryActionStyles.btnCompactFlex,
         style,
       ]}
       accessibilityRole="button"
     >
-      <Text style={alertRegistryActionStyles.ghostBtnText}>{label}</Text>
+      <Text
+        style={[
+          alertRegistryActionStyles.ghostBtnText,
+          compact && alertRegistryActionStyles.ghostBtnTextCompact,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -212,10 +266,12 @@ export function RegistryPrimaryButton({
   label,
   onPress,
   disabled,
+  compact = false,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
     <Pressable
@@ -223,11 +279,20 @@ export function RegistryPrimaryButton({
       disabled={disabled}
       style={[
         alertRegistryActionStyles.primaryBtn,
+        compact && alertRegistryActionStyles.primaryBtnCompact,
         disabled && alertRegistryActionStyles.btnDisabled,
+        compact && alertRegistryActionStyles.btnCompactFlex,
       ]}
       accessibilityRole="button"
     >
-      <Text style={alertRegistryActionStyles.primaryBtnText}>{label}</Text>
+      <Text
+        style={[
+          alertRegistryActionStyles.primaryBtnText,
+          compact && alertRegistryActionStyles.primaryBtnTextCompact,
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }

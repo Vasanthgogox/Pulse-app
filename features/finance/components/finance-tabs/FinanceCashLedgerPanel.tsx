@@ -24,10 +24,18 @@ export function FinanceCashLedgerPanel({
   linkedOrgDisplayMap,
   topContent,
   embedInParentScroll = false,
+  isAnyFilterActive = false,
 }: FinanceTabBodyProps) {
   const header =
     topContent ??
     (orgId != null ? <FinanceAIInsights organizationId={orgId} /> : null);
+
+  const ledgerEmpty =
+    ledgerTransactions !== null && ledgerTransactions.length === 0;
+  const filteredEmpty =
+    ledgerTransactions !== null &&
+    ledgerTransactions.length > 0 &&
+    filteredLedgerForDisplay.length === 0;
 
   return (
     <View
@@ -38,6 +46,25 @@ export function FinanceCashLedgerPanel({
       {header}
       {ledgerLoading && ledgerTransactions === null ? (
         <Text style={styles.ledgerLoading}>Loading…</Text>
+      ) : ledgerEmpty ? (
+        <LedgerTab
+          organizationId={orgId}
+          refreshKey={ledgerRefreshKey}
+          transactions={[]}
+          viewMode="transaction"
+          showFiscalSubTabs={false}
+          embedInParentScroll={embedInParentScroll}
+          onAddTransactionPress={onAddTransactionPress}
+          clientRows={clientRows}
+          supplierRows={supplierRows}
+          driverRows={driverRows}
+          tripPartyMap={tripPartyMap}
+          linkedOrgDisplayMap={linkedOrgDisplayMap}
+        />
+      ) : filteredEmpty ? (
+        <Text style={styles.ledgerLoading}>
+          No entries match the current filters.
+        </Text>
       ) : (
         <LedgerTab
           organizationId={orgId}

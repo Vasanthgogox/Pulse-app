@@ -24,6 +24,7 @@ export function FinanceGarageTab(props: FinanceTabBodyProps) {
     bottomInset,
     financeSubTab,
     embedInParentScroll,
+    onAddPartyPress,
   } = props;
 
   return (
@@ -51,6 +52,7 @@ export function FinanceGarageTab(props: FinanceTabBodyProps) {
       bottomInset={bottomInset}
       hideSummaryRow
       embedInParentScroll={embedInParentScroll}
+      onAddPartyPress={onAddPartyPress}
     />
   );
 }

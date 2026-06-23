@@ -20,7 +20,7 @@ import {
   LEGACY_AVATAR_BUCKET,
   resolveAvatarPublicUrl,
 } from "@/lib/avatarUpload";
-import { LEDGER_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
+import { LEDGER_PAGE_SIZE, toRange, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { VALIDATION, dateISO } from "@/lib/validation";
@@ -801,20 +801,18 @@ export async function getTransactionsByOrganization(
   if (opts != null) {
     const limit = opts.limit ?? LEDGER_PAGE_SIZE;
     const offset = opts.offset ?? 0;
-    let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).range(
-      offset,
-      offset + limit,
-    );
+    const { from, to } = toRange(offset, limit);
+    let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).range(from, to);
     if (error && isMissingTripsDisplayTripIdError(error)) {
       ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY).range(
-        offset,
-        offset + limit,
+        from,
+        to,
       ));
     }
     if (error) return { error: new Error(error.message), transactions: [] };
     const rows = (data ?? []) as unknown as Row[];
-    const transactions: LedgerRow[] = rows.slice(0, limit).map(toLedgerRow);
-    return { error: null, transactions, hasMore: rows.length > limit };
+    const transactions: LedgerRow[] = rows.map(toLedgerRow);
+    return { error: null, transactions, hasMore: transactions.length === limit };
   }
 
   let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).limit(500);

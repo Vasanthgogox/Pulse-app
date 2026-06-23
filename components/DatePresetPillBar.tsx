@@ -112,7 +112,9 @@ export function DatePresetPillBar({
               size={12}
               color={
                 customActive
-                  ? Theme.textOnPrimary
+                  ? onLight
+                    ? Theme.textOnPrimary
+                    : Theme.darkBackground
                   : onLight
                     ? Theme.textRouteCard
                     : Theme.textOnDarkMuted

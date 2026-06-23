@@ -17,10 +17,7 @@ export function resolveTripLedgerTripType(
 ): TripLedgerTripType {
   const raw = (trip?.trip_payout_mode ?? "").trim().toLowerCase();
   if (raw === "market" || raw === "asset") return raw;
-  const hasAssignedFleet =
-    (trip?.driver_id ?? "").trim().length > 0 ||
-    (trip?.vehicle_id ?? "").trim().length > 0;
-  if (hasAssignedFleet) return "asset";
   const sid = (trip?.supplier_id ?? "").trim();
-  return sid ? "market" : "asset";
+  if (sid) return "market";
+  return "asset";
 }

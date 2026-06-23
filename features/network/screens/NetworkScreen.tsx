@@ -12,8 +12,10 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
 
-/** Network growth card — darker indigo than `Theme.primary` for kicker + trend pill. */
-const NETWORK_GROWTH_PURPLE = "#3730A3";
+/** Network growth card — brand ink for kicker + trend pill. */
+const NETWORK_GROWTH_PURPLE = Theme.brandBlueInk;
+const NETWORK_CONNECTIONS_WATERMARK = require("@/assets/illustrations/network-connections-watermark.png");
+const NETWORK_CONNECTIONS_WATERMARK_ASPECT = 456 / 334;
 import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext.shared";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
@@ -104,10 +106,10 @@ import {
   TextInput,
   TouchableOpacity,
   type TextStyle,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
+import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { useQueryClient } from "@tanstack/react-query";
@@ -137,7 +139,7 @@ function NetworkStoryStrip({
   if (feedLoading && storyPosts.length === 0) {
     return (
       <View style={styles.storyLoading}>
-        <LoadingIndicator color={Theme.teslaRed} />
+        <LoadingIndicator color={Theme.loaderAccent} />
         <Text style={styles.storyLoadingLabel}>Syncing stories…</Text>
       </View>
     );
@@ -222,7 +224,7 @@ function useAnimatedCount(target: number, durationMs = 720): number {
 function NetworkScreenInner() {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
-  const { width } = useWindowDimensions();
+  const width = useWebLayoutWidth();
   const searchParams = useLocalSearchParams<{ view?: string; hub?: string; hubTab?: string; tab?: string }>();
   const segments = useSegments();
   const isWideNetwork = Platform.OS === "web" && width >= 1180;
@@ -837,7 +839,7 @@ function NetworkScreenInner() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={onRefresh}
-          tintColor={Theme.teslaRed}
+          tintColor={Theme.loaderAccent}
         />
       }
     >
@@ -957,10 +959,34 @@ function NetworkScreenInner() {
               isWideNetwork && styles.networkMergedPanePrimary,
             ]}
           >
-            <View style={[styles.sectionBody, styles.sectionBodyConnections]}>
+            <View
+              style={[
+                styles.connectionsHubCardWrap,
+                !isWideNetwork && styles.connectionsHubCardWrapInset,
+              ]}
+            >
+              <View style={styles.connectionsHubCard}>
+                <View style={styles.connectionsHubCardOrb} />
+                <Image
+                  source={NETWORK_CONNECTIONS_WATERMARK}
+                  style={[
+                    styles.connectionsHubCardWatermark,
+                    isMobileLayout && styles.connectionsHubCardWatermarkCompact,
+                  ]}
+                  resizeMode="contain"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                />
+                <View
+                  style={[
+                    styles.connectionsHubCardContent,
+                    isMobileLayout && styles.connectionsHubCardContentCompact,
+                  ]}
+                >
               <View
                 style={[
                   styles.sectionHeadingRowSpread,
+                  styles.connectionsHubHeadingRow,
                   isMobileLayout && styles.sectionHeadingRowSpreadMobile,
                 ]}
               >
@@ -970,9 +996,9 @@ function NetworkScreenInner() {
                     isMobileLayout && styles.sectionHeadingRowCompactMobile,
                   ]}
                 >
-                  <Activity size={11} color={Theme.textPrimaryDark} strokeWidth={2.2} />
+                  <Activity size={11} color={NETWORK_GROWTH_PURPLE} strokeWidth={2.2} />
                   <View style={styles.sectionTitleBlock}>
-                    <Text style={styles.sectionKicker}>Operations pulse</Text>
+                    <Text style={styles.connectionsHubKicker}>Operations pulse</Text>
                     <Text style={styles.sectionHeading}>Your connections</Text>
                   </View>
                 </View>
@@ -1063,6 +1089,8 @@ function NetworkScreenInner() {
                 onPressMutuals={handlePressMutuals}
                 onPressMutual={handleOpenMutualProfile}
               />
+                </View>
+              </View>
             </View>
           </View>
 
@@ -1555,6 +1583,9 @@ const styles = StyleSheet.create({
   },
   orgGateBtn: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 12,
@@ -1583,7 +1614,7 @@ const styles = StyleSheet.create({
   topTickerText: {
     fontSize: 8,
     fontWeight: "900",
-    color: Theme.textOnPrimary,
+    color: Theme.cardWhite,
     letterSpacing: 0.8,
   },
   commandStatsWrap: {
@@ -1646,6 +1677,72 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.screenBackground,
     overflow: "hidden",
+  },
+  connectionsHubCardWrap: {
+    width: "100%",
+    minWidth: 0,
+  },
+  connectionsHubCardWrapInset: {
+    marginHorizontal: Layout.screenPaddingHorizontal,
+  },
+  connectionsHubCard: {
+    width: "100%",
+    minWidth: 0,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.screenBackground,
+    overflow: "hidden",
+  },
+  connectionsHubCardOrb: {
+    position: "absolute",
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: Theme.brandBlueWashSubtle,
+    right: -72,
+    top: -88,
+    zIndex: 0,
+  },
+  connectionsHubCardWatermark: {
+    position: "absolute",
+    width: 220,
+    height: 220 / NETWORK_CONNECTIONS_WATERMARK_ASPECT,
+    right: -28,
+    top: -18,
+    opacity: 0.2,
+    zIndex: 1,
+    ...(Platform.OS === "web" ? { mixBlendMode: "multiply" as const } : null),
+  },
+  connectionsHubCardWatermarkCompact: {
+    width: 168,
+    height: 168 / NETWORK_CONNECTIONS_WATERMARK_ASPECT,
+    right: -22,
+    top: -14,
+    opacity: 0.18,
+  },
+  connectionsHubCardContent: {
+    width: "100%",
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 2,
+    position: "relative",
+    zIndex: 2,
+  },
+  connectionsHubCardContentCompact: {
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  connectionsHubHeadingRow: {
+    paddingTop: 0,
+    paddingBottom: 4,
+  },
+  connectionsHubKicker: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    color: NETWORK_GROWTH_PURPLE,
+    textTransform: "uppercase",
   },
   commandMainBgOrb: {
     position: "absolute",
@@ -1934,7 +2031,7 @@ const styles = StyleSheet.create({
   profileCoverGrain: {
     ...StyleSheet.absoluteFillObject,
     opacity: 0.18,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   profileBackBtn: {
     marginTop: 18,
@@ -1953,7 +2050,7 @@ const styles = StyleSheet.create({
   profileBackBtnText: {
     fontSize: 10,
     fontWeight: "900",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -2247,7 +2344,10 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     minHeight: 32,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -2255,7 +2355,7 @@ const styles = StyleSheet.create({
   },
   profilePrimaryBtnText: {
     ...FinanceTxnTypography.buttonLabel,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   profileSecondaryBtn: {
     width: "100%",
@@ -2283,7 +2383,7 @@ const styles = StyleSheet.create({
   },
   profileSecondaryBtnText: {
     ...FinanceTxnTypography.buttonLabel,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     zIndex: 1,
   },
   /* "Request sent" CTA row in the profile modal: a CLIENT/SUPPLIER
@@ -2505,7 +2605,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderTopLeftRadius: 6,
     borderTopRightRadius: 6,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     opacity: 0.36,
   },
   profileRecentCard: {
@@ -2613,12 +2713,12 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 5,
   },
-  ribbonBadgeText: { fontSize: 9, fontWeight: "900", color: Theme.textOnPrimary },
+  ribbonBadgeText: { fontSize: 9, fontWeight: "900", color: Theme.brandBlueInk },
   ribbonChipMuted: {
     flexDirection: "row",
     alignItems: "center",
@@ -2972,7 +3072,7 @@ const styles = StyleSheet.create({
     borderRadius: 66,
     top: -48,
     right: -28,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
     opacity: 0.34,
   },
   loadsPromoOrbSecondary: {
@@ -3220,13 +3320,13 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
   },
   storyInviteBadge: {
     minWidth: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: Theme.teslaRed,
+    backgroundColor: Theme.accentGold,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 3,
@@ -3234,7 +3334,7 @@ const styles = StyleSheet.create({
   storyInviteBadgeText: {
     fontSize: 8,
     fontWeight: "900",
-    color: Theme.textOnPrimary,
+    color: Theme.brandBlueInk,
     letterSpacing: 0.1,
   },
   storyTopSwitchRow: {
@@ -3373,7 +3473,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3,
     borderBottomColor: "transparent",
   },
-  invSubBtnOn: { borderBottomColor: Theme.teslaRed },
+  invSubBtnOn: { borderBottomColor: Theme.accentGold },
   invSubText: {
     fontSize: 11,
     fontWeight: "800",
@@ -3441,7 +3541,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBadge: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 7,

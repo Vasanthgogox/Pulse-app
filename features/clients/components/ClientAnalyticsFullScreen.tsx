@@ -87,7 +87,7 @@ export function ClientAnalyticsFullScreen({ clientId }: { clientId: string }) {
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Theme.teslaRed} />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Theme.loaderAccent} />
         }
       >
         <Suspense fallback={<LazySuspenseNullFallback />}>

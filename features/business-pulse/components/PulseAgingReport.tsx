@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.borderLight,
     overflow: "hidden",
   },
-  bucketBarFill: { height: "100%", backgroundColor: Theme.primary, borderRadius: 999 },
+  bucketBarFill: { height: "100%", backgroundColor: Theme.buttonPrimary, borderRadius: 999 },
   bucketAmount: { fontSize: 12, fontWeight: "700", color: Theme.textPrimaryDark },
   bucketMeta: { fontSize: 11, color: Theme.textMuted },
   cardList: { gap: 6, paddingHorizontal: 14, paddingVertical: 10 },

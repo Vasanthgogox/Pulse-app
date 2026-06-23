@@ -1076,7 +1076,7 @@ const styles = StyleSheet.create({
   otpBtnText: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
     textTransform: "uppercase",
   },
   handshakeSegmentSection: {
@@ -1126,7 +1126,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   handshakeSegBtnTextActive: {
-    color: "#ffffff",
+    color: Theme.buttonDarkText,
   },
   handshakeAssignLaterOuter: {
     flexDirection: "row",
@@ -1325,12 +1325,15 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   assignEmptyActionBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },

@@ -65,7 +65,7 @@ const TONE_BG: Record<ComplianceDashboardCard["tone"], string> = {
 const TONE_FG: Record<ComplianceDashboardCard["tone"], string> = {
   critical: Theme.destructive ?? "#DC2626",
   warning: Theme.warning ?? "#B45309",
-  notice: Theme.primary ?? "#4F46E5",
+  notice: Theme.primary ?? "#4D3636",
   ok: Theme.positive ?? "#15803D",
   neutral: Theme.textPrimaryDark,
 };

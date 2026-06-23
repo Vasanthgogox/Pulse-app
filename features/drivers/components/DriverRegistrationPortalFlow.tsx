@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.buttonLabel,
     fontSize: 11,
     fontWeight: '700',
-    color: '#fff',
+    color: Theme.buttonDarkText,
     letterSpacing: 0.75,
   },
   ghostBtnText: {
@@ -854,6 +854,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 14,
     borderRadius: 14,
   },
@@ -861,7 +864,7 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.buttonLabel,
     fontSize: 11,
     fontWeight: '700',
-    color: '#fff',
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.75,
   },
   confirmBtnFlexible: {

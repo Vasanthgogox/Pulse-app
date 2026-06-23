@@ -1,11 +1,13 @@
 /**
  * Chat feature tokens — Metronic demo2 density (compact, professional).
  */
+import Theme from "@/constants/Theme";
+
 /** Outgoing message bubble + primary thread accent */
-export const CHAT_ACCENT = "#5b5ef4";
-export const CHAT_ACCENT_SOFT = "#eef2ff";
-/** Light borders / dividers (indigo tint aligned to CHAT_ACCENT) */
-export const CHAT_ACCENT_BORDER = "#c7d2fe";
+export const CHAT_ACCENT = Theme.brandBlueInk;
+export const CHAT_ACCENT_SOFT = Theme.brandBlueSoft;
+/** Light borders / dividers */
+export const CHAT_ACCENT_BORDER = "rgba(77, 54, 54, 0.15)";
 /** Unselected icons on light pills */
 export const CHAT_ICON_MUTED = "#475569";
 /** Metronic text hierarchy */

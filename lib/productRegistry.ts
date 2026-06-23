@@ -115,7 +115,7 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
     tagline: 'The foundation of your logistics business',
     description: 'Trip management, driver coordination, client and supplier records, real-time GPS, and trip-level finance. The operational backbone every logistics team runs on.',
     icon: 'Zap',
-    color: '#4f46e5',
+    color: '#4D3636',
     status: 'active',
     pricing: { model: 'free' },
     dependencies: [],
@@ -516,7 +516,7 @@ export function canActivate(id: ProductId, activeProductIds: Set<ProductId>): bo
 
 export const BADGE_COLORS: Record<BadgeVariant, { bg: string; text: string; border: string }> = {
   green:  { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
-  indigo: { bg: '#eef2ff', text: '#4338ca', border: '#a5b4fc' },
+  indigo: { bg: '#E5F4FB', text: '#4D3636', border: 'rgba(77, 54, 54, 0.22)' },
   amber:  { bg: '#fef3c7', text: '#b45309', border: '#fcd34d' },
   rose:   { bg: '#fff1f2', text: '#be123c', border: '#fda4af' },
   gray:   { bg: '#f3f4f6', text: '#6b7280', border: '#d1d5db' },

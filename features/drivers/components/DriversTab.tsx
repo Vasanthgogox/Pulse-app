@@ -2,8 +2,8 @@
  * Treasury Financial Summary — Drivers tab. O(n): due = trips (commission), paid = ledger only (no trip.amount_paid).
  * Layout aligned with Customers tab: wrap, header, summary row, table card.
  */
-import { FeatureBanner } from '@/components/FeatureBanner';
-import type { ReactNode } from 'react';
+import { FinancePromoCard } from "@/features/finance/components/FinancePromoCard";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   NativeScrollEvent,
@@ -72,6 +72,7 @@ export interface DriversTabProps {
   viewTab?: DriversViewTab;
   onViewTabChange?: (v: DriversViewTab) => void;
   embedInParentScroll?: boolean;
+  onAddPartyPress?: () => void;
 }
 
 export function DriversTab({
@@ -95,6 +96,7 @@ export function DriversTab({
   viewTab = "list" as DriversViewTab,
   onViewTabChange,
   embedInParentScroll = false,
+  onAddPartyPress,
 }: DriversTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
@@ -234,20 +236,28 @@ export function DriversTab({
   }
   if (filteredRows.length === 0 && viewTab !== "analytics") {
     return (
-      <FeatureBanner
-        title="No drivers yet"
-        description="Add drivers from Resources, then track their earnings, advances, and trip activity here."
-        illustration="🧑‍✈️"
-        accentColor="#0891b2"
-        bullets={[
-          { label: "Trip-based earnings" },
-          { label: "Advance tracking" },
-          { label: "Settlement view" },
-          { label: "Performance scores" },
+      <ScrollView
+        contentContainerStyle={[
+          styles.emptyState,
+          { paddingBottom: bottomInset + insets.bottom, flexGrow: 1 },
         ]}
-        cta={{ label: "Go to Resources →", onPress: () => router.push("/(tabs)/resources") }}
-        style={styles.emptyBanner}
-      />
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={Theme.loaderAccent}
+            />
+          ) : undefined
+        }
+      >
+        {topContent}
+        <FinancePromoCard
+          variant="drivers"
+          onCtaPress={onAddPartyPress}
+          style={styles.emptyBanner}
+        />
+      </ScrollView>
     );
   }
 
@@ -398,7 +408,7 @@ export function DriversTab({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Theme.teslaRed}
+              tintColor={Theme.loaderAccent}
             />
           ) : undefined
         }
@@ -577,7 +587,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'right',
   },
-  emptyBanner: { margin: 16, marginTop: 12 },
-  emptyState: { paddingVertical: 24, alignItems: 'center' },
+  emptyBanner: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  emptyState: {
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: "stretch",
+    flexGrow: 1,
+  },
   emptyText: { fontSize: 10, fontWeight: '700', color: Theme.textMutedDemo, textTransform: 'uppercase' },
 });

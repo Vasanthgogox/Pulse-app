@@ -845,6 +845,6 @@ const styles = StyleSheet.create({
   acceptBtnText: {
     fontSize: 12,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
 });

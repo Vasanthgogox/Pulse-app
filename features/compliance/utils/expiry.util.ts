@@ -139,7 +139,7 @@ export function getExpiryToneColors(level: ExpiryAlertLevel): {
       };
     case "notice":
       return {
-        fg: Theme.primary ?? "#4F46E5",
+        fg: Theme.primary ?? "#4D3636",
         bg: "rgba(79,70,229,0.10)",
         border: "rgba(79,70,229,0.30)",
       };

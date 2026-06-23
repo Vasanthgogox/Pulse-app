@@ -399,7 +399,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   confirmBtnPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   confirmBtnSecondary: {
     backgroundColor: Theme.surface,

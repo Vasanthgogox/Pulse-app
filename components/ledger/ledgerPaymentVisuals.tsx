@@ -102,9 +102,9 @@ export const LEDGER_PAYMENT_MODES: PaymentModeVisual[] = [
     id: "FASTAG",
     label: "FASTag",
     shortLabel: "FASTag",
-    color: "#4f46e5",
+    color: "#4D3636",
     tint: "#e0e7ff",
-    gradient: ["#a5b4fc", "#4f46e5", "#312e81"],
+    gradient: ["#a5b4fc", "#4D3636", "#312e81"],
     Icon: Ticket,
   },
   {

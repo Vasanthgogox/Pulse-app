@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   actionPrimary: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   actionPrimaryText: {

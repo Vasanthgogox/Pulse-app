@@ -5,14 +5,18 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { ConnectionInviteRole } from "@/features/network/components/ConnectionRoleModal";
+import { MutualConnectionsFacepile } from "@/features/network/components/MutualConnectionsFacepile";
 import {
   connectionCardStyles as styles,
   growConnectionCardStyles as growStyles,
 } from "@/features/network/components/desktop/networkDesktopConnectionCard.styles";
 import { NetworkDesktopSalesStars } from "@/features/network/components/desktop/NetworkDesktopSalesStars";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
+import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { BadgeCheck, X } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
+
+const GROW_CARD_MUTUAL_FACE_SIZE = 22;
 
 function ratingFilledCount(rating: number | null | undefined): number {
   if (rating == null || !Number.isFinite(rating)) return 0;
@@ -50,10 +54,16 @@ function roleTone(pendingRole: ConnectionInviteRole | null | undefined) {
 }
 
 export type NetworkDesktopGrowConnectionCardProps = {
-  org: Pick<DiscoverOrg, "id" | "name" | "avatar_seed" | "connection_status">;
+  org: Pick<
+    DiscoverOrg,
+    "id" | "name" | "avatar_seed" | "avatar_url" | "connection_status"
+  >;
   locationLabel: string;
   ratingValue?: number | null;
   mutualCount?: number;
+  viewerOrgId?: string | null;
+  onPressMutuals?: () => void;
+  onPressMutual?: (org: MutualConnectionRow) => void;
   pendingRole?: ConnectionInviteRole | null;
   connecting?: boolean;
   onOpenProfile?: () => void;
@@ -67,6 +77,9 @@ export function NetworkDesktopGrowConnectionCard({
   locationLabel,
   ratingValue = null,
   mutualCount = 0,
+  viewerOrgId = null,
+  onPressMutuals,
+  onPressMutual,
   pendingRole = null,
   connecting = false,
   onOpenProfile,
@@ -81,11 +94,9 @@ export function NetworkDesktopGrowConnectionCard({
   const filledStars = ratingFilledCount(ratingValue);
   const ratingLabel = formatRating(ratingValue);
 
-  const showStatusChip = !isConnected && !isPending;
-  const statusTag =
-    mutualCount > 0
-      ? { label: `${mutualCount} mutual`, on: false, pending: false }
-      : { label: "Discover", on: false, pending: false };
+  const showStatusChip = !isConnected && !isPending && mutualCount <= 0;
+  const showMutualFacepile =
+    mutualCount > 0 && Boolean(viewerOrgId) && !isConnected && !isPending;
 
   return (
     <Pressable
@@ -149,8 +160,10 @@ export function NetworkDesktopGrowConnectionCard({
       <View style={[styles.avatarWrap, growStyles.avatarWrap]}>
         <PartyAvatar
           name={org.name}
-          entityType="client"
+          initialsColorSeed={org.id}
+          avatarUrl={org.avatar_url}
           avatarSeed={org.avatar_seed}
+          entityType="client"
           size={52}
           shape="circle"
         />
@@ -174,10 +187,22 @@ export function NetworkDesktopGrowConnectionCard({
         style={[
           styles.footerRow,
           growStyles.footerRow,
-          !showStatusChip && growStyles.footerActionOnly,
+          !showStatusChip && !showMutualFacepile && growStyles.footerActionOnly,
         ]}
       >
-        {showStatusChip ? (
+        {showMutualFacepile ? (
+          <View style={growStyles.mutualFacepileSlot}>
+            <MutualConnectionsFacepile
+              viewerOrgId={viewerOrgId}
+              targetOrgId={org.id}
+              mutualCount={mutualCount}
+              faceSize={GROW_CARD_MUTUAL_FACE_SIZE}
+              compact
+              onPressMutual={onPressMutual}
+              onPressViewAll={onPressMutuals}
+            />
+          </View>
+        ) : showStatusChip ? (
           <View style={[styles.appTag, growStyles.appTag, styles.appTagOff]}>
             <View style={[styles.appTagDot, styles.appTagDotOff]} />
             <Text
@@ -187,10 +212,12 @@ export function NetworkDesktopGrowConnectionCard({
                 styles.appTagTextOff,
               ]}
             >
-              {statusTag.label}
+              Discover
             </Text>
           </View>
-        ) : null}
+        ) : (
+          <View style={growStyles.mutualFacepileSlot} />
+        )}
 
         {isConnected ? (
           <View

@@ -754,12 +754,15 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   saveBtnDisabled: { opacity: 0.45 },
   saveBtnText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
 });

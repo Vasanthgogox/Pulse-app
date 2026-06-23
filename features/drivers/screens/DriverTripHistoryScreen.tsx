@@ -1777,7 +1777,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(16,185,129,0.30)",
   },
   tripTypeBadgeOpen: {
-    color: "#4f46e5",
+    color: "#4D3636",
     backgroundColor: "rgba(99,102,241,0.10)",
     borderColor: "rgba(99,102,241,0.30)",
   },

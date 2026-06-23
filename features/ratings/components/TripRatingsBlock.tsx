@@ -3185,7 +3185,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   tagChipPulseActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   tagChipTextPulse: {
@@ -3300,6 +3300,6 @@ const styles = StyleSheet.create({
   doneButtonText: {
     fontSize: 15,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonDarkText,
   },
 });

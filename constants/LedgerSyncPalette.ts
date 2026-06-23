@@ -1,4 +1,6 @@
 /** Pulse ledger sync workbench — visual tokens (web reference). */
+import Theme from "@/constants/Theme";
+
 export const LedgerSyncPalette = {
   ink: "#171A20",
   slate: "#0F172A",
@@ -9,6 +11,6 @@ export const LedgerSyncPalette = {
   emerald: "#10B981",
   emeraldSoft: "#ECFDF5",
   rose: "#F43F5E",
-  indigo: "#4F46E5",
-  indigoSoft: "#EEF2FF",
+  indigo: Theme.brandBlueInk,
+  indigoSoft: Theme.brandBlueSoft,
 } as const;

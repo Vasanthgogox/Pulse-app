@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     marginTop: 7,
-    backgroundColor: Theme.pulseIndigo,
+    backgroundColor: Theme.buttonPrimary,
     flexShrink: 0,
   },
   bulletText: {

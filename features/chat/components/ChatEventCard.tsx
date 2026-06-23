@@ -87,7 +87,7 @@ const STATUS_ICON_MAP: Record<
     bg: "#e8eaf6",
     sheetLabel: "In progress",
     rightWord: "ACTIVE",
-    rightColor: "#4338ca",
+    rightColor: "#4D3636",
   },
   picked_up: {
     Icon: MapPin,
@@ -143,7 +143,7 @@ const STATUS_ICON_MAP: Record<
     bg: "#e8eaf6",
     sheetLabel: "Started",
     rightWord: "START",
-    rightColor: "#4338ca",
+    rightColor: "#4D3636",
   },
   delivered: {
     Icon: Package,
@@ -662,7 +662,7 @@ const s = StyleSheet.create({
   ledgerAddBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: Theme.buttonPrimaryText,
   },
   ledgerDisputeBtn: {
     flex: 1,

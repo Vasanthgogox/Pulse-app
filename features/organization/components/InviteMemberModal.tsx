@@ -105,7 +105,7 @@ const roleStyles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
   },
   labelWrap: { flex: 1, minWidth: 0 },
   label: { fontSize: 14, fontWeight: "600", color: Theme.textPrimaryDark },
@@ -659,7 +659,7 @@ const embeddedFlow = StyleSheet.create({
   primaryBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   successWrap: {
     alignItems: "center",
@@ -746,7 +746,7 @@ const modal = StyleSheet.create({
     justifyContent: "center",
   },
   stepDotActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   stepDotDone: {
@@ -821,13 +821,16 @@ const modal = StyleSheet.create({
     gap: 8,
     paddingVertical: 15,
     borderRadius: 14,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     marginTop: 4,
   },
   primaryBtnText: {
     fontSize: 15,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.1,
   },
 

@@ -227,7 +227,10 @@ const styles = StyleSheet.create({
     }),
   },
   saveBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 12,
     minHeight: 48,
     alignItems: "center",
@@ -240,7 +243,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 15,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   listSection: {
     gap: 8,

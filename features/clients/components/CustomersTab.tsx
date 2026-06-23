@@ -2,6 +2,7 @@
  * Treasury Financial Summary — Customers tab. O(n) aggregation: received = ledger only, billed = trips only.
  * Supports matrix (table) view and ledger (transaction cards) view with toggle.
  */
+import { FinancePromoCard } from "@/features/finance/components/FinancePromoCard";
 import { FAB } from "@/components/FAB";
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
@@ -427,7 +428,7 @@ function CustomerDetailView({
                   <FontAwesome
                     name="arrow-down"
                     size={10}
-                    color={Theme.teslaRed}
+                    color={Theme.loaderAccent}
                   />
                   <Text style={detailStyles.byTripCardLabel}>
                     TOTAL BALANCE
@@ -1624,7 +1625,10 @@ const detailStyles = StyleSheet.create({
   sharedBtnPrimary: {
     flex: 1,
     paddingVertical: 14,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -1818,6 +1822,7 @@ export interface CustomersTabProps {
   onViewTabChange?: (v: CustomersViewTab) => void;
   /** Parent ScrollView owns vertical scroll (finance mobile). */
   embedInParentScroll?: boolean;
+  onAddPartyPress?: () => void;
 }
 
 export function CustomersTab({
@@ -1844,6 +1849,7 @@ export function CustomersTab({
   viewTab,
   onViewTabChange,
   embedInParentScroll = false,
+  onAddPartyPress,
 }: CustomersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
@@ -1990,17 +1996,27 @@ export function CustomersTab({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Theme.teslaRed}
+              tintColor={Theme.loaderAccent}
             />
           ) : undefined
         }
       >
         {topContent}
-        <Text style={styles.emptyText}>
-          {hasPendingInvites
-            ? 'No customer records loaded. Pull to refresh or add clients from Home.'
-            : 'No customers. Add clients from Home.'}
-        </Text>
+        <FinancePromoCard
+          variant="customers"
+          title={
+            hasPendingInvites
+              ? "Waiting on customer records"
+              : undefined
+          }
+          description={
+            hasPendingInvites
+              ? "Invitations are out — add a customer now or pull to refresh when they accept."
+              : undefined
+          }
+          onCtaPress={onAddPartyPress}
+          style={styles.emptyBanner}
+        />
       </ScrollView>
     );
   }
@@ -2166,7 +2182,7 @@ export function CustomersTab({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Theme.teslaRed}
+              tintColor={Theme.loaderAccent}
             />
           ) : undefined
         }
@@ -2396,7 +2412,18 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
-  emptyState: { paddingVertical: 24, alignItems: "center" },
+  emptyState: {
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: "stretch",
+    flexGrow: 1,
+  },
+  emptyBanner: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
   emptyText: {
     fontSize: 10,
     fontWeight: "700",

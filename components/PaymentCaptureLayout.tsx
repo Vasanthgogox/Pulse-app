@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
   },
   header: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     paddingBottom: 16,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -342,6 +342,9 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
@@ -349,7 +352,7 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -422,7 +425,7 @@ const styles = StyleSheet.create({
   bottomButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textTransform: 'uppercase',
   },
 });

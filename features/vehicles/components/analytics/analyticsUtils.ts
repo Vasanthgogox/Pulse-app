@@ -348,7 +348,7 @@ export function computeDocExpiry(vehicle: VehicleRow | null): DocExpiry[] {
 // ─── Expense categories ────────────────────────────────────────────────────────
 
 const EXPENSE_COLOR_MAP: Record<string, string> = {
-  Supplier: "#4F46E5",
+  Supplier: "#4D3636",
   Fuel: "#F97316",
   Toll: "#0EA5E9",
   Other: "#94A3B8",

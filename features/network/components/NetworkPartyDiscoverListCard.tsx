@@ -36,6 +36,7 @@ export type NetworkPartyDiscoverListCardProps = {
   locationLabel: string;
   locationUnset?: boolean;
   avatarSeed?: string | null;
+  avatarUrl?: string | null;
   totalTrips?: number | null;
   ratingValue?: number | null;
   mutualCount?: number;
@@ -66,6 +67,7 @@ export function NetworkPartyDiscoverListCard({
   locationLabel,
   locationUnset = false,
   avatarSeed,
+  avatarUrl,
   totalTrips,
   ratingValue,
   mutualCount = 0,
@@ -226,6 +228,7 @@ export function NetworkPartyDiscoverListCard({
               <PartyAvatar
                 name={displayName}
                 initialsColorSeed={orgId}
+                avatarUrl={avatarUrl}
                 avatarSeed={avatarSeed}
                 entityType="client"
                 size={avatarSize}

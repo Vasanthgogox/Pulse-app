@@ -2,6 +2,7 @@
  * Client profile data panels — all editable tabs with real form fields.
  * Each panel: view mode (shows existing data) + add/edit form (saves to DB).
  */
+import Theme from "@/constants/Theme";
 import type { ClientManagementBundle } from "@/features/clients/types/clientManagement.types";
 import {
   clientProfileStyles as cpStyles,
@@ -1181,7 +1182,7 @@ const f = StyleSheet.create({
     flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: METRONIC.text,
   },
-  saveBtnText: { fontSize: 12, fontWeight: "700", color: "#fff" },
+  saveBtnText: { fontSize: 12, fontWeight: "700", color: Theme.buttonDarkText },
 
   // Add button
   addBtn: {
@@ -1189,7 +1190,7 @@ const f = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
     backgroundColor: METRONIC.text,
   },
-  addBtnText: { fontSize: 11, fontWeight: "700", color: "#fff" },
+  addBtnText: { fontSize: 11, fontWeight: "700", color: Theme.buttonDarkText },
 
   // Finance terms
   termsRow: {

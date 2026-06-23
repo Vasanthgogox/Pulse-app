@@ -361,7 +361,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 10,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     minWidth: 88,
     justifyContent: "center",
   },
@@ -371,7 +374,7 @@ const styles = StyleSheet.create({
   connectBtnText: {
     fontSize: 11,
     fontWeight: "800",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     letterSpacing: 0.2,
   },
   loadMoreBtn: {

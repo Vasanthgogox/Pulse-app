@@ -170,6 +170,9 @@ const styles = StyleSheet.create({
   },
   exportBtn: {
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingVertical: 12,
     alignItems: 'center',
   },

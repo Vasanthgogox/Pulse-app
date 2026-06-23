@@ -2103,7 +2103,10 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   financeViewModeBtnDarkActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   financeViewModeTextDark: {
     fontSize: 10,
@@ -2163,7 +2166,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -2173,7 +2179,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  logPodsBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  logPodsBtnText: { color: Theme.buttonPrimaryText, fontSize: 12, fontWeight: "700" },
 
   velocityBanner: {
     marginHorizontal: 16,
@@ -2473,7 +2479,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   viewModeBtnActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   viewModeText: {
     fontSize: 12,
@@ -2685,7 +2694,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   pageSizeBtnActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
   },
   pageSizeText: {
     fontSize: 10,
@@ -2813,12 +2825,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   retryBtn: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
-  retryBtnText: { color: "#fff", fontWeight: "700" },
+  retryBtnText: { color: Theme.buttonPrimaryText, fontWeight: "700" },
 
   modalOverlay: {
     flex: 1,
@@ -2915,7 +2930,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   filterChipActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   filterChipText: {
@@ -2942,7 +2957,10 @@ const styles = StyleSheet.create({
   blockedBody: { fontSize: 14, color: Theme.textSecondary, marginBottom: 20 },
   blockedBtn: {
     alignSelf: "flex-start",
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,

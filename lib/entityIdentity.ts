@@ -6,6 +6,10 @@ import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import {
+  isIntegratedClientRow,
+  isIntegratedSupplierRow,
+} from "@/features/trips/visibility/tripVisibility";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import {
   partyAvatarHasRenderableOutput,
@@ -47,7 +51,6 @@ export function resolvePartyAvatarIdentityFromClient(
   client: ClientRow,
   linkedOrgBranding?: LinkedOrgDisplay | null,
 ): ResolvedPartyAvatarIdentity {
-  const lid = (client.linked_organization_id ?? "").trim();
   const org = linkedOrgBranding ?? undefined;
   return {
     displayName: (client.name ?? "").trim() || "—",
@@ -56,7 +59,7 @@ export function resolvePartyAvatarIdentityFromClient(
     organizationAvatarSeed: org?.avatarSeed ?? null,
     avatarUrl: resolveAvatarPublicUrl(client.avatar_url),
     avatarSeed: (client.avatar_seed ?? "").trim() || null,
-    isIntegrated: Boolean(client.is_integrated || lid),
+    isIntegrated: isIntegratedClientRow(client),
   };
 }
 
@@ -64,7 +67,6 @@ export function resolvePartyAvatarIdentityFromSupplier(
   supplier: SupplierRow,
   linkedOrgBranding?: LinkedOrgDisplay | null,
 ): ResolvedPartyAvatarIdentity {
-  const lid = (supplier.linked_organization_id ?? "").trim();
   const org = linkedOrgBranding ?? undefined;
   return {
     displayName: supplierDisplayName(supplier),
@@ -73,9 +75,7 @@ export function resolvePartyAvatarIdentityFromSupplier(
     organizationAvatarSeed: org?.avatarSeed ?? null,
     avatarUrl: resolveAvatarPublicUrl(supplier.avatar_url),
     avatarSeed: (supplier.avatar_seed ?? "").trim() || null,
-    isIntegrated: Boolean(
-      lid || supplier.supplier_type === "integrated",
-    ),
+    isIntegrated: isIntegratedSupplierRow(supplier),
   };
 }
 

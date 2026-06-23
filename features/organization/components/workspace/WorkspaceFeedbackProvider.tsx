@@ -27,7 +27,7 @@ import {
 } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-const PURPLE = "#4F46E5";
+const PURPLE = "#4D3636";
 
 type NoticeKind = "success" | "error" | "info";
 

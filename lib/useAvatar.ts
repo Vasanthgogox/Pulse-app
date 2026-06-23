@@ -100,7 +100,7 @@ export type UseAvatarResult = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const INITIALS_PALETTE = [
-  '#4F46E5', // indigo
+  '#4D3636', // indigo
   '#0891B2', // cyan
   '#059669', // emerald
   '#D97706', // amber

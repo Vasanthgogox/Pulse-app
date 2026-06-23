@@ -52,12 +52,20 @@ function resolveTripId(input: {
   return null;
 }
 
+export type AlertDetailVariant = "page" | "panel";
+
 export type AlertDetailScreenProps = {
   kind: RegistryFeedKind;
   alertId: string;
   mode: AlertDetailMode;
   onBack: () => void;
   finance: AlertRegistryFinanceHandlers;
+  /** Full route vs notifications drawer / fullscreen panel. */
+  variant?: AlertDetailVariant;
+  /** Panel footer inset (safe area / tab bar). */
+  bottomInset?: number;
+  /** Close notifications shell when an action navigates away (trip, wizard, etc.). */
+  onNavigateAway?: () => void;
 };
 
 export function AlertDetailScreen({
@@ -66,6 +74,9 @@ export function AlertDetailScreen({
   mode,
   onBack,
   finance,
+  variant = "page",
+  bottomInset = 0,
+  onNavigateAway,
 }: AlertDetailScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -187,19 +198,23 @@ export function AlertDetailScreen({
     if (kind === "salary" && salary) {
       if (mode === "archive") {
         finance.onViewSalaryArchive(salary);
+        onNavigateAway?.();
         return;
       }
       finance.onPaySalary(salary);
+      onNavigateAway?.();
       return;
     }
     if (kind === "shared" && shared) {
       finance.onSharedAction(shared);
+      onNavigateAway?.();
       return;
     }
     if (kind === "ops" && ops) {
       navigateToOpsAlert(router, ops);
+      onNavigateAway?.();
     }
-  }, [kind, salary, shared, ops, mode, finance, router]);
+  }, [kind, salary, shared, ops, mode, finance, router, onNavigateAway]);
 
   const handleSecondary = useCallback(() => {
     if (kind === "salary" && salary && mode === "active") {
@@ -222,15 +237,88 @@ export function AlertDetailScreen({
     const tripId = resolveTripId({ kind, salary, shared, ops });
     if (tripId) {
       router.push(`/trip-ledger/${tripId}` as const);
+      onNavigateAway?.();
     }
-  }, [kind, salary, shared, ops, router]);
+  }, [kind, salary, shared, ops, router, onNavigateAway]);
 
   const showTripLedgerLink =
     resolveTripId({ kind, salary, shared, ops }) != null &&
     mode === "active" &&
     kind !== "ops";
 
-  const footerHeight = 96 + insets.bottom;
+  const isPanel = variant === "panel";
+  const footerPadBottom = isPanel
+    ? Math.max(bottomInset, 8)
+    : Math.max(insets.bottom, 8);
+  const footerHeight = 96 + footerPadBottom;
+
+  const body = loading ? (
+    <View style={styles.centered}>
+      <LoadingIndicator size="large" color={Theme.primary} />
+    </View>
+  ) : error || !hasCardContent || !footerPlan ? (
+    <View style={styles.centered}>
+      <Text style={styles.errorText}>{error ?? "Alert not found"}</Text>
+    </View>
+  ) : (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={[
+        styles.scrollContent,
+        isPanel
+          ? { paddingBottom: 12 }
+          : { paddingBottom: footerHeight + 16 },
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
+      <AlertDetailChatBody
+        kind={kind}
+        mode={mode}
+        salary={salary}
+        shared={shared}
+        ops={ops}
+        driversById={driversById}
+        partyCtx={partyCtx}
+      />
+    </ScrollView>
+  );
+
+  const footer =
+    footerPlan && hasCardContent && !loading && !error ? (
+      <View
+        style={[
+          isPanel ? styles.footerPanel : styles.footer,
+          {
+            paddingBottom: footerPadBottom,
+            paddingHorizontal: Layout.screenPaddingHorizontal,
+          },
+        ]}
+      >
+        <FullPageWizardFooter
+          actionVariant="registry"
+          summary={footerPlan.summary}
+          hint={footerPlan.hint}
+          secondaryLabel={footerPlan.secondaryLabel}
+          onSecondaryPress={
+            footerPlan.secondaryLabel ? handleSecondary : undefined
+          }
+          tertiaryLabel={showTripLedgerLink ? "View trip" : undefined}
+          onTertiaryPress={showTripLedgerLink ? handleTertiary : undefined}
+          primaryLabel={footerPlan.primaryLabel}
+          onPrimaryPress={handlePrimary}
+          loading={kind === "salary" && finance.busySalaryId === alertId}
+        />
+      </View>
+    ) : null;
+
+  if (isPanel) {
+    return (
+      <View style={styles.rootPanel}>
+        {body}
+        {footer}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -247,59 +335,8 @@ export function AlertDetailScreen({
         <Text style={styles.headerTitle}>Notification</Text>
         <View style={styles.headerSpacer} />
       </View>
-
-      {loading ? (
-        <View style={styles.centered}>
-          <LoadingIndicator size="large" color={Theme.primary} />
-        </View>
-      ) : error || !hasCardContent || !footerPlan ? (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error ?? "Alert not found"}</Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={{ paddingBottom: footerHeight + 16 }}
-          showsVerticalScrollIndicator={false}
-        >
-          <AlertDetailChatBody
-            kind={kind}
-            mode={mode}
-            salary={salary}
-            shared={shared}
-            ops={ops}
-            driversById={driversById}
-            partyCtx={partyCtx}
-          />
-        </ScrollView>
-      )}
-
-      {footerPlan && hasCardContent && !loading && !error ? (
-        <View
-          style={[
-            styles.footer,
-            {
-              paddingBottom: Math.max(insets.bottom, 8),
-              paddingHorizontal: Layout.screenPaddingHorizontal,
-            },
-          ]}
-        >
-          <FullPageWizardFooter
-            actionVariant="registry"
-            summary={footerPlan.summary}
-            hint={footerPlan.hint}
-            secondaryLabel={footerPlan.secondaryLabel}
-            onSecondaryPress={
-              footerPlan.secondaryLabel ? handleSecondary : undefined
-            }
-            tertiaryLabel={showTripLedgerLink ? "View trip" : undefined}
-            onTertiaryPress={showTripLedgerLink ? handleTertiary : undefined}
-            primaryLabel={footerPlan.primaryLabel}
-            onPrimaryPress={handlePrimary}
-            loading={kind === "salary" && finance.busySalaryId === alertId}
-          />
-        </View>
-      ) : null}
+      {body}
+      {footer}
     </View>
   );
 }
@@ -307,6 +344,11 @@ export function AlertDetailScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: Theme.cardWhite,
+  },
+  rootPanel: {
+    flex: 1,
+    minHeight: 0,
     backgroundColor: Theme.cardWhite,
   },
   header: {
@@ -337,6 +379,9 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -358,5 +403,12 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     paddingTop: 8,
+  },
+  footerPanel: {
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    paddingTop: 8,
+    flexShrink: 0,
   },
 });

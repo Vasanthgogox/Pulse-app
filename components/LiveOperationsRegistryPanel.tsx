@@ -148,7 +148,7 @@ function OpsAlertRow({ item, glow }: { item: GlobalOperationAlert; glow: boolean
     ) : item.kind === 'success' ? (
       <CheckCircle2 size={16} color="#16a34a" />
     ) : (
-      <Truck size={16} color="#4F46E5" />
+      <Truck size={16} color="#4D3636" />
     );
   const money = formatMoneyInr(item.amount);
 

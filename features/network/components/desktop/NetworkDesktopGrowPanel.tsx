@@ -298,6 +298,11 @@ export function NetworkDesktopGrowPanel({
         locationLabel={location}
         ratingValue={org.average_rating ?? org.rating ?? null}
         mutualCount={org.mutual_count ?? org.mutual_connections_count ?? 0}
+        viewerOrgId={orgId}
+        onPressMutuals={() =>
+          onPressMutuals({ id: org.id, name: org.name })
+        }
+        onPressMutual={onOpenMutualProfile}
         pendingRole={pending ? pendingRole : null}
         connecting={connectingId === org.id}
         onOpenProfile={() => onOpenProfile(org)}

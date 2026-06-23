@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   publishBtnDisabled: { opacity: 0.4 },
-  publishBtnText: { fontSize: 12, fontWeight: "800", color: "#fff", letterSpacing: 0.2 },
+  publishBtnText: { fontSize: 12, fontWeight: "800", color: Theme.buttonPrimaryText, letterSpacing: 0.2 },
   hintBox: {
     marginTop: 4,
     paddingHorizontal: 12,
@@ -870,7 +870,10 @@ const styles = StyleSheet.create({
     borderColor: "#f59e0b",
   },
   typeBtnActiveVehicle: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderColor: Theme.primary,
   },
   typeBtnText: {
@@ -880,7 +883,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     textTransform: "capitalize",
   },
-  typeBtnTextActive: { color: "#fff" },
+  typeBtnTextActive: { color: Theme.buttonPrimaryText },
   form: { flex: 1 },
   formContent: {
     paddingTop: 10,
@@ -1158,11 +1161,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.surfaceBorder,
   },
   chipActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   chipActiveVehicleType: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   chipDisabled: {

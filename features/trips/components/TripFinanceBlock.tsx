@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
   cashActionBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   summaryCard: {
     position: "relative",

@@ -84,7 +84,7 @@ export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Theme.teslaRed} />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Theme.loaderAccent} />
         }
       >
         <DriverAnalyticsTab

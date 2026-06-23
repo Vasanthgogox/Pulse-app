@@ -5854,7 +5854,7 @@ const styles = StyleSheet.create({
   inviteAcceptBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   inviteBtnDisabled: { opacity: 0.6 },
   activeMissionWrap: {
@@ -6219,7 +6219,7 @@ const styles = StyleSheet.create({
     fontSize: 14, // Increased from 13 for better readability
     fontWeight: "800",
     letterSpacing: 0.8,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
     textAlign: "center",
     flex: 1, // Add flex to allow proper text centering
   },
@@ -6556,7 +6556,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.5,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
 
   // --- Assigned trip waiting (reference-style: map + HUD + bottom sheet) ---
@@ -7594,7 +7594,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     letterSpacing: 0,
-    color: Theme.textOnPrimary,
+    color: Theme.buttonPrimaryText,
   },
   assignedTrustRow: {
     flexDirection: "row",
@@ -7700,7 +7700,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,

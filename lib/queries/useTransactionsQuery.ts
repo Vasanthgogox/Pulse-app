@@ -1,11 +1,16 @@
 /**
  * TanStack Query hooks for ledger/transactions. Cached by orgId.
  */
+import { useCallback } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getTransactionsByOrganization,
   syncTransactionsWithCache,
+  type LedgerRow,
 } from '@/features/finance/services/finance.service';
+import { clearDomainCacheMeta } from '@/lib/cache/cacheMetadataStore';
+import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 import { LEDGER_PAGE_SIZE } from '@/lib/pagination';
@@ -18,14 +23,25 @@ export function useTransactionsQuery(orgId: string | null) {
     queryFn: async () => {
       const existing =
         (qc.getQueryData(queryKeys.transactions.finite(orgId ?? '')) as
-          | Array<{ id: string }>
+          | LedgerRow[]
           | undefined) ?? [];
-      const res = await syncTransactionsWithCache(orgId!, existing as any);
-      if (res.error) throw res.error;
-      return res.transactions;
+      return fetchEntityListWithFallback({
+        orgId: orgId!,
+        domain: 'transactions',
+        cachedRows: existing,
+        sync: async (id, cached) => {
+          const res = await syncTransactionsWithCache(id, cached);
+          return { error: res.error, rows: res.transactions };
+        },
+        fetchDirect: async (id) => {
+          const res = await getTransactionsByOrganization(id);
+          return { error: res.error, rows: res.transactions };
+        },
+      });
     },
     enabled: !!orgId,
     staleTime: STALE.realtime,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<LedgerRow[]>(),
   });
 }
 
@@ -52,9 +68,13 @@ export function useTransactionsInfiniteQuery(orgId: string | null, opts?: { page
 
 export function useInvalidateTransactions() {
   const qc = useQueryClient();
-  return (orgId: string) => {
-    qc.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(orgId) });
-    qc.invalidateQueries({ queryKey: ['q', 'transactions', orgId, 'infinite'] });
-  };
+  return useCallback(async (orgId: string) => {
+    await clearDomainCacheMeta('transactions', orgId);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) }),
+      qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(orgId) }),
+      qc.invalidateQueries({ queryKey: ['q', 'transactions', orgId, 'infinite'] }),
+    ]);
+    await qc.refetchQueries({ queryKey: queryKeys.transactions.finite(orgId) });
+  }, [qc]);
 }

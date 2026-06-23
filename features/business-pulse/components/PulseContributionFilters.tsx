@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ledgerChipActive: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   ledgerChipText: {

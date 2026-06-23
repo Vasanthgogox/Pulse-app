@@ -14,10 +14,10 @@ export const colors = {
   textPrimary: Theme.textPrimaryDark,
   textSecondary: Theme.textSecondary,
   textMuted: Theme.textMuted,
-  textOnBrand: Theme.textOnPrimary,
+  textOnBrand: Theme.buttonPrimaryText,
 
-  brand: Theme.primary,
-  brandMuted: Theme.primaryLight,
+  brand: Theme.buttonPrimary,
+  brandMuted: Theme.buttonPrimaryPressed,
 
   revenue: Theme.success,
   cost: Theme.destructive,

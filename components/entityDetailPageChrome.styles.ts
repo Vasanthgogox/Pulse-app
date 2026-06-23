@@ -54,8 +54,10 @@ export const entityDetailPageChromeStyles = StyleSheet.create({
   downloadBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: Theme.darkBackground,
+    borderRadius: Theme.buttonPrimaryRadius,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },

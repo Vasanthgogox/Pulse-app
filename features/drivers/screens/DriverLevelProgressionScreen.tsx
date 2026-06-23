@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   statCardDark: {
-    backgroundColor: Theme.primary,
+    backgroundColor: Theme.buttonPrimary,
     borderColor: Theme.primary,
   },
   statCardDecoDark: {

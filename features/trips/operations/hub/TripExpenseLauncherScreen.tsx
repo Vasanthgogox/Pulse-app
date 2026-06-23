@@ -33,7 +33,7 @@ const TILES = [
     title: "Toll & FASTag",
     subtitle: "Plaza receipts · FASTag slips",
     Icon: MapPin,
-    iconTint: "#4338ca",
+    iconTint: "#4D3636",
     iconBg: "rgba(99,102,241,0.12)",
   },
   {
