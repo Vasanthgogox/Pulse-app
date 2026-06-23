@@ -35,20 +35,23 @@ function parseEnvFile(filePath) {
 const envVars = parseEnvFile(envPath);
 const localVars = fs.existsSync(envLocalPath) ? parseEnvFile(envLocalPath) : {};
 
-// Source of truth order (file-only, deterministic):
+// Source of truth order:
 // 1) .env.local (developer override)
 // 2) .env (project default)
-// Intentionally avoid process.env fallback to prevent stale shell-injected
-// EXPO_PUBLIC_* values from forcing a different Supabase project at runtime.
+// 3) process.env — CI only (Netlify injects these; no .env files are present there)
+// Avoid process.env winning in local dev where stale shell vars could override the wrong project.
+const isCI = process.env.CI === 'true';
 let supabaseUrl =
   localVars.EXPO_PUBLIC_SUPABASE_URL ||
   envVars.EXPO_PUBLIC_SUPABASE_URL ||
   envVars.VITE_SUPABASE_URL ||
+  (isCI ? process.env.EXPO_PUBLIC_SUPABASE_URL : '') ||
   '';
 let supabaseAnonKey =
   localVars.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   envVars.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
   envVars.VITE_SUPABASE_ANON_KEY ||
+  (isCI ? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY : '') ||
   '';
 
 let geminiApiKey =
@@ -56,6 +59,7 @@ let geminiApiKey =
   envVars.EXPO_PUBLIC_GEMINI_API_KEY ||
   localVars.VITE_GEMINI_API_KEY ||
   envVars.VITE_GEMINI_API_KEY ||
+  (isCI ? process.env.EXPO_PUBLIC_GEMINI_API_KEY : '') ||
   '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -101,12 +105,12 @@ const expoContactsPlugin = contactsAvailable
 // Production (https Supabase URL): disable cleartext on Android. Local dev (http): allow.
 const useCleartextTraffic = typeof supabaseUrl === 'string' && supabaseUrl.startsWith('http://');
 
-// "static" makes the dev server SSR-render every page request (λ render.js, ~5.8k-module
-// server bundle), which leaks heap until Metro OOMs in long sessions. Use SPA mode for
-// `expo start`; keep "static" for `expo export` (Netlify build).
-const isExport = process.argv.includes('export');
-// PULSE_WEB_OUTPUT=static lets you reproduce the export rendering mode in dev.
-const webOutput = process.env.PULSE_WEB_OUTPUT || (isExport ? 'static' : 'single');
+// SPA mode for both dev and export. Pulse is an authenticated dashboard — SEO has no value
+// inside the app, and static rendering forces the λ render.js server bundle (~3300 modules,
+// ~5.8k-module server graph) to be built on every Netlify deploy, which is the dominant
+// build-time cost. Netlify's /* → /index.html redirect handles client-side routing.
+// PULSE_WEB_OUTPUT=static can reproduce the old static export mode locally if ever needed.
+const webOutput = process.env.PULSE_WEB_OUTPUT || 'single';
 
 module.exports = {
   ...config,

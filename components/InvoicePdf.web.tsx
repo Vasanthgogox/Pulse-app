@@ -1,6 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { jsPDF } from 'jspdf/dist/jspdf.es.min.js';
-import html2canvas from 'html2canvas';
 import type { InvoicePdfData } from '@/components/InvoicePdf.types';
 
 function formatCurrency(amount: number): string {
@@ -39,11 +37,13 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
 
     try {
       const element = printRef.current;
-      // Capture the element as a high-res canvas
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf/dist/jspdf.es.min.js'),
+      ]);
       const canvas = await html2canvas(element, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL('image/png');
 
-      // Create PDF (A4 size)
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'px',

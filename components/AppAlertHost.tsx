@@ -1,7 +1,6 @@
 import Theme from '@/constants/Theme';
 import { tGlobal } from '@/contexts/LanguageContext';
 import { registerAppAlertImplementation } from '@/lib/appAlert';
-import { Clock } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { pe } from '@/lib/platformViewStyle.util';
 import {
@@ -48,7 +47,7 @@ export function AppAlertHost() {
           accessibilityViewIsModal
         >
           <View style={styles.iconWrap}>
-            <Clock size={28} color={Theme.modalNeutralAccent} strokeWidth={2.2} />
+            <Text style={styles.iconChar}>!</Text>
           </View>
           <Text style={styles.title}>{title}</Text>
           {message ? (
@@ -138,5 +137,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Theme.buttonMatteBlackText,
+  },
+  iconChar: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Theme.modalNeutralAccent,
+    includeFontPadding: false,
   },
 });

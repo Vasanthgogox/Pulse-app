@@ -1,7 +1,6 @@
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
-import { X } from 'lucide-react-native';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { useOptionalAuth } from '@/contexts/AuthContext';
@@ -42,7 +41,7 @@ export function GlobalOperationsToast() {
           }}
           style={styles.close}
         >
-          <X size={18} color={Theme.textPrimary} />
+          <Text style={styles.closeChar}>×</Text>
         </Pressable>
       </View>
     </View>
@@ -84,4 +83,5 @@ const styles = StyleSheet.create({
   },
   body: { flex: 1, fontSize: 13, fontWeight: '700', color: '#92400e', lineHeight: 18 },
   close: { padding: 4 },
+  closeChar: { fontSize: 18, color: Theme.textPrimary, lineHeight: 18, includeFontPadding: false },
 });
