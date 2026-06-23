@@ -29,6 +29,7 @@ export function isPastIndexBootPath(pathname: string): boolean {
     pathname === '/finance' ||
     pathname === '/trips' ||
     pathname === '/network' ||
+    pathname.startsWith('/network/') ||
     pathname === '/resources' ||
     pathname.startsWith('/sign-in') ||
     pathname.startsWith('/sign-up') ||

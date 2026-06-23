@@ -21,7 +21,7 @@ export function preloadTabForRoute(route: string, orgId?: string | null): void {
   else if (route === '/(tabs)/trips') {
     preloadTabScreen('trips');
     preloadChatRoute(orgId);
-  } else if (route === '/(tabs)/network') {
+  } else if (route === '/(tabs)/network' || route.includes('/network/hub')) {
     preloadTabScreen('network');
     preloadChatRoute(orgId);
   }

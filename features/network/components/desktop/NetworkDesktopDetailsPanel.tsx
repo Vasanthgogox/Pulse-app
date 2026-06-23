@@ -28,7 +28,7 @@ import {
 import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
 import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
 import { getWorkspaceKyc } from "@/features/organization/services/organization.service";
-import { profileCompletionPct } from "@/features/organization/components/workspace/workspacePanelUi";
+import { networkHubProfileCompletion } from "@/features/network/utils/networkHubProfileCompletion.util";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { ROUTES } from "@/lib/routes";
@@ -787,16 +787,27 @@ export function NetworkDesktopDetailsPanel({
             />
 
             {(() => {
-              const hasAddress = !!(derived.addressLine || derived.city || derived.state);
-              const hasWebsite = !!profileQ.data?.profile_website;
-              const pct = profileCompletionPct({
-                address_line: derived.addressLine || null,
-                city: derived.city || null,
-                state: derived.state || null,
-                profile_website: profileQ.data?.profile_website ?? null,
+              const { pct, gaps } = networkHubProfileCompletion({
+                profile: profileQ.data,
+                locationCount: locationsQ.data?.length ?? 0,
+                hasGstin: !!kyc?.gstin,
               });
               if (pct === 100) return null;
               const barColor = pct > 33 ? '#F6C000' : '#F64E60';
+              const openGap = (gap: (typeof gaps)[number]) => {
+                if (gap.section === 'kyc') {
+                  router.push({
+                    pathname: ROUTES.WORKSPACE as Parameters<typeof router.push>[0],
+                    params: { panel: 'kyc' },
+                  });
+                  return;
+                }
+                if (gap.section === 'locations') {
+                  openAddLocation();
+                  return;
+                }
+                setProfileEditSection(gap.section);
+              };
               return (
                 <View style={profileCompletionStyles.banner}>
                   <View style={profileCompletionStyles.topRow}>
@@ -808,24 +819,18 @@ export function NetworkDesktopDetailsPanel({
                     <View style={[profileCompletionStyles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: barColor }]} />
                   </View>
                   <View style={profileCompletionStyles.actionRow}>
-                    {!hasWebsite ? (
+                    {gaps.slice(0, 4).map((gap) => (
                       <Pressable
-                        onPress={() => setProfileEditSection("contact")}
+                        key={gap.key}
+                        onPress={() => openGap(gap)}
                         style={profileCompletionStyles.actionChip}
                         hitSlop={6}
                       >
-                        <Text style={profileCompletionStyles.actionChipText}>+ Add website</Text>
+                        <Text style={profileCompletionStyles.actionChipText}>
+                          + Add {gap.label.toLowerCase()}
+                        </Text>
                       </Pressable>
-                    ) : null}
-                    {!hasAddress ? (
-                      <Pressable
-                        onPress={() => setProfileEditSection("contact")}
-                        style={profileCompletionStyles.actionChip}
-                        hitSlop={6}
-                      >
-                        <Text style={profileCompletionStyles.actionChipText}>+ Add address</Text>
-                      </Pressable>
-                    ) : null}
+                    ))}
                   </View>
                 </View>
               );
@@ -844,7 +849,11 @@ export function NetworkDesktopDetailsPanel({
                 />
               </View>
               <View style={[styles.contactList, compact && mobile.contactListFull]}>
-                <NetworkLinkRow icon={Globe} value={derived.website} compact={compact} />
+                <NetworkLinkRow
+                  icon={Globe}
+                  value={profileQ.data?.profile_website?.trim() || "Add website"}
+                  compact={compact}
+                />
                 {derived.facebook ? (
                   <NetworkLinkRow icon={Globe} value={derived.facebook} compact={compact} />
                 ) : null}

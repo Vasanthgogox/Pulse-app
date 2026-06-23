@@ -1,6 +1,10 @@
 /**
  * Web-only trip map using Leaflet with road routing via routingService.ts.
  */
+import {
+  INDIA_MAP_CENTER,
+  lookupIndianCityCoordinate,
+} from '@/lib/indianCityCoordinates.util';
 import { getOptimalRoute, type RouteResult } from '@/lib/routingService';
 import {
   MAP_DESTINATION_PIN_HTML,
@@ -53,28 +57,11 @@ function ensureLeafletStylesheet(): Promise<void> {
   });
 }
 
-// ── Fallback Indian city coordinates (same as reference) ────────────────────
-const INDIAN_CITY_COORDINATES: Record<string, [number, number]> = {
-  mumbai: [19.076, 72.8777], delhi: [28.6139, 77.209], bangalore: [12.9716, 77.5946],
-  chennai: [13.0827, 80.2707], kolkata: [22.5726, 88.3639], hyderabad: [17.385, 78.4867],
-  ahmedabad: [23.0225, 72.5714], pune: [18.5204, 73.8567], surat: [21.1702, 72.8311],
-  jaipur: [26.9124, 75.7873], lucknow: [26.8467, 80.9462], kanpur: [26.4499, 80.3319],
-  nagpur: [21.1458, 79.0882], indore: [22.7196, 75.8577], thane: [19.2183, 72.9781],
-  bhopal: [23.2599, 77.4126], visakhapatnam: [17.6868, 83.2185], patna: [25.5941, 85.1376],
-  vadodara: [22.3072, 73.1812], ludhiana: [30.901, 75.8573], agra: [27.1767, 78.0081],
-  nashik: [19.9975, 73.7898], meerut: [28.9845, 77.7064], rajkot: [22.3039, 70.8022],
-  varanasi: [25.3176, 82.9739], aurangabad: [19.8762, 75.3433], amritsar: [31.634, 74.8723],
-  coimbatore: [11.0168, 76.9558], mysore: [12.2958, 76.6394], mangalore: [12.9141, 74.856],
-};
-
 const getFallbackCoordinates = (location?: string): [number, number] => {
-  if (!location) return [20.5937, 78.9629];
-  const lower = location.toLowerCase().trim();
-  if (INDIAN_CITY_COORDINATES[lower]) return INDIAN_CITY_COORDINATES[lower];
-  for (const [city, coords] of Object.entries(INDIAN_CITY_COORDINATES)) {
-    if (lower.includes(city) || city.includes(lower)) return coords;
-  }
-  return [20.5937, 78.9629];
+  if (!location) return [INDIA_MAP_CENTER.latitude, INDIA_MAP_CENTER.longitude];
+  const hit = lookupIndianCityCoordinate(location);
+  if (hit) return [hit.latitude, hit.longitude];
+  return [INDIA_MAP_CENTER.latitude, INDIA_MAP_CENTER.longitude];
 };
 
 const getCoordinates = async (location: string, retryCount = 0): Promise<[number, number]> => {

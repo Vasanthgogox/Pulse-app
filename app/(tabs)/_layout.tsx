@@ -3,14 +3,19 @@
  * Dock hides on scroll (native + mobile web); fixed to viewport on mobile web.
  */
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { DemoTabBar, type DemoTabId, type DemoTabChangeOptions } from '@/components/demo';
 import { DemoTabBarAutoHideShell } from '@/contexts/DemoTabBarScrollContext';
-import { getLastTabRoute, saveLastTabRoute } from '@/lib/lastRoute';
+import {
+  getLastTabRoute,
+  isStoredNetworkHubRoute,
+  resolveRestorableDispatcherRoute,
+  saveLastTabRoute,
+} from '@/lib/lastRoute';
 import { useLayoutInsets } from '@/lib/layoutInsets';
 import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
@@ -36,11 +41,13 @@ function DemoCustomTabBar(
   props: BottomTabBarProps & { onOpenProfileDrawer: () => void },
 ) {
   const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const org = useOptionalOrganization();
   const orgId = org?.currentOrganization?.id ?? null;
   const { onOpenProfileDrawer } = props;
   const { state, navigation } = props;
+  const lastNetworkRouteRef = useRef(ROUTES.TABS.NETWORK);
   const layout = useLayoutInsets();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
@@ -61,16 +68,23 @@ function DemoCustomTabBar(
       }
       if (tab === 'network') {
         const hub = options?.networkLayout === 'hub';
-        // Href-only: nested network stack (index | hub) — navigation.navigate('network')
-        // is a no-op when already on the tab and blocks hub ↔ feed switches.
-        router.replace(
-          (hub ? ROUTES.networkOrgHub('details') : ROUTES.TABS.NETWORK) as Parameters<typeof router.replace>[0],
-        );
+        if (hub) {
+          router.replace(
+            ROUTES.networkOrgHub('details') as Parameters<typeof router.replace>[0],
+          );
+          return;
+        }
+        // Re-tapping NETWORK while already on hub must not downgrade to the feed.
+        if (pathname.includes('/hub')) return;
+        const target = isStoredNetworkHubRoute(lastNetworkRouteRef.current)
+          ? lastNetworkRouteRef.current
+          : ROUTES.TABS.NETWORK;
+        router.replace(target as Parameters<typeof router.replace>[0]);
         return;
       }
       navigation.navigate(tab);
     },
-    [navigation, router],
+    [navigation, pathname, router],
   );
 
   const onProfilePress = () => {
@@ -78,16 +92,14 @@ function DemoCustomTabBar(
   };
 
   useEffect(() => {
-    // Persist the active tab so cold-start can restore it via getLastTabRoute().
-    const tabRoute =
-      routeName === 'finance' ? ROUTES.TABS.FINANCE
-      : routeName === 'trips'   ? ROUTES.TABS.TRIPS
-      : routeName === 'network' ? ROUTES.TABS.NETWORK
-      : routeName === 'resources' ? ROUTES.TABS.RESOURCES
-      : null;
-    if (tabRoute) saveLastTabRoute(tabRoute);
+    const restorable = resolveRestorableDispatcherRoute(pathname);
+    if (!restorable) return;
+    if (restorable.includes('/network')) {
+      lastNetworkRouteRef.current = restorable;
+    }
+    void saveLastTabRoute(restorable);
     // Do not resetBarVisible() here — it runs a spring on every tab swap and feels laggy.
-  }, [routeName]);
+  }, [pathname]);
 
   const shellStyle = [
     styles.tabBarWrap,
@@ -154,6 +166,7 @@ export default function TabLayout() {
   const isDesktopWeb = Platform.OS === 'web' && width >= 1024;
   const orgId = org?.currentOrganization?.id ?? null;
   const tabMountMarked = useRef(false);
+  const tabsUnlockedRef = useRef(false);
 
   useEffect(() => {
     void hydrateSignupFlowFlags();
@@ -223,7 +236,14 @@ export default function TabLayout() {
     }
   }, [loading, user, profile, router]);
 
-  if (loading || !user || !profile || profile.role === 'driver') {
+  if (!loading && user && profile && profile.role !== 'driver') {
+    tabsUnlockedRef.current = true;
+  }
+
+  if (
+    !tabsUnlockedRef.current &&
+    (loading || !user || !profile || profile.role === 'driver')
+  ) {
     return (
       <AppLoadingSplash
         variant={loading ? 'session' : 'verify'}

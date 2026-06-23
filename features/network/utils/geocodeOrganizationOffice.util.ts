@@ -1,11 +1,19 @@
 import type { OrganizationLocation } from "@/features/organization/services/organization.service";
 import type { OfficeMapCoordinate } from "@/features/network/hooks/useOrganizationOfficeMap";
 import { buildOrganizationOfficeGeocodeQuery } from "@/features/network/utils/organizationOfficeLocation.util";
+import {
+  haversineKm,
+  lookupIndianCityCoordinate,
+} from "@/lib/indianCityCoordinates.util";
 
 const MAPBOX_GEOCODING_BASE =
   "https://api.mapbox.com/geocoding/v5/mapbox.places";
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search";
 const NOMINATIM_USER_AGENT = "Pulse-Logistics/1.0 (office HQ geocode)";
+/** Reject street hits that land far from the stated city (e.g. Gingee town vs Coimbatore). */
+const MAX_CITY_DISTANCE_KM = 80;
+
+type GeocodeHit = { coordinate: OfficeMapCoordinate; name: string };
 
 function readMapboxToken(): string {
   if (typeof process === "undefined") return "";
@@ -48,9 +56,59 @@ function officeGeocodeQueries(
   return queries;
 }
 
+function cityAnchor(location?: OrganizationLocation | null): OfficeMapCoordinate | null {
+  const fromTable = lookupIndianCityCoordinate(location?.city);
+  if (fromTable) return fromTable;
+  return null;
+}
+
+function isNearStatedCity(
+  coordinate: OfficeMapCoordinate,
+  location?: OrganizationLocation | null,
+): boolean {
+  const anchor = cityAnchor(location);
+  if (!anchor) return true;
+  return (
+    haversineKm(
+      coordinate.latitude,
+      coordinate.longitude,
+      anchor.latitude,
+      anchor.longitude,
+    ) <= MAX_CITY_DISTANCE_KM
+  );
+}
+
+function placeNameMatchesCity(name: string, city?: string | null): boolean {
+  const cityKey = city?.trim().toLowerCase();
+  if (!cityKey) return true;
+  const normalized = name.toLowerCase();
+  if (normalized.includes(cityKey)) return true;
+  if (cityKey === "bengaluru" && normalized.includes("bangalore")) return true;
+  if (cityKey === "bangalore" && normalized.includes("bengaluru")) return true;
+  if (cityKey === "mysuru" && normalized.includes("mysore")) return true;
+  if (cityKey === "mysore" && normalized.includes("mysuru")) return true;
+  if (cityKey === "mangaluru" && normalized.includes("mangalore")) return true;
+  if (cityKey === "mangalore" && normalized.includes("mangaluru")) return true;
+  return false;
+}
+
+function acceptHit(
+  hit: GeocodeHit | null,
+  location?: OrganizationLocation | null,
+  options?: { requireCityInName?: boolean },
+): GeocodeHit | null {
+  if (!hit) return null;
+  if (!isNearStatedCity(hit.coordinate, location)) return null;
+  if (options?.requireCityInName && !placeNameMatchesCity(hit.name, location?.city)) {
+    return null;
+  }
+  return hit;
+}
+
 async function forwardMapbox(
   query: string,
-): Promise<{ coordinate: OfficeMapCoordinate; name: string } | null> {
+  proximity?: OfficeMapCoordinate | null,
+): Promise<GeocodeHit | null> {
   const token = readMapboxToken();
   if (!token) return null;
 
@@ -59,7 +117,11 @@ async function forwardMapbox(
     country: "IN",
     limit: "1",
     types: "address,place,locality,neighborhood,poi",
+    worldview: "IN",
   });
+  if (proximity) {
+    params.set("proximity", `${proximity.longitude},${proximity.latitude}`);
+  }
   const url = `${MAPBOX_GEOCODING_BASE}/${encodeURIComponent(query)}.json?${params}`;
 
   try {
@@ -86,9 +148,7 @@ async function forwardMapbox(
   }
 }
 
-async function forwardNominatim(
-  query: string,
-): Promise<{ coordinate: OfficeMapCoordinate; name: string } | null> {
+async function forwardNominatim(query: string): Promise<GeocodeHit | null> {
   const params = new URLSearchParams({
     q: query,
     countrycodes: "in",
@@ -123,20 +183,48 @@ async function forwardNominatim(
   }
 }
 
-/** Forward-geocode org HQ — Mapbox then Nominatim, multiple query variants. */
+function cityFallback(
+  location?: OrganizationLocation | null,
+): { coordinate: OfficeMapCoordinate; geocodedName: string } | null {
+  const anchor = cityAnchor(location);
+  if (!anchor) return null;
+  const city = location?.city?.trim();
+  const state = location?.state?.trim();
+  const label = [city, state, "India"].filter(Boolean).join(", ");
+  return {
+    coordinate: anchor,
+    geocodedName: label || city || "India",
+  };
+}
+
+/** Forward-geocode org HQ — Mapbox then Nominatim, India-biased with city validation. */
 export async function geocodeOrganizationOffice(
   location?: OrganizationLocation | null,
 ): Promise<{ coordinate: OfficeMapCoordinate | null; geocodedName: string | null }> {
   const queries = officeGeocodeQueries(location);
+  const proximity = cityAnchor(location);
+
   for (const query of queries) {
-    const mapbox = await forwardMapbox(query);
+    const isCityLevel =
+      !location?.address_line?.trim() ||
+      query === `${location.city?.trim()}, ${location.state?.trim()}, India` ||
+      query === `${location.city?.trim()}, India`;
+
+    const mapbox = acceptHit(
+      await forwardMapbox(query, proximity),
+      location,
+      { requireCityInName: !isCityLevel },
+    );
     if (mapbox) {
       return {
         coordinate: mapbox.coordinate,
         geocodedName: mapbox.name,
       };
     }
-    const nominatim = await forwardNominatim(query);
+
+    const nominatim = acceptHit(await forwardNominatim(query), location, {
+      requireCityInName: !isCityLevel,
+    });
     if (nominatim) {
       return {
         coordinate: nominatim.coordinate,
@@ -144,5 +232,14 @@ export async function geocodeOrganizationOffice(
       };
     }
   }
+
+  const fallback = cityFallback(location);
+  if (fallback) {
+    return {
+      coordinate: fallback.coordinate,
+      geocodedName: fallback.geocodedName,
+    };
+  }
+
   return { coordinate: null, geocodedName: null };
 }

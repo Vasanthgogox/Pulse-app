@@ -26,7 +26,11 @@ export function buildStaticMapImageUrl(
   if (mapbox) {
     const lon = lng;
     const la = lat;
-    return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+1a237e(${lon},${la})/${lon},${la},14/${width}x${height}@2x?access_token=${encodeURIComponent(mapbox)}`;
+    const params = new URLSearchParams({
+      access_token: mapbox,
+      worldview: "IN",
+    });
+    return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+1a237e(${lon},${la})/${lon},${la},14/${width}x${height}@2x?${params.toString()}`;
   }
   const googleKey = readGoogleMapsKey();
   if (googleKey) {

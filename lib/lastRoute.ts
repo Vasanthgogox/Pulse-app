@@ -1,18 +1,14 @@
 /**
- * Persist and restore the last visited main tab route.
+ * Persist and restore the last visited dispatcher route (tabs + network hub).
  *
- * On native, the app always cold-starts at `app/index.tsx` (the `/` route).
- * Without persistence, every cold start lands on the hardcoded default tab.
- * This module remembers which tab the user was on and restores it on next launch.
- *
- * Only the three bookmarkable tabs (Trips, Finance, Network) are tracked.
- * Restoring a modal or detail page on cold start would cause a broken back-stack,
- * so only top-level tab routes are persisted.
+ * On native, the app cold-starts at `app/index.tsx` (`/`). This module remembers
+ * the last bookmarkable screen and restores it on next launch.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   BOOKMARKABLE_TABS,
   DEFAULT_DISPATCHER_ROUTE,
+  ROUTES,
   type BookmarkableTab,
 } from './routes';
 
@@ -22,25 +18,78 @@ function isBookmarkableTab(route: string): route is BookmarkableTab {
   return (BOOKMARKABLE_TABS as readonly string[]).includes(route);
 }
 
+function isNetworkHubRoute(route: string): boolean {
+  return (
+    route === ROUTES.networkOrgHub('details') ||
+    route.startsWith('/(tabs)/network/hub') ||
+    route.startsWith('/network/hub')
+  );
+}
+
+/** Map current pathname to a storable dispatcher route (tabs or network hub). */
+export function resolveRestorableDispatcherRoute(pathname: string): string | null {
+  const path = pathname?.trim() || '';
+  if (!path || path === '/') return null;
+
+  if (path.includes('/network/hub')) {
+    const tabMatch = path.match(/[?&]tab=([^&]+)/);
+    const tab = tabMatch?.[1];
+    const allowed = new Set([
+      'details',
+      'team',
+      'profile',
+      'sales',
+      'goals',
+      'asset',
+      'connections',
+      'grow',
+      'chat',
+    ]);
+    if (tab && allowed.has(tab)) {
+      return ROUTES.networkOrgHub(tab as Parameters<typeof ROUTES.networkOrgHub>[0]);
+    }
+    return ROUTES.networkOrgHub('details');
+  }
+
+  if (path === '/trips' || path.endsWith('/trips') || path.includes('/(tabs)/trips')) {
+    return ROUTES.TABS.TRIPS;
+  }
+  if (path === '/finance' || path.endsWith('/finance') || path.includes('/(tabs)/finance')) {
+    return ROUTES.TABS.FINANCE;
+  }
+  if (path === '/network' || path.endsWith('/network') || path.includes('/(tabs)/network')) {
+    return ROUTES.TABS.NETWORK;
+  }
+
+  return null;
+}
+
+function isRestorableRoute(route: string): boolean {
+  return isBookmarkableTab(route) || isNetworkHubRoute(route);
+}
+
 /**
- * Persist the current tab route so it can be restored on next cold start.
- * Silently ignores routes that are not bookmarkable tabs.
+ * Persist the current dispatcher route so it can be restored on cold start.
  */
 export async function saveLastTabRoute(route: string): Promise<void> {
-  if (!isBookmarkableTab(route)) return;
+  if (!isRestorableRoute(route)) return;
   await AsyncStorage.setItem(STORAGE_KEY, route).catch(() => {});
 }
 
 /**
- * Returns the last persisted tab route, or the default dispatcher route
- * if nothing has been saved yet (e.g. first launch).
+ * Returns the last persisted dispatcher route, or the default trips tab.
  */
-export async function getLastTabRoute(): Promise<BookmarkableTab> {
+export async function getLastTabRoute(): Promise<string> {
   try {
     const stored = await AsyncStorage.getItem(STORAGE_KEY);
-    if (stored && isBookmarkableTab(stored)) return stored;
+    if (stored && isRestorableRoute(stored)) return stored;
   } catch {
-    // Storage unavailable (e.g. test environment) — use default
+    // Storage unavailable — use default
   }
   return DEFAULT_DISPATCHER_ROUTE;
+}
+
+/** True when route is the org network hub (any hub tab). */
+export function isStoredNetworkHubRoute(route: string): boolean {
+  return isNetworkHubRoute(route);
 }
