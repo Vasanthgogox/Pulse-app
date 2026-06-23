@@ -529,12 +529,6 @@ export function FinanceScreen() {
     handleAddSupplierComplete,
   } = addEntityHandlers;
 
-  useEffect(() => {
-    if (canAccess && currentOrganization?.id && financeSubTab !== "cash") {
-      setEntitiesRefreshKey((k) => k + 1);
-    }
-  }, [canAccess, currentOrganization?.id, financeSubTab]);
-
   /** Tab refocus must not remount entities/ledger — realtime + pull-to-refresh handle freshness. */
 
   useEffect(() => {
