@@ -14,7 +14,7 @@ import {
   AMBER,
   GREEN,
   InfoRow,
-  KycFieldRow,
+  KycFieldsList,
   KycProgressBlock,
   ProfileFieldRow,
   modelLabel,
@@ -125,7 +125,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     >
       <View style={styles.panelStack}>
         <View style={styles.detailCard}>
-          <SectionHeader label="Compliance & KYC" color={kycAccent} />
+          <SectionHeader label="Identity & Compliance" color={kycAccent} />
           <KycProgressBlock pct={kycPct} barColor={progressColor} />
           {!canEdit ? (
             <View style={styles.kycReadonlyNote}>
@@ -135,27 +135,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
               </Text>
             </View>
           ) : null}
-          <KycFieldRow
-            field="gstin"
-            value={kyc?.gstin}
-            verificationStatus={kyc?.verification_status}
-            canEdit={canEdit}
-            onSave={handleSaveKycField}
-          />
-          <KycFieldRow
-            field="business_pan"
-            value={kyc?.business_pan}
-            verificationStatus={kyc?.verification_status}
-            canEdit={canEdit}
-            onSave={handleSaveKycField}
-          />
-          <KycFieldRow
-            field="cin"
-            value={kyc?.cin}
-            verificationStatus={kyc?.verification_status}
-            canEdit={canEdit}
-            onSave={handleSaveKycField}
-          />
+          <KycFieldsList kyc={kyc} canEdit={canEdit} onSave={handleSaveKycField} />
         </View>
 
         <View style={styles.detailCard}>

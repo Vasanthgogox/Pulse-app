@@ -81,6 +81,10 @@ export function EditSupplierModal({
   const [address, setAddress] = useState("");
   const [gstin, setGstin] = useState("");
   const [panNumber, setPanNumber] = useState("");
+  const [cin, setCin] = useState("");
+  const [msmeNumber, setMsmeNumber] = useState("");
+  const [tanNumber, setTanNumber] = useState("");
+  const [iecNumber, setIecNumber] = useState("");
   const [vehicleTypes, setVehicleTypes] = useState("");
   const [operatingAreas, setOperatingAreas] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -110,8 +114,12 @@ export function EditSupplierModal({
       setPhone(fromLinked?.phone ?? fromSupplier.phone);
       setEmail(fromLinked?.email ?? fromSupplier.email);
       setAddress(supplier.address ?? "");
-      setGstin((supplier as { gstin?: string | null }).gstin ?? "");
-      setPanNumber((supplier as { pan_number?: string | null }).pan_number ?? "");
+      setGstin(supplier.gstin ?? "");
+      setPanNumber(supplier.pan_number ?? "");
+      setCin(supplier.cin ?? "");
+      setMsmeNumber(supplier.msme_number ?? "");
+      setTanNumber(supplier.tan_number ?? "");
+      setIecNumber(supplier.iec_number ?? "");
       setVehicleTypes((supplier.vehicle_types ?? []).join(", "));
       setOperatingAreas((supplier.operating_areas ?? []).join(", "));
     }
@@ -193,6 +201,10 @@ export function EditSupplierModal({
     patch.address = address.trim();
     patch.gstin = gstin.trim();
     patch.pan_number = panNumber.trim();
+    patch.cin = cin.trim();
+    patch.msme_number = msmeNumber.trim();
+    patch.tan_number = tanNumber.trim();
+    patch.iec_number = iecNumber.trim();
     patch.vehicle_types = vehicleTypes.split(",").map((s) => s.trim()).filter(Boolean);
     patch.operating_areas = operatingAreas.split(",").map((s) => s.trim()).filter(Boolean);
     if (canEditCompany) {
@@ -385,6 +397,58 @@ export function EditSupplierModal({
                     placeholderTextColor={Theme.textMutedDemo}
                     value={panNumber}
                     onChangeText={setPanNumber}
+                    autoCapitalize="characters"
+                  />
+                </Pressable>
+              </View>
+
+              <Text style={styles.screenSectionLabel}>Compliance & KYC</Text>
+
+              <View style={[styles.screenTwoCol, useSingleColumnFields && styles.screenTwoColStack]}>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>CIN</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="U12345MH2020PTC123456"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={cin}
+                    onChangeText={setCin}
+                    autoCapitalize="characters"
+                  />
+                </Pressable>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>MSME Number</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="UDYAM-MH-00-0000000"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={msmeNumber}
+                    onChangeText={setMsmeNumber}
+                    autoCapitalize="characters"
+                  />
+                </Pressable>
+              </View>
+
+              <View style={[styles.screenTwoCol, useSingleColumnFields && styles.screenTwoColStack]}>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>TAN Number</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="AAAA00000A"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={tanNumber}
+                    onChangeText={setTanNumber}
+                    autoCapitalize="characters"
+                  />
+                </Pressable>
+                <Pressable style={styles.screenFieldCard}>
+                  <Text style={styles.screenInputLabel}>IEC Number</Text>
+                  <TextInput
+                    style={styles.screenInput}
+                    placeholder="0000000000"
+                    placeholderTextColor={Theme.textMutedDemo}
+                    value={iecNumber}
+                    onChangeText={setIecNumber}
                     autoCapitalize="characters"
                   />
                 </Pressable>

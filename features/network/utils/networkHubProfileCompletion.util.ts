@@ -64,7 +64,7 @@ export function networkHubProfileCompletion(
     },
     {
       filled: isKycComplete(input.kyc),
-      gap: { key: "kyc", label: "Compliance & KYC", section: "kyc" },
+      gap: { key: "kyc", label: "Identity & Compliance", section: "kyc" },
     },
   ];
 

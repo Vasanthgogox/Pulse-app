@@ -344,23 +344,55 @@ export async function getWorkspaceKyc(orgId: string): Promise<{
   error: Error | null;
   kyc: WorkspaceKyc | null;
 }> {
-  const { data, error } = await supabase().rpc('get_workspace_kyc_status', {
-    p_org_id: orgId,
-  });
+  const { data, error } = await supabase()
+    .from('organizations')
+    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,verification_status,verified_at,kyc_rejected_reason')
+    .eq('id', orgId)
+    .maybeSingle();
   if (error) return { error: new Error(error.message), kyc: null };
-  return { error: null, kyc: (data as WorkspaceKyc) ?? null };
+  return { error: null, kyc: (data as unknown as WorkspaceKyc) ?? null };
 }
 
 export async function updateWorkspaceKyc(
   orgId: string,
-  fields: { business_pan?: string | null; gstin?: string | null; cin?: string | null },
+  fields: {
+    business_pan?: string | null;
+    gstin?: string | null;
+    cin?: string | null;
+    msme_number?: string | null;
+    tan_number?: string | null;
+    iec_number?: string | null;
+  },
 ): Promise<{ error: Error | null; kyc: WorkspaceKyc | null }> {
-  const { data, error } = await supabase().rpc('update_workspace_kyc', {
-    p_org_id: orgId,
-    p_pan:    fields.business_pan ?? null,
-    p_gstin:  fields.gstin ?? null,
-    p_cin:    fields.cin ?? null,
-  });
-  if (error) return { error: new Error(error.message), kyc: null };
-  return { error: null, kyc: (data as WorkspaceKyc) ?? null };
+  const coreFields = { business_pan: fields.business_pan, gstin: fields.gstin, cin: fields.cin };
+  const hasCoreUpdate = Object.values(coreFields).some((v) => v !== undefined);
+  const hasExtUpdate = fields.msme_number !== undefined || fields.tan_number !== undefined || fields.iec_number !== undefined;
+
+  if (hasCoreUpdate) {
+    const { data, error } = await supabase().rpc('update_workspace_kyc', {
+      p_org_id: orgId,
+      p_pan:    fields.business_pan ?? null,
+      p_gstin:  fields.gstin ?? null,
+      p_cin:    fields.cin ?? null,
+    });
+    if (error) return { error: new Error(error.message), kyc: null };
+    if (!hasExtUpdate) return { error: null, kyc: (data as WorkspaceKyc) ?? null };
+  }
+
+  if (hasExtUpdate) {
+    const patch: Record<string, unknown> = {};
+    if (fields.msme_number !== undefined) patch.msme_number = fields.msme_number?.trim().toUpperCase() || null;
+    if (fields.tan_number !== undefined) patch.tan_number = fields.tan_number?.trim().toUpperCase() || null;
+    if (fields.iec_number !== undefined) patch.iec_number = fields.iec_number?.trim() || null;
+    const { error } = await supabase().from('organizations').update(patch).eq('id', orgId);
+    if (error) return { error: new Error(error.message), kyc: null };
+  }
+
+  const { data: fresh, error: fetchErr } = await supabase()
+    .from('organizations')
+    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,verification_status,verified_at,kyc_rejected_reason')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (fetchErr) return { error: new Error(fetchErr.message), kyc: null };
+  return { error: null, kyc: (fresh as unknown as WorkspaceKyc) ?? null };
 }

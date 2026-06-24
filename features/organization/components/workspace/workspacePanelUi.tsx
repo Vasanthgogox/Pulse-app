@@ -55,24 +55,42 @@ export function modelColor(m: string | undefined): string {
   }
 }
 
-export type KycField = 'gstin' | 'business_pan' | 'cin';
+export type KycField = 'gstin' | 'business_pan' | 'cin' | 'msme_number' | 'tan_number' | 'iec_number';
+
+export const KYC_FIELD_ORDER: KycField[] = [
+  'gstin',
+  'business_pan',
+  'cin',
+  'msme_number',
+  'tan_number',
+  'iec_number',
+];
 
 function kycLabel(f: KycField) {
   if (f === 'gstin') return 'GSTIN';
   if (f === 'business_pan') return 'Business PAN';
-  return 'CIN';
+  if (f === 'cin') return 'CIN';
+  if (f === 'msme_number') return 'MSME / Udyam';
+  if (f === 'tan_number') return 'TAN';
+  return 'IEC';
 }
 
 function kycSub(f: KycField) {
   if (f === 'gstin') return 'GST Identification Number (15 chars)';
   if (f === 'business_pan') return 'Permanent Account Number (10 chars)';
-  return 'Company Identification Number (21 chars)';
+  if (f === 'cin') return 'Company Identification Number (21 chars)';
+  if (f === 'msme_number') return 'Udyam Registration Number';
+  if (f === 'tan_number') return 'Tax Deduction Account Number (10 chars)';
+  return 'Importer Exporter Code (10 digits)';
 }
 
 function kycPlaceholder(f: KycField) {
   if (f === 'gstin') return '27AAAAA0000A1Z5';
   if (f === 'business_pan') return 'AAAAA0000A';
-  return 'U12345MH2024PTC123456';
+  if (f === 'cin') return 'U12345MH2024PTC123456';
+  if (f === 'msme_number') return 'UDYAM-MH-00-0000000';
+  if (f === 'tan_number') return 'AAAA00000A';
+  return '0000000000';
 }
 
 export function validateKyc(f: KycField, val: string): string | null {
@@ -87,13 +105,16 @@ export function validateKyc(f: KycField, val: string): string | null {
   if (f === 'cin' && v.length !== 21) {
     return 'CIN must be exactly 21 characters';
   }
+  if (f === 'tan_number' && !/^[A-Z]{4}\d{5}[A-Z]$/.test(v)) {
+    return 'Invalid TAN format (e.g. AAAA00000A)';
+  }
   return null;
 }
 
 export function kycCompletionPct(kyc: WorkspaceKyc | null): number {
   if (!kyc) return 0;
-  const fields: KycField[] = ['gstin', 'business_pan', 'cin'];
-  return Math.round((fields.filter((f) => !!kyc[f]).length / fields.length) * 100);
+  const core: KycField[] = ['gstin', 'business_pan', 'cin'];
+  return Math.round((core.filter((f) => !!kyc[f]).length / core.length) * 100);
 }
 
 export type OrgProfileSnapshot = {
@@ -405,7 +426,6 @@ export function KycFieldRow({
     ? <Clock size={14} color={AMBER} strokeWidth={2.2} />
     : <CircleDashed size={14} color={Theme.textMuted} strokeWidth={2} />;
 
-  const statusText = isVerified ? 'Verified' : hasValue ? (value ?? '') : 'Not added';
   const statusColor = isVerified ? GREEN : hasValue ? AMBER : Theme.textMuted;
   const statusBg = isVerified ? GREEN_TINT : hasValue ? AMBER_TINT : Theme.surfaceGray;
 
@@ -429,67 +449,134 @@ export function KycFieldRow({
     }
   };
 
-  const statusLine = isVerified
+  const displayValue = isVerified
     ? 'Verified'
     : hasValue
-      ? statusText
+      ? (value ?? '').trim()
       : 'Not added';
 
   return (
     <View style={kf.wrap}>
-      <View style={[kf.iconBox, { backgroundColor: statusBg }]}>{statusIcon}</View>
-      <View style={kf.body}>
-        <Text style={kf.label}>{kycLabel(field)}</Text>
-        <Text style={kf.sub} numberOfLines={2}>
-          {kycSub(field)}
-          <Text style={kf.subMuted}> / </Text>
-          <Text style={[kf.subStatus, { color: statusColor }]}>{statusLine}</Text>
-        </Text>
-        {editing ? (
-          <View style={kf.editRow}>
-            <TextInput
-              ref={inputRef}
-              style={kf.input}
-              value={draft}
-              onChangeText={(t) => { setDraft(t); setValidationErr(null); }}
-              placeholder={kycPlaceholder(field)}
-              placeholderTextColor={Theme.textMuted}
-              autoCapitalize="characters"
-              returnKeyType="done"
-              onSubmitEditing={() => void handleSave()}
-            />
-            <Pressable style={kf.saveBtn} onPress={() => void handleSave()} disabled={saving}>
-              {saving ? <LoadingIndicator size="small" color="#fff" /> : <Check size={14} color="#fff" strokeWidth={2.8} />}
+      <View style={kf.topRow}>
+        <View style={[kf.iconBox, { backgroundColor: statusBg }]}>{statusIcon}</View>
+        <View style={kf.body}>
+          <View style={kf.titleRow}>
+            <Text style={kf.label}>{kycLabel(field)}</Text>
+            {canEdit && !isVerified && !editing ? (
+              <Pressable
+                style={kf.editBtn}
+                onPress={handleEdit}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${kycLabel(field)}`}
+              >
+                <Pencil size={11} color={PURPLE} strokeWidth={2.2} />
+                <Text style={kf.editBtnText}>Edit</Text>
+              </Pressable>
+            ) : isVerified ? (
+              <Lock size={12} color={Theme.textMuted} strokeWidth={2} />
+            ) : null}
+          </View>
+          <Text style={kf.hint} numberOfLines={2}>
+            {kycSub(field)}
+          </Text>
+          {!editing ? (
+            <Text
+              style={[
+                kf.valueLine,
+                !hasValue && !isVerified && kf.valueEmpty,
+                (hasValue || isVerified) && { color: statusColor },
+              ]}
+              numberOfLines={1}
+            >
+              {displayValue}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      {editing ? (
+        <View style={kf.editor}>
+          <TextInput
+            ref={inputRef}
+            style={kf.input}
+            value={draft}
+            onChangeText={(t) => { setDraft(t); setValidationErr(null); }}
+            placeholder={kycPlaceholder(field)}
+            placeholderTextColor={Theme.textMuted}
+            autoCapitalize="characters"
+            returnKeyType="done"
+            onSubmitEditing={() => void handleSave()}
+          />
+          <View style={kf.actionRow}>
+            <Pressable
+              style={({ pressed }) => [kf.saveBtn, pressed && { opacity: 0.9 }]}
+              onPress={() => void handleSave()}
+              disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={`Save ${kycLabel(field)}`}
+            >
+              {saving ? (
+                <LoadingIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Check size={13} color="#fff" strokeWidth={2.8} />
+                  <Text style={kf.saveBtnText}>Save</Text>
+                </>
+              )}
             </Pressable>
-            <Pressable style={kf.cancelBtn} onPress={() => setEditing(false)}>
+            <Pressable
+              style={kf.cancelBtn}
+              onPress={() => setEditing(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel edit"
+            >
               <Text style={kf.cancelText}>Cancel</Text>
             </Pressable>
           </View>
-        ) : null}
-        {validationErr ? <Text style={kf.errText}>{validationErr}</Text> : null}
-      </View>
-      {canEdit && !isVerified && !editing ? (
-        <Pressable style={kf.editBtn} onPress={handleEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Edit ${kycLabel(field)}`}>
-          <Pencil size={11} color={PURPLE} strokeWidth={2.2} />
-          <Text style={kf.editBtnText}>Edit</Text>
-        </Pressable>
-      ) : isVerified ? (
-        <Lock size={12} color={Theme.textMuted} strokeWidth={2} style={kf.lockIcon} />
+          {validationErr ? <Text style={kf.errText}>{validationErr}</Text> : null}
+        </View>
       ) : null}
     </View>
   );
 }
 
+export function KycFieldsList({
+  kyc,
+  canEdit,
+  onSave,
+}: {
+  kyc: WorkspaceKyc | null;
+  canEdit: boolean;
+  onSave: (field: KycField, val: string) => Promise<void>;
+}) {
+  return (
+    <>
+      {KYC_FIELD_ORDER.map((field) => (
+        <KycFieldRow
+          key={field}
+          field={field}
+          value={kyc?.[field]}
+          verificationStatus={kyc?.verification_status}
+          canEdit={canEdit}
+          onSave={onSave}
+        />
+      ))}
+    </>
+  );
+}
+
 const kf = StyleSheet.create({
   wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    minHeight: 52,
+    gap: 0,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   iconBox: {
     width: 34,
@@ -497,22 +584,57 @@ const kf = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
   },
-  body: { flex: 1, minWidth: 0, gap: 2 },
+  body: { flex: 1, minWidth: 0, gap: 3 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    minHeight: 22,
+  },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: Theme.textPrimaryDark,
     letterSpacing: -0.05,
-  },
-  sub: { fontSize: 10, color: Theme.textMuted, lineHeight: 14, fontWeight: '500' },
-  subMuted: { color: Theme.textMuted, fontWeight: '500' },
-  subStatus: { fontWeight: '600' },
-  editRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  input: {
     flex: 1,
+    minWidth: 0,
+  },
+  hint: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    lineHeight: 14,
+    fontWeight: '500',
+  },
+  valueLine: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginTop: 1,
+  },
+  valueEmpty: {
+    color: Theme.textMuted,
+    fontStyle: 'italic',
+    fontWeight: '500',
+    fontFamily: undefined,
+    letterSpacing: -0.05,
+  },
+  editor: {
+    marginTop: 10,
+    marginLeft: 46,
+    gap: 8,
+    alignSelf: 'stretch',
+    minWidth: 0,
+  },
+  input: {
+    alignSelf: 'stretch',
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
@@ -524,31 +646,47 @@ const kf = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: Theme.screenBackground,
     minHeight: 44,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as const } : null),
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   saveBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: PURPLE,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: PURPLE,
+    flexShrink: 0,
   },
-  cancelBtn: { paddingHorizontal: 6 },
+  saveBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  cancelBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexShrink: 0,
+  },
   cancelText: { fontSize: 11, color: Theme.textMuted, fontWeight: '600' },
-  errText: { fontSize: 10, color: Theme.negative, marginTop: 3, fontWeight: '500' },
+  errText: { fontSize: 10, color: Theme.negative, fontWeight: '500' },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 8,
     backgroundColor: PURPLE_TINT,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: PURPLE_BORDER,
+    flexShrink: 0,
   },
   editBtnText: { fontSize: 10, fontWeight: '600', color: PURPLE },
-  lockIcon: { marginRight: 2 },
 });
 
 const oid = StyleSheet.create({

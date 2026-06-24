@@ -5,6 +5,7 @@ import Theme from "@/constants/Theme";
 import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
 import { updateOrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
 import { useInvalidateOrganizationWorkspaceProfile } from "@/lib/queries/useOrganizationWorkspaceProfileQuery";
+import { updateProfile } from "@/features/auth/services/auth.service";
 import { Save, X } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -96,6 +97,7 @@ export function NetworkDesktopWorkspaceProfileModal({
   const [website, setWebsite] = useState("");
   const [facebook, setFacebook] = useState("");
   const [youtube, setYoutube] = useState("");
+  const [phoneValue, setPhoneValue] = useState("");
   const [addressLine, setAddressLine] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -110,6 +112,7 @@ export function NetworkDesktopWorkspaceProfileModal({
     setWebsite(profile.profile_website?.trim() ?? "");
     setFacebook(profile.profile_facebook?.trim() ?? "");
     setYoutube(profile.profile_youtube?.trim() ?? "");
+    setPhoneValue(phone?.trim() ?? "");
     setAddressLine(profile.address_line?.trim() ?? "");
     setCity(profile.city?.trim() ?? "");
     setState(profile.state?.trim() ?? "");
@@ -150,6 +153,14 @@ export function NetworkDesktopWorkspaceProfileModal({
         city,
         state,
       };
+      if (phoneValue.trim() !== (phone?.trim() ?? "")) {
+        const { error: phoneErr } = await updateProfile({ phone: phoneValue.trim() });
+        if (phoneErr) {
+          setSaving(false);
+          setError(phoneErr.message);
+          return;
+        }
+      }
     } else if (section === "about") {
       payload = { profile_about: about };
     } else {
@@ -207,8 +218,9 @@ export function NetworkDesktopWorkspaceProfileModal({
                 <Field label="Address line" value={addressLine} onChangeText={setAddressLine} placeholder="Street / plot" />
                 <Field label="City" value={city} onChangeText={setCity} placeholder="City" />
                 <Field label="State" value={state} onChangeText={setState} placeholder="State" />
+                <Field label="Phone" value={phoneValue} onChangeText={setPhoneValue} placeholder="+91 98765 43210" keyboardType="numeric" />
                 <Text style={modalStyles.readOnlyHint}>
-                  Email {email || "—"} · Phone {phone?.trim() || "—"} (from account settings)
+                  Email {email || "—"} is managed in account settings.
                 </Text>
               </>
             ) : null}
@@ -351,11 +363,10 @@ const modalStyles = StyleSheet.create({
   saveBtn: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 8,
     backgroundColor: Theme.buttonPrimary,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

@@ -27,8 +27,12 @@ import {
 } from "@/features/network/utils/organizationLocationDisplay.util";
 import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
 import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
-import { getWorkspaceKyc } from "@/features/organization/services/organization.service";
-import { kycCompletionPct } from "@/features/organization/components/workspace/workspacePanelUi";
+import { getWorkspaceKyc, updateWorkspaceKyc } from "@/features/organization/services/organization.service";
+import {
+  kycCompletionPct,
+  KycFieldsList,
+  KycProgressBlock,
+} from "@/features/organization/components/workspace/workspacePanelUi";
 import { networkHubProfileCompletion } from "@/features/network/utils/networkHubProfileCompletion.util";
 import type { WorkspaceKyc } from "@/types/organization";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,15 +43,11 @@ import {
   useDriversQuery,
   useSuppliersQuery,
 } from "@/lib/queries";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useOrganizationLocationsQuery } from "@/lib/queries/useOrganizationLocationsQuery";
 import { useOrganizationWorkspaceProfileQuery } from "@/lib/queries/useOrganizationWorkspaceProfileQuery";
 import {
   Briefcase,
   Calendar,
-  Eye,
-  EyeOff,
-  ExternalLink,
   Globe,
   Mail,
   MapPin,
@@ -367,28 +367,15 @@ export function NetworkDesktopDetailsPanel({
   const isDriver = authProfile?.role === 'driver';
   const [kyc, setKyc] = useState<WorkspaceKyc | null>(null);
   const [kycLoaded, setKycLoaded] = useState(false);
-  const [complianceVisible, setComplianceVisible] = useState(false);
   const [showEmptyHighlights, setShowEmptyHighlights] = useState(false);
 
   useEffect(() => {
     if (isDriver || !orgId) return;
-    AsyncStorage.getItem('@pulse/hub_compliance_visible').then((v) => {
-      if (v === 'true') setComplianceVisible(true);
-    });
     getWorkspaceKyc(orgId).then(({ kyc: k }) => {
       setKyc(k);
       setKycLoaded(true);
     });
   }, [isDriver, orgId]);
-
-  const toggleComplianceVisible = () => {
-    const next = !complianceVisible;
-    setComplianceVisible(next);
-    AsyncStorage.setItem('@pulse/hub_compliance_visible', String(next));
-  };
-
-  const maskGstin = (v: string) => complianceVisible ? v : v.slice(0, 2) + '*****' + v.slice(-3);
-  const maskPan = (v: string) => complianceVisible ? v : v.slice(0, 5) + '****' + v.slice(-1);
 
   const profileQ = useOrganizationWorkspaceProfileQuery(orgId);
   const officeMapQ = useOrganizationOfficeMap(orgId);
@@ -737,68 +724,37 @@ export function NetworkDesktopDetailsPanel({
           </View>
 
           {!isDriver && kycLoaded ? (
-            <View style={[styles.card, compact && mobile.cardCompact]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <View style={[styles.card, compact && mobile.cardCompact, { padding: 0, gap: 0, overflow: 'hidden' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 14, paddingBottom: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <ShieldCheck size={14} color={kyc?.verification_status === 'verified' ? '#50CD89' : METRONIC.subtle} strokeWidth={2} />
                   <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact, { marginBottom: 0 }]}>Identity & Compliance</Text>
                 </View>
-                {(kyc?.gstin || kyc?.business_pan || kyc?.cin) ? (
-                  <Pressable onPress={toggleComplianceVisible} hitSlop={8}>
-                    {complianceVisible
-                      ? <EyeOff size={14} color={METRONIC.subtle} strokeWidth={2} />
-                      : <Eye size={14} color={METRONIC.subtle} strokeWidth={2} />}
-                  </Pressable>
+                {kyc?.verification_status ? (
+                  <View style={{
+                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
+                    backgroundColor: kyc.verification_status === 'verified' ? '#E8FFF3' : kyc.verification_status === 'pending' ? '#FFF8DD' : '#F1F1F4',
+                  }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: kyc.verification_status === 'verified' ? '#50CD89' : kyc.verification_status === 'pending' ? '#F6C000' : METRONIC.subtle }}>
+                      {kyc.verification_status.toUpperCase()}
+                    </Text>
+                  </View>
                 ) : null}
               </View>
               {(() => {
                 const kycPct = kycCompletionPct(kyc);
                 const barColor = kycPct === 100 ? '#50CD89' : kycPct > 0 ? '#F6C000' : '#F64E60';
-                return (
-                  <View style={{ marginBottom: 10 }}>
-                    <View style={{ height: 5, borderRadius: 3, backgroundColor: '#F1F1F4', overflow: 'hidden' }}>
-                      <View style={{ height: '100%', width: `${kycPct}%`, backgroundColor: barColor, borderRadius: 3 }} />
-                    </View>
-                    <Text style={{ marginTop: 6, fontSize: 11, fontWeight: '600', color: METRONIC.subtle }}>
-                      {kycPct}% complete
-                    </Text>
-                  </View>
-                );
+                return <KycProgressBlock pct={kycPct} barColor={barColor} />;
               })()}
-              {kyc?.gstin ? (
-                <HighlightRow label="GSTIN" value={maskGstin(kyc.gstin)} {...{ compact }} />
-              ) : null}
-              {kyc?.business_pan ? (
-                <HighlightRow label="PAN" value={maskPan(kyc.business_pan)} {...{ compact }} />
-              ) : null}
-              {kyc?.cin ? (
-                <HighlightRow label="CIN" value={kyc.cin} {...{ compact }} />
-              ) : null}
-              {!kyc?.gstin && !kyc?.business_pan && !kyc?.cin ? (
-                <Text style={{ fontSize: 12, color: METRONIC.subtle, marginBottom: 8 }}>
-                  Add GSTIN, PAN, and CIN in Workspace → Compliance & KYC.
-                </Text>
-              ) : null}
-              {kyc?.verification_status ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                  <View style={{
-                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
-                    backgroundColor: kyc.verification_status === 'verified' ? '#E8FFF3' : kyc.verification_status === 'pending' ? '#FFF8DD' : '#F1F1F4',
-                  }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: kyc.verification_status === 'verified' ? '#50CD89' : kyc.verification_status === 'pending' ? '#F6C000' : METRONIC.subtle }}>
-                      {kyc.verification_status.toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-              ) : null}
-              <Pressable
-                onPress={() => router.push({ pathname: ROUTES.WORKSPACE as Parameters<typeof router.push>[0], params: { panel: 'kyc' } })}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 }}
-                hitSlop={8}
-              >
-                <ExternalLink size={12} color={METRONIC.link} strokeWidth={2} />
-                <Text style={{ fontSize: 12, color: METRONIC.link }}>Manage KYC</Text>
-              </Pressable>
+              <KycFieldsList
+                kyc={kyc}
+                canEdit
+                onSave={async (f, val) => {
+                  if (!orgId) return;
+                  const { kyc: updated } = await updateWorkspaceKyc(orgId, { [f]: val || null });
+                  if (updated) setKyc(updated);
+                }}
+              />
             </View>
           ) : null}
         </View>

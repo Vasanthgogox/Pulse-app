@@ -21,6 +21,11 @@ export interface SupplierRow {
   email: string | null;
   address: string | null;
   gstin: string | null;
+  pan_number: string | null;
+  cin: string | null;
+  msme_number: string | null;
+  tan_number: string | null;
+  iec_number: string | null;
   is_active: boolean;
   is_verified: boolean;
   created_at: string;
@@ -46,7 +51,7 @@ export interface SupplierRow {
 
 const SUPPLIER_CORE_COLUMNS = [
   "id", "organization_id", "name", "contact_person",
-  "phone", "email", "address", "gstin", "is_active", "is_verified",
+  "phone", "email", "address", "gstin", "pan_number", "cin", "msme_number", "tan_number", "iec_number", "is_active", "is_verified",
   "created_at", "updated_at", "supplier_type", "linked_organization_id",
   "avatar_url", "avatar_seed", "owner_full_name",
   "vehicle_types", "operating_areas",
@@ -228,7 +233,7 @@ export async function getSupplierById(
   }
   if (error) return { error: new Error(error.message), supplier: null };
   if (data == null) return { error: null, supplier: null };
-  return { error: null, supplier: withDefaultOnboardingFields(data as SupplierRow) };
+  return { error: null, supplier: withDefaultOnboardingFields(data as unknown as SupplierRow) };
 }
 
 /**
@@ -244,7 +249,7 @@ export async function getSupplierDetails(
   });
   if (error) return { error: new Error(error.message), supplier: null };
   if (data == null) return { error: null, supplier: null };
-  return { error: null, supplier: data as SupplierRow };
+  return { error: null, supplier: data as unknown as SupplierRow };
 }
 
 /**
@@ -342,7 +347,7 @@ export async function createSupplier(
     .select()
     .single();
   if (error) return { error: new Error(error.message), supplier: null };
-  return { error: null, supplier: data as SupplierRow };
+  return { error: null, supplier: data as unknown as SupplierRow };
 }
 
 export interface UpdateSupplierData {
@@ -356,6 +361,10 @@ export interface UpdateSupplierData {
   address?: string;
   gstin?: string;
   pan_number?: string;
+  cin?: string;
+  msme_number?: string;
+  tan_number?: string;
+  iec_number?: string;
   vehicle_types?: string[];
   operating_areas?: string[];
 }
@@ -381,6 +390,10 @@ export async function updateSupplier(
   if (patch.address !== undefined) updates.address = patch.address.trim() || null;
   if (patch.gstin !== undefined) updates.gstin = patch.gstin.trim().toUpperCase() || null;
   if (patch.pan_number !== undefined) updates.pan_number = patch.pan_number.trim().toUpperCase() || null;
+  if (patch.cin !== undefined) updates.cin = patch.cin.trim().toUpperCase() || null;
+  if (patch.msme_number !== undefined) updates.msme_number = patch.msme_number.trim().toUpperCase() || null;
+  if (patch.tan_number !== undefined) updates.tan_number = patch.tan_number.trim().toUpperCase() || null;
+  if (patch.iec_number !== undefined) updates.iec_number = patch.iec_number.trim() || null;
   if (patch.vehicle_types !== undefined) updates.vehicle_types = patch.vehicle_types;
   if (patch.operating_areas !== undefined) updates.operating_areas = patch.operating_areas;
   if (Object.keys(updates).length === 0) return { error: null, supplier: null };
@@ -392,5 +405,5 @@ export async function updateSupplier(
     .select()
     .single();
   if (error) return { error: new Error(error.message), supplier: null };
-  return { error: null, supplier: data as SupplierRow };
+  return { error: null, supplier: data as unknown as SupplierRow };
 }

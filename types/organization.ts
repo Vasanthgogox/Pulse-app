@@ -61,6 +61,9 @@ export interface WorkspaceKyc {
   business_pan: string | null;
   gstin: string | null;
   cin: string | null;
+  msme_number: string | null;
+  tan_number: string | null;
+  iec_number: string | null;
   verification_status: KycVerificationStatus;
   verified_at: string | null;
   kyc_rejected_reason: string | null;
