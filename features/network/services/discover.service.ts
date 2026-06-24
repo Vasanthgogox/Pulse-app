@@ -11,18 +11,25 @@ type PartnerDisplayBatch = Record<
   }
 >;
 
-/** Fallback when discover_organizations RPC predates avatar_url column. */
+/**
+ * Resolve org logo / owner photo via SECURITY DEFINER batch RPC — same path as
+ * the network profile modal (`getOrgProfileSnapshot`). Remote `discover_organizations`
+ * may omit `avatar_url` or only return `avatar_seed`; logos still live on
+ * `organizations.logo_url` and must be merged here.
+ */
 async function enrichDiscoverOrgsWithPartnerDisplay(
   orgs: DiscoverOrg[],
 ): Promise<DiscoverOrg[]> {
-  const needsEnrich = orgs.some(
-    (o) => !(o.avatar_url ?? "").trim() && !(o.avatar_seed ?? "").trim(),
-  );
-  if (!needsEnrich || orgs.length === 0) return orgs;
+  if (orgs.length === 0) return orgs;
+
+  const idsMissingLogo = orgs
+    .filter((o) => !(o.avatar_url ?? "").trim())
+    .map((o) => o.id);
+  if (idsMissingLogo.length === 0) return orgs;
 
   const { data, error } = await supabase().rpc(
     "get_connection_partner_display_batch",
-    { p_linked_organization_ids: orgs.map((o) => o.id) },
+    { p_linked_organization_ids: idsMissingLogo },
   );
   if (error || !data || typeof data !== "object") return orgs;
 
@@ -30,10 +37,12 @@ async function enrichDiscoverOrgsWithPartnerDisplay(
   return orgs.map((org) => {
     const row = map[org.id];
     if (!row) return org;
+    const batchUrl = (row.avatarUrl ?? "").trim();
+    const batchSeed = (row.avatarSeed ?? "").trim();
     return {
       ...org,
-      avatar_url: org.avatar_url ?? row.avatarUrl ?? null,
-      avatar_seed: org.avatar_seed ?? row.avatarSeed ?? null,
+      avatar_url: (org.avatar_url ?? "").trim() || batchUrl || null,
+      avatar_seed: (org.avatar_seed ?? "").trim() || batchSeed || org.avatar_seed,
     };
   });
 }

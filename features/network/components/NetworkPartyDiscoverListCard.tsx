@@ -274,6 +274,7 @@ export function NetworkPartyDiscoverListCard({
           <PartyAvatar
             name={displayName}
             initialsColorSeed={orgId}
+            avatarUrl={avatarUrl}
             avatarSeed={avatarSeed}
             entityType="client"
             size={avatarSize}

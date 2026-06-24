@@ -161,6 +161,7 @@ export function NetworkDesktopGrowConnectionCard({
         <PartyAvatar
           name={org.name}
           initialsColorSeed={org.id}
+          organizationImageUrl={org.avatar_url}
           avatarUrl={org.avatar_url}
           avatarSeed={org.avatar_seed}
           entityType="client"
