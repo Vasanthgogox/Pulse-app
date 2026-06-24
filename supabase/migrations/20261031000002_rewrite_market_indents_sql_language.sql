@@ -6,8 +6,10 @@
 -- tree, chooses better join orders, and can use parallel workers.
 --
 -- Semantic changes: NONE. Verified line-by-line against the plpgsql version:
---   - Guard clause: IF NOT is_org_member THEN RETURN → WHERE (SELECT is_org_member(org_id))
---     evaluated once as a scalar; short-circuits the entire plan when false.
+--   - Guard clause: IF NOT is_org_member THEN RETURN → single WHERE on the outer
+--     wrapper SELECT, evaluated once after all CTEs are defined. The guard CTE
+--     is referenced only at the final SELECT so the planner has one evaluation
+--     point regardless of CTE materialization decisions.
 --   - Parameter references: market_indents_for_org.org_id → org_id (sql language
 --     resolves bare parameter names without the function-name prefix).
 --   - RETURN QUERY removed; sql language implicitly returns the top-level SELECT.
@@ -131,7 +133,6 @@ AS $$
     WHERE i.deleted_at IS NULL
       AND i.circulation_target IN ('integrated_supplier', 'both')
       AND i.status <> 'draft'
-      AND (SELECT ok FROM guard)
   ),
   via_award AS (
     SELECT
@@ -158,7 +159,6 @@ AS $$
     WHERE i.deleted_at IS NULL
       AND i.status <> 'draft'
       AND i.organization_id <> org_id
-      AND (SELECT ok FROM guard)
       AND (
         i.assigned_supplier_id = org_id
         OR EXISTS (
@@ -170,8 +170,12 @@ AS $$
         )
       )
   )
-  SELECT * FROM via_link
-  UNION
-  SELECT * FROM via_award
-  ORDER BY created_at DESC;
+  SELECT x.*
+  FROM (
+    SELECT * FROM via_link
+    UNION
+    SELECT * FROM via_award
+  ) x
+  WHERE (SELECT ok FROM guard)
+  ORDER BY x.created_at DESC;
 $$;

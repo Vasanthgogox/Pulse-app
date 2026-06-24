@@ -70,12 +70,16 @@ export function useLogIncomingPodsMutation(orgId: string | null) {
       if (result.error) throw result.error;
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (_result, payload) => {
+      const affectedTripIds = Object.keys(payload.selectedLRs).filter(
+        (id) => payload.selectedLRs[id].length > 0,
+      );
+      for (const tripId of affectedTripIds) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+      }
       if (orgId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.logPods.trips(orgId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsSupplier(orgId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsClient(orgId) });
       }
       queryClient.invalidateQueries({ queryKey: queryKeys.logPods.courierPartners() });
     },

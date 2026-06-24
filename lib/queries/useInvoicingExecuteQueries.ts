@@ -43,13 +43,14 @@ export function useExecuteInvoiceMutation(orgId: string | null) {
       if (result.error) throw result.error;
       return result;
     },
-    onSuccess: () => {
+    onSuccess: (_result, { internalIds }) => {
       if (orgId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.invoicing.trips(orgId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.invoicing.summary(orgId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsSupplier(orgId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.trips.whereOrgIsClient(orgId) });
+      }
+      for (const tripId of internalIds) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
       }
     },
   });

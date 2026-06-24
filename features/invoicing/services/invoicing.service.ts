@@ -68,7 +68,40 @@ export interface PodReconciliationSummary {
   invoiced_sum: number;
 }
 
-type TripRecord = TripRow & Record<string, unknown>;
+type TripRecord = Pick<
+  TripRow,
+  | "id"
+  | "organization_id"
+  | "trip_operational_code"
+  | "trip_code"
+  | "display_trip_id"
+  | "trip_number"
+  | "client_name"
+  | "client_price"
+  | "supplier_id"
+  | "supplier_name"
+  | "status"
+  | "pickup_date"
+  | "pickup_area"
+  | "drop_location"
+  | "notes"
+  | "created_at"
+  | "booking_ref"
+> & {
+  // DB columns not in TripRow (accessed via dynamic cast in mapping functions)
+  trip_id?: string | null;
+  lr_no?: string | null;
+  pod_status?: string | null;
+  invoice_no?: string | null;
+  invoice_status_1?: string | null;
+  vendor_name?: string | null;
+  total_client_value?: number | null;
+  trip_status?: string | null;
+  trip_date?: string | null;
+  pp_location?: string | null;
+  drop_point?: string | null;
+  remarks?: string | null;
+};
 
 function str(v: unknown): string {
   return v == null ? "" : String(v);
@@ -198,7 +231,9 @@ export async function fetchInvoicingTrips(
     const [ownerRes, supRes] = await Promise.all([
       supabase()
         .from("trips")
-        .select("*")
+        .select(
+          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, trip_id, booking_ref, lr_no, pod_status, invoice_no, invoice_status_1, supplier_id, vendor_name, supplier_name, client_name, total_client_value, client_price, trip_status, status, trip_date, pickup_date, pp_location, pickup_area, drop_point, drop_location, remarks, notes, created_at",
+        )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false })
         .limit(3000),
@@ -403,17 +438,19 @@ export async function executeInvoiceCreation(
 
     if (error) throw error;
 
-    for (const id of sanitizedIds) {
-      const { error: logError } = await supabase().rpc("log_activity", {
-        p_action: "INVOICE_GENERATED",
-        p_entity_type: "trip",
-        p_entity_id: id,
-        p_details: { invoice_no: invoiceNo, payload },
-      });
-      if (logError) {
-        console.warn("[invoicing] log_activity RPC failed for trip", id, logError.message);
-      }
-    }
+    await Promise.all(
+      sanitizedIds.map(async (id) => {
+        const { error: logError } = await supabase().rpc("log_activity", {
+          p_action: "INVOICE_GENERATED",
+          p_entity_type: "trip",
+          p_entity_id: id,
+          p_details: { invoice_no: invoiceNo, payload },
+        });
+        if (logError) {
+          console.warn("[invoicing] log_activity RPC failed for trip", id, logError.message);
+        }
+      }),
+    );
 
     return { error: null };
   } catch (e) {

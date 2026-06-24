@@ -751,10 +751,12 @@ export async function createIndent(
 
   // Sequential indent trigger writes user_counters(user_id),
   // which references public.users(id).
-  await ensurePublicUserRecord(ownerUserId);
-  if (creatorUserId && creatorUserId !== ownerUserId) {
-    await ensurePublicUserRecord(creatorUserId);
-  }
+  await Promise.all([
+    ensurePublicUserRecord(ownerUserId),
+    creatorUserId && creatorUserId !== ownerUserId
+      ? ensurePublicUserRecord(creatorUserId)
+      : Promise.resolve(),
+  ]);
 
   const { data: row, error } = await supabase()
     .from("indents")

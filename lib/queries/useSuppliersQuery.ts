@@ -45,6 +45,5 @@ export function useInvalidateSuppliers() {
   const qc = useQueryClient();
   return (orgId: string) => {
     qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.suppliers.finite(orgId) });
   };
 }

@@ -127,7 +127,6 @@ export function useTripStatusMutation(orgId: string | null) {
     onSettled: (_data, _err, { tripId }) => {
       qc.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
       if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.finite(orgId) });
-      if (orgId) qc.invalidateQueries({ queryKey: queryKeys.trips.all(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.trips.assignmentAuditRoot });
       qc.invalidateQueries({
         queryKey: ["q", "trips", "assignment-audit-history", tripId],

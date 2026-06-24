@@ -38,7 +38,39 @@ export type CourierPartnerRow = {
   is_custom?: boolean | null;
 };
 
-type TripRecord = TripRow & Record<string, unknown>;
+type TripRecord = Pick<
+  TripRow,
+  | "id"
+  | "organization_id"
+  | "trip_operational_code"
+  | "trip_code"
+  | "display_trip_id"
+  | "trip_number"
+  | "client_name"
+  | "client_price"
+  | "supplier_id"
+  | "supplier_name"
+  | "status"
+  | "pickup_date"
+  | "pickup_area"
+  | "drop_location"
+  | "notes"
+  | "created_at"
+  | "booking_ref"
+> & {
+  // DB columns not in TripRow (accessed via dynamic cast in mapping functions)
+  trip_id?: string | null;
+  lr_no?: string | null;
+  pod_status?: string | null;
+  invoice_no?: string | null;
+  invoice_status_2?: string | null;
+  vendor_name?: string | null;
+  total_client_value?: number | null;
+  trip_status?: string | null;
+  trip_date?: string | null;
+  pp_location?: string | null;
+  drop_point?: string | null;
+};
 
 function num(v: unknown): number | null {
   if (v == null) return null;
@@ -202,7 +234,9 @@ export async function fetchTripsForLogPods(
     const [ownerRes, supRes, cliRes, shipperNamesRes] = await Promise.all([
       supabase()
         .from("trips")
-        .select("*")
+        .select(
+          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, trip_id, lr_no, pod_status, invoice_no, invoice_status_2, supplier_id, vendor_name, supplier_name, client_name, total_client_value, client_price, trip_status, status, trip_date, pickup_date, pp_location, pickup_area, drop_point, drop_location, created_at",
+        )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false })
         .limit(3000),
@@ -498,39 +532,43 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
     }
   }
 
-  for (const update of lrUpdates) {
-    const { error } = await supabase()
-      .from("trip_lrs")
-      .update({
-        status: "delivered",
-        pod_received: true,
-        pod_status: "Received",
-        invoice_status: "Received-Awaiting Validation",
-      })
-      .eq("trip_id", update.trip_id)
-      .eq("lr_number", update.lr_number);
+  await Promise.all(
+    lrUpdates.map(async (update) => {
+      const { error } = await supabase()
+        .from("trip_lrs")
+        .update({
+          status: "delivered",
+          pod_received: true,
+          pod_status: "Received",
+          invoice_status: "Received-Awaiting Validation",
+        })
+        .eq("trip_id", update.trip_id)
+        .eq("lr_number", update.lr_number);
+      if (error) console.error("[logPods] trip_lrs update:", error);
+    }),
+  );
 
-    if (error) console.error("[logPods] trip_lrs update:", error);
-  }
-
-  for (const [tripInternalId, lrs] of Object.entries(selectedLRs)) {
-    if (lrs.length === 0) continue;
-    const attCount = mappedAttachments.filter(
-      (a) => a.trip_id === tripInternalId,
-    ).length;
-    const { error } = await supabase().rpc("log_activity", {
-      p_action: "POD_LOGGED",
-      p_entity_type: "trip",
-      p_entity_id: tripInternalId,
-      p_details: {
-        lr_numbers: lrs.filter((lr) => lr !== "N/A"),
-        courier_name: finalCourierName,
-        tracking_id: trackingId || null,
-        attachment_count: attCount,
-      },
-    });
-    if (error) console.warn("[logPods] log_activity:", error.message);
-  }
+  await Promise.all(
+    Object.entries(selectedLRs)
+      .filter(([, lrs]) => lrs.length > 0)
+      .map(async ([tripInternalId, lrs]) => {
+        const attCount = mappedAttachments.filter(
+          (a) => a.trip_id === tripInternalId,
+        ).length;
+        const { error } = await supabase().rpc("log_activity", {
+          p_action: "POD_LOGGED",
+          p_entity_type: "trip",
+          p_entity_id: tripInternalId,
+          p_details: {
+            lr_numbers: lrs.filter((lr) => lr !== "N/A"),
+            courier_name: finalCourierName,
+            tracking_id: trackingId || null,
+            attachment_count: attCount,
+          },
+        });
+        if (error) console.warn("[logPods] log_activity:", error.message);
+      }),
+  );
 
   return attachmentWarning
     ? { error: null, attachmentWarning }

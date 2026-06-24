@@ -138,10 +138,16 @@ export async function getProfileImageBatch(
   if (ids.length === 0) return {};
 
   const profileMap = await getDriverProfileDisplayBatch(ids);
+  const entries = Object.entries(profileMap);
+  const urls = await Promise.all(
+    entries.map(([, profile]) =>
+      resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed),
+    ),
+  );
   const result: Record<string, string> = {};
-  for (const [driverId, profile] of Object.entries(profileMap)) {
-    const url = await resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed);
-    if (url) result[driverId] = url;
+  for (let i = 0; i < entries.length; i++) {
+    const url = urls[i];
+    if (url) result[entries[i][0]] = url;
   }
   return result;
 }
