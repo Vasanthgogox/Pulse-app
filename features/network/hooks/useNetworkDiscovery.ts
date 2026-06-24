@@ -126,12 +126,19 @@ export function useNetworkDiscovery({
     if (orgId) clearDiscoveryCache(orgId);
   }, [orgId]);
 
+  const mutateOrgStatus = useCallback((targetOrgId: string, status: string) => {
+    setOrgs((prev) =>
+      prev.map((o) => (o.id === targetOrgId ? { ...o, connection_status: status } : o)),
+    );
+  }, []);
+
   return {
     orgs,
     loading,
     error,
     refetch,
     invalidateCache,
+    mutateOrgStatus,
     setSearchTerm: (term: string) => {
       searchRef.current = term;
       void fetchOrgs(term);

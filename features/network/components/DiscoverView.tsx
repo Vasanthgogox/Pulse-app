@@ -315,24 +315,30 @@ export function DiscoverView({
     error,
     refetch: refetchDiscover,
     invalidateCache: invalidateDiscoverCache,
+    mutateOrgStatus,
   } = useNetworkDiscovery({ orgId, search });
-  /** Role chosen for outbound requests — drives "Request sent as client/supplier" on list cards. */
-  const [sentRequestRoles, setSentRequestRoles] = useState<
-    Record<string, ConnectionInviteRole>
-  >({});
   /** User-dismissed Grow your network recommendations (session); next scored org fills the slot. */
   const [dismissedRecommendationIds, setDismissedRecommendationIds] = useState<
     Set<string>
   >(() => new Set());
 
   useEffect(() => {
-    setSentRequestRoles({});
     setDismissedRecommendationIds(new Set());
   }, [orgId, search]);
 
   const visibleOrgs = orgs;
 
   const sentQ = useConnectionRequestsSentQuery(orgId);
+
+  const pendingRoleByOrgId = useMemo<Record<string, ConnectionInviteRole>>(() => {
+    const map: Record<string, ConnectionInviteRole> = {};
+    for (const r of sentQ.data ?? []) {
+      if (r.status === 'pending' && r.from_organization_id === orgId) {
+        map[r.to_organization_id] = r.request_shipper_client ? 'client' : 'supplier';
+      }
+    }
+    return map;
+  }, [sentQ.data, orgId]);
 
   const todayInviteCount = useMemo(
     () => todayPendingInviteCountFromSent(sentQ.data ?? []),
@@ -490,10 +496,19 @@ export function DiscoverView({
       return;
     }
     setConnecting(org.id);
-    const { error, alreadyInvited, requestId } = await createConnectionRequest(orgId, org.id, {
-      requestShipperClient: mode === "client",
-      requestCarrierSupplier: mode === "supplier",
-    });
+    let result: Awaited<ReturnType<typeof createConnectionRequest>>;
+    try {
+      result = await createConnectionRequest(orgId, org.id, {
+        requestShipperClient: mode === "client",
+        requestCarrierSupplier: mode === "supplier",
+      });
+    } catch {
+      setConnecting(null);
+      setRequestRoleModalOrg(null);
+      Alert.alert("Could not connect", "A network error occurred. Please try again.");
+      return;
+    }
+    const { error, alreadyInvited, requestId } = result;
     setConnecting(null);
     setRequestRoleModalOrg(null);
     if (error) {
@@ -505,14 +520,13 @@ export function DiscoverView({
       }
       return;
     }
-    setSentRequestRoles((prev) => ({ ...prev, [org.id]: mode }));
+    mutateOrgStatus(org.id, 'pending');
     if (alreadyInvited) {
       invalidateDiscoverCache();
       void refetchDiscover(search);
       invalidateNetwork();
       return;
     }
-    invalidateDiscoverCache();
     if (requestId) {
       queryClient.setQueryData<ConnectionRequestRow[]>(
         queryKeys.connectionRequests.sent(orgId),
@@ -537,6 +551,7 @@ export function DiscoverView({
     }
     invalidateNetwork();
     invalidateDiscoverCache();
+    void refetchDiscover(search);
   };
 
   const handleCancelRequest = async (org: ScoredOrg) => {
@@ -550,11 +565,7 @@ export function DiscoverView({
     if (!deleted) {
       Alert.alert("Request already changed", "Refreshing the latest network state.");
     }
-    setSentRequestRoles((prev) => {
-      const next = { ...prev };
-      delete next[org.id];
-      return next;
-    });
+    mutateOrgStatus(org.id, 'none');
     queryClient.setQueryData<ConnectionRequestRow[]>(
       queryKeys.connectionRequests.sent(orgId),
       (prev = []) => prev.filter((r) => !(r.to_organization_id === org.id && r.status === "pending"))
@@ -650,7 +661,7 @@ export function DiscoverView({
           onPressMutuals={orgPressMutualsHandler(org)}
           onPressMutual={onPressMutual}
           viewerOrgId={orgId}
-          pendingRole={sentRequestRoles[org.id] ?? null}
+          pendingRole={pendingRoleByOrgId[org.id] ?? null}
         />
       );
 
@@ -691,7 +702,7 @@ export function DiscoverView({
       connecting,
       discoverListCompact,
       getDiscoverOrgCardMetrics,
-      sentRequestRoles,
+      pendingRoleByOrgId,
       handleCancelRequest,
       handleDismissRecommendation,
       isMobileHub,
@@ -857,7 +868,7 @@ export function DiscoverView({
                 onConnect={() => tryBeginConnectionRequest(item.org)}
                 onCancel={() => void handleCancelRequest(item.org)}
                 loading={connecting === item.org.id}
-                pendingRole={sentRequestRoles[item.org.id] ?? null}
+                pendingRole={pendingRoleByOrgId[item.org.id] ?? null}
                 onOpenProfile={() => {
                   const metrics = getDiscoverOrgCardMetrics(item.org);
                   onOpenProfile?.({
