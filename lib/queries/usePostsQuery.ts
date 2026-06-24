@@ -9,7 +9,10 @@ import {
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
-export function useNetworkFeedQuery(orgId: string | null) {
+export function useNetworkFeedQuery(
+  orgId: string | null,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: queryKeys.posts.feed(orgId ?? ''),
     queryFn: async () => {
@@ -17,7 +20,7 @@ export function useNetworkFeedQuery(orgId: string | null) {
       if (res.error) throw res.error;
       return res.posts;
     },
-    enabled: !!orgId,
+    enabled: !!orgId && options?.enabled !== false,
     staleTime: STALE.moderate,
   });
 }

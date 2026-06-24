@@ -189,7 +189,7 @@ export function LoadCenterView({
     isError: marketError,
     isRefetching: marketRefetching,
     refetch: refetchMarketIndents,
-  } = useMarketIndentsQuery(orgId);
+  } = useMarketIndentsQuery(orgId, { urgent: true });
   const { data: myQuotes = [], refetch: refetchMyQuotes } =
     useMyDirectQuotesQuery(orgId);
   const { data: trips = [] } = useTripsQuery(orgId);

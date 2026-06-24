@@ -63,6 +63,7 @@ import {
 import { queryKeys } from "@/lib/queryKeys";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useInboundProtocolInviteActions } from "@/lib/hooks/useInboundProtocolInviteActions";
+import { useQueryBootDefer } from "@/lib/hooks/useQueryBootDefer";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import {
   useConnectionRequestsReceivedQuery,
@@ -272,13 +273,16 @@ function NetworkScreenInner() {
 
   useRealtimeNetworkInvalidation(orgId);
   const queryClient = useQueryClient();
+  const entityQueriesReady = useQueryBootDefer(orgId, 900);
   const receivedQ = useConnectionRequestsReceivedQuery(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
-  const driverInvitesSentQ = useDriverInvitesSentQuery(orgId);
-  const clientsQ = useClientsQuery(orgId);
-  const suppliersQ = useSuppliersQuery(orgId);
-  const driversQ = useDriversQuery(orgId);
-  const feedQ = useNetworkFeedQuery(orgId);
+  const driverInvitesSentQ = useDriverInvitesSentQuery(orgId, {
+    enabled: viewMode === "requests" || invitationsOpen,
+  });
+  const clientsQ = useClientsQuery(entityQueriesReady ? orgId : null);
+  const suppliersQ = useSuppliersQuery(entityQueriesReady ? orgId : null);
+  const driversQ = useDriversQuery(entityQueriesReady ? orgId : null);
+  const feedQ = useNetworkFeedQuery(orgId, { enabled: entityQueriesReady });
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const {
     receivedItems: receivedInviteItems,

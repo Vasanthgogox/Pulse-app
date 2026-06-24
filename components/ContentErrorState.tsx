@@ -23,21 +23,15 @@ import {
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  LayoutAnimation,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  UIManager,
-  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export type ContentErrorVariant =
   | 'network'
@@ -154,7 +148,6 @@ export function ContentErrorState({
   showTechnicalDetails = __DEV__,
   style,
 }: ContentErrorStateProps) {
-  const { width: windowWidth } = useWindowDimensions();
   const preset = VARIANT_PRESETS[variant];
   const { Icon, accent } = preset;
   const illustration = CONTENT_ERROR_ILLUSTRATIONS[variant];
@@ -168,10 +161,9 @@ export function ContentErrorState({
   const canShowDev =
     showTechnicalDetails && Boolean(technicalDetails?.trim());
   const isInline = layout === 'inline';
-  const useBannerLayout = !isInline && windowWidth >= 520;
+  const useBannerLayout = false;
 
   const toggleDev = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setDevOpen((v) => !v);
   }, []);
 
@@ -262,12 +254,14 @@ export function ContentErrorState({
   }
 
   return (
-    <View
-      style={[
+    <ScrollView
+      contentContainerStyle={[
         layout === 'full' ? styles.fullRoot : styles.embeddedRoot,
         { backgroundColor: palette.bg },
-        style,
       ]}
+      style={[{ backgroundColor: palette.bg }, style]}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
       <View
         style={[
@@ -408,18 +402,25 @@ export function ContentErrorState({
                     )}
                   </Pressable>
                 </View>
-                <Text
-                  selectable
-                  style={[styles.terminalBody, { color: palette.terminalText }]}
+                <ScrollView
+                  style={styles.terminalScroll}
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
                 >
-                  {technicalDetails}
-                </Text>
+                  <Text
+                    selectable
+                    style={[styles.terminalBody, { color: palette.terminalText }]}
+                  >
+                    {technicalDetails}
+                  </Text>
+                </ScrollView>
               </View>
             ) : null}
           </View>
         ) : null}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -445,7 +446,7 @@ const styles = StyleSheet.create({
   },
   bannerCard: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 480,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
@@ -456,7 +457,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   bannerCardWide: {
-    maxWidth: 680,
+    maxWidth: 480,
   },
   bannerBody: {
     width: '100%',
@@ -660,6 +661,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     fontWeight: '600',
+  },
+  terminalScroll: {
+    maxHeight: 200,
   },
   terminalBody: {
     fontSize: 11,

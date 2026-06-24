@@ -22,12 +22,7 @@ export async function fetchEntityListWithFallback<T>(params: {
     if (synced.error) throw synced.error;
     if (synced.rows.length > 0) return synced.rows;
   } catch (syncError) {
-    const direct = await fetchDirect(orgId);
-    if (direct.error) throw syncError;
-    if (direct.rows.length > 0) {
-      await clearDomainCacheMeta(domain, orgId);
-      return direct.rows;
-    }
+    // Sync already attempted getFull on failure — do not duplicate the same API call.
     throw syncError;
   }
 

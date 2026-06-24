@@ -2,7 +2,11 @@
  * Direct quotes — supplier quotes on indents that have no marketplace listing
  * (circulation_target offline / integrated_supplier). Backed by public.direct_quotes.
  */
+import { FINITE_LIST_CAP } from '@/lib/pagination';
 import { supabase } from '@/lib/supabase';
+
+const MY_DIRECT_QUOTES_SELECT =
+  'id, indent_id, bidder_organization_id, amount, notes, status, created_at, updated_at, driver_id, vehicle_id' as const;
 
 export interface DirectQuoteRow {
   id: string;
@@ -62,9 +66,10 @@ export async function getMyDirectQuotes(
 ): Promise<{ error: Error | null; quotes: DirectQuoteRow[] }> {
   const { data, error } = await supabase()
     .from('direct_quotes')
-    .select('*')
+    .select(MY_DIRECT_QUOTES_SELECT)
     .eq('bidder_organization_id', bidderOrgId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(FINITE_LIST_CAP);
 
   if (error) return { error: new Error(error.message), quotes: [] };
   return { error: null, quotes: (data ?? []) as DirectQuoteRow[] };

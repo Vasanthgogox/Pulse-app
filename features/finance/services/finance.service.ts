@@ -26,10 +26,15 @@ import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 
-/** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
+/**
+ * Join trips via trip_id (not booking_ref).
+ * `transactions_booking_ref_fkey` also points at trips — unqualified `trips(...)` is ambiguous.
+ */
+const LEDGER_TX_TRIP_EMBED = "trips!trip_id";
 const LEDGER_TX_SELECT_WITH_TRIPS =
-  "*, trips(trip_number, display_trip_id, trip_code, trip_operational_code)" as const;
-const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY = "*, trips(trip_number)" as const;
+  `*, ${LEDGER_TX_TRIP_EMBED}(trip_number, display_trip_id, trip_code, trip_operational_code)` as const;
+const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY =
+  `*, ${LEDGER_TX_TRIP_EMBED}(trip_number)` as const;
 
 function isMissingTripsDisplayTripIdError(
   error: {

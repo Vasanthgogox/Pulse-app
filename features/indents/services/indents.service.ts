@@ -10,7 +10,7 @@ import {
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import type { DeltaResponse } from "@/lib/cache/deltaTypes";
-import { DEFAULT_PAGE_SIZE, type PageOpts } from "@/lib/pagination";
+import { DEFAULT_PAGE_SIZE, FINITE_LIST_CAP, type PageOpts } from "@/lib/pagination";
 import { supabase } from "@/lib/supabase";
 import {
   getIndentOperationalDisplay,
@@ -199,7 +199,7 @@ export async function getIndentsByOrganization(
       hasMore,
     };
   }
-  const { data, error } = await base();
+  const { data, error } = await base().limit(FINITE_LIST_CAP);
   if (error) return { error: new Error(error.message), indents: [] };
   const indents = (data ?? []).map((row) =>
     normalizeIndentRow(row as IndentRow & { trips?: IndentTripJoin[] | null }),

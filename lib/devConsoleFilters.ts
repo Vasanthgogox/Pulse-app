@@ -8,6 +8,8 @@ const SUPPRESSED_WARN_PREFIXES = [
   'No route named "add-commodity-type"',
   '@supabase/gotrue-js: Lock "lock:sb-',
   'was not released within',
+  '`useNativeDriver` is not supported because the native animated module is missing',
+  'Reduced motion setting is enabled on this device',
 ] as const;
 
 let installed = false;

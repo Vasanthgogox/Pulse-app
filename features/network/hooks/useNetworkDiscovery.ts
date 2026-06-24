@@ -1,13 +1,15 @@
 /**
  * Cached discover list with realtime invalidation and offline fallback.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   clearDiscoveryCache,
   getDiscoveryCache,
   getDiscoveryCacheStale,
+  getDiscoverInvalidationCounter,
   hydrateDiscoveryCacheFromStorage,
   setDiscoveryCache,
+  subscribeDiscoverInvalidation,
 } from '@/features/network/lib/discoveryCache';
 import {
   discoverOrganizations,
@@ -117,6 +119,21 @@ export function useNetworkDiscovery({
     },
     [fetchOrgs],
   );
+
+  // Re-fetch whenever clearDiscoveryCache() is called from anywhere (e.g. after
+  // accepting/declining a connection request in the modal context).
+  const invalidationCount = useSyncExternalStore(
+    subscribeDiscoverInvalidation,
+    getDiscoverInvalidationCounter,
+    getDiscoverInvalidationCounter,
+  );
+  const prevInvalidationRef = useRef(invalidationCount);
+  useEffect(() => {
+    if (invalidationCount === prevInvalidationRef.current) return;
+    prevInvalidationRef.current = invalidationCount;
+    if (!orgId || !enabled) return;
+    void fetchOrgs(searchRef.current, true);
+  }, [invalidationCount, orgId, enabled, fetchOrgs]);
 
   useRealtimeDiscoverInvalidation(orgId, () => {
     void fetchOrgs(searchRef.current, true);

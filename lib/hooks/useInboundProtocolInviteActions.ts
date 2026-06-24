@@ -1,18 +1,17 @@
 import { useCallback, useState } from "react";
 import { cancelDriverInvite } from "@/features/drivers/services/drivers.service";
+import { clearDiscoveryCache } from "@/features/network/lib/discoveryCache";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { useInboundProtocolInvites } from "@/lib/globalSync/useInboundProtocolInvites";
-import {
-  useConnectionRequestsReceivedQuery,
-  useConnectionRequestsSentQuery,
-  useDriverInvitesSentQuery,
-} from "@/lib/queries/useNetworkQueries";
+import { useDriverInvitesSentQuery } from "@/lib/queries/useNetworkQueries";
+import { queryKeys } from "@/lib/queryKeys";
 import {
   approveConnectionRequest,
   cancelConnectionRequest,
   cancelPendingConnectionRequestsForPartnerOwner,
   rejectConnectionRequest,
 } from "@/features/connections/services/connectionRequests.service";
+import { useQueryClient } from "@tanstack/react-query";
 
 function isIgnorableInviteRefetchError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -21,11 +20,10 @@ function isIgnorableInviteRefetchError(error: unknown): boolean {
 
 export function useInboundProtocolInviteActions(orgId: string | null) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
-  const receivedQ = useConnectionRequestsReceivedQuery(orgId);
-  const sentQ = useConnectionRequestsSentQuery(orgId);
-  const driverInvitesSentQ = useDriverInvitesSentQuery(orgId);
+  const driverInvitesSentQ = useDriverInvitesSentQuery(orgId, { bootDeferMs: 0 });
   const { patchAfterAction, refreshInboundProtocol } =
     useInboundProtocolInvites(orgId);
+  const qc = useQueryClient();
 
   const handleInviteAction = useCallback(
     async (
@@ -39,10 +37,21 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
         patchAfterAction(item.id, item.linkedRequestIds);
         const res = await approveConnectionRequest(item.id, orgId);
         error = res.error;
+        if (!error) {
+          clearDiscoveryCache(orgId);
+          // DB trigger created client/supplier rows synchronously — invalidate
+          // everything so "Your connections" reflects the new connection immediately.
+          qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
+          qc.invalidateQueries({ queryKey: queryKeys.suppliers.all(orgId) });
+          qc.invalidateQueries({ queryKey: queryKeys.drivers.all(orgId) });
+          qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.received(orgId) });
+          qc.invalidateQueries({ queryKey: queryKeys.connectionRequests.sent(orgId) });
+        }
       } else if (action === "reject") {
         patchAfterAction(item.id, item.linkedRequestIds);
         const res = await rejectConnectionRequest(item.id, orgId);
         error = res.error;
+        if (!error) clearDiscoveryCache(orgId);
       } else if (action === "cancel" && item.kind === "driver") {
         const res = await cancelDriverInvite(item.id);
         error = res.error;
@@ -74,21 +83,13 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       setInviteActionId(null);
       if (error) {
         await refreshInboundProtocol();
-        await Promise.all([
-          receivedQ.refetch(),
-          sentQ.refetch(),
-          driverInvitesSentQ.refetch(),
-        ]);
+        await driverInvitesSentQ.refetch();
         return;
       }
       // Optimistic patch already updated global sync; defer refetch so home modals
       // do not flash while the dismiss animation completes.
       const refetchNetworkLists = () =>
-        Promise.all([
-          receivedQ.refetch(),
-          sentQ.refetch(),
-          driverInvitesSentQ.refetch(),
-        ]);
+        Promise.all([refreshInboundProtocol(), driverInvitesSentQ.refetch()]);
       if (typeof requestAnimationFrame === "function") {
         requestAnimationFrame(() => {
           void refetchNetworkLists().catch((refetchError) => {
@@ -112,10 +113,9 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
     },
     [
       orgId,
+      qc,
       patchAfterAction,
       refreshInboundProtocol,
-      receivedQ,
-      sentQ,
       driverInvitesSentQ,
     ],
   );

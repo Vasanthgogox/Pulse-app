@@ -14,7 +14,7 @@ export function refetchOnMountIfEntityListEmpty<TData>() {
   };
 }
 
-const ENTITY_FINITE_PREFIXES = new Set(['clients', 'suppliers', 'drivers', 'vehicles', 'trips', 'transactions']);
+const ENTITY_FINITE_PREFIXES = new Set(['clients', 'suppliers', 'drivers', 'vehicles', 'trips', 'transactions', 'indents']);
 
 /** Drop hydrated empty entity lists saved before persistence guard shipped. */
 export function isPersistedEntityListQueryKey(queryKey: readonly unknown[]): boolean {

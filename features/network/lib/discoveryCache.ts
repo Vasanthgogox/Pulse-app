@@ -21,6 +21,28 @@ type PersistedPayload = {
 
 const memoryByOrg = new Map<string, Map<string, DiscoveryCacheEntry>>();
 
+// ── Invalidation signal ────────────────────────────────────────────────────
+// Bumped every time clearDiscoveryCache is called so React hooks can subscribe
+// and force-refetch without any extra coupling between the modal context and
+// the DiscoverView's useNetworkDiscovery hook.
+let invalidationCounter = 0;
+type Listener = () => void;
+const invalidationListeners = new Set<Listener>();
+
+export function subscribeDiscoverInvalidation(listener: Listener): () => void {
+  invalidationListeners.add(listener);
+  return () => invalidationListeners.delete(listener);
+}
+
+export function getDiscoverInvalidationCounter(): number {
+  return invalidationCounter;
+}
+
+function notifyInvalidation(): void {
+  invalidationCounter += 1;
+  invalidationListeners.forEach((l) => l());
+}
+
 export function discoveryCacheKey(orgId: string, search: string): string {
   return `${orgId}::${search.toLowerCase().trim()}`;
 }
@@ -70,6 +92,7 @@ export function clearDiscoveryCache(orgId?: string): void {
     memoryByOrg.clear();
   }
   void persistDiscoveryCache();
+  notifyInvalidation();
 }
 
 /** Stale-but-usable snapshot for offline fallback (ignores TTL). */

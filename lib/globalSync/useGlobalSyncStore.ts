@@ -28,6 +28,7 @@
  *   Zero extra DB calls on any event.
  */
 
+import { markAppQueryGateBootstrapReady } from '@/lib/hooks/appQueryGateState';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
@@ -506,6 +507,7 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           alertRows:               Array.isArray(payload?.global_alerts)  ? payload.global_alerts  : [],
           networkStatus:           payload?.network_status ?? { ...DEFAULT_NETWORK_STATUS },
         });
+        markAppQueryGateBootstrapReady();
       } catch (err) {
         set({
           bootstrapStatus:   'error',

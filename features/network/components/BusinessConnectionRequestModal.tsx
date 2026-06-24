@@ -43,9 +43,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const WEB_DESKTOP_BREAKPOINT = 600;
 
 type Props = {
   visible: boolean;
@@ -88,6 +91,8 @@ export function BusinessConnectionRequestModal({
   onNext,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && screenWidth >= WEB_DESKTOP_BREAKPOINT;
   const dragY = useRef(new Animated.Value(0)).current;
   const dismissingRef = useRef(false);
   const [shellVisible, setShellVisible] = useState(visible);
@@ -244,7 +249,7 @@ export function BusinessConnectionRequestModal({
       onRequestClose={requestDismiss}
       statusBarTranslucent
     >
-      <View style={[styles.backdrop, Platform.OS === 'web' ? styles.backdropWeb : null]}>
+      <View style={[styles.backdrop, isWebDesktop ? styles.backdropWebDesktop : (Platform.OS === 'web' ? styles.backdropWebMobile : null)]}>
         <Pressable
           style={styles.backdropTouch}
           onPress={requestDismiss}
@@ -255,18 +260,21 @@ export function BusinessConnectionRequestModal({
         <Animated.View
           style={[
             styles.sheet,
-            { transform: [{ translateY: sheetTranslate }] },
+            isWebDesktop ? styles.sheetWebDesktop : styles.sheetMobile,
+            !isWebDesktop && { transform: [{ translateY: sheetTranslate }] },
             isDragging && styles.sheetDragging,
           ]}
         >
-          <View
-            style={styles.sheetDragCapture}
-            {...panResponder.panHandlers}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <View style={styles.dragHandle} />
-          </View>
+          {!isWebDesktop ? (
+            <View
+              style={styles.sheetDragCapture}
+              {...panResponder.panHandlers}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <View style={styles.dragHandle} />
+            </View>
+          ) : null}
 
           <LinearGradient
             colors={[PURPLE_DARK, PURPLE]}
@@ -535,7 +543,8 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  backdropWeb: {
+  // Desktop web: centered dialog
+  backdropWebDesktop: {
     position: 'fixed' as 'absolute',
     top: 0,
     left: 0,
@@ -544,20 +553,38 @@ const styles = StyleSheet.create({
     zIndex: 100000,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+  },
+  // Mobile web: bottom sheet (same as native)
+  backdropWebMobile: {
+    position: 'fixed' as 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100000,
+    justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     overflow: 'hidden',
     backgroundColor: Theme.screenBackground,
-    maxHeight: Platform.OS === 'web' ? '92%' : '82%',
     flexDirection: 'column',
-    alignSelf: 'stretch',
     position: 'relative',
-    ...(Platform.OS === 'web'
-      ? { width: '100%', maxWidth: 440, borderRadius: 28 }
-      : {}),
+  },
+  // Desktop web: full dialog card, centered
+  sheetWebDesktop: {
+    borderRadius: 28,
+    width: '100%',
+    maxWidth: 460,
+    maxHeight: '92vh' as unknown as number,
+    alignSelf: 'center',
+  },
+  // Native + mobile web: bottom sheet
+  sheetMobile: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    alignSelf: 'stretch',
+    maxHeight: '86%',
   },
   sheetDragging: {
     opacity: 0.98,

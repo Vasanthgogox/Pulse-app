@@ -45,13 +45,18 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
   const { receivedItems, refreshInboundProtocol } = useInboundProtocolInvites(orgId);
   const { inviteActionId, handleInviteAction } = useInboundProtocolInviteActions(orgId);
 
-  const pendingConnectionInvites = useMemo(
-    () => (receivedItems ?? []).filter(isConnectionProtocolInvite),
-    [receivedItems],
-  );
-
   const [sessionSnoozedIds, setSessionSnoozedIds] = useState<Set<string>>(new Set());
+  // Suppress re-popup after accept during read-replica lag window
+  const [clientApprovedIds, setClientApprovedIds] = useState<Set<string>>(new Set());
   const [queueViewIndex, setQueueViewIndex] = useState(0);
+
+  const pendingConnectionInvites = useMemo(
+    () =>
+      (receivedItems ?? [])
+        .filter(isConnectionProtocolInvite)
+        .filter((i) => !clientApprovedIds.has(i.id)),
+    [receivedItems, clientApprovedIds],
+  );
   const [focusedInviteId, setFocusedInviteId] = useState<string | null>(null);
   const [declineTarget, setDeclineTarget] = useState<InboundProtocolInviteItem | null>(null);
   const [promptByPartnerKey, setPromptByPartnerKey] = useState<
@@ -270,11 +275,15 @@ export function BusinessConnectionRequestModalProvider({ children }: { children:
 
   const handleAccept = useCallback(async () => {
     if (!activeInvite) return;
-    await handleInviteAction(activeInvite, 'approve');
-    clearInvitePromptSchedule(activeInvite);
+    // Capture before any state changes that could re-filter pendingConnectionInvites
+    const invite = activeInvite;
+    await handleInviteAction(invite, 'approve');
+    // Only suppress re-popup AFTER the approve completes (prevents premature activeInvite→null)
+    setClientApprovedIds((prev) => new Set(prev).add(invite.id));
+    clearInvitePromptSchedule(invite);
     setSessionSnoozedIds((prev) => {
       const next = new Set(prev);
-      next.delete(activeInvite.id);
+      next.delete(invite.id);
       return next;
     });
     setAutoPresentedInviteId(null);
