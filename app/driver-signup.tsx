@@ -230,6 +230,8 @@ export default function DriverSignUpScreen() {
   const scrollRef = useRef<ScrollView>(null);
   /** Per-page vertical scroll (horizontal pager does not scroll vertically). */
   const pageVerticalScrollRefs = useRef<Array<ScrollView | null>>([]);
+  /** Mobile shell scroll (driver signup step body on phone / mobile web). */
+  const mobileScrollRef = useRef<ScrollView>(null);
 
   const [step, setStep] = useState(0);
   const [phone, setPhone] = useState('');
@@ -338,14 +340,19 @@ export default function DriverSignUpScreen() {
   const scrollToField = (name: keyof typeof PROFILE_FIELD_SCROLL_Y) => {
     const isPasswordOnIos = name === 'password' && Platform.OS === 'ios';
     const offset = isPasswordOnIos ? SCROLL_OFFSET_PASSWORD_IOS : SCROLL_OFFSET_DEFAULT;
+    const delay = Platform.OS === 'web' ? 400 : 80;
     setTimeout(() => {
+      if (useMobileLayout) {
+        mobileScrollRef.current?.scrollToEnd({ animated: true });
+        return;
+      }
       const inner = pageVerticalScrollRefs.current[2];
       const y = PROFILE_FIELD_SCROLL_Y[name];
       inner?.scrollTo({
         y: Math.max(0, y - offset),
         animated: true,
       });
-    }, 80);
+    }, delay);
   };
 
   const fullPhoneForApi = getFullPhoneIndia(phone);
@@ -1378,6 +1385,7 @@ export default function DriverSignUpScreen() {
           hideProgress={step >= 7}
           bodyMode={usesKeypadBody ? 'keypad' : 'scroll'}
           scrollBottomPad={insets.bottom + 24}
+          scrollRef={mobileScrollRef}
           trustMode="driver"
         >
           {stepPages}

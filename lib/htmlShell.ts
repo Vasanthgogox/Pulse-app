@@ -22,7 +22,7 @@ export const SHELL_STYLE_ID = 'pulse-mobile-web-reset';
  * so safe-area insets are applied correctly by the app.
  */
 export const VIEWPORT_CONTENT =
-  'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+  'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content';
 
 /**
  * interactive-widget=overlays-content: Prevents Android Chrome from resizing the

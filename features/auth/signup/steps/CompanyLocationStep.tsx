@@ -25,6 +25,7 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
       onPrimary={flow.continueCompanyLocation}
       primaryDisabled={!flow.step4Valid}
       keyboardAware
+      scrollRef={flow.locationScrollRef}
     >
       <SignUpPulseField
         label="Building / Street"
@@ -58,6 +59,7 @@ export function CompanyLocationStep({ flow }: { flow: SignUpFlow }) {
         inputMode="numeric"
         maxLength={VALIDATION.PINCODE_LENGTH}
         errorMessage={showPincodeError}
+        onFocus={flow.scrollLocationFieldIntoView}
         dense
       />
 

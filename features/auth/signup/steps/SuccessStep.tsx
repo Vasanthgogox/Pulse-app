@@ -10,6 +10,7 @@ import { SignUpWorkspaceReadyCard } from '../components/SignUpWorkspaceReadyCard
 export function SuccessStep({ flow }: { flow: SignUpFlow }) {
   const router = useRouter();
   const verifying = flow.emailVerificationRequired;
+  const enteringOps = !verifying && flow.loading;
   const hasChosenProfilePhoto =
     !!flow.profilePreviewUri || !!flow.profileAvatarSeed?.trim();
   const profilePreset =
@@ -41,6 +42,7 @@ export function SuccessStep({ flow }: { flow: SignUpFlow }) {
             }
       }
       primaryDisabled={verifying && flow.resendingSecs > 0}
+      primaryLoading={enteringOps}
       secondaryAction={{
         label: 'Sign in on another device',
         onPress: () => {

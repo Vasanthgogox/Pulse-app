@@ -69,6 +69,7 @@ export function useBusinessSignUpFlow() {
   const { signUp, signIn, signInWithGoogle, refreshSession } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const accountScrollRef = useRef<ScrollView>(null);
+  const locationScrollRef = useRef<ScrollView>(null);
   const sessionEnsuredRef = useRef(false);
 
   const isDesktop = width >= DESKTOP_BREAKPOINT;
@@ -766,12 +767,19 @@ export function useBusinessSignUpFlow() {
   };
 
   const scrollAccountFieldIntoView = () => {
-    // Web: browser natively scrolls the focused input into view when the keyboard
-    // opens — calling scrollToEnd fights that and lands at the wrong position.
-    if (Platform.OS === 'web') return;
+    // Mobile web: body overflow is hidden; only this ScrollView can move content above
+    // the overlay keyboard (Android Chrome interactive-widget=overlays-content).
+    const delay = Platform.OS === 'web' ? 400 : CONFIRM_SCROLL_DELAY_MS;
     setTimeout(() => {
       accountScrollRef.current?.scrollToEnd({ animated: true });
-    }, CONFIRM_SCROLL_DELAY_MS);
+    }, delay);
+  };
+
+  const scrollLocationFieldIntoView = () => {
+    const delay = Platform.OS === 'web' ? 400 : CONFIRM_SCROLL_DELAY_MS;
+    setTimeout(() => {
+      locationScrollRef.current?.scrollToEnd({ animated: true });
+    }, delay);
   };
 
   return {
@@ -781,6 +789,7 @@ export function useBusinessSignUpFlow() {
     pageWidth,
     scrollRef,
     accountScrollRef,
+    locationScrollRef,
     isOnline,
 
     // step
@@ -855,6 +864,7 @@ export function useBusinessSignUpFlow() {
     passwordStrength,
     confirmMismatch,
     scrollAccountFieldIntoView,
+    scrollLocationFieldIntoView,
 
     // step 6 — logo
     provisionedOrgId,
