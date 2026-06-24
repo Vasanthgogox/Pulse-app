@@ -140,7 +140,7 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
   const invalidateQuoteCaches = async (matchedIndentId: string) => {
     await Promise.allSettled([
       queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.all(orgId), 'my-direct-quotes'] }),
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.indents.finite(orgId), 'my-direct-quotes'] }),
       queryClient.invalidateQueries({ queryKey: ['indents', matchedIndentId, 'direct-quotes'] }),
       queryClient.invalidateQueries({ queryKey: ['indents', 'quote-counts'] }),
       queryClient.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) }),

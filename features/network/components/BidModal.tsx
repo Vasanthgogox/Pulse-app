@@ -90,7 +90,7 @@ export function BidModal({
         invalidateIndents(orgId);
         await Promise.allSettled([
           queryClient.invalidateQueries({
-            queryKey: [...queryKeys.indents.all(orgId), "my-direct-quotes"],
+            queryKey: [...queryKeys.indents.finite(orgId), "my-direct-quotes"],
           }),
           queryClient.invalidateQueries({
             queryKey: ["indents", load.id, "direct-quotes"],

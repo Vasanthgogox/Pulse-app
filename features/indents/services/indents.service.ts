@@ -283,19 +283,34 @@ async function fetchPartnerShipperLinkSinceMap(
     if (!prev || iso < prev) map.set(shipperId, iso);
   };
 
-  const { data: clientSupplier } = await supabase()
-    .from("organization_relations")
-    .select("from_organization_id, created_at")
-    .eq("to_organization_id", orgId)
-    .eq("relation_type", "client_supplier")
-    .eq("status", "active");
-
-  const { data: supplierClient } = await supabase()
-    .from("organization_relations")
-    .select("to_organization_id, created_at")
-    .eq("from_organization_id", orgId)
-    .eq("relation_type", "supplier_client")
-    .eq("status", "active");
+  const [
+    { data: clientSupplier },
+    { data: supplierClient },
+    { data: suppliers },
+    { data: linkedClients },
+  ] = await Promise.all([
+    supabase()
+      .from("organization_relations")
+      .select("from_organization_id, created_at")
+      .eq("to_organization_id", orgId)
+      .eq("relation_type", "client_supplier")
+      .eq("status", "active"),
+    supabase()
+      .from("organization_relations")
+      .select("to_organization_id, created_at")
+      .eq("from_organization_id", orgId)
+      .eq("relation_type", "supplier_client")
+      .eq("status", "active"),
+    supabase()
+      .from("suppliers")
+      .select("organization_id, updated_at")
+      .eq("linked_organization_id", orgId),
+    supabase()
+      .from("clients")
+      .select("linked_organization_id, created_at")
+      .eq("organization_id", orgId)
+      .eq("status", "active"),
+  ]);
 
   for (const r of clientSupplier ?? []) {
     mergeMin(String(r.from_organization_id), r.created_at as string);
@@ -304,11 +319,6 @@ async function fetchPartnerShipperLinkSinceMap(
     mergeMin(String(r.to_organization_id), r.created_at as string);
   }
 
-  const { data: suppliers } = await supabase()
-    .from("suppliers")
-    .select("organization_id, updated_at")
-    .eq("linked_organization_id", orgId);
-
   for (const s of suppliers ?? []) {
     const oid = s.organization_id as string | null;
     const ts = s.updated_at as string | null | undefined;
@@ -316,12 +326,6 @@ async function fetchPartnerShipperLinkSinceMap(
     if (map.has(oid)) continue;
     mergeMin(oid, ts);
   }
-
-  const { data: linkedClients } = await supabase()
-    .from("clients")
-    .select("linked_organization_id, created_at")
-    .eq("organization_id", orgId)
-    .eq("status", "active");
 
   for (const c of linkedClients ?? []) {
     const lid = c.linked_organization_id as string | null;
