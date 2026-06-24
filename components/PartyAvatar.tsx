@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
-import { Building2, Truck } from "lucide-react-native";
+import { Building2, Truck, User } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import {
   partyAvatarBackgroundColor,
@@ -35,7 +35,7 @@ export type PartyAvatarProps = {
   avatarUrl?: string | null;
   avatarSeed?: string | null;
   entityType?: PartyEntityType;
-  /** When `false`, client/supplier show a role icon on a tinted plate (offline party). */
+  /** When `false`, role entities show role icon plates (offline party state). */
   isIntegrated?: boolean;
   size: number;
   /** `rounded` matches attribution / shipper picker tiles (not full circle). */
@@ -64,9 +64,14 @@ export function PartyAvatar({
   const radius = partyAvatarRadius(size, shape);
 
   if (shouldUseOfflinePartyRoleAvatar(isIntegrated, entityType)) {
-    const roleType = entityType as "client" | "supplier";
+    const roleType = entityType as "client" | "supplier" | "driver" | "vehicle";
     const { accent, iconColor, accessibilityLabel } = offlinePartyRolePresentation(roleType);
-    const Icon = roleType === "supplier" ? Truck : Building2;
+    const Icon =
+      roleType === "supplier" || roleType === "vehicle"
+        ? Truck
+        : roleType === "driver"
+          ? User
+          : Building2;
     return (
       <View
         accessibilityLabel={accessibilityLabel}

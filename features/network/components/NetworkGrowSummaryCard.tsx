@@ -4,7 +4,7 @@
 import Theme from "@/constants/Theme";
 import { DAILY_CONNECTION_INVITE_LIMIT } from "@/features/connections/services/connectionRequests.service";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Sparkles } from "lucide-react-native";
+import LottieView from "lottie-react-native";
 import { Platform, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 function interpolate(
@@ -56,6 +56,23 @@ export function NetworkGrowSummaryCard({
         style,
       ]}
     >
+      {variant === "card" ? (
+        <View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.watermarkWrap}
+        >
+          <LottieView
+            source={require("@/assets/Animated folder/user-flow.json")}
+            autoPlay
+            loop
+            speed={0.9}
+            style={styles.watermark}
+          />
+        </View>
+      ) : null}
+
       {hideTitle ? (
         <View style={styles.statsPill}>
           <Text style={styles.statsPillText}>{statsLine}</Text>
@@ -64,7 +81,13 @@ export function NetworkGrowSummaryCard({
         <>
           <View style={styles.head}>
             <View style={styles.iconWrap}>
-              <Sparkles size={13} color={Theme.primary} strokeWidth={2.1} />
+              <LottieView
+                source={require("@/assets/Animated folder/conversation-verified.json")}
+                autoPlay
+                loop
+                speed={1}
+                style={styles.headIconAnim}
+              />
             </View>
             <Text style={styles.title}>{t("networkDiscoverGrowSlots")}</Text>
           </View>
@@ -94,6 +117,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(79, 70, 229, 0.04)",
     padding: 18,
     gap: 10,
+    position: "relative",
+    overflow: "hidden",
     ...Platform.select({
       web: {
         boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
@@ -118,6 +143,18 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "transparent",
   },
+  watermarkWrap: {
+    position: "absolute",
+    right: -10,
+    top: -14,
+    width: 152,
+    height: 120,
+    opacity: 0.17,
+  },
+  watermark: {
+    width: "100%",
+    height: "100%",
+  },
   head: {
     flexDirection: "row",
     alignItems: "center",
@@ -125,14 +162,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(99, 102, 241, 0.09)",
-    borderWidth: 1,
-    borderColor: "rgba(99, 102, 241, 0.14)",
+    backgroundColor: "transparent",
+  },
+  headIconAnim: {
+    width: 26,
+    height: 26,
   },
   title: {
     flex: 1,

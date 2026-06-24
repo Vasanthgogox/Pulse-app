@@ -6,7 +6,8 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import {
   DEFAULT_USER_2D_AVATAR_SEED,
-  USER_2D_AVATARS,
+  FEMALE_USER_2D_AVATARS,
+  MALE_USER_2D_AVATARS,
   getUser2DAvatarUriForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
@@ -399,24 +400,61 @@ export function NetworkDesktopProfilePanel({ organization }: Props) {
             </View>
 
             {showPresets ? (
-              <View style={styles.profilePresetGrid}>
-                {USER_2D_AVATARS.map((av) => {
-                  const selected = selectedPresetSeed === av.seed;
-                  return (
-                    <Pressable
-                      key={av.seed}
-                      onPress={() => void handleSelectPreset(av.seed)}
-                      style={[
-                        styles.profilePresetItem,
-                        selected && styles.profilePresetItemSelected,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={av.name}
-                    >
-                      <Image source={av.image} style={styles.profilePresetImage} />
-                    </Pressable>
-                  );
-                })}
+              <View>
+                <Text
+                  style={[
+                    styles.profileFieldLabel,
+                    { marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.6 },
+                  ]}
+                >
+                  Male avatars
+                </Text>
+                <View style={styles.profilePresetGrid}>
+                  {MALE_USER_2D_AVATARS.map((av) => {
+                    const selected = selectedPresetSeed === av.seed;
+                    return (
+                      <Pressable
+                        key={av.seed}
+                        onPress={() => void handleSelectPreset(av.seed)}
+                        style={[
+                          styles.profilePresetItem,
+                          selected && styles.profilePresetItemSelected,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={av.name}
+                      >
+                        <Image source={av.image} style={styles.profilePresetImage} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text
+                  style={[
+                    styles.profileFieldLabel,
+                    { marginTop: 14, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.6 },
+                  ]}
+                >
+                  Female avatars
+                </Text>
+                <View style={styles.profilePresetGrid}>
+                  {FEMALE_USER_2D_AVATARS.map((av) => {
+                    const selected = selectedPresetSeed === av.seed;
+                    return (
+                      <Pressable
+                        key={av.seed}
+                        onPress={() => void handleSelectPreset(av.seed)}
+                        style={[
+                          styles.profilePresetItem,
+                          selected && styles.profilePresetItemSelected,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={av.name}
+                      >
+                        <Image source={av.image} style={styles.profilePresetImage} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
             ) : null}
 

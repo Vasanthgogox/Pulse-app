@@ -8,6 +8,7 @@ import {
   fitLoadCenterIllustration,
   type LoadCenterPromoVariant,
 } from "@/lib/loadCenterPromoAssets";
+import LottieView from "lottie-react-native";
 import { useWindowDimensions } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
@@ -29,6 +30,96 @@ export function LoadCenterPromoCard({
   const preset = LOAD_CENTER_PROMO_PRESETS[variant];
   const featureIconSize = isDesktop ? 14 : 12;
 
+  const renderFeatureIcon = (label: string, icon: keyof typeof TripsPromoIcons) => {
+    const animatedSize = featureIconSize + 8;
+    if (variant === "claimed_awarded") {
+      if (label === "Award confirmed") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/recipt check.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+      if (label === "Assign staff") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/add-user.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+      if (label === "Deploy vehicle") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/truck-loading.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+      if (label === "Share indent") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/note-saved.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+    }
+    if (variant === "claimed_done_rejected") {
+      if (label === "Closed award") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/law approved.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+      if (label === "No trip created") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/web-error.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+      if (label === "Audit trail") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/note-saved.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+      if (label === "Reference only") {
+        return (
+          <LottieView
+            source={require("@/assets/Animated folder/user-info.json")}
+            autoPlay
+            loop
+            style={{ width: animatedSize, height: animatedSize }}
+          />
+        );
+      }
+    }
+    const IconAsset = TripsPromoIcons[icon];
+    return <IconAsset width={featureIconSize} height={featureIconSize} />;
+  };
+
   return (
     <HubEmptyPromoLayout
       style={style}
@@ -40,11 +131,10 @@ export function LoadCenterPromoCard({
       ctaLabel={preset.ctaLabel}
       onCtaPress={onCtaPress}
       features={preset.bullets.map(({ label, icon }) => {
-        const IconAsset = TripsPromoIcons[icon];
         return {
           key: label,
           label,
-          icon: <IconAsset width={featureIconSize} height={featureIconSize} />,
+          icon: renderFeatureIcon(label, icon),
         };
       })}
     />

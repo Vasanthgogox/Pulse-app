@@ -41,8 +41,13 @@ export function FinancePromoCard({
   const preset = FINANCE_PROMO_PRESETS[variant];
   const Illustration = preset.illustration;
   const isColumn = layout === "column";
-  const illusBoxW = isColumn ? 96 : width < 400 ? 108 : 124;
-  const illusBoxH = isColumn ? 72 : width < 400 ? 88 : 100;
+  const garageVisualBoost = variant === "garage" ? 1.22 : 1;
+  const illusBoxW = Math.round(
+    (isColumn ? 96 : width < 400 ? 108 : 124) * garageVisualBoost,
+  );
+  const illusBoxH = Math.round(
+    (isColumn ? 72 : width < 400 ? 88 : 100) * garageVisualBoost,
+  );
   const illusSize = fitFinanceIllustration(illusBoxW, illusBoxH, preset.aspect);
 
   const resolvedTitle = title ?? preset.title;

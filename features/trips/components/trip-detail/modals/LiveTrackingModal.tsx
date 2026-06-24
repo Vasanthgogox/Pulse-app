@@ -535,7 +535,11 @@ export function LiveTrackingModal({
                               : "truck"
                         }
                         size={15}
-                        color={Theme.textOnPrimary}
+                        color={
+                          statusTone === "offline"
+                            ? Theme.textPrimaryDark
+                            : Theme.textOnPrimary
+                        }
                       />
                     </View>
                     <View style={styles.statusCopy}>
@@ -559,8 +563,12 @@ export function LiveTrackingModal({
                     <Text
                       style={[
                         styles.statusChipText,
-                        (statusTone === "offline" || statusTone === "live") &&
-                          styles.statusChipTextSolid,
+                        statusTone === "offline" && {
+                          color: TRACKING.offline.chipText,
+                        },
+                        statusTone === "live" && {
+                          color: TRACKING.live.chipText,
+                        },
                       ]}
                     >
                       {statusTone === "offline"
@@ -723,7 +731,7 @@ export function LiveTrackingModal({
                   accessibilityRole="button"
                   accessibilityLabel="Call driver"
                 >
-                  <Feather name="phone" size={14} color={Theme.textOnPrimary} />
+                  <Feather name="phone" size={14} color={Theme.textPrimaryDark} />
                   <Text style={styles.actionBtnPrimaryText}>Call driver</Text>
                 </Pressable>
                 {driverOffline && onSendLoginReminder ? (
@@ -869,7 +877,11 @@ function RouteStopRow({
         { backgroundColor: isOffline ? tone.badgeBg : TRACKING.live.badgeBg },
       ]}
     >
-      <Navigation size={16} color={Theme.textOnPrimary} strokeWidth={2.5} />
+      <Navigation
+        size={16}
+        color={isOffline ? Theme.textPrimaryDark : Theme.textOnPrimary}
+        strokeWidth={2.5}
+      />
     </View>
   ) : null;
 
@@ -1055,13 +1067,13 @@ const TRACKING = {
   offline: {
     bannerBg: "#EEF2FF",
     bannerBorder: "#C7D2FE",
-    iconBg: Theme.pulseIndigo,
-    chipBg: "#4D3636",
-    chipText: Theme.textOnPrimary,
-    progress: "#4D3636",
+    iconBg: Theme.loadMainTabBg,
+    chipBg: Theme.loadDoneSubTabBg,
+    chipText: Theme.textPrimaryDark,
+    progress: Theme.loadDoneSubTabBg,
     rowBg: "#F5F3FF",
     rowBorder: Theme.pulseIndigoRing,
-    badgeBg: Theme.pulseIndigo,
+    badgeBg: Theme.loadMainTabBg,
     metaText: "#64748b",
   },
   idle: {
@@ -1402,13 +1414,13 @@ const styles = StyleSheet.create({
   etaBadgeValue: {
     fontSize: 18,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.textPrimaryDark,
     lineHeight: 20,
   },
   etaBadgeUnit: {
     fontSize: 9,
     fontWeight: "500",
-    color: "rgba(255,255,255,0.92)",
+    color: Theme.textPrimaryDark,
     letterSpacing: 0.2,
     marginTop: 1,
   },
@@ -1589,7 +1601,7 @@ const styles = StyleSheet.create({
   actionBtnPrimaryText: {
     fontSize: 13,
     fontWeight: "600",
-    color: Theme.textOnPrimary,
+    color: Theme.textPrimaryDark,
   },
   actionBtnSecondaryText: {
     fontSize: 13,
@@ -1724,7 +1736,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Theme.textOnPrimary,
+    backgroundColor: Theme.textPrimaryDark,
   },
   timelineItemBody: {
     flex: 1,

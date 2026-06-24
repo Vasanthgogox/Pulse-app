@@ -33,6 +33,7 @@ export function TripsPromoCard({ variant, onCtaPress, style }: TripsPromoCardPro
       Illustration={preset.illustration}
       illustrationAspect={preset.aspect}
       fitIllustration={fitTripsIllustration}
+      illustrationScale={0.9}
       ctaLabel={preset.ctaLabel}
       onCtaPress={onCtaPress}
       features={preset.bullets.map(({ label, icon }) => {

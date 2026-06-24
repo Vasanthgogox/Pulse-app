@@ -37,6 +37,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Activity, Check, MessageSquare, Zap } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
+import LottieView from "lottie-react-native";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -863,6 +864,7 @@ export default function TripDetailScreen({
     driverLocLabel: string | null;
   } | null>(null);
   const [simulating, setSimulating] = useState(false);
+  const [revokingSimulation, setRevokingSimulation] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -945,13 +947,15 @@ export default function TripDetailScreen({
       .filter((line) => line.startsWith("[BISIM|"))
       .map((line) => {
         const inner = line.slice(7, -1);
-        const [status, timestamp, lat, lng, userName] = inner.split("|");
+        const [status, timestamp, lat, lng, userName, fromStatus] =
+          inner.split("|");
         return {
           status,
           timestamp,
           lat: parseFloat(lat) || null,
           lng: parseFloat(lng) || null,
           userName: userName || "Business",
+          fromStatus: fromStatus || null,
         };
       });
   }, [detail.trip?.notes]);
@@ -1821,6 +1825,42 @@ export default function TripDetailScreen({
     return null;
   })();
 
+  const previousStatusForSimTarget = (targetStatusRaw: string) => {
+    const targetStatus = String(targetStatusRaw ?? "").trim().toLowerCase();
+    if (!targetStatus) return null;
+    if (targetStatus === "assigned") return "pending_acceptance";
+    if (targetStatus === "in_progress") return "assigned";
+    if (targetStatus === "picked_up") return "in_progress";
+    if (targetStatus === "in_transit") return "in_progress";
+    if (targetStatus === "at_drop") return "in_transit";
+    if (targetStatus === "completed") return "at_drop";
+    return null;
+  };
+
+  const lastSimulatedTransition = (() => {
+    if (simLogEntries.length === 0) return null;
+    const last = simLogEntries[simLogEntries.length - 1];
+    if (!last?.status) return null;
+    const toStatus = String(last.status).trim().toLowerCase();
+    if (!toStatus) return null;
+    const fallbackFrom = previousStatusForSimTarget(toStatus);
+    const fromStatus = String(last.fromStatus ?? "")
+      .trim()
+      .toLowerCase();
+    return {
+      toStatus,
+      fromStatus: fromStatus || fallbackFrom,
+      lat: last.lat ?? null,
+      lng: last.lng ?? null,
+    };
+  })();
+
+  const currentTripStatusLower = String(trip.status ?? "").trim().toLowerCase();
+  const canRevokeLastSimulation =
+    !!lastSimulatedTransition?.toStatus &&
+    currentTripStatusLower === lastSimulatedTransition.toStatus &&
+    !!lastSimulatedTransition.fromStatus;
+
   // Execute simulation: advance status + append log marker to notes
   const handleConfirmSimulate = async () => {
     if (!simConfirmStep) return;
@@ -1876,7 +1916,7 @@ export default function TripDetailScreen({
       notifyTripChatMessagesChanged();
 
       const userName = detail.profile?.full_name?.trim() || "Business";
-      const simEntry = `[BISIM|${simConfirmStep.targetStatus}|${new Date().toISOString()}|${simConfirmStep.driverLat ?? ""}|${simConfirmStep.driverLng ?? ""}|${userName}]`;
+      const simEntry = `[BISIM|${simConfirmStep.targetStatus}|${new Date().toISOString()}|${simConfirmStep.driverLat ?? ""}|${simConfirmStep.driverLng ?? ""}|${userName}|${String(trip.status ?? "").trim().toLowerCase()}]`;
       const existingNotes = trip.notes?.trim() || "";
       await supabase()
         .from("trips")
@@ -1891,6 +1931,65 @@ export default function TripDetailScreen({
       setSimError(e instanceof Error ? e.message : "Simulation failed");
     } finally {
       setSimulating(false);
+    }
+  };
+
+  const handleRevokeLastSimulation = async () => {
+    if (!canRevokeLastSimulation || !lastSimulatedTransition?.fromStatus) return;
+    setRevokingSimulation(true);
+    setSimError(null);
+    try {
+      const revertToStatus = lastSimulatedTransition.fromStatus;
+      const revertPayload = {
+        status: revertToStatus,
+        status_change_origin: "business_simulation_revoked",
+      };
+      const { error } = await updateTripStatus(trip.id, revertPayload);
+      if (error) {
+        const fallbackUpdate: Record<string, unknown> = {
+          ...revertPayload,
+          updated_at: new Date().toISOString(),
+        };
+        const { error: fallbackError } = await supabase()
+          .from("trips")
+          .update(fallbackUpdate)
+          .eq("id", trip.id);
+        if (fallbackError) {
+          setSimError(fallbackError.message);
+          return;
+        }
+      }
+
+      // If we moved back from completion/in-progress stages, clear terminal timestamps.
+      const cleanupPayload: Record<string, unknown> = {};
+      if (revertToStatus !== "completed") cleanupPayload.completed_at = null;
+      if (["pending_acceptance", "assigned", "draft"].includes(revertToStatus)) {
+        cleanupPayload.started_at = null;
+      }
+      if (Object.keys(cleanupPayload).length > 0) {
+        await supabase().from("trips").update(cleanupPayload).eq("id", trip.id);
+      }
+
+      notifyTripChatMessagesChanged();
+
+      const userName = detail.profile?.full_name?.trim() || "Business";
+      const loc = detail.driverLocation;
+      const revokeLat = loc?.latitude ?? lastSimulatedTransition.lat ?? "";
+      const revokeLng = loc?.longitude ?? lastSimulatedTransition.lng ?? "";
+      const revokeEntry = `[BISIM_REVOKE|${currentTripStatusLower}|${revertToStatus}|${new Date().toISOString()}|${revokeLat}|${revokeLng}|${userName}]`;
+      const existingNotes = trip.notes?.trim() || "";
+      await supabase()
+        .from("trips")
+        .update({
+          notes: existingNotes ? `${existingNotes}\n${revokeEntry}` : revokeEntry,
+        })
+        .eq("id", trip.id);
+
+      detail.handleRefresh();
+    } catch (e: unknown) {
+      setSimError(e instanceof Error ? e.message : "Revoke simulation failed");
+    } finally {
+      setRevokingSimulation(false);
     }
   };
 
@@ -2402,6 +2501,23 @@ export default function TripDetailScreen({
       : statusLabel === "Completed"
         ? "#60a5fa"
         : "#f59e0b";
+  const timelineWatermarkAnimation = (() => {
+    const isCompletedLike =
+      statusLower === "at_drop" ||
+      statusLower.includes("arrived") ||
+      statusLower.includes("destination") ||
+      statusLower.includes("complet") ||
+      statusLower.includes("deliver") ||
+      statusLower === "done";
+    if (isCompletedLike) {
+      return require("@/assets/Animated folder/truck-unloading.json");
+    }
+    if (statusLower.includes("in_transit") || statusLower.includes("transit")) {
+      return require("@/assets/Animated folder/truck-2.json");
+    }
+    return require("@/assets/Animated folder/truck-loading.json");
+  })();
+  const timelineWatermarkKey = `manifest-watermark-${statusLower}`;
   const pickupStr = trip.pickup_date
     ? new Date(trip.pickup_date).toLocaleDateString("en-IN", {
         day: "numeric",
@@ -3547,133 +3663,246 @@ export default function TripDetailScreen({
                 </View>
 
                 {activeTab === "trip" ? (
-                  <View style={neoStyles.journeyGrid}>
-                    <View style={neoStyles.timelineCard}>
-                      <View style={neoStyles.cardTitleRow}>
-                        <View style={neoStyles.manifestPulseTitleGroup}>
-                          <Activity size={24} color="#5856D6" strokeWidth={2.5} />
-                          <Text style={neoStyles.cardTitleDark}>
-                            MANIFEST PULSE
-                          </Text>
-                        </View>
-                        {nextSimulateStep && !tripCompleted ? (
-                          <TouchableOpacity
-                            style={neoStyles.simBtn}
-                            onPress={() => setSimConfirmStep(nextSimulateStep)}
-                            activeOpacity={0.85}
-                          >
-                            <Zap size={14} color="#f59e0b" fill="#f59e0b" />
-                            <Text style={neoStyles.simBtnText}>
-                              {nextSimulateStep.targetStatus === "completed"
-                                ? "Simulate Complete"
-                                : "Simulate"}
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
+                  <View
+                    style={[
+                      neoStyles.journeyGrid,
+                      isMobile && neoStyles.journeyGridMobile,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        neoStyles.timelineCard,
+                        isMobile && neoStyles.timelineCardMobile,
+                      ]}
+                    >
+                      <View
+                        pointerEvents="none"
+                        accessibilityElementsHidden
+                        importantForAccessibility="no-hide-descendants"
+                        style={[
+                          neoStyles.timelineWatermarkWrap,
+                          isMobile && neoStyles.timelineWatermarkWrapMobile,
+                        ]}
+                      >
+                        <LottieView
+                          key={timelineWatermarkKey}
+                          source={timelineWatermarkAnimation}
+                          autoPlay
+                          loop
+                          speed={0.85}
+                          style={neoStyles.timelineWatermark}
+                        />
                       </View>
-                      {visibleJourneyLogs.map((log, index) => {
-                        const expanded = expandedLog === index;
-                        const isLast = index === visibleJourneyLogs.length - 1;
-                        const isCurrent =
-                          !manifestJourneyComplete && isLast;
-                        const phase: "completed" | "current" | "pending" = isCurrent
-                          ? "current"
-                          : "completed";
-                        const stepIndex = manifestStepIndexForLog(log.stepKey);
-                        const stepSimLogs = manifestSimLogsForStepIndex(
-                          stepIndex,
-                          simLogEntries,
-                        );
-                        return (
-                          <View
-                            key={`${log.stepKey}-${index}`}
-                            style={[
-                              neoStyles.timelineItemWrap,
-                              !isLast && neoStyles.timelineItemWrapSpaced,
-                            ]}
-                          >
-                            {!isLast ? (
-                              <View
-                                style={[
-                                  neoStyles.timelineConnector,
-                                  { backgroundColor: "#40B876" },
-                                ]}
-                              />
-                            ) : null}
-                            <TouchableOpacity
+                      <View style={neoStyles.timelineCardContent}>
+                        <View
+                          style={[
+                            neoStyles.cardTitleRow,
+                            isMobile && neoStyles.cardTitleRowMobile,
+                          ]}
+                        >
+                          <View style={neoStyles.manifestPulseTitleGroup}>
+                            <Activity size={24} color="#5856D6" strokeWidth={2.5} />
+                            <Text
                               style={[
-                                neoStyles.timelineItem,
-                                expanded && neoStyles.timelineItemActive,
+                                neoStyles.cardTitleDark,
+                                isMobile && neoStyles.cardTitleDarkMobile,
                               ]}
-                              onPress={() =>
-                                setExpandedLog(expanded ? null : index)
-                              }
-                              activeOpacity={0.9}
                             >
-                              <View style={neoStyles.manifestPulseIconColumn}>
-                                <ManifestPulseStepIcon phase={phase} />
-                              </View>
-                              <View style={neoStyles.timelineBody}>
-                                <View style={neoStyles.timelineTop}>
-                                  <Text style={neoStyles.timelineStatus}>
-                                    {log.status}
-                                  </Text>
-                                  <Text style={neoStyles.timelineTime}>
-                                    {log.time}
-                                  </Text>
-                                </View>
+                              MANIFEST PULSE
+                            </Text>
+                          </View>
+                          <View style={neoStyles.simActions}>
+                            {canRevokeLastSimulation ? (
+                              <TouchableOpacity
+                                style={[
+                                  neoStyles.simBtn,
+                                  neoStyles.simBtnRevoke,
+                                  isMobile && neoStyles.simBtnMobile,
+                                ]}
+                                onPress={handleRevokeLastSimulation}
+                                activeOpacity={0.85}
+                                disabled={simulating || revokingSimulation}
+                              >
+                                {revokingSimulation ? (
+                                  <LoadingIndicator size="small" color="#f59e0b" />
+                                ) : (
+                                  <Feather name="rotate-ccw" size={13} color="#f59e0b" />
+                                )}
                                 <Text
-                                  style={neoStyles.timelineLocation}
-                                  numberOfLines={expanded ? undefined : 2}
+                                  style={[
+                                    neoStyles.simBtnText,
+                                    isMobile && neoStyles.simBtnTextMobile,
+                                  ]}
                                 >
-                                  {log.location}
+                                  {revokingSimulation ? "Revoking…" : "Revoke Last"}
                                 </Text>
-                                {log.locationCoords ? (
+                              </TouchableOpacity>
+                            ) : null}
+                            {nextSimulateStep && !tripCompleted ? (
+                              <TouchableOpacity
+                                style={[neoStyles.simBtn, isMobile && neoStyles.simBtnMobile]}
+                                onPress={() => setSimConfirmStep(nextSimulateStep)}
+                                activeOpacity={0.85}
+                                disabled={revokingSimulation}
+                              >
+                                <Zap size={14} color="#f59e0b" fill="#f59e0b" />
+                                <Text
+                                  style={[
+                                    neoStyles.simBtnText,
+                                    isMobile && neoStyles.simBtnTextMobile,
+                                  ]}
+                                >
+                                  {nextSimulateStep.targetStatus === "completed"
+                                    ? "Simulate Complete"
+                                    : "Simulate"}
+                                </Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        </View>
+                        {visibleJourneyLogs.map((log, index) => {
+                          const expanded = expandedLog === index;
+                          const isLast = index === visibleJourneyLogs.length - 1;
+                          const isCurrent =
+                            !manifestJourneyComplete && isLast;
+                          const phase: "completed" | "current" | "pending" = isCurrent
+                            ? "current"
+                            : "completed";
+                          const stepIndex = manifestStepIndexForLog(log.stepKey);
+                          const stepSimLogs = manifestSimLogsForStepIndex(
+                            stepIndex,
+                            simLogEntries,
+                          );
+                          return (
+                            <View
+                              key={`${log.stepKey}-${index}`}
+                              style={[
+                                neoStyles.timelineItemWrap,
+                                !isLast && neoStyles.timelineItemWrapSpaced,
+                                isMobile &&
+                                  !isLast &&
+                                  neoStyles.timelineItemWrapSpacedMobile,
+                              ]}
+                            >
+                              {!isLast ? (
+                                <View
+                                  style={[
+                                    neoStyles.timelineConnector,
+                                    { backgroundColor: "#40B876" },
+                                  ]}
+                                />
+                              ) : null}
+                              <TouchableOpacity
+                                style={[
+                                  neoStyles.timelineItem,
+                                  isMobile && neoStyles.timelineItemMobile,
+                                  expanded && neoStyles.timelineItemActive,
+                                ]}
+                                onPress={() =>
+                                  setExpandedLog(expanded ? null : index)
+                                }
+                                activeOpacity={0.9}
+                              >
+                                <View style={neoStyles.manifestPulseIconColumn}>
+                                  <ManifestPulseStepIcon phase={phase} />
+                                </View>
+                                <View style={neoStyles.timelineBody}>
+                                  <View style={neoStyles.timelineTop}>
+                                    <Text
+                                      style={[
+                                        neoStyles.timelineStatus,
+                                        isMobile && neoStyles.timelineStatusMobile,
+                                      ]}
+                                    >
+                                      {log.status}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        neoStyles.timelineTime,
+                                        isMobile && neoStyles.timelineTimeMobile,
+                                      ]}
+                                    >
+                                      {log.time}
+                                    </Text>
+                                  </View>
                                   <Text
-                                    style={neoStyles.timelineLocationCoords}
+                                    style={[
+                                      neoStyles.timelineLocation,
+                                      isMobile && neoStyles.timelineLocationMobile,
+                                    ]}
                                     numberOfLines={expanded ? undefined : 2}
                                   >
-                                    {log.locationCoords}
+                                    {log.location}
                                   </Text>
-                                ) : null}
-                                {expanded ? (
-                                  <Text style={neoStyles.timelineDetails}>
-                                    {log.details}
-                                  </Text>
-                                ) : null}
-                                {expanded && stepIndex === 3 ? (
-                                  <ManifestDriverPingList pings={manifestDriverPings} />
-                                ) : null}
-                                {/* Business simulation log badges */}
-                                {stepSimLogs.map((sim, si) => (
-                                  <View key={si} style={neoStyles.simLogBadge}>
-                                    <Feather
-                                      name="zap"
-                                      size={10}
-                                      color="#f59e0b"
-                                    />
-                                    <View style={{ flex: 1, minWidth: 0 }}>
-                                      <Text style={neoStyles.simLogBadgeText}>
-                                        Business simulated · {sim.userName}
-                                      </Text>
-                                      {sim.timestamp ? (
-                                        <Text style={neoStyles.simLogBadgeTime}>
-                                          {new Date(
-                                            sim.timestamp,
-                                          ).toLocaleTimeString("en-IN", {
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          })}
+                                  {log.locationCoords ? (
+                                    <Text
+                                      style={[
+                                        neoStyles.timelineLocationCoords,
+                                        isMobile &&
+                                          neoStyles.timelineLocationCoordsMobile,
+                                      ]}
+                                      numberOfLines={expanded ? undefined : 2}
+                                    >
+                                      {log.locationCoords}
+                                    </Text>
+                                  ) : null}
+                                  {expanded ? (
+                                    <Text style={neoStyles.timelineDetails}>
+                                      {log.details}
+                                    </Text>
+                                  ) : null}
+                                  {expanded && stepIndex === 3 ? (
+                                    <ManifestDriverPingList pings={manifestDriverPings} />
+                                  ) : null}
+                                  {/* Business simulation log badges */}
+                                  {stepSimLogs.map((sim, si) => (
+                                    <View
+                                      key={si}
+                                      style={[
+                                        neoStyles.simLogBadge,
+                                        isMobile && neoStyles.simLogBadgeMobile,
+                                      ]}
+                                    >
+                                      <Feather
+                                        name="zap"
+                                        size={10}
+                                        color="#f59e0b"
+                                      />
+                                      <View style={{ flex: 1, minWidth: 0 }}>
+                                        <Text
+                                          style={[
+                                            neoStyles.simLogBadgeText,
+                                            isMobile &&
+                                              neoStyles.simLogBadgeTextMobile,
+                                          ]}
+                                        >
+                                          Business simulated · {sim.userName}
                                         </Text>
-                                      ) : null}
+                                        {sim.timestamp ? (
+                                          <Text
+                                            style={[
+                                              neoStyles.simLogBadgeTime,
+                                              isMobile &&
+                                                neoStyles.simLogBadgeTimeMobile,
+                                            ]}
+                                          >
+                                            {new Date(
+                                              sim.timestamp,
+                                            ).toLocaleTimeString("en-IN", {
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                            })}
+                                          </Text>
+                                        ) : null}
+                                      </View>
                                     </View>
-                                  </View>
-                                ))}
-                              </View>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
+                                  ))}
+                                </View>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
                     </View>
 
                     {/* Business Simulate Confirmation Modal */}
@@ -7264,6 +7493,9 @@ const neoStyles = StyleSheet.create({
     gap: 24,
     alignItems: "stretch",
   },
+  journeyGridMobile: {
+    gap: 12,
+  },
   timelineCard: {
     flex: 1,
     minWidth: 340,
@@ -7279,6 +7511,39 @@ const neoStyles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 20,
     elevation: 2,
+    position: "relative",
+    overflow: "hidden",
+  },
+  timelineCardMobile: {
+    minWidth: 0,
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    minHeight: 0,
+  },
+  timelineCardContent: {
+    position: "relative",
+    zIndex: 1,
+  },
+  timelineWatermarkWrap: {
+    position: "absolute",
+    right: -12,
+    bottom: -8,
+    width: 230,
+    height: 180,
+    opacity: 0.12,
+    zIndex: 0,
+  },
+  timelineWatermarkWrapMobile: {
+    right: -2,
+    bottom: 8,
+    width: 188,
+    height: 146,
+    opacity: 0.16,
+  },
+  timelineWatermark: {
+    width: "100%",
+    height: "100%",
   },
   cardTitleRow: {
     flexDirection: "row",
@@ -7287,6 +7552,9 @@ const neoStyles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 48,
+  },
+  cardTitleRowMobile: {
+    marginBottom: 20,
   },
   manifestPulseTitleGroup: {
     flexDirection: "row",
@@ -7304,11 +7572,18 @@ const neoStyles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 2,
   },
+  cardTitleDarkMobile: {
+    fontSize: 16,
+    letterSpacing: 0.25,
+  },
   timelineItemWrap: {
     position: "relative",
   },
   timelineItemWrapSpaced: {
     marginBottom: 48,
+  },
+  timelineItemWrapSpacedMobile: {
+    marginBottom: 26,
   },
   timelineConnector: {
     position: "absolute",
@@ -7334,6 +7609,10 @@ const neoStyles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 0,
   },
+  timelineItemMobile: {
+    gap: 12,
+    paddingVertical: 2,
+  },
   timelineItemActive: {
     backgroundColor: "#f8fafc",
   },
@@ -7354,6 +7633,10 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.6,
   },
+  timelineStatusMobile: {
+    fontSize: 11,
+    letterSpacing: 1.1,
+  },
   manifestPulseTitlePending: {
     color: "#94a3b8",
   },
@@ -7361,6 +7644,9 @@ const neoStyles = StyleSheet.create({
     color: "#94a3b8",
     fontSize: 13,
     fontWeight: "700",
+  },
+  timelineTimeMobile: {
+    fontSize: 11,
   },
   manifestPulseTimePending: {
     color: "#CBD5E1",
@@ -7371,6 +7657,9 @@ const neoStyles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "600",
   },
+  timelineLocationMobile: {
+    fontSize: 12,
+  },
   timelineLocationCoords: {
     color: "#94a3b8",
     fontSize: 11,
@@ -7378,6 +7667,9 @@ const neoStyles = StyleSheet.create({
     fontWeight: "500",
     fontVariant: ["tabular-nums"],
     letterSpacing: 0.2,
+  },
+  timelineLocationCoordsMobile: {
+    fontSize: 10,
   },
   manifestPulseSubtitlePending: {
     color: "#CBD5E1",
@@ -7400,6 +7692,22 @@ const neoStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FDE68A",
   },
+  simActions: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
+  simBtnRevoke: {
+    backgroundColor: "rgba(255, 251, 235, 0.45)",
+  },
+  simBtnMobile: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 4,
+  },
   simBtnText: {
     fontSize: 11,
     fontWeight: "800",
@@ -7407,6 +7715,10 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 2,
     marginTop: 1,
+  },
+  simBtnTextMobile: {
+    fontSize: 10,
+    letterSpacing: 1.2,
   },
   simLogBadge: {
     flexDirection: "row",
@@ -7420,15 +7732,27 @@ const neoStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(245,158,11,0.2)",
   },
+  simLogBadgeMobile: {
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
   simLogBadgeText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#f59e0b",
   },
+  simLogBadgeTextMobile: {
+    fontSize: 10,
+  },
   simLogBadgeTime: {
     fontSize: 10,
     color: "#94a3b8",
     marginTop: 2,
+  },
+  simLogBadgeTimeMobile: {
+    fontSize: 9,
   },
   simModalBackdrop: {
     flex: 1,
