@@ -7,6 +7,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { FAB_ICON_ASSETS, type FABIconName } from "@/lib/fabIconAssets";
 import { useGlobalFabAnimation } from "@/lib/hooks/useGlobalFabAnimation";
+import LottieView from "lottie-react-native";
 import {
   Building2,
   CirclePlus,
@@ -82,6 +83,18 @@ function getLucideIcon(name: FABIconName): LucideIcon {
   }
 }
 
+const FAB_ANIMATED_GLYPH_SOURCE: Partial<Record<FABIconName, unknown>> = {
+  building: require("@/assets/Animated folder/business-idea.json"),
+  warehouse: require("@/assets/Animated folder/forklift-truck.json"),
+  truck: require("@/assets/Animated folder/truck-4.json"),
+  road: require("@/assets/Animated folder/online-tracking.json"),
+  package: require("@/assets/Animated folder/loading-cargo.json"),
+  user: require("@/assets/Animated folder/add-user.json"),
+  "user-plus": require("@/assets/Animated folder/add-user.json"),
+  "receipt-text": require("@/assets/Animated folder/approved-note.json"),
+  "credit-card": require("@/assets/Animated folder/online-payments.json"),
+};
+
 export function FinanceFAB({
   onPress,
   accessibilityLabel,
@@ -123,13 +136,33 @@ export function FinanceFAB({
   const shouldShowPlus = showPlusSuffix && icon !== "plus";
 
   const MainIcon = icon === "receipt-text" || icon === "credit-card" ? Receipt : IconComponent;
+  const animatedGlyphSource = FAB_ANIMATED_GLYPH_SOURCE[icon];
+  const useAnimatedGlyphChrome = Boolean(animatedGlyphSource);
 
   const chipSize = Math.round(size * 0.56);
   const assetGlyphSize = Math.round(
     chipSize * (assetGlyph?.glyphScale ?? 0.74),
   );
 
-  const mainGlyph = assetGlyph ? (
+  const mainGlyph = animatedGlyphSource ? (
+    <View
+      style={[
+        styles.assetChip,
+        {
+          width: chipSize,
+          height: chipSize,
+          borderRadius: chipSize / 2,
+        },
+      ]}
+    >
+      <LottieView
+        source={animatedGlyphSource}
+        autoPlay
+        loop
+        style={{ width: chipSize + 14, height: chipSize + 14 }}
+      />
+    </View>
+  ) : assetGlyph ? (
     <View
       style={[
         styles.assetChip,
@@ -165,23 +198,27 @@ export function FinanceFAB({
               width: size,
               height: size,
               borderRadius: size / 2,
-              backgroundColor: fabBgColor,
+              backgroundColor: useAnimatedGlyphChrome ? Theme.cardWhite : fabBgColor,
+              borderColor: useAnimatedGlyphChrome ? "transparent" : Theme.cardWhite,
+              borderWidth: useAnimatedGlyphChrome ? 0 : 2.5,
               transform: [{ scale: pressScale }],
             },
           ]}
         >
-          <Reanimated.View
-            style={[
-              styles.innerRing,
-              {
-                width: size - 10,
-                height: size - 10,
-                borderRadius: (size - 10) / 2,
-              },
-              ringStyle,
-              pe("none"),
-            ]}
-          />
+          {!useAnimatedGlyphChrome ? (
+            <Reanimated.View
+              style={[
+                styles.innerRing,
+                {
+                  width: size - 10,
+                  height: size - 10,
+                  borderRadius: (size - 10) / 2,
+                },
+                ringStyle,
+                pe("none"),
+              ]}
+            />
+          ) : null}
           {mainGlyph}
           {shouldShowPlus ? (
             <View style={styles.addBadge}>

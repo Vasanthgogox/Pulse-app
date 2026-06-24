@@ -52,6 +52,7 @@ import { FlashList } from "@shopify/flash-list";
 import {
     Alert,
     Animated,
+    Image,
     Platform,
     Pressable,
     RefreshControl,
@@ -62,6 +63,9 @@ import {
     View,
 } from "react-native";
 import { useWebLayoutWidth } from "@/lib/useWebLayoutWidth";
+
+const CONNECTIONS_BODY_WATERMARK = require("@/assets/illustrations/network-connections-watermark.png");
+const CONNECTIONS_BODY_WATERMARK_ASPECT = 456 / 334;
 
 export type ConnectionFilterTab = "ALL" | "CLIENT" | "SUPPLIER" | "DRIVER";
 
@@ -1126,6 +1130,16 @@ export function ConnectionsView({
       </View>
     ) : (
       <View style={styles.connectionsPhotoSurface}>
+        <Image
+          source={CONNECTIONS_BODY_WATERMARK}
+          style={[
+            styles.connectionsPhotoWatermark,
+            isMobileHub && styles.connectionsPhotoWatermarkCompact,
+          ]}
+          resizeMode="contain"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
         {renderHubConnectionsBody()}
       </View>
     )
@@ -1369,7 +1383,25 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     paddingTop: 4,
     paddingBottom: 8,
-    overflow: "visible",
+    overflow: "hidden",
+    position: "relative",
+  },
+  connectionsPhotoWatermark: {
+    position: "absolute",
+    width: 190,
+    height: 190 / CONNECTIONS_BODY_WATERMARK_ASPECT,
+    right: 8,
+    top: 8,
+    opacity: 0.17,
+    zIndex: 0,
+    ...(Platform.OS === "web" ? { mixBlendMode: "multiply" as const } : null),
+  },
+  connectionsPhotoWatermarkCompact: {
+    width: 150,
+    height: 150 / CONNECTIONS_BODY_WATERMARK_ASPECT,
+    right: 4,
+    top: 12,
+    opacity: 0.15,
   },
   metronicGridRoot: {
     width: "100%",

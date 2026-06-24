@@ -21,9 +21,9 @@ export const LOAD_CENTER_TAB_STRIP_PALETTES = {
     trayBorder: Theme.loadMainTabTrayBorder,
     border: Theme.loadMainTabBorder,
     borderSoft: Theme.loadMainTabBorderSoft,
-    text: Theme.loadMainTabText,
-    textMuted: Theme.loadMainTabTextMuted,
-    underline: Theme.loadMainTabBorder,
+    text: Theme.textPrimaryDark,
+    textMuted: Theme.textPrimaryDark,
+    underline: Theme.textPrimaryDark,
   },
   blue: {
     bg: Theme.loadStatusTabBg,

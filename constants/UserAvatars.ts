@@ -1,76 +1,85 @@
-import { type PresetAvatar, getPresetAvatarUri } from './DriverLevels';
+import { type PresetAvatar, getPresetAvatarUri } from "./DriverLevels";
 
-const user1  = require('../assets/avatars/male_1.png');
-const user2  = require('../assets/avatars/male_2.png');
-const user3  = require('../assets/avatars/male_3.png');
-const user4  = require('../assets/avatars/male_4.png');
-const user5  = require('../assets/avatars/male_5.png');
-const user6  = require('../assets/avatars/male_6.png');
-const user7  = require('../assets/avatars/male_screenshot_1.png');
-const user8  = require('../assets/avatars/male_screenshot_2.png');
-const user9  = require('../assets/avatars/male_screenshot_3.png');
-const user10 = require('../assets/avatars/male_screenshot_4.png');
-const user11 = require('../assets/avatars/male_screenshot_5.png');
-const user12 = require('../assets/avatars/male_screenshot_6.png');
-const user13 = require('../assets/avatars/male_screenshot_7.png');
-const user14 = require('../assets/avatars/male_screenshot_8.png');
-const user15 = require('../assets/avatars/male_screenshot_9.png');
-const user16 = require('../assets/avatars/male_screenshot_10.png');
-const user17 = require('../assets/avatars/male_screenshot_11.png');
-const user18 = require('../assets/avatars/male_screenshot_12.png');
-const user19 = require('../assets/avatars/male_screenshot_13.png');
-const user20 = require('../assets/avatars/female_1.png');
-const user21 = require('../assets/avatars/female_5.png');
-const user22 = require('../assets/avatars/female_screenshot_1.png');
-const user23 = require('../assets/avatars/female_screenshot_5.png');
-const user24 = require('../assets/avatars/female_screenshot_6.png');
-const user25 = require('../assets/avatars/female_screenshot_7.png');
-const user26 = require('../assets/avatars/female_screenshot_9.png');
-const user27 = require('../assets/avatars/male_wa1.jpeg');
-const user28 = require('../assets/avatars/male_wa2.jpeg');
-const user29 = require('../assets/avatars/male_wa3.jpeg');
-const user30 = require('../assets/avatars/male_wa4.jpeg');
-const user31 = require('../assets/avatars/male_wa5.jpeg');
-const user32 = require('../assets/avatars/male_wa6.jpeg');
-const user33 = require('../assets/avatars/male_wa7.png');
+export type UserAvatarGender = "male" | "female";
+export type UserAvatarPreset = PresetAvatar & { gender: UserAvatarGender };
 
-export type { PresetAvatar as UserAvatarPreset };
-
-export const USER_2D_AVATARS: PresetAvatar[] = [
-  { name: 'Fleet Manager',     seed: 'user-1',  image: user1  },
-  { name: 'Road Pro',          seed: 'user-2',  image: user2  },
-  { name: 'The Veteran',       seed: 'user-3',  image: user3  },
-  { name: 'Tech Lead',         seed: 'user-4',  image: user4  },
-  { name: 'The Dispatcher',    seed: 'user-5',  image: user5  },
-  { name: 'Senior Manager',    seed: 'user-6',  image: user6  },
-  { name: 'Operations Pro',    seed: 'user-7',  image: user7  },
-  { name: 'Logistics Expert',  seed: 'user-8',  image: user8  },
-  { name: 'Fleet Coordinator', seed: 'user-9',  image: user9  },
-  { name: 'Route Planner',     seed: 'user-10', image: user10 },
-  { name: 'Cargo Specialist',  seed: 'user-11', image: user11 },
-  { name: 'Transport Lead',    seed: 'user-12', image: user12 },
-  { name: 'Urban Driver',      seed: 'user-13', image: user13 },
-  { name: 'Express Pilot',     seed: 'user-14', image: user14 },
-  { name: 'Supply Chain Pro',  seed: 'user-15', image: user15 },
-  { name: 'Dispatch Manager',  seed: 'user-16', image: user16 },
-  { name: 'Field Operator',    seed: 'user-17', image: user17 },
-  { name: 'Logistics Chief',   seed: 'user-18', image: user18 },
-  { name: 'Hub Controller',    seed: 'user-19', image: user19 },
-  { name: 'Fleet Coordinator', seed: 'user-20', image: user20 },
-  { name: 'Office Manager',    seed: 'user-21', image: user21 },
-  { name: 'Swift Sister',      seed: 'user-22', image: user22 },
-  { name: 'The Navigator',     seed: 'user-23', image: user23 },
-  { name: 'Fleet Analyst',     seed: 'user-24', image: user24 },
-  { name: 'Logistics Pro',     seed: 'user-25', image: user25 },
-  { name: 'Express Manager',   seed: 'user-26', image: user26 },
-  { name: 'Operations Lead',   seed: 'user-27', image: user27 },
-  { name: 'Fleet Director',    seed: 'user-28', image: user28 },
-  { name: 'Senior Executive',  seed: 'user-29', image: user29 },
-  { name: 'Logistics Head',    seed: 'user-30', image: user30 },
-  { name: 'Transport Manager', seed: 'user-31', image: user31 },
-  { name: 'Dispatch Chief',    seed: 'user-32', image: user32 },
-  { name: 'Port Manager',      seed: 'user-33', image: user33 },
+/**
+ * Include all bundled files from `assets/avatars` and keep seeds stable.
+ * Order: male first, then female (so pickers can segment cleanly).
+ */
+export const USER_2D_AVATARS: UserAvatarPreset[] = [
+  { seed: "user-1", name: "Adult", gender: "male", image: require("../assets/avatars/adult.png") },
+  { seed: "user-2", name: "Arabian", gender: "male", image: require("../assets/avatars/arabian.png") },
+  { seed: "user-3", name: "Assassin", gender: "male", image: require("../assets/avatars/assasin.png") },
+  { seed: "user-4", name: "Astronaut", gender: "male", image: require("../assets/avatars/astronaut.png") },
+  { seed: "user-5", name: "Astronaut Avatar", gender: "male", image: require("../assets/avatars/astronaut-avatar.png") },
+  { seed: "user-6", name: "Bearded Man", gender: "male", image: require("../assets/avatars/bearded-man.png") },
+  { seed: "user-7", name: "Boy", gender: "male", image: require("../assets/avatars/boy.png") },
+  { seed: "user-8", name: "Boy Avatar", gender: "male", image: require("../assets/avatars/boy-avatar.png") },
+  { seed: "user-9", name: "Boxer", gender: "male", image: require("../assets/avatars/boxer.png") },
+  { seed: "user-10", name: "Businessman", gender: "male", image: require("../assets/avatars/businessman.png") },
+  { seed: "user-11", name: "Chef", gender: "male", image: require("../assets/avatars/chef.png") },
+  { seed: "user-12", name: "Check Profile", gender: "male", image: require("../assets/avatars/check-profile.png") },
+  { seed: "user-13", name: "Cool Man", gender: "male", image: require("../assets/avatars/cool-man.png") },
+  { seed: "user-14", name: "Cowboy", gender: "male", image: require("../assets/avatars/cowboy-is-wearing-hat.png") },
+  { seed: "user-15", name: "Curly Hair Hat", gender: "male", image: require("../assets/avatars/curly-hair-man-with-hat.png") },
+  { seed: "user-16", name: "Curly Hair Glasses", gender: "male", image: require("../assets/avatars/curly-hair-man-with-glasses.png") },
+  { seed: "user-17", name: "Doctor", gender: "male", image: require("../assets/avatars/doctor.png") },
+  { seed: "user-18", name: "Employee", gender: "male", image: require("../assets/avatars/employee-young-man.png") },
+  { seed: "user-19", name: "Gamer", gender: "male", image: require("../assets/avatars/gamer.png") },
+  { seed: "user-20", name: "Graduate", gender: "male", image: require("../assets/avatars/graduate-avatar-icon.png") },
+  { seed: "user-21", name: "Grandpa", gender: "male", image: require("../assets/avatars/grandpa.png") },
+  { seed: "user-22", name: "Knowledgeable Teacher", gender: "male", image: require("../assets/avatars/knowledgeable-avatar-teacher.png") },
+  { seed: "user-23", name: "Lab Technician", gender: "male", image: require("../assets/avatars/lab-technician.png") },
+  { seed: "user-24", name: "Manager", gender: "male", image: require("../assets/avatars/manager.png") },
+  { seed: "user-25", name: "Man", gender: "male", image: require("../assets/avatars/man.png") },
+  { seed: "user-26", name: "Man 2", gender: "male", image: require("../assets/avatars/man-2.png") },
+  { seed: "user-27", name: "Man Avatar", gender: "male", image: require("../assets/avatars/man-avatar.png") },
+  { seed: "user-28", name: "Man Avatar 2", gender: "male", image: require("../assets/avatars/man-avatar-2.png") },
+  { seed: "user-29", name: "Man Avatar 3", gender: "male", image: require("../assets/avatars/man-avatar-3.png") },
+  { seed: "user-30", name: "Meteorologist", gender: "male", image: require("../assets/avatars/meteorologist.png") },
+  { seed: "user-31", name: "Motorcyclist", gender: "male", image: require("../assets/avatars/motorcyclist-avatar.png") },
+  { seed: "user-32", name: "Mountain Climber", gender: "male", image: require("../assets/avatars/mountain-climber.png") },
+  { seed: "user-33", name: "Native American", gender: "male", image: require("../assets/avatars/native-american-spiritual-leader-avatar.png") },
+  { seed: "user-34", name: "Old Man", gender: "male", image: require("../assets/avatars/old-man.png") },
+  { seed: "user-35", name: "Old Man 2", gender: "male", image: require("../assets/avatars/old-man-2.png") },
+  { seed: "user-36", name: "Old Man Avatar", gender: "male", image: require("../assets/avatars/old-man-avatar.png") },
+  { seed: "user-37", name: "Panjabi Man", gender: "male", image: require("../assets/avatars/panjabi-man.png") },
+  { seed: "user-38", name: "Pilot", gender: "male", image: require("../assets/avatars/pilot.png") },
+  { seed: "user-39", name: "Pilot 2", gender: "male", image: require("../assets/avatars/pilot-2.png") },
+  { seed: "user-40", name: "Policeman", gender: "male", image: require("../assets/avatars/policeman.png") },
+  { seed: "user-41", name: "Senior Businessman", gender: "male", image: require("../assets/avatars/senior-businessman.png") },
+  { seed: "user-42", name: "Showman", gender: "male", image: require("../assets/avatars/showman.png") },
+  { seed: "user-43", name: "Sikh Guru", gender: "male", image: require("../assets/avatars/sikh-guru-avatar.png") },
+  { seed: "user-44", name: "Singer", gender: "male", image: require("../assets/avatars/singer.png") },
+  { seed: "user-45", name: "Soccer Player", gender: "male", image: require("../assets/avatars/soccer-player-avatar.png") },
+  { seed: "user-46", name: "Soldier", gender: "male", image: require("../assets/avatars/soldier-avatar-icon.png") },
+  { seed: "user-47", name: "Thief", gender: "male", image: require("../assets/avatars/thief.png") },
+  { seed: "user-48", name: "Thief Man", gender: "male", image: require("../assets/avatars/thief-man.png") },
+  { seed: "user-49", name: "Young Boy", gender: "male", image: require("../assets/avatars/young-boy.png") },
+  { seed: "user-50", name: "Actress", gender: "female", image: require("../assets/avatars/actress.png") },
+  { seed: "user-51", name: "Baby Sitter", gender: "female", image: require("../assets/avatars/baby-sitter.png") },
+  { seed: "user-52", name: "Business Woman", gender: "female", image: require("../assets/avatars/business-woman.png") },
+  { seed: "user-53", name: "Cleopatra", gender: "female", image: require("../assets/avatars/cleopatra-avatar.png") },
+  { seed: "user-54", name: "Cleopatra 2", gender: "female", image: require("../assets/avatars/cleopatra-avatar-2.png") },
+  { seed: "user-55", name: "Female Characters", gender: "female", image: require("../assets/avatars/female-characters.png") },
+  { seed: "user-56", name: "Female Characters 2", gender: "female", image: require("../assets/avatars/female-characters-2.png") },
+  { seed: "user-57", name: "Female Florist", gender: "female", image: require("../assets/avatars/female-florist.png") },
+  { seed: "user-58", name: "Female Waiter", gender: "female", image: require("../assets/avatars/female-waiter-avatar.png") },
+  { seed: "user-59", name: "Girl", gender: "female", image: require("../assets/avatars/girl-avatar.png") },
+  { seed: "user-60", name: "Long Hair Woman", gender: "female", image: require("../assets/avatars/long-hair-woman-with-glasses.png") },
+  { seed: "user-61", name: "Saleswoman", gender: "female", image: require("../assets/avatars/saleswoman.png") },
+  { seed: "user-62", name: "Woman Hijab", gender: "female", image: require("../assets/avatars/woman-with-hijab.png") },
+  { seed: "user-63", name: "Women with Glasses", gender: "female", image: require("../assets/avatars/women-with-glasses-avatar.png") },
+  { seed: "user-64", name: "Astronout", gender: "female", image: require("../assets/avatars/astronout.png") },
 ];
+
+export const MALE_USER_2D_AVATARS: UserAvatarPreset[] = USER_2D_AVATARS.filter(
+  (avatar) => avatar.gender === "male",
+);
+export const FEMALE_USER_2D_AVATARS: UserAvatarPreset[] = USER_2D_AVATARS.filter(
+  (avatar) => avatar.gender === "female",
+);
 
 export const DEFAULT_USER_2D_AVATAR_SEED = USER_2D_AVATARS[0]?.seed ?? 'user-1';
 

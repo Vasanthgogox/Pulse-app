@@ -12,6 +12,12 @@ export function navigateToOpsAlert(router: Router, ops: GlobalOperationAlert): v
     return;
   }
 
+  // Driver tracking ops should open the actionable trip detail page directly.
+  if ((ops.category === "late_log" || ops.category === "vehicle_idle") && tripId) {
+    router.push(`/trip/${tripId}` as const);
+    return;
+  }
+
   if (ops.category === "payment_received" || ops.category === "dispute") {
     if (tripId) {
       router.push(`/trip-ledger/${tripId}` as const);

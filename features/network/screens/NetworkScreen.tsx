@@ -13,8 +13,6 @@ import Typography from "@/constants/Typography";
 
 /** Network growth card — brand ink for kicker + trend pill. */
 const NETWORK_GROWTH_PURPLE = Theme.brandBlueInk;
-const NETWORK_CONNECTIONS_WATERMARK = require("@/assets/illustrations/network-connections-watermark.png");
-const NETWORK_CONNECTIONS_WATERMARK_ASPECT = 456 / 334;
 import { useOptionalBusinessConnectionRequestModal } from "@/contexts/BusinessConnectionRequestModalContext.shared";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
@@ -961,16 +959,6 @@ function NetworkScreenInner() {
             >
               <View style={styles.connectionsHubCard}>
                 <View style={styles.connectionsHubCardOrb} />
-                <Image
-                  source={NETWORK_CONNECTIONS_WATERMARK}
-                  style={[
-                    styles.connectionsHubCardWatermark,
-                    isMobileLayout && styles.connectionsHubCardWatermarkCompact,
-                  ]}
-                  resizeMode="contain"
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                />
                 <View
                   style={[
                     styles.connectionsHubCardContent,
@@ -1697,23 +1685,6 @@ const styles = StyleSheet.create({
     right: -72,
     top: -88,
     zIndex: 0,
-  },
-  connectionsHubCardWatermark: {
-    position: "absolute",
-    width: 220,
-    height: 220 / NETWORK_CONNECTIONS_WATERMARK_ASPECT,
-    right: -28,
-    top: -18,
-    opacity: 0.2,
-    zIndex: 1,
-    ...(Platform.OS === "web" ? { mixBlendMode: "multiply" as const } : null),
-  },
-  connectionsHubCardWatermarkCompact: {
-    width: 168,
-    height: 168 / NETWORK_CONNECTIONS_WATERMARK_ASPECT,
-    right: -22,
-    top: -14,
-    opacity: 0.18,
   },
   connectionsHubCardContent: {
     width: "100%",
