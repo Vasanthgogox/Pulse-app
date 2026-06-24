@@ -195,6 +195,7 @@ import {
 } from "@/lib/ledgerBookPendingStore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import LottieView from "lottie-react-native";
 import {
   ArrowLeft,
   Briefcase,
@@ -1308,6 +1309,9 @@ export function ChatScreen() {
   const [tripSidebarSearch, setTripSidebarSearch] = useState("");
   const [netSidebarSearch, setNetSidebarSearch] = useState("");
   const [showStoriesSheet, setShowStoriesSheet] = useState(false);
+  const [tripStartNoticeMode, setTripStartNoticeMode] = useState<
+    "integrated" | "driver" | null
+  >(null);
   const [hubSearchOpen, setHubSearchOpen] = useState(false);
   const tripSearchInputRef = useRef<TextInput>(null);
   const netSearchInputRef = useRef<TextInput>(null);
@@ -2434,6 +2438,10 @@ export function ChatScreen() {
     }
   };
 
+  const handleTripEmptyStartConversation = useCallback(() => {
+    setTripStartNoticeMode(activeTab === "indent" ? "integrated" : "driver");
+  }, [activeTab]);
+
   const handleInitiate = async (
     trip: TripForCompose,
     partyType: ConversationPartyType,
@@ -3322,8 +3330,18 @@ export function ChatScreen() {
                         ? "No active integrated trip conversations"
                         : "No active manual trip conversations"
                   }
+                  variant={activeTab === "indent" ? "trip_integrated" : "trip_driver"}
+                  subtitle={
+                    activeTab === "indent"
+                      ? CHAT_EMPTY_COPY.tripIntegratedSubtitle
+                      : CHAT_EMPTY_COPY.tripDriverSubtitle
+                  }
                   actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
-                  onAction={tripChatScope === "active" ? openCompose : undefined}
+                  onAction={
+                    tripChatScope === "active"
+                      ? handleTripEmptyStartConversation
+                      : undefined
+                  }
                 />
               }
               ItemSeparatorComponent={undefined}
@@ -3426,11 +3444,136 @@ export function ChatScreen() {
                 {(tripChatScope === "active"
                   ? desktopActiveTripConversations.length
                   : desktopHistoryTripConversations.length) === 0 ? (
-                  <Text style={deskSt.sidebarCategoryEmptyText}>
-                    {tripChatScope === "active"
-                      ? "No active conversations"
-                      : "No conversations in history"}
-                  </Text>
+                  <View
+                    style={{
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 5,
+                      paddingVertical: 12,
+                      width: "100%",
+                      maxWidth: 300,
+                      alignSelf: "center",
+                    }}
+                  >
+                    <CompactChatAnimation
+                      size={activeTab === "indent" ? 84 : 112}
+                      source={
+                        activeTab === "indent"
+                          ? NEW_TRIP_INTEGRATED_EMPTY_ANIMATION
+                          : NEW_TRIP_DRIVER_EMPTY_ANIMATION
+                      }
+                    />
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: "#EEF2FF",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <MessageSquare size={12} color={CHAT_ACCENT} />
+                      </View>
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: "#ECFDF5",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Users size={12} color="#059669" />
+                      </View>
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: "#FFF7ED",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Truck size={12} color="#EA580C" />
+                      </View>
+                    </View>
+                    <Text style={deskSt.sidebarCategoryEmptyText}>
+                      {tripChatScope === "active"
+                        ? "No active conversations"
+                        : "No conversations in history"}
+                    </Text>
+                    {activeTab === "indent" ? (
+                      <View style={{ width: "100%", gap: 4 }}>
+                        {CHAT_EMPTY_COPY.tripIntegratedFeatures.map((feature) => (
+                          <Text
+                            key={feature}
+                            style={{
+                              fontSize: 11,
+                              color: SLACK_DESKTOP.textTertiary,
+                              textAlign: "center",
+                              lineHeight: 16,
+                              paddingHorizontal: 16,
+                            }}
+                          >
+                            • {feature}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: SLACK_DESKTOP.textTertiary,
+                          textAlign: "center",
+                          lineHeight: 16,
+                          paddingHorizontal: 16,
+                        }}
+                      >
+                        {CHAT_EMPTY_COPY.tripDriverSubtitle}
+                      </Text>
+                    )}
+                    {tripChatScope === "active" ? (
+                      <TouchableOpacity
+                        style={{
+                          marginTop: 6,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          borderRadius: 999,
+                          backgroundColor: CHAT_ACCENT,
+                          paddingHorizontal: 16,
+                          paddingVertical: 9,
+                          alignSelf: "center",
+                        }}
+                        onPress={handleTripEmptyStartConversation}
+                        activeOpacity={0.85}
+                      >
+                        <LottieView
+                          source={START_CHAT_CTA_ANIMATION}
+                          autoPlay
+                          loop
+                          speed={0.9}
+                          resizeMode="contain"
+                          style={{ width: 18, height: 18 }}
+                        />
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontSize: 13,
+                            fontWeight: "800",
+                            lineHeight: 18,
+                          }}
+                        >
+                          Start a conversation
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
             </ScrollView>
@@ -3453,8 +3596,18 @@ export function ChatScreen() {
                         ? "No active integrated trip conversations"
                         : "No active manual trip conversations"
                   }
+                  variant={activeTab === "indent" ? "trip_integrated" : "trip_driver"}
+                  subtitle={
+                    activeTab === "indent"
+                      ? CHAT_EMPTY_COPY.tripIntegratedSubtitle
+                      : CHAT_EMPTY_COPY.tripDriverSubtitle
+                  }
                   actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
-                  onAction={tripChatScope === "active" ? openCompose : undefined}
+                  onAction={
+                    tripChatScope === "active"
+                      ? handleTripEmptyStartConversation
+                      : undefined
+                  }
                 />
               ) : (
                 (() => {
@@ -3707,8 +3860,18 @@ export function ChatScreen() {
                         ? "No active integrated trip conversations"
                         : "No active manual trip conversations"
                   }
+                  variant={activeTab === "indent" ? "trip_integrated" : "trip_driver"}
+                  subtitle={
+                    activeTab === "indent"
+                      ? CHAT_EMPTY_COPY.tripIntegratedSubtitle
+                      : CHAT_EMPTY_COPY.tripDriverSubtitle
+                  }
                   actionLabel={tripChatScope === "active" ? "Start a conversation" : undefined}
-                  onAction={tripChatScope === "active" ? openCompose : undefined}
+                  onAction={
+                    tripChatScope === "active"
+                      ? handleTripEmptyStartConversation
+                      : undefined
+                  }
                 />
               }
               contentContainerStyle={{ padding: 10, paddingBottom: 24, gap: 4 }}
@@ -3769,9 +3932,23 @@ export function ChatScreen() {
                       </TouchableOpacity>
                     ) : null}
                     {slackFilteredNetChats.length === 0 ? (
-                      <Text style={deskSt.sidebarCategoryEmptyText}>
-                        No direct messages found
-                      </Text>
+                      <View style={{ alignItems: "center", gap: 6, paddingVertical: 10 }}>
+                        <CompactChatAnimation size={84} source={NEW_DM_EMPTY_ANIMATION} />
+                        <Text style={deskSt.sidebarCategoryEmptyText}>
+                          No direct messages found
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: SLACK_DESKTOP.textTertiary,
+                            textAlign: "center",
+                            lineHeight: 15,
+                            paddingHorizontal: 18,
+                          }}
+                        >
+                          {CHAT_EMPTY_COPY.dmSubtitle}
+                        </Text>
+                      </View>
                     ) : null}
                   </>
                 ) : null}
@@ -3793,6 +3970,9 @@ export function ChatScreen() {
               ListEmptyComponent={
                 <EmptyList
                   label="No network conversations"
+                  variant={isMobileChatUi ? "dm" : "network"}
+                  subtitle={CHAT_EMPTY_COPY.networkSubtitle}
+                  iconSizeOverride={isMobileChatUi ? 72 : undefined}
                   actionLabel={netPartners.length > 0 ? "Message a partner" : undefined}
                   onAction={netPartners.length > 0 ? () => setShowNetCompose(true) : undefined}
                 />
@@ -4062,6 +4242,91 @@ export function ChatScreen() {
                 onCreatePost={() => router.push("/(modals)/create-post")}
               />
             )}
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  function TripStartNoticeModal() {
+    if (!tripStartNoticeMode) return null;
+    const isIntegrated = tripStartNoticeMode === "integrated";
+    const title = isIntegrated
+      ? "No integrated trip to begin chat"
+      : "Driver is not on Pulse Pilot yet";
+    const message = isIntegrated
+      ? "Add an integrated trip to begin chat. Driver and Partner tabs will appear with payment and tracking system updates."
+      : "No driver is using the Pulse Pilot app for this trip. Invite your driver to Pulse app to begin the chat.";
+    const iconSource = isIntegrated
+      ? NEW_TRIP_INTEGRATED_EMPTY_ANIMATION
+      : NEW_TRIP_DRIVER_EMPTY_ANIMATION;
+    return (
+      <Modal
+        visible
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTripStartNoticeMode(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(2, 6, 23, 0.42)",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: "rgba(148,163,184,0.35)",
+              backgroundColor: "#fff",
+              paddingHorizontal: 16,
+              paddingVertical: 16,
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <CompactChatAnimation size={isIntegrated ? 72 : 96} source={iconSource} />
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "800",
+                color: "#0f172a",
+                textAlign: "center",
+              }}
+            >
+              {title}
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                lineHeight: 18,
+                color: "#64748b",
+                textAlign: "center",
+                paddingHorizontal: 4,
+              }}
+            >
+              {message}
+            </Text>
+            <TouchableOpacity
+              style={{
+                marginTop: 4,
+                paddingHorizontal: 18,
+                paddingVertical: 10,
+                borderRadius: 999,
+                backgroundColor: CHAT_ACCENT,
+              }}
+              onPress={() => setTripStartNoticeMode(null)}
+              activeOpacity={0.82}
+            >
+              <Text style={{ color: "#fff", fontSize: 13, fontWeight: "800" }}>
+                Got it
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -4364,6 +4629,7 @@ export function ChatScreen() {
         <NetworkComposeModal />
         <TripFilterModal />
         <StoriesModal />
+        <TripStartNoticeModal />
         {Platform.OS === "web" && isDesktop && ledgerWebToast ? (
           <View style={[s.ledgerWebToast, pe("none")]}>
             <Text style={s.ledgerWebToastText}>Added to Ledger</Text>
@@ -4416,6 +4682,7 @@ export function ChatScreen() {
       <NetworkComposeModal />
       <TripFilterModal />
       <StoriesModal />
+      <TripStartNoticeModal />
       {tripFeedbackOverlay}
       {platformTripRoomSheet}
     </View>
@@ -4453,6 +4720,7 @@ export function ChatScreen() {
       <NetworkComposeModal />
       <TripFilterModal />
       <StoriesModal />
+      <TripStartNoticeModal />
       {tripFeedbackOverlay}
       {platformTripRoomSheet}
     </LinearGradient>
@@ -4461,19 +4729,148 @@ export function ChatScreen() {
 
 // ── Shared empty states ───────────────────────────────────────────────────────
 
+const NEW_DETAIL_EMPTY_ANIMATION = require("@/assets/Animated folder/People doing Group Chat.json");
+const NEW_TRIP_DRIVER_EMPTY_ANIMATION = require("@/assets/Animated folder/drunk-driver.json");
+const NEW_TRIP_INTEGRATED_EMPTY_ANIMATION = require("@/assets/Animated folder/truck-2.json");
+const NEW_DM_EMPTY_ANIMATION = require("@/assets/Animated folder/Chat.json");
+const NEW_NETWORK_EMPTY_ANIMATION = require("@/assets/Animated folder/conversation-verified.json");
+const START_CHAT_CTA_ANIMATION = require("@/assets/Animated folder/next-button.json");
+const CHAT_EMPTY_COPY = {
+  startTitle: "Start a new conversation",
+  startSubtitle: "Add more integrated network partners and trips to begin chat updates.",
+  tripDriverSubtitle:
+    "Chat with your assigned driver using the app and get system updates on trip activity, including live location updates.",
+  tripIntegratedSubtitle:
+    "Integrated chat lets you chat with driver and partner in separate tabs, with system updates for payment activity and tracking.",
+  tripIntegratedFeatures: [
+    "Separate tabs for Driver and Partner chat",
+    "System updates for payment activity",
+    "Live tracking and trip activity updates",
+  ],
+  dmSubtitle: "Add integrated partners to start direct messages.",
+  networkSubtitle: "Connect with integrated partners to start network chats.",
+} as const;
+
+function CompactChatAnimation({
+  size = 44,
+  source = NEW_DETAIL_EMPTY_ANIMATION,
+}: {
+  size?: number;
+  source?: object;
+}) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+      }}
+    >
+      <LottieView
+        source={source}
+        autoPlay
+        loop
+        speed={0.8}
+        resizeMode="contain"
+        style={{ width: size, height: size }}
+      />
+    </View>
+  );
+}
+
 function EmptyList({
   label,
+  variant = "trip",
+  subtitle,
+  iconSizeOverride,
   actionLabel,
   onAction,
 }: {
   label: string;
+  variant?:
+    | "trip_driver"
+    | "trip_integrated"
+    | "dm"
+    | "network"
+    | "detail";
+  subtitle?: string;
+  iconSizeOverride?: number;
   actionLabel?: string;
   onAction?: () => void;
 }) {
+  const illustration =
+    variant === "dm"
+      ? NEW_DM_EMPTY_ANIMATION
+      : variant === "network"
+        ? NEW_NETWORK_EMPTY_ANIMATION
+        : variant === "trip_integrated"
+          ? NEW_TRIP_INTEGRATED_EMPTY_ANIMATION
+          : variant === "trip_driver"
+            ? NEW_TRIP_DRIVER_EMPTY_ANIMATION
+          : NEW_DETAIL_EMPTY_ANIMATION;
+  const iconSize =
+    variant === "trip_driver"
+      ? 84
+      : variant === "trip_integrated"
+        ? 72
+        : 42;
+  const resolvedIconSize = iconSizeOverride ?? iconSize;
   return (
-    <View style={{ alignItems: "center", paddingTop: 48, gap: 12 }}>
-      <MessageSquare size={32} color="#e2e8f0" />
-      <Text style={{ fontSize: 13, color: "#94a3b8" }}>{label}</Text>
+    <View
+      style={{
+        alignItems: "center",
+        paddingTop: 40,
+        gap: 10,
+        width: "100%",
+        maxWidth: 280,
+        alignSelf: "center",
+      }}
+    >
+      <CompactChatAnimation size={resolvedIconSize} source={illustration} />
+      <Text
+        style={{
+          fontSize: 12,
+          color: "#94a3b8",
+          textAlign: "center",
+          paddingHorizontal: 16,
+        }}
+      >
+        {label}
+      </Text>
+      {subtitle && variant !== "trip_integrated" ? (
+        <Text
+          style={{
+            fontSize: 11,
+            color: "#94a3b8",
+            textAlign: "center",
+            lineHeight: 16,
+            paddingHorizontal: 18,
+            marginTop: -2,
+          }}
+        >
+          {subtitle}
+        </Text>
+      ) : null}
+      {variant === "trip_integrated" ? (
+        <View style={{ width: "100%", gap: 4, marginTop: -2 }}>
+          {CHAT_EMPTY_COPY.tripIntegratedFeatures.map((feature) => (
+            <Text
+              key={feature}
+              style={{
+                fontSize: 11,
+                color: "#94a3b8",
+                textAlign: "center",
+                lineHeight: 16,
+                paddingHorizontal: 18,
+              }}
+            >
+              • {feature}
+            </Text>
+          ))}
+        </View>
+      ) : null}
       {actionLabel && onAction && (
         <TouchableOpacity
           onPress={onAction}
@@ -4496,41 +4893,30 @@ function EmptyDetail({ isDesktop = false }: { isDesktop?: boolean }) {
   if (isDesktop) {
     return (
       <View style={deskSt.emptyWrap}>
-        <MessageSquare size={28} color={SLACK_DESKTOP.textTertiary} strokeWidth={1.5} />
-        <Text style={deskSt.emptyTitle}>Select a conversation</Text>
-        <Text style={deskSt.emptySub}>
-          Pick a trip or direct message from the sidebar to start messaging.
+        <CompactChatAnimation size={44} source={NEW_DETAIL_EMPTY_ANIMATION} />
+        <Text style={[deskSt.emptyTitle, { fontSize: 13 }]}>{CHAT_EMPTY_COPY.startTitle}</Text>
+        <Text style={[deskSt.emptySub, { fontSize: 11, lineHeight: 16 }]}>
+          {CHAT_EMPTY_COPY.startSubtitle}
         </Text>
       </View>
     );
   }
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14 }}>
-      <View
-        style={{
-          width: 72,
-          height: 72,
-          borderRadius: 24,
-          backgroundColor: "#e8eaf6",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <MessageSquare size={34} color={CHAT_ACCENT} />
-      </View>
-      <Text style={{ fontSize: 18, fontWeight: "800", color: "#1e293b", letterSpacing: -0.5 }}>
-        Select a conversation
+      <CompactChatAnimation size={46} source={NEW_DETAIL_EMPTY_ANIMATION} />
+      <Text style={{ fontSize: 15, fontWeight: "700", color: "#1e293b", letterSpacing: -0.2 }}>
+        {CHAT_EMPTY_COPY.startTitle}
       </Text>
       <Text
         style={{
-          fontSize: 13,
+          fontSize: 11,
           color: "#94a3b8",
           textAlign: "center",
           paddingHorizontal: 40,
-          lineHeight: 20,
+          lineHeight: 16,
         }}
       >
-        Pick a trip conversation or network chat to start messaging.
+        {CHAT_EMPTY_COPY.startSubtitle}
       </Text>
     </View>
   );
