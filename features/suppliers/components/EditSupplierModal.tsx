@@ -91,7 +91,7 @@ export function EditSupplierModal({
   useEffect(() => {
     if (supplier) {
       const fromSupplier = {
-        companyName: supplier.company_name ?? supplier.name ?? "",
+        companyName: supplier.name ?? supplier.company_name ?? "",
         contactPerson: normalizeContactDisplay(supplier.contact_person ?? supplier.contact),
         phone: normalizePhoneDisplay(supplier.phone),
         email: supplier.email ?? "",
@@ -196,7 +196,7 @@ export function EditSupplierModal({
     patch.vehicle_types = vehicleTypes.split(",").map((s) => s.trim()).filter(Boolean);
     patch.operating_areas = operatingAreas.split(",").map((s) => s.trim()).filter(Boolean);
     if (canEditCompany) {
-      patch.company_name = companyName.trim();
+      patch.name = companyName.trim();
     }
     if (canEditPhone) {
       patch.phone = phone.trim();

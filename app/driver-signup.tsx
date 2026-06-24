@@ -753,9 +753,8 @@ export default function DriverSignUpScreen() {
 
     if (uploaded.license) {
       await supabase()
-        .from('profiles')
-        .update({ license_photo_url: uploaded.license })
-        .eq('id', uid);
+        .from('driver_profiles')
+        .upsert({ user_id: uid, license_photo_url: uploaded.license }, { onConflict: 'user_id' });
     }
 
     const {

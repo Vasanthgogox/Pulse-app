@@ -165,10 +165,10 @@ export default function DriverProfileScreen() {
           ? (authUser.user_metadata.driver_documents as Record<string, unknown>)
           : {};
 
-      const { data: profileRow } = await supabase()
-        .from('profiles')
+      const { data: driverProfileRow } = await supabase()
+        .from('driver_profiles')
         .select('license_photo_url')
-        .eq('id', profile.uid)
+        .eq('user_id', profile.uid)
         .maybeSingle();
       const { data: storageItems } = await supabase()
         .storage
@@ -177,7 +177,7 @@ export default function DriverProfileScreen() {
       const hasStoragePrefix = (prefix: string) =>
         (storageItems ?? []).some((item) => (item.name ?? '').toLowerCase().startsWith(prefix));
 
-      const license = (profileRow as { license_photo_url?: string | null } | null)?.license_photo_url
+      const license = (driverProfileRow as { license_photo_url?: string | null } | null)?.license_photo_url
         ?? (typeof metadata.license === 'string' ? metadata.license : null)
         ?? (hasStoragePrefix('license-') ? 'present' : null);
       const aadhaar =

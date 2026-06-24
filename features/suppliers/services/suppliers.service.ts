@@ -12,13 +12,15 @@ export interface SupplierRow {
   id: string;
   organization_id: string;
   name: string | null;
+  /** @deprecated Use contact_person instead */
   contact: string | null;
+  /** @deprecated Use name instead */
   company_name: string | null;
   contact_person: string | null;
   phone: string | null;
   email: string | null;
   address: string | null;
-  gst_number: string | null;
+  gstin: string | null;
   is_active: boolean;
   is_verified: boolean;
   created_at: string;
@@ -43,8 +45,8 @@ export interface SupplierRow {
 }
 
 const SUPPLIER_CORE_COLUMNS = [
-  "id", "organization_id", "name", "contact", "company_name", "contact_person",
-  "phone", "email", "address", "gst_number", "is_active", "is_verified",
+  "id", "organization_id", "name", "contact_person",
+  "phone", "email", "address", "gstin", "is_active", "is_verified",
   "created_at", "updated_at", "supplier_type", "linked_organization_id",
   "avatar_url", "avatar_seed", "owner_full_name",
   "vehicle_types", "operating_areas",
@@ -303,6 +305,9 @@ export async function getLinkedOrgProfileForSupplier(
 
 /** Create supplier payload — matches SupplierFormData from pulse-unified-base AddSupplierWizard */
 export interface CreateSupplierData {
+  /** Display name of the supplier company. Stored in suppliers.name (canonical). */
+  name?: string;
+  /** @deprecated Pass name instead */
   company_name?: string;
   contact_person?: string;
   phone: string;
@@ -317,11 +322,10 @@ export async function createSupplier(
   orgId: string,
   supplierData: CreateSupplierData
 ): Promise<{ error: Error | null; supplier: SupplierRow | null }> {
+  const displayName = (supplierData.name ?? supplierData.company_name ?? supplierData.contact_person ?? '').trim();
   const payload = {
     organization_id: orgId,
-    name: supplierData.company_name ?? supplierData.contact_person ?? '',
-    contact: supplierData.contact_person ?? null,
-    company_name: supplierData.company_name ?? null,
+    name: displayName,
     contact_person: supplierData.contact_person ?? null,
     phone: (supplierData.phone ?? '').trim(),
     email: (supplierData.email ?? '').trim() || null,
@@ -342,6 +346,9 @@ export async function createSupplier(
 }
 
 export interface UpdateSupplierData {
+  /** Display name. Writes to suppliers.name (canonical). */
+  name?: string;
+  /** @deprecated Use name instead */
   company_name?: string;
   contact_person?: string;
   phone?: string;
@@ -359,7 +366,15 @@ export async function updateSupplier(
   patch: UpdateSupplierData
 ): Promise<{ error: Error | null; supplier: SupplierRow | null }> {
   const updates: Record<string, unknown> = {};
-  if (patch.company_name !== undefined) updates.company_name = patch.company_name.trim() || null;
+  // Resolve display name: accept either `name` or deprecated `company_name`
+  const incomingName = patch.name ?? patch.company_name;
+  if (incomingName !== undefined) {
+    const resolved = incomingName.trim() || (patch.contact_person ?? '').trim() || '';
+    updates.name = resolved;
+  } else if (patch.contact_person !== undefined) {
+    // contact_person changed but no explicit name — derive name from contact if name was empty
+    updates.name = (patch.contact_person ?? '').trim();
+  }
   if (patch.contact_person !== undefined) updates.contact_person = patch.contact_person.trim() || null;
   if (patch.phone !== undefined) updates.phone = patch.phone.trim();
   if (patch.email !== undefined) updates.email = patch.email.trim() || null;
@@ -368,8 +383,6 @@ export async function updateSupplier(
   if (patch.pan_number !== undefined) updates.pan_number = patch.pan_number.trim().toUpperCase() || null;
   if (patch.vehicle_types !== undefined) updates.vehicle_types = patch.vehicle_types;
   if (patch.operating_areas !== undefined) updates.operating_areas = patch.operating_areas;
-  const name = (patch.company_name ?? '').trim() || (patch.contact_person ?? '').trim() || '';
-  if (patch.company_name !== undefined || patch.contact_person !== undefined) updates.name = name;
   if (Object.keys(updates).length === 0) return { error: null, supplier: null };
   const { data, error } = await supabase()
     .from('suppliers')

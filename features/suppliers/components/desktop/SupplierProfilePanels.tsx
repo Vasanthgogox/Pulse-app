@@ -196,7 +196,7 @@ export function SupplierProfileOverviewPanel({ bundle, isIntegrated, linkedOrgId
               ["Contact person", supplier.contact_person ?? "—"],
               ["Phone", supplier.phone ?? "—"],
               ["Email", supplier.email ?? "—"],
-              ["GST Number", supplier.gst_number ?? "—"],
+              ["GST Number", supplier.gstin ?? "—"],
               ["Address", supplier.address ?? "—"],
               ["Type", supplier.supplier_type ?? "offline"],
               ["Vehicle types", (supplier.vehicle_types ?? []).join(", ") || "—"],

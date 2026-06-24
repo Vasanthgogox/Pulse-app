@@ -1,5 +1,9 @@
 # CLAUDE.md — Pulse (q-web)
 
+## Skill Restrictions
+- Never auto-invoke artifact-design unless the user explicitly asks to build a UI component, page, or visual artifact
+- For analysis, schema review, or consulting tasks: plain text output only — no artifacts, no design system, no colors, no typography
+
 ## Efficiency Rules
 - Inspect only files relevant to the task
 - Follow imports one level deep
