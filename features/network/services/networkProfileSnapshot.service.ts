@@ -33,6 +33,7 @@ export type NetworkProfileSnapshot = {
   website: string | null;
   gstin: string | null;
   operating_model: string | null;
+  total_trips: number;
 };
 
 type OrganizationSnapshotRow = {
@@ -44,7 +45,116 @@ type OrganizationSnapshotRow = {
   state: string | null;
   address_line: string | null;
   owner_id: string | null;
+  profile_sector: string | null;
+  profile_website: string | null;
+  gstin: string | null;
+  operating_model: string | null;
 };
+
+type PartnerDisplayBatchRow = {
+  organizationName?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  tripCount?: number | null;
+  averageRating?: number | null;
+};
+
+type PartnerDisplaySingleRow = {
+  organizationName?: string | null;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  avatarUrl?: string | null;
+  avatarSeed?: string | null;
+  gstin?: string | null;
+  address?: string | null;
+  website?: string | null;
+};
+
+function nonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function loadOrganizationRow(
+  targetOrgId: string,
+): Promise<{ error: Error | null; row: OrganizationSnapshotRow | null }> {
+  const orgWithLogo = await supabase()
+    .from("organizations")
+    .select(
+      "id, name, avatar_seed, logo_url, city, state, address_line, owner_id, profile_sector, profile_website, gstin, operating_model",
+    )
+    .eq("id", targetOrgId)
+    .maybeSingle();
+
+  if (orgWithLogo.error && isMissingColumnError(orgWithLogo.error.message)) {
+    const fallback = await supabase()
+      .from("organizations")
+      .select("id, name, avatar_seed, city, state, address_line, owner_id")
+      .eq("id", targetOrgId)
+      .maybeSingle();
+    if (fallback.error) {
+      return { error: new Error(fallback.error.message), row: null };
+    }
+    if (!fallback.data) return { error: null, row: null };
+    return {
+      error: null,
+      row: {
+        ...(fallback.data as {
+          id: string;
+          name: string;
+          avatar_seed: string | null;
+          city: string | null;
+          state: string | null;
+          address_line: string | null;
+          owner_id: string | null;
+        }),
+        logo_url: null,
+        profile_sector: null,
+        profile_website: null,
+        gstin: null,
+        operating_model: null,
+      },
+    };
+  }
+
+  if (orgWithLogo.error) {
+    return { error: new Error(orgWithLogo.error.message), row: null };
+  }
+
+  return {
+    error: null,
+    row: orgWithLogo.data ? (orgWithLogo.data as OrganizationSnapshotRow) : null,
+  };
+}
+
+function buildOrganizationRowFromPartnerDisplay(
+  targetOrgId: string,
+  batchRow: PartnerDisplayBatchRow | null,
+  singleRow: PartnerDisplaySingleRow | null,
+): OrganizationSnapshotRow | null {
+  if (!batchRow && !singleRow) return null;
+
+  return {
+    id: targetOrgId,
+    name:
+      nonEmptyString(singleRow?.organizationName) ??
+      nonEmptyString(batchRow?.organizationName) ??
+      "Organization",
+    avatar_seed: nonEmptyString(singleRow?.avatarSeed) ?? nonEmptyString(batchRow?.avatarSeed),
+    logo_url: nonEmptyString(singleRow?.avatarUrl) ?? nonEmptyString(batchRow?.avatarUrl),
+    city: null,
+    state: null,
+    address_line: nonEmptyString(singleRow?.address),
+    owner_id: null,
+    profile_sector: null,
+    profile_website: nonEmptyString(singleRow?.website),
+    gstin: nonEmptyString(singleRow?.gstin),
+    operating_model: null,
+  };
+}
 
 function formatLocation(
   city: string | null | undefined,
@@ -76,49 +186,47 @@ export async function getOrgProfileSnapshot(
     return { error: null, snapshot: null };
   }
 
-  // 1) Organization row — prefer logo_url column when available.
-  let orgRow: OrganizationSnapshotRow | null = null;
+  // 1) Partner display RPCs first — SECURITY DEFINER, readable for Discover orgs
+  //    the viewer does not belong to. Direct `organizations` SELECT is blocked by
+  //    RLS ("Users can read orgs they belong to") for those profiles.
+  const [partnerDisplayRes, partnerProfileRes, orgLoadRes] = await Promise.all([
+    supabase().rpc("get_connection_partner_display_batch", {
+      p_linked_organization_ids: [targetOrgId],
+    }),
+    supabase().rpc("get_connection_partner_display", {
+      p_linked_organization_id: targetOrgId,
+    }),
+    loadOrganizationRow(targetOrgId),
+  ]);
 
-  const orgWithLogo = await supabase()
-    .from("organizations")
-    .select("id, name, avatar_seed, logo_url, city, state, address_line, owner_id")
-    .eq("id", targetOrgId)
-    .maybeSingle();
-
-  if (orgWithLogo.error && isMissingColumnError(orgWithLogo.error.message)) {
-    const fallback = await supabase()
-      .from("organizations")
-      .select("id, name, avatar_seed, city, state, address_line, owner_id")
-      .eq("id", targetOrgId)
-      .maybeSingle();
-    if (fallback.error) {
-      return { error: new Error(fallback.error.message), snapshot: null };
-    }
-    if (fallback.data) {
-      orgRow = {
-        ...(fallback.data as {
-          id: string;
-          name: string;
-          avatar_seed: string | null;
-          city: string | null;
-          state: string | null;
-          address_line: string | null;
-          owner_id: string | null;
-        }),
-        logo_url: null,
-      };
-    }
-  } else if (orgWithLogo.error) {
-    return { error: new Error(orgWithLogo.error.message), snapshot: null };
-  } else if (orgWithLogo.data) {
-    orgRow = orgWithLogo.data as OrganizationSnapshotRow;
+  if (orgLoadRes.error) {
+    return { error: orgLoadRes.error, snapshot: null };
   }
+
+  const partnerBatchMap = partnerDisplayRes.error
+    ? null
+    : (partnerDisplayRes.data as Record<string, PartnerDisplayBatchRow> | null);
+  const partnerBatch = partnerBatchMap?.[targetOrgId] ?? null;
+  const partnerProfile = partnerProfileRes.error
+    ? null
+    : ((partnerProfileRes.data ?? null) as PartnerDisplaySingleRow | null);
+
+  let orgRow =
+    orgLoadRes.row ??
+    buildOrganizationRowFromPartnerDisplay(targetOrgId, partnerBatch, partnerProfile);
 
   if (!orgRow) {
     return { error: null, snapshot: null };
   }
 
-  // 2) Connection request between viewer and target (either direction).
+  let phone =
+    nonEmptyString(partnerBatch?.phone) ?? nonEmptyString(partnerProfile?.phone);
+  let ownerAvatarUrl =
+    nonEmptyString(partnerBatch?.avatarUrl) ?? nonEmptyString(partnerProfile?.avatarUrl);
+  const partnerTripCount =
+    typeof partnerBatch?.tripCount === "number" ? partnerBatch.tripCount : null;
+  const partnerRating =
+    typeof partnerBatch?.averageRating === "number" ? partnerBatch.averageRating : null;
   const connRes = await supabase()
     .from("connection_requests")
     .select(
@@ -146,7 +254,7 @@ export async function getOrgProfileSnapshot(
     }
   }
 
-  // 3) Existing relationship in viewer's clients / suppliers / drivers tables.
+  // 2) Connection request between viewer and target (either direction).
   let role: NetworkProfileSnapshotRole = "SUPPLIER";
 
   const clientLink = await supabase()
@@ -171,32 +279,7 @@ export async function getOrgProfileSnapshot(
     if (supplierLink.data?.id) role = "SUPPLIER";
   }
 
-  // 4) Owner profile — best-effort fetch of phone + personal avatar so we
-  //    can fall back to the user's avatar when the organization has no
-  //    branding logo set yet. Resolution priority for the snapshot:
-  //      organizations.logo_url  →  profiles.avatar_url  →  seed/initials.
-  //    Mirrors `get_connection_partner_display` and the network hub list
-  //    RPCs so every surface that shows a partner resolves the same face.
-  let phone: string | null = null;
-  let ownerAvatarUrl: string | null = null;
-  if (orgRow.owner_id) {
-    const profileRes = await supabase()
-      .from("profiles")
-      .select("phone, avatar_url")
-      .eq("id", orgRow.owner_id)
-      .maybeSingle();
-    if (!profileRes.error && profileRes.data) {
-      const row = profileRes.data as {
-        phone?: string | null;
-        avatar_url?: string | null;
-      };
-      phone = row.phone && row.phone.trim().length > 0 ? row.phone : null;
-      ownerAvatarUrl =
-        row.avatar_url && row.avatar_url.trim().length > 0
-          ? row.avatar_url
-          : null;
-    }
-  }
+  // 3) Existing relationship in viewer's clients / suppliers / drivers tables.
   const resolvedLogoUrl =
     orgRow.logo_url && orgRow.logo_url.trim().length > 0
       ? orgRow.logo_url
@@ -210,12 +293,8 @@ export async function getOrgProfileSnapshot(
     mutuals = mutualsRes.error ? 0 : mutualsRes.mutuals.length;
   }
 
-  // 6b) Location count and workspace profile (best-effort).
+  // 6b) Location count and workspace profile fields on organizations row.
   let branchCount = 0;
-  let sector: string | null = null;
-  let website: string | null = null;
-  let gstin: string | null = null;
-  let operatingModel: string | null = null;
   let registeredAddress: string | null = null;
 
   const locationsRes = await supabase()
@@ -225,27 +304,64 @@ export async function getOrgProfileSnapshot(
     .order("sort_order", { ascending: true });
   if (!locationsRes.error && Array.isArray(locationsRes.data)) {
     branchCount = locationsRes.data.length;
-    const regOff = (locationsRes.data as Array<{ location_type: string; address_line: string | null; city: string | null; state: string | null }>)
-      .find((l) => l.location_type === "registered_office");
+    const regOff = (
+      locationsRes.data as Array<{
+        location_type: string;
+        address_line: string | null;
+        city: string | null;
+        state: string | null;
+      }>
+    ).find((l) => l.location_type === "registered_office");
     if (regOff) {
-      registeredAddress = [regOff.address_line, regOff.city, regOff.state].filter(Boolean).join(", ") || null;
+      registeredAddress =
+        [regOff.address_line, regOff.city, regOff.state]
+          .filter(Boolean)
+          .join(", ") || null;
+    }
+  }
+  if (!registeredAddress && orgRow.address_line?.trim()) {
+    registeredAddress = orgRow.address_line.trim();
+  } else if (!registeredAddress) {
+    registeredAddress = nonEmptyString(partnerProfile?.address);
+  }
+
+  const sector = orgRow.profile_sector?.trim() || null;
+  const website =
+    orgRow.profile_website?.trim() || nonEmptyString(partnerProfile?.website);
+  const gstin = orgRow.gstin?.trim() || nonEmptyString(partnerProfile?.gstin);
+  const operatingModel = orgRow.operating_model?.trim() || null;
+
+  // 6) Shared trips with viewer (when linked); else partner trip count from RPC.
+  let totalTrips = partnerTripCount ?? 0;
+  if (viewerOrgId !== targetOrgId) {
+    const [clientTripsRes, supplierTripsRes] = await Promise.all([
+      supabase()
+        .from("trips")
+        .select("id, clients!inner(linked_organization_id)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("organization_id", viewerOrgId)
+        .eq("clients.linked_organization_id", targetOrgId)
+        .is("deleted_at", null),
+      supabase()
+        .from("trips")
+        .select("id, suppliers!inner(linked_organization_id)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("organization_id", viewerOrgId)
+        .eq("suppliers.linked_organization_id", targetOrgId)
+        .is("deleted_at", null),
+    ]);
+    const sharedCount =
+      (clientTripsRes.count ?? 0) + (supplierTripsRes.count ?? 0);
+    if (sharedCount > 0) {
+      totalTrips = sharedCount;
     }
   }
 
-  const orgProfileRes = await supabase()
-    .from("organization_workspace_profiles")
-    .select("profile_sector, profile_website, profile_gstin, operating_model")
-    .eq("id", targetOrgId)
-    .maybeSingle();
-  if (!orgProfileRes.error && orgProfileRes.data) {
-    const wp = orgProfileRes.data as { profile_sector?: string | null; profile_website?: string | null; profile_gstin?: string | null; operating_model?: string | null };
-    sector = wp.profile_sector?.trim() || null;
-    website = wp.profile_website?.trim() || null;
-    gstin = wp.profile_gstin?.trim() || null;
-    operatingModel = wp.operating_model?.trim() || null;
-  }
-
-  // 6) Rating — average viewer-given scores for this org (best-effort).
+  // 7) Rating — prefer viewer-given scores; fall back to partner aggregate.
   let rating: number | null = null;
   const ratingRes = await supabase()
     .from("ratings")
@@ -256,13 +372,19 @@ export async function getOrgProfileSnapshot(
     const rows = ratingRes.data as Array<{ score: number | null }>;
     const total = rows.reduce((acc, r) => acc + Number(r.score ?? 0), 0);
     rating = Number((total / rows.length).toFixed(2));
+  } else if (partnerRating != null) {
+    rating = partnerRating;
   }
 
   const snapshot: NetworkProfileSnapshot = {
     id: orgRow.id,
     name: orgRow.name,
     type: role,
-    location: formatLocation(orgRow.city, orgRow.state, orgRow.address_line),
+    location:
+      formatLocation(orgRow.city, orgRow.state, orgRow.address_line) !==
+      "Not available"
+        ? formatLocation(orgRow.city, orgRow.state, orgRow.address_line)
+        : nonEmptyString(partnerProfile?.address) ?? "Not available",
     status,
     rating,
     mutuals,
@@ -276,6 +398,7 @@ export async function getOrgProfileSnapshot(
     website,
     gstin,
     operating_model: operatingModel,
+    total_trips: totalTrips,
   };
 
   return { error: null, snapshot };

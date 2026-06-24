@@ -38,6 +38,7 @@ import {
   NETWORK_HUB_SPLIT_COLUMN_GAP_PX,
 } from "@/features/network/constants/networkHubGrid";
 import { NetworkLoadsQuickCards } from "@/features/network/components/NetworkLoadsQuickCards";
+import { NetworkProfileDirectMessageButton } from "@/features/network/components/NetworkProfileDirectMessageButton";
 import { NetworkProfileModalBody } from "@/features/network/components/NetworkProfileModalBody";
 import { getOrgProfileSnapshot } from "@/features/network/services/networkProfileSnapshot.service";
 import { LinearGradient } from "expo-linear-gradient";
@@ -82,7 +83,6 @@ import {
   Building2,
   Check,
   Compass,
-  Mail,
   Search,
   User,
   UserPlus,
@@ -433,18 +433,12 @@ function NetworkScreenInner() {
     setProfileStatsLoading(true);
     void (async () => {
       try {
-        const [tripsRes, snapshotRes] = await Promise.all([
-          supabase()
-            .from("trips")
-            .select("id", { count: "exact", head: true })
-            .eq("organization_id", nodeOrgId),
-          orgId
-            ? getOrgProfileSnapshot(orgId, nodeOrgId)
-            : Promise.resolve({ error: null, snapshot: null }),
-        ]);
+        const snapshotRes = orgId
+          ? getOrgProfileSnapshot(orgId, nodeOrgId)
+          : Promise.resolve({ error: null, snapshot: null });
+        const { snapshot: snap } = await snapshotRes;
         if (cancelled) return;
-        setSelectedProfileStats({ totalTrips: tripsRes.count ?? 0 });
-        const snap = snapshotRes.snapshot;
+        setSelectedProfileStats({ totalTrips: snap?.total_trips ?? 0 });
         if (snap) {
           setSelectedProfileNode((prev) => {
             if (!prev || prev.id !== nodeOrgId) return prev;
@@ -510,6 +504,11 @@ function NetworkScreenInner() {
         status,
         rating: org.rating_value ?? null,
         mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
+        avatar_url: org.avatar_url ?? null,
+        avatar_seed: org.avatar_seed ?? null,
+      });
+      setSelectedProfileStats({
+        totalTrips: org.trip_count ?? null,
       });
     },
     [],
@@ -1500,24 +1499,10 @@ function NetworkScreenInner() {
                         </Pressable>
                       )
                     ) : null}
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.profileSecondaryBtn,
-                        isMobileLayout && styles.profileSecondaryBtnMobile,
-                        pressed && { opacity: 0.88 },
-                      ]}
+                    <NetworkProfileDirectMessageButton
+                      compact={isMobileLayout}
                       onPress={() => void handleOpenDirectMessage()}
-                    >
-                      <Mail size={14} color={Theme.textOnPrimary} strokeWidth={2.2} />
-                      <Text
-                        style={[
-                          styles.profileSecondaryBtnText,
-                          isMobileLayout && styles.profileSecondaryBtnTextMobile,
-                        ]}
-                      >
-                        Direct message
-                      </Text>
-                    </Pressable>
+                    />
                   </View>
                 </ScrollView>
             </View>
@@ -2357,35 +2342,6 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.buttonLabel,
     color: Theme.buttonPrimaryText,
   },
-  profileSecondaryBtn: {
-    width: "100%",
-    alignSelf: "stretch",
-    minHeight: 36,
-    borderRadius: 10,
-    backgroundColor: Theme.textPrimaryDark,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0F172A",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-      },
-      android: { elevation: 3 },
-      web: {
-        boxShadow: "0 4px 14px rgba(15, 23, 42, 0.18)",
-      },
-      default: {},
-    }),
-  },
-  profileSecondaryBtnText: {
-    ...FinanceTxnTypography.buttonLabel,
-    color: Theme.buttonDarkText,
-    zIndex: 1,
-  },
   /* "Request sent" CTA row in the profile modal: a CLIENT/SUPPLIER
    *  pill on the left and a tappable "Request sent · Cancel" button
    *  on the right, so the user can withdraw without leaving the
@@ -2445,15 +2401,6 @@ const styles = StyleSheet.create({
     color: Theme.primary,
     letterSpacing: 0.2,
     textTransform: "capitalize",
-  },
-  profileSecondaryBtnMobile: {
-    minHeight: 48,
-    borderRadius: 12,
-  },
-  profileSecondaryBtnTextMobile: {
-    fontWeight: "600",
-    letterSpacing: 0,
-    textTransform: "none",
   },
   profileOpsCard: {
     borderRadius: 22,

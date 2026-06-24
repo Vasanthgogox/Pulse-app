@@ -3,41 +3,37 @@
  * profile, Locations) with inline CRUD aligned to KeenThemes reference.
  */
 import Theme from "@/constants/Theme";
-import type { CurrentOrganization } from "@/types/organization";
+import { useAuth } from "@/contexts/AuthContext";
 import { NetworkDesktopHeadquarterMap } from "@/features/network/components/desktop/NetworkDesktopHeadquarterMap";
+import {
+  METRONIC,
+  networkDesktopHubStyles as styles,
+} from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { NetworkDesktopLocationModal } from "@/features/network/components/desktop/NetworkDesktopLocationModal";
 import { NetworkDesktopPeopleStack } from "@/features/network/components/desktop/NetworkDesktopPeopleStack";
-import { buildProjectPeopleStack } from "@/features/network/utils/networkProjectPeople.util";
 import {
   NetworkDesktopWorkspaceProfileModal,
   type WorkspaceProfileEditSection,
 } from "@/features/network/components/desktop/NetworkDesktopWorkspaceProfileModal";
 import { useOrganizationOfficeMap } from "@/features/network/hooks/useOrganizationOfficeMap";
-import {
-  METRONIC,
-  networkDesktopHubStyles as styles,
-} from "@/features/network/components/desktop/networkDesktopHub.styles";
-import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
-import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
+import { networkHubProfileCompletion } from "@/features/network/utils/networkHubProfileCompletion.util";
+import { buildProjectPeopleStack } from "@/features/network/utils/networkProjectPeople.util";
 import {
   buildHeadquarterLocationCard,
   formatLocationSubtitle,
   LOCATION_TYPE_GRADIENTS,
   type LocationCardModel,
 } from "@/features/network/utils/organizationLocationDisplay.util";
-import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
-import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
-import { getWorkspaceKyc, updateWorkspaceKyc } from "@/features/organization/services/organization.service";
 import {
   kycCompletionPct,
   KycFieldsList,
   KycProgressBlock,
 } from "@/features/organization/components/workspace/workspacePanelUi";
-import { networkHubProfileCompletion } from "@/features/network/utils/networkHubProfileCompletion.util";
-import type { WorkspaceKyc } from "@/types/organization";
-import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
-import { ROUTES } from "@/lib/routes";
+import { getWorkspaceKyc, updateWorkspaceKyc } from "@/features/organization/services/organization.service";
+import type { OrganizationWorkspaceLocation } from "@/features/organization/services/organizationLocations.service";
+import type { OrganizationWorkspaceProfile } from "@/features/organization/services/organizationWorkspaceProfile.service";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
 import {
   useClientsQuery,
   useDriversQuery,
@@ -45,6 +41,9 @@ import {
 } from "@/lib/queries";
 import { useOrganizationLocationsQuery } from "@/lib/queries/useOrganizationLocationsQuery";
 import { useOrganizationWorkspaceProfileQuery } from "@/lib/queries/useOrganizationWorkspaceProfileQuery";
+import { ROUTES } from "@/lib/routes";
+import type { CurrentOrganization, WorkspaceKyc } from "@/types/organization";
+import { useRouter } from "expo-router";
 import {
   Briefcase,
   Calendar,
@@ -1016,7 +1015,7 @@ export function NetworkDesktopDetailsPanel({
           <View style={[styles.card, compact && mobile.cardCompact]}>
             <View style={styles.cardTitleRow}>
               <Text style={[styles.cardTitle, compact && mobile.cardTitleCompact]}>
-                Projects
+                Network growth
               </Text>
               <Pressable hitSlop={8}>
                 <MoreHorizontal size={compact ? 14 : 16} color={METRONIC.muted} />
