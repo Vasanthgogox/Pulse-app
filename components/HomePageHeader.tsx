@@ -5,7 +5,7 @@ import {
   AnimatedBellHeaderIcon,
   AnimatedInboxHeaderIcon,
 } from "@/components/HomeHeaderAnimatedIcons";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { MOBILE_TAB_ICON_SIZE } from "@/components/navigation/PulseBottomTabBar/constants";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -32,7 +32,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const ICON_SIZE = 26;
+const HEADER_AVATAR_SIZE = 44;
+/** Match bottom-tab visual weight (20px Lucide → ~40px Lottie footprint). */
+const HEADER_ACTION_ICON_SIZE = MOBILE_TAB_ICON_SIZE * 2;
 
 export interface HomePageHeaderProps {
   title?: string;
@@ -42,8 +44,6 @@ export interface HomePageHeaderProps {
   onProfilePress?: () => void;
   onInvitationsPress?: () => void;
   onNotificationsPress?: () => void;
-  /** Compliance & Documents Center — defaults to routing `/documents-center`. */
-  onDocumentsPress?: () => void;
   invitationBadgeCount?: number;
   skipSafeAreaTop?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -67,7 +67,6 @@ export function HomePageHeader({
   onProfilePress,
   onInvitationsPress,
   onNotificationsPress,
-  onDocumentsPress,
   invitationBadgeCount = 0,
   skipSafeAreaTop = false,
   style,
@@ -167,14 +166,6 @@ export function HomePageHeader({
     router.push("/notifications");
   };
 
-  const handleDocuments = () => {
-    if (onDocumentsPress) {
-      onDocumentsPress();
-      return;
-    }
-    router.push(ROUTES.DOCUMENTS_CENTER as Parameters<typeof router.push>[0]);
-  };
-
   return (
     <View style={[styles.wrap, { paddingTop: topPad }, style]}>
       <View style={styles.row}>
@@ -225,21 +216,12 @@ export function HomePageHeader({
             accessibilityLabel="Manage invitations"
             hitSlop={6}
           >
-            <AnimatedInboxHeaderIcon size={ICON_SIZE} active={hasInviteBadge} />
-            <Badge count={invitationBadgeCount} />
-          </Pressable>
-          <Pressable
-            onPress={handleDocuments}
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Open documents center"
-            hitSlop={6}
-          >
-            <FontAwesome
-              name="folder-open"
-              size={ICON_SIZE - 6}
-              color={Theme.textPrimaryDark}
+            <AnimatedInboxHeaderIcon
+              size={HEADER_ACTION_ICON_SIZE}
+              glyphScale={1.28}
+              active={hasInviteBadge}
             />
+            <Badge count={invitationBadgeCount} />
           </Pressable>
           <Pressable
             onPress={handleNotifications}
@@ -248,7 +230,11 @@ export function HomePageHeader({
             accessibilityLabel="Notifications"
             hitSlop={6}
           >
-            <AnimatedBellHeaderIcon size={ICON_SIZE} active={hasNotifBadge} />
+            <AnimatedBellHeaderIcon
+              size={HEADER_ACTION_ICON_SIZE}
+              glyphScale={1.2}
+              active={hasNotifBadge}
+            />
             <Badge count={notificationUnread} />
           </Pressable>
         </View>
@@ -269,12 +255,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    minHeight: 44,
+    minHeight: HEADER_AVATAR_SIZE,
   },
   avatarBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: HEADER_AVATAR_SIZE,
+    height: HEADER_AVATAR_SIZE,
+    borderRadius: HEADER_AVATAR_SIZE / 2,
     borderWidth: 1,
     borderColor: Theme.borderInput,
     overflow: "hidden",
@@ -319,15 +305,16 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 6,
     flexShrink: 0,
   },
   iconBtn: {
-    width: 42,
-    height: 42,
+    width: HEADER_AVATAR_SIZE,
+    height: HEADER_AVATAR_SIZE,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+    overflow: "visible",
   },
   pressed: {
     opacity: 0.88,
@@ -335,8 +322,8 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 2,
-    right: 2,
+    top: 0,
+    right: 0,
     minWidth: 16,
     height: 16,
     paddingHorizontal: 4,

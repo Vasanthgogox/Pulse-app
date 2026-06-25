@@ -41,6 +41,7 @@ import {
   Building2,
   Car,
   ChevronRight,
+  FolderOpen,
   Globe,
   HelpCircle,
   LogOut,
@@ -414,6 +415,20 @@ export function WorkspaceHubMenu({
                 )}
               </View>
               <Text style={hubStyles.quickLabel}>My Account</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
+              onPress={() => {
+                onExit?.();
+                navigate(ROUTES.DOCUMENTS_CENTER);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open documents center"
+            >
+              <View style={hubStyles.quickCircle}>
+                <FolderOpen size={20} color={HUB_PURPLE} strokeWidth={2.2} />
+              </View>
+              <Text style={hubStyles.quickLabel}>Documents</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}

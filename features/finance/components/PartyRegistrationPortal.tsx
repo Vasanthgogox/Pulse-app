@@ -37,6 +37,7 @@ import {
   nextStepAfterDriverImport,
   type PartyDriverWizardStep,
 } from "@/components/party/PartyDriverMobileWizard";
+import { PartyCreateSuccessModal } from "@/components/party/PartyCreateSuccessModal";
 import { PartyMobileWizardReview } from "@/components/party/PartyMobileWizardReview";
 import {
   PartyVehicleMobileWizard,
@@ -334,6 +335,8 @@ function PartyRegistrationPortalInner(
   const [vehicleWizardStep, setVehicleWizardStep] =
     useState<PartyVehicleWizardStep>("registration");
   const [submitting, setSubmitting] = useState(false);
+  const [showCreateSuccess, setShowCreateSuccess] = useState(false);
+  const [createSuccessInvited, setCreateSuccessInvited] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -432,6 +435,8 @@ function PartyRegistrationPortalInner(
     setVehicleWizardStep("registration");
     setFormError(null);
     setSubmitting(false);
+    setShowCreateSuccess(false);
+    setCreateSuccessInvited(false);
     setImportLoading(false);
     setImportError(null);
     setOrgOrCompanyName("");
@@ -929,6 +934,16 @@ function PartyRegistrationPortalInner(
 
   const contactPickerAvailable = isContactPickerAvailable();
 
+  const openCreateSuccess = (invited: boolean) => {
+    setCreateSuccessInvited(invited);
+    setShowCreateSuccess(true);
+  };
+
+  const handleCreateSuccessOk = () => {
+    setShowCreateSuccess(false);
+    onClose();
+  };
+
   const buildDriverPayload = (): DriverFormData => ({
     driverSource: "organization",
     name: driverName.trim(),
@@ -957,7 +972,7 @@ function PartyRegistrationPortalInner(
         if (inviteeMatch && onSendInvitation && !inviteeIsDrv) {
           await onSendInvitation(inviteeMatch.organization_id);
           clearDraft(CLIENT_DRAFT_STORAGE_KEY);
-          onClose();
+          openCreateSuccess(true);
           return;
         }
         await onAddClient({
@@ -973,7 +988,7 @@ function PartyRegistrationPortalInner(
         if (inviteeMatch && onSendSupplierInvitation && !inviteeIsDrv) {
           await onSendSupplierInvitation(inviteeMatch.organization_id);
           clearDraft(SUPPLIER_DRAFT_STORAGE_KEY);
-          onClose();
+          openCreateSuccess(true);
           return;
         }
         await onAddSupplier({
@@ -993,7 +1008,7 @@ function PartyRegistrationPortalInner(
         ) {
           await onInviteDriver(payload);
           clearDraft(DRIVER_DRAFT_STORAGE_KEY);
-          onClose();
+          openCreateSuccess(true);
           return;
         }
         await onAddDriver(payload);
@@ -1011,7 +1026,7 @@ function PartyRegistrationPortalInner(
         );
         clearDraft(VEHICLE_DRAFT_STORAGE_KEY);
       }
-      onClose();
+      openCreateSuccess(false);
     } catch (e: unknown) {
       const msg =
         e && typeof e === "object" && "message" in e
@@ -1179,6 +1194,16 @@ function PartyRegistrationPortalInner(
         ? t("sendInvitation")
         : "Save";
 
+  const reviewConfirmTitle =
+    reviewSaveLabel === t("sendInvitation")
+      ? `Confirm ${headline.toLowerCase()} invitation`
+      : `Confirm ${headline.toLowerCase()} details`;
+
+  const reviewConfirmMessage =
+    reviewSaveLabel === t("sendInvitation")
+      ? "Review the details below, then send the invitation."
+      : "Review the summary below, then save to add this record to your organization.";
+
   const narrowShellMaxHeight =
     !layoutWide && viewportH > 0
       ? Math.min(
@@ -1338,7 +1363,7 @@ function PartyRegistrationPortalInner(
     driverExistingMatches.length > 0 &&
     !driverExistingMatches.some((m) => m.is_in_fleet === true) &&
     !driverPreferOfflineOnly ? (
-      <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+      <View style={{ width: "100%", paddingBottom: 4 }}>
         <Pressable
           onPress={handleAddDriverOfflineInstead}
           disabled={submitting}
@@ -1883,69 +1908,19 @@ function PartyRegistrationPortalInner(
               }
             />
           ) : (
-            <View
-              style={[
-                styles.mobileWizardReviewRoot,
-                { paddingTop: insets.top, paddingBottom: insets.bottom },
-              ]}
-            >
-              <View style={styles.mobileWizardReviewHeader}>
-                <Pressable
-                  style={styles.backBtnLight}
-                  onPress={() => {
-                    setStep("form");
-                    setContactWizardStep("phone");
-                  }}
-                  hitSlop={12}
-                >
-                  <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
-                </Pressable>
-                <Text style={styles.mobileWizardReviewTitle}>Review</Text>
-                <View style={{ width: 40 }} />
-              </View>
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={styles.mobileWizardReviewScroll}
-                keyboardShouldPersistTaps="handled"
-              >
-                {mobileWizardSummaryContent}
-              </ScrollView>
-              <View
-                style={[
-                  styles.mobileWizardReviewFooter,
-                  { paddingBottom: insets.bottom + 12 },
-                ]}
-              >
-                <Pressable
-                  style={styles.reviewGhostBtnWide}
-                  onPress={() => {
-                    setStep("form");
-                    setContactWizardStep("phone");
-                  }}
-                >
-                  <Text style={styles.ghostBtnText}>← Edit details</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.confirmBtn,
-                    styles.confirmBtnFlexible,
-                    (!organizationId || submitting) && styles.primaryBtnDisabled,
-                  ]}
-                  onPress={() => void confirmSave()}
-                  disabled={!organizationId || submitting}
-                  testID="party-save-btn"
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Check size={22} color="#fff" strokeWidth={2.8} />
-                      <Text style={styles.confirmBtnText}>{reviewSaveLabel}</Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
-            </View>
+            <PartyMobileWizardReview
+              onBackToEdit={() => {
+                setStep("form");
+                setContactWizardStep("phone");
+              }}
+              summaryContent={mobileWizardSummaryContent}
+              reviewSaveLabel={reviewSaveLabel}
+              submitting={submitting}
+              organizationId={organizationId}
+              onConfirm={() => void confirmSave()}
+              title={reviewConfirmTitle}
+              message={reviewConfirmMessage}
+            />
           )}
         </Modal>
       </>
@@ -2011,6 +1986,8 @@ function PartyRegistrationPortalInner(
               submitting={submitting}
               organizationId={organizationId}
               onConfirm={() => void confirmSave()}
+              title={reviewConfirmTitle}
+              message={reviewConfirmMessage}
             />
           )}
         </Modal>
@@ -2078,6 +2055,8 @@ function PartyRegistrationPortalInner(
               submitting={submitting}
               organizationId={organizationId}
               onConfirm={() => void confirmSave()}
+              title={reviewConfirmTitle}
+              message={reviewConfirmMessage}
             />
           )}
           {renderVehiclePickerModals({ overlay: true })}
@@ -2876,6 +2855,12 @@ function PartyRegistrationPortalInner(
     </Modal>
 
       {kind === "vehicle" ? renderVehiclePickerModals() : null}
+      <PartyCreateSuccessModal
+        visible={showCreateSuccess}
+        kind={kind}
+        invited={createSuccessInvited}
+        onOk={handleCreateSuccessOk}
+      />
     </>
   );
 }
@@ -3462,7 +3447,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 16,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#f3f7fd",
     gap: 0,
   },
   summaryDetailsCardDriver: {
@@ -3473,7 +3458,7 @@ const styles = StyleSheet.create({
   },
   summaryDetailsHeading: {
     ...FinanceTxnTypography.columnTitle,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   summaryDetailsHeadingDriver: {
     color: "#166534",
@@ -3484,20 +3469,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     backgroundColor: "#ffffff",
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#eef2f7",
-    marginBottom: 10,
+    borderColor: "#dbeafe",
+    marginBottom: 12,
     overflow: "hidden",
   },
   summaryDetailRowLast: {
     marginBottom: 4,
   },
   summaryDetailRowEmphasis: {
-    borderColor: "#cbd5f5",
+    borderColor: "#a5b4fc",
     ...Platform.select({
-      web: { backgroundColor: "#fafbff" } as object,
-      default: { backgroundColor: "#fafbff" },
+      web: { backgroundColor: "#f8faff" } as object,
+      default: { backgroundColor: "#f8faff" },
     }),
   },
   summaryDetailRowDriver: {
@@ -3519,12 +3504,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
   },
   summaryDetailIconBubble: {
-    width: 48,
+    width: 56,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#f1f5ff",
     borderRightWidth: 1,
-    borderRightColor: "#f1f5f9",
+    borderRightColor: "#dbeafe",
   },
   summaryDetailIconBubbleDriver: {
     backgroundColor: "#f0fdf4",
@@ -3533,8 +3518,8 @@ const styles = StyleSheet.create({
   summaryDetailCopy: {
     flex: 1,
     justifyContent: "center",
-    paddingVertical: 11,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     minWidth: 0,
   },
   summaryDetailLabel: {
@@ -3546,8 +3531,8 @@ const styles = StyleSheet.create({
   },
   summaryDetailValue: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 16,
   },
   summaryDetailValueEmphasis: {
     ...FinanceTxnTypography.partyTitle,
