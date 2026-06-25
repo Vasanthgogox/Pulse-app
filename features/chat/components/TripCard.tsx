@@ -222,15 +222,15 @@ const styles = StyleSheet.create({
   tripHubWatermarkWrap: {
     position: "absolute",
     left: "50%",
-    top: "50%",
-    width: 182,
-    height: 122,
-    transform: [{ translateX: -91 }, { translateY: -61 }],
-    opacity: 0.22,
-    zIndex: 1,
+    top: "46%",
+    width: 210,
+    height: 140,
+    transform: [{ translateX: -105 }, { translateY: -70 }],
+    opacity: 0.3,
+    zIndex: 3,
   },
   tripHubWatermarkWrapOn: {
-    opacity: 0.26,
+    opacity: 0.34,
   },
   tripHubWatermark: {
     width: "100%",

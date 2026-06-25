@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const SPLASH_ANIMATION = require('@/assets/Animated folder/website-startup.json');
+const SPLASH_ANIMATION = require('@/assets/Animated folder/planet.json');
 
 export type AppLoadingSplashVariant =
   | 'preparing'

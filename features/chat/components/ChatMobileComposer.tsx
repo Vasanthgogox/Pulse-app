@@ -531,7 +531,8 @@ const sl = StyleSheet.create({
   },
   composerCard: {
     marginHorizontal: 12,
-    marginVertical: 8,
+    marginTop: 8,
+    marginBottom: 2,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#DDDDDD",

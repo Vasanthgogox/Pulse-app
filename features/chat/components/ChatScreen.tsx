@@ -3114,7 +3114,7 @@ export function ChatScreen() {
                   <ArrowLeft size={18} color="#fff" />
                 </TouchableOpacity>
                 <Text style={s.brandTitle} numberOfLines={1}>
-                  pulse chat
+                  pulse business chat
                   <Text style={s.brandDot}>.</Text>
                 </Text>
               </View>
@@ -6787,48 +6787,6 @@ function ChatConversationLayout({
     if (h > 0) setComposerDockHeight(h);
   }, []);
 
-  const composerWebRef = useRef<View>(null);
-  const msgsWebRef = useRef<View>(null);
-
-  useEffect(() => {
-    if (!mobileWeb) return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    const update = () => {
-      const measured = Math.max(
-        0,
-        Math.round(window.innerHeight - vv.height - (vv.offsetTop ?? 0)),
-      );
-      const active = document.activeElement;
-      const focusedEditable =
-        active instanceof HTMLElement &&
-        (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
-      const open = measured >= 48 || focusedEditable;
-      const keyboardH = effectiveKeyboardInset(open, measured);
-      const safeB = keyboardH > 0 ? 4 : insets.bottom;
-      const reserve = composerDockHeight + safeB + keyboardH;
-      (composerWebRef.current as View & { setNativeProps?: (p: object) => void })
-        ?.setNativeProps?.({
-        style: { bottom: keyboardH, paddingBottom: safeB },
-      });
-      (msgsWebRef.current as View & { setNativeProps?: (p: object) => void })
-        ?.setNativeProps?.({
-        style: { paddingBottom: reserve },
-      });
-    };
-
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    window.addEventListener("resize", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, [mobileWeb, insets.bottom, composerDockHeight]);
-
   const messagesPane = (
     <>
       {header}
@@ -6877,7 +6835,6 @@ function ChatConversationLayout({
     return (
       <View style={s.detailPanel}>
         <View
-          ref={msgsWebRef}
           style={[
             s.conversationBody,
             {
@@ -6891,7 +6848,6 @@ function ChatConversationLayout({
           {messagesPane}
         </View>
         <View
-          ref={composerWebRef}
           onLayout={onComposerLayout}
           style={[
             s.chatInputDockWebFixed,
@@ -6913,7 +6869,7 @@ function ChatConversationLayout({
     <KeyboardAvoidingView
       style={s.detailPanel}
       behavior="padding"
-      keyboardVerticalOffset={insets.top}
+      keyboardVerticalOffset={0}
     >
       {conversationBody}
     </KeyboardAvoidingView>

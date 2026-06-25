@@ -4,13 +4,16 @@ import {
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, ChevronLeft } from "lucide-react-native";
+import LottieView from "lottie-react-native";
 
 import Theme from "@/constants/Theme";
 import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
+
+const REVIEW_CONFIRMATION_ANIMATION = require("@/assets/Animated folder/note-saved.json");
 
 export interface PartyMobileWizardReviewProps {
   onBackToEdit: () => void;
@@ -20,6 +23,8 @@ export interface PartyMobileWizardReviewProps {
   submitting: boolean;
   organizationId: string | null;
   onConfirm: () => void;
+  title?: string;
+  message?: string;
 }
 
 export const PartyMobileWizardReview = memo(function PartyMobileWizardReview({
@@ -30,69 +35,65 @@ export const PartyMobileWizardReview = memo(function PartyMobileWizardReview({
   submitting,
   organizationId,
   onConfirm,
+  title = "Confirm details",
+  message = "Review the summary below, then save to add this record to your organization.",
 }: PartyMobileWizardReviewProps) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const summaryMaxHeight = Math.min(300, Math.round(windowHeight * 0.34));
 
   return (
     <View
       style={[
-        styles.reviewRoot,
-        { paddingTop: insets.top, paddingBottom: insets.bottom },
+        styles.reviewOverlay,
+        { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 },
       ]}
     >
-      <View style={styles.reviewHeader}>
-        <Pressable style={styles.backBtn} onPress={onBackToEdit} hitSlop={12}>
-          <ChevronLeft size={22} color="#0f172a" strokeWidth={2.5} />
-        </Pressable>
-        <Text style={styles.reviewTitle}>Review</Text>
-        <View style={{ width: 40 }} />
-      </View>
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.reviewScroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        {summaryContent}
-      </ScrollView>
-      {footerExtra}
-      <View style={[styles.reviewFooter, { paddingBottom: insets.bottom + 12 }]}>
-        <Pressable style={{ paddingVertical: 8 }} onPress={onBackToEdit}>
-          <Text style={{ fontSize: 14, fontWeight: "700", color: Theme.textMuted }}>
-            ← Edit details
-          </Text>
-        </Pressable>
+      <View style={styles.reviewCard}>
+        <View style={styles.reviewAnimationWrap}>
+          <LottieView
+            source={REVIEW_CONFIRMATION_ANIMATION}
+            autoPlay
+            loop={false}
+            resizeMode="contain"
+            style={styles.reviewAnimation}
+          />
+        </View>
+        <Text style={styles.reviewCardTitle}>{title}</Text>
+        <Text style={styles.reviewCardMessage}>{message}</Text>
+        <ScrollView
+          style={[styles.reviewSummaryScroll, { maxHeight: summaryMaxHeight }]}
+          contentContainerStyle={styles.reviewSummaryScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+        >
+          {summaryContent}
+        </ScrollView>
+        {footerExtra ? (
+          <View style={styles.reviewFooterExtra}>{footerExtra}</View>
+        ) : null}
         <Pressable
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            backgroundColor: "#0f172a",
-            paddingVertical: 14,
-            borderRadius: 14,
-            opacity: !organizationId || submitting ? 0.45 : 1,
-          }}
+          style={[
+            styles.reviewConfirmBtn,
+            (!organizationId || submitting) && styles.reviewConfirmBtnDisabled,
+          ]}
           onPress={onConfirm}
           disabled={!organizationId || submitting}
           testID="party-save-btn"
         >
           {submitting ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={Theme.buttonPrimaryText} />
           ) : (
-            <>
-              <Check size={22} color="#fff" strokeWidth={2.8} />
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: "700",
-                  color: "#fff",
-                  letterSpacing: 0.75,
-                }}
-              >
-                {reviewSaveLabel}
-              </Text>
-            </>
+            <Text style={styles.reviewConfirmBtnText}>{reviewSaveLabel}</Text>
           )}
+        </Pressable>
+        <Pressable
+          style={styles.reviewEditLink}
+          onPress={onBackToEdit}
+          hitSlop={8}
+          testID="party-edit-details-btn"
+        >
+          <Text style={styles.reviewEditLinkText}>← Edit details</Text>
         </Pressable>
       </View>
     </View>

@@ -3,7 +3,7 @@
  *
  * Routed from:
  *   • `TeslaHeader` "folder-open" icon          (via `onDocumentsClick`)
- *   • `HomePageHeader` "folder-open" icon       (default route)
+ *   • Workspace hub "Documents" quick action    (default route)
  *   • Compliance-block error in trip allocation (future Phase 7)
  *
  * The screen is just a thin shell: header + the `DocumentCenter`
