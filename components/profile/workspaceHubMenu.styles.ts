@@ -4,13 +4,14 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { Platform, StyleSheet } from "react-native";
 
 export { METRONIC };
 
-/** Pastel blue gradient stops for the workspace header band. */
-export const HUB_HEADER_GRADIENT = ["#B9E2F5", "#CDE9F7", "#E5F4FB"] as const;
+/** Same fill as chat “Start a conversation” — subtle depth top → bottom. */
+export const HUB_HEADER_GRADIENT = [CHAT_ACCENT, CHAT_ACCENT, "#3f2c2c"] as const;
 
 export const HUB_PURPLE = Theme.brandBlueInk;
 export const HUB_PURPLE_DEEP = "#9ACEEB";
@@ -19,6 +20,24 @@ export const HUB_PURPLE_LIGHT = Theme.primaryLight;
 export const HUB_PURPLE_TINT = Theme.pulseIndigoWash;
 export const HUB_PURPLE_BORDER = Theme.pulseIndigoRing;
 export const HUB_MENU_ICON = METRONIC.subtle;
+
+/** Tinted wells behind hub menu glyphs (aligned with workspace detail panels). */
+export const HUB_ICON_WELL = {
+  brand: Theme.brandBlueWashSubtle,
+  brandBorder: Theme.brandBlueRing,
+  indigo: "rgba(99, 102, 241, 0.12)",
+  indigoBorder: "rgba(99, 102, 241, 0.22)",
+  teal: "rgba(15, 118, 110, 0.12)",
+  tealBorder: "rgba(15, 118, 110, 0.22)",
+  amber: "rgba(217, 119, 6, 0.12)",
+  amberBorder: "rgba(217, 119, 6, 0.22)",
+  sky: "rgba(59, 130, 246, 0.12)",
+  skyBorder: "rgba(59, 130, 246, 0.22)",
+  emerald: Theme.driverEmeraldMuted,
+  emeraldBorder: Theme.driverEmeraldBorderSoft,
+  slate: "rgba(77, 54, 54, 0.1)",
+  slateBorder: Theme.brandBlueRing,
+} as const;
 
 const HEADER_GLASS_WEB =
   Platform.OS === "web"
@@ -45,12 +64,12 @@ export const hubStyles = StyleSheet.create({
     overflow: "hidden",
     ...Platform.select({
       web: {
-        boxShadow: "0 8px 24px rgba(76, 29, 149, 0.28)" as unknown as undefined,
+        boxShadow: "0 8px 24px rgba(77, 54, 54, 0.28)" as unknown as undefined,
       },
       default: {
-        shadowColor: HUB_PURPLE_DEEP,
+        shadowColor: CHAT_ACCENT,
         shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.22,
+        shadowOpacity: 0.28,
         shadowRadius: 14,
         elevation: 8,
       },
@@ -72,7 +91,7 @@ export const hubStyles = StyleSheet.create({
   },
   headerVignette: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(49, 16, 101, 0.22)",
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
   },
   headerBottomFade: {
     position: "absolute",
@@ -206,6 +225,14 @@ export const hubStyles = StyleSheet.create({
       },
     }),
   },
+  quickCircleBrand: {
+    backgroundColor: HUB_ICON_WELL.brand,
+    borderColor: HUB_ICON_WELL.brandBorder,
+  },
+  quickCircleEmerald: {
+    backgroundColor: HUB_ICON_WELL.emerald,
+    borderColor: HUB_ICON_WELL.emeraldBorder,
+  },
   quickAvatar: { width: "100%", height: "100%" },
   quickAvatarInitials: { fontSize: 16, fontWeight: "700", color: HUB_PURPLE },
   quickLabel: {
@@ -222,8 +249,8 @@ export const hubStyles = StyleSheet.create({
     gap: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: HUB_PURPLE_BORDER,
-    backgroundColor: "rgba(124, 58, 237, 0.07)",
+    borderColor: HUB_ICON_WELL.brandBorder,
+    backgroundColor: HUB_ICON_WELL.brand,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
@@ -231,9 +258,9 @@ export const hubStyles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: Theme.brandBlueSoft,
     borderWidth: 1,
-    borderColor: HUB_PURPLE_BORDER,
+    borderColor: HUB_ICON_WELL.brandBorder,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -296,11 +323,19 @@ export const hubStyles = StyleSheet.create({
   },
   menuRowFirst: { borderTopWidth: 0 },
   menuRowPressed: { backgroundColor: METRONIC.bodyBg },
-  menuRowSelected: { backgroundColor: HUB_PURPLE_TINT },
-  menuRowIconPlain: {
-    width: 20,
+  menuRowSelected: { backgroundColor: Theme.brandBlueWashSubtle },
+  menuRowIconWell: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  menuRowPngIcon: {
+    width: 22,
+    height: 22,
   },
   menuRowLabel: {
     flex: 1,
@@ -308,19 +343,58 @@ export const hubStyles = StyleSheet.create({
     fontWeight: "600",
     color: METRONIC.text,
   },
+
+  // Party — single row (scrolls horizontally when narrow)
+  partyRowScrollContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
+    gap: 4,
+    minWidth: "100%",
+  },
+  partyRowCell: {
+    flex: 1,
+    minWidth: 72,
+    alignItems: "center",
+  },
+  partyRowChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    width: "100%",
+  },
+  partyRowChipPressed: {
+    opacity: 0.85,
+  },
+  partyRowIconSlot: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  partyGridLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: METRONIC.text,
+    textAlign: "center",
+  },
   valuePill: {
     maxWidth: 112,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 7,
     borderWidth: 1,
-    borderColor: HUB_PURPLE_BORDER,
-    backgroundColor: "rgba(124, 58, 237, 0.04)",
+    borderColor: HUB_ICON_WELL.brandBorder,
+    backgroundColor: Theme.brandBlueSoft,
   },
   valuePillText: {
     fontSize: 10,
     fontWeight: "600",
-    color: HUB_PURPLE_DEEP,
+    color: HUB_PURPLE,
     textAlign: "center",
   },
 
@@ -349,9 +423,11 @@ export const hubStyles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 11,
-    backgroundColor: HUB_PURPLE_TINT,
+    backgroundColor: HUB_ICON_WELL.brand,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: HUB_ICON_WELL.brandBorder,
   },
   footerAvatarInitials: { fontSize: 12, fontWeight: "700", color: HUB_PURPLE },
   footerText: { flex: 1, minWidth: 0 },

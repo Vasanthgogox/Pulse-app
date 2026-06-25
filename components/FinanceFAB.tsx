@@ -87,20 +87,20 @@ function getLucideIcon(name: FABIconName): LucideIcon {
 
 /** Transparent 3D PNG avatars — preferred over Lottie/SVG when present. */
 const FAB_PNG_GLYPH_SOURCE: Partial<Record<FABIconName, ImageSourcePropType>> = {
-  building: require("@/assets/icon and logos/company-building.png"),
+  building: require("@/assets/file type icons/add-2.png"),
   warehouse: require("@/assets/icon and logos/client.png"),
-  user: require("@/assets/file type icons/add-2.png"),
-  "user-plus": require("@/assets/file type icons/add-2.png"),
+  user: require("@/assets/icon and logos/taxi-driver.png"),
+  "user-plus": require("@/assets/icon and logos/taxi-driver.png"),
   truck: require("@/assets/icon and logos/truck.png"),
   "receipt-text": require("@/assets/file type icons/dollar-calendar.png"),
 };
 
 /** Per-party visual scale inside the clipped avatar well. */
 const FAB_PNG_GLYPH_SCALE: Partial<Record<FABIconName, number>> = {
-  building: 1,
+  building: 0.92,
   warehouse: 0.98,
-  user: 0.92,
-  "user-plus": 0.92,
+  user: 1.04,
+  "user-plus": 1.04,
   truck: 0.96,
   "receipt-text": 1.02,
 };
@@ -111,16 +111,15 @@ const FAB_PNG_GLYPH_OFFSET: Partial<
 > = {
   building: { translateY: 2 },
   warehouse: { translateY: 3 },
-  user: { translateY: 2 },
-  "user-plus": { translateY: 2 },
+  user: { translateY: 4 },
+  "user-plus": { translateY: 4 },
   truck: { translateY: 2 },
   "receipt-text": { translateY: 3 },
 };
 
 /** PNG glyphs that already include a plus — skip the satellite badge. */
 const FAB_PNG_SUPPRESS_PLUS_SUFFIX: Partial<Record<FABIconName, boolean>> = {
-  user: true,
-  "user-plus": true,
+  building: true,
 };
 
 const FAB_ANIMATED_GLYPH_SOURCE: Partial<Record<FABIconName, unknown>> = {

@@ -4,7 +4,6 @@
 import Theme from "@/constants/Theme";
 import {
   HUB_PURPLE,
-  HUB_PURPLE_VIVID,
 } from "@/components/profile/workspaceHubMenu.styles";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { StyleSheet } from "react-native";
@@ -40,7 +39,7 @@ export const productGridStyles = StyleSheet.create({
     width: 3,
     height: 12,
     borderRadius: 2,
-    backgroundColor: HUB_PURPLE_VIVID,
+    backgroundColor: Theme.brandBluePressed,
     flexShrink: 0,
   },
   sectionTitleBlock: {
@@ -96,6 +95,7 @@ export const productGridStyles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 8,
     minHeight: 72,
+    borderRadius: 10,
   },
   chipActive: {},
   chipPressed: {

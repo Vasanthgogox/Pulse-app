@@ -4,6 +4,7 @@ import {
   BarChart2,
   Brain,
   FileCheck,
+  Gavel,
   MessageSquare,
   Network,
   Receipt,
@@ -15,15 +16,18 @@ import {
   Users,
   Zap,
 } from "lucide-react-native";
+import LottieView from "lottie-react-native";
 import { StyleSheet, View } from "react-native";
 
 import Theme from "@/constants/Theme";
+import { PRODUCT_LOTTIE_ASSETS } from "@/features/organization/utils/productLottieAssets.util";
 import { PRODUCT_REGISTRY, type ProductId } from "@/lib/productRegistry";
 
 const PRODUCT_ICON: Record<ProductId, LucideIcon> = {
   pulse_core: Zap,
   pulse_driver: Smartphone,
   pulse_network: Network,
+  pulse_network_bidding: Gavel,
   pulse_chat: MessageSquare,
   pulse_pod_pro: FileCheck,
   pulse_invoice_pro: Receipt,
@@ -39,11 +43,6 @@ const PRODUCT_ICON: Record<ProductId, LucideIcon> = {
 
 const INACTIVE_ICON = "#A1A5B7";
 
-function iconColor(productId: ProductId, active: boolean): string {
-  if (!active) return INACTIVE_ICON;
-  return PRODUCT_REGISTRY[productId]?.color ?? Theme.primary;
-}
-
 export type ProductLogoProps = {
   productId: ProductId;
   size?: number;
@@ -53,7 +52,32 @@ export type ProductLogoProps = {
   showActiveDot?: boolean;
 };
 
-/** Flat product icon — no tile border or fill; active = brand color stroke only. */
+function ProductLottieLogo({
+  productId,
+  size,
+}: {
+  productId: ProductId;
+  size: number;
+}) {
+  const asset = PRODUCT_LOTTIE_ASSETS[productId];
+  const glyphScale = asset.glyphScale ?? 1.1;
+  const lottieSize = Math.round(size * glyphScale);
+
+  return (
+    <View style={[styles.lottieSlot, { width: size, height: size }]}>
+      <LottieView
+        source={asset.source}
+        autoPlay
+        loop
+        speed={asset.speed ?? 1}
+        resizeMode="contain"
+        style={{ width: lottieSize, height: lottieSize }}
+      />
+    </View>
+  );
+}
+
+/** Product glyph — active modules use Lottie; locked modules stay flat grey Lucide. */
 export function ProductLogo({
   productId,
   size = 40,
@@ -64,13 +88,13 @@ export function ProductLogo({
   const isLive = active && !muted;
   const iconSize = Math.round(size * 0.52);
 
+  if (isLive) {
+    return <ProductLottieLogo productId={productId} size={size} />;
+  }
+
   return (
     <View style={[styles.wrap, { width: size, height: size }]}>
-      <Icon
-        color={iconColor(productId, isLive)}
-        size={iconSize}
-        strokeWidth={isLive ? 2.1 : 1.75}
-      />
+      <Icon color={INACTIVE_ICON} size={iconSize} strokeWidth={1.75} />
     </View>
   );
 }
@@ -79,6 +103,11 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  lottieSlot: {
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
 });
 
