@@ -23,8 +23,11 @@ export function WizardDesktopFrame({
   contextPanel,
 }: WizardDesktopFrameProps) {
   const showRails = width >= Layout.wizardDesktopGridMinWidth;
-  const hasLeft = showRails && leftInsights.length > 0;
-  const hasRight = showRails && (rightInsights.length > 0 || contextPanel != null);
+  const mergedLeftInsights = showRails
+    ? [...leftInsights, ...rightInsights]
+    : [];
+  const hasLeft = showRails && mergedLeftInsights.length > 0;
+  const hasRight = showRails && contextPanel != null;
 
   if (!hasLeft && !hasRight) {
     return <View style={styles.desktopFrameSingle}>{children}</View>;
@@ -32,15 +35,12 @@ export function WizardDesktopFrame({
 
   return (
     <View style={styles.desktopFrameRow}>
-      {hasLeft ? <WizardInsightRail cards={leftInsights} side="left" /> : null}
+      {hasLeft ? <WizardInsightRail cards={mergedLeftInsights} side="left" /> : null}
       <View style={styles.desktopFrameMain}>{children}</View>
       {hasRight ? (
         <View style={styles.desktopInsightRailRightStack}>
           {contextPanel ? (
             <View style={styles.desktopContextPanel}>{contextPanel}</View>
-          ) : null}
-          {rightInsights.length > 0 ? (
-            <WizardInsightRail cards={rightInsights} side="right" />
           ) : null}
         </View>
       ) : null}

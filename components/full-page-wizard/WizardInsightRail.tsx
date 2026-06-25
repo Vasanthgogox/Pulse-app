@@ -1,5 +1,6 @@
-import { memo } from "react";
+import { memo, type ComponentType } from "react";
 import { Text, View } from "react-native";
+import type { SvgProps } from "react-native-svg";
 
 import Theme from "@/constants/Theme";
 
@@ -13,26 +14,22 @@ export type WizardInsightCard = {
   title: string;
   body: string;
   accent?: WizardInsightAccent;
+  illustration?: ComponentType<SvgProps>;
+  icon?: ComponentType<SvgProps>;
 };
 
 const accentStyles: Record<
   WizardInsightAccent,
-  { stripe: string; wash: string; eyebrow: string }
+  { eyebrow: string }
 > = {
   indigo: {
-    stripe: Theme.brandBlueInk,
-    wash: Theme.pulseIndigoWash,
-    eyebrow: Theme.brandBlueInk,
+    eyebrow: Theme.textMuted,
   },
   green: {
-    stripe: Theme.positive,
-    wash: "rgba(16, 185, 129, 0.1)",
-    eyebrow: Theme.positive,
+    eyebrow: Theme.textMuted,
   },
   amber: {
-    stripe: Theme.warning,
-    wash: "rgba(245, 158, 11, 0.12)",
-    eyebrow: Theme.warning,
+    eyebrow: Theme.textMuted,
   },
 };
 
@@ -45,6 +42,7 @@ export const WizardInsightRail = memo(function WizardInsightRail({
   cards,
   side,
 }: WizardInsightRailProps) {
+  const isSingleBanner = cards.length === 1;
   return (
     <View
       style={[
@@ -57,12 +55,29 @@ export const WizardInsightRail = memo(function WizardInsightRail({
       </Text>
       {cards.map((card) => {
         const accent = accentStyles[card.accent ?? "indigo"];
+        const Illustration = card.illustration;
         return (
           <View
             key={card.id}
-            style={[styles.desktopInsightCard, { backgroundColor: accent.wash }]}
+            style={[
+              styles.desktopInsightCard,
+              isSingleBanner && styles.desktopInsightCardSingle,
+            ]}
           >
-            <View style={[styles.desktopInsightStripe, { backgroundColor: accent.stripe }]} />
+            {Illustration ? (
+              <View
+                style={[
+                  styles.desktopInsightWatermark,
+                  isSingleBanner && styles.desktopInsightWatermarkSingle,
+                ]}
+                pointerEvents="none"
+              >
+                <Illustration
+                  width={isSingleBanner ? 136 : 94}
+                  height={isSingleBanner ? 102 : 70}
+                />
+              </View>
+            ) : null}
             <Text style={[styles.desktopInsightEyebrow, { color: accent.eyebrow }]}>
               {card.eyebrow}
             </Text>

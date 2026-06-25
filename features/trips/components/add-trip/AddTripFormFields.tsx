@@ -87,6 +87,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import LottieView from "lottie-react-native";
 import { ROUTES } from "@/lib/routes";
 import { ADD_TRIP_FORM } from "./addTripFormTokens";
 import { AddTripWebCurrencyField } from "./AddTripWebCurrencyField";
@@ -127,6 +128,8 @@ function formatUiDateLabel(iso: string): string {
     year: "numeric",
   });
 }
+
+const ROUTE_INSTRUCTOR_ANIMATION = require("@/assets/Animated folder/reach the location.json");
 
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -1319,6 +1322,27 @@ export function AddTripFormFields({
                       ))}
                   </>
                 )}
+                </View>
+                <View style={styles.routeInstructorBanner}>
+                  <View style={styles.routeInstructorAnimationWrap}>
+                    <LottieView
+                      source={ROUTE_INSTRUCTOR_ANIMATION}
+                      autoPlay
+                      loop
+                      speed={0.75}
+                      resizeMode="contain"
+                      style={styles.routeInstructorAnimation}
+                    />
+                  </View>
+                  <View style={styles.routeInstructorCopy}>
+                    <View style={styles.routeInstructorTitleRow}>
+                      <Navigation size={12} color={Theme.brandBlueInk} />
+                      <Text style={styles.routeInstructorTitle}>Update your route details</Text>
+                    </View>
+                    <Text style={styles.routeInstructorBody}>
+                      Add accurate pickup and drop points for better tracking and ETA.
+                    </Text>
+                  </View>
                 </View>
               </View>
             ) : (
@@ -3510,6 +3534,7 @@ const styles = StyleSheet.create({
   routeWizardBody: {
     gap: 0,
     width: "100%",
+    flex: 1,
   },
   routeLocationsStack: {
     gap: 12,
@@ -3530,6 +3555,55 @@ const styles = StyleSheet.create({
   },
   routeDateLabel: {
     marginBottom: 6,
+  },
+  routeInstructorBanner: {
+    width: "100%",
+    marginTop: "auto",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "nowrap",
+  },
+  routeInstructorAnimationWrap: {
+    width: 96,
+    height: 96,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+    flexShrink: 0,
+  },
+  routeInstructorAnimation: {
+    width: 108,
+    height: 108,
+  },
+  routeInstructorCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  routeInstructorTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  routeInstructorTitle: {
+    color: Theme.textPrimaryDark,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.25,
+    textTransform: "uppercase",
+  },
+  routeInstructorBody: {
+    color: Theme.textSecondary,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "500",
   },
   labelWizard: {
     marginBottom: 4,
