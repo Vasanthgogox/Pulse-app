@@ -483,6 +483,7 @@ function RootLayoutNav() {
                   contentStyle: { flex: 1, backgroundColor: "transparent" },
                 }}
               />
+              <Stack.Screen name="audit" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />
             </Stack>
             <NavigationLoadingOverlay />

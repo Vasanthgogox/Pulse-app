@@ -201,6 +201,8 @@ export const ROUTES = {
   LOAD_BOARD:     '/load-board'     as const,
   /** Load Center + share indent to Pulse (story); use when Network is story-only. */
   PULSE_LOADS:   '/pulse-loads'   as const,
+  /** DBA audit tool — web only. */
+  DBA_AUDIT:     '/audit'          as const,
 } as const;
 
 /** True when the user is on the full-screen indent deploy / allocation wizard. */
