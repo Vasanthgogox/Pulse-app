@@ -328,7 +328,8 @@ export function DriverTripFlowCard({
 
   useEffect(() => {
     setLocalTrip(trip);
-    setStep(deriveDriverFlowStepFromTrip(trip));
+    const derived = deriveDriverFlowStepFromTrip(trip);
+    setStep((prev) => (prev === 'lr' && derived === 'pickup' ? prev : derived));
   }, [trip]);
 
   const tripIsAggregate = useMemo(() => isAggregateTrip(localTrip), [localTrip]);
