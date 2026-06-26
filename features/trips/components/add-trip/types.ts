@@ -33,6 +33,9 @@ export interface AddTripFormData {
   advance_paid?: number;
   notes?: string | null;
   driver_id?: string | null;
+  /** Resolved from driver record when driver is selected — stamped onto trips.driver_commission at creation. */
+  driver_commission_percent?: number | null;
+  driver_commission_per_km?: number | null;
   vehicle_id?: string | null;
   /** Aggregate only: vehicle number for display (persisted as trip.vehicle_display_number). */
   vehicle_display_number?: string | null;
@@ -74,6 +77,8 @@ export interface AddTripFormState {
   assignLater: boolean;
   notes: string;
   driverId: string | null;
+  driverCommissionPercent: number | null;
+  driverCommissionPerKm: number | null;
   vehicleId: string | null;
   /** Aggregate only: assign driver for tracking by phone (used after createTrip). */
   driverPhone: string;

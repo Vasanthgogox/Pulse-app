@@ -177,6 +177,8 @@ const initialState: AddTripFormState = {
   assignLater: false,
   notes: '',
   driverId: null,
+  driverCommissionPercent: null,
+  driverCommissionPerKm: null,
   vehicleId: null,
   driverPhone: '',
   aggregateDriverName: '',
@@ -266,7 +268,22 @@ export function useAddTripForm() {
     })),
   []);
   const setNotes = useCallback((v: string) => setState((s) => ({ ...s, notes: v })), []);
-  const setDriverId = useCallback((v: string | null) => setState((s) => ({ ...s, driverId: v })), []);
+  const setDriverId = useCallback((v: string | null) => setState((s) => ({
+    ...s,
+    driverId: v,
+    driverCommissionPercent: null,
+    driverCommissionPerKm: null,
+  })), []);
+  const setDriver = useCallback((
+    id: string | null,
+    commissionPercent: number | null,
+    commissionPerKm: number | null,
+  ) => setState((s) => ({
+    ...s,
+    driverId: id,
+    driverCommissionPercent: commissionPercent ?? null,
+    driverCommissionPerKm: commissionPerKm ?? null,
+  })), []);
   const setVehicleId = useCallback((v: string | null) => setState((s) => ({ ...s, vehicleId: v })), []);
   const setDriverPhone = useCallback(
     (v: string) =>
@@ -486,6 +503,14 @@ export function useAddTripForm() {
         state.supplySource === 'asset' && !state.assignLater
           ? state.driverId || null
           : null,
+      driver_commission_percent:
+        state.supplySource === 'asset' && !state.assignLater
+          ? state.driverCommissionPercent ?? null
+          : null,
+      driver_commission_per_km:
+        state.supplySource === 'asset' && !state.assignLater
+          ? state.driverCommissionPerKm ?? null
+          : null,
       vehicle_id:
         state.supplySource === 'asset' && !state.assignLater
           ? state.vehicleId || null
@@ -523,6 +548,7 @@ export function useAddTripForm() {
       setAssignLater,
       setNotes,
       setDriverId,
+      setDriver,
       setVehicleId,
       setDriverPhone,
       setDriverPhoneName,
@@ -554,6 +580,7 @@ export function useAddTripForm() {
       setAssignLater,
       setNotes,
       setDriverId,
+      setDriver,
       setVehicleId,
       setDriverPhone,
       setDriverPhoneName,

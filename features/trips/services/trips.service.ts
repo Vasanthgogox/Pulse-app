@@ -653,6 +653,10 @@ export interface CreateTripData {
    * Used when recording a past trip that should not block live assignments.
    */
   skipAssignmentConflictCheck?: boolean;
+  /** Driver's commission % (e.g. 10 = 10%). Stamped onto trips.driver_commission at creation. */
+  driver_commission_percent?: number | null;
+  /** Driver's per-km rate. Used only when commission_percent is absent. */
+  driver_commission_per_km?: number | null;
 }
 
 type PostgrestLikeError = {
@@ -1383,6 +1387,15 @@ export async function createTrip(
 
   const clientPrice = Number(data.client_price) || 0;
   const supplierRate = Number(data.supplier_rate) || 0;
+  const distanceKm = data.distance != null && Number.isFinite(Number(data.distance)) ? Number(data.distance) : null;
+  const driverCommissionPct = Number(data.driver_commission_percent ?? 0) || 0;
+  const driverCommissionPerKm = Number(data.driver_commission_per_km ?? 0) || 0;
+  const computedDriverCommission =
+    driverCommissionPct > 0 && clientPrice > 0
+      ? Math.round((clientPrice * driverCommissionPct) / 100)
+      : driverCommissionPerKm > 0 && distanceKm != null && distanceKm > 0
+        ? Math.round(distanceKm * driverCommissionPerKm)
+        : 0;
   const loadTonsRaw = Number(data.load_tons);
   const loadTons =
     Number.isFinite(loadTonsRaw) && loadTonsRaw >= 0 ? loadTonsRaw : null;
@@ -1449,7 +1462,7 @@ export async function createTrip(
     client_price: clientPrice,
     supplier_rate: supplierRate,
     platform_fee: 0,
-    driver_commission: 0,
+    driver_commission: computedDriverCommission,
     payment_status: "pending",
     amount_paid: 0,
     // Cross-schema compatibility:

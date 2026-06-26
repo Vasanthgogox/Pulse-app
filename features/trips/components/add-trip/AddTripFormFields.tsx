@@ -2191,7 +2191,9 @@ export function AddTripFormFields({
                         onSelect={(id) => {
                           const row = driverOptions.find((d) => d.id === id);
                           if (row?.isBusy) return;
-                          setters.setDriverId(state.driverId === id ? null : id);
+                          const newId = state.driverId === id ? null : id;
+                          const dr = newId ? drivers.find((d) => d.id === newId) : null;
+                          setters.setDriver(newId, dr?.commission_percent ?? null, dr?.commission_per_km ?? null);
                           setDriverListExpanded(false);
                         }}
                         items={driverAvatarGridItems}
@@ -2503,7 +2505,9 @@ export function AddTripFormFields({
                               onSelect={(id) => {
                                 const row = driverOptions.find((d) => d.id === id);
                                 if (row?.isBusy) return;
-                                setters.setDriverId(state.driverId === id ? null : id);
+                                const newId = state.driverId === id ? null : id;
+                                const dr = newId ? drivers.find((d) => d.id === newId) : null;
+                                setters.setDriver(newId, dr?.commission_percent ?? null, dr?.commission_per_km ?? null);
                                 setDriverListExpanded(false);
                               }}
                               items={driverAvatarGridItems}
@@ -3661,6 +3665,9 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
+  },
+  errorText: {
+    color: "#D0372B",
   },
   gridColWizardFill: {
     width: "100%",
