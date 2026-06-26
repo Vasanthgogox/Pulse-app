@@ -82,9 +82,9 @@ function confirmRemovePod(): Promise<boolean> {
 
 function progressForStep(step: StepId): number {
   if (step === 'completed') return 100;
-  // Keep POD/reached internal, but visually remain on Transit until completion.
-  if (step === 'reached') return 60;
+  if (step === 'reached') return 80;
   if (step === 'transit') return 60;
+  if (step === 'lr') return 50;
   if (step === 'pickup') return 40;
   if (step === 'accepted') return 20;
   return 0;
@@ -140,7 +140,7 @@ async function optimizeImageForUpload(
 
 function stageForStep(step: StepId): 1 | 2 | 3 | 4 {
   if (step === 'accepted') return 1;
-  if (step === 'pickup') return 2;
+  if (step === 'pickup' || step === 'lr') return 2;
   if (step === 'reached') return 3;
   if (step === 'transit') return 3;
   return 4;
@@ -149,6 +149,7 @@ function stageForStep(step: StepId): 1 | 2 | 3 | 4 {
 function titleForStep(step: StepId): string {
   if (step === 'accepted') return 'Head to Pickup';
   if (step === 'pickup') return 'At Pickup Location';
+  if (step === 'lr') return 'Upload Lorry Receipt';
   if (step === 'transit') return 'Head to Drop-off';
   if (step === 'reached') return 'At Drop-off Location';
   return 'Trip completed';
@@ -199,6 +200,7 @@ function PodDocumentRow({
   colors,
   podDeletingId,
   canDelete = true,
+  docFallbackLabel = 'POD',
   onView,
   onDelete,
 }: {
@@ -206,6 +208,7 @@ function PodDocumentRow({
   index: number;
   colors: { emerald: string; emeraldMuted?: string };
   podDeletingId: string | null;
+  docFallbackLabel?: string;
   /** After delivery is completed, list stays view-only. */
   canDelete?: boolean;
   onView: (d: tripDocumentsService.TripDocumentRow) => void;
@@ -220,7 +223,7 @@ function PodDocumentRow({
       ]}
     >
       <Text style={[styles.podListFileName, { color: Theme.textPrimaryDark }]} numberOfLines={1}>
-        {doc.file_name || doc.storage_path.split('/').pop() || 'POD'}
+        {doc.file_name || doc.storage_path.split('/').pop() || docFallbackLabel}
       </Text>
       <View style={styles.podListActions}>
         <TouchableOpacity
@@ -300,6 +303,20 @@ export function DriverTripFlowCard({
   const [viewingPodError, setViewingPodError] = useState(false);
   const [podDeletingId, setPodDeletingId] = useState<string | null>(null);
   const podUploadCancelledRef = useRef(false);
+
+  const [lrDocuments, setLrDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
+  const [lrLoading, setLrLoading] = useState(false);
+  const [lrUploading, setLrUploading] = useState(false);
+  const [lrSkipped, setLrSkipped] = useState(false);
+  const [lrViewUrls, setLrViewUrls] = useState<Record<string, string>>({});
+  const lrViewUrlsRequestedRef = useRef<Set<string>>(new Set());
+  const lastLrTripIdRef = useRef<string | null>(null);
+  const [lrDeletingId, setLrDeletingId] = useState<string | null>(null);
+  const lrUploadCancelledRef = useRef(false);
+  const [lrHoldProgress, setLrHoldProgress] = useState(0);
+  const [isLrHolding, setIsLrHolding] = useState(false);
+  const lrHoldTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lrHoldStartRef = useRef(0);
 
   const [holdProgress, setHoldProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
@@ -389,6 +406,23 @@ export function DriverTripFlowCard({
       setViewingPodUrl(url);
     },
     [podViewUrls],
+  );
+
+  const openLrPreview = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow) => {
+      setViewingPodError(false);
+      const cached = lrViewUrls[doc.id];
+      if (cached) {
+        setViewingPodUrl(cached);
+        return;
+      }
+      setViewingPodLoading(true);
+      const url = await tripDocumentsService.getDocumentViewUrl(doc.storage_path);
+      setLrViewUrls((prev) => ({ ...prev, [doc.id]: url }));
+      setViewingPodLoading(false);
+      setViewingPodUrl(url);
+    },
+    [lrViewUrls],
   );
 
   const cancelPodUpload = useCallback(() => {
@@ -496,6 +530,51 @@ export function DriverTripFlowCard({
     loadPodDocuments(hasCache ? { silent: true } : undefined);
   }, [step, localTrip?.id, loadPodDocuments]);
 
+  const loadLrDocuments = useCallback(
+    (opts?: { silent?: boolean }) => {
+      const id = localTrip?.id;
+      if (!id) return;
+      if (!opts?.silent) setLrLoading(true);
+      tripDocumentsService.getDocumentsByTripId(id).then(({ documents, error }) => {
+        setLrLoading(false);
+        if (!error) {
+          setLrDocuments(documents.filter((d) => d.document_type === 'lr'));
+          lastLrTripIdRef.current = id;
+        }
+      });
+    },
+    [localTrip?.id],
+  );
+
+  useEffect(() => {
+    if (step !== 'lr') {
+      setLrSkipped(false);
+      if (lrHoldTimerRef.current) {
+        clearInterval(lrHoldTimerRef.current);
+        lrHoldTimerRef.current = null;
+      }
+      setLrHoldProgress(0);
+      setIsLrHolding(false);
+      return;
+    }
+    const id = localTrip?.id;
+    if (!id) return;
+    if (id !== lastLrTripIdRef.current) setLrDocuments([]);
+    const hasCache = lastLrTripIdRef.current === id;
+    loadLrDocuments(hasCache ? { silent: true } : undefined);
+  }, [step, localTrip?.id, loadLrDocuments]);
+
+  useEffect(() => {
+    if (lrDocuments.length === 0) return;
+    lrDocuments.forEach((doc) => {
+      if (lrViewUrlsRequestedRef.current.has(doc.id)) return;
+      lrViewUrlsRequestedRef.current.add(doc.id);
+      tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((url) => {
+        setLrViewUrls((prev) => (prev[doc.id] ? prev : { ...prev, [doc.id]: url }));
+      });
+    });
+  }, [lrDocuments]);
+
   useEffect(() => {
     if (podDocuments.length === 0) return;
     podDocuments.forEach((doc) => {
@@ -549,7 +628,7 @@ export function DriverTripFlowCard({
     setStepLoading(false);
     if (error) {
       setStepError(error.message);
-      setStep('pickup');
+      setStep('lr');
       return;
     }
     if (updated) setLocalTrip(updated);
@@ -715,6 +794,105 @@ export function DriverTripFlowCard({
     }
   };
 
+  const uploadLr = async () => {
+    const id = localTrip?.id;
+    if (!id || !profile?.uid || lrUploading) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setStepError('Permission to access photos is required');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setStepError(null);
+    lrUploadCancelledRef.current = false;
+    setLrUploading(true);
+    const uri = result.assets[0].uri;
+    const fileName = normalizeImageFileName(result.assets[0].fileName ?? `lr-${Date.now()}`);
+    try {
+      const { arrayBuffer, mimeType } = await optimizeImageForUpload(uri, POD_IMAGE_QUALITY);
+
+      if (lrUploadCancelledRef.current) {
+        return;
+      }
+
+      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+        setStepError('Could not read image file');
+        return;
+      }
+      if (arrayBuffer.byteLength > MAX_POD_IMAGE_BYTES) {
+        setStepError(
+          `Image too large (${formatBytes(arrayBuffer.byteLength)}). Max allowed is ${formatBytes(MAX_POD_IMAGE_BYTES)}.`,
+        );
+        return;
+      }
+
+      if (lrUploadCancelledRef.current) {
+        return;
+      }
+
+      const { doc, error } = await tripDocumentsService.uploadTripDocument(id, profile.uid, {
+        arrayBuffer,
+        fileName,
+        mimeType,
+      }, 'lr');
+      if (error) {
+        setStepError(error.message);
+        return;
+      }
+      if (doc && lrUploadCancelledRef.current) {
+        await tripDocumentsService.deleteTripDocument(doc);
+        return;
+      }
+      if (doc) {
+        setLrDocuments((prev) => [doc, ...prev]);
+        tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((u) => {
+          setLrViewUrls((prev) => ({ ...prev, [doc.id]: u }));
+        });
+        await shareTripDocumentInChat(doc, 'Lorry Receipt');
+      }
+      onRefresh?.();
+    } catch (e) {
+      setStepError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      lrUploadCancelledRef.current = false;
+      setLrUploading(false);
+    }
+  };
+
+  const cancelLrUpload = useCallback(() => {
+    lrUploadCancelledRef.current = true;
+    setLrUploading(false);
+  }, []);
+
+  const confirmDeleteLr = useCallback(
+    async (doc: tripDocumentsService.TripDocumentRow) => {
+      const ok = await confirmRemovePod();
+      if (!ok) return;
+      setLrDeletingId(doc.id);
+      setStepError(null);
+      const { error } = await tripDocumentsService.deleteTripDocument(doc);
+      setLrDeletingId(null);
+      if (error) {
+        setStepError(error.message);
+        return;
+      }
+      setLrDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      setLrViewUrls((prev) => {
+        const next = { ...prev };
+        delete next[doc.id];
+        return next;
+      });
+      lrViewUrlsRequestedRef.current.delete(doc.id);
+      onRefresh?.();
+    },
+    [onRefresh],
+  );
+
   const completeTrip = async () => {
     const id = localTrip?.id;
     if (!id) return;
@@ -761,6 +939,32 @@ export function DriverTripFlowCard({
     }
     setHoldProgress(0);
     setIsHolding(false);
+  };
+
+  const startLrHold = () => {
+    setIsLrHolding(true);
+    setLrHoldProgress(0);
+    setStepError(null);
+    lrHoldStartRef.current = Date.now();
+    lrHoldTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - lrHoldStartRef.current;
+      const pct = Math.min((elapsed / HOLD_DURATION_MS) * 100, 100);
+      setLrHoldProgress(pct);
+      if (pct >= 100) {
+        if (lrHoldTimerRef.current) clearInterval(lrHoldTimerRef.current);
+        lrHoldTimerRef.current = null;
+        void engageTransit();
+      }
+    }, 20);
+  };
+
+  const cancelLrHold = () => {
+    if (lrHoldTimerRef.current) {
+      clearInterval(lrHoldTimerRef.current);
+      lrHoldTimerRef.current = null;
+    }
+    setLrHoldProgress(0);
+    setIsLrHolding(false);
   };
 
   return (
@@ -923,7 +1127,7 @@ export function DriverTripFlowCard({
           {step === 'pickup' ? (
             <TouchableOpacity
               style={[styles.primaryBtnWrap, stepLoading && styles.btnDisabled]}
-              onPress={engageTransit}
+              onPress={() => setStep('lr')}
               disabled={stepLoading}
               activeOpacity={0.88}
             >
@@ -957,6 +1161,90 @@ export function DriverTripFlowCard({
               </LinearGradient>
             </TouchableOpacity>
           ) : null}
+        </View>
+      ) : null}
+
+      {step === 'lr' ? (
+        <View style={styles.reachedBlock}>
+          <View style={styles.podSectionHeader}>
+            <Text style={[sheetStyles.sectionLabel, { color: Theme.textMuted }]}>
+              LORRY RECEIPT (LR)
+            </Text>
+            {lrLoading ? (
+              <LoadingIndicator size="small" color={colors.emerald} />
+            ) : (
+              <Text style={[sheetStyles.bodyMetaText, { color: Theme.textMuted }]}>
+                {lrDocuments.length} file{lrDocuments.length === 1 ? '' : 's'}
+              </Text>
+            )}
+          </View>
+          <View style={[sheetStyles.insetCard, styles.podCard]}>
+            <TouchableOpacity
+              style={[styles.podUploadBtn, { backgroundColor: Theme.textPrimaryDark }, lrUploading && styles.btnDisabled]}
+              onPress={uploadLr}
+              disabled={lrUploading}
+              activeOpacity={0.9}
+            >
+              <FontAwesome name="cloud-upload" size={16} color={Theme.textOnPrimary} />
+              <Text style={styles.podUploadText}>{lrUploading ? 'Uploading…' : 'Upload LR'}</Text>
+            </TouchableOpacity>
+            {lrUploading ? (
+              <TouchableOpacity onPress={cancelLrUpload} activeOpacity={0.8} style={styles.podCancelLink}>
+                <Text style={[styles.podCancelLinkText, { color: Theme.textMuted }]}>Cancel upload</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={() => setLrSkipped(true)} activeOpacity={0.8} style={styles.skipLink}>
+              <Text style={[styles.skipLinkText, { color: colors.emerald }]}>Skip LR</Text>
+            </TouchableOpacity>
+            {lrDocuments.length >= 1 ? (
+              <View style={[styles.podListWrap, { borderColor: Theme.border }]}>
+                {lrDocuments.map((doc, index) => (
+                  <PodDocumentRow
+                    key={doc.id}
+                    doc={doc}
+                    index={index}
+                    colors={colors}
+                    podDeletingId={lrDeletingId}
+                    docFallbackLabel="LR"
+                    onView={openLrPreview}
+                    onDelete={confirmDeleteLr}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </View>
+
+          {(lrDocuments.length >= 1 || lrSkipped) ? (
+            <HoldPressable
+              onPressIn={startLrHold}
+              onPressOut={cancelLrHold}
+              pressRetentionOffset={HOLD_PRESS_RETENTION}
+              android_ripple={{ color: 'transparent' }}
+              style={[
+                styles.holdBtnWrap,
+                { backgroundColor: colors.emeraldMuted ?? Theme.surfaceLight },
+                Platform.OS === 'web' && holdCompleteWebStyle,
+              ]}
+            >
+              <View style={[styles.holdFill, { width: `${lrHoldProgress}%`, backgroundColor: colors.emerald }]} />
+              <View style={[styles.holdContent, { pointerEvents: 'none' }]}>
+                <FontAwesome name="truck" size={15} color={lrHoldProgress > 20 ? Theme.textOnPrimary : colors.emerald} />
+                <Text
+                  style={[
+                    styles.holdText,
+                    { color: lrHoldProgress > 20 ? Theme.textOnPrimary : colors.emerald },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Hold to start transit
+                </Text>
+              </View>
+            </HoldPressable>
+          ) : (
+            <Text style={[styles.podRequired, { color: Theme.textMuted }]}>
+              Upload at least one LR to proceed to drop-off.
+            </Text>
+          )}
         </View>
       ) : null}
 

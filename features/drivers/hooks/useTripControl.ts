@@ -9,7 +9,7 @@ export const STEPS = [
   { id: "completed", label: "Complete", icon: "check-circle" as const },
 ] as const;
 
-export type StepId = (typeof STEPS)[number]["id"] | "reached";
+export type StepId = (typeof STEPS)[number]["id"] | "reached" | "lr";
 
 export function useTripControl(tripId: string | undefined) {
   const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
