@@ -67,7 +67,7 @@ const MENU_ICON_SIZE = 14;
 const MENU_ICON_STROKE = 2.1;
 
 const HUB_PARTY_PNG = {
-  customer: require("@/assets/file type icons/add-2.png"),
+  customer: require("@/assets/icon and logos/client-collaboration.png"),
   supplier: require("@/assets/icon and logos/client.png"),
   driver: require("@/assets/icon and logos/taxi-driver.png"),
   vehicle: require("@/assets/icon and logos/truck.png"),

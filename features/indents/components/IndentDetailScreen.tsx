@@ -12,16 +12,17 @@ import {
   indentReviewHubText,
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { BidReceivedHammer } from "@/features/indents/components/BidReceivedHammer";
-import {
-  IndentBidsAwaitingPanel,
-  LiveBidsSectionHeader,
-} from "@/features/indents/components/IndentBidsAwaitingPanel";
 import { IndentBidAmountEntry } from "@/features/indents/components/IndentBidAmountEntry";
+import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
 import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
-import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
+import {
+  IndentReviewHubBidsBody,
+  IndentReviewHubBidsHeader,
+  IndentReviewHubSplitLayout,
+} from "@/features/indents/components/IndentReviewHubSplitLayout";
 import { IndentSupplierPartySummary } from "@/features/indents/components/IndentSupplierPartySummary";
 import type { SupplierQuoteActionHint } from "@/features/indents/components/IndentSupplierQuoteCard";
+import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
 import { buildSupplierQuoteFooterInsight } from "@/features/indents/utils/indentLiveBids.util";
 import { buildIndentAwardedBidAlert } from "@/features/indents/utils/indentBidAlert.util";
 import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
@@ -38,6 +39,8 @@ import {
     updateIndent,
     type IndentRow,
 } from "@/features/indents/services/indents.service";
+import { selectIntegratedSuppliersForLoadCenter } from "@/features/network/utils/loadCenterIntegratedParties.util";
+import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
 import {
   resolveTripPartyLabels,
   type LoadCenterDriverProfile,
@@ -45,6 +48,7 @@ import {
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { formatINR } from "@/lib/format";
 import {
+    useClientsQuery,
     useDriversQuery,
     useSuppliersQuery,
     useTripsQuery,
@@ -57,6 +61,8 @@ import {
 } from "@/lib/queries/useIndentsQuery";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { ROUTES } from "@/lib/routes";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
+import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -66,8 +72,6 @@ import {
     Modal,
     Platform,
     Pressable,
-    RefreshControl,
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -152,6 +156,9 @@ export function IndentDetailScreen({
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const compactHub = windowHeight < 820;
+  const useSplitHub = windowWidth >= 880 && windowHeight >= 560;
+  const stackedHub = !useSplitHub;
+  const hubDense = compactHub || stackedHub;
   const footerReserve = compactHub ? 52 : 64;
   const router = useRouter();
   const { currentOrganization } = useOrganization();
@@ -163,6 +170,13 @@ export function IndentDetailScreen({
   const { data: drivers = [] } = useDriversQuery(orgId);
   const { data: vehicles = [] } = useVehiclesQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const { data: clients = [] } = useClientsQuery(orgId);
+  const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
+  const integratedSuppliers = useMemo(
+    () =>
+      selectIntegratedSuppliersForLoadCenter(suppliers, linkedOrgByOrganizationId),
+    [suppliers, linkedOrgByOrganizationId],
+  );
   const [indent, setIndent] = useState<IndentRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +185,7 @@ export function IndentDetailScreen({
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [confirmShareVisible, setConfirmShareVisible] = useState(false);
   const [sharingDraft, setSharingDraft] = useState(false);
+  const [shareStorySheetVisible, setShareStorySheetVisible] = useState(false);
   const [broadcastError, setBroadcastError] = useState<string | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
@@ -270,6 +285,32 @@ export function IndentDetailScreen({
     setBroadcastError(null);
     setConfirmShareVisible(true);
   }, [indent, handleEditAll]);
+
+  const handleOpenShareStory = useCallback(() => {
+    if (!indent) return;
+    setShareStorySheetVisible(true);
+  }, [indent]);
+
+  const handleShareWhatsApp = useCallback(async () => {
+    if (!indent) return;
+    await shareIndentOnWhatsApp(indent);
+  }, [indent]);
+
+  const handleStoryShareSuccess = useCallback(() => {
+    if (orgId) invalidatePosts();
+    setShareStorySheetVisible(false);
+  }, [orgId, invalidatePosts]);
+
+  const openIntegratedSuppliersNetwork = useCallback(() => {
+    router.push(ROUTES.TABS.NETWORK as import("expo-router").Href);
+  }, [router]);
+
+  const handleIntegratedPartyPress = useCallback(
+    (party: LoadCenterIntegratedParty) => {
+      router.push(ROUTES.supplierDetail(party.id) as import("expo-router").Href);
+    },
+    [router],
+  );
 
   const handleAwardQuote = useCallback(async () => {
     if (!indentId || !indent || !selectedQuoteId) return;
@@ -608,7 +649,8 @@ export function IndentDetailScreen({
       ? awardedSupplierAmount
       : Number(indent.supplier_target ?? 0);
   const freight = formatINR(Number(indent.client_price ?? 0));
-  const supplierRate = formatINR(effectiveSupplierAmount);
+  const supplierTargetNum = Number(indent.supplier_target ?? 0);
+  const supplierTarget = formatINR(supplierTargetNum);
   const vehicleType = indent.vehicle_type || "—";
   const material = indent.load_type || "—";
   const weightKg =
@@ -622,10 +664,9 @@ export function IndentDetailScreen({
 
   const clientPriceNum = Number(indent.client_price ?? 0);
   const supplierNum = effectiveSupplierAmount;
-  // Margin % for supplier rate vs client price — owner-only (never derive from client_price for network viewers)
   const marginPct =
-    isOwner && clientPriceNum > 0 && supplierNum > 0
-      ? Math.round(((clientPriceNum - supplierNum) / clientPriceNum) * 100)
+    isOwner && clientPriceNum > 0 && supplierTargetNum > 0
+      ? Math.round(((clientPriceNum - supplierTargetNum) / clientPriceNum) * 100)
       : null;
   const hasMyPendingQuote = myQuoteStatus === "pending";
   const canSupplierBid =
@@ -678,6 +719,12 @@ export function IndentDetailScreen({
     ? "ASSIGN VEHICLE"
     : "ALLOCATE VEHICLE";
 
+  const showGiveLoadPartiesStrip =
+    isOwner &&
+    !["awarded", "completed", "deployed", "cancelled", "closed", "expired"].includes(
+      statusLower,
+    );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -726,141 +773,165 @@ export function IndentDetailScreen({
         </TouchableOpacity>
       </View>
 
-      {/* Scrollable content */}
-      <ScrollView
-        style={[styles.scroll, { backgroundColor: Theme.surface }]}
-        contentContainerStyle={[
-          styles.scrollContent,
-          compactHub && styles.scrollContentCompact,
-          { paddingBottom: 8 + footerReserve + insets.bottom },
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={Theme.darkBackground}
-          />
+      {/* Summary + bids (split on wide web, stacked on mobile) */}
+      <IndentReviewHubSplitLayout
+        useSplit={useSplitHub}
+        compact={hubDense}
+        stacked={stackedHub}
+        footerReserve={footerReserve}
+        insetsBottom={insets.bottom}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        summary={
+          <>
+            {statusLower === "draft" ? (
+              <View style={styles.draftBanner}>
+                <FontAwesome
+                  name="pencil-square-o"
+                  size={12}
+                  color={Theme.textPrimaryDark}
+                />
+                <Text style={styles.draftBannerText}>
+                  Draft saved. You can edit this indent and share it with network
+                  when ready.
+                </Text>
+              </View>
+            ) : null}
+
+            <IndentReviewHubCard
+              compact={hubDense}
+              stacked={stackedHub}
+              isOwner={isOwner}
+              typeLabel={isOwner ? "GIVE LOAD" : "GET LOAD"}
+              status={status}
+              isDirect={isDirect}
+              dateLabel={dateLabel}
+              origin={origin}
+              destination={destination}
+              vehicleType={vehicleType}
+              weightKg={weightKg}
+              material={material}
+              canCancelLoad={canCancelLoad}
+              cancelling={cancelling}
+              onCancelLoad={handleCancelLoad}
+              canEditLoad={canEditLoad}
+              onEditAll={handleEditAll}
+              suppressSupplierQuoteHero={useSplitHub && !isOwner}
+              primaryAmount={
+                isOwner
+                  ? freight
+                  : supplierNum > 0
+                    ? formatINR(supplierNum)
+                    : "—"
+              }
+              supplierRate={supplierTarget}
+              marginPct={marginPct}
+              client={{
+                displayName: clientEntityRawName,
+                avatarName: clientEntityRawName,
+                clientId: indent.client_id,
+                ownerOrgId: orgId,
+                shipperOrgId: indent.organization_id,
+                isOwner,
+              }}
+              quoteStatus={myQuote ? myQuoteStatus || "pending" : null}
+              quoteAmountInr={myQuote ? Number(myQuote.amount ?? 0) : null}
+              targetRateInr={Number(indent.supplier_target ?? 0)}
+              footerInsight={supplierFooterInsight}
+              alertInfo={supplierQuoteAlert}
+              onQuotePress={
+                useSplitHub && !isOwner
+                  ? undefined
+                  : canOpenQuoteModal
+                    ? openQuoteEntry
+                    : undefined
+              }
+              partiesStrip={
+                showGiveLoadPartiesStrip ? (
+                  <IndentGiveLoadPartiesStrip
+                    parties={integratedSuppliers}
+                    quotes={quotes}
+                    marginPct={marginPct}
+                    compact={hubDense}
+                    stacked={stackedHub}
+                    onAddParties={openIntegratedSuppliersNetwork}
+                    onPartyPress={handleIntegratedPartyPress}
+                  />
+                ) : undefined
+              }
+            >
+              {!useSplitHub && showSupplierPartySummaries ? (
+                <IndentSupplierPartySummary
+                  orgId={orgId}
+                  shipperName={clientEntityRawName}
+                  awardedQuoteInr={Number(myQuote?.amount ?? 0)}
+                  trip={linkedTrip}
+                  driverLabel={linkedTripPartyLabels.driver}
+                  vehicleLabel={linkedTripPartyLabels.vehicle}
+                  allocationPending={!linkedTripPartyLabels.isAllocated}
+                />
+              ) : null}
+            </IndentReviewHubCard>
+          </>
         }
-      >
-        {statusLower === "draft" ? (
-          <View style={styles.draftBanner}>
-            <FontAwesome
-              name="pencil-square-o"
-              size={12}
-              color={Theme.textPrimaryDark}
-            />
-            <Text style={styles.draftBannerText}>
-              Draft saved. You can edit this indent and share it with network
-              when ready.
-            </Text>
-          </View>
-        ) : null}
-
-        <IndentReviewHubCard
-          compact={compactHub}
-          isOwner={isOwner}
-          typeLabel={isOwner ? "GIVE LOAD" : "GET LOAD"}
-          status={status}
-          isDirect={isDirect}
-          dateLabel={dateLabel}
-          origin={origin}
-          destination={destination}
-          vehicleType={vehicleType}
-          weightKg={weightKg}
-          material={material}
-          canCancelLoad={canCancelLoad}
-          cancelling={cancelling}
-          onCancelLoad={handleCancelLoad}
-          canEditLoad={canEditLoad}
-          onEditAll={handleEditAll}
-          primaryAmount={
-            isOwner
-              ? freight
-              : supplierNum > 0
-                ? supplierRate
-                : "—"
-          }
-          supplierRate={supplierRate}
-          marginPct={marginPct}
-          client={{
-            displayName: clientEntityRawName,
-            avatarName: clientEntityRawName,
-            clientId: indent.client_id,
-            ownerOrgId: orgId,
-            shipperOrgId: indent.organization_id,
-            isOwner,
-          }}
-          quoteStatus={myQuote ? myQuoteStatus || "pending" : null}
-          quoteAmountInr={myQuote ? Number(myQuote.amount ?? 0) : null}
-          targetRateInr={Number(indent.supplier_target ?? 0)}
-          footerInsight={supplierFooterInsight}
-          alertInfo={supplierQuoteAlert}
-          onQuotePress={canOpenQuoteModal ? openQuoteEntry : undefined}
-        >
-          {showSupplierPartySummaries ? (
-            <IndentSupplierPartySummary
-              orgId={orgId}
-              shipperName={clientEntityRawName}
-              awardedQuoteInr={Number(myQuote?.amount ?? 0)}
-              trip={linkedTrip}
-              driverLabel={linkedTripPartyLabels.driver}
-              vehicleLabel={linkedTripPartyLabels.vehicle}
-              allocationPending={!linkedTripPartyLabels.isAllocated}
-            />
-          ) : null}
-        </IndentReviewHubCard>
-
-        {/* Live Bids */}
-        <View
-          style={[styles.sectionHeader, compactHub && styles.sectionHeaderCompact]}
-        >
-          <LiveBidsSectionHeader
+        bidsHeader={
+          <IndentReviewHubBidsHeader
             title={isOwner ? "LIVE BIDS" : "QUOTE STATUS"}
-            count={liveBidsCount}
-            isListening={isListeningForBids}
+            liveBidsCount={liveBidsCount}
+            isListeningForBids={isListeningForBids}
             showTrophy={
               statusLower === "awarded" ||
               statusLower === "completed" ||
               statusLower === "deployed"
             }
+            showHammer={liveBidsCount > 0}
           />
-          {liveBidsCount > 0 ? <BidReceivedHammer visible /> : null}
-        </View>
-
-        {isOwner && quotes.length === 0 ? (
-          <IndentBidsAwaitingPanel
-            compact={compactHub}
+        }
+        bidsBody={
+          <IndentReviewHubBidsBody
+            isOwner={isOwner}
+            compact={hubDense}
+            stacked={stackedHub}
+            title={isOwner ? "LIVE BIDS" : "QUOTE STATUS"}
+            liveBidsCount={liveBidsCount}
+            isListeningForBids={isListeningForBids}
+            showTrophy={
+              statusLower === "awarded" ||
+              statusLower === "completed" ||
+              statusLower === "deployed"
+            }
+            showHammer={liveBidsCount > 0}
+            quotes={quotes}
+            clientPriceInr={clientPriceNum}
+            targetRateInr={effectiveSupplierAmount}
+            pickupDateIso={indent.pickup_date}
+            selectedQuoteId={selectedQuoteId}
+            onSelectQuote={setSelectedQuoteId}
+            canAward={canAward}
             canBroadcast={canBroadcast}
             isListening={statusLower === "broadcast" || statusLower === "open"}
             isBroadcasting={isBroadcasting}
             sharingDraft={sharingDraft}
             broadcastError={broadcastError}
             onBroadcast={handleBroadcast}
+            onShareStory={isOwner ? handleOpenShareStory : undefined}
+            onShareWhatsApp={isOwner ? handleShareWhatsApp : undefined}
+            myQuote={myQuote}
+            supplierQuoteActionHint={supplierQuoteActionHint}
+            supplierQuoteAlert={supplierQuoteAlert}
+            canOpenQuoteModal={canOpenQuoteModal}
+            onQuotePress={openQuoteEntry}
+            showSupplierPartySummaries={showSupplierPartySummaries}
+            orgId={orgId}
+            shipperName={clientEntityRawName}
+            linkedTrip={linkedTrip ?? null}
+            driverLabel={linkedTripPartyLabels.driver}
+            vehicleLabel={linkedTripPartyLabels.vehicle}
+            allocationPending={!linkedTripPartyLabels.isAllocated}
+            targetRateInrSupplier={Number(indent.supplier_target ?? 0)}
           />
-        ) : isOwner ? (
-          <View style={styles.offersListWrap}>
-            <IndentLiveBidsPanel
-              quotes={quotes}
-              clientPriceInr={clientPriceNum}
-              targetRateInr={effectiveSupplierAmount}
-              pickupDateIso={indent.pickup_date}
-              selectedQuoteId={selectedQuoteId}
-              onSelectQuote={setSelectedQuoteId}
-              canSelect={canAward}
-            />
-          </View>
-        ) : !myQuote && !canOpenQuoteModal ? (
-          <Text style={styles.supplierQuoteSectionHint}>
-            {supplierQuoteActionHint === "locked"
-              ? "Bidding is closed for this load."
-              : supplierQuoteActionHint === "completed"
-                ? "This load is completed."
-                : null}
-          </Text>
-        ) : null}
-      </ScrollView>
+        }
+      />
 
       {/* Fixed footer (light style) */}
       <View
@@ -1047,6 +1118,17 @@ export function IndentDetailScreen({
                 transporters in your network.
               </Text>
               <TouchableOpacity
+                style={styles.modalStoryBtn}
+                onPress={() => {
+                  setIsBroadcasting(false);
+                  handleOpenShareStory();
+                }}
+                activeOpacity={0.9}
+              >
+                <FontAwesome name="bolt" size={14} color={Theme.brandBlueInk} />
+                <Text style={styles.modalStoryBtnText}>Share as Pulse story</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={styles.modalDoneBtn}
                 onPress={() => setIsBroadcasting(false)}
                 activeOpacity={0.9}
@@ -1078,6 +1160,16 @@ export function IndentDetailScreen({
           setQuoteEntryError("Enter an amount greater than 0.")
         }
       />
+
+      {isOwner && orgId ? (
+        <ShareLoadSheet
+          visible={shareStorySheetVisible}
+          indent={indent}
+          orgId={orgId}
+          onClose={() => setShareStorySheetVisible(false)}
+          onSuccess={handleStoryShareSuccess}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1855,6 +1947,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
     lineHeight: 18,
+  },
+  modalStoryBtn: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    marginBottom: 10,
+    borderRadius: 14,
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+  },
+  modalStoryBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.brandBlueInk,
   },
   modalDoneBtn: {
     width: "100%",

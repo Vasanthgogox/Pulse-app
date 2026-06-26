@@ -31,8 +31,8 @@ export const NETWORK_LOADS_QUICK_ACTIONS: NetworkLoadsQuickAction[] = [
     aspect: 600 / 463,
     accent: Theme.brandBlueInk,
     wash: "rgba(205, 233, 247, 0.45)",
-    lottie: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
-    lottieScale: 1.1,
+    lottie: require("@/assets/Animated folder/signals.json"),
+    lottieScale: 1.14,
   },
   {
     id: "get",
@@ -44,7 +44,7 @@ export const NETWORK_LOADS_QUICK_ACTIONS: NetworkLoadsQuickAction[] = [
     accent: "#059669",
     wash: "rgba(16, 185, 129, 0.08)",
     lottie: require("@/assets/Animated folder/auction.json"),
-    lottieScale: 1.08,
+    lottieScale: 1.12,
   },
 ];
 

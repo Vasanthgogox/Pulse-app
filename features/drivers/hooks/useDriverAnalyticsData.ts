@@ -142,6 +142,7 @@ export function useDriverAnalyticsData(driverId: string) {
     driverRequests,
     driverOffer,
     driverRatings,
+    orgId: currentOrganization?.id ?? null,
     loading,
     error,
     refreshing,

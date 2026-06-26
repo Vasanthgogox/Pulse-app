@@ -1,0 +1,498 @@
+import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import { BidReceivedHammer } from "@/features/indents/components/BidReceivedHammer";
+import {
+  IndentBidsAwaitingPanel,
+  LiveBidsSectionHeader,
+} from "@/features/indents/components/IndentBidsAwaitingPanel";
+import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
+import {
+  IndentSupplierQuoteCard,
+  type SupplierQuoteActionHint,
+} from "@/features/indents/components/IndentSupplierQuoteCard";
+import { IndentSupplierPartySummary } from "@/features/indents/components/IndentSupplierPartySummary";
+import type { DirectQuoteRow } from "@/features/indents/services/direct-quotes.service";
+import {
+  indentReviewHubSplitLayout as splitStyles,
+} from "@/features/indents/styles/indentReviewHubStyles";
+import type { IndentBidAlertInfo } from "@/features/indents/utils/indentBidAlert.util";
+import type { TripRow } from "@/features/trips/services/trips.service";
+import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
+import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";
+import Feather from "@expo/vector-icons/Feather";
+import type { ReactNode } from "react";
+import {
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+export type IndentReviewHubBidsPaneProps = {
+  isOwner: boolean;
+  compact: boolean;
+  stacked: boolean;
+  title: string;
+  liveBidsCount: number;
+  isListeningForBids: boolean;
+  showTrophy: boolean;
+  showHammer: boolean;
+  // Owner — give load
+  quotes: DirectQuoteRow[];
+  clientPriceInr: number;
+  targetRateInr: number;
+  pickupDateIso: string | null;
+  selectedQuoteId: string | null;
+  onSelectQuote: (id: string | null) => void;
+  canAward: boolean;
+  canBroadcast: boolean;
+  isListening: boolean;
+  isBroadcasting: boolean;
+  sharingDraft: boolean;
+  sharingStory?: boolean;
+  broadcastError: string | null;
+  onBroadcast?: () => void;
+  onShareStory?: () => void;
+  onShareWhatsApp?: () => void;
+  // Supplier — get load
+  myQuote: DirectQuoteRow | null;
+  supplierQuoteActionHint: SupplierQuoteActionHint;
+  supplierQuoteAlert: IndentBidAlertInfo | null;
+  canOpenQuoteModal: boolean;
+  onQuotePress?: () => void;
+  showSupplierPartySummaries: boolean;
+  orgId: string | null;
+  shipperName: string;
+  linkedTrip: TripRow | null | undefined;
+  driverLabel: string;
+  vehicleLabel: string;
+  allocationPending: boolean;
+  targetRateInrSupplier: number;
+};
+
+function SupplierBidInvitePanel({
+  compact,
+  onQuotePress,
+}: {
+  compact: boolean;
+  onQuotePress: () => void;
+}) {
+  return (
+    <View style={[styles.supplierInviteCard, compact && styles.supplierInviteCardCompact]}>
+      <View style={styles.supplierInviteHero}>
+        <View style={[styles.lottieWrap, compact && styles.lottieWrapCompact]}>
+          <TinyEmptyLottie source={EMPTY_STATE_LOTTIE.auction} size={compact ? 48 : 56} />
+        </View>
+        <Text style={[styles.supplierInviteTitle, compact && styles.supplierInviteTitleCompact]}>
+          Place your bid
+        </Text>
+        <Text style={[styles.supplierInviteBody, compact && styles.supplierInviteBodyCompact]}>
+          Review the load on the left, then submit a competitive quote. Your bid
+          status updates here in real time.
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.bidNowBtn, compact && styles.bidNowBtnCompact]}
+        onPress={onQuotePress}
+        activeOpacity={0.9}
+        accessibilityRole="button"
+        accessibilityLabel="Bid now"
+      >
+        <Feather name="send" size={14} color={Theme.buttonPrimaryText} />
+        <Text style={styles.bidNowBtnText}>Bid now</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export function IndentReviewHubBidsHeader({
+  title,
+  liveBidsCount,
+  isListeningForBids,
+  showTrophy,
+  showHammer,
+}: Pick<
+  IndentReviewHubBidsPaneProps,
+  "title" | "liveBidsCount" | "isListeningForBids" | "showTrophy" | "showHammer"
+>) {
+  return (
+    <>
+      <LiveBidsSectionHeader
+        title={title}
+        count={liveBidsCount}
+        isListening={isListeningForBids}
+        showTrophy={showTrophy}
+      />
+      {showHammer ? <BidReceivedHammer visible /> : null}
+    </>
+  );
+}
+
+export function IndentReviewHubBidsBody(props: IndentReviewHubBidsPaneProps) {
+  const {
+    isOwner,
+    compact,
+    stacked,
+    quotes,
+    clientPriceInr,
+    targetRateInr,
+    pickupDateIso,
+    selectedQuoteId,
+    onSelectQuote,
+    canAward,
+    canBroadcast,
+    isListening,
+    isBroadcasting,
+    sharingDraft,
+    sharingStory,
+    broadcastError,
+    onBroadcast,
+    onShareStory,
+    onShareWhatsApp,
+    myQuote,
+    supplierQuoteActionHint,
+    supplierQuoteAlert,
+    canOpenQuoteModal,
+    onQuotePress,
+    showSupplierPartySummaries,
+    orgId,
+    shipperName,
+    linkedTrip,
+    driverLabel,
+    vehicleLabel,
+    allocationPending,
+    targetRateInrSupplier,
+  } = props;
+
+  if (isOwner) {
+    if (quotes.length === 0) {
+      return (
+        <View
+          style={[
+            styles.awaitingPaneShell,
+            stacked && styles.awaitingPaneShellStacked,
+          ]}
+        >
+          <IndentBidsAwaitingPanel
+            compact={compact}
+            paneFill={!stacked}
+            stacked={stacked}
+            canBroadcast={canBroadcast}
+            isListening={isListening}
+            isBroadcasting={isBroadcasting}
+            sharingDraft={sharingDraft}
+            sharingStory={sharingStory}
+            broadcastError={broadcastError}
+            onBroadcast={onBroadcast}
+            onShareStory={onShareStory}
+            onShareWhatsApp={onShareWhatsApp}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.ownerBidsWrap}>
+        <IndentLiveBidsPanel
+          quotes={quotes}
+          clientPriceInr={clientPriceInr}
+          targetRateInr={targetRateInr}
+          pickupDateIso={pickupDateIso}
+          selectedQuoteId={selectedQuoteId}
+          onSelectQuote={onSelectQuote}
+          canSelect={canAward}
+        />
+      </View>
+    );
+  }
+
+  if (myQuote) {
+    return (
+      <IndentSupplierQuoteCard
+        quote={myQuote}
+        shipperName={shipperName}
+        shipperOrgId={orgId}
+        targetRateInr={targetRateInrSupplier}
+        alertInfo={supplierQuoteAlert}
+        canUpdateBid={canOpenQuoteModal}
+        actionHint={supplierQuoteActionHint}
+        onPress={canOpenQuoteModal ? onQuotePress : undefined}
+      >
+        {showSupplierPartySummaries ? (
+          <IndentSupplierPartySummary
+            orgId={orgId}
+            shipperName={shipperName}
+            awardedQuoteInr={Number(myQuote.amount ?? 0)}
+            trip={linkedTrip ?? null}
+            driverLabel={driverLabel}
+            vehicleLabel={vehicleLabel}
+            allocationPending={allocationPending}
+          />
+        ) : null}
+      </IndentSupplierQuoteCard>
+    );
+  }
+
+  if (canOpenQuoteModal && onQuotePress) {
+    return (
+      <SupplierBidInvitePanel compact={compact} onQuotePress={onQuotePress} />
+    );
+  }
+
+  if (supplierQuoteActionHint === "locked") {
+    return (
+      <Text style={styles.supplierHint}>Bidding is closed for this load.</Text>
+    );
+  }
+  if (supplierQuoteActionHint === "completed") {
+    return (
+      <Text style={styles.supplierHint}>This load is completed.</Text>
+    );
+  }
+
+  return null;
+}
+
+type SplitLayoutProps = {
+  useSplit: boolean;
+  compact: boolean;
+  stacked: boolean;
+  summary: ReactNode;
+  bidsHeader: ReactNode;
+  bidsBody: ReactNode;
+  footerReserve: number;
+  insetsBottom: number;
+  refreshing: boolean;
+  onRefresh: () => void;
+};
+
+export function IndentReviewHubSplitLayout({
+  useSplit,
+  compact,
+  stacked,
+  summary,
+  bidsHeader,
+  bidsBody,
+  footerReserve,
+  insetsBottom,
+  refreshing,
+  onRefresh,
+}: SplitLayoutProps) {
+  const bottomPad = footerReserve + insetsBottom + 8;
+
+  if (!useSplit) {
+    return (
+      <ScrollView
+        style={styles.stackScroll}
+        contentContainerStyle={[
+          splitStyles.summaryPaneContent,
+          compact && splitStyles.summaryPaneContentCompact,
+          stacked && splitStyles.summaryPaneContentStacked,
+          { paddingBottom: bottomPad },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Theme.darkBackground}
+          />
+        }
+      >
+        {summary}
+        <View
+          style={[
+            styles.stackBidsSection,
+            compact && styles.stackBidsSectionCompact,
+          ]}
+        >
+          <View style={[styles.stackBidsHeader, compact && styles.stackBidsHeaderCompact]}>
+            {bidsHeader}
+          </View>
+          {bidsBody}
+        </View>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <View style={splitStyles.splitRow}>
+      <ScrollView
+        style={splitStyles.summaryPane}
+        contentContainerStyle={[
+          splitStyles.summaryPaneContent,
+          compact && splitStyles.summaryPaneContentCompact,
+          { paddingBottom: bottomPad },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Theme.darkBackground}
+          />
+        }
+      >
+        {summary}
+      </ScrollView>
+
+      <View style={splitStyles.bidsPane}>
+        <View style={splitStyles.bidsPaneHeader}>{bidsHeader}</View>
+        <ScrollView
+          style={splitStyles.bidsPaneScroll}
+          contentContainerStyle={[
+            splitStyles.bidsPaneScrollContent,
+            compact && splitStyles.bidsPaneScrollContentCompact,
+            { paddingBottom: bottomPad },
+          ]}
+          showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
+        >
+          {bidsBody}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  stackScroll: {
+    flex: 1,
+    backgroundColor: Theme.surface,
+  },
+  stackBidsSection: {
+    marginTop: 6,
+    paddingTop: 10,
+    gap: 8,
+    alignSelf: "stretch",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
+    marginHorizontal: -Layout.screenPaddingHorizontal,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: 4,
+  },
+  stackBidsSectionCompact: {
+    marginTop: 4,
+    paddingTop: 8,
+    gap: 6,
+  },
+  stackBidsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minWidth: 0,
+    paddingBottom: 2,
+  },
+  stackBidsHeaderCompact: {
+    paddingBottom: 0,
+  },
+  ownerBidsWrap: {
+    flexGrow: 1,
+    minHeight: 120,
+  },
+  awaitingPaneShell: {
+    alignSelf: "stretch",
+    width: "100%",
+    paddingTop: 2,
+  },
+  awaitingPaneShellStacked: {
+    paddingTop: 0,
+  },
+  supplierHint: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 17,
+    paddingHorizontal: 2,
+  },
+  supplierInviteCard: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    gap: 12,
+    flexGrow: 1,
+    minHeight: 280,
+    justifyContent: "space-between",
+    ...Platform.select({
+      web: { boxShadow: "0 2px 12px rgba(15,23,42,0.06)" } as object,
+      default: {},
+    }),
+  },
+  supplierInviteCardCompact: {
+    minHeight: 220,
+    paddingVertical: 12,
+  },
+  supplierInviteHero: {
+    alignItems: "center",
+    gap: 8,
+  },
+  lottieWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lottieWrapCompact: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+  },
+  supplierInviteTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+    textAlign: "center",
+  },
+  supplierInviteTitleCompact: {
+    fontSize: 12,
+  },
+  supplierInviteBody: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 16,
+    textAlign: "center",
+    maxWidth: 320,
+  },
+  supplierInviteBodyCompact: {
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  bidNowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: 999,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    minHeight: 42,
+  },
+  bidNowBtnCompact: {
+    minHeight: 38,
+    paddingVertical: 9,
+  },
+  bidNowBtnText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.buttonPrimaryText,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+});

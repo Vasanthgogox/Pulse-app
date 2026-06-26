@@ -15,7 +15,8 @@ export type TripMarginHeroProps = {
   layout?: "mobile" | "desktop";
 };
 
-const LOTTIE_SIZE = { mobile: 36, desktop: 44 } as const;
+const LOTTIE_SIZE = { mobile: 52, desktop: 64 } as const;
+const LOTTIE_RENDER_SCALE = 1.75;
 const LOTTIE_SPEED: Record<TripMarginTone, number> = {
   profit: 0.9,
   loss: 1,
@@ -35,7 +36,7 @@ export const TripMarginHero = memo(function TripMarginHero({
   const isDesktop = layout === "desktop";
   const tone = tripMarginTone(amount);
   const lottieSize = isDesktop ? LOTTIE_SIZE.desktop : LOTTIE_SIZE.mobile;
-  const lottieRenderSize = Math.round(lottieSize * 1.12);
+  const lottieRenderSize = Math.round(lottieSize * LOTTIE_RENDER_SCALE);
 
   return (
     <View
@@ -54,7 +55,11 @@ export const TripMarginHero = memo(function TripMarginHero({
           loop
           speed={LOTTIE_SPEED[tone]}
           resizeMode="contain"
-          style={{ width: lottieRenderSize, height: lottieRenderSize }}
+          style={{
+            width: lottieRenderSize,
+            height: lottieRenderSize,
+            position: "absolute",
+          }}
         />
       </View>
 
@@ -109,8 +114,8 @@ const styles = StyleSheet.create({
   lottieSlot: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 6,
-    overflow: "hidden",
+    marginBottom: 8,
+    overflow: "visible",
   },
   label: {
     fontSize: 8,

@@ -41,7 +41,7 @@ export const ClientAnalyticsInsightRow = memo(function ClientAnalyticsInsightRow
     <View style={[styles.row, toneStyle]}>
       {lottie ? (
         <View style={styles.lottieSlot}>
-          <ClientAnalyticsKpiLottie source={lottie} size={28} />
+          <ClientAnalyticsKpiLottie source={lottie} size={34} />
         </View>
       ) : null}
       <Text style={styles.text}>{clean}</Text>

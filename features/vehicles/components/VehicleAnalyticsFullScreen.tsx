@@ -1,5 +1,6 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
+import { Suspense, lazy } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -11,11 +12,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
 import { isPulseDesktop } from "@/components/analytics/pulse/pulseStyles";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { VehicleAnalyticsTab } from "./analytics/VehicleAnalyticsTab";
+import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { useVehicleAnalyticsData } from "../hooks/useVehicleAnalyticsData";
+
+const VehicleAnalyticsTab = lazy(() =>
+  import("./analytics/VehicleAnalyticsTab").then((m) => ({ default: m.default })),
+);
 
 export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string }) {
   const router = useRouter();
@@ -57,7 +63,13 @@ export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string })
   }
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.wrap,
+        desktop && styles.wrapDesktop,
+        { paddingTop: insets.top },
+      ]}
+    >
       <View style={styles.header}>
         <Pressable style={styles.headerIconBtn} onPress={() => router.back()} hitSlop={8}>
           <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
@@ -74,11 +86,11 @@ export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string })
       </View>
 
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, desktop && styles.scrollDesktop]}
         contentContainerStyle={[
           styles.scrollContent,
           desktop && styles.scrollContentDesktop,
-          { paddingBottom: insets.bottom + Layout.screenPaddingHorizontal },
+          { paddingBottom: insets.bottom + (desktop ? 24 : Layout.screenPaddingHorizontal) },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -89,13 +101,15 @@ export function VehicleAnalyticsFullScreen({ vehicleId }: { vehicleId: string })
           />
         }
       >
-        <VehicleAnalyticsTab
-          missionRows={missionRows}
-          vehicleTrips={vehicleTrips}
-          vehicleTransactions={vehicleTransactions}
-          vehicle={vehicle}
-          orgId={orgId}
-        />
+        <Suspense fallback={<LazySuspenseNullFallback />}>
+          <VehicleAnalyticsTab
+            missionRows={missionRows}
+            vehicleTrips={vehicleTrips}
+            vehicleTransactions={vehicleTransactions}
+            vehicle={vehicle}
+            orgId={orgId}
+          />
+        </Suspense>
       </ScrollView>
     </View>
   );
@@ -105,6 +119,9 @@ const styles = StyleSheet.create({
   wrap: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
+  },
+  wrapDesktop: {
+    backgroundColor: METRONIC.bodyBg,
   },
   header: {
     flexDirection: "row",
@@ -147,13 +164,17 @@ const styles = StyleSheet.create({
     borderColor: "#C7D2FE",
   },
   scroll: { flex: 1 },
+  scrollDesktop: {
+    backgroundColor: METRONIC.bodyBg,
+  },
   scrollContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 16,
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   scrollContentDesktop: {
     paddingHorizontal: 0,
     paddingTop: 0,
+    flexGrow: 1,
   },
   errorWrap: { padding: 16 },
   errorText: { fontSize: 15, color: Theme.textSecondary },

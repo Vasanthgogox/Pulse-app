@@ -3,6 +3,8 @@
  * Feature chips orbit the hero illustration — top, left, and right.
  */
 import Theme from "@/constants/Theme";
+import { HubPromoHeroLottie } from "@/components/hub/HubPromoLottie";
+import type { AnimationObject } from "lottie-react-native";
 import type { ComponentType, ReactNode } from "react";
 import {
   Pressable,
@@ -27,7 +29,9 @@ export type HubEmptyPromoLayoutProps = {
   title: string;
   description: string;
   features: HubEmptyPromoFeature[];
-  Illustration: ComponentType<SvgProps>;
+  Illustration?: ComponentType<SvgProps>;
+  /** When set, replaces the SVG hero with a Lottie animation. */
+  HeroLottie?: AnimationObject;
   illustrationAspect: number;
   fitIllustration: (
     boxW: number,
@@ -40,6 +44,12 @@ export type HubEmptyPromoLayoutProps = {
   kickerColor?: string;
   ctaColor?: string;
   illustrationScale?: number;
+  /** Trips hub: single large hero only. Load center: orbit chips around hero. */
+  layoutMode?: "orbit" | "hero";
+  /** Inner Lottie scale inside the fixed hero slot (visual normalization). */
+  heroRenderScale?: number;
+  /** Fixed hero square size when layoutMode is hero (overrides responsive box). */
+  heroSlotSize?: number;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -48,7 +58,7 @@ function OrbitChip({
   variant,
 }: {
   feature: HubEmptyPromoFeature;
-  variant: "top" | "side" | "bottom";
+  variant: "top" | "side" | "bottom" | "corner";
 }) {
   return (
     <View
@@ -57,13 +67,14 @@ function OrbitChip({
         variant === "top" && styles.featureChipTop,
         variant === "side" && styles.featureChipSide,
         variant === "bottom" && styles.featureChipBottom,
+        variant === "corner" && styles.featureChipCorner,
       ]}
     >
       {feature.icon}
       <Text
         style={[
           styles.featureLabel,
-          variant === "side" && styles.featureLabelSide,
+          (variant === "side" || variant === "corner") && styles.featureLabelCorner,
         ]}
         numberOfLines={2}
       >
@@ -78,6 +89,7 @@ export function HubEmptyPromoLayout({
   description,
   features,
   Illustration,
+  HeroLottie,
   illustrationAspect,
   fitIllustration,
   ctaLabel,
@@ -86,29 +98,51 @@ export function HubEmptyPromoLayout({
   kickerColor = Theme.primary,
   ctaColor = Theme.primary,
   illustrationScale = 1,
+  layoutMode = "orbit",
+  heroRenderScale = 1,
+  heroSlotSize,
   style,
 }: HubEmptyPromoLayoutProps) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const compact = width < 480;
   const showCta = Boolean(onCtaPress && ctaLabel);
+  const heroOnly = layoutMode === "hero";
 
-  const illusBoxW = isDesktop
-    ? Math.min(340, Math.round(width * 0.28))
+  const clusterW = compact
+    ? Math.min(300, width - 36)
+    : isDesktop
+      ? Math.min(400, width - 72)
+      : Math.min(340, width - 48);
+
+  const heroBoxW = heroOnly
+    ? heroSlotSize ??
+      (compact
+        ? 200
+        : isDesktop
+          ? 256
+          : 228)
+    : Math.round(clusterW * 0.55);
+  const heroBoxH = heroOnly
+    ? heroSlotSize ??
+      (compact
+        ? 200
+        : isDesktop
+          ? 256
+          : 228)
     : compact
-      ? Math.min(200, width - 120)
-      : Math.min(260, width - 100);
-  const illusBoxH = isDesktop
-    ? Math.min(320, Math.round(width * 0.26))
-    : compact
-      ? 150
-      : 180;
-  const safeScale = Math.min(1.2, Math.max(0.6, illustrationScale));
-  const illusSize = fitIllustration(
-    illusBoxW * safeScale,
-    illusBoxH * safeScale,
-    illustrationAspect,
-  );
+      ? 96
+      : isDesktop
+        ? 120
+        : 108;
+  const safeScale = heroOnly ? 1 : Math.min(1, Math.max(0.55, illustrationScale));
+  const illusSize = heroOnly
+    ? { width: heroBoxW, height: heroBoxH }
+    : fitIllustration(
+        heroBoxW * safeScale,
+        heroBoxH * safeScale,
+        illustrationAspect,
+      );
 
   const [topLeft, topRight, flankLeft, flankRight] = features;
 
@@ -134,46 +168,36 @@ export function HubEmptyPromoLayout({
 
         <View
           style={[
-            styles.orbitStage,
-            isDesktop && styles.orbitStageDesktop,
-            compact && styles.orbitStageCompact,
+            heroOnly ? styles.heroStage : styles.orbitCluster,
+            heroOnly && { minHeight: illusSize.height },
+            !heroOnly && { width: clusterW },
+            !heroOnly && compact && styles.orbitClusterCompact,
           ]}
         >
-          {topLeft && topRight ? (
-            <View style={[styles.orbitTop, isDesktop && styles.orbitTopDesktop]}>
-              <OrbitChip feature={topLeft} variant="top" />
-              <OrbitChip feature={topRight} variant="top" />
+          {!heroOnly && topLeft && topRight ? (
+            <View style={styles.orbitRow}>
+              <OrbitChip feature={topLeft} variant="corner" />
+              <OrbitChip feature={topRight} variant="corner" />
             </View>
           ) : null}
 
-          <View
-            style={[
-              styles.orbitMiddle,
-              isDesktop && styles.orbitMiddleDesktop,
-              compact && styles.orbitMiddleCompact,
-            ]}
-          >
-            {isDesktop && flankLeft ? (
-              <View style={styles.orbitFlankLeft}>
-                <OrbitChip feature={flankLeft} variant="side" />
-              </View>
-            ) : null}
-
-            <View style={[styles.hero, isDesktop && styles.heroDesktop]}>
+          <View style={[styles.hero, heroOnly && styles.heroLarge]}>
+            {HeroLottie ? (
+              <HubPromoHeroLottie
+                source={HeroLottie}
+                width={illusSize.width}
+                height={illusSize.height}
+                renderScale={heroRenderScale}
+              />
+            ) : Illustration ? (
               <Illustration width={illusSize.width} height={illusSize.height} />
-            </View>
-
-            {isDesktop && flankRight ? (
-              <View style={styles.orbitFlankRight}>
-                <OrbitChip feature={flankRight} variant="side" />
-              </View>
             ) : null}
           </View>
 
-          {!isDesktop && flankLeft && flankRight ? (
-            <View style={[styles.orbitBottom, compact && styles.orbitBottomCompact]}>
-              <OrbitChip feature={flankLeft} variant="bottom" />
-              <OrbitChip feature={flankRight} variant="bottom" />
+          {!heroOnly && flankLeft && flankRight ? (
+            <View style={styles.orbitRow}>
+              <OrbitChip feature={flankLeft} variant="corner" />
+              <OrbitChip feature={flankRight} variant="corner" />
             </View>
           ) : null}
         </View>
@@ -199,34 +223,33 @@ export function HubEmptyPromoLayout({
 const styles = StyleSheet.create({
   shell: {
     width: "100%",
+    maxWidth: 520,
+    alignSelf: "center",
   },
   shellDesktop: {
-    maxWidth: 760,
-    alignSelf: "center",
+    maxWidth: 560,
   },
   body: {
     alignItems: "center",
-    gap: 16,
-    paddingHorizontal: 8,
+    gap: 14,
+    paddingHorizontal: 12,
     paddingVertical: 12,
   },
   bodyDesktop: {
-    gap: 20,
-    paddingVertical: 24,
-    paddingHorizontal: 12,
+    gap: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
   },
   copyHeader: {
     width: "100%",
     alignItems: "center",
-    gap: 8,
-    maxWidth: 520,
-    paddingHorizontal: 12,
-    marginBottom: 4,
+    gap: 6,
+    maxWidth: 440,
+    paddingHorizontal: 4,
   },
   copyHeaderDesktop: {
-    maxWidth: 560,
-    gap: 10,
-    marginBottom: 6,
+    maxWidth: 480,
+    gap: 8,
   },
   kicker: {
     fontSize: 9,
@@ -236,112 +259,68 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
-    letterSpacing: -0.45,
-    lineHeight: 26,
+    letterSpacing: -0.4,
+    lineHeight: 24,
     textAlign: "center",
-    maxWidth: 480,
+    maxWidth: 400,
   },
   titleDesktop: {
-    fontSize: 24,
-    fontWeight: "600",
-    lineHeight: 30,
-    letterSpacing: -0.55,
-    maxWidth: 520,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.5,
+    maxWidth: 440,
   },
   description: {
     fontSize: 11,
     fontWeight: "400",
     color: Theme.textSecondary,
-    lineHeight: 17,
+    lineHeight: 16,
     textAlign: "center",
-    maxWidth: 420,
+    maxWidth: 380,
   },
   descriptionDesktop: {
     fontSize: 12,
-    lineHeight: 18,
-    maxWidth: 460,
+    lineHeight: 17,
+    maxWidth: 420,
   },
-  orbitStage: {
-    width: "100%",
+  orbitCluster: {
+    alignSelf: "center",
     alignItems: "center",
     gap: 10,
-    maxWidth: 520,
+    overflow: "visible",
   },
-  orbitStageDesktop: {
-    maxWidth: 680,
-    gap: 12,
-  },
-  orbitStageCompact: {
-    maxWidth: 360,
-    gap: 8,
-  },
-  orbitTop: {
+  heroStage: {
     width: "100%",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    paddingHorizontal: 4,
-    gap: 8,
-  },
-  orbitTopDesktop: {
-    paddingHorizontal: 24,
-    maxWidth: 560,
-    alignSelf: "center",
-  },
-  orbitMiddle: {
-    width: "100%",
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 4,
   },
-  orbitMiddleDesktop: {
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 280,
+  orbitClusterCompact: {
+    gap: 6,
   },
-  orbitMiddleCompact: {
-    minHeight: 160,
-  },
-  orbitFlankLeft: {
-    flex: 1,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    paddingRight: 6,
-    minWidth: 0,
-  },
-  orbitFlankRight: {
-    flex: 1,
-    alignItems: "flex-start",
-    justifyContent: "center",
-    paddingLeft: 6,
-    minWidth: 0,
-  },
-  orbitBottom: {
+  orbitRow: {
     width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    paddingHorizontal: 4,
-    gap: 8,
-  },
-  orbitBottomCompact: {
-    paddingHorizontal: 0,
+    gap: 10,
   },
   hero: {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
-  heroDesktop: {
-    paddingHorizontal: 4,
+  heroLarge: {
+    width: "100%",
+    paddingVertical: 4,
   },
   featureChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     maxWidth: 148,
   },
   featureChipTop: {
@@ -351,25 +330,33 @@ const styles = StyleSheet.create({
   featureChipSide: {
     flexDirection: "column",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     maxWidth: 108,
   },
   featureChipBottom: {
     flex: 1,
     maxWidth: 160,
   },
+  featureChipCorner: {
+    flex: 1,
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: 132,
+    minWidth: 0,
+  },
   featureLabel: {
     flex: 1,
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "500",
     color: Theme.textMuted,
-    lineHeight: 11,
+    lineHeight: 12,
     letterSpacing: 0.02,
   },
-  featureLabelSide: {
+  featureLabelCorner: {
     flex: 0,
     textAlign: "center",
-    maxWidth: 96,
+    maxWidth: 108,
   },
   ctaInline: {
     marginTop: 4,

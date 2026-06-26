@@ -55,8 +55,14 @@ export type IndentReviewHubCardProps = {
   footerInsight?: IndentBidFooterInsight | null;
   alertInfo?: IndentBidAlertInfo | null;
   onQuotePress?: () => void;
+  /** When true (GET LOAD split layout), quote hero moves to the bids pane. */
+  suppressSupplierQuoteHero?: boolean;
   /** Tighter layout for indent detail on smaller viewports. */
   compact?: boolean;
+  /** Stacked mobile layout (summary above bids). */
+  stacked?: boolean;
+  /** Owner give-load: integrated supplier strip below shipment profile. */
+  partiesStrip?: ReactNode;
   children?: ReactNode;
 };
 
@@ -138,10 +144,16 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   footerInsight,
   alertInfo,
   onQuotePress,
+  suppressSupplierQuoteHero = false,
   compact = false,
+  stacked = false,
+  partiesStrip,
   children,
 }: IndentReviewHubCardProps) {
-  const hasQuote = quoteAmountInr != null && quoteAmountInr > 0;
+  const hasQuote =
+    !suppressSupplierQuoteHero &&
+    quoteAmountInr != null &&
+    quoteAmountInr > 0;
   const ownerInlineFreight = isOwner && !onQuotePress;
   const quoteStatusNorm = (quoteStatus ?? "").trim().toLowerCase();
   const statusStyles = quoteStatus ? quoteStatusStyles(quoteStatusNorm) : null;
@@ -153,7 +165,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   const heroKicker = heroIsQuote
     ? "YOUR QUOTE"
     : isOwner
-      ? "EST. MARKET FREIGHT"
+      ? "CLIENT RATE"
       : "TARGET RATE";
   const referenceTarget =
     !isOwner && hasQuote && targetRateInr > 0
@@ -254,7 +266,14 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   }
 
   return (
-    <View style={[styles.card, compact && styles.cardCompact, cardShadow]}>
+    <View
+      style={[
+        styles.card,
+        compact && styles.cardCompact,
+        stacked && styles.cardStacked,
+        cardShadow,
+      ]}
+    >
       <View style={styles.orb} pointerEvents="none" />
 
       {isOwner && canCancelLoad ? (
@@ -325,7 +344,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
           </View>
         ) : null}
 
-        <View style={[styles.insetPanel, compact && styles.insetPanelCompact]}>
+        <View style={[styles.insetPanel, compact && styles.insetPanelCompact, stacked && styles.insetPanelStacked]}>
           <View style={styles.gridRow}>
             {(["Vehicle", "Weight", "Load"] as const).map((label, i) => (
               <HubGridColumn key={label} showLeftBorder={i > 0}>
@@ -342,7 +361,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
               <View style={styles.panelRowDivider} />
               <View style={styles.gridRow}>
                 <HubGridColumn showLeftBorder={false}>
-                  <Text style={styles.commerceLabel}>SUPPLIER RATE</Text>
+                  <Text style={styles.commerceLabel}>SUPPLIER TARGET</Text>
                   <Text
                     style={[styles.commerceValue, compact && styles.commerceValueCompact]}
                   >
@@ -413,6 +432,12 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
             {heroBlock}
           </View>
         ) : null}
+
+        {isOwner && partiesStrip ? (
+          <View style={[styles.partiesStripSlot, compact && styles.partiesStripSlotCompact]}>
+            {partiesStrip}
+          </View>
+        ) : null}
       </View>
 
       <IndentHubInsightTicketTail
@@ -439,6 +464,11 @@ const styles = StyleSheet.create({
   },
   cardCompact: {
     marginBottom: 6,
+  },
+  cardStacked: {
+    marginBottom: 4,
+    alignSelf: "stretch",
+    width: "100%",
   },
   orb: {
     position: "absolute",
@@ -580,6 +610,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     gap: 6,
     borderRadius: 10,
+  },
+  insetPanelStacked: {
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 8,
   },
   freightInlineRow: {
     flexDirection: "row",
@@ -785,5 +820,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     gap: 8,
     zIndex: 1,
+  },
+  partiesStripSlot: {
+    marginTop: 2,
+    zIndex: 1,
+  },
+  partiesStripSlotCompact: {
+    marginTop: 0,
   },
 });

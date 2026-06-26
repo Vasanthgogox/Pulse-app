@@ -87,7 +87,7 @@ function getLucideIcon(name: FABIconName): LucideIcon {
 
 /** Transparent 3D PNG avatars — preferred over Lottie/SVG when present. */
 const FAB_PNG_GLYPH_SOURCE: Partial<Record<FABIconName, ImageSourcePropType>> = {
-  building: require("@/assets/file type icons/add-2.png"),
+  building: require("@/assets/icon and logos/company-building.png"),
   warehouse: require("@/assets/icon and logos/client.png"),
   user: require("@/assets/icon and logos/taxi-driver.png"),
   "user-plus": require("@/assets/icon and logos/taxi-driver.png"),

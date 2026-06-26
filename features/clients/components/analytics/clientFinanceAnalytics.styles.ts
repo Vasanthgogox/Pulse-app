@@ -54,8 +54,13 @@ export const clientFinanceAnalyticsStyles = StyleSheet.create({
   },
   mobileStack: {
     width: "100%",
-    gap: 10,
-    paddingBottom: 8,
+    gap: 12,
+    paddingBottom: 12,
+  },
+  mobileToolbar: {
+    gap: 8,
+    paddingBottom: 4,
+    paddingHorizontal: GUTTER,
   },
   mobileSection: {
     paddingHorizontal: GUTTER,
@@ -90,7 +95,6 @@ export const clientFinanceAnalyticsStyles = StyleSheet.create({
   },
   mobileClearBtn: {
     alignSelf: "flex-start",
-    marginLeft: GUTTER,
     marginTop: -2,
     marginBottom: 4,
     paddingVertical: 6,
@@ -104,18 +108,43 @@ export const clientFinanceAnalyticsStyles = StyleSheet.create({
   kpiGridMobile: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
     width: "100%",
   },
   kpiCardMobile: {
-    width: "48%",
     flexGrow: 1,
-    flexBasis: "46%",
-    minWidth: 0,
+    flexBasis: "47%",
+    minWidth: 148,
+    maxWidth: "100%",
+  },
+  kpiCardMobileSolo: {
+    flexBasis: "100%",
+    width: "100%",
   },
   kpiCardMobileWide: {
     width: "100%",
     flexBasis: "100%",
+  },
+  kpiIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#F9FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+    alignSelf: "flex-start",
+    overflow: "visible",
+  },
+  kpiIconWrapLane: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#F9FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    overflow: "visible",
   },
   kpiLabelMobile: {
     color: Theme.textMuted,
@@ -193,6 +222,8 @@ export const clientFinanceAnalyticsStyles = StyleSheet.create({
   },
   desktopSidebar: {
     gap: 12,
+    minWidth: 0,
+    alignSelf: "flex-start",
   },
   healthBadge: {
     alignSelf: "flex-start",
@@ -304,16 +335,26 @@ export const clientFinanceAnalyticsStyles = StyleSheet.create({
     } as object),
   },
   tripsEmpty: {
-    paddingVertical: 28,
-    paddingHorizontal: 16,
+    width: "100%",
+    alignSelf: "stretch",
+    paddingVertical: 48,
+    paddingHorizontal: 24,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 14,
+  },
+  tripsEmptyText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: METRONIC.muted,
+    textAlign: "center",
   },
   insightsCard: {
     gap: 2,
   },
   insightsCardDesktop: {
     padding: 18,
+    width: "100%",
+    alignSelf: "stretch",
   },
 });
