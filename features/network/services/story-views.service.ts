@@ -27,7 +27,10 @@ export async function recordStoryView(
 
   const { error } = await supabase()
     .from('story_views')
-    .insert({ post_id: postId, viewer_org_id: orgId, viewer_org_name: orgName, viewer_user_id: userId, viewed_at: new Date().toISOString() });
+    .upsert(
+      { post_id: postId, viewer_org_id: orgId, viewer_org_name: orgName, viewer_user_id: userId, viewed_at: new Date().toISOString() },
+      { onConflict: 'post_id,viewer_org_id', ignoreDuplicates: true },
+    );
 
   if (error) {
     // 23505 = unique_violation — already viewed, keep first view time, ignore

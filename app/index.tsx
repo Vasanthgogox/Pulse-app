@@ -19,7 +19,7 @@ import {
 } from '@/lib/onboarding/businessSignupBranding.util';
 import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
 import { useIsFocused } from '@react-navigation/native';
-import { usePathname, useRouter } from 'expo-router';
+import { useLocalSearchParams, usePathname, useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
@@ -39,6 +39,7 @@ export default function Index() {
   const pathname = usePathname();
   const isFocused = useIsFocused();
   const uid = user?.uid ?? null;
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [brandingGateHydrated, setBrandingGateHydrated] = useState(false);
 
   useEffect(() => {
@@ -90,6 +91,13 @@ export default function Index() {
 
     if (!profile) return;
 
+    if (returnTo) {
+      if (!claimIndexBootRedirect(uid)) return;
+      logRouteDecision('redirect_return_to', { uid, returnTo });
+      router.replace(decodeURIComponent(returnTo) as Href);
+      return;
+    }
+
     if (profile.role === 'driver') {
       if (isDriverSignupSuccessActiveSync()) {
         logRouteDecision('block_driver_redirect_signup_success', { uid, pathname });
@@ -112,7 +120,7 @@ export default function Index() {
       logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
       router.replace(route as '/');
     });
-  }, [uid, profile, loading, pathname, router, isFocused, brandingGateHydrated]);
+  }, [uid, profile, loading, pathname, router, isFocused, brandingGateHydrated, returnTo]);
 
   const splashVariant = useMemo(() => {
     if (loading) return 'session' as const;

@@ -221,6 +221,20 @@ export async function createPost(
   return { error: new Error(primary.error.message), postId: null };
 }
 
+export async function getPostById(
+  postId: string,
+): Promise<{ error: Error | null; post: PostRow | null }> {
+  const { data, error } = await supabase()
+    .from('posts')
+    .select('*, organizations(name)')
+    .eq('id', postId)
+    .single();
+  if (error) return { error: new Error(error.message), post: null };
+  const raw = data as (PostRow & { organizations?: { name: string } | null });
+  const row: PostRow = { ...raw, org_name: raw.org_name ?? raw.organizations?.name ?? '' };
+  return { error: null, post: normalizeFeedPost(row) };
+}
+
 export async function deactivatePost(
   postId: string,
   organizationId?: string | null,

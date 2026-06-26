@@ -142,6 +142,8 @@ function tryReadWebSession(): {
       };
     };
     if (!parsed?.access_token || !parsed?.user?.id) return empty;
+    const now = Math.floor(Date.now() / 1000);
+    if (parsed.expires_at && parsed.expires_at < now) return empty;
     const meta = parsed.user.user_metadata ?? {};
     const uid = parsed.user.id;
     const email = parsed.user.email ?? "";
