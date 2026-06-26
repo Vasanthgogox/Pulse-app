@@ -248,9 +248,8 @@ function getSupabase(): SupabaseClient {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      // Navigator Web Locks are browser-only; on native they surface as uncaught
-      // "Lock was stolen by another request" when auth refreshes overlap.
-      ...(Platform.OS !== 'web' ? { lock: processLock } : {}),
+      // processLock avoids navigator Web Locks races (Strict Mode, parallel refresh).
+      lock: processLock,
     },
     global: {
       fetch: fetchWithTimeoutAndRetry,

@@ -1537,59 +1537,61 @@ export function LedgerTransactionListView({
                                           </Text>
                                           <Text
                                             style={styles.fiscalCardRouteWhy}
-                                            numberOfLines={1}
+                                            numberOfLines={2}
                                           >
                                             {routeWhyLine}
                                           </Text>
+                                          {tripIdOnly ? (
+                                            onMissionChange ? (
+                                              <TouchableOpacity
+                                                style={styles.fiscalCardPill}
+                                                onPress={(e) => {
+                                                  e?.stopPropagation?.();
+                                                  setTripPickerRowId(row.id);
+                                                }}
+                                                activeOpacity={0.8}
+                                                hitSlop={8}
+                                              >
+                                                <FontAwesome
+                                                  name="check-circle"
+                                                  size={7}
+                                                  color={Theme.darkGreen}
+                                                  style={
+                                                    styles.fiscalCardPillIcon
+                                                  }
+                                                />
+                                                <Text
+                                                  style={
+                                                    styles.fiscalCardPillText
+                                                  }
+                                                  numberOfLines={1}
+                                                >
+                                                  {tripIdOnly}
+                                                </Text>
+                                              </TouchableOpacity>
+                                            ) : (
+                                              <View style={styles.fiscalCardPill}>
+                                                <FontAwesome
+                                                  name="check-circle"
+                                                  size={7}
+                                                  color={Theme.darkGreen}
+                                                  style={
+                                                    styles.fiscalCardPillIcon
+                                                  }
+                                                />
+                                                <Text
+                                                  style={
+                                                    styles.fiscalCardPillText
+                                                  }
+                                                  numberOfLines={1}
+                                                >
+                                                  {tripIdOnly}
+                                                </Text>
+                                              </View>
+                                            )
+                                          ) : null}
                                         </View>
                                         <View style={styles.fiscalCardRight}>
-                                          {onMissionChange ? (
-                                            <TouchableOpacity
-                                              style={styles.fiscalCardPill}
-                                              onPress={(e) => {
-                                                e?.stopPropagation?.();
-                                                setTripPickerRowId(row.id);
-                                              }}
-                                              activeOpacity={0.8}
-                                              hitSlop={8}
-                                            >
-                                              <FontAwesome
-                                                name="check-circle"
-                                                size={7}
-                                                color={Theme.darkGreen}
-                                                style={
-                                                  styles.fiscalCardPillIcon
-                                                }
-                                              />
-                                              <Text
-                                                style={
-                                                  styles.fiscalCardPillText
-                                                }
-                                                numberOfLines={1}
-                                              >
-                                                {tripIdOnly ?? "—"}
-                                              </Text>
-                                            </TouchableOpacity>
-                                          ) : tripIdOnly ? (
-                                            <View style={styles.fiscalCardPill}>
-                                              <FontAwesome
-                                                name="check-circle"
-                                                size={7}
-                                                color={Theme.darkGreen}
-                                                style={
-                                                  styles.fiscalCardPillIcon
-                                                }
-                                              />
-                                              <Text
-                                                style={
-                                                  styles.fiscalCardPillText
-                                                }
-                                                numberOfLines={1}
-                                              >
-                                                {tripIdOnly}
-                                              </Text>
-                                            </View>
-                                          ) : null}
                                           <Text
                                             style={[
                                               styles.fiscalCardAmount,
@@ -2985,43 +2987,51 @@ const styles = StyleSheet.create({
   dateSyncBarCardIconIn: { backgroundColor: "rgba(16,185,129,0.25)" },
   fiscalTransactionRows: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 6,
+    paddingTop: 10,
     paddingBottom: Layout.sectionSpacing / 2,
   },
   fiscalCardWrap: {},
   fiscalCardWrapSeparator: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
-    paddingBottom: 6,
+    paddingBottom: 10,
+    marginBottom: 4,
   },
   fiscalCard: {
     backgroundColor: Theme.screenBackground,
     paddingVertical: 4,
+    position: "relative",
+    zIndex: 1,
   },
   fiscalCardExpanded: {
     paddingBottom: 8,
   },
   fiscalCardInner: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 7,
-    paddingHorizontal: 0,
-    gap: 10,
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    gap: 12,
+    minWidth: 0,
   },
   fiscalCardAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 1,
+    flexShrink: 0,
   },
   fiscalCardAvatarImageWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 1,
+    flexShrink: 0,
   },
   fiscalCardAvatarText: {
     fontSize: 9,
@@ -3030,46 +3040,52 @@ const styles = StyleSheet.create({
   fiscalCardBody: {
     flex: 1,
     minWidth: 0,
+    gap: 2,
+    paddingRight: 4,
   },
   fiscalCardParty: {
-    fontSize: 11,
-    fontWeight: "500",
-    fontStyle: "italic",
-    letterSpacing: -0.3,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.2,
     textTransform: "uppercase",
     color: Theme.textPrimaryDark,
   },
   fiscalCardDate: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textMuted,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginTop: 3,
+    letterSpacing: 0.35,
+    marginTop: 2,
   },
   fiscalCardRouteWhy: {
-    fontSize: 8,
-    fontWeight: "400",
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.textSecondary,
-    fontStyle: "italic",
-    marginTop: 1,
-    lineHeight: 11,
+    marginTop: 3,
+    lineHeight: 15,
   },
   fiscalCardRight: {
     alignItems: "flex-end",
-    gap: 6,
+    justifyContent: "flex-start",
+    flexShrink: 0,
+    minWidth: 72,
+    paddingTop: 2,
+    gap: 4,
   },
   fiscalCardPill: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 4,
+    marginTop: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 16,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    maxWidth: 148,
+    maxWidth: "100%",
   },
   fiscalCardPillIcon: { marginRight: 0 },
   fiscalCardPillText: {
@@ -3747,8 +3763,8 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   sectionTimeline: {
-    marginTop: 4,
-    marginBottom: 2,
+    marginTop: 6,
+    marginBottom: 4,
   },
   sectionBar: {
     flexDirection: "row",
@@ -3839,11 +3855,11 @@ const styles = StyleSheet.create({
   },
   rowCardTimeline: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     backgroundColor: Theme.screenBackground,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    gap: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
     borderRadius: 28,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.04)",
@@ -3891,12 +3907,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   timelineCardRouteWhy: {
-    fontSize: 9,
-    fontWeight: "400",
-    fontStyle: "italic",
-    color: Theme.textMuted,
-    marginTop: 2,
-    opacity: 0.9,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    marginTop: 3,
+    lineHeight: 14,
   },
   rightMetaStack: {
     alignItems: "flex-end",

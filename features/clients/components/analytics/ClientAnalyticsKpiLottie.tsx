@@ -1,14 +1,19 @@
 import LottieView, { type AnimationObject } from "lottie-react-native";
 import { StyleSheet, View } from "react-native";
 
+/** Lottie JSONs include generous canvas padding — render larger than the slot. */
+const LOTTIE_RENDER_SCALE = 1.85;
+
 export function ClientAnalyticsKpiLottie({
   source,
-  size = 28,
+  size = 36,
+  renderScale = LOTTIE_RENDER_SCALE,
 }: {
   source: AnimationObject;
   size?: number;
+  renderScale?: number;
 }) {
-  const lottieSize = Math.round(size * 1.15);
+  const renderSize = Math.round(size * renderScale);
   return (
     <View style={[styles.slot, { width: size, height: size }]}>
       <LottieView
@@ -17,7 +22,11 @@ export function ClientAnalyticsKpiLottie({
         loop
         speed={0.85}
         resizeMode="contain"
-        style={{ width: lottieSize, height: lottieSize }}
+        style={{
+          width: renderSize,
+          height: renderSize,
+          position: "absolute",
+        }}
       />
     </View>
   );
@@ -27,6 +36,6 @@ const styles = StyleSheet.create({
   slot: {
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
+    overflow: "visible",
   },
 });

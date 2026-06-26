@@ -1,5 +1,6 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter } from "expo-router";
+import { Suspense, lazy } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -11,11 +12,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
 import { isPulseDesktop } from "@/components/analytics/pulse/pulseStyles";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { DriverAnalyticsTab } from "./analytics/DriverAnalyticsTab";
+import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { useDriverAnalyticsData } from "../hooks/useDriverAnalyticsData";
+
+const DriverAnalyticsTab = lazy(() =>
+  import("./analytics/DriverAnalyticsTab").then((m) => ({ default: m.default })),
+);
 
 export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
   const router = useRouter();
@@ -31,6 +37,7 @@ export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
     driverRequests,
     driverOffer,
     driverRatings,
+    orgId,
     loading,
     error,
     refreshing,
@@ -59,7 +66,13 @@ export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
   }
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.wrap,
+        desktop && styles.wrapDesktop,
+        { paddingTop: insets.top },
+      ]}
+    >
       <View style={styles.header}>
         <Pressable style={styles.headerIconBtn} onPress={() => router.back()} hitSlop={8}>
           <FontAwesome name="chevron-left" size={18} color={Theme.textPrimaryDark} />
@@ -76,25 +89,28 @@ export function DriverAnalyticsFullScreen({ driverId }: { driverId: string }) {
       </View>
 
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, desktop && styles.scrollDesktop]}
         contentContainerStyle={[
           styles.scrollContent,
           desktop && styles.scrollContentDesktop,
-          { paddingBottom: insets.bottom + Layout.screenPaddingHorizontal },
+          { paddingBottom: insets.bottom + (desktop ? 24 : Layout.screenPaddingHorizontal) },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Theme.loaderAccent} />
         }
       >
-        <DriverAnalyticsTab
-          trips={trips}
-          driverTransactions={driverTransactions}
-          driverRequests={driverRequests}
-          driver={driver}
-          driverOffer={driverOffer}
-          driverRatings={driverRatings}
-        />
+        <Suspense fallback={<LazySuspenseNullFallback />}>
+          <DriverAnalyticsTab
+            trips={trips}
+            driverTransactions={driverTransactions}
+            driverRequests={driverRequests}
+            driver={driver}
+            driverOffer={driverOffer}
+            driverRatings={driverRatings}
+            orgId={orgId}
+          />
+        </Suspense>
       </ScrollView>
     </View>
   );
@@ -104,6 +120,9 @@ const styles = StyleSheet.create({
   wrap: {
     flex: 1,
     backgroundColor: Theme.screenBackground,
+  },
+  wrapDesktop: {
+    backgroundColor: METRONIC.bodyBg,
   },
   header: {
     flexDirection: "row",
@@ -146,12 +165,17 @@ const styles = StyleSheet.create({
     borderColor: "#C7D2FE",
   },
   scroll: { flex: 1 },
+  scrollDesktop: {
+    backgroundColor: METRONIC.bodyBg,
+  },
   scrollContent: {
-    paddingTop: 16,
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
   scrollContentDesktop: {
     paddingHorizontal: 0,
     paddingTop: 0,
+    flexGrow: 1,
   },
   errorWrap: { padding: 16 },
   errorText: { fontSize: 15, color: Theme.textSecondary },

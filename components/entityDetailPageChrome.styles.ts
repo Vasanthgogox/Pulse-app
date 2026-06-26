@@ -178,11 +178,19 @@ export const entityDetailPageChromeStyles = StyleSheet.create({
     color: Theme.textMuted,
     marginTop: 2,
   },
-  emptyRow: { paddingVertical: 20, alignItems: "center", gap: 4 },
+  emptyRow: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingVertical: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
   emptyRowText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
     fontStyle: "italic",
     color: Theme.textMuted,
+    textAlign: "center",
   },
 });

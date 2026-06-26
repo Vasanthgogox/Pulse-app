@@ -11,8 +11,9 @@ interface Props {
   trips: TripRow[];
   transactions: LedgerRow[];
   orgId: string | null;
+  embedded?: boolean;
 }
 
-export default function ClientAnalyticsTab(props: Props) {
-  return <ClientFinanceAnalyticsDashboard {...props} />;
+export default function ClientAnalyticsTab({ embedded = true, ...props }: Props) {
+  return <ClientFinanceAnalyticsDashboard {...props} embedded={embedded} />;
 }

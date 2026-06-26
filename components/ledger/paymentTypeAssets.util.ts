@@ -99,7 +99,7 @@ export const PAYMENT_TYPE_ASSETS: Record<string, PaymentTypeAsset> = {
   },
   Other: {
     kind: "png",
-    source: require("@/assets/file type icons/add-2.png"),
+    source: require("@/assets/icon and logos/partner.png"),
     glyphScale: 0.9,
   },
   salary: {

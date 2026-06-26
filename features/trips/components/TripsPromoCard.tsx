@@ -1,13 +1,16 @@
 /**
- * Trips hub empty-state banner — borderless hero on transparent body.
+ * Trips hub empty-state — title, copy, and one large hero Lottie per status tab.
  */
 import { HubEmptyPromoLayout } from "@/components/hub/HubEmptyPromoLayout";
 import {
   TRIPS_PROMO_PRESETS,
-  TripsPromoIcons,
-  fitTripsIllustration,
   type TripsPromoVariant,
 } from "@/lib/tripsPromoAssets";
+import {
+  TRIPS_PROMO_HERO_SLOT,
+  resolveTripsPromoHeroLottie,
+  resolveTripsPromoHeroVisualScale,
+} from "@/lib/tripsPromoLottieAssets";
 import { useWindowDimensions } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
@@ -22,28 +25,31 @@ export type TripsPromoCardProps = {
 export function TripsPromoCard({ variant, onCtaPress, style }: TripsPromoCardProps) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const compact = width < 480;
   const preset = TRIPS_PROMO_PRESETS[variant];
-  const featureIconSize = isDesktop ? 14 : 12;
+  const heroSlotSize = compact
+    ? TRIPS_PROMO_HERO_SLOT.compact
+    : isDesktop
+      ? TRIPS_PROMO_HERO_SLOT.desktop
+      : TRIPS_PROMO_HERO_SLOT.mobile;
 
   return (
     <HubEmptyPromoLayout
       style={style}
+      layoutMode="hero"
       title={preset.title}
       description={preset.description}
-      Illustration={preset.illustration}
-      illustrationAspect={preset.aspect}
-      fitIllustration={fitTripsIllustration}
-      illustrationScale={0.9}
+      HeroLottie={resolveTripsPromoHeroLottie(variant)}
+      heroRenderScale={resolveTripsPromoHeroVisualScale(variant)}
+      heroSlotSize={heroSlotSize}
+      illustrationAspect={1}
+      fitIllustration={(_boxW, boxH) => ({
+        width: boxH,
+        height: boxH,
+      })}
       ctaLabel={preset.ctaLabel}
       onCtaPress={onCtaPress}
-      features={preset.bullets.map(({ label, icon }) => {
-        const IconAsset = TripsPromoIcons[icon];
-        return {
-          key: label,
-          label,
-          icon: <IconAsset width={featureIconSize} height={featureIconSize} />,
-        };
-      })}
+      features={[]}
     />
   );
 }

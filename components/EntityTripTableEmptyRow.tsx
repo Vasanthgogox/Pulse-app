@@ -16,7 +16,7 @@ export function EntityTripTableEmptyRow({
 }: EntityTripTableEmptyRowProps) {
   return (
     <View style={[entityDetailPageChromeStyles.emptyRow, style]}>
-      <TinyEmptyLottie source={EMPTY_STATE_LOTTIE.tripsTable} size={36} />
+      <TinyEmptyLottie source={EMPTY_STATE_LOTTIE.tripsTable} size={64} />
       <Text style={[entityDetailPageChromeStyles.emptyRowText, textStyle]}>
         {label}
       </Text>

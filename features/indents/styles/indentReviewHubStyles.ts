@@ -5,6 +5,7 @@
 import { Platform, StyleSheet } from "react-native";
 
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 
 export const indentReviewHubText = {
@@ -394,6 +395,77 @@ export const indentReviewHubStyles = StyleSheet.create({
   hubStatePillText: {
     ...indentReviewHubText.chipLabel,
     color: Theme.positive,
+  },
+});
+
+/** Review Hub — summary left, bids / quote scroll pane right (give + get load). */
+export const indentReviewHubSplitLayout = StyleSheet.create({
+  splitRow: {
+    flex: 1,
+    flexDirection: "row",
+    minHeight: 0,
+    backgroundColor: Theme.surface,
+  },
+  summaryPane: {
+    flex: 0.44,
+    minWidth: 0,
+    maxWidth: 480,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  summaryPaneContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  summaryPaneContentCompact: {
+    paddingTop: 6,
+  },
+  summaryPaneContentStacked: {
+    paddingTop: 8,
+    paddingBottom: 0,
+  },
+  bidsPane: {
+    flex: 1,
+    minWidth: 280,
+    minHeight: 0,
+    backgroundColor: Theme.screenBackground,
+  },
+  bidsPaneHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    gap: 8,
+    zIndex: 2,
+    ...Platform.select({
+      web: { boxShadow: "0 1px 0 rgba(15,23,42,0.04)" } as object,
+      ios: {
+        shadowColor: Theme.shadow,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 2,
+      },
+      default: {},
+    }),
+  },
+  bidsPaneScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  bidsPaneScrollContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    flexGrow: 0,
+  },
+  bidsPaneScrollContentCompact: {
+    paddingTop: 8,
   },
 });
 

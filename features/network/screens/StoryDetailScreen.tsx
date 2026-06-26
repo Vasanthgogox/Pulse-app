@@ -7,36 +7,33 @@ import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidSheet } from "@/features/network/components/BidSheet";
+import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
+import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
+import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import {
   deactivatePost,
   getPostById,
   isPostVisibleForOrg,
   type PostRow,
 } from "@/features/network/services/posts.service";
-import { type StoryViewRow } from "@/features/network/services/story-views.service";
 import {
   getVisibleIndentById,
   resolveSupplierTargetDisplayRate,
 } from "@/features/indents/services/indents.service";
-import { formatINR } from "@/lib/format";
 import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES } from "@/lib/routes";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
 import {
-  ArrowRight,
   CheckCircle2,
   Clock3,
   Edit3,
-  Eye,
   MapPin,
   MessageSquare,
-  Package,
   Send,
   Sparkles,
   Trash2,
@@ -50,8 +47,6 @@ import {
   Animated,
   Alert,
   Easing,
-  FlatList,
-  Modal,
   useWindowDimensions,
   Pressable,
   StyleSheet,
@@ -147,97 +142,6 @@ function loadMaterialLabel(post: PostRow, fallbackHeadline: string): string {
   return beforeRoute || "Load";
 }
 
-// ── Viewers bottom sheet ────────────────────────────────────────────────────
-
-function ViewersSheet({
-  visible,
-  views,
-  loading,
-  onClose,
-}: {
-  visible: boolean;
-  views: StoryViewRow[];
-  loading: boolean;
-  onClose: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={vs.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={[vs.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <View style={vs.handle} />
-          <View style={vs.header}>
-            <Eye size={18} color={INK} strokeWidth={2} />
-            <Text style={vs.title}>
-              {loading ? "Loading…" : views.length === 0 ? "No views yet" : `${views.length} Viewed`}
-            </Text>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <X size={20} color={MUTED} />
-            </Pressable>
-          </View>
-          {views.length === 0 && !loading ? (
-            <View style={vs.empty}>
-              <Eye size={36} color={MUTED} strokeWidth={1.5} />
-              <Text style={vs.emptyText}>No one has viewed this yet</Text>
-              <Text style={vs.emptyHint}>Viewers from your network will appear here</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={views}
-              keyExtractor={(item) => item.id}
-              style={vs.list}
-              ItemSeparatorComponent={() => <View style={vs.sep} />}
-              renderItem={({ item }) => (
-                <View style={vs.row}>
-                  <View style={[vs.avatar, { backgroundColor: seedColor(item.viewer_org_id) + "22" }]}>
-                    <Text style={[vs.avatarText, { color: seedColor(item.viewer_org_id) }]}>
-                      {(item.viewer_org_name ?? "?")[0]?.toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={vs.rowText}>
-                    <Text style={vs.orgName} numberOfLines={1}>
-                      {item.viewer_org_name ?? "Unknown org"}
-                    </Text>
-                    <Text style={vs.viewedAt}>{timeAgo(item.viewed_at)}</Text>
-                  </View>
-                  <Eye size={14} color={MUTED} strokeWidth={2} />
-                </View>
-              )}
-            />
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const vs = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: Theme.screenBackground,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    maxHeight: "65%",
-  },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Theme.borderMedium, alignSelf: "center", marginBottom: 16 },
-  header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
-  title: { flex: 1, fontSize: 18, fontWeight: "900", color: INK, letterSpacing: -0.4 },
-  list: { flex: 1 },
-  sep: { height: StyleSheet.hairlineWidth, backgroundColor: Theme.borderLight, marginLeft: 56 },
-  row: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 12 },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 16, fontWeight: "900" },
-  rowText: { flex: 1, minWidth: 0 },
-  orgName: { fontSize: 14, fontWeight: "800", color: INK, marginBottom: 2 },
-  viewedAt: { fontSize: 11, fontWeight: "600", color: MUTED },
-  empty: { alignItems: "center", paddingVertical: 40, gap: 8 },
-  emptyText: { fontSize: 16, fontWeight: "800", color: INK },
-  emptyHint: { fontSize: 12, color: MUTED, textAlign: "center" },
-});
-
 // ── Progress segment ────────────────────────────────────────────────────────
 
 function ProgressSegment({ index, current, progress }: { index: number; current: number; progress: Animated.Value }) {
@@ -250,6 +154,49 @@ function ProgressSegment({ index, current, progress }: { index: number; current:
 const ps = StyleSheet.create({
   track: { height: 3, backgroundColor: Theme.surfaceBorder, borderRadius: 2, overflow: "hidden" },
   fill: { height: "100%", backgroundColor: INK, borderRadius: 2 },
+});
+
+function StoryContentEntrance({
+  storyKey,
+  children,
+}: {
+  storyKey: string;
+  children: React.ReactNode;
+}) {
+  const fade = useRef(new Animated.Value(0)).current;
+  const rise = useRef(new Animated.Value(22)).current;
+
+  useEffect(() => {
+    fade.setValue(0);
+    rise.setValue(22);
+    Animated.parallel([
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(rise, {
+        toValue: 0,
+        tension: 70,
+        friction: 12,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [storyKey, fade, rise]);
+
+  return (
+    <Animated.View
+      style={[entrance.wrap, { opacity: fade, transform: [{ translateY: rise }] }]}
+      pointerEvents="none"
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+const entrance = StyleSheet.create({
+  wrap: { width: "100%", alignItems: "center", gap: 0 },
 });
 
 // ── Main screen ─────────────────────────────────────────────────────────────
@@ -317,6 +264,7 @@ export default function StoryDetailScreen() {
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [showViewers, setShowViewers] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
+  const footerFade = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
   const recordedViewsRef = useRef<Set<string>>(new Set());
 
@@ -348,6 +296,18 @@ export default function StoryDetailScreen() {
   useEffect(() => { setCurrent(initialStoryIndex); progress.setValue(0); }, [initialStoryIndex, progress]);
 
   const post = resolvedStoryList[current];
+
+  useEffect(() => {
+    if (!post) return;
+    footerFade.setValue(0);
+    Animated.timing(footerFade, {
+      toValue: 1,
+      duration: 480,
+      delay: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [post?.id, footerFade, post]);
   const linkedIndentQ = useQuery({
     queryKey: ["q", "indents", "story-target", myOrgId, post?.source_indent_id],
     queryFn: async () => {
@@ -457,9 +417,12 @@ export default function StoryDetailScreen() {
 
   if (!post) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
-        <Pressable style={[styles.closeBtn, { position: 'absolute', top: insets.top + 8, left: Layout.screenPaddingHorizontal }]} onPress={() => router.back()}>
-          <X size={22} color={INK} />
+      <View style={[styles.container, { paddingTop: insets.top, paddingHorizontal: Layout.screenPaddingHorizontal }]}>
+        <Pressable
+          style={[styles.topBarIconBtn, { marginTop: 8, alignSelf: "flex-start" }]}
+          onPress={() => router.back()}
+        >
+          <X size={16} color={INK} strokeWidth={2.25} />
         </Pressable>
         {isLoadingPost
           ? <ActivityIndicator size="large" color={Theme.primary} />
@@ -471,6 +434,7 @@ export default function StoryDetailScreen() {
 
   return (
     <View style={styles.container}>
+      {isLoad ? <View style={styles.ambientGlow} pointerEvents="none" /> : null}
       <View style={[styles.progressRow, { paddingTop: insets.top + 8 }]}>
         {resolvedStoryList.map((_, i) => (
           <ProgressSegment key={i} index={i} current={current} progress={progress} />
@@ -481,25 +445,43 @@ export default function StoryDetailScreen() {
       <View style={[styles.topBar, isDesktopPreview && styles.topBarDesktop, { paddingHorizontal: Layout.screenPaddingHorizontal }]}>
         <View style={styles.topBarLeft}>
           <View style={styles.topBarText}>
-            <View style={styles.orgTitleRow}>
-              <View style={styles.orgBrandRow}>
-                <Text style={[styles.orgTitle, (post.org_name ?? '').trim().toUpperCase() === "PULSE" && styles.orgTitlePulse]} numberOfLines={1}>
-                  {post.org_name}
-                </Text>
-                {(post.org_name ?? '').trim().toUpperCase() === "PULSE" ? <View style={styles.pulseGreenDot} /> : null}
-              </View>
-              {isOwnPost ? (
-                <Pressable style={[styles.inlineDeleteBtn, isDeletingCurrent && styles.inlineDeleteBtnDisabled]} onPress={handleDeletePost} disabled={isDeletingCurrent} hitSlop={8}>
-                  <Trash2 size={11} color={Theme.teslaRed} strokeWidth={2.5} />
-                </Pressable>
-              ) : null}
+            <View style={styles.orgBrandRow}>
+              <Text style={[styles.orgTitle, (post.org_name ?? '').trim().toUpperCase() === "PULSE" && styles.orgTitlePulse]} numberOfLines={1}>
+                {post.org_name}
+              </Text>
+              {(post.org_name ?? '').trim().toUpperCase() === "PULSE" ? <View style={styles.pulseGreenDot} /> : null}
             </View>
             <Text style={styles.timeAgoLabel}>{timeAgo(post.created_at)}</Text>
           </View>
         </View>
-        <Pressable style={styles.closeBtn} onPress={() => router.back()} hitSlop={10}>
-          <X size={18} color={INK} />
-        </Pressable>
+        <View style={styles.topBarActions}>
+          {isOwnPost ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.topBarIconBtn,
+                styles.topBarDeleteBtn,
+                isDeletingCurrent && styles.topBarIconBtnDisabled,
+                pressed && styles.topBarIconBtnPressed,
+              ]}
+              onPress={handleDeletePost}
+              disabled={isDeletingCurrent}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Delete story"
+            >
+              <Trash2 size={14} color={Theme.teslaRed} strokeWidth={2.25} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            style={({ pressed }) => [styles.topBarIconBtn, pressed && styles.topBarIconBtnPressed]}
+            onPress={() => router.back()}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Close story"
+          >
+            <X size={16} color={INK} strokeWidth={2.25} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.tapZones} pointerEvents="box-none">
@@ -509,127 +491,76 @@ export default function StoryDetailScreen() {
 
       {/* Center payload */}
       <View style={[styles.centerStage, isDesktopPreview && styles.centerStageDesktop]} pointerEvents="none">
-        <View style={[styles.iconHero, isDesktopPreview && styles.iconHeroDesktop, { backgroundColor: color + "18" }]}>
-          {isLoad ? <Package size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />
-            : isVehicle ? <Truck size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />
-            : <Sparkles size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />}
-        </View>
-        <Text style={[styles.kicker, isDesktopPreview && styles.kickerDesktop, { color }]}>{heroLabel}</Text>
         {isLoad && post.origin && post.destination ? (
-          <View style={[styles.loadHeroTitleWrap, isDesktopPreview && styles.loadHeroTitleWrapDesktop]}>
-            <Text style={[styles.loadMaterialTitle, isDesktopPreview && styles.loadMaterialTitleDesktop]} numberOfLines={1}>
-              {loadMaterial}
-            </Text>
-            <View style={styles.loadRouteHeadlineRow}>
-              <View style={styles.loadRouteHeadlinePoint}>
-                <Text style={[styles.loadCityText, isDesktopPreview && styles.loadCityTextDesktop]} numberOfLines={1}>
-                  {originParts.city}
-                </Text>
-                {originParts.state ? (
-                  <Text style={[styles.loadStateText, isDesktopPreview && styles.loadStateTextDesktop]} numberOfLines={1}>
-                    {originParts.state}
-                  </Text>
-                ) : null}
-              </View>
-              <ArrowRight
-                size={isDesktopPreview ? 22 : 16}
-                color={MUTED}
-                strokeWidth={2.25}
-                style={styles.loadRouteArrow}
-              />
-              <View style={[styles.loadRouteHeadlinePoint, styles.loadRouteHeadlinePointEnd]}>
-                <Text
-                  style={[
-                    styles.loadCityText,
-                    styles.loadCityTextEnd,
-                    isDesktopPreview && styles.loadCityTextDesktop,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {destinationParts.city}
-                </Text>
-                {destinationParts.state ? (
-                  <Text
-                    style={[
-                      styles.loadStateText,
-                      styles.loadStateTextEnd,
-                      isDesktopPreview && styles.loadStateTextDesktop,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {destinationParts.state}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          </View>
+          <StoryBroadcastPreview
+            post={post}
+            loadMaterial={loadMaterial}
+            originParts={originParts}
+            destinationParts={destinationParts}
+            loadTargetRate={loadTargetRate}
+            isDesktopPreview={isDesktopPreview}
+            storyKey={post.id}
+          />
         ) : (
-          <Text style={[styles.heroTitle, isDesktopPreview && styles.heroTitleDesktop]} numberOfLines={6}>
-            {isVehicle ? `${vehicleTypeHeadline} AVAILABLE` : headline}
-          </Text>
-        )}
-
-        {isVehicle ? (
-          <View style={[styles.vehicleAvailabilityBlock, isDesktopPreview && styles.vehicleAvailabilityBlockDesktop]}>
-            <View style={styles.vehicleAvailabilityLine}>
-              <Clock3 size={14} color={MUTED} />
-              <Text style={[styles.vehicleAvailabilityText, isDesktopPreview && styles.vehicleAvailabilityTextDesktop]}>{vehicleAvailabilityText}</Text>
+          <StoryContentEntrance storyKey={post.id}>
+            <View style={[styles.iconHero, isDesktopPreview && styles.iconHeroDesktop, { backgroundColor: color + "18" }]}>
+              {isVehicle ? (
+                <Truck size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />
+              ) : (
+                <Sparkles size={isDesktopPreview ? 40 : 30} color={color} strokeWidth={1.8} />
+              )}
             </View>
-            {storyDateLabel ? <Text style={[styles.vehicleDateText, isDesktopPreview && styles.vehicleDateTextDesktop]}>{storyDateLabel}</Text> : null}
-          </View>
-        ) : null}
+            <Text style={[styles.kicker, isDesktopPreview && styles.kickerDesktop, { color }]}>{heroLabel}</Text>
+            <Text style={[styles.heroTitle, isDesktopPreview && styles.heroTitleDesktop]} numberOfLines={6}>
+              {isVehicle ? `${vehicleTypeHeadline} AVAILABLE` : headline}
+            </Text>
 
-        {isLoad && post.origin && post.destination ? (
-          <View style={[styles.routeCard, isDesktopPreview && styles.routeCardDesktop]}>
-            <View style={styles.routeLine}>
-              <View style={styles.routePoint}>
-                <View style={styles.routeDotG} />
-                <Text style={styles.routeLabel}>ORIGIN</Text>
-                <Text style={styles.routeText} numberOfLines={1}>{originParts.city}{originParts.state ? `, ${originParts.state}` : ""}</Text>
-              </View>
-              <ArrowRight size={14} color={MUTED} strokeWidth={2} />
-              <View style={[styles.routePoint, { alignItems: "flex-end" }]}>
-                <View style={[styles.routeDot, { backgroundColor: color }]} />
-                <Text style={styles.routeLabel}>DESTINATION</Text>
-                <Text style={styles.routeText} numberOfLines={1}>{destinationParts.city}{destinationParts.state ? `, ${destinationParts.state}` : ""}</Text>
-              </View>
-            </View>
-          </View>
-        ) : null}
-
-        {isVehicle ? (
-          <View style={[styles.vehicleLocationsCard, isDesktopPreview && styles.vehicleLocationsCardDesktop]}>
-            <View style={styles.vehicleLocationRow}>
-              <MapPin size={13} color={color} />
-              <Text style={styles.vehicleLocationLabel}>Vehicle location:</Text>
-              <Text style={styles.vehicleLocationValue} numberOfLines={1}>{post.origin?.trim() || "Not set"}</Text>
-            </View>
-            <View style={styles.vehicleLocationDivider} />
-            <View style={styles.vehicleLocationRow}>
-              <MapPin size={13} color={MUTED} />
-              <Text style={styles.vehicleLocationLabel}>Preferred location:</Text>
-              <Text style={styles.vehicleLocationValue} numberOfLines={1}>{post.destination?.trim() || "Not set"}</Text>
-            </View>
-          </View>
-        ) : null}
-
-        {isLoad && (post.vehicle_type != null || post.weight_tonnes != null || loadTargetRate != null) ? (
-          <View style={[styles.metaRow, isDesktopPreview && styles.metaRowDesktop]}>
-            {post.vehicle_type ? <View style={styles.metaChip}><Truck size={10} color={MUTED} /><Text style={styles.metaChipText}>{post.vehicle_type}</Text></View> : null}
-            {post.weight_tonnes != null ? <View style={styles.metaChip}><Text style={styles.metaChipText}>{post.weight_tonnes}T</Text></View> : null}
-            {loadTargetRate != null ? (
-              <View style={[styles.metaChip, styles.metaChipEmphasis, { borderColor: color + "55" }]}>
-                <Text style={[styles.metaChipText, { color }]}>{formatINR(loadTargetRate)}</Text>
+            {isVehicle ? (
+              <View style={[styles.vehicleAvailabilityBlock, isDesktopPreview && styles.vehicleAvailabilityBlockDesktop]}>
+                <View style={styles.vehicleAvailabilityLine}>
+                  <Clock3 size={14} color={MUTED} />
+                  <Text style={[styles.vehicleAvailabilityText, isDesktopPreview && styles.vehicleAvailabilityTextDesktop]}>
+                    {vehicleAvailabilityText}
+                  </Text>
+                </View>
+                {storyDateLabel ? (
+                  <Text style={[styles.vehicleDateText, isDesktopPreview && styles.vehicleDateTextDesktop]}>
+                    {storyDateLabel}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
-          </View>
-        ) : null}
 
-        {isVehicle && post.vehicle_type ? (
-          <View style={[styles.metaRow, isDesktopPreview && styles.metaRowDesktop]}>
-            <View style={styles.metaChip}><Truck size={10} color={MUTED} /><Text style={styles.metaChipText}>{post.vehicle_type}</Text></View>
-          </View>
-        ) : null}
+            {isVehicle ? (
+              <View style={[styles.vehicleLocationsCard, isDesktopPreview && styles.vehicleLocationsCardDesktop]}>
+                <View style={styles.vehicleLocationRow}>
+                  <MapPin size={13} color={color} />
+                  <Text style={styles.vehicleLocationLabel}>Vehicle location:</Text>
+                  <Text style={styles.vehicleLocationValue} numberOfLines={1}>
+                    {post.origin?.trim() || "Not set"}
+                  </Text>
+                </View>
+                <View style={styles.vehicleLocationDivider} />
+                <View style={styles.vehicleLocationRow}>
+                  <MapPin size={13} color={MUTED} />
+                  <Text style={styles.vehicleLocationLabel}>Preferred location:</Text>
+                  <Text style={styles.vehicleLocationValue} numberOfLines={1}>
+                    {post.destination?.trim() || "Not set"}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            {isVehicle && post.vehicle_type ? (
+              <View style={[styles.metaRow, isDesktopPreview && styles.metaRowDesktop]}>
+                <View style={styles.metaChip}>
+                  <Truck size={10} color={MUTED} />
+                  <Text style={styles.metaChipText}>{post.vehicle_type}</Text>
+                </View>
+              </View>
+            ) : null}
+          </StoryContentEntrance>
+        )}
       </View>
 
       <View style={[styles.watermark, isDesktopPreview && styles.watermarkDesktop]} pointerEvents="none">
@@ -637,54 +568,27 @@ export default function StoryDetailScreen() {
       </View>
 
       {/* Footer */}
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 8 }]}>
+      <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 8, opacity: footerFade }]}>
         {isOwnPost && isLoad && (
-          <>
-            {/* Views pill */}
-            <Pressable style={styles.viewersPill} onPress={() => setShowViewers(true)}>
-              <Eye size={14} color={MUTED} strokeWidth={2} />
-              <Text style={styles.viewersPillText}>
-                {viewsQ.isLoading ? "…" : views.length === 0 ? "No views yet" : `${views.length} viewed`}
-              </Text>
-            </Pressable>
-            <Text style={styles.ownerHint}>This is your broadcast — others can place bids on this indent.</Text>
-            <Pressable style={[styles.authorizeBtn, { backgroundColor: INK }]} onPress={() => router.push(ROUTES.PULSE_LOADS)}>
-              <Text style={styles.authorizeBtnText}>Open load center</Text>
-            </Pressable>
-            <Pressable
-              style={styles.shareWaBtn}
-              onPress={handleShareWhatsApp}
-              accessibilityRole="button"
-              accessibilityLabel="Share story bidding link on WhatsApp"
-            >
-              <FontAwesome name="whatsapp" size={16} color={Theme.textOnPrimary} />
-              <Text style={styles.shareWaBtnText}>Share on WhatsApp</Text>
-            </Pressable>
-          </>
+          <StoryOwnerFooterActions
+            viewsLabel={viewsQ.isLoading ? "…" : views.length === 0 ? "No views yet" : `${views.length} viewed`}
+            hint="This is your broadcast — others can place bids on this indent."
+            primaryLabel="Open load center"
+            onViewersPress={() => setShowViewers(true)}
+            onPrimaryPress={() => router.push(ROUTES.PULSE_LOADS)}
+            onShareWhatsApp={handleShareWhatsApp}
+          />
         )}
 
         {isOwnPost && isVehicle && (
-          <>
-            <Pressable style={styles.viewersPill} onPress={() => setShowViewers(true)}>
-              <Eye size={14} color={MUTED} strokeWidth={2} />
-              <Text style={styles.viewersPillText}>
-                {viewsQ.isLoading ? "…" : views.length === 0 ? "No views yet" : `${views.length} viewed`}
-              </Text>
-            </Pressable>
-            <Text style={styles.ownerHint}>Your vehicle availability is visible to your network.</Text>
-            <Pressable style={[styles.authorizeBtn, { backgroundColor: INK }]} onPress={() => router.back()}>
-              <Text style={styles.authorizeBtnText}>Done</Text>
-            </Pressable>
-            <Pressable
-              style={styles.shareWaBtn}
-              onPress={handleShareWhatsApp}
-              accessibilityRole="button"
-              accessibilityLabel="Share story bidding link on WhatsApp"
-            >
-              <FontAwesome name="whatsapp" size={16} color={Theme.textOnPrimary} />
-              <Text style={styles.shareWaBtnText}>Share on WhatsApp</Text>
-            </Pressable>
-          </>
+          <StoryOwnerFooterActions
+            viewsLabel={viewsQ.isLoading ? "…" : views.length === 0 ? "No views yet" : `${views.length} viewed`}
+            hint="Your vehicle availability is visible to your network."
+            primaryLabel="Done"
+            onViewersPress={() => setShowViewers(true)}
+            onPrimaryPress={() => router.back()}
+            onShareWhatsApp={handleShareWhatsApp}
+          />
         )}
 
         {canBidOnLoad && post && (
@@ -703,29 +607,37 @@ export default function StoryDetailScreen() {
               </View>
               {myBid.status === "pending" && (
                 <Pressable
-                  style={[styles.authorizeBtn, { backgroundColor: INK }]}
+                  style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
                   onPress={() => { setEditBidMode(true); setBidPost(post); }}
                 >
-                  <Edit3 size={16} color="#fff" />
+                  <Edit3 size={16} color={INK} />
                   <Text style={styles.authorizeBtnText}>Edit bid</Text>
                 </Pressable>
               )}
             </>
           ) : (
             <Pressable
-              style={[styles.authorizeBtn, { backgroundColor: INK }]}
+              style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
               onPress={() => { setEditBidMode(false); setBidPost(post); }}
             >
-              <Send size={16} color="#fff" />
+              <Send size={16} color={INK} />
               <Text style={styles.authorizeBtnText}>Place bid on indent</Text>
             </Pressable>
           )
         )}
 
         {canContactVehicle && (
-          <Pressable style={[styles.authorizeBtn, { backgroundColor: color }]} onPress={() => router.back()}>
-            <MessageSquare size={16} color="#fff" />
-            <Text style={styles.authorizeBtnText}>Contact & message</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.authorizeBtn,
+              styles.authorizeBtnSolid,
+              { backgroundColor: color },
+              pressed && styles.authorizeBtnSolidPressed,
+            ]}
+            onPress={() => router.back()}
+          >
+            <MessageSquare size={16} color={Theme.textOnPrimary} />
+            <Text style={[styles.authorizeBtnText, styles.authorizeBtnTextOnFill]}>Contact & message</Text>
           </Pressable>
         )}
 
@@ -735,7 +647,7 @@ export default function StoryDetailScreen() {
             <Text style={styles.messageGhostText}>Message</Text>
           </Pressable>
         )}
-      </View>
+      </Animated.View>
 
       <BidSheet
         visible={bidPost != null}
@@ -750,7 +662,7 @@ export default function StoryDetailScreen() {
         }}
       />
 
-      <ViewersSheet
+      <StoryViewersSheet
         visible={showViewers}
         views={views}
         loading={viewsQ.isLoading}
@@ -761,7 +673,18 @@ export default function StoryDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Theme.screenBackground },
+  container: { flex: 1, backgroundColor: Theme.screenBackground, overflow: "hidden" },
+  ambientGlow: {
+    position: "absolute",
+    top: "18%",
+    left: "-12%",
+    right: "-12%",
+    height: "52%",
+    borderRadius: 999,
+    backgroundColor: Theme.loadAddButtonBg,
+    opacity: 0.42,
+    transform: [{ scaleX: 1.15 }],
+  },
   progressRow: {
     flexDirection: "row", gap: 4,
     paddingHorizontal: Layout.screenPaddingHorizontal,
@@ -776,17 +699,40 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   topBarDesktop: { marginBottom: 12 },
-  topBarLeft: { flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0 },
+  topBarLeft: { flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0, paddingRight: 10 },
   topBarText: { flex: 1, minWidth: 0 },
-  orgBrandRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
-  orgTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0, paddingRight: 2 },
-  orgTitle: { flex: 1, fontSize: 13, fontWeight: "800", color: INK, letterSpacing: -0.2 },
+  topBarActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  topBarIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.loadStatusTabTrayBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.loadStatusTabBorderSoft,
+  },
+  topBarDeleteBtn: {
+    backgroundColor: "rgba(220, 38, 38, 0.06)",
+    borderColor: "rgba(220, 38, 38, 0.18)",
+  },
+  topBarIconBtnPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.96 }],
+  },
+  topBarIconBtnDisabled: {
+    opacity: 0.5,
+  },
+  orgBrandRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  orgTitle: { flexShrink: 1, fontSize: 13, fontWeight: "800", color: INK, letterSpacing: -0.2 },
   orgTitlePulse: { fontStyle: "italic", letterSpacing: -0.45 },
   pulseGreenDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: Theme.darkGreen, marginTop: 1, flexShrink: 0 },
-  inlineDeleteBtn: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: Theme.borderLight, backgroundColor: Theme.screenBackground, zIndex: 60 },
-  inlineDeleteBtnDisabled: { opacity: 0.55 },
   timeAgoLabel: { fontSize: 8, fontWeight: "700", color: MUTED, letterSpacing: 1, textTransform: "uppercase", marginTop: 1 },
-  closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Theme.surfaceGray, alignItems: "center", justifyContent: "center" },
   tapZones: { position: "absolute", top: 100, left: 0, right: 0, bottom: 200, flexDirection: "row", zIndex: 30 },
   tapLeft: { flex: 1 },
   tapRight: { flex: 2.2 },
@@ -955,55 +901,44 @@ const styles = StyleSheet.create({
   watermarkText: { fontSize: 56, fontWeight: "900", color: INK, opacity: 0.03, letterSpacing: -1.2, fontStyle: "italic" },
   footer: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 10,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderMedium,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    gap: 6,
-  },
-  viewersPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    paddingVertical: 4,
-    marginBottom: 2,
-  },
-  viewersPillText: { fontSize: 10, fontWeight: "700", color: MUTED, letterSpacing: 0.3 },
-  ownerHint: {
-    fontSize: 10,
-    color: MUTED,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 8,
-    lineHeight: 14,
-    paddingHorizontal: 8,
+    borderTopColor: Theme.loadStatusTabBorderSoft,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    gap: 8,
+    maxWidth: 480,
+    width: "100%",
+    alignSelf: "center",
   },
   authorizeBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    marginBottom: 6,
-  },
-  authorizeBtnText: { fontSize: 10, fontWeight: "900", color: Theme.buttonPrimaryText, letterSpacing: 0.9, textTransform: "uppercase" },
-  messageGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
-  messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
-  shareWaBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: 14,
+    borderRadius: 16,
+    minHeight: 50,
     paddingVertical: 12,
     paddingHorizontal: 18,
     marginBottom: 4,
-    backgroundColor: "#25D366",
+    backgroundColor: Theme.loadAddButtonBg,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
   },
-  shareWaBtnText: { fontSize: 10, fontWeight: "900", color: "#fff", letterSpacing: 0.9, textTransform: "uppercase" },
+  authorizeBtnPressed: {
+    backgroundColor: Theme.loadAddButtonBgPressed,
+    transform: [{ scale: 0.985 }],
+  },
+  authorizeBtnSolid: {
+    borderWidth: 0,
+  },
+  authorizeBtnSolidPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
+  },
+  authorizeBtnText: { fontSize: 13, fontWeight: "800", color: INK, letterSpacing: -0.15 },
+  authorizeBtnTextOnFill: { color: Theme.textOnPrimary },
+  messageGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
+  messageGhostText: { fontSize: 12, fontWeight: "800", color: INK, letterSpacing: 0.6 },
   // Bid status
   bidStatusBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#10b98110", borderRadius: 14, borderWidth: 1, borderColor: "#10b98130", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 10 },
   bidStatusText: { flex: 1, minWidth: 0 },

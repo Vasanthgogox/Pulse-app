@@ -832,7 +832,7 @@ export default function TripsScreen() {
       styles.emptyBannerStage,
       Platform.OS === "web" &&
         !isMobileViewport && {
-          minHeight: Math.max(380, Math.round(height * 0.44)),
+          minHeight: Math.max(320, Math.round(height * 0.34)),
         },
     ],
     [height, isMobileViewport],
@@ -4013,8 +4013,8 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 20,
-    minHeight: 280,
+    paddingVertical: 16,
+    minHeight: 240,
     flexGrow: 1,
     backgroundColor: "transparent",
   },

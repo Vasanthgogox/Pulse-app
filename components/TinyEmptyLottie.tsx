@@ -1,17 +1,24 @@
 import LottieView from "lottie-react-native";
 import { StyleSheet, View } from "react-native";
 
+/** Empty-state Lottie JSONs have large transparent margins — overscale the render. */
+const EMPTY_LOTTIE_RENDER_SCALE = 1.7;
+
 type TinyEmptyLottieProps = {
   source: object;
   size?: number;
   speed?: number;
+  renderScale?: number;
 };
 
 export function TinyEmptyLottie({
   source,
-  size = 40,
+  size = 56,
   speed = 0.85,
+  renderScale = EMPTY_LOTTIE_RENDER_SCALE,
 }: TinyEmptyLottieProps) {
+  const renderSize = Math.round(size * renderScale);
+  const offset = (size - renderSize) / 2;
   return (
     <View style={[styles.slot, { width: size, height: size }]}>
       <LottieView
@@ -20,7 +27,13 @@ export function TinyEmptyLottie({
         loop
         speed={speed}
         resizeMode="contain"
-        style={{ width: size, height: size }}
+        style={{
+          width: renderSize,
+          height: renderSize,
+          position: "absolute",
+          left: offset,
+          top: offset,
+        }}
       />
     </View>
   );
@@ -30,5 +43,6 @@ const styles = StyleSheet.create({
   slot: {
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
 });

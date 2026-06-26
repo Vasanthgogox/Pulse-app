@@ -618,6 +618,130 @@ export function computeSupplierPricingStability(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Lane / load / payable aging (Metronic BI dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function laneLabel(t: TripRow): string {
+  const pickup = (t.pickup_area ?? "").trim();
+  const drop = (t.drop_location ?? "").trim();
+  return pickup && drop
+    ? `${pickup} → ${drop}`
+    : pickup || drop || "Unspecified lane";
+}
+
+export interface SupplierLaneBreakdown {
+  id: string;
+  label: string;
+  payable: number;
+  trips: number;
+}
+
+export function computeSupplierLaneBreakdown(
+  trips: readonly TripRow[],
+  options: { topN?: number } = {},
+): SupplierLaneBreakdown[] {
+  const map = new Map<string, { payable: number; trips: number }>();
+  for (const t of trips) {
+    const lane = laneLabel(t);
+    const entry = map.get(lane) ?? { payable: 0, trips: 0 };
+    entry.payable += asNumber(t.supplier_rate);
+    entry.trips += 1;
+    map.set(lane, entry);
+  }
+  const rows: SupplierLaneBreakdown[] = Array.from(map.entries()).map(
+    ([label, agg]) => ({
+      id: label,
+      label,
+      payable: agg.payable,
+      trips: agg.trips,
+    }),
+  );
+  rows.sort((a, b) => b.payable - a.payable);
+  return rows.slice(0, options.topN ?? 6);
+}
+
+export interface SupplierLoadTypeBreakdown {
+  id: string;
+  label: string;
+  payable: number;
+  trips: number;
+}
+
+export function computeSupplierLoadTypeBreakdown(
+  trips: readonly TripRow[],
+  options: { topN?: number } = {},
+): SupplierLoadTypeBreakdown[] {
+  const map = new Map<string, { payable: number; trips: number }>();
+  for (const t of trips) {
+    const loadType = (t.load_type ?? "").trim() || "Unspecified";
+    const entry = map.get(loadType) ?? { payable: 0, trips: 0 };
+    entry.payable += asNumber(t.supplier_rate);
+    entry.trips += 1;
+    map.set(loadType, entry);
+  }
+  const rows = Array.from(map.entries()).map(([label, agg]) => ({
+    id: label,
+    label,
+    payable: agg.payable,
+    trips: agg.trips,
+  }));
+  rows.sort((a, b) => b.payable - a.payable);
+  return rows.slice(0, options.topN ?? 5);
+}
+
+export interface SupplierPayableAging {
+  outstanding: number;
+  bucket0_30: number;
+  bucket31_60: number;
+  bucket61_90: number;
+  bucket90Plus: number;
+  totalOverdueTrips: number;
+}
+
+export function computeSupplierPayableAging(
+  trips: readonly TripRow[],
+  txns: readonly LedgerRow[],
+  options: { now?: Date } = {},
+): SupplierPayableAging {
+  const now = options.now ?? new Date();
+  const payableByTrip = buildPayableByTripMap(trips, txns);
+
+  let bucket0_30 = 0;
+  let bucket31_60 = 0;
+  let bucket61_90 = 0;
+  let bucket90Plus = 0;
+  let overdueTrips = 0;
+
+  for (const t of trips) {
+    const rate = asNumber(t.supplier_rate);
+    if (rate <= 0) continue;
+    const paid = payableByTrip.get(t.id)?.paid ?? 0;
+    const outstanding = rate - paid;
+    if (outstanding <= 0) continue;
+    const dateAnchor = t.pickup_date ? new Date(t.pickup_date) : tripDate(t);
+    if (!dateAnchor || !Number.isFinite(dateAnchor.getTime())) continue;
+    const daysOld = Math.max(
+      0,
+      Math.round((now.getTime() - dateAnchor.getTime()) / MS_PER_DAY),
+    );
+    overdueTrips += 1;
+    if (daysOld <= 30) bucket0_30 += outstanding;
+    else if (daysOld <= 60) bucket31_60 += outstanding;
+    else if (daysOld <= 90) bucket61_90 += outstanding;
+    else bucket90Plus += outstanding;
+  }
+
+  return {
+    outstanding: bucket0_30 + bucket31_60 + bucket61_90 + bucket90Plus,
+    bucket0_30,
+    bucket31_60,
+    bucket61_90,
+    bucket90Plus,
+    totalOverdueTrips: overdueTrips,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auto Insights
 // ─────────────────────────────────────────────────────────────────────────────
 

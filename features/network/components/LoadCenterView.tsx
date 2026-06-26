@@ -393,25 +393,8 @@ export function LoadCenterView({
       showIntegratedPartiesBanner &&
         (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") &&
         styles.loadCenterEmptyStageIntegrated,
-      Platform.OS === "web" &&
-        !isMobileView &&
-        !showIntegratedPartiesBanner &&
-        {
-          minHeight: Math.max(340, Math.round(height * 0.4)),
-        },
-      Platform.OS === "web" &&
-        !isMobileView &&
-        showIntegratedPartiesBanner &&
-        (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") && {
-          minHeight: Math.max(420, Math.round(height * 0.52)),
-        },
     ],
-    [
-      height,
-      isMobileView,
-      loadSubTab,
-      showIntegratedPartiesBanner,
-    ],
+    [loadSubTab, showIntegratedPartiesBanner],
   );
 
   const integratedLoadsCanvas =
@@ -1419,6 +1402,22 @@ export function LoadCenterView({
         />
       ) : null}
 
+      {isMobileView &&
+      (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") ? (
+        <View style={styles.mobileNetworkToolbarRow}>
+          <LoadCenterIntegratedPartiesRow
+            mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
+            parties={
+              loadSubTab === "GIVE_LOAD"
+                ? integratedSuppliers
+                : integratedClients
+            }
+            onAddToNetwork={openNetworkForParties}
+            onPartyPress={openIntegratedParty}
+          />
+        </View>
+      ) : null}
+
       {/* Content area — gray hub canvas (matches Trips page) */}
       <View
         style={[
@@ -1822,9 +1821,18 @@ const styles = StyleSheet.create({
   loadsFilterActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
+    gap: 10,
+    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
+  },
+  mobileNetworkToolbarRow: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
   loadsSearchIcon: { marginRight: 8 },
   loadsStatusTabRow: {
@@ -2888,12 +2896,11 @@ const styles = StyleSheet.create({
   loadCenterEmptyStage: {
     width: "100%",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     paddingVertical: 20,
     paddingHorizontal: 0,
-    gap: 14,
-    flexGrow: 1,
-    minHeight: 280,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: "transparent",
   },
   loadCenterEmptyStageIntegrated: {
@@ -2901,7 +2908,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     paddingVertical: 0,
     backgroundColor: Theme.cardWhite,
-    minHeight: 360,
   },
   getLoadEmptyWrap: {
     paddingTop: 20,

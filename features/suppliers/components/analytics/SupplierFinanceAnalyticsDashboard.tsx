@@ -1,33 +1,20 @@
 /**
- * Client finance analytics — responsive Metronic BI (Connection sales style).
+ * Supplier finance analytics — responsive Metronic BI (matches client dashboard).
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { RiskMeter } from "@/components/analytics/RiskMeter";
 import { TrendBarChart, type TrendPoint } from "@/components/analytics";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { CLIENT_ANALYTICS_LOTTIE } from "@/features/clients/components/analytics/clientAnalyticsAssets";
+import {
+  computeSupplierReliabilityScore,
+  deriveSupplierBadges,
+  scoreLevelFromValue,
+  type SupplierReliabilityScore,
+} from "@/features/analytics";
 import { ClientAnalyticsInsightRow } from "@/features/clients/components/analytics/ClientAnalyticsInsightRow";
 import { ClientAnalyticsKpiLottie } from "@/features/clients/components/analytics/ClientAnalyticsKpiLottie";
-import { ClientAnalyticsMobileTripCard } from "@/features/clients/components/analytics/ClientAnalyticsMobileTripCard";
-import { clientFinanceAnalyticsStyles as clientStyles } from "@/features/clients/components/analytics/clientFinanceAnalytics.styles";
-import {
-  computeClientKpiHeader,
-  computeClientMonthlyTrend,
-  computeClientOperationalMetrics,
-  computeLaneBreakdown,
-  computeLoadTypeBreakdown,
-  computePaymentAging,
-  deriveClientInsights,
-  type ClientMonthlyTrendPoint,
-} from "@/features/clients/components/analytics/clientAnalyticsUtils";
-import type { ClientRow } from "@/features/clients/services/clients.service";
-import {
-  computeCustomerHealthScore,
-  deriveCustomerBadges,
-  scoreLevelFromValue,
-  type CustomerHealthScore,
-} from "@/features/analytics";
+import { clientFinanceAnalyticsStyles as supplierStyles } from "@/features/clients/components/analytics/clientFinanceAnalytics.styles";
 import type { LedgerRow } from "@/features/finance";
 import { NetworkDesktopSalesBarChart } from "@/features/network/components/desktop/NetworkDesktopSalesBarChart";
 import { NetworkDesktopSalesDonut } from "@/features/network/components/desktop/NetworkDesktopSalesDonut";
@@ -49,10 +36,25 @@ import type {
   SalesTrendPoint,
 } from "@/features/network/utils/connectionSalesAnalytics.util";
 import { useProfileHubCompactLayout } from "@/features/party/hooks/useProfileHubCompactLayout";
+import { SUPPLIER_ANALYTICS_LOTTIE } from "@/features/suppliers/components/analytics/supplierAnalyticsAssets";
+import { SupplierAnalyticsMobileTripCard } from "@/features/suppliers/components/analytics/SupplierAnalyticsMobileTripCard";
+import {
+  computeSupplierFinancialMetrics,
+  computeSupplierKpiHeader,
+  computeSupplierLaneBreakdown,
+  computeSupplierLoadTypeBreakdown,
+  computeSupplierMonthlyTrend,
+  computeSupplierOperationalMetrics,
+  computeSupplierPayableAging,
+  computeSupplierPricingStability,
+  deriveSupplierInsights,
+  type SupplierMonthlyTrendPoint,
+} from "@/features/suppliers/components/analytics/supplierAnalyticsUtils";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { formatINRChip } from "@/lib/format";
-import { useCustomerHealthScoreQuery } from "@/lib/queries/useAnalyticsQueries";
+import { useSupplierReliabilityScoreQuery } from "@/lib/queries/useAnalyticsQueries";
 import { Search } from "lucide-react-native";
 import { useMemo, useState, type ReactNode } from "react";
 import {
@@ -64,18 +66,17 @@ import {
   useWindowDimensions,
 } from "react-native";
 
-export type ClientAnalyticsDateRange = "3m" | "6m" | "12m" | "all";
+export type SupplierAnalyticsDateRange = "3m" | "6m" | "12m" | "all";
 
 type Props = {
-  client: ClientRow | null;
+  supplier: SupplierRow | null;
   trips: TripRow[];
   transactions: LedgerRow[];
   orgId: string | null;
-  /** Full-screen route — header already shows party name; hide duplicate intro on mobile. */
   embedded?: boolean;
 };
 
-const DATE_RANGES: { id: ClientAnalyticsDateRange; label: string }[] = [
+const DATE_RANGES: { id: SupplierAnalyticsDateRange; label: string }[] = [
   { id: "3m", label: "3 months" },
   { id: "6m", label: "6 months" },
   { id: "12m", label: "12 months" },
@@ -93,7 +94,7 @@ function tripDate(t: TripRow): Date | null {
 
 function filterByDateRange<T extends TripRow | LedgerRow>(
   rows: T[],
-  range: ClientAnalyticsDateRange,
+  range: SupplierAnalyticsDateRange,
   dateFn: (row: T) => Date | null,
 ): T[] {
   if (range === "all") return rows;
@@ -113,40 +114,38 @@ function laneChipLabel(lane: string): string {
 
 function badgeLabel(b: string): string {
   switch (b) {
-    case "premium":
-      return "Premium client";
+    case "preferred":
+      return "Preferred vendor";
     case "high_risk":
       return "High risk";
-    case "fast_paying":
-      return "Fast paying";
-    case "high_margin":
-      return "High margin";
-    case "strategic":
-      return "Strategic account";
-    case "growing":
-      return "Growing";
-    case "declining":
-      return "Declining";
+    case "reliable":
+      return "Reliable";
+    case "low_quality":
+      return "Low quality";
+    case "best_value":
+      return "Best value";
+    case "frequent_canceller":
+      return "Cancels often";
     default:
       return b.replace(/_/g, " ");
   }
 }
 
-function toTrendPoints(months: readonly ClientMonthlyTrendPoint[]): SalesTrendPoint[] {
+function toTrendPoints(months: readonly SupplierMonthlyTrendPoint[]): SalesTrendPoint[] {
   return months.map((m) => ({
     monthKey: m.monthKey,
     label: m.label,
-    trips: m.revenue,
-    revenue: m.revenue,
+    trips: m.payable,
+    revenue: m.payable,
   }));
 }
 
-function toRevenueLinePoints(
-  months: readonly ClientMonthlyTrendPoint[],
+function toPayableLinePoints(
+  months: readonly SupplierMonthlyTrendPoint[],
 ): TrendPoint[] {
   return months.map((m) => ({
     label: m.label,
-    revenue: m.revenue,
+    revenue: m.paid,
     expense: m.outstanding,
     profit: 0,
     margin: 0,
@@ -170,14 +169,14 @@ function FilterChip({
       <Pressable
         onPress={onPress}
         style={[
-          clientStyles.mobileFilterChip,
-          active && clientStyles.mobileFilterChipOn,
+          supplierStyles.mobileFilterChip,
+          active && supplierStyles.mobileFilterChipOn,
         ]}
       >
         <Text
           style={[
-            clientStyles.mobileFilterChipText,
-            active && clientStyles.mobileFilterChipTextOn,
+            supplierStyles.mobileFilterChipText,
+            active && supplierStyles.mobileFilterChipTextOn,
           ]}
         >
           {label}
@@ -225,20 +224,20 @@ function KpiCard({
     <View
       style={[
         styles.salesKpiCard,
-        compact && clientStyles.kpiCardMobile,
-        compact && (solo || wide) && clientStyles.kpiCardMobileWide,
-        compact && solo && clientStyles.kpiCardMobileSolo,
+        compact && supplierStyles.kpiCardMobile,
+        compact && (solo || wide) && supplierStyles.kpiCardMobileWide,
+        compact && solo && supplierStyles.kpiCardMobileSolo,
       ]}
     >
-      <View style={clientStyles.kpiIconWrap}>{lottie}</View>
+      <View style={supplierStyles.kpiIconWrap}>{lottie}</View>
       <Text style={[styles.salesKpiValue, valueColor ? { color: valueColor } : null]}>
         {value}
       </Text>
-      <Text style={[styles.salesKpiLabel, compact && clientStyles.kpiLabelMobile]}>
+      <Text style={[styles.salesKpiLabel, compact && supplierStyles.kpiLabelMobile]}>
         {label}
       </Text>
       {sub ? (
-        <Text style={[styles.salesKpiSub, compact && clientStyles.kpiSubMobile]}>
+        <Text style={[styles.salesKpiSub, compact && supplierStyles.kpiSubMobile]}>
           {sub}
         </Text>
       ) : null}
@@ -264,7 +263,7 @@ function ChartShell({
       style={[
         styles.salesCard,
         styles.salesCardPadTight,
-        compact && clientStyles.chartCardMobile,
+        compact && supplierStyles.chartCardMobile,
         shellStyle,
       ]}
     >
@@ -275,8 +274,8 @@ function ChartShell({
   );
 }
 
-export function ClientFinanceAnalyticsDashboard({
-  client,
+export function SupplierFinanceAnalyticsDashboard({
+  supplier,
   trips,
   transactions,
   orgId,
@@ -287,14 +286,14 @@ export function ClientFinanceAnalyticsDashboard({
   const { width } = useWindowDimensions();
   const carouselCardWidth = Math.min(300, width - Layout.screenPaddingHorizontal * 2 - 12);
 
-  const [dateRange, setDateRange] = useState<ClientAnalyticsDateRange>("12m");
+  const [dateRange, setDateRange] = useState<SupplierAnalyticsDateRange>("12m");
   const [laneFilter, setLaneFilter] = useState<string | null>(null);
   const [monthKey, setMonthKey] = useState<string | null>(null);
   const [tableSearch, setTableSearch] = useState("");
   const [trendChartWidth, setTrendChartWidth] = useState(compact ? width - 48 : 320);
   const [laneChartWidth, setLaneChartWidth] = useState(compact ? carouselCardWidth - 24 : 200);
 
-  const clientId = client?.id ?? null;
+  const supplierId = supplier?.id ?? null;
 
   const scopedTrips = useMemo(() => {
     let list = filterByDateRange(trips, dateRange, tripDate);
@@ -329,82 +328,70 @@ export function ClientFinanceAnalyticsDashboard({
     [transactions, dateRange],
   );
 
+  const { data: serverScore } = useSupplierReliabilityScoreQuery(orgId, supplierId);
+
+  const localScore: SupplierReliabilityScore | null = useMemo(() => {
+    if (serverScore || !supplierId) return null;
+    return computeSupplierReliabilityScore(
+      supplierId,
+      scopedTrips.map((t) => ({
+        id: t.id,
+        supplier_id: t.supplier_id,
+        supplier_rate: Number(t.supplier_rate ?? 0),
+        status: t.status,
+        pickup_date: t.pickup_date,
+        completed_at: t.completed_at,
+        created_at: t.created_at,
+      })),
+    );
+  }, [serverScore, supplierId, scopedTrips]);
+
+  const score = serverScore ?? localScore;
+  const badges = useMemo(() => deriveSupplierBadges(score), [score]);
+  const primaryBadge = badges[0] ? badgeLabel(badges[0]) : undefined;
+
   const kpis = useMemo(
-    () => computeClientKpiHeader(scopedTrips, scopedTx),
-    [scopedTrips, scopedTx],
+    () => computeSupplierKpiHeader(scopedTrips, scopedTx, { score }),
+    [scopedTrips, scopedTx, score],
   );
   const monthly = useMemo(
-    () => computeClientMonthlyTrend(scopedTrips, scopedTx, { monthsBack: 12 }),
+    () => computeSupplierMonthlyTrend(scopedTrips, scopedTx, { monthsBack: 12 }),
     [scopedTrips, scopedTx],
   );
-  const lanes = useMemo(
-    () => computeLaneBreakdown(scopedTrips, { topN: 6 }),
-    [scopedTrips],
-  );
-  const loadTypes = useMemo(
-    () => computeLoadTypeBreakdown(scopedTrips, { topN: 5 }),
-    [scopedTrips],
-  );
-  const aging = useMemo(
-    () => computePaymentAging(scopedTrips, scopedTx),
+  const financial = useMemo(
+    () => computeSupplierFinancialMetrics(scopedTrips, scopedTx),
     [scopedTrips, scopedTx],
   );
   const operations = useMemo(
-    () => computeClientOperationalMetrics(scopedTrips, scopedTx),
+    () => computeSupplierOperationalMetrics(scopedTrips, scopedTx),
+    [scopedTrips, scopedTx],
+  );
+  const lanes = useMemo(
+    () => computeSupplierLaneBreakdown(scopedTrips, { topN: 6 }),
+    [scopedTrips],
+  );
+  const loadTypes = useMemo(
+    () => computeSupplierLoadTypeBreakdown(scopedTrips, { topN: 5 }),
+    [scopedTrips],
+  );
+  const aging = useMemo(
+    () => computeSupplierPayableAging(scopedTrips, scopedTx),
     [scopedTrips, scopedTx],
   );
 
-  const { data: serverScore } = useCustomerHealthScoreQuery(orgId, clientId);
+  const settlementPct = useMemo(() => {
+    const total = financial.payable;
+    const paid = financial.paid;
+    return total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  }, [financial.paid, financial.payable]);
 
-  const localScore: CustomerHealthScore | null = useMemo(() => {
-    if (serverScore || !clientId) return null;
-    return computeCustomerHealthScore(
-      clientId,
-      scopedTrips.map((t) => ({
-        id: t.id,
-        client_id: t.client_id,
-        client_price: Number(t.client_price ?? 0),
-        margin: Number(t.margin ?? 0),
-        status: t.status,
-        pickup_date: t.pickup_date,
-        created_at: t.created_at,
-      })),
-      scopedTx.map((tx) => ({
-        trip_id: tx.trip_id,
-        amount_in: Number(tx.amount_in ?? 0),
-        transaction_date: tx.transaction_date ?? null,
-        created_at: tx.created_at ?? null,
-      })),
-    );
-  }, [serverScore, clientId, scopedTrips, scopedTx]);
-
-  const healthScore = serverScore ?? localScore;
-  const badges = useMemo(() => deriveCustomerBadges(healthScore), [healthScore]);
-  const primaryBadge = badges[0] ? badgeLabel(badges[0]) : undefined;
-
-  const paymentRisk = useMemo(() => {
-    if (!healthScore) {
-      const delay = kpis.avgPaymentDelayDays;
-      const v = delay <= 0 ? 100 : Math.max(0, 100 - delay * 1.5);
-      return Math.round(v);
-    }
-    return healthScore.paymentScore;
-  }, [healthScore, kpis.avgPaymentDelayDays]);
-
-  const collectionPct = useMemo(() => {
-    const billed = kpis.totalRevenue;
-    const received = Math.max(0, billed - kpis.outstanding);
-    return billed > 0 ? Math.min(100, Math.round((received / billed) * 100)) : 0;
-  }, [kpis.outstanding, kpis.totalRevenue]);
-
-  const collectedAmount = Math.max(0, kpis.totalRevenue - kpis.outstanding);
   const trend = useMemo(() => toTrendPoints(monthly), [monthly]);
 
   const laneSlices: SalesSlice[] = useMemo(
     () =>
       lanes.map((l, i) => ({
         label: laneChipLabel(l.label),
-        value: l.revenue,
+        value: l.payable,
         color: DONUT_COLORS[i % DONUT_COLORS.length],
       })),
     [lanes],
@@ -414,7 +401,7 @@ export function ClientFinanceAnalyticsDashboard({
     () =>
       loadTypes.map((l, i) => ({
         label: l.label,
-        value: l.revenue,
+        value: l.payable,
         color: DONUT_COLORS[(i + 2) % DONUT_COLORS.length],
       })),
     [loadTypes],
@@ -437,8 +424,8 @@ export function ClientFinanceAnalyticsDashboard({
         key: l.id,
         label: l.label,
         shortLabel: laneChipLabel(l.label),
-        value: l.revenue,
-        revenue: l.revenue,
+        value: l.payable,
+        revenue: l.payable,
         contributionPct: 0,
         color: DONUT_COLORS[i % DONUT_COLORS.length],
       })),
@@ -458,7 +445,7 @@ export function ClientFinanceAnalyticsDashboard({
       })
       .slice(0, 50)
       .map((t) => {
-        const sales = Number(t.client_price ?? 0);
+        const cost = Number(t.supplier_rate ?? 0);
         const pickup = (t.pickup_area ?? "").trim();
         const drop = (t.drop_location ?? "").trim();
         const lane =
@@ -467,31 +454,40 @@ export function ClientFinanceAnalyticsDashboard({
           id: t.id,
           tripRef: getTripOperationalDisplay({ trip_number: t.trip_number ?? null }),
           lane,
-          clientName: client?.name ?? "—",
-          supplierName: "—",
-          sales,
-          cost: 0,
+          clientName: "—",
+          supplierName: supplier?.name ?? "—",
+          sales: cost,
+          cost,
           margin: Number(t.margin ?? 0),
-          marginPct: sales > 0 ? Math.round((Number(t.margin ?? 0) / sales) * 100) : 0,
+          marginPct: 0,
           dateLabel: null,
           statusLabel: (t.status ?? "—").replace(/_/g, " ").toUpperCase(),
           trip: t,
         };
       });
-  }, [scopedTrips, tableSearch, client?.name]);
+  }, [scopedTrips, tableSearch, supplier?.name]);
 
-  const insights = useMemo(
-    () => deriveClientInsights(monthly, kpis, operations, aging),
-    [monthly, kpis, operations, aging],
+  const pricing = useMemo(
+    () => computeSupplierPricingStability(scopedTrips, { topLanes: 5 }),
+    [scopedTrips],
   );
 
-  const healthBars = healthScore
+  const insights = useMemo(
+    () => deriveSupplierInsights(monthly, kpis, operations, pricing, financial),
+    [monthly, kpis, operations, pricing, financial],
+  );
+
+  const healthBars = score
     ? [
-        { label: "Profitability", percent: healthScore.profitabilityScore },
-        { label: "Payment", percent: healthScore.paymentScore },
-        { label: "Operations", percent: healthScore.operationsScore, color: Theme.positive },
-        { label: "Consistency", percent: healthScore.consistencyScore },
-        { label: "Growth", percent: healthScore.growthScore },
+        { label: "Completion", percent: score.completionScore },
+        { label: "On-time", percent: score.onTimeScore, color: Theme.positive },
+        {
+          label: "Cancellation",
+          percent: score.cancellationScore,
+          color: score.cancellationScore < 50 ? Theme.negative : Theme.primary,
+        },
+        { label: "Availability", percent: score.availabilityScore },
+        { label: "Pricing", percent: score.pricingScore },
       ]
     : [];
 
@@ -503,7 +499,7 @@ export function ClientFinanceAnalyticsDashboard({
 
   const filtersActive = Boolean(laneFilter || monthKey || tableSearch.trim());
 
-  const setDateRangeAndResetMonth = (range: ClientAnalyticsDateRange) => {
+  const setDateRangeAndResetMonth = (range: SupplierAnalyticsDateRange) => {
     setDateRange(range);
     setMonthKey(null);
   };
@@ -513,7 +509,7 @@ export function ClientFinanceAnalyticsDashboard({
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={
-        compact ? clientStyles.mobileFilterScroll : styles.tagWrap
+        compact ? supplierStyles.mobileFilterScroll : styles.tagWrap
       }
     >
       {DATE_RANGES.map((range) => (
@@ -534,7 +530,7 @@ export function ClientFinanceAnalyticsDashboard({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={
-          compact ? clientStyles.mobileFilterScroll : styles.tagWrap
+          compact ? supplierStyles.mobileFilterScroll : styles.tagWrap
         }
       >
         {lanes.map((l) => (
@@ -552,44 +548,55 @@ export function ClientFinanceAnalyticsDashboard({
     ) : null;
 
   const kpiRow = (
-    <View style={compact ? clientStyles.kpiGridMobile : styles.salesKpiRow}>
+    <View style={compact ? supplierStyles.kpiGridMobile : styles.salesKpiRow}>
       <KpiCard
         compact={compact}
-        label="Total sales"
-        value={formatINRChip(kpis.totalRevenue)}
-        sub={`Received ${formatINRChip(collectedAmount)} · Due ${formatINRChip(kpis.outstanding)}`}
-        lottie={<ClientAnalyticsKpiLottie source={CLIENT_ANALYTICS_LOTTIE.sales} size={40} />}
+        label="Total cost"
+        value={formatINRChip(financial.payable)}
+        sub={`Paid ${formatINRChip(financial.paid)} · Due ${formatINRChip(financial.outstanding)}`}
+        lottie={
+          <ClientAnalyticsKpiLottie source={SUPPLIER_ANALYTICS_LOTTIE.cost} size={40} />
+        }
       />
       <KpiCard
         compact={compact}
-        label="Trip P&L"
-        value={formatINRChip(kpis.netMargin)}
-        sub={`${kpis.marginPct.toFixed(1)}% on sales`}
-        valueColor={kpis.netMargin >= 0 ? Theme.positive : Theme.negative}
-        lottie={<ClientAnalyticsKpiLottie source={CLIENT_ANALYTICS_LOTTIE.revenue} size={40} />}
-      />
-      <KpiCard
-        compact={compact}
-        label="Collection rate"
-        value={`${collectionPct}%`}
-        sub="Received vs billed"
+        label="Margin contribution"
+        value={formatINRChip(financial.marginContribution)}
+        sub={`${financial.marginContributionPct.toFixed(1)}% on revenue handled`}
         valueColor={
-          collectionPct >= 80
+          financial.marginContribution >= 0 ? Theme.positive : Theme.negative
+        }
+        lottie={
+          <ClientAnalyticsKpiLottie source={SUPPLIER_ANALYTICS_LOTTIE.margin} size={40} />
+        }
+      />
+      <KpiCard
+        compact={compact}
+        label="Settlement rate"
+        value={`${settlementPct}%`}
+        sub="Paid vs total payable"
+        valueColor={
+          settlementPct >= 80
             ? Theme.positive
-            : collectionPct >= 50
+            : settlementPct >= 50
               ? Theme.warning
               : Theme.negative
         }
         lottie={
-          <ClientAnalyticsKpiLottie source={CLIENT_ANALYTICS_LOTTIE.collection} size={40} />
+          <ClientAnalyticsKpiLottie
+            source={SUPPLIER_ANALYTICS_LOTTIE.settlement}
+            size={40}
+          />
         }
       />
       <KpiCard
         compact={compact}
-        label="Trips completed"
+        label="Trips executed"
         value={String(operations.tripsCompleted)}
         sub={`${operations.onTimePct}% on-time · ${operations.completionPct.toFixed(0)}% completion`}
-        lottie={<ClientAnalyticsKpiLottie source={CLIENT_ANALYTICS_LOTTIE.trips} size={40} />}
+        lottie={
+          <ClientAnalyticsKpiLottie source={SUPPLIER_ANALYTICS_LOTTIE.trips} size={40} />
+        }
       />
     </View>
   );
@@ -599,50 +606,58 @@ export function ClientFinanceAnalyticsDashboard({
       style={[
         styles.salesCard,
         styles.salesCardPadTight,
-        compact && clientStyles.healthCardMobile,
+        compact && supplierStyles.healthCardMobile,
       ]}
     >
-      <View style={clientStyles.healthHeader}>
-        <ClientAnalyticsKpiLottie source={CLIENT_ANALYTICS_LOTTIE.health} size={32} />
-        <Text style={styles.salesCardTitle}>Receivable health</Text>
+      <View style={supplierStyles.healthHeader}>
+        <ClientAnalyticsKpiLottie
+          source={SUPPLIER_ANALYTICS_LOTTIE.reliability}
+          size={32}
+        />
+        <Text style={styles.salesCardTitle}>Reliability score</Text>
       </View>
-      {healthScore ? (
+      {score ? (
         <>
-          <View style={clientStyles.healthScoreRow}>
+          <View style={supplierStyles.healthScoreRow}>
             <Text
               style={[
-                clientStyles.healthScore,
-                compact && clientStyles.healthScoreCompact,
+                supplierStyles.healthScore,
+                compact && supplierStyles.healthScoreCompact,
+                score.level === "critical" || score.level === "warning"
+                  ? { color: Theme.negative }
+                  : score.level === "good" || score.level === "excellent"
+                    ? { color: Theme.positive }
+                    : { color: Theme.warning },
               ]}
             >
-              {Math.round(healthScore.score)}
+              {Math.round(score.score)}
             </Text>
             <Text
               style={[
-                clientStyles.healthScoreMax,
-                compact && clientStyles.healthScoreMaxCompact,
+                supplierStyles.healthScoreMax,
+                compact && supplierStyles.healthScoreMaxCompact,
               ]}
             >
               / 100
             </Text>
           </View>
           <Text style={styles.salesWidgetSub}>
-            {healthScore.breakdown.tripsTotal} trips · payment behaviour
+            {score.breakdown.tripsTotal} trips · last 6 months
           </Text>
           {healthBars.map((bar) => (
-            <View key={bar.label} style={clientStyles.healthBarRow}>
+            <View key={bar.label} style={supplierStyles.healthBarRow}>
               <Text
                 style={[
-                  clientStyles.healthBarLabel,
-                  compact && clientStyles.healthBarLabelCompact,
+                  supplierStyles.healthBarLabel,
+                  compact && supplierStyles.healthBarLabelCompact,
                 ]}
               >
                 {bar.label}
               </Text>
-              <View style={clientStyles.healthBarTrack}>
+              <View style={supplierStyles.healthBarTrack}>
                 <View
                   style={[
-                    clientStyles.healthBarFill,
+                    supplierStyles.healthBarFill,
                     {
                       width: `${Math.max(0, Math.min(100, bar.percent))}%`,
                       backgroundColor:
@@ -652,40 +667,36 @@ export function ClientFinanceAnalyticsDashboard({
                   ]}
                 />
               </View>
-              <Text style={clientStyles.healthBarValue}>{Math.round(bar.percent)}</Text>
+              <Text style={supplierStyles.healthBarValue}>{Math.round(bar.percent)}</Text>
             </View>
           ))}
         </>
       ) : (
         <Text style={styles.salesEmptySide}>
-          Not enough trip history for a health score.
+          Not enough trip history for a reliability score.
         </Text>
       )}
     </View>
   );
 
-  const paymentRiskCard = (
+  const onTimeGaugeCard = (
     <View
       style={[
         styles.salesCard,
         styles.salesCardPadTight,
-        clientStyles.gaugeCard,
-        !compact && clientStyles.gaugeCardDesktop,
+        supplierStyles.gaugeCard,
+        !compact && supplierStyles.gaugeCardDesktop,
       ]}
     >
       <Text style={[styles.salesCardTitle, compact && { textAlign: "center" }]}>
-        Payment risk
+        On-time availability
       </Text>
-      <View style={clientStyles.gaugeBody}>
+      <View style={supplierStyles.gaugeBody}>
         <RiskMeter
-          value={paymentRisk}
-          level={scoreLevelFromValue(paymentRisk)}
-          label="Payment risk"
-          caption={
-            kpis.avgPaymentDelayDays > 0
-              ? `${kpis.avgPaymentDelayDays}d average delay`
-              : "No delay history"
-          }
+          value={kpis.onTimePct}
+          level={scoreLevelFromValue(kpis.onTimePct)}
+          label="On-time availability"
+          caption={`${operations.onTime}/${operations.onTimeEligible} eligible trips`}
           size={compact ? 112 : 128}
           stroke={compact ? 9 : 10}
         />
@@ -693,12 +704,12 @@ export function ClientFinanceAnalyticsDashboard({
     </View>
   );
 
-  const revenueTrendCard = (
+  const payableTrendCard = (
     <ChartShell
       compact={compact}
       shellStyle={!compact ? styles.salesWidgetTrend : undefined}
-      title="Revenue trend"
-      subtitle="Client billing by month · tap to filter trips"
+      title="Payable trend"
+      subtitle="Supplier cost by month · tap to filter trips"
     >
       <View
         style={styles.salesWidgetChartBody}
@@ -775,7 +786,7 @@ export function ClientFinanceAnalyticsDashboard({
             const lane = lanes.find((l) => l.id === key);
             setLaneFilter(lane ? lane.label : null);
           }}
-          footerText="Revenue by lane · tap to cross-filter"
+          footerText="Payable by lane · tap to cross-filter"
         />
       </View>
     </ChartShell>
@@ -785,25 +796,25 @@ export function ClientFinanceAnalyticsDashboard({
     <ChartShell
       compact={compact}
       shellStyle={!compact ? styles.salesBarOrigin : undefined}
-      title="Aging mix"
+      title="Payable aging"
     >
       <View style={styles.salesWidgetDonutBody}>
         <NetworkDesktopSalesDonut
           slices={agingSlices}
-          emptyMessage="No outstanding aging."
+          emptyMessage="No outstanding payable aging."
         />
       </View>
     </ChartShell>
   );
 
-  const collectionsCard = (
+  const settlementsCard = (
     <ChartShell
       compact={compact}
       shellStyle={!compact ? styles.salesBarOrigin : undefined}
-      title="Collections"
+      title="Settlements"
     >
       <TrendBarChart
-        data={toRevenueLinePoints(monthly)}
+        data={toPayableLinePoints(monthly)}
         width={Math.max(180, laneChartWidth)}
         height={compact ? 132 : 140}
         primaryField="revenue"
@@ -814,29 +825,35 @@ export function ClientFinanceAnalyticsDashboard({
     </ChartShell>
   );
 
-  const clientSummaryCard = client ? (
-    <View style={[styles.salesCard, styles.salesCardPad, compact && clientStyles.sectionCardMobile]}>
+  const supplierSummaryCard = supplier ? (
+    <View
+      style={[
+        styles.salesCard,
+        styles.salesCardPad,
+        compact && supplierStyles.sectionCardMobile,
+      ]}
+    >
       <View style={styles.salesContributorRow}>
         <PartyAvatar
-          name={client.name}
-          initialsColorSeed={client.id}
-          avatarUrl={client.avatar_url}
-          avatarSeed={client.avatar_seed}
-          entityType="client"
+          name={supplier.name ?? "Supplier"}
+          initialsColorSeed={supplier.id}
+          avatarUrl={supplier.avatar_url}
+          avatarSeed={supplier.avatar_seed}
+          entityType="supplier"
           size={compact ? 40 : 36}
         />
         <View style={styles.salesContributorTextCol}>
           <Text style={styles.salesContributorName} numberOfLines={2}>
-            {client.name}
+            {supplier.name}
           </Text>
           <Text style={styles.salesContributorMeta}>
-            {operations.tripsTotal} trips · {collectionPct}% collected
+            {operations.tripsTotal} trips · {settlementPct}% settled
           </Text>
         </View>
       </View>
       {primaryBadge ? (
-        <View style={clientStyles.healthBadge}>
-          <Text style={clientStyles.healthBadgeText}>{primaryBadge}</Text>
+        <View style={supplierStyles.healthBadge}>
+          <Text style={supplierStyles.healthBadgeText}>{primaryBadge}</Text>
         </View>
       ) : null}
     </View>
@@ -848,9 +865,9 @@ export function ClientFinanceAnalyticsDashboard({
         style={[
           styles.salesCard,
           styles.salesCardPad,
-          clientStyles.insightsCard,
-          !compact && clientStyles.insightsCardDesktop,
-          compact && clientStyles.sectionCardMobile,
+          supplierStyles.insightsCard,
+          !compact && supplierStyles.insightsCardDesktop,
+          compact && supplierStyles.sectionCardMobile,
         ]}
       >
         <Text style={styles.cardTitle}>Insights</Text>
@@ -864,19 +881,31 @@ export function ClientFinanceAnalyticsDashboard({
       </View>
     ) : null;
 
+  const paidByTrip = useMemo(() => {
+    const map = new Map<string, number>();
+    const tripIds = new Set(scopedTrips.map((t) => t.id));
+    for (const tx of scopedTx) {
+      if (!tx.trip_id || !tripIds.has(tx.trip_id)) continue;
+      const amt = Number(tx.amount_out ?? 0);
+      if (amt <= 0) continue;
+      map.set(tx.trip_id, (map.get(tx.trip_id) ?? 0) + amt);
+    }
+    return map;
+  }, [scopedTrips, scopedTx]);
+
   const tripsBlock = compact ? (
-    <View style={clientStyles.tripsSectionMobile}>
-      <View style={clientStyles.sectionCardMobile}>
+    <View style={supplierStyles.tripsSectionMobile}>
+      <View style={supplierStyles.sectionCardMobile}>
         <Text style={styles.salesCardTitle}>Trips</Text>
         <Text style={styles.salesTripTableSub}>
           {filtersActive
             ? "Filtered by period, lane, or month"
-            : "All client trips in period"}
+            : "All supplier trips in period"}
         </Text>
-        <View style={clientStyles.tripsSearchMobile}>
+        <View style={supplierStyles.tripsSearchMobile}>
           <Search size={16} color={METRONIC.muted} />
           <TextInput
-            style={clientStyles.tripsSearchInput}
+            style={supplierStyles.tripsSearchInput}
             placeholder="Search trips, lanes…"
             placeholderTextColor={METRONIC.muted}
             value={tableSearch}
@@ -886,25 +915,23 @@ export function ClientFinanceAnalyticsDashboard({
       </View>
 
       {tableRows.length === 0 ? (
-        <View style={clientStyles.tripsEmpty}>
+        <View style={supplierStyles.tripsEmpty}>
           <ClientAnalyticsKpiLottie
-            source={CLIENT_ANALYTICS_LOTTIE.trips}
+            source={SUPPLIER_ANALYTICS_LOTTIE.trips}
             size={72}
           />
-          <Text style={clientStyles.tripsEmptyText}>No trips match filters.</Text>
+          <Text style={supplierStyles.tripsEmptyText}>No trips match filters.</Text>
         </View>
       ) : (
-        <View style={clientStyles.tripsListMobile}>
+        <View style={supplierStyles.tripsListMobile}>
           {tableRows.map((row) => {
-            const received = scopedTx
-              .filter((tx) => tx.trip_id === row.id)
-              .reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0);
-            const due = Math.max(0, row.sales - received);
+            const paid = paidByTrip.get(row.id) ?? 0;
+            const due = Math.max(0, row.cost - paid);
             return (
-              <ClientAnalyticsMobileTripCard
+              <SupplierAnalyticsMobileTripCard
                 key={row.id}
                 row={row}
-                received={received}
+                paid={paid}
                 due={due}
               />
             );
@@ -920,7 +947,7 @@ export function ClientFinanceAnalyticsDashboard({
           <Text style={styles.salesTripTableSub}>
             {filtersActive
               ? "Filtered by period, lane, or month"
-              : "All client trips in period"}
+              : "All supplier trips in period"}
           </Text>
         </View>
       </View>
@@ -940,7 +967,7 @@ export function ClientFinanceAnalyticsDashboard({
 
       <View style={styles.salesTableScroll}>
         <View style={styles.salesTableHead}>
-          <View style={clientStyles.clientTripsGrid}>
+          <View style={supplierStyles.clientTripsGrid}>
             <Text style={[styles.salesTableHeadCell, styles.salesColTripRef]}>
               Trip
             </Text>
@@ -948,10 +975,10 @@ export function ClientFinanceAnalyticsDashboard({
               Lane
             </Text>
             <Text style={[styles.salesTableHeadCell, styles.salesGridNumHead]}>
-              Sales
+              Cost
             </Text>
             <Text style={[styles.salesTableHeadCell, styles.salesGridNumHead]}>
-              Received
+              Paid
             </Text>
             <Text style={[styles.salesTableHeadCell, styles.salesGridNumHead]}>
               Due
@@ -963,19 +990,17 @@ export function ClientFinanceAnalyticsDashboard({
         </View>
 
         {tableRows.length === 0 ? (
-          <View style={clientStyles.tripsEmpty}>
+          <View style={supplierStyles.tripsEmpty}>
             <ClientAnalyticsKpiLottie
-              source={CLIENT_ANALYTICS_LOTTIE.trips}
+              source={SUPPLIER_ANALYTICS_LOTTIE.trips}
               size={72}
             />
-            <Text style={clientStyles.tripsEmptyText}>No trips match filters.</Text>
+            <Text style={supplierStyles.tripsEmptyText}>No trips match filters.</Text>
           </View>
         ) : (
           tableRows.map((row, idx) => {
-            const received = scopedTx
-              .filter((tx) => tx.trip_id === row.id)
-              .reduce((s, tx) => s + Number(tx.amount_in ?? 0), 0);
-            const due = Math.max(0, row.sales - received);
+            const paid = paidByTrip.get(row.id) ?? 0;
+            const due = Math.max(0, row.cost - paid);
             return (
               <View
                 key={row.id}
@@ -984,7 +1009,7 @@ export function ClientFinanceAnalyticsDashboard({
                   idx === tableRows.length - 1 && styles.salesTableRowLast,
                 ]}
               >
-                <View style={clientStyles.clientTripsGrid}>
+                <View style={supplierStyles.clientTripsGrid}>
                   <View style={styles.salesColTripRef}>
                     <SalesTripRefCell row={row} />
                   </View>
@@ -992,10 +1017,10 @@ export function ClientFinanceAnalyticsDashboard({
                     <SalesTripLaneCell row={row} />
                   </View>
                   <View style={styles.salesGridNumCell}>
-                    <SalesTripMoneyCell value={row.sales} />
+                    <SalesTripMoneyCell value={row.cost} />
                   </View>
                   <View style={styles.salesGridNumCell}>
-                    <SalesTripMoneyCell value={received} />
+                    <SalesTripMoneyCell value={paid} />
                   </View>
                   <View style={styles.salesGridNumCell}>
                     <SalesTripMoneyCell value={due} />
@@ -1016,67 +1041,67 @@ export function ClientFinanceAnalyticsDashboard({
     return (
       <View style={[styles.salesBody, layout.salesBody]}>
         {!embedded ? (
-          <View style={clientStyles.pageIntroCompact}>
-            <Text style={[clientStyles.pageTitle, clientStyles.pageTitleCompact]}>
+          <View style={supplierStyles.pageIntroCompact}>
+            <Text style={[supplierStyles.pageTitle, supplierStyles.pageTitleCompact]}>
               Finance analytics
             </Text>
-            <Text style={[clientStyles.pageSub, clientStyles.pageSubCompact]}>
-              {client?.name ?? "Billing, P&L, and receivables"}
+            <Text style={[supplierStyles.pageSub, supplierStyles.pageSubCompact]}>
+              {supplier?.name ?? "Payable, settlement, and trip performance"}
             </Text>
           </View>
         ) : null}
 
-        <View style={clientStyles.mobileToolbar}>
+        <View style={supplierStyles.mobileToolbar}>
           {periodFilters}
           {laneFilters}
           {filtersActive ? (
-            <Pressable onPress={clearFilters} style={clientStyles.mobileClearBtn}>
-              <Text style={clientStyles.mobileClearBtnText}>Clear all filters</Text>
+            <Pressable onPress={clearFilters} style={supplierStyles.mobileClearBtn}>
+              <Text style={supplierStyles.mobileClearBtnText}>Clear all filters</Text>
             </Pressable>
           ) : null}
         </View>
 
-        <View style={clientStyles.mobileStack}>
-          {clientSummaryCard ? (
-            <View style={clientStyles.mobileSection}>{clientSummaryCard}</View>
+        <View style={supplierStyles.mobileStack}>
+          {supplierSummaryCard ? (
+            <View style={supplierStyles.mobileSection}>{supplierSummaryCard}</View>
           ) : null}
 
-          <View style={clientStyles.mobileSection}>{kpiRow}</View>
+          <View style={supplierStyles.mobileSection}>{kpiRow}</View>
 
-          <View style={clientStyles.mobileSection}>
-            <View style={clientStyles.chartStackMobile}>
-              {revenueTrendCard}
+          <View style={supplierStyles.mobileSection}>
+            <View style={supplierStyles.chartStackMobile}>
+              {payableTrendCard}
               {laneMixCard}
               {loadTypesCard}
             </View>
           </View>
 
-          <View style={clientStyles.mobileSection}>
-            <View style={clientStyles.healthStackMobile}>
+          <View style={supplierStyles.mobileSection}>
+            <View style={supplierStyles.healthStackMobile}>
               {healthCard}
-              {paymentRiskCard}
+              {onTimeGaugeCard}
             </View>
           </View>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={clientStyles.carousel}
+            contentContainerStyle={supplierStyles.carousel}
           >
-            <View style={[clientStyles.carouselCard, { width: carouselCardWidth }]}>
-              <View style={clientStyles.carouselCardInner}>{laneContributionCard}</View>
+            <View style={[supplierStyles.carouselCard, { width: carouselCardWidth }]}>
+              <View style={supplierStyles.carouselCardInner}>{laneContributionCard}</View>
             </View>
-            <View style={[clientStyles.carouselCard, { width: carouselCardWidth }]}>
-              <View style={clientStyles.carouselCardInner}>{agingCard}</View>
+            <View style={[supplierStyles.carouselCard, { width: carouselCardWidth }]}>
+              <View style={supplierStyles.carouselCardInner}>{agingCard}</View>
             </View>
-            <View style={[clientStyles.carouselCard, { width: carouselCardWidth }]}>
-              <View style={clientStyles.carouselCardInner}>{collectionsCard}</View>
+            <View style={[supplierStyles.carouselCard, { width: carouselCardWidth }]}>
+              <View style={supplierStyles.carouselCardInner}>{settlementsCard}</View>
             </View>
           </ScrollView>
 
           {tripsBlock}
           {insightsBlock ? (
-            <View style={clientStyles.mobileSection}>{insightsBlock}</View>
+            <View style={supplierStyles.mobileSection}>{insightsBlock}</View>
           ) : null}
         </View>
       </View>
@@ -1084,18 +1109,18 @@ export function ClientFinanceAnalyticsDashboard({
   }
 
   return (
-    <View style={[styles.salesBody, clientStyles.bodyDesktop]}>
-      <View style={[clientStyles.pageIntro, clientStyles.pageIntroDesktop]}>
-        <Text style={clientStyles.pageTitle}>Client finance analytics</Text>
-        <Text style={clientStyles.pageSub}>
-          {client?.name
-            ? `${client.name} · billing, P&L, and receivables`
-            : "Billing, P&L, and receivables for this client"}
+    <View style={[styles.salesBody, supplierStyles.bodyDesktop]}>
+      <View style={[supplierStyles.pageIntro, supplierStyles.pageIntroDesktop]}>
+        <Text style={supplierStyles.pageTitle}>Supplier finance analytics</Text>
+        <Text style={supplierStyles.pageSub}>
+          {supplier?.name
+            ? `${supplier.name} · payable, settlement, and trip performance`
+            : "Payable, settlement, and trip performance"}
         </Text>
       </View>
 
       <View style={styles.splitRow}>
-        <View style={[styles.sidebar, clientStyles.desktopSidebar]}>
+        <View style={[styles.sidebar, supplierStyles.desktopSidebar]}>
           <View style={[styles.salesCard, styles.salesCardPad]}>
             <Text style={styles.cardTitle}>Intelligent filters</Text>
             <Text style={styles.salesFilterHint}>
@@ -1132,9 +1157,9 @@ export function ClientFinanceAnalyticsDashboard({
                   )
                 }
               >
-                <View style={clientStyles.kpiIconWrapLane}>
+                <View style={supplierStyles.kpiIconWrapLane}>
                   <ClientAnalyticsKpiLottie
-                    source={CLIENT_ANALYTICS_LOTTIE.lanes}
+                    source={SUPPLIER_ANALYTICS_LOTTIE.lanes}
                     size={32}
                   />
                 </View>
@@ -1143,7 +1168,7 @@ export function ClientFinanceAnalyticsDashboard({
                     {lane.label}
                   </Text>
                   <Text style={styles.salesContributorMeta}>
-                    {lane.trips} trips · {formatINRChip(lane.revenue)}
+                    {lane.trips} trips · {formatINRChip(lane.payable)}
                   </Text>
                 </View>
               </Pressable>
@@ -1153,28 +1178,28 @@ export function ClientFinanceAnalyticsDashboard({
             ) : null}
           </View>
 
-          {clientSummaryCard}
+          {supplierSummaryCard}
           {insightsBlock}
         </View>
 
-        <View style={[styles.mainCol, clientStyles.desktopMainCol]}>
+        <View style={[styles.mainCol, supplierStyles.desktopMainCol]}>
           {kpiRow}
 
           <View style={styles.salesWidgetRow}>
-            {revenueTrendCard}
+            {payableTrendCard}
             {laneMixCard}
             {loadTypesCard}
           </View>
 
           <View style={styles.salesBarRowDual}>
             {healthCard}
-            {paymentRiskCard}
+            {onTimeGaugeCard}
           </View>
 
           <View style={styles.salesBarRow}>
             {laneContributionCard}
             {agingCard}
-            {collectionsCard}
+            {settlementsCard}
           </View>
 
           {tripsBlock}
