@@ -8,6 +8,7 @@ import { DateRangePickerModal } from "@/components/DateRangePickerModal";
 import { EntityIntelWidgetRow } from "@/components/entityIntel/EntityIntelWidgetRow";
 import { pickEntityReport } from "@/components/entityIntel/pickEntityReport";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
+import { EntityTripTableEmptyRow } from "@/components/EntityTripTableEmptyRow";
 import { entityDetailPageChromeStyles as edc } from "@/components/entityDetailPageChrome.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
 import { FinanceFAB } from "@/components/FinanceFAB";
@@ -2566,9 +2567,7 @@ export default function ClientDetailScreen({
                 </TouchableOpacity>
               ))
             ) : (
-              <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No trips</Text>
-              </View>
+              <EntityTripTableEmptyRow />
             )}
           </View>
         )}

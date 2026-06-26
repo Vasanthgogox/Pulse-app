@@ -12,10 +12,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
 import {
-  openTripLedgerEntryChooser,
   pushTripLedgerQuickEntry,
 } from "@/features/finance/ledger/tripLedgerEntryChooser";
 import { TripPayableReceivableSummaryCard } from "@/features/trips/components/trip-detail/adjustment/TripPayableReceivableSummaryCard";
+import { TripMarginHero } from "@/features/trips/components/trip-detail/TripMarginHero";
 import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { latestTripSettlementLedgerEntry } from "@/features/trips/utils/tripSettlementLedgerEntries.util";
@@ -2054,7 +2054,6 @@ export default function TripDetailScreen({
     adjustedSaleInr: adjSales,
     adjustedCostInr: adjCost,
   });
-  const marginIsNegative = netManifestYield < 0;
   const marginBasisLabel = isAssetTripFinance
     ? "Client sale − trip cost"
     : "Client sale − supplier cost";
@@ -2161,67 +2160,65 @@ export default function TripDetailScreen({
             ? () => openSettlementLanePreview("payable")
             : undefined
         }
+        receivableAction={
+          <>
+            <TouchableOpacity
+              style={[neoStyles.laneActionBtn, neoStyles.laneActionBtnPrimary]}
+              onPress={() => {
+                const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
+                pushTripLedgerQuickEntry(
+                  {
+                    ...tripLedgerNavContext,
+                    ledgerSyncExtraParams: {
+                      dueAmountIn: String(dueHint),
+                    },
+                  },
+                  "client",
+                );
+              }}
+              activeOpacity={0.88}
+            >
+              <Feather name="credit-card" size={14} color="#fff" />
+              <Text style={neoStyles.laneActionBtnText} numberOfLines={2}>
+                Capture payment
+              </Text>
+            </TouchableOpacity>
+            {!hasLinkedClient ? (
+              <Text style={neoStyles.laneActionHint}>
+                Link a client to pre-fill receipt
+              </Text>
+            ) : null}
+          </>
+        }
+        payableAction={
+          showRecordSupplierPayoutCta ? (
+            <TouchableOpacity
+              style={[neoStyles.laneActionBtn, neoStyles.laneActionBtnDark]}
+              onPress={() => {
+                const dueOut = Math.max(0, Math.round(supplierDueAfterAdjustments));
+                pushTripLedgerQuickEntry(
+                  {
+                    ...tripLedgerNavContext,
+                    ledgerSyncExtraParams: {
+                      dueAmountOut: String(dueOut),
+                    },
+                  },
+                  "supplier",
+                );
+              }}
+              activeOpacity={0.88}
+            >
+              <Feather name="arrow-up-right" size={14} color="#fff" />
+              <Text
+                style={[neoStyles.laneActionBtnText, neoStyles.laneActionBtnDarkText]}
+                numberOfLines={2}
+              >
+                Record supplier payout
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        }
       />
-      <TouchableOpacity
-        style={neoStyles.capturePaymentBtn}
-        onPress={() => {
-          const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
-          pushTripLedgerQuickEntry(
-            {
-              ...tripLedgerNavContext,
-              ledgerSyncExtraParams: {
-                dueAmountIn: String(dueHint),
-              },
-            },
-            "client",
-          );
-        }}
-        activeOpacity={0.88}
-      >
-        <Feather name="credit-card" size={16} color="#fff" />
-        <Text style={neoStyles.capturePaymentBtnText}>Capture payment</Text>
-      </TouchableOpacity>
-      {!hasLinkedClient ? (
-        <Text style={neoStyles.capturePaymentHint}>
-          Link a client on the trip to pre-fill customer receipt
-        </Text>
-      ) : null}
-      <TouchableOpacity
-        style={neoStyles.markPaymentsBtn}
-        onPress={() => openTripLedgerEntryChooser(tripLedgerNavContext)}
-        activeOpacity={0.88}
-        accessibilityRole="button"
-        accessibilityLabel="Mark payments"
-      >
-        <Feather name="check-circle" size={16} color={Theme.primary} />
-        <Text style={neoStyles.markPaymentsBtnText}>Mark payments</Text>
-      </TouchableOpacity>
-      {showRecordSupplierPayoutCta ? (
-        <TouchableOpacity
-          style={[
-            neoStyles.capturePaymentBtn,
-            { marginTop: 4, backgroundColor: "#0f172a" },
-          ]}
-          onPress={() => {
-            const dueOut = Math.max(0, Math.round(supplierDueAfterAdjustments));
-            pushTripLedgerQuickEntry(
-              {
-                ...tripLedgerNavContext,
-                ledgerSyncExtraParams: {
-                  dueAmountOut: String(dueOut),
-                },
-              },
-              "supplier",
-            );
-          }}
-          activeOpacity={0.88}
-        >
-          <Feather name="arrow-up-right" size={16} color="#fff" />
-          <Text style={neoStyles.capturePaymentBtnText}>
-            Record supplier payout
-          </Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 
@@ -2307,42 +2304,11 @@ export default function TripDetailScreen({
 
   /** Shared mobile + desktop: trip margin hero only (detail in adjustments panel below). */
   const financeManifestSummaryBlock = (
-    <View
-      style={[
-        styles.refSettleCard,
-        styles.refFinanceManifestHero,
-        isDesktop && styles.refFinanceManifestHeroDesktop,
-        marginIsNegative && styles.refFinanceManifestHeroLoss,
-      ]}
-    >
-      <Text
-        style={[
-          styles.refFinanceMarginLabel,
-          isDesktop && styles.refFinanceMarginLabelDesktop,
-        ]}
-      >
-        {marginIsNegative ? "Margin · loss" : "Margin"}
-      </Text>
-      <Text
-        style={[
-          styles.refFinanceMarginValue,
-          isDesktop && styles.refFinanceMarginValueDesktop,
-          marginIsNegative && styles.refFinanceMarginValueLoss,
-          isDesktop && marginIsNegative && styles.refFinanceMarginValueLossDesktop,
-          !marginIsNegative && netManifestYield > 0 && styles.refFinanceMarginValueGain,
-        ]}
-      >
-        {formatINR(netManifestYield)}
-      </Text>
-      <Text
-        style={[
-          styles.refFinanceMarginHint,
-          isDesktop && styles.refFinanceMarginHintDesktop,
-        ]}
-      >
-        {marginBasisLabel}
-      </Text>
-    </View>
+    <TripMarginHero
+      amount={netManifestYield}
+      basisLabel={marginBasisLabel}
+      layout={isDesktop ? "desktop" : "mobile"}
+    />
   );
 
   const showOdometerVerification = isAssetExecutionTrip(trip);
@@ -4647,9 +4613,20 @@ export default function TripDetailScreen({
                                 <Feather
                                   name={btnIcon}
                                   size={12}
-                                  color="#fff"
+                                  color={
+                                    isPending && canUploadTripDocs
+                                      ? Theme.buttonPrimaryText
+                                      : "#fff"
+                                  }
                                 />
-                                <Text style={neoStyles.vaultBtnText}>
+                                <Text
+                                  style={[
+                                    neoStyles.vaultBtnText,
+                                    isPending &&
+                                      canUploadTripDocs &&
+                                      neoStyles.vaultBtnTextUpload,
+                                  ]}
+                                >
                                   {btnLabel}
                                 </Text>
                               </>
@@ -8764,52 +8741,46 @@ const neoStyles = StyleSheet.create({
   },
   capturePaymentSlot: {
     marginTop: 12,
-    gap: 6,
   },
-  capturePaymentBtn: {
-    marginTop: 0,
+  laneActionBtn: {
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 14,
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+  },
+  laneActionBtnPrimary: {
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
   },
-  capturePaymentBtnText: {
+  laneActionBtnDark: {
+    backgroundColor: Theme.buttonDark,
+    borderWidth: 0,
+    borderColor: "transparent",
+  },
+  laneActionBtnText: {
+    flexShrink: 1,
     color: Theme.buttonPrimaryText,
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  capturePaymentHint: {
-    marginTop: 8,
-    color: "#94a3b8",
-    fontSize: 8,
-    fontWeight: "700",
+    letterSpacing: 0.15,
     textAlign: "center",
-    lineHeight: 12,
+    lineHeight: 14,
   },
-  markPaymentsBtn: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 11,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(99,102,241,0.35)",
-    backgroundColor: "rgba(99,102,241,0.06)",
+  laneActionBtnDarkText: {
+    color: Theme.buttonDarkText,
   },
-  markPaymentsBtnText: {
-    color: Theme.primary,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.2,
+  laneActionHint: {
+    marginTop: 4,
+    color: Theme.textMuted,
+    fontSize: 8,
+    fontWeight: "600",
+    textAlign: "center",
+    lineHeight: 11,
   },
   capturePaymentDueFooter: {
     marginTop: 12,
@@ -9553,6 +9524,9 @@ const neoStyles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.4,
   },
+  vaultBtnTextUpload: {
+    color: Theme.buttonPrimaryText,
+  },
   sideCard: {
     backgroundColor: "#fff",
     borderRadius: 36,
@@ -9956,7 +9930,7 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   refTabBtnActive: {
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.buttonDark,
   },
   refTabBtnText: {
     fontSize: 8,
@@ -9966,7 +9940,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   refTabBtnTextActive: {
-    color: Theme.buttonPrimaryText,
+    color: Theme.buttonDarkText,
   },
   refFinanceSubTabs: {
     flexDirection: "row",
@@ -10955,79 +10929,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.25)",
   },
   refFinanceWrap: { gap: 8 },
-  refFinanceManifestHero: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    overflow: "hidden",
-    alignItems: "stretch",
-    borderRadius: 14,
-    borderColor: "#e6edf5",
-  },
-  refFinanceManifestHeroDesktop: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    marginBottom: 4,
-  },
-  refFinanceManifestHeroLoss: {
-    borderColor: "rgba(220,38,38,0.25)",
-    backgroundColor: Theme.negativeMuted,
-  },
-  refFinanceMarginLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: "#94a3b8",
-    textAlign: "center",
-  },
-  refFinanceMarginLabelDesktop: {
-    fontSize: 10,
-    letterSpacing: 1,
-  },
-  refFinanceMarginValue: {
-    marginTop: 3,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0f172a",
-    letterSpacing: -0.2,
-    textAlign: "center",
-    fontVariant: ["tabular-nums"],
-    lineHeight: 22,
-  },
-  refFinanceMarginValueDesktop: {
-    fontSize: 22,
-    lineHeight: 26,
-  },
-  refFinanceMarginValueLoss: {
-    marginTop: 4,
-    fontSize: 26,
-    fontWeight: "900",
-    color: Theme.negative,
-    letterSpacing: -0.5,
-    lineHeight: 30,
-  },
-  refFinanceMarginValueLossDesktop: {
-    fontSize: 32,
-    lineHeight: 36,
-    letterSpacing: -0.6,
-  },
-  refFinanceMarginValueGain: {
-    color: Theme.positive,
-  },
-  refFinanceMarginHint: {
-    marginTop: 3,
-    fontSize: 8,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    textAlign: "center",
-    lineHeight: 11,
-  },
-  refFinanceMarginHintDesktop: {
-    fontSize: 10,
-    lineHeight: 14,
-    marginTop: 4,
-  },
   refManifestNetHuge: {
     marginTop: 4,
     fontSize: 22,
@@ -12150,7 +12051,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   tabBtnActiveCompact: {
-    backgroundColor: "#0f172a",
+    backgroundColor: Theme.buttonDark,
   },
   tabBtnText: {
     fontSize: 14,
@@ -12167,7 +12068,7 @@ const styles = StyleSheet.create({
     color: "#60a5fa",
   },
   tabBtnTextActiveCompact: {
-    color: Theme.buttonPrimaryText,
+    color: Theme.buttonDarkText,
   },
   tabUnderline: {
     position: "absolute",

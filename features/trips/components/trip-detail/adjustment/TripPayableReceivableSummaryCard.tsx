@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
@@ -193,6 +193,8 @@ export interface TripPayableReceivableSummaryCardProps {
   layout?: ProvisionFinanceLayout;
   onPressReceivable?: () => void;
   onPressPayable?: () => void;
+  receivableAction?: ReactNode;
+  payableAction?: ReactNode;
 }
 
 export const TripPayableReceivableSummaryCard = memo(
@@ -206,40 +208,50 @@ export const TripPayableReceivableSummaryCard = memo(
     return (
       <View style={[styles.wrap, isDesktop && styles.wrapDesktop]}>
         {showReceivable ? (
-          <SettlementLaneCard
-            partyName={props.clientName}
-            avatarUrl={props.clientAvatarUrl}
-            avatarSeed={props.clientAvatarSeed}
-            organizationImageUrl={props.clientOrganizationImageUrl}
-            organizationAvatarSeed={props.clientOrganizationAvatarSeed}
-            isIntegrated={props.clientIntegrated}
-            entityType="client"
-            laneLabel="Receivable"
-            revisedAmount={props.revisedReceivable}
-            settledAmount={props.collectedAmount}
-            dueAmount={props.receivableDue}
-            accentColor={Theme.primary}
-            onPress={props.onPressReceivable}
-            layout={layout}
-          />
+          <View style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}>
+            <SettlementLaneCard
+              partyName={props.clientName}
+              avatarUrl={props.clientAvatarUrl}
+              avatarSeed={props.clientAvatarSeed}
+              organizationImageUrl={props.clientOrganizationImageUrl}
+              organizationAvatarSeed={props.clientOrganizationAvatarSeed}
+              isIntegrated={props.clientIntegrated}
+              entityType="client"
+              laneLabel="Receivable"
+              revisedAmount={props.revisedReceivable}
+              settledAmount={props.collectedAmount}
+              dueAmount={props.receivableDue}
+              accentColor={Theme.primary}
+              onPress={props.onPressReceivable}
+              layout={layout}
+            />
+            {props.receivableAction ? (
+              <View style={styles.laneAction}>{props.receivableAction}</View>
+            ) : null}
+          </View>
         ) : null}
         {showPayable ? (
-          <SettlementLaneCard
-            partyName={props.payablePartyName}
-            avatarUrl={props.payableAvatarUrl}
-            avatarSeed={props.payableAvatarSeed}
-            organizationImageUrl={props.payableOrganizationImageUrl}
-            organizationAvatarSeed={props.payableOrganizationAvatarSeed}
-            isIntegrated={props.payableIntegrated}
-            entityType={props.payableEntityType ?? "supplier"}
-            laneLabel={props.payableLaneLabel ?? "Payable"}
-            revisedAmount={props.revisedPayable}
-            settledAmount={props.paidAmount}
-            dueAmount={props.payableDue}
-            accentColor="#0f766e"
-            onPress={props.onPressPayable}
-            layout={layout}
-          />
+          <View style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}>
+            <SettlementLaneCard
+              partyName={props.payablePartyName}
+              avatarUrl={props.payableAvatarUrl}
+              avatarSeed={props.payableAvatarSeed}
+              organizationImageUrl={props.payableOrganizationImageUrl}
+              organizationAvatarSeed={props.payableOrganizationAvatarSeed}
+              isIntegrated={props.payableIntegrated}
+              entityType={props.payableEntityType ?? "supplier"}
+              laneLabel={props.payableLaneLabel ?? "Payable"}
+              revisedAmount={props.revisedPayable}
+              settledAmount={props.paidAmount}
+              dueAmount={props.payableDue}
+              accentColor="#0f766e"
+              onPress={props.onPressPayable}
+              layout={layout}
+            />
+            {props.payableAction ? (
+              <View style={styles.laneAction}>{props.payableAction}</View>
+            ) : null}
+          </View>
         ) : null}
       </View>
     );
@@ -247,12 +259,27 @@ export const TripPayableReceivableSummaryCard = memo(
 );
 
 const styles = StyleSheet.create({
-  wrap: { gap: 6, marginBottom: 4 },
-  wrapDesktop: {
+  wrap: {
     flexDirection: "row",
     alignItems: "stretch",
+    gap: 8,
+    marginBottom: 4,
+  },
+  wrapDesktop: {
     gap: 14,
     marginBottom: 6,
+  },
+  laneColumn: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  laneColumnDesktop: {
+    gap: 8,
+  },
+  laneAction: {
+    width: "100%",
+    minWidth: 0,
   },
   card: {
     borderWidth: 1,

@@ -1385,7 +1385,7 @@ export function TripsHubTableView({
                 accessibilityRole="button"
                 accessibilityLabel={addTripLabel ?? "Add trip"}
               >
-                <Plus size={13} color="#ffffff" strokeWidth={2.4} />
+                <Plus size={13} color={Theme.buttonPrimaryText} strokeWidth={2.4} />
                 <Text style={styles.auditAddTripBtnText} numberOfLines={1}>
                   {addTripLabel ?? "Add Trip"}
                 </Text>

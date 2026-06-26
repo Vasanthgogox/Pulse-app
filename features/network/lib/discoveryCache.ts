@@ -66,6 +66,9 @@ export function getDiscoveryCache(
     orgMap(orgId).delete(discoveryCacheKey(orgId, search));
     return null;
   }
+  // Empty snapshots are not valid cache hits — always re-fetch so a stale
+  // persisted [] (e.g. from a prior error or cold start) cannot block the list.
+  if (entry.data.length === 0) return null;
   return entry;
 }
 

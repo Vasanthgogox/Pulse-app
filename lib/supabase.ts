@@ -15,7 +15,7 @@
  * SINGLETON — this file exports one client instance created at first call.
  * Never call createClient() again elsewhere; import supabase() from this module.
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, processLock, type SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
@@ -248,6 +248,9 @@ function getSupabase(): SupabaseClient {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
+      // Navigator Web Locks are browser-only; on native they surface as uncaught
+      // "Lock was stolen by another request" when auth refreshes overlap.
+      ...(Platform.OS !== 'web' ? { lock: processLock } : {}),
     },
     global: {
       fetch: fetchWithTimeoutAndRetry,

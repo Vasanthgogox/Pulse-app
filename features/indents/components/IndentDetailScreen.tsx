@@ -13,6 +13,10 @@ import {
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidReceivedHammer } from "@/features/indents/components/BidReceivedHammer";
+import {
+  IndentBidsAwaitingPanel,
+  LiveBidsSectionHeader,
+} from "@/features/indents/components/IndentBidsAwaitingPanel";
 import { IndentBidAmountEntry } from "@/features/indents/components/IndentBidAmountEntry";
 import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
 import { IndentLiveBidsPanel } from "@/features/indents/components/IndentLiveBidsPanel";
@@ -637,6 +641,10 @@ export function IndentDetailScreen({
     statusLower !== "completed" &&
     statusLower !== "deployed";
   const liveBidsCount = isOwner ? quotes.length : myQuote ? 1 : 0;
+  const isListeningForBids =
+    isOwner &&
+    (statusLower === "broadcast" || statusLower === "open") &&
+    liveBidsCount === 0;
   const isIndentCompleted = statusLower === "completed";
   const supplierFooterStatus =
     myQuoteStatus === "accepted"
@@ -808,116 +816,29 @@ export function IndentDetailScreen({
         <View
           style={[styles.sectionHeader, compactHub && styles.sectionHeaderCompact]}
         >
-          <View style={styles.liveBidsTitleRow}>
-            <Text style={styles.sectionTitle}>
-              {isOwner ? "LIVE BIDS" : "QUOTE STATUS"}
-            </Text>
-            {statusLower === "awarded" ||
-            statusLower === "completed" ||
-            statusLower === "deployed" ? (
-              <FontAwesome name="trophy" size={14} color={Theme.driverGold} />
-            ) : (
-              <BidReceivedHammer visible={liveBidsCount > 0} />
-            )}
-            <View style={styles.bidsCountBadge}>
-              <Text style={styles.bidsCountText}>{liveBidsCount}</Text>
-            </View>
-          </View>
+          <LiveBidsSectionHeader
+            title={isOwner ? "LIVE BIDS" : "QUOTE STATUS"}
+            count={liveBidsCount}
+            isListening={isListeningForBids}
+            showTrophy={
+              statusLower === "awarded" ||
+              statusLower === "completed" ||
+              statusLower === "deployed"
+            }
+          />
+          {liveBidsCount > 0 ? <BidReceivedHammer visible /> : null}
         </View>
 
         {isOwner && quotes.length === 0 ? (
-          <View
-            style={[
-              styles.bidsEmptyCard,
-              compactHub && styles.bidsEmptyCardCompact,
-            ]}
-          >
-            <View
-              style={[
-                styles.bidsEmptyTop,
-                compactHub && styles.bidsEmptyTopCompact,
-              ]}
-            >
-              <View
-                style={[
-                  styles.bidsEmptyIconWrap,
-                  compactHub && styles.bidsEmptyIconWrapCompact,
-                ]}
-              >
-                <FontAwesome
-                  name="inbox"
-                  size={compactHub ? 16 : 22}
-                  color={Theme.textMuted}
-                />
-              </View>
-              <View style={styles.bidsEmptyCopy}>
-                <Text
-                  style={[
-                    styles.bidsEmptyTitle,
-                    compactHub && styles.bidsEmptyTitleCompact,
-                  ]}
-                >
-                  No bids received
-                </Text>
-                <Text
-                  style={[
-                    styles.bidsEmptyBodyLeft,
-                    compactHub && styles.bidsEmptyBodyCompact,
-                  ]}
-                  numberOfLines={compactHub ? 2 : 3}
-                >
-                  {canBroadcast
-                    ? "Broadcast this indent to your network for rates."
-                    : "Waiting for transporters to respond on this load."}
-                </Text>
-              </View>
-            </View>
-            {canBroadcast ? (
-              <TouchableOpacity
-                style={[
-                  styles.broadcastBtn,
-                  compactHub && styles.broadcastBtnCompact,
-                ]}
-                onPress={handleBroadcast}
-                activeOpacity={0.9}
-                disabled={isBroadcasting || sharingDraft}
-              >
-                {isBroadcasting || sharingDraft ? (
-                  <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                ) : (
-                  <>
-                    <FontAwesome
-                      name="share"
-                      size={14}
-                      color={Theme.textOnPrimary}
-                      style={styles.broadcastBtnIcon}
-                    />
-                    <Text style={styles.broadcastBtnText}>BROADCAST NOW</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            ) : (
-              <View
-                style={[
-                  styles.broadcastLockedPill,
-                  compactHub && styles.broadcastLockedPillCompact,
-                ]}
-              >
-                <FontAwesome name="lock" size={12} color={Theme.textMuted} />
-                <Text
-                  style={styles.broadcastLockedText}
-                  numberOfLines={compactHub ? 2 : 3}
-                >
-                  {statusLower === "broadcast"
-                    ? "Shared — editing is locked"
-                    : "Broadcast unavailable for current status"}
-                </Text>
-              </View>
-            )}
-            {broadcastError ? (
-              <Text style={styles.broadcastErrorText}>{broadcastError}</Text>
-            ) : null}
-          </View>
+          <IndentBidsAwaitingPanel
+            compact={compactHub}
+            canBroadcast={canBroadcast}
+            isListening={statusLower === "broadcast" || statusLower === "open"}
+            isBroadcasting={isBroadcasting}
+            sharingDraft={sharingDraft}
+            broadcastError={broadcastError}
+            onBroadcast={handleBroadcast}
+          />
         ) : isOwner ? (
           <View style={styles.offersListWrap}>
             <IndentLiveBidsPanel
@@ -1001,6 +922,11 @@ export function IndentDetailScreen({
                   <Text style={styles.footerAwardBtnText}>Award selected</Text>
                 )}
               </TouchableOpacity>
+            ) : isListeningForBids ? (
+              <View style={styles.footerListeningPill}>
+                <View style={styles.footerListeningDot} />
+                <Text style={styles.footerListeningText}>Awaiting bids</Text>
+              </View>
             ) : !canCancelLoad ? (
               <View style={styles.footerLockedPill}>
                 <FontAwesome name="lock" size={14} color={Theme.textMuted} />
@@ -1800,6 +1726,30 @@ const styles = StyleSheet.create({
     ...indentReviewHubText.buttonLabel,
     fontSize: 9,
     color: Theme.textMuted,
+  },
+  footerListeningPill: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Theme.pulseIndigoWash,
+    borderWidth: 1,
+    borderColor: Theme.pulseIndigoRing,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  footerListeningDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Theme.positive,
+  },
+  footerListeningText: {
+    ...indentReviewHubText.buttonLabel,
+    fontSize: 9,
+    color: Theme.pulseIndigo,
+    letterSpacing: 0.4,
   },
 
   // Broadcast modal

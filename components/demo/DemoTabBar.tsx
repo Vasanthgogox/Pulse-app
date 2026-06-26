@@ -85,9 +85,10 @@ const InboundProtocolPanel = lazy(() =>
   import("@/components/InboundProtocolPanel").then((m) => ({ default: m.InboundProtocolPanel })),
 );
 
+import { isIgnorableSupabaseAuthLockError } from "@/lib/supabaseAuthLock.util";
+
 function isIgnorableInviteRefetchError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.toLowerCase().includes("lock was stolen by another request");
+  return isIgnorableSupabaseAuthLockError(error);
 }
 
 function AnimatedPress({

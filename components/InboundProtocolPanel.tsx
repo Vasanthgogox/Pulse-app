@@ -8,8 +8,10 @@ import {
   RegistryPrimaryButton,
 } from "@/components/AlertRegistryCardActions";
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
 import Theme from "@/constants/Theme";
 import { resolveInboundInviteAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";
 import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { inviteHeadlineParts } from "@/lib/globalSync/inboundProtocol.util";
 import { UserCheck, X } from "lucide-react-native";
@@ -95,7 +97,16 @@ const GRID_AVATAR_SIZE = 34;
 function EmptyInvitationsState({ tab }: { tab: "received" | "sent" }) {
   return (
     <View style={styles.emptyWrap}>
-      <Text style={styles.emptyTitle}>No pending invitations</Text>
+      <TinyEmptyLottie
+        source={
+          tab === "received"
+            ? EMPTY_STATE_LOTTIE.inviteReceived
+            : EMPTY_STATE_LOTTIE.inviteSent
+        }
+      />
+      <Text style={styles.emptyTitle}>
+        {tab === "received" ? "No pending invitations" : "No sent invitations"}
+      </Text>
       <Text style={styles.emptyBody}>
         {tab === "received"
           ? "Connection and driver requests from other organisations will appear here."
@@ -802,7 +813,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 28,
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
   emptyTitle: {
     fontSize: 12,

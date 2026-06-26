@@ -158,7 +158,8 @@ export function LiquidFillPill({
   const palette = getLiquidPalette(clamped);
   const glowColor = palette.glow;
   const textOnLiquid = clamped > TEXT_COLOR_FLIP_THRESHOLD;
-  const textColor = textOnLiquid ? Theme.textOnPrimary : Theme.primaryText;
+  const textColor = Theme.textPrimaryDark;
+  const useLightTextShadow = textOnLiquid;
 
   return (
     <View
@@ -203,7 +204,7 @@ export function LiquidFillPill({
           style={[
             styles.label,
             { color: textColor },
-            textOnLiquid && styles.valueOnLiquidShadow,
+            useLightTextShadow && styles.valueOnLiquidShadow,
           ]}
           numberOfLines={1}
         >
@@ -213,7 +214,7 @@ export function LiquidFillPill({
           style={[
             styles.value,
             { color: textColor },
-            textOnLiquid && styles.valueOnLiquidShadow,
+            useLightTextShadow && styles.valueOnLiquidShadow,
           ]}
           numberOfLines={1}
         >

@@ -198,6 +198,8 @@ export const Theme = {
   buttonSecondaryText: "#ffffff",
   buttonMatteBlack: "#151515",
   buttonMatteBlackText: "#ffffff",
+  /** Navy ink fill (#0f172a) — always pair with buttonDarkText. */
+  buttonDark: "#0f172a",
   /** Text/icons on dark/black filled CTAs (hub grid, registry, matte black). Not pastel-blue pills. */
   buttonDarkText: "#ffffff",
   fabBackground: "#151515",

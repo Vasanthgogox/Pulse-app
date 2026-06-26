@@ -41,6 +41,7 @@ import {
   LedgerPaymentModeTile,
   LedgerPaymentTypeIcon,
 } from "@/components/ledger/ledgerPaymentVisuals";
+import { ledgerPaymentTypeVisual } from "@/components/ledger/paymentTypeVisuals.util";
 
 export type LedgerWizardStep =
   | "direction"
@@ -858,16 +859,26 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
       <View style={styles.iconGrid}>
         {props.paymentTypeItems.map((item) => {
           const selected = item.selected;
+          const visual = ledgerPaymentTypeVisual(item.kind);
           return (
             <Pressable
               key={item.key}
-              style={[styles.typeTile, selected && styles.typeTileActive]}
+              style={[
+                styles.typeTile,
+                selected && { borderColor: visual.color, backgroundColor: visual.tint },
+              ]}
               onPress={item.onPress}
             >
-              <View style={[styles.typeIconWrap, selected && { backgroundColor: "rgba(99,102,241,0.15)" }]}>
-                <LedgerPaymentTypeIcon kind={item.kind} size={18} />
+              <View style={styles.typeIconWrap}>
+                <LedgerPaymentTypeIcon kind={item.kind} size={36} />
               </View>
-              <Text style={[styles.typeTileLabel, selected && styles.typeTileLabelActive]} numberOfLines={2}>
+              <Text
+                style={[
+                  styles.typeTileLabel,
+                  selected && { color: visual.color },
+                ]}
+                numberOfLines={2}
+              >
                 {item.label}
               </Text>
             </Pressable>
@@ -1599,27 +1610,24 @@ const styles = StyleSheet.create({
     width: "47%",
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 14,
-    padding: 10,
+    borderRadius: 12,
+    padding: 8,
     backgroundColor: "#fff",
     alignItems: "center",
-    gap: 6,
-    minHeight: 80,
+    gap: 4,
+    minHeight: 68,
   },
   typeTileActive: {
     borderColor: Theme.primary,
     backgroundColor: "rgba(99,102,241,0.08)",
   },
   typeIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#f8fafc",
+    minHeight: 22,
     alignItems: "center",
     justifyContent: "center",
   },
   typeTileLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
     textAlign: "center",

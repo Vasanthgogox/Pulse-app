@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -60,6 +61,21 @@ function borderRadius(size: number, shape: AvatarShape): number {
   return 4;
 }
 
+function avatarImageResizeMode(
+  party: AvatarParty,
+  context: AvatarContext,
+): 'contain' | 'cover' {
+  if (party.type === 'organization') return 'contain';
+  if (
+    party.type === 'user' &&
+    context === 'business' &&
+    (party.orgLogoUrl ?? '').trim()
+  ) {
+    return 'contain';
+  }
+  return 'cover';
+}
+
 function contrastText(hex: string): string {
   const c = hex.replace('#', '');
   if (c.length !== 6) return '#1e293b';
@@ -107,6 +123,7 @@ export function Avatar({
   };
 
   const br = borderRadius(size, shape);
+  const resizeMode = avatarImageResizeMode(party, context);
   const containerStyle: StyleProp<ViewStyle> = [
     styles.base,
     {
@@ -124,8 +141,12 @@ export function Avatar({
       <View style={containerStyle}>
         <Animated.Image
           source={{ uri }}
-          style={[styles.img, { borderRadius: br, opacity }]}
-          resizeMode="cover"
+          style={[
+            styles.img,
+            { borderRadius: br, opacity },
+            Platform.OS === 'web' ? { objectFit: resizeMode } : null,
+          ]}
+          resizeMode={resizeMode}
           onLoad={onLoad}
           onError={() => setImgError(true)}
           accessibilityIgnoresInvertColors

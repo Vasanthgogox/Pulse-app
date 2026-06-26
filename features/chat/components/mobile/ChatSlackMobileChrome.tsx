@@ -10,6 +10,7 @@ import { ChatSlackMirrorToggle } from "@/features/chat/components/shared/ChatSla
 import { SLACK_STREAM_TABS } from "@/features/chat/components/shared/chatSlackStreamTabs";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { LinearGradient } from "expo-linear-gradient";
+import LottieView from "lottie-react-native";
 import {
   ArrowLeft,
   CircleDashed,
@@ -46,7 +47,86 @@ import {
 export { CHAT_SLACK_BOTTOM_NAV_BAR };
 
 const FLOATING_COMPOSE_AVATAR = require("@/assets/icon and logos/client.png");
-const NEW_TILE_COMPOSE_AVATAR = require("@/assets/icon and logos/client.png");
+const PEOPLE_STRIP_LOTTIE = 52;
+
+const PEOPLE_STRIP_EMPTY_ANIMATIONS = {
+  partners: require("@/assets/Animated folder/add-friend.json"),
+  integrated: require("@/assets/Animated folder/conversation-verified.json"),
+  trip: require("@/assets/Animated folder/chat-with-driver.json"),
+} as const;
+
+const PEOPLE_STRIP_EMPTY_COPY: Record<
+  keyof typeof PEOPLE_STRIP_EMPTY_ANIMATIONS,
+  { title: string; subtitle: string }
+> = {
+  partners: {
+    title: "Grow your network",
+    subtitle: "Integrated partners you message will show up here.",
+  },
+  integrated: {
+    title: "Integrated chat",
+    subtitle: "Driver and party threads show up on active integrated trips.",
+  },
+  trip: {
+    title: "On-trip chat",
+    subtitle: "Driver chat shows up on active trips.",
+  },
+};
+
+function resolvePeopleStripEmptyVariant(
+  sectionLabel: string,
+): keyof typeof PEOPLE_STRIP_EMPTY_ANIMATIONS {
+  const key = sectionLabel.trim().toLowerCase();
+  if (key === "partners") return "partners";
+  if (key === "integrated") return "integrated";
+  return "trip";
+}
+
+function PeopleStripEmptyState({
+  sectionLabel,
+  onPress,
+}: {
+  sectionLabel: string;
+  onPress?: () => void;
+}) {
+  const variant = resolvePeopleStripEmptyVariant(sectionLabel);
+  const copy = PEOPLE_STRIP_EMPTY_COPY[variant];
+  const source = PEOPLE_STRIP_EMPTY_ANIMATIONS[variant];
+  const lottieSize = Math.round(PEOPLE_STRIP_LOTTIE * 1.12);
+
+  const content = (
+    <View style={st.peopleStripEmptyCard}>
+      <View style={st.peopleStripEmptyLottie}>
+        <LottieView
+          source={source}
+          autoPlay
+          loop
+          speed={0.85}
+          resizeMode="contain"
+          style={{ width: lottieSize, height: lottieSize }}
+        />
+      </View>
+      <Text style={st.peopleStripEmptyTitle}>{copy.title}</Text>
+      <Text style={st.peopleStripEmptySubtitle}>{copy.subtitle}</Text>
+    </View>
+  );
+
+  if (!onPress) {
+    return <View style={st.peopleStripEmptyWrap}>{content}</View>;
+  }
+
+  return (
+    <TouchableOpacity
+      style={st.peopleStripEmptyWrap}
+      onPress={onPress}
+      activeOpacity={0.88}
+      accessibilityRole="button"
+      accessibilityLabel={`${copy.title}. ${copy.subtitle}`}
+    >
+      {content}
+    </TouchableOpacity>
+  );
+}
 
 export type SlackStreamTabId = "network" | "trips" | "indent";
 
@@ -226,6 +306,7 @@ export function ChatSlackPeopleStrip({
   onCompose?: () => void;
 }) {
   if (items.length === 0 && !onCompose) return null;
+
   return (
     <View style={st.peopleStrip}>
       <View style={st.peopleStripHeader}>
@@ -234,84 +315,63 @@ export function ChatSlackPeopleStrip({
           <Text style={st.peopleStripHint}>{items.length} people</Text>
         ) : null}
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={st.peopleStripContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {onCompose ? (
-          <TouchableOpacity
-            style={st.peopleItem}
-            onPress={onCompose}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityLabel="New conversation"
-          >
-            <View style={st.peopleNewAvatarWrap}>
-              <View style={st.peopleNewAvatarPlate}>
-                <Image
-                  source={NEW_TILE_COMPOSE_AVATAR}
-                  style={st.peopleNewAvatarImage}
-                  resizeMode="contain"
-                />
-              </View>
-              <View style={st.peopleNewBadge}>
-                <Plus size={12} color="#4b5563" strokeWidth={2.8} />
-              </View>
-            </View>
-            <Text style={st.peopleName} numberOfLines={1}>
-              New
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-        {items.map((item) => {
-          const active = selectedId === item.id;
-          const hasUnread = (item.unread ?? 0) > 0;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={st.peopleItem}
-              onPress={item.onPress}
-              activeOpacity={0.82}
-            >
-              <View style={st.peopleAvatarWrap}>
-                <View
-                  style={[
-                    st.peopleAvatarRing,
-                    hasUnread && st.peopleAvatarRingUnread,
-                    active && st.peopleAvatarRingActive,
-                  ]}
-                >
-                  <View style={st.peopleAvatarCircle}>
-                    <ChatPartyAvatar identity={item.identity} size={SLACK_AVATAR.people} />
-                  </View>
-                </View>
-                {hasUnread ? (
-                  <View style={st.peopleUnreadBadge}>
-                    <Text style={st.peopleUnreadBadgeText}>
-                      {(item.unread ?? 0) > 9 ? "9+" : String(item.unread)}
-                    </Text>
-                  </View>
-                ) : (
+      {items.length === 0 ? (
+        <PeopleStripEmptyState sectionLabel={sectionLabel} onPress={onCompose} />
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={st.peopleStripContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {items.map((item) => {
+            const active = selectedId === item.id;
+            const hasUnread = (item.unread ?? 0) > 0;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={st.peopleItem}
+                onPress={item.onPress}
+                activeOpacity={0.82}
+              >
+                <View style={st.peopleAvatarWrap}>
                   <View
                     style={[
-                      st.peopleOnlineDot,
-                      item.online === false && st.peopleOfflineDot,
+                      st.peopleAvatarRing,
+                      hasUnread && st.peopleAvatarRingUnread,
+                      active && st.peopleAvatarRingActive,
                     ]}
-                  />
-                )}
-              </View>
-              <Text
-                style={[st.peopleName, active && st.peopleNameActive]}
-                numberOfLines={1}
-              >
-                {item.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+                  >
+                    <View style={st.peopleAvatarCircle}>
+                      <ChatPartyAvatar identity={item.identity} size={SLACK_AVATAR.people} />
+                    </View>
+                  </View>
+                  {hasUnread ? (
+                    <View style={st.peopleUnreadBadge}>
+                      <Text style={st.peopleUnreadBadgeText}>
+                        {(item.unread ?? 0) > 9 ? "9+" : String(item.unread)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        st.peopleOnlineDot,
+                        item.online === false && st.peopleOfflineDot,
+                      ]}
+                    />
+                  )}
+                </View>
+                <Text
+                  style={[st.peopleName, active && st.peopleNameActive]}
+                  numberOfLines={1}
+                >
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 }

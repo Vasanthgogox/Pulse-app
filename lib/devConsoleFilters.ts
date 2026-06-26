@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 
+import { isIgnorableSupabaseAuthLockError } from '@/lib/supabaseAuthLock.util';
+
 const SUPPRESSED_WARN_PREFIXES = [
   '"shadow*" style props are deprecated',
   '"textShadow*" style props are deprecated',
@@ -29,7 +31,12 @@ export function installDevConsoleFilters(): void {
         : first != null && typeof first === 'object' && 'message' in first
           ? String((first as { message: unknown }).message)
           : '';
-    if (SUPPRESSED_WARN_PREFIXES.some((prefix) => text.includes(prefix))) {
+    if (
+      SUPPRESSED_WARN_PREFIXES.some((prefix) => text.includes(prefix)) ||
+      isIgnorableSupabaseAuthLockError(
+        first instanceof Error ? first : new Error(text),
+      )
+    ) {
       return;
     }
     originalWarn(...args);

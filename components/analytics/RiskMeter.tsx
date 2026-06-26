@@ -137,16 +137,23 @@ export const RiskMeter = memo(function RiskMeter({
           style={[styles.centerOverlay, { width: size, height: size }]}
           pointerEvents="none"
         >
-          <Text
-            style={[styles.value, { color, fontSize: Math.round(size * 0.26) }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-          >
-            {displayValue}
-          </Text>
-          <Text style={[styles.scale, { fontSize: Math.max(10, Math.round(size * 0.08)) }]}>
-            / 100
-          </Text>
+          <View style={styles.centerRow}>
+            <Text
+              style={[
+                styles.value,
+                { color: Theme.textPrimaryDark, fontSize: Math.round(size * 0.26) },
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {displayValue}
+            </Text>
+            <Text
+              style={[styles.scale, { fontSize: Math.max(10, Math.round(size * 0.08)) }]}
+            >
+              / 100
+            </Text>
+          </View>
         </View>
       </View>
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -181,15 +188,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  centerRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "center",
+    gap: 2,
+    maxWidth: "100%",
+    paddingHorizontal: 4,
+  },
   value: {
     fontWeight: "900",
     fontStyle: "italic",
     letterSpacing: -1,
+    color: Theme.textPrimaryDark,
   },
   scale: {
     fontWeight: "700",
     color: Theme.textMuted,
-    marginTop: -2,
+    marginTop: 0,
   },
   label: {
     fontSize: 10,

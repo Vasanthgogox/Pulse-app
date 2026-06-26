@@ -3,6 +3,7 @@
  * with cumulative Paid/Received per section and tappable trip association.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
@@ -17,6 +18,7 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import { LedgerDayDivider } from "@/features/finance/components/LedgerDayDivider";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatIndianVehicleNumber, formatINRChip, formatLedgerAmount } from "@/lib/format";
+import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";
 import { partyAvatarHasRenderableOutput, partyAvatarInitialsTextColor } from "@/lib/partyAvatarDisplay";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -712,12 +714,7 @@ export function LedgerTransactionListView({
         <View
           style={[styles.emptyState, fullWidth && { paddingHorizontal: 0 }]}
         >
-          <FontAwesome
-            name="list-alt"
-            size={40}
-            color={Theme.textMuted}
-            style={styles.emptyStateIcon}
-          />
+          <TinyEmptyLottie source={EMPTY_STATE_LOTTIE.transactions} size={64} />
           <Text style={styles.emptyStateTitle}>No transactions yet</Text>
           <Text style={styles.emptyStateSubtext}>
             Transactions will appear here when added.

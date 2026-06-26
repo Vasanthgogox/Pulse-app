@@ -16,6 +16,8 @@ export type NetworkLoadsQuickAction = {
   aspect: number;
   accent: string;
   wash: string;
+  lottie?: object;
+  lottieScale?: number;
 };
 
 /** Supply = post freight; demand = find & bid on loads. */
@@ -29,6 +31,8 @@ export const NETWORK_LOADS_QUICK_ACTIONS: NetworkLoadsQuickAction[] = [
     aspect: 600 / 463,
     accent: Theme.brandBlueInk,
     wash: "rgba(205, 233, 247, 0.45)",
+    lottie: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
+    lottieScale: 1.1,
   },
   {
     id: "get",
@@ -39,6 +43,8 @@ export const NETWORK_LOADS_QUICK_ACTIONS: NetworkLoadsQuickAction[] = [
     aspect: 600 / 480,
     accent: "#059669",
     wash: "rgba(16, 185, 129, 0.08)",
+    lottie: require("@/assets/Animated folder/auction.json"),
+    lottieScale: 1.08,
   },
 ];
 
