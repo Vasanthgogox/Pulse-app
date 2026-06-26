@@ -13,10 +13,7 @@ import {
 } from "@/features/connections/services/connectionRequests.service";
 import { useQueryClient } from "@tanstack/react-query";
 
-function isIgnorableInviteRefetchError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.toLowerCase().includes("lock was stolen by another request");
-}
+import { isIgnorableSupabaseAuthLockError } from "@/lib/supabaseAuthLock.util";
 
 export function useInboundProtocolInviteActions(orgId: string | null) {
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
@@ -93,7 +90,7 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       if (typeof requestAnimationFrame === "function") {
         requestAnimationFrame(() => {
           void refetchNetworkLists().catch((refetchError) => {
-            if (!isIgnorableInviteRefetchError(refetchError)) {
+            if (!isIgnorableSupabaseAuthLockError(refetchError)) {
               console.warn("[InboundProtocolInviteActions] deferred refetch failed", refetchError);
             }
           });
@@ -101,7 +98,7 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
       } else {
         setTimeout(() => {
           void refetchNetworkLists().catch((refetchError) => {
-            if (!isIgnorableInviteRefetchError(refetchError)) {
+            if (!isIgnorableSupabaseAuthLockError(refetchError)) {
               console.warn(
                 "[InboundProtocolInviteActions] deferred refetch failed",
                 refetchError,

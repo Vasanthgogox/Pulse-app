@@ -76,6 +76,9 @@ export const SLACK_ICON = {
 
 export const SLACK_AVATAR = SLACK_CHAT_AVATAR;
 
+/** Horizontal inset for people strip header, avatars, and empty state. */
+export const PEOPLE_STRIP_PAD_H = 14;
+
 /** Visible row height of the Slack-style bottom tab bar (excludes safe-area inset). */
 export const CHAT_SLACK_BOTTOM_NAV_BAR = 48;
 
@@ -325,12 +328,14 @@ export const slackMobileStyles = StyleSheet.create({
   },
   peopleStrip: {
     backgroundColor: "#FFFFFF",
+    alignSelf: "stretch",
+    width: "100%",
   },
   peopleStripHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 14,
+    paddingHorizontal: PEOPLE_STRIP_PAD_H,
     paddingTop: 8,
     paddingBottom: 6,
   },
@@ -347,10 +352,51 @@ export const slackMobileStyles = StyleSheet.create({
     color: PULSE_CHAT.accent,
   },
   peopleStripContent: {
-    paddingHorizontal: 12,
+    paddingHorizontal: PEOPLE_STRIP_PAD_H,
     paddingBottom: 12,
     gap: 10,
     alignItems: "flex-start",
+  },
+  peopleStripEmptyWrap: {
+    alignSelf: "stretch",
+    width: "100%",
+    paddingHorizontal: PEOPLE_STRIP_PAD_H,
+    paddingBottom: 12,
+  },
+  peopleStripEmptyCard: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e8edf4",
+  },
+  peopleStripEmptyLottie: {
+    width: 64,
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    flexShrink: 0,
+  },
+  peopleStripEmptyTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: SLACK_MOBILE.textPrimary,
+    letterSpacing: -0.15,
+    textAlign: "center",
+  },
+  peopleStripEmptySubtitle: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: SLACK_MOBILE.textTertiary,
+    lineHeight: 15,
+    textAlign: "center",
+    maxWidth: 280,
+    alignSelf: "center",
   },
   peopleItem: {
     width: 64,

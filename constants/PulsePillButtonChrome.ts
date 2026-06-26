@@ -90,6 +90,57 @@ export const pulsePillButtonDisabled: ViewStyle = {
   opacity: 0.5,
 };
 
+/** Dark navy CTA — #0f172a fill + white label (Record payout, dark tabs, etc.). */
+export const pulseDarkFilledButtonContainer: ViewStyle = {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  borderRadius: 14,
+  backgroundColor: Theme.buttonDark,
+  borderWidth: 0,
+};
+
+export const pulseDarkFilledButtonContainerPill: ViewStyle = {
+  ...pulseDarkFilledButtonContainer,
+  borderRadius: PULSE_PILL_BUTTON_RADIUS,
+  minHeight: 44,
+  paddingVertical: 12,
+  paddingHorizontal: 20,
+};
+
+export const pulseDarkFilledButtonLabel: TextStyle = {
+  fontWeight: "800",
+  color: Theme.buttonDarkText,
+  textAlign: "center",
+  fontSize: 14,
+  letterSpacing: 0.3,
+};
+
+export const pulseDarkFilledButtonLabelCompact: TextStyle = {
+  ...pulseDarkFilledButtonLabel,
+  fontSize: 8,
+  fontWeight: "800",
+  textTransform: "uppercase",
+  letterSpacing: 0.8,
+};
+
+/** Label color for a filled button background (light pill vs dark ink). */
+export function pulseButtonLabelColor(backgroundColor?: string): string {
+  const bg = (backgroundColor ?? "").toLowerCase();
+  if (
+    bg === Theme.buttonDark.toLowerCase() ||
+    bg === Theme.buttonMatteBlack.toLowerCase() ||
+    bg === Theme.brandBlueInk.toLowerCase() ||
+    bg === "#0f172a" ||
+    bg === "#151515" ||
+    bg === "#4d3636"
+  ) {
+    return Theme.buttonDarkText;
+  }
+  return Theme.buttonPrimaryText;
+}
+
 /** StyleSheet mirror for screens that prefer StyleSheet.create. */
 export const pulsePillButtonStyles = StyleSheet.create({
   container: pulsePillButtonContainerDefault,
@@ -102,6 +153,10 @@ export const pulsePillButtonStyles = StyleSheet.create({
   labelLarge: pulsePillButtonLabelLarge,
   pressed: pulsePillButtonPressed,
   disabled: pulsePillButtonDisabled,
+  darkContainer: pulseDarkFilledButtonContainer,
+  darkContainerPill: pulseDarkFilledButtonContainerPill,
+  darkLabel: pulseDarkFilledButtonLabel,
+  darkLabelCompact: pulseDarkFilledButtonLabelCompact,
 });
 
 export type PulsePillButtonSize = "compact" | "default" | "large" | "icon";

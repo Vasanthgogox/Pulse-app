@@ -11,6 +11,11 @@ import {
   LedgerProtocolStripModeTile,
   LedgerProtocolStripTypeTile,
 } from "@/components/ledger/ledgerPaymentVisuals";
+import {
+  LEDGER_PROTOCOL_TILE_GAP,
+  LedgerProtocolStripSection,
+  LedgerProtocolWorkbench,
+} from "@/components/ledger/LedgerProtocolStrip";
 import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerTripSettlementNote } from "@/components/ledger/LedgerTripSettlementNote";
@@ -170,73 +175,6 @@ function useLedgerViewportWidth(): number {
 /** Brand logos for ledger payment mode tiles. */
 function ledgerPaymentModeLogo(modeId: string, size = 20) {
   return <PaymentModeLogo modeId={modeId} size={size} />;
-}
-
-/** Colour Lucide icons for payment type / category / driver-type keys. */
-function ledgerPaymentTypeLucide(kind: string, size = 20) {
-  const p = { size, strokeWidth: LEDGER_LUCIDE_STROKE };
-  switch (kind) {
-    case "Trip Payment":
-      return <Truck {...p} color="#2563eb" />;
-    case "Advance Payment":
-    case "Advance from Client":
-    case "Advance":
-      return <ArrowUpRight {...p} color="#16a34a" />;
-    case "Partial Payment":
-      return <ArrowLeftRight {...p} color="#d97706" />;
-    case "Balance Payment":
-      return <CheckCircle2 {...p} color="#0d9488" />;
-    case "Extra Charges":
-      return <PlusCircle {...p} color="#ca8a04" />;
-    case "Detention Charges":
-      return <Timer {...p} color="#ea580c" />;
-    case "Cancellation Charges":
-      return <Ban {...p} color="#dc2626" />;
-    case "Commission":
-      return <Percent {...p} color="#7c3aed" />;
-    case "Penalty":
-      return <AlertTriangle {...p} color="#e11d48" />;
-    case "Adjustment":
-      return <Sliders {...p} color="#64748b" />;
-    case "Other":
-      return <CircleEllipsis {...p} color="#94a3b8" />;
-    case "salary":
-      return <User {...p} color="#2563eb" />;
-    case "settlement":
-      return <CheckCircle2 {...p} color="#16a34a" />;
-    case "advance":
-      return <ArrowUpRight {...p} color="#d97706" />;
-    case "reimbursement":
-      return <Undo2 {...p} color="#8b5cf6" />;
-    case "bonus":
-      return <Star {...p} color="#ca8a04" />;
-    case "deduction":
-      return <MinusCircle {...p} color="#dc2626" />;
-    case "Fuel":
-      return <Fuel {...p} color="#15803d" />;
-    case "Toll":
-      return <ArrowLeftRight {...p} color="#0ea5e9" />;
-    case "Maintenance":
-    case "Repair":
-      return <Wrench {...p} color="#64748b" />;
-    case "Tyre":
-      return <Package {...p} color="#57534e" />;
-    case "Insurance":
-      return <Shield {...p} color="#1d4ed8" />;
-    case "Permit / Tax":
-      return <FileText {...p} color="#7c3aed" />;
-    case "Parking":
-      return <ParkingCircle {...p} color="#0891b2" />;
-    case "Cleaning":
-      return <Sparkles {...p} color="#db2777" />;
-    case "SUPPLIER PAYMENT":
-    case "DRIVER SALARY":
-    case "DRIVER COMMISSION":
-    case "SUPPLIER COST":
-      return <Wallet {...p} color="#0f766e" />;
-    default:
-      return <Package {...p} color="#94a3b8" />;
-  }
 }
 
 function ledgerIsoFromDate(d: Date): string {
@@ -3372,9 +3310,11 @@ export function AddTransactionModal({
 
     /** Protocol strips: desktop = one row each; mobile = horizontal scroll in side-by-side columns. */
     const mob = stackTripFinancialBand;
-    const LEDGER_PROTOCOL_TILE_GAP = mob ? 6 : 8;
-    /** Mobile column: ~6 tiles visible in horizontal scroll (unchanged from original). */
-    const LEDGER_PROTOCOL_TILES_ACROSS_MOBILE = 6;
+    const protocolTileGap = mob
+      ? LEDGER_PROTOCOL_TILE_GAP.compact
+      : LEDGER_PROTOCOL_TILE_GAP.desktop;
+    /** Mobile column: more tiles visible in horizontal scroll. */
+    const LEDGER_PROTOCOL_TILES_ACROSS_MOBILE = 7;
     const LEDGER_PROTOCOL_STRIP_VARIANT = mob ? "compact" : "desktop";
     /** Stack synchronization + date vertically on very narrow widths. */
     const LEDGER_MOBILE_STACK_BREAKPOINT = 430;
@@ -3387,8 +3327,7 @@ export function AddTransactionModal({
 
     /** Full-page ledger on desktop split layout. */
     const ledgerTripDesktopSplit = fullPage && !stackTripFinancialBand;
-    const LEDGER_PROTOCOL_SUMMARY_LOGO = ledgerTripDesktopSplit ? 28 : mob ? 22 : 24;
-    const LEDGER_PROTOCOL_SUMMARY_TYPE_ICON = ledgerTripDesktopSplit ? 16 : 14;
+    const LEDGER_PROTOCOL_SUMMARY_LOGO = ledgerTripDesktopSplit ? 20 : mob ? 18 : 20;
     /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
     const missionListMaxHeight = stackTripFinancialBand
       ? Math.min(240, Math.max(140, Math.floor(Dimensions.get("window").height * 0.26)))
@@ -3493,7 +3432,7 @@ export function AddTransactionModal({
       32,
       Math.floor(
         (topBandColInnerW -
-          LEDGER_PROTOCOL_TILE_GAP * (LEDGER_PROTOCOL_TILES_ACROSS_MOBILE - 1)) /
+          protocolTileGap * (LEDGER_PROTOCOL_TILES_ACROSS_MOBILE - 1)) /
           LEDGER_PROTOCOL_TILES_ACROSS_MOBILE,
       ),
     );
@@ -3502,17 +3441,17 @@ export function AddTransactionModal({
     /** Desktop split: one tile width for both rows so SYNC MODE / PAYMENT TYPE columns align. */
     const protocolDesktopTileCount = Math.max(syncModeCount, paymentTypeCount);
     const protocolDesktopUnifiedTileWidth = Math.max(
-      56,
+      44,
       Math.floor(
         (desktopRightPaneInnerW -
-          LEDGER_PROTOCOL_TILE_GAP * (protocolDesktopTileCount - 1)) /
+          protocolTileGap * (protocolDesktopTileCount - 1)) /
           protocolDesktopTileCount,
       ),
     );
     const LEDGER_DESKTOP_TYPE_TILE_MIN = protocolDesktopUnifiedTileWidth;
     const paymentTypeFitsDesktopRow =
       paymentTypeCount * LEDGER_DESKTOP_TYPE_TILE_MIN +
-        (paymentTypeCount - 1) * LEDGER_PROTOCOL_TILE_GAP <=
+        (paymentTypeCount - 1) * protocolTileGap <=
       desktopRightPaneInnerW;
     const protocolModeTileWidth = ledgerTripDesktopSplit
       ? protocolDesktopUnifiedTileWidth
@@ -3525,259 +3464,98 @@ export function AddTransactionModal({
       mob || !ledgerTripDesktopSplit || !paymentTypeFitsDesktopRow;
 
     /** Desktop: SYNC MODE row, then PAYMENT TYPE row; compact mobile: single side-by-side row. */
-    const ledgerProtocolColStyle = ledgerTripDesktopSplit
-      ? styles.ledgerProtocolSplitColStacked
-      : styles.ledgerProtocolSplitCol;
     const ledgerProtocolModeStripOpen =
       ledgerTripDesktopSplit || paymentModeExpanded;
     const ledgerProtocolTypeStripOpen =
       ledgerTripDesktopSplit || paymentTypeExpanded;
 
-    const ledgerModeCategoryTopBand = (
-      <View
-        style={[
-          styles.ledgerProtocolSplitWrap,
-          styles.ledgerProtocolSplitWrapTopBand,
-          styles.ledgerProtocolWorkbenchElevated,
-          ledgerTripDesktopSplit && styles.ledgerProtocolSplitWrapStack,
-          mob && styles.ledgerMobProtocolWrap,
-        ]}
-      >
-        <View
-          style={[
-            ledgerProtocolColStyle,
-            stackTripFinancialBand
-              ? styles.ledgerProtocolSplitColStackBottom
-              : styles.ledgerProtocolSplitColDividerRight,
-          ]}
-        >
-          <View
-            style={[
-              styles.selectorHeaderRow,
-              stackTripFinancialBand && styles.selectorHeaderRowLedgerMobile,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tagLabel,
-                styles.fieldLabelNoMargin,
-                styles.selectorHeaderTitle,
-                mob && styles.ledgerMobTagLabel,
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              SYNC MODE
-            </Text>
-            {!ledgerProtocolModeStripOpen ? (
-              <TouchableOpacity
-                style={[styles.selectorChangeBtn, mob && styles.ledgerMobSelectorChange]}
-                onPress={() => setPaymentModeExpanded(true)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[styles.selectorChangeBtnText, mob && styles.ledgerMobSelectorChangeText]}
-                >
-                  Change
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          {!ledgerProtocolModeStripOpen ? (
-            <TouchableOpacity
-              style={[styles.selectorSummaryCard, mob && styles.ledgerMobSelectorSummary]}
-              onPress={() => setPaymentModeExpanded(true)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.selectorSummaryMain}>
-                <View style={[styles.selectorSummaryIconSm, mob && styles.ledgerMobSelectorIcon]}>
-                  <PaymentModeLogo modeId={paymentModeId} size={LEDGER_PROTOCOL_SUMMARY_LOGO} />
-                </View>
-                <Text
-                  style={[styles.selectorSummaryText, mob && styles.ledgerMobSelectorText]}
-                  numberOfLines={1}
-                >
-                  {selectedPaymentModeName}
-                </Text>
-              </View>
-              <FontAwesome name="chevron-down" size={10} color={Theme.textMutedDemo} />
-            </TouchableOpacity>
-          ) : protocolModeStripUsesScroll ? (
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-              showsHorizontalScrollIndicator
-              style={styles.protocolStripScrollSplit}
-              contentContainerStyle={[
-                styles.protocolStripContent,
-                { gap: LEDGER_PROTOCOL_TILE_GAP },
-              ]}
-            >
-              {PAYMENT_MODES.map((opt) => {
-                const selected = paymentModeId === opt.id;
-                return (
-                  <LedgerProtocolStripModeTile
-                    key={opt.id}
-                    modeId={opt.id}
-                    label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
-                    selected={selected}
-                    variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-                    width={protocolModeTileWidth}
-                    onPress={() => {
-                      setPaymentModeId(opt.id);
-                      setPaymentModeExpanded(false);
-                    }}
-                  />
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <View style={styles.protocolStripScrollSplit}>
-              <View
-                style={[
-                  styles.protocolStripContent,
-                  styles.protocolStripRowSingle,
-                  { gap: LEDGER_PROTOCOL_TILE_GAP },
-                ]}
-              >
-                {PAYMENT_MODES.map((opt) => {
-                  const selected = paymentModeId === opt.id;
-                  return (
-                    <LedgerProtocolStripModeTile
-                      key={opt.id}
-                      modeId={opt.id}
-                      label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
-                      selected={selected}
-                      variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-                      width={protocolModeTileWidth}
-                      onPress={() => {
-                        setPaymentModeId(opt.id);
-                        setPaymentModeExpanded(false);
-                      }}
-                    />
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
+    const protocolModeCenterRow =
+      ledgerTripDesktopSplit &&
+      !protocolModeStripUsesScroll &&
+      syncModeCount < paymentTypeCount;
 
-        <View
-          style={[
-            ledgerProtocolColStyle,
-            stackTripFinancialBand
-              ? styles.ledgerProtocolSplitColStackTop
-              : styles.ledgerProtocolSplitColPaddedLeft,
-          ]}
+    const ledgerModeCategoryTopBand = (
+      <LedgerProtocolWorkbench stacked={ledgerTripDesktopSplit} compact={mob}>
+        <LedgerProtocolStripSection
+          title="SYNC MODE"
+          variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+          stripOpen={ledgerProtocolModeStripOpen}
+          onExpand={() => setPaymentModeExpanded(true)}
+          summaryIcon={
+            <PaymentModeLogo modeId={paymentModeId} size={LEDGER_PROTOCOL_SUMMARY_LOGO} />
+          }
+          summaryLabel={selectedPaymentModeName}
+          usesScroll={protocolModeStripUsesScroll}
+          tileGap={protocolTileGap}
+          centerRow={protocolModeCenterRow}
+          sectionStyle={
+            ledgerTripDesktopSplit
+              ? undefined
+              : stackTripFinancialBand
+                ? styles.ledgerProtocolSectionStackBottom
+                : styles.ledgerProtocolSectionSideLeft
+          }
         >
-          <View
-            style={[
-              styles.selectorHeaderRow,
-              stackTripFinancialBand && styles.selectorHeaderRowLedgerMobile,
-            ]}
-          >
-            <Text
-              style={[
-                styles.tagLabel,
-                styles.fieldLabelNoMargin,
-                styles.selectorHeaderTitle,
-                mob && styles.ledgerMobTagLabel,
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {type === "in"
+          {PAYMENT_MODES.map((opt) => {
+            const selected = paymentModeId === opt.id;
+            return (
+              <LedgerProtocolStripModeTile
+                key={opt.id}
+                modeId={opt.id}
+                label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
+                selected={selected}
+                variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                width={protocolModeTileWidth}
+                onPress={() => {
+                  setPaymentModeId(opt.id);
+                  setPaymentModeExpanded(false);
+                }}
+              />
+            );
+          })}
+        </LedgerProtocolStripSection>
+
+        <LedgerProtocolStripSection
+          title={
+            type === "in"
+              ? "PAYMENT TYPE"
+              : isDriverPayment
                 ? "PAYMENT TYPE"
-                : isDriverPayment
-                  ? "PAYMENT TYPE"
-                  : "CATEGORY"}
-            </Text>
-            {!ledgerProtocolTypeStripOpen && selectedPaymentTypeLabel ? (
-              <TouchableOpacity
-                style={[styles.selectorChangeBtn, mob && styles.ledgerMobSelectorChange]}
-                onPress={() => setPaymentTypeExpanded(true)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[styles.selectorChangeBtnText, mob && styles.ledgerMobSelectorChangeText]}
-                >
-                  Change
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          {!ledgerProtocolTypeStripOpen && selectedPaymentTypeLabel ? (
-            <TouchableOpacity
-              style={[styles.selectorSummaryCard, mob && styles.ledgerMobSelectorSummary]}
-              onPress={() => setPaymentTypeExpanded(true)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.selectorSummaryMain}>
-                <View style={[styles.selectorSummaryIconSm, mob && styles.ledgerMobSelectorIcon]}>
-                  <LedgerPaymentTypeIcon
-                    kind={selectedPaymentTypeLabel ?? ""}
-                    size={LEDGER_PROTOCOL_SUMMARY_TYPE_ICON}
-                  />
-                </View>
-                <Text
-                  style={[styles.selectorSummaryText, mob && styles.ledgerMobSelectorText]}
-                  numberOfLines={2}
-                >
-                  {selectedPaymentTypeLabel}
-                </Text>
-              </View>
-              <FontAwesome name="chevron-down" size={10} color={Theme.textMutedDemo} />
-            </TouchableOpacity>
-          ) : protocolTypeStripUsesScroll ? (
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-              showsHorizontalScrollIndicator
-              style={styles.protocolStripScrollSplit}
-              contentContainerStyle={[
-                styles.protocolStripContent,
-                { gap: LEDGER_PROTOCOL_TILE_GAP },
-              ]}
-            >
-              {paymentTypeItems.map((item) => (
-                <LedgerProtocolStripTypeTile
-                  key={String(item.key)}
-                  kind={item.label}
-                  label={item.label}
-                  selected={item.selected}
-                  variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-                  width={protocolTypeTileWidth}
-                  onPress={item.onPress}
-                />
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.protocolStripScrollSplit}>
-              <View
-                style={[
-                  styles.protocolStripContent,
-                  styles.protocolStripRowSingle,
-                  { gap: LEDGER_PROTOCOL_TILE_GAP },
-                ]}
-              >
-                {paymentTypeItems.map((item) => (
-                  <LedgerProtocolStripTypeTile
-                    key={String(item.key)}
-                    kind={item.label}
-                    label={item.label}
-                    selected={item.selected}
-                    variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-                    width={protocolTypeTileWidth}
-                    onPress={item.onPress}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
+                : "CATEGORY"
+          }
+          variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+          stripOpen={ledgerProtocolTypeStripOpen}
+          onExpand={() => setPaymentTypeExpanded(true)}
+          summaryIcon={
+            <LedgerPaymentTypeIcon
+              kind={selectedPaymentTypeLabel ?? ""}
+              size={LEDGER_PROTOCOL_SUMMARY_LOGO}
+            />
+          }
+          summaryLabel={selectedPaymentTypeLabel ?? ""}
+          usesScroll={protocolTypeStripUsesScroll}
+          tileGap={protocolTileGap}
+          sectionStyle={
+            ledgerTripDesktopSplit
+              ? undefined
+              : stackTripFinancialBand
+                ? styles.ledgerProtocolSectionStackTop
+                : styles.ledgerProtocolSectionSideRight
+          }
+        >
+          {paymentTypeItems.map((item) => (
+            <LedgerProtocolStripTypeTile
+              key={String(item.key)}
+              kind={item.label}
+              label={item.label}
+              selected={item.selected}
+              variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+              width={protocolTypeTileWidth}
+              onPress={item.onPress}
+            />
+          ))}
+        </LedgerProtocolStripSection>
+      </LedgerProtocolWorkbench>
     );
 
     const ledgerSyncAmountHero = (
@@ -6591,7 +6369,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 10,
   },
-  ledgerMobSelectorIcon: { width: 14, height: 14, borderRadius: 7 },
+  ledgerMobSelectorIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 0,
+    backgroundColor: "transparent",
+    overflow: "visible",
+  },
   ledgerMobSelectorText: {
     ...FinanceTxnTypography.partyTitle,
     fontSize: 10,
@@ -6977,6 +6761,28 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 4,
   },
+  ledgerProtocolSectionSideLeft: {
+    flex: 1,
+    minWidth: 0,
+    borderRightWidth: 1,
+    borderRightColor: Theme.borderMedium,
+    paddingRight: 8,
+  },
+  ledgerProtocolSectionSideRight: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 8,
+  },
+  ledgerProtocolSectionStackBottom: {
+    width: "100%",
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderMedium,
+    paddingBottom: 10,
+  },
+  ledgerProtocolSectionStackTop: {
+    width: "100%",
+    paddingTop: 2,
+  },
   ledgerProtocolSplitCol: {
     flex: 1,
     minWidth: 0,
@@ -7078,12 +6884,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   selectorSummaryIconSm: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Theme.surfaceGray,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
+    backgroundColor: "transparent",
   },
   selectorSummaryText: {
     flex: 1,

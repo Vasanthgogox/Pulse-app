@@ -19,6 +19,7 @@ import {
   type ConnectionRequestRow,
 } from "@/features/connections/services/connectionRequests.service";
 import { Check, Clock3, Search, Send, UserPlus2, X } from "lucide-react-native";
+import LottieView from "lottie-react-native";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -31,6 +32,25 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
+const INVITE_EMPTY_RECEIVED_LOTTIE = require("@/assets/Animated folder/email-notification.json");
+const INVITE_EMPTY_SENT_LOTTIE = require("@/assets/Animated folder/friend-request.json");
+const INVITE_EMPTY_LOTTIE_SIZE = 40;
+
+function InviteEmptyLottie({ sent }: { sent?: boolean }) {
+  return (
+    <View style={inviteEmptyStyles.lottieSlot}>
+      <LottieView
+        source={sent ? INVITE_EMPTY_SENT_LOTTIE : INVITE_EMPTY_RECEIVED_LOTTIE}
+        autoPlay
+        loop
+        speed={0.85}
+        resizeMode="contain"
+        style={{ width: INVITE_EMPTY_LOTTIE_SIZE, height: INVITE_EMPTY_LOTTIE_SIZE }}
+      />
+    </View>
+  );
+}
 
 function formatRelativeShort(iso: string): string {
   const t = new Date(iso).getTime();
@@ -425,6 +445,7 @@ export function InvitationsView({
       </View>
       {pendingReceived.length === 0 ? (
         <View style={styles.emptyInbox}>
+          <InviteEmptyLottie />
           <Text style={styles.emptyInboxTitle}>No pending invitations</Text>
         </View>
       ) : (
@@ -444,6 +465,7 @@ export function InvitationsView({
       </View>
       {sent.length === 0 ? (
         <View style={styles.emptyInbox}>
+          <InviteEmptyLottie sent />
           <Text style={styles.emptyInboxSub}>No sent requests</Text>
         </View>
       ) : (
@@ -457,6 +479,7 @@ export function InvitationsView({
   const hubList =
     hubItems.length === 0 ? (
       <View style={styles.emptyInbox}>
+        <InviteEmptyLottie sent={subTab === "sent"} />
         <Text style={styles.emptyInboxSub}>
           {subTab === "received" ? "No pending invitations" : "No sent invitations"}
         </Text>
@@ -970,7 +993,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 24,
     paddingHorizontal: 20,
+    gap: 6,
   },
-  emptyInboxTitle: { fontSize: 14, fontWeight: "700", color: Theme.textSecondary, marginTop: 8 },
+  emptyInboxTitle: { fontSize: 14, fontWeight: "700", color: Theme.textSecondary },
   emptyInboxSub: { fontSize: 12, color: Theme.textSecondary, textAlign: "center" },
+});
+
+const inviteEmptyStyles = StyleSheet.create({
+  lottieSlot: {
+    width: INVITE_EMPTY_LOTTIE_SIZE,
+    height: INVITE_EMPTY_LOTTIE_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

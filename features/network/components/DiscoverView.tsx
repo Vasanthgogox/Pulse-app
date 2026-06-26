@@ -312,6 +312,7 @@ export function DiscoverView({
   const {
     orgs,
     loading,
+    hasFetched,
     error,
     refetch: refetchDiscover,
     invalidateCache: invalidateDiscoverCache,
@@ -769,6 +770,23 @@ export function DiscoverView({
           )}
         </View>
       ) : null}
+      {growNetworkRecommendations.length === 0 &&
+      peopleYouMayKnow.length === 0 &&
+      connectableOrgs.length > 0 ? (
+        <View
+          style={[
+            styles.hubMobileListSection,
+            suppressGrowSectionHeader && styles.hubMobileListSectionFlush,
+          ]}
+        >
+          {renderEmbeddedPaneListGrid(
+            connectableOrgs.slice(0, growSectionLimit * 2),
+            "discover-fallback",
+            styles.hubMobileListPane,
+            growGridOptions,
+          )}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -795,6 +813,16 @@ export function DiscoverView({
       : embedded && search
         ? embeddedHubSearchBody
         : null;
+
+  const embeddedHasListContent =
+    embedded && !search
+      ? growNetworkRecommendations.length > 0 ||
+        peopleYouMayKnow.length > 0 ||
+        connectableOrgs.length > 0
+      : discoverListOrgs.length > 0;
+
+  const showEmbeddedLoading = !hasFetched || (loading && !embeddedHasListContent);
+  const showEmbeddedEmpty = hasFetched && !loading && !embeddedHasListContent;
 
   return (
     <View style={[styles.container, embedded && styles.containerEmbedded]}>
@@ -830,7 +858,7 @@ export function DiscoverView({
 
       {embedded ? (
         <View>
-          {discoverListOrgs.length === 0 && !loading ? (
+          {showEmbeddedEmpty ? (
             <View style={styles.empty}>
               <View style={styles.emptyIconWrap}>
                 <Compass size={36} color={Theme.textSecondary} strokeWidth={1.5} />
@@ -844,7 +872,7 @@ export function DiscoverView({
                   : "Search for companies, clients, and suppliers across the country"}
               </Text>
             </View>
-          ) : discoverListOrgs.length === 0 && loading ? (
+          ) : showEmbeddedLoading ? (
             <View style={styles.embeddedGridLoading}>
               <LoadingIndicator size="small" color={Theme.primary} />
             </View>
@@ -888,7 +916,7 @@ export function DiscoverView({
           scrollEnabled
           nestedScrollEnabled
           ListEmptyComponent={
-            !loading ? (
+            hasFetched && !loading ? (
               <View style={styles.empty}>
                 <View style={styles.emptyIconWrap}>
                   <Compass size={36} color={Theme.textSecondary} strokeWidth={1.5} />

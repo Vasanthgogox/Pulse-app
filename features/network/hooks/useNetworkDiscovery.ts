@@ -31,20 +31,22 @@ export function useNetworkDiscovery({
   enabled = true,
 }: UseNetworkDiscoveryOptions) {
   const [orgs, setOrgs] = useState<DiscoverOrg[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(orgId && enabled));
+  const [hasFetched, setHasFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const isMountedRef = useRef(true);
   const searchRef = useRef(search);
   const orgIdRef = useRef(orgId);
   const fetchGenRef = useRef(0);
+  const hydrateReadyRef = useRef<Promise<void> | null>(null);
 
   orgIdRef.current = orgId;
   searchRef.current = debouncedSearch;
 
   useEffect(() => {
     isMountedRef.current = true;
-    void hydrateDiscoveryCacheFromStorage();
+    hydrateReadyRef.current = hydrateDiscoveryCacheFromStorage();
     return () => {
       isMountedRef.current = false;
     };
@@ -59,11 +61,15 @@ export function useNetworkDiscovery({
     const currentOrgId = orgIdRef.current;
     if (!currentOrgId || !enabled) return;
 
+    await hydrateReadyRef.current;
+
     if (!force) {
       const cached = getDiscoveryCache(currentOrgId, term);
       if (cached) {
         setOrgs(cached.data);
         setError(null);
+        setHasFetched(true);
+        setLoading(false);
         return;
       }
     }
@@ -80,6 +86,8 @@ export function useNetworkDiscovery({
     );
 
     if (!isMountedRef.current || gen !== fetchGenRef.current) return;
+
+    setHasFetched(true);
 
     if (err) {
       const stale = getDiscoveryCacheStale(currentOrgId, term);
@@ -107,8 +115,11 @@ export function useNetworkDiscovery({
   useEffect(() => {
     if (!orgId || !enabled) {
       setOrgs([]);
+      setHasFetched(false);
+      setLoading(false);
       return;
     }
+    setLoading(true);
     void fetchOrgs(debouncedSearch);
   }, [orgId, debouncedSearch, enabled, fetchOrgs]);
 
@@ -152,6 +163,7 @@ export function useNetworkDiscovery({
   return {
     orgs,
     loading,
+    hasFetched,
     error,
     refetch,
     invalidateCache,

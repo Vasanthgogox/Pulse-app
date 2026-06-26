@@ -178,7 +178,7 @@ export const entityDetailPageChromeStyles = StyleSheet.create({
     color: Theme.textMuted,
     marginTop: 2,
   },
-  emptyRow: { paddingVertical: 20, alignItems: "center" },
+  emptyRow: { paddingVertical: 20, alignItems: "center", gap: 4 },
   emptyRowText: {
     fontSize: 10,
     fontWeight: "600",

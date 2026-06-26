@@ -281,13 +281,13 @@ const styles = StyleSheet.create({
   etaBadgeValue: {
     fontSize: 11,
     fontWeight: "700",
-    color: Theme.textOnPrimary,
+    color: Theme.textPrimaryDark,
     lineHeight: 12,
   },
   etaBadgeUnit: {
     fontSize: 6.5,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.92)",
+    color: Theme.textPrimaryDark,
     lineHeight: 8,
     marginTop: 0,
   },

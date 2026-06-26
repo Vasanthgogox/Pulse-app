@@ -254,6 +254,7 @@ LogBox.ignoreLogs([
   // React Strict Mode double-mount vs Supabase auth Web Lock (dev-only recovery).
   'Lock "lock:sb-',
   'was not released within',
+  'Lock was stolen by another request',
 ]);
 
 export default function RootLayout() {

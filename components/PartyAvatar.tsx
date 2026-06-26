@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp, type ViewStyle } from "react-native";
+import {
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  type ImageStyle,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { Building2, Truck, User } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import {
@@ -23,6 +32,16 @@ function partyAvatarRadius(size: number, shape: PartyAvatarShape): number {
   if (shape === "circle") return size / 2;
   if (shape === "rounded") return Math.round(size * 0.26);
   return 4;
+}
+
+/** Logos and client/supplier marks should letterbox; driver photos may crop. */
+function partyAvatarImageResizeMode(
+  entityType: PartyEntityType,
+  organizationImageUrl?: string | null,
+): "contain" | "cover" {
+  if ((organizationImageUrl ?? "").trim()) return "contain";
+  if (entityType === "client" || entityType === "supplier") return "contain";
+  return "cover";
 }
 
 export type PartyAvatarProps = {
@@ -144,26 +163,36 @@ export function PartyAvatar({
   const initialsColor = partyAvatarInitialsTextColor(bg);
 
   if (uri && !imageFailed) {
+    const resizeMode = partyAvatarImageResizeMode(entityType, organizationImageUrl);
     return (
-      <Image
-        source={{ uri }}
-        resizeMode="cover"
-        accessibilityIgnoresInvertColors
-        onError={() => setImageFailed(true)}
+      <View
         style={[
+          styles.photoFrame,
           {
             width: size,
             height: size,
             borderRadius: radius,
-            backgroundColor: Theme.surface,
-            borderWidth: 1,
-            borderColor: Theme.border,
-            overflow: "hidden",
           },
-          borderStyle,
-          style as StyleProp<ImageStyle>,
+          style,
         ]}
-      />
+      >
+        <Image
+          source={{ uri }}
+          resizeMode={resizeMode}
+          accessibilityIgnoresInvertColors
+          onError={() => setImageFailed(true)}
+          style={[
+            styles.photoImage,
+            {
+              width: size,
+              height: size,
+              borderRadius: radius,
+            },
+            Platform.OS === "web" ? { objectFit: resizeMode } : null,
+            borderStyle,
+          ]}
+        />
+      </View>
     );
   }
 
@@ -204,6 +233,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    flexShrink: 0,
+  },
+  photoFrame: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  photoImage: {
     flexShrink: 0,
   },
   initialsWrap: {

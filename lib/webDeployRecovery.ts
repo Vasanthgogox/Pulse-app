@@ -92,6 +92,8 @@ function messageFromUnknownError(error: unknown): string {
 /** Install after root layout mounts (not from index.js — RN must init first). */
 export function installNativeBundleRecoveryHandler(): void {
   if (platformOS() === 'web' || !__DEV__) return;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isIgnorableSupabaseAuthLockError } = require('@/lib/supabaseAuthLock.util') as typeof import('@/lib/supabaseAuthLock.util');
   const ErrorUtils = (
     global as typeof global & {
       ErrorUtils?: {
@@ -104,6 +106,9 @@ export function installNativeBundleRecoveryHandler(): void {
 
   const previous = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error, isFatal) => {
+    if (isIgnorableSupabaseAuthLockError(error)) {
+      return;
+    }
     const err =
       error instanceof Error
         ? error

@@ -1,5 +1,5 @@
 /**
- * Give / Get loads — Network home quick actions with Metronic illustrations.
+ * Give / Get loads — Network home quick actions with Metronic illustrations + Lottie.
  */
 import Theme from "@/constants/Theme";
 import { NETWORK_HUB_GRID_ROW_PADDING_H } from "@/features/network/constants/networkHubGrid";
@@ -11,6 +11,7 @@ import {
 import { ROUTES } from "@/lib/routes";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import LottieView, { type AnimationObject } from "lottie-react-native";
 import { ArrowUpRight, Zap } from "lucide-react-native";
 import {
   Platform,
@@ -22,6 +23,10 @@ import {
   type ViewStyle,
 } from "react-native";
 
+const MOBILE_MARKETPLACE_BREAKPOINT = 520;
+/** Readable subline on pastel supply/demand washes. */
+const SUB_ON_WASH = "#64748B";
+
 export interface NetworkLoadsQuickCardsProps {
   compact?: boolean;
   layout?: "default" | "sidebar";
@@ -32,25 +37,115 @@ type MarketplaceCardProps = {
   pressed: boolean;
   compact?: boolean;
   variant: "tile" | "sidebar";
+  isMobile?: boolean;
 };
+
+function MarketplaceArt({
+  action,
+  illusBoxW,
+  illusBoxH,
+  useLottie,
+}: {
+  action: NetworkLoadsQuickAction;
+  illusBoxW: number;
+  illusBoxH: number;
+  useLottie?: boolean;
+}) {
+  const Illustration = action.illustration;
+
+  if (useLottie && action.lottie) {
+    const scale = action.lottieScale ?? 1.1;
+    const size = Math.round(Math.min(illusBoxW, illusBoxH) * scale);
+    return (
+      <View style={[styles.lottieSlot, { width: illusBoxW, height: illusBoxH }]}>
+        <LottieView
+          source={action.lottie as AnimationObject}
+          autoPlay
+          loop
+          speed={0.88}
+          resizeMode="contain"
+          style={{ width: size, height: size }}
+        />
+      </View>
+    );
+  }
+
+  const illusSize = fitNetworkLoadsIllustration(
+    illusBoxW,
+    illusBoxH,
+    action.aspect,
+  );
+  return (
+    <Illustration width={illusSize.width} height={illusSize.height} />
+  );
+}
 
 function MarketplaceCard({
   action,
   pressed,
   compact,
   variant,
+  isMobile,
 }: MarketplaceCardProps) {
   const { width } = useWindowDimensions();
   const sidebar = variant === "sidebar";
-  const Illustration = action.illustration;
+  const mobileTile = isMobile && variant === "tile";
 
   const illusBoxW = sidebar ? 76 : compact || width < 380 ? 80 : 96;
   const illusBoxH = sidebar ? 64 : compact || width < 380 ? 68 : 80;
-  const illusSize = fitNetworkLoadsIllustration(
-    illusBoxW,
-    illusBoxH,
-    action.aspect,
+  const mobileArtW = compact ? 108 : 120;
+  const mobileArtH = compact ? 84 : 92;
+
+  const arrowOrb = (
+    <View
+      style={[
+        mobileTile ? styles.arrowOrbMobile : styles.arrowOrb,
+        { borderColor: `${action.accent}28`, backgroundColor: Theme.cardWhite },
+      ]}
+    >
+      <ArrowUpRight
+        size={mobileTile ? 14 : sidebar ? 12 : 13}
+        color={action.accent}
+        strokeWidth={2.2}
+      />
+    </View>
   );
+
+  if (mobileTile) {
+    return (
+      <View
+        style={[
+          styles.cardMobile,
+          compact && styles.cardMobileCompact,
+          { backgroundColor: action.wash },
+          pressed && styles.cardPressed,
+        ]}
+      >
+        <View style={styles.cardMobileTop}>
+          <View style={styles.cardMobileText}>
+            <Text style={[styles.chip, { color: action.accent }]}>
+              {action.chip}
+            </Text>
+            <Text style={styles.titleMobile} numberOfLines={1}>
+              {action.label}
+            </Text>
+            <Text style={styles.subMobile} numberOfLines={1}>
+              {action.sub}
+            </Text>
+          </View>
+          {arrowOrb}
+        </View>
+        <View style={styles.cardMobileArt}>
+          <MarketplaceArt
+            action={action}
+            illusBoxW={mobileArtW}
+            illusBoxH={mobileArtH}
+            useLottie
+          />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -84,33 +179,25 @@ function MarketplaceCard({
         <View
           style={[
             styles.illusWrap,
+            { width: illusBoxW, height: illusBoxH },
             sidebar && styles.illusWrapSidebar,
           ]}
         >
-          <Illustration
-            width={illusSize.width}
-            height={illusSize.height}
+          <MarketplaceArt
+            action={action}
+            illusBoxW={illusBoxW}
+            illusBoxH={illusBoxH}
+            useLottie={!sidebar}
           />
         </View>
 
-        <View
-          style={[
-            styles.arrowOrb,
-            { borderColor: `${action.accent}28`, backgroundColor: Theme.cardWhite },
-          ]}
-        >
-          <ArrowUpRight
-            size={sidebar ? 12 : 13}
-            color={action.accent}
-            strokeWidth={2.2}
-          />
-        </View>
+        {arrowOrb}
       </View>
     </View>
   );
 }
 
-function SectionHeader({ sidebar }: { sidebar?: boolean }) {
+function SectionHeader({ sidebar, isMobile }: { sidebar?: boolean; isMobile?: boolean }) {
   return (
     <View style={sidebar ? styles.headSidebar : styles.head}>
       <View style={styles.headPill}>
@@ -125,7 +212,9 @@ function SectionHeader({ sidebar }: { sidebar?: boolean }) {
         </Text>
       </View>
       {!sidebar ? (
-        <Text style={styles.headHint}>Tap to open Load Center</Text>
+        <Text style={styles.headHint}>
+          {isMobile ? "Post or bid on freight" : "Tap to open Load Center"}
+        </Text>
       ) : null}
     </View>
   );
@@ -136,7 +225,9 @@ export function NetworkLoadsQuickCards({
   layout = "default",
 }: NetworkLoadsQuickCardsProps) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const sidebar = layout === "sidebar";
+  const isMobile = !sidebar && (compact || width < MOBILE_MARKETPLACE_BREAKPOINT);
 
   const openLoadCenter = () => {
     if (Platform.OS !== "web") {
@@ -153,7 +244,7 @@ export function NetworkLoadsQuickCards({
     return (
       <View
         key={action.id}
-        style={tile ? styles.cardSlot : styles.sidebarCardPress}
+        style={tile ? (isMobile ? styles.cardSlotMobile : styles.cardSlot) : styles.sidebarCardPress}
       >
         <Pressable
           onPress={openLoadCenter}
@@ -170,6 +261,7 @@ export function NetworkLoadsQuickCards({
               pressed={pressed}
               compact={compact}
               variant={variant}
+              isMobile={isMobile}
             />
           )}
         </Pressable>
@@ -191,8 +283,14 @@ export function NetworkLoadsQuickCards({
 
   return (
     <View style={[styles.wrap, compact && styles.wrapCompact]}>
-      <SectionHeader />
-      <View style={[styles.rail, compact && styles.railCompact]}>
+      <SectionHeader isMobile={isMobile} />
+      <View
+        style={[
+          styles.rail,
+          compact && styles.railCompact,
+          isMobile && styles.railMobile,
+        ]}
+      >
         {NETWORK_LOADS_QUICK_ACTIONS.map((action) =>
           renderCard(action, "tile"),
         )}
@@ -300,6 +398,10 @@ const styles = StyleSheet.create({
   railCompact: {
     gap: 10,
   },
+  railMobile: {
+    flexDirection: "column",
+    gap: 10,
+  },
   railSidebar: {
     flexDirection: "column",
     gap: 10,
@@ -310,11 +412,75 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 108,
     borderRadius: 14,
-    backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
     ...cardShadow,
+  },
+  cardMobile: {
+    width: "100%",
+    minHeight: 148,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    overflow: "hidden",
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 4,
+    ...cardShadow,
+  },
+  cardMobileCompact: {
+    minHeight: 136,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  cardMobileTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  cardMobileText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  titleMobile: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.35,
+    lineHeight: 21,
+  },
+  subMobile: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: SUB_ON_WASH,
+    lineHeight: 16,
+  },
+  cardMobileArt: {
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "stretch",
+    minHeight: 84,
+    marginTop: 2,
+  },
+  arrowOrbMobile: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  lottieSlot: {
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
   cardCompact: {
     minHeight: 100,
@@ -347,6 +513,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 4,
     justifyContent: "center",
+    paddingRight: 4,
   },
   textColSidebar: {
     gap: 3,
@@ -371,7 +538,7 @@ const styles = StyleSheet.create({
   sub: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textSecondary,
+    color: SUB_ON_WASH,
     lineHeight: 15,
   },
   subSidebar: {
@@ -382,7 +549,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    minWidth: 0,
   },
   illusWrapSidebar: {
     marginRight: 0,
@@ -395,11 +561,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
-    alignSelf: "center",
   },
   cardSlot: {
     flex: 1,
     flexBasis: 0,
+    minWidth: 0,
+  },
+  cardSlotMobile: {
+    width: "100%",
     minWidth: 0,
   },
   cardPress: {

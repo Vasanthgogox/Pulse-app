@@ -23,6 +23,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { entityCompanionCardStyles as ecc } from "@/components/entityCompanionCard.styles";
 import { entityHeroScorecardStyles as ehs } from "@/components/entityHeroScorecard.styles";
+import { EntityTripTableEmptyRow } from "@/components/EntityTripTableEmptyRow";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { FinanceFAB } from "@/components/FinanceFAB";
 import { useAuth } from "@/contexts/AuthContext";
@@ -898,9 +899,7 @@ export default function VehicleDetailScreen({
                 </TouchableOpacity>
               ))
             ) : (
-              <View style={styles.emptyRow}>
-                <Text style={styles.emptyRowText}>No trips</Text>
-              </View>
+              <EntityTripTableEmptyRow textStyle={styles.emptyRowText} style={styles.emptyRow} />
             )}
           </View>
         )}
@@ -1338,7 +1337,7 @@ const styles = StyleSheet.create({
   tdRight: { flex: 1, textAlign: "right" as const },
   tdGreen: { color: Theme.darkGreen },
   tdRed: { color: Theme.teslaRed },
-  emptyRow: { paddingVertical: 24, alignItems: "center" },
+  emptyRow: { paddingVertical: 24, alignItems: "center", gap: 4 },
   emptyRowText: {
     fontSize: 11,
     fontWeight: "600",
