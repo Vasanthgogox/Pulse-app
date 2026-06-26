@@ -161,6 +161,50 @@ const HTML_STYLE = `
   /* ── GRID ── */
   .grid-wrap { flex: 1; overflow: auto; position: relative; background: var(--g); }
 
+  /* ── CHECKBOX COL ── */
+  .xtable td.cb, .xtable th.cb {
+    position: sticky; left: 0; z-index: 22;
+    width: 40px; min-width: 40px;
+    background: var(--s1); border-right: 1px solid var(--bdl); border-bottom: 1px solid var(--bdl);
+    text-align: center; padding: 0;
+  }
+  .xtable thead th.cb { z-index: 37; background: var(--s2); }
+  .xtable .dh td.cb  { z-index: 32; background: var(--s1); }
+  .xtable .grp td.cb { background: var(--s2) !important; }
+  .xtable tbody tr.row-sel td.cb { background: rgba(240,180,41,.12) !important; }
+  .xtable tbody tr.row-sel td { background: rgba(240,180,41,.05) !important; }
+  .xtable tbody tr.row-sel td.col-id { color: var(--ac); }
+  .xtable td.rn, .xtable th.rn { left: 36px; }
+  .xtable thead td.rn, .xtable thead th.rn { z-index: 36; }
+  .xtable td.col-id, .xtable th.col-id { left: 80px; }
+  .xtable td.col-action, .xtable th.col-action { left: 132px; }
+  .row-cb { width: 14px; height: 14px; accent-color: var(--ac); cursor: pointer; display: block; margin: auto; opacity: .5; transition: opacity .12s; }
+  .xtable tbody tr:hover .row-cb, .row-cb:checked { opacity: 1; }
+
+  /* ── SELECTION BAR ── */
+  .sel-bar {
+    position: fixed; bottom: 48px; left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--s2); border: 1px solid var(--bd); border-radius: 9px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.55);
+    padding: 8px 12px; display: flex; align-items: center; gap: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+    z-index: 10000;
+  }
+  .sel-bar.show { opacity: 1; pointer-events: all; transform: translateX(-50%) translateY(0); }
+  .sel-bar-count { font-size: 12px; color: var(--txm); font-weight: 600;
+    padding-right: 10px; border-right: 1px solid var(--bd); white-space: nowrap; }
+  .sel-bar-btn {
+    background: var(--s3); border: 1px solid var(--bd); color: var(--txm);
+    padding: 5px 11px; cursor: pointer; font-family: var(--sans); font-size: 11px;
+    font-weight: 600; border-radius: 6px; transition: .12s;
+  }
+  .sel-bar-btn.copy:hover  { border-color: var(--ins); color: var(--ins); background: var(--insb); }
+  .sel-bar-btn.clear:hover { border-color: var(--txm); color: var(--tx); }
+  .sel-bar-close { background: none; border: none; color: var(--txd);
+    cursor: pointer; font-size: 15px; padding: 0 3px; line-height: 1; }
+  .sel-bar-close:hover { color: var(--tx); }
+
   /* ── TABLE ── */
   .xtable { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
 
@@ -594,6 +638,7 @@ function AuditApp() {
   const [snap, setSnap] = useState<{ before: SnapData | null; after: SnapData | null }>({ before: null, after: null });
   const [sheet, setSheet] = useState<Sheet>('matrix');
   const [selId, setSelId] = useState<string | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tester] = useState('dev');
@@ -731,17 +776,23 @@ function AuditApp() {
 
   // ── Matrix sheet ────────────────────────────────────────────────────────────
   function matrixHTML() {
-    const letters = ['C','D','E','F','G','H','I','J'];
+    const letters = ['D','E','F','G','H','I','J','K'];
     const cols = ['ROUTE','SERVICE','INSERTS','UPDATES','TRIGGER','AUDIT TABLE','PRI','✓'];
+    const allIds = actions.filter(a => !a.is_subflow).map(a => a.id);
+    const allChecked = allIds.length > 0 && allIds.every(id => selectedRows.has(id));
+
     let html = `<table class="xtable">
       <thead>
         <tr class="col-hdr">
+          <th class="cb"><input type="checkbox" class="row-cb" id="cb-all" ${allChecked ? 'checked' : ''} onchange="window.__auditSelectAll(this.checked)" title="Select all"></th>
           <th class="rn th-rn"></th>
           <th class="col-id th-id">A</th>
           <th class="col-action th-action">B</th>
-          ${letters.map((l, i) => i < cols.length ? `<th>${l}</th>` : '').join('')}
+          <th>C</th>
+          ${letters.map((l, i) => i < cols.length - 1 ? `<th>${l}</th>` : '').join('')}
         </tr>
         <tr class="dh">
+          <td class="cb"></td>
           <td class="rn td-rn">1</td>
           <td class="col-id td-id">#</td>
           <td class="col-action td-action">ACTION</td>
@@ -755,6 +806,7 @@ function AuditApp() {
       if (a.flow_group && a.flow_group !== lastGroup && !a.is_subflow) {
         lastGroup = a.flow_group;
         html += `<tr class="grp">
+          <td class="cb"></td>
           <td class="rn"></td>
           <td class="col-id"></td>
           <td class="col-action">${a.flow_group}</td>
@@ -762,9 +814,11 @@ function AuditApp() {
         </tr>`;
       }
       const v = vers[a.id];
+      const rowSel = selectedRows.has(a.id) ? 'row-sel' : '';
       const sel = selId === a.id ? 'sel' : '';
       const sub = a.is_subflow ? 'sub' : '';
-      html += `<tr data-id="${a.id}" class="${sel} ${sub}" onclick="window.__auditSelectRow('${a.id}')">
+      html += `<tr data-id="${a.id}" class="${sel} ${rowSel} ${sub}" onclick="window.__auditSelectRow('${a.id}')">
+        <td class="cb" onclick="event.stopPropagation()"><input type="checkbox" class="row-cb" ${selectedRows.has(a.id) ? 'checked' : ''} onchange="window.__auditToggleRow('${a.id}',this.checked)"></td>
         <td class="rn">${a.is_subflow ? '' : i + 1}</td>
         <td class="col-id">${a.id}</td>
         <td class="col-action">${a.action}</td>
@@ -1096,6 +1150,27 @@ function AuditApp() {
   useEffect(() => {
     const win = window as unknown as Record<string, unknown>;
     win.__auditSelectRow = (id: string) => setSelId(id);
+    win.__auditToggleRow = (id: string, checked: boolean) => {
+      setSelectedRows(prev => {
+        const next = new Set(prev);
+        checked ? next.add(id) : next.delete(id);
+        return next;
+      });
+    };
+    win.__auditSelectAll = (checked: boolean) => {
+      setSelectedRows(checked ? new Set(actions.map(a => a.id)) : new Set());
+    };
+    win.__auditCopySelected = () => {
+      const rows = actions.filter(a => selectedRows.has(a.id));
+      const header = '#\tACTION\tROUTE\tSERVICE\tINSERTS\tUPDATES\tTRIGGER\tAUDIT TABLE\tPRI';
+      const lines = rows.map(a =>
+        [a.id, a.action, a.route ?? '', a.service ?? '',
+         (a.ins_tables ?? []).join(', '), (a.upd_tables ?? []).join(', '),
+         a.trigger_name ?? '', a.audit_table ?? '', a.priority].join('\t')
+      );
+      navigator.clipboard.writeText([header, ...lines].join('\n'))
+        .then(() => showToast(`Copied ${rows.length} row${rows.length !== 1 ? 's' : ''}`, 'ok'));
+    };
     win.__auditToggleVer = async (id: string, checked: boolean) => {
       if (!sb()) return;
       if (checked) {
@@ -1110,7 +1185,7 @@ function AuditApp() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tester, vers]);
+  }, [tester, vers, selectedRows, actions]);
 
   // ── Active sheet content ────────────────────────────────────────────────────
   function sheetContent() {
@@ -1193,6 +1268,16 @@ function AuditApp() {
 
       {/* Toast */}
       {toast && <div className={`toast show ${toast.type}`}>{toast.msg}</div>}
+
+      {/* Selection bar */}
+      {selectedRows.size > 0 && (
+        <div className="sel-bar show">
+          <span className="sel-bar-count">{selectedRows.size} row{selectedRows.size !== 1 ? 's' : ''} selected</span>
+          <button className="sel-bar-btn copy" onClick={() => (window as unknown as Record<string, () => void>).__auditCopySelected?.()}>⎘ Copy</button>
+          <button className="sel-bar-btn clear" onClick={() => setSelectedRows(new Set())}>Clear</button>
+          <button className="sel-bar-close" onClick={() => setSelectedRows(new Set())}>✕</button>
+        </div>
+      )}
     </>
   );
 }
