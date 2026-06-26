@@ -27,6 +27,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
   type StyleProp,
   type TextInput as TextInputType,
   type ViewStyle,
@@ -43,6 +44,9 @@ import {
 } from "./chatSlackMobile.styles";
 
 export { CHAT_SLACK_BOTTOM_NAV_BAR };
+
+const FLOATING_COMPOSE_AVATAR = require("@/assets/icon and logos/client.png");
+const NEW_TILE_COMPOSE_AVATAR = require("@/assets/icon and logos/client.png");
 
 export type SlackStreamTabId = "network" | "trips" | "indent";
 
@@ -119,7 +123,7 @@ export function ChatSlackListHeader({
       <View style={st.listHeaderTextCol}>
         <View style={st.listHeaderBrandRow}>
           <Text style={st.listHeaderTitle} numberOfLines={1}>
-            pulse chat
+            pulse business chat
           </Text>
           <Text style={st.listHeaderBrandDot}>.</Text>
         </View>
@@ -244,8 +248,17 @@ export function ChatSlackPeopleStrip({
             accessibilityRole="button"
             accessibilityLabel="New conversation"
           >
-            <View style={st.peopleNewTile}>
-              <Plus size={18} color={SLACK_MOBILE.textTertiary} strokeWidth={SLACK_ICON.strokeInactive} />
+            <View style={st.peopleNewAvatarWrap}>
+              <View style={st.peopleNewAvatarPlate}>
+                <Image
+                  source={NEW_TILE_COMPOSE_AVATAR}
+                  style={st.peopleNewAvatarImage}
+                  resizeMode="contain"
+                />
+              </View>
+              <View style={st.peopleNewBadge}>
+                <Plus size={12} color="#4b5563" strokeWidth={2.8} />
+              </View>
             </View>
             <Text style={st.peopleName} numberOfLines={1}>
               New
@@ -643,7 +656,16 @@ export function ChatSlackFab({
       accessibilityRole="button"
       accessibilityLabel="New conversation"
     >
-      <Plus size={SLACK_ICON.sizeFab} color="#FFFFFF" strokeWidth={SLACK_ICON.strokeActive} />
+      <View style={st.fabAvatarPlate}>
+        <Image
+          source={FLOATING_COMPOSE_AVATAR}
+          style={st.fabAvatarImage}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={st.fabBadge}>
+        <Plus size={14} color="#4b5563" strokeWidth={2.7} />
+      </View>
     </TouchableOpacity>
   );
 }

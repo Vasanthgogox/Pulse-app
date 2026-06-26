@@ -209,9 +209,7 @@ function createStyles(theme: SignUpShellTheme) {
       width: DEVICE_WIDTH,
       maxWidth: '100%',
       height: DEVICE_HEIGHT,
-      ...(Platform.OS === 'web'
-        ? { minHeight: DEVICE_HEIGHT }
-        : { maxHeight: '100%' }),
+      maxHeight: '100%',
       borderRadius: PULSE_SIGNUP_RADIUS.device,
       borderWidth: DEVICE_BORDER,
       borderColor: theme.deviceBorder,
@@ -256,6 +254,7 @@ function createStyles(theme: SignUpShellTheme) {
       fontStyle: 'italic',
       letterSpacing: -0.6,
       color: theme.primary,
+      flexShrink: 0,
     },
     headerSpacer: {
       minWidth: 64,

@@ -2,6 +2,7 @@ import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import type { ChatTripFlow } from "@/features/chat/types/chat.types";
 import { Bell, Network, Truck } from "lucide-react-native";
 import { renderChatInlineMarkdown } from "@/features/chat/utils/chatInlineMarkdown.util";
+import LottieView from "lottie-react-native";
 import React from "react";
 import {
     StyleSheet,
@@ -9,6 +10,9 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+
+const MANUAL_TRIP_WATERMARK = require("@/assets/Animated folder/truck.json");
+const INTEGRATED_TRIP_WATERMARK = require("@/assets/Animated folder/truck-2.json");
 
 export type TripCardProps = {
   tripActive: boolean;
@@ -56,110 +60,133 @@ export const TripCard = React.memo(function TripCard({
   /** Hub lead icon: network (indent-backed) vs truck (manual) — from bootstrap `indent_id` only. */
   const showIntegrated = hasIndent;
   const showVehicleLate = trackingStatus === "RUNNING_LATE";
+  const watermarkSource = showIntegrated
+    ? INTEGRATED_TRIP_WATERMARK
+    : MANUAL_TRIP_WATERMARK;
 
   return (
     <View style={[styles.tripHubCard, tripActive && styles.tripHubCardOn]}>
-      {totalUnread > 0 ? (
-        <View style={[styles.tripHubAlertBar, tripActive && styles.tripHubAlertBarOn]}>
-          <Bell size={13} color={tripActive ? "#fecdd3" : "#e11d48"} />
-          <Text style={[styles.tripHubAlertBarText, tripActive && styles.tripHubAlertBarTextOn]}>
-            Trip alerts · {totalUnread > 99 ? "99+" : String(totalUnread)}
-          </Text>
-        </View>
-      ) : null}
-      <TouchableOpacity onPress={onPressHero} activeOpacity={0.88} style={styles.tripHubHeroTouchable}>
-        <View style={styles.tripHubHeroRow}>
-          <View style={styles.tripHubHeroMain}>
-            <View
-              style={[
-                styles.tripHubLeadPill,
-                showIntegrated ? styles.tripHubLeadPillIntegrated : styles.tripHubLeadPillManual,
-                tripActive &&
-                  (showIntegrated ? styles.tripHubLeadPillIntegratedOn : styles.tripHubLeadPillManualOn),
-              ]}
-              accessibilityLabel={showIntegrated ? "Integrated network trip" : "Manual trip"}
-            >
-              {showIntegrated ? (
-                <Network size={14} color={tripActive ? "#a5b4fc" : CHAT_ACCENT} strokeWidth={2.4} />
-              ) : (
-                <Truck size={14} color="#ffffff" />
-              )}
-            </View>
-            <View style={styles.tripHubHeroTextCol}>
-              <View style={styles.tripHubTitleRow}>
-                <Text
-                  style={[styles.tripHubTripTitle, tripActive && styles.tripHubTripTitleOn]}
-                  numberOfLines={1}
-                >
-                  {tripLabel}
-                </Text>
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[
+          styles.tripHubWatermarkWrap,
+          tripActive && styles.tripHubWatermarkWrapOn,
+        ]}
+      >
+        <LottieView
+          source={watermarkSource}
+          autoPlay
+          loop
+          speed={1}
+          resizeMode="contain"
+          style={styles.tripHubWatermark}
+        />
+      </View>
+      <View style={styles.tripHubContentLayer}>
+        {totalUnread > 0 ? (
+          <View style={[styles.tripHubAlertBar, tripActive && styles.tripHubAlertBarOn]}>
+            <Bell size={13} color={tripActive ? "#fecdd3" : "#e11d48"} />
+            <Text style={[styles.tripHubAlertBarText, tripActive && styles.tripHubAlertBarTextOn]}>
+              Trip alerts · {totalUnread > 99 ? "99+" : String(totalUnread)}
+            </Text>
+          </View>
+        ) : null}
+        <TouchableOpacity onPress={onPressHero} activeOpacity={0.88} style={styles.tripHubHeroTouchable}>
+          <View style={styles.tripHubHeroRow}>
+            <View style={styles.tripHubHeroMain}>
+              <View
+                style={[
+                  styles.tripHubLeadPill,
+                  showIntegrated ? styles.tripHubLeadPillIntegrated : styles.tripHubLeadPillManual,
+                  tripActive &&
+                    (showIntegrated ? styles.tripHubLeadPillIntegratedOn : styles.tripHubLeadPillManualOn),
+                ]}
+                accessibilityLabel={showIntegrated ? "Integrated network trip" : "Manual trip"}
+              >
+                {showIntegrated ? (
+                  <Network size={14} color={tripActive ? "#a5b4fc" : CHAT_ACCENT} strokeWidth={2.4} />
+                ) : (
+                  <Truck size={14} color="#ffffff" />
+                )}
               </View>
-              <View style={styles.tripHubRouteRow}>
-                <View style={styles.tripHubRouteTextWrap}>
+              <View style={styles.tripHubHeroTextCol}>
+                <View style={styles.tripHubTitleRow}>
                   <Text
-                    style={[styles.tripHubRouteLarge, tripActive && styles.tripHubRouteLargeOn]}
+                    style={[styles.tripHubTripTitle, tripActive && styles.tripHubTripTitleOn]}
                     numberOfLines={1}
-                    ellipsizeMode="tail"
                   >
-                    {pickup} {"→"} {drop}
+                    {tripLabel}
                   </Text>
                 </View>
-                {hubDateLabel ? (
-                  <Text
-                    style={[styles.tripHubRouteDate, tripActive && styles.tripHubRouteDateOn]}
-                    numberOfLines={1}
-                  >
-                    {hubDateLabel}
-                  </Text>
-                ) : null}
+                <View style={styles.tripHubRouteRow}>
+                  <View style={styles.tripHubRouteTextWrap}>
+                    <Text
+                      style={[styles.tripHubRouteLarge, tripActive && styles.tripHubRouteLargeOn]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {pickup} {"→"} {drop}
+                    </Text>
+                  </View>
+                  {hubDateLabel ? (
+                    <Text
+                      style={[styles.tripHubRouteDate, tripActive && styles.tripHubRouteDateOn]}
+                      numberOfLines={1}
+                    >
+                      {hubDateLabel}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             </View>
+            <View style={styles.tripHubHeroTrail}>
+              <Text
+                style={[
+                  styles.tripHubStatusPill,
+                  isUnassignedBadge
+                    ? tripActive
+                      ? styles.tripHubStatusPillUnassignedOn
+                      : styles.tripHubStatusPillUnassigned
+                    : tripActive
+                      ? styles.tripHubStatusPillAssignedOn
+                      : styles.tripHubStatusPillAssigned,
+                ]}
+                numberOfLines={1}
+              >
+                {statusLabel}
+              </Text>
+              {totalUnread > 0 ? (
+                <View style={styles.tripHubTotalUnread}>
+                  <Text style={styles.tripHubTotalUnreadText}>
+                    {totalUnread > 9 ? "9+" : String(totalUnread)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-          <View style={styles.tripHubHeroTrail}>
+        </TouchableOpacity>
+        <View style={styles.tripHubFooterRow}>
+          <View style={styles.tripHubFooterIcons}>{partyIconRow}</View>
+          {showVehicleLate || (lastActivityPartyLabel && lastMessagePreview) ? (
             <Text
-              style={[
-                styles.tripHubStatusPill,
-                isUnassignedBadge
-                  ? tripActive
-                    ? styles.tripHubStatusPillUnassignedOn
-                    : styles.tripHubStatusPillUnassigned
-                  : tripActive
-                    ? styles.tripHubStatusPillAssignedOn
-                    : styles.tripHubStatusPillAssigned,
-              ]}
-              numberOfLines={1}
+              style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
+              numberOfLines={2}
             >
-              {statusLabel}
+              {showVehicleLate ? (
+                <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
+              ) : (
+                <>
+                  <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
+                    {lastActivityPartyLabel}:{" "}
+                  </Text>
+                  {renderChatInlineMarkdown(lastMessagePreview)}
+                </>
+              )}
             </Text>
-            {totalUnread > 0 ? (
-              <View style={styles.tripHubTotalUnread}>
-                <Text style={styles.tripHubTotalUnreadText}>
-                  {totalUnread > 9 ? "9+" : String(totalUnread)}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+          ) : null}
         </View>
-      </TouchableOpacity>
-      <View style={styles.tripHubFooterRow}>
-        <View style={styles.tripHubFooterIcons}>{partyIconRow}</View>
-        {showVehicleLate || (lastActivityPartyLabel && lastMessagePreview) ? (
-          <Text
-            style={[styles.tripHubFooterText, tripActive && styles.tripHubLastMsgOn]}
-            numberOfLines={2}
-          >
-            {showVehicleLate ? (
-              <Text style={styles.vehicleLateText}>🚨 VEHICLE LATE</Text>
-            ) : (
-              <>
-                <Text style={[styles.tripHubLastMsgParty, tripActive && styles.tripHubLastMsgOn]}>
-                  {lastActivityPartyLabel}:{" "}
-                </Text>
-                {renderChatInlineMarkdown(lastMessagePreview)}
-              </>
-            )}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
@@ -177,6 +204,8 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
+    position: "relative",
+    overflow: "hidden",
   },
   tripHubCardOn: {
     backgroundColor: "#020617",
@@ -185,6 +214,27 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
     elevation: 5,
+  },
+  tripHubContentLayer: {
+    position: "relative",
+    zIndex: 2,
+  },
+  tripHubWatermarkWrap: {
+    position: "absolute",
+    left: "50%",
+    top: "46%",
+    width: 210,
+    height: 140,
+    transform: [{ translateX: -105 }, { translateY: -70 }],
+    opacity: 0.3,
+    zIndex: 3,
+  },
+  tripHubWatermarkWrapOn: {
+    opacity: 0.34,
+  },
+  tripHubWatermark: {
+    width: "100%",
+    height: "100%",
   },
   tripHubAlertBar: {
     flexDirection: "row",

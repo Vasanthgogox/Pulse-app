@@ -65,7 +65,7 @@ export function ChatSlackDesktopSidebarChrome({
         />
         <View style={st.sidebarTopMirrorGlow} pointerEvents="none" />
         <View style={st.sidebarBrandTitleRow}>
-          <Text style={st.sidebarBrandTitle}>pulse chat</Text>
+          <Text style={st.sidebarBrandTitle}>pulse business chat</Text>
           <Text style={st.sidebarBrandDot}>.</Text>
         </View>
         {onClose ? (

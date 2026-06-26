@@ -50,8 +50,6 @@ export function invalidateTripOperationalState(input: {
     });
     qc.invalidateQueries({ queryKey: queryKeys.operations.observabilityByTrip(input.tripId) });
     if (input.organizationId) {
-      qc.invalidateQueries({ queryKey: queryKeys.trips.all(input.organizationId) });
-      qc.invalidateQueries({ queryKey: queryKeys.trips.finite(input.organizationId) });
       qc.invalidateQueries({
         queryKey: queryKeys.operations.controlCenter(input.organizationId),
       });

@@ -39,6 +39,7 @@ export type HubEmptyPromoLayoutProps = {
   kicker?: string;
   kickerColor?: string;
   ctaColor?: string;
+  illustrationScale?: number;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -84,6 +85,7 @@ export function HubEmptyPromoLayout({
   kicker,
   kickerColor = Theme.primary,
   ctaColor = Theme.primary,
+  illustrationScale = 1,
   style,
 }: HubEmptyPromoLayoutProps) {
   const { width } = useWindowDimensions();
@@ -101,7 +103,12 @@ export function HubEmptyPromoLayout({
     : compact
       ? 150
       : 180;
-  const illusSize = fitIllustration(illusBoxW, illusBoxH, illustrationAspect);
+  const safeScale = Math.min(1.2, Math.max(0.6, illustrationScale));
+  const illusSize = fitIllustration(
+    illusBoxW * safeScale,
+    illusBoxH * safeScale,
+    illustrationAspect,
+  );
 
   const [topLeft, topRight, flankLeft, flankRight] = features;
 

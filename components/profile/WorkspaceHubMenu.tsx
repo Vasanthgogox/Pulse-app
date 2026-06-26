@@ -7,7 +7,7 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   HUB_HEADER_GRADIENT,
-  HUB_MENU_ICON,
+  HUB_ICON_WELL,
   HUB_PURPLE,
   hubStyles,
 } from "@/components/profile/workspaceHubMenu.styles";
@@ -38,9 +38,8 @@ import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQue
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import {
-  Building2,
-  Car,
   ChevronRight,
+  FolderOpen,
   Globe,
   HelpCircle,
   LogOut,
@@ -48,14 +47,13 @@ import {
   Settings,
   Shield,
   Sparkles,
-  Truck,
-  User,
   X,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
+  type ImageSourcePropType,
   Modal,
   Pressable,
   ScrollView,
@@ -65,8 +63,35 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const MENU_ICON_SIZE = 15;
-const MENU_ICON_STROKE = 1.75;
+const MENU_ICON_SIZE = 14;
+const MENU_ICON_STROKE = 2.1;
+
+const HUB_PARTY_PNG = {
+  customer: require("@/assets/file type icons/add-2.png"),
+  supplier: require("@/assets/icon and logos/client.png"),
+  driver: require("@/assets/icon and logos/taxi-driver.png"),
+  vehicle: require("@/assets/icon and logos/truck.png"),
+} as const;
+
+function hubLucideIcon(
+  Icon: typeof Shield,
+  color: string,
+) {
+  return (
+    <Icon size={MENU_ICON_SIZE} color={color} strokeWidth={MENU_ICON_STROKE} />
+  );
+}
+
+function hubPngIcon(source: ImageSourcePropType, scale = 1) {
+  const size = 22 * scale;
+  return (
+    <Image
+      source={source}
+      style={{ width: size, height: size }}
+      resizeMode="contain"
+    />
+  );
+}
 
 function orgInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -79,6 +104,8 @@ type HubRow = {
   id: string;
   label: string;
   icon: React.ReactNode;
+  iconBg?: string;
+  iconBorder?: string;
   panelId?: WorkspacePanelId;
   route?: string;
   valuePill?: string;
@@ -203,26 +230,18 @@ export function WorkspaceHubMenu({
     {
       id: "language",
       label: "Language",
-      icon: (
-        <Globe
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubLucideIcon(Globe, "#2563eb"),
+      iconBg: HUB_ICON_WELL.sky,
+      iconBorder: HUB_ICON_WELL.skyBorder,
       panelId: "language",
       valuePill: languageLabel,
     },
     {
       id: "region",
       label: "Region",
-      icon: (
-        <MapPin
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubLucideIcon(MapPin, "#d97706"),
+      iconBg: HUB_ICON_WELL.amber,
+      iconBorder: HUB_ICON_WELL.amberBorder,
       panelId: "region",
       valuePill: regionLabel,
     },
@@ -232,25 +251,17 @@ export function WorkspaceHubMenu({
     {
       id: "ws-kyc",
       label: "Org Identity & KYC",
-      icon: (
-        <Shield
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubLucideIcon(Shield, "#0f766e"),
+      iconBg: HUB_ICON_WELL.teal,
+      iconBorder: HUB_ICON_WELL.tealBorder,
       panelId: "kyc",
     },
     {
       id: "ws-settings",
       label: "Settings",
-      icon: (
-        <Settings
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubLucideIcon(Settings, HUB_PURPLE),
+      iconBg: HUB_ICON_WELL.slate,
+      iconBorder: HUB_ICON_WELL.slateBorder,
       panelId: "settings",
     },
   ];
@@ -259,49 +270,25 @@ export function WorkspaceHubMenu({
     {
       id: "party-customers",
       label: "Customer",
-      icon: (
-        <Building2
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubPngIcon(HUB_PARTY_PNG.customer, 1.05),
       route: ROUTES.partyDirectory("customers"),
     },
     {
       id: "party-suppliers",
       label: "Supplier",
-      icon: (
-        <Truck
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubPngIcon(HUB_PARTY_PNG.supplier, 1.02),
       route: ROUTES.partyDirectory("suppliers"),
     },
     {
       id: "party-drivers",
       label: "Driver",
-      icon: (
-        <User
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubPngIcon(HUB_PARTY_PNG.driver, 1.08),
       route: ROUTES.partyDirectory("drivers"),
     },
     {
       id: "party-vehicles",
       label: "Vehicle",
-      icon: (
-        <Car
-          size={MENU_ICON_SIZE}
-          color={HUB_MENU_ICON}
-          strokeWidth={MENU_ICON_STROKE}
-        />
-      ),
+      icon: hubPngIcon(HUB_PARTY_PNG.vehicle, 1.02),
       route: ROUTES.partyDirectory("vehicles"),
     },
   ];
@@ -310,10 +297,14 @@ export function WorkspaceHubMenu({
     router.replace(path as Parameters<typeof router.replace>[0]);
   };
 
-  const renderHubSection = (title: string, sectionRows: HubRow[]) => (
+  const renderHubSection = (
+    title: string,
+    sectionRows: HubRow[],
+    accentColor = HUB_PURPLE,
+  ) => (
     <View style={hubStyles.sectionCard}>
       <View style={hubStyles.sectionHeader}>
-        <View style={hubStyles.sectionAccent} />
+        <View style={[hubStyles.sectionAccent, { backgroundColor: accentColor }]} />
         <Text style={hubStyles.sectionTitle}>{title}</Text>
       </View>
       {sectionRows.map((row, idx) => {
@@ -341,7 +332,19 @@ export function WorkspaceHubMenu({
             accessibilityRole="button"
             accessibilityState={{ selected }}
           >
-            <View style={hubStyles.menuRowIconPlain}>{row.icon}</View>
+            <View
+              style={[
+                hubStyles.menuRowIconWell,
+                row.iconBg
+                  ? {
+                      backgroundColor: row.iconBg,
+                      borderColor: row.iconBorder,
+                    }
+                  : null,
+              ]}
+            >
+              {row.icon}
+            </View>
             <Text style={hubStyles.menuRowLabel} numberOfLines={1}>
               {row.label}
             </Text>
@@ -361,6 +364,53 @@ export function WorkspaceHubMenu({
           </Pressable>
         );
       })}
+    </View>
+  );
+
+  const renderPartyGridSection = (
+    title: string,
+    sectionRows: HubRow[],
+    accentColor = HUB_PURPLE,
+  ) => (
+    <View style={hubStyles.sectionCard}>
+      <View style={hubStyles.sectionHeader}>
+        <View style={[hubStyles.sectionAccent, { backgroundColor: accentColor }]} />
+        <Text style={hubStyles.sectionTitle}>{title}</Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={hubStyles.partyRowScrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {sectionRows.map((row) => (
+          <View key={row.id} style={hubStyles.partyRowCell}>
+            <Pressable
+              onPress={() => {
+                if (row.panelId) {
+                  onSelectPanel(row.panelId);
+                  return;
+                }
+                if (row.route) {
+                  onExit?.();
+                  navigate(row.route);
+                }
+              }}
+              style={({ pressed }) => [
+                hubStyles.partyRowChip,
+                pressed && hubStyles.partyRowChipPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={row.label}
+            >
+              <View style={hubStyles.partyRowIconSlot}>{row.icon}</View>
+              <Text style={hubStyles.partyGridLabel} numberOfLines={1}>
+                {row.label}
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+      </ScrollView>
     </View>
   );
 
@@ -448,13 +498,27 @@ export function WorkspaceHubMenu({
               style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
               onPress={() => {
                 onExit?.();
+                navigate(ROUTES.DOCUMENTS_CENTER);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open documents center"
+            >
+              <View style={[hubStyles.quickCircle, hubStyles.quickCircleBrand]}>
+                <FolderOpen size={20} color={HUB_PURPLE} strokeWidth={2.2} />
+              </View>
+              <Text style={hubStyles.quickLabel}>Documents</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
+              onPress={() => {
+                onExit?.();
                 navigate(ROUTES.CHAT);
               }}
               accessibilityRole="button"
               accessibilityLabel="Support"
             >
-              <View style={hubStyles.quickCircle}>
-                <HelpCircle size={20} color={HUB_PURPLE} strokeWidth={2.2} />
+              <View style={[hubStyles.quickCircle, hubStyles.quickCircleEmerald]}>
+                <HelpCircle size={20} color={Theme.driverEmerald} strokeWidth={2.2} />
               </View>
               <Text style={hubStyles.quickLabel}>Support</Text>
             </Pressable>
@@ -472,9 +536,9 @@ export function WorkspaceHubMenu({
             </View>
           </View>
 
-          {renderHubSection("Workspace", workspaceRows)}
-          {renderHubSection("Preferences", preferenceRows)}
-          {renderHubSection("Party", partyRows)}
+          {renderHubSection("Workspace", workspaceRows, "#0f766e")}
+          {renderHubSection("Preferences", preferenceRows, "#2563eb")}
+          {renderPartyGridSection("Party", partyRows, Theme.driverEmerald)}
 
           <WorkspaceHubProductGrid
             activeProductIds={activeProductIds}

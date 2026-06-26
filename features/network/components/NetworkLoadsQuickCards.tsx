@@ -19,7 +19,6 @@ import {
   Text,
   useWindowDimensions,
   View,
-  type TextStyle,
   type ViewStyle,
 } from "react-native";
 
@@ -27,27 +26,6 @@ export interface NetworkLoadsQuickCardsProps {
   compact?: boolean;
   layout?: "default" | "sidebar";
 }
-
-const CARD_HEIGHT_TILE = 108;
-const CARD_HEIGHT_TILE_COMPACT = 100;
-const CARD_HEIGHT_SIDEBAR = 92;
-const CARD_MIN_WIDTH_TILE = 148;
-
-/** Horizontal text flow with 2-line clamp (RN + web). */
-const clampedBodyText = Platform.select<TextStyle>({
-  web: {
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    overflow: "hidden",
-    whiteSpace: "normal",
-    wordBreak: "normal",
-    overflowWrap: "break-word",
-    lineHeight: "1.3",
-    textOverflow: "ellipsis",
-  } as TextStyle,
-  default: {},
-});
 
 type MarketplaceCardProps = {
   action: NetworkLoadsQuickAction;
@@ -66,8 +44,8 @@ function MarketplaceCard({
   const sidebar = variant === "sidebar";
   const Illustration = action.illustration;
 
-  const illusBoxW = sidebar ? 72 : compact || width < 380 ? 76 : 88;
-  const illusBoxH = sidebar ? 56 : compact || width < 380 ? 60 : 72;
+  const illusBoxW = sidebar ? 76 : compact || width < 380 ? 80 : 96;
+  const illusBoxH = sidebar ? 64 : compact || width < 380 ? 68 : 80;
   const illusSize = fitNetworkLoadsIllustration(
     illusBoxW,
     illusBoxH,
@@ -78,47 +56,26 @@ function MarketplaceCard({
     <View
       style={[
         styles.card,
-        sidebar ? styles.cardSidebar : compact ? styles.cardCompact : styles.cardTile,
+        sidebar && styles.cardSidebar,
+        compact && !sidebar && styles.cardCompact,
         { backgroundColor: action.wash },
         pressed && styles.cardPressed,
       ]}
     >
-      <View
-        style={[
-          styles.cardColumn,
-          sidebar && styles.cardColumnSidebar,
-          compact && !sidebar && styles.cardColumnCompact,
-        ]}
-      >
-        <View style={[styles.textStack, sidebar && styles.textStackSidebar]}>
-          <Text
-            style={[styles.chip, { color: action.accent }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
+      <View style={[styles.cardBody, sidebar && styles.cardBodySidebar]}>
+        <View style={[styles.textCol, sidebar && styles.textColSidebar]}>
+          <Text style={[styles.chip, { color: action.accent }]}>
             {action.chip}
           </Text>
           <Text
-            style={[
-              styles.title,
-              sidebar && styles.titleSidebar,
-              clampedBodyText,
-              styles.titleClamp,
-            ]}
+            style={[styles.title, sidebar && styles.titleSidebar]}
             numberOfLines={2}
-            ellipsizeMode="tail"
           >
             {action.label}
           </Text>
           <Text
-            style={[
-              styles.sub,
-              sidebar && styles.subSidebar,
-              clampedBodyText,
-              styles.subClamp,
-            ]}
+            style={[styles.sub, sidebar && styles.subSidebar]}
             numberOfLines={2}
-            ellipsizeMode="tail"
           >
             {action.sub}
           </Text>
@@ -126,8 +83,8 @@ function MarketplaceCard({
 
         <View
           style={[
-            styles.visualArea,
-            sidebar && styles.visualAreaSidebar,
+            styles.illusWrap,
+            sidebar && styles.illusWrapSidebar,
           ]}
         >
           <Illustration
@@ -135,20 +92,19 @@ function MarketplaceCard({
             height={illusSize.height}
           />
         </View>
-      </View>
 
-      <View
-        style={[
-          styles.arrowOrb,
-          sidebar && styles.arrowOrbSidebar,
-          { borderColor: `${action.accent}28`, backgroundColor: Theme.cardWhite },
-        ]}
-      >
-        <ArrowUpRight
-          size={sidebar ? 12 : 13}
-          color={action.accent}
-          strokeWidth={2.2}
-        />
+        <View
+          style={[
+            styles.arrowOrb,
+            { borderColor: `${action.accent}28`, backgroundColor: Theme.cardWhite },
+          ]}
+        >
+          <ArrowUpRight
+            size={sidebar ? 12 : 13}
+            color={action.accent}
+            strokeWidth={2.2}
+          />
+        </View>
       </View>
     </View>
   );
@@ -350,66 +306,49 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   card: {
+    flex: 1,
     width: "100%",
+    minHeight: 108,
     borderRadius: 14,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
-    position: "relative",
     ...cardShadow,
   },
-  cardTile: {
-    height: CARD_HEIGHT_TILE,
-    minHeight: CARD_HEIGHT_TILE,
-  },
   cardCompact: {
-    height: CARD_HEIGHT_TILE_COMPACT,
-    minHeight: CARD_HEIGHT_TILE_COMPACT,
+    minHeight: 100,
     borderRadius: 12,
   },
   cardSidebar: {
-    height: CARD_HEIGHT_SIDEBAR,
-    minHeight: CARD_HEIGHT_SIDEBAR,
+    minHeight: 92,
   },
   cardPressed: {
     opacity: 0.94,
     transform: [{ scale: 0.985 }],
   },
-  cardColumn: {
+  cardBody: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 108,
+  },
+  cardBodySidebar: {
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    minHeight: 92,
+    gap: 8,
+  },
+  textCol: {
     flex: 1,
     minWidth: 0,
-    minHeight: 0,
-    flexDirection: "column",
-    justifyContent: "space-between",
-    paddingTop: 14,
-    paddingBottom: 14,
-    paddingLeft: 14,
-    paddingRight: 44,
-    gap: 6,
-  },
-  cardColumnCompact: {
-    paddingTop: 12,
-    paddingBottom: 12,
-    paddingLeft: 12,
-    paddingRight: 40,
     gap: 4,
+    justifyContent: "center",
   },
-  cardColumnSidebar: {
-    paddingTop: 12,
-    paddingBottom: 12,
-    paddingLeft: 13,
-    paddingRight: 40,
-    gap: 4,
-  },
-  textStack: {
-    width: "100%",
-    minWidth: 0,
-    alignSelf: "stretch",
-    flexShrink: 0,
-    gap: 4,
-  },
-  textStackSidebar: {
+  textColSidebar: {
     gap: 3,
   },
   chip: {
@@ -417,84 +356,56 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.8,
     textTransform: "uppercase",
-    alignSelf: "flex-start",
-    maxWidth: "100%",
   },
   title: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.35,
     lineHeight: 18,
-    width: "100%",
-    minWidth: 0,
-    alignSelf: "stretch",
-    flexShrink: 0,
-  },
-  titleClamp: {
-    maxHeight: 24,
   },
   titleSidebar: {
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 17,
   },
   sub: {
     fontSize: 11,
     fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 14,
-    width: "100%",
-    minWidth: 0,
-    alignSelf: "stretch",
-    flexShrink: 0,
-  },
-  subClamp: {
-    maxHeight: 20,
+    lineHeight: 15,
   },
   subSidebar: {
     fontSize: 10,
-    lineHeight: 13,
+    lineHeight: 14,
   },
-  visualArea: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 0,
-    alignItems: "flex-end",
+  illusWrap: {
+    alignItems: "center",
     justifyContent: "center",
-    paddingRight: 2,
+    flexShrink: 0,
+    minWidth: 0,
   },
-  visualAreaSidebar: {
-    paddingRight: 0,
+  illusWrapSidebar: {
+    marginRight: 0,
   },
   arrowOrb: {
-    position: "absolute",
-    right: 12,
-    bottom: 12,
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    zIndex: 2,
-  },
-  arrowOrbSidebar: {
-    right: 10,
-    bottom: 10,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    flexShrink: 0,
+    alignSelf: "center",
   },
   cardSlot: {
     flex: 1,
     flexBasis: 0,
-    minWidth: CARD_MIN_WIDTH_TILE,
+    minWidth: 0,
   },
   cardPress: {
     flex: 1,
     alignSelf: "stretch",
     minWidth: 0,
-    width: "100%",
   },
   sidebarCardPress: {
     width: "100%",

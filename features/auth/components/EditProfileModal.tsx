@@ -30,7 +30,8 @@ import Typography from '@/constants/Typography';
 import { getAvatarUriForSeed, ALL_PRESET_AVATARS } from '@/constants/DriverLevels';
 import {
   DEFAULT_USER_2D_AVATAR_SEED,
-  USER_2D_AVATARS,
+  FEMALE_USER_2D_AVATARS,
+  MALE_USER_2D_AVATARS,
   getUser2DAvatarUriForSeed,
 } from '@/constants/UserAvatars';
 import { useAuth } from '@/contexts/AuthContext';
@@ -339,33 +340,88 @@ export function EditProfileModal({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator
       >
-        <View style={styles.avatarGrid}>
-          {(avatarPresetStyle === 'user-2d' ? USER_2D_AVATARS : ALL_PRESET_AVATARS).map((av) => {
-            const seed = (av as { seed: string }).seed;
-            const name = (av as { name?: string }).name ?? 'Avatar';
-            const isSelected = selectedPresetSeed === seed;
-            const imageSource = (av as (typeof ALL_PRESET_AVATARS)[number]).image;
-            return (
-              <View key={seed} style={styles.avatarGridCell}>
-                <TouchableOpacity
-                  style={[styles.avatarGridItem, isSelected && styles.avatarGridItemSelected]}
-                  onPress={() => handleSelectPreset(seed)}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel={name}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <Image source={imageSource as never} style={styles.avatarGridAvatar} />
-                  {isSelected ? (
-                    <View style={styles.avatarGridCheck}>
-                      <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              </View>
-            );
-          })}
-        </View>
+        {avatarPresetStyle === 'user-2d' ? (
+          <>
+            <Text style={styles.avatarGroupTitle}>Male avatars</Text>
+            <View style={styles.avatarGrid}>
+              {MALE_USER_2D_AVATARS.map((av) => {
+                const isSelected = selectedPresetSeed === av.seed;
+                return (
+                  <View key={av.seed} style={styles.avatarGridCell}>
+                    <TouchableOpacity
+                      style={[styles.avatarGridItem, isSelected && styles.avatarGridItemSelected]}
+                      onPress={() => handleSelectPreset(av.seed)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={av.name ?? 'Avatar'}
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Image source={av.image as never} style={styles.avatarGridAvatar} />
+                      {isSelected ? (
+                        <View style={styles.avatarGridCheck}>
+                          <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={[styles.avatarGroupTitle, styles.avatarGroupTitleWithGap]}>Female avatars</Text>
+            <View style={styles.avatarGrid}>
+              {FEMALE_USER_2D_AVATARS.map((av) => {
+                const isSelected = selectedPresetSeed === av.seed;
+                return (
+                  <View key={av.seed} style={styles.avatarGridCell}>
+                    <TouchableOpacity
+                      style={[styles.avatarGridItem, isSelected && styles.avatarGridItemSelected]}
+                      onPress={() => handleSelectPreset(av.seed)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={av.name ?? 'Avatar'}
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Image source={av.image as never} style={styles.avatarGridAvatar} />
+                      {isSelected ? (
+                        <View style={styles.avatarGridCheck}>
+                          <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        ) : (
+          <View style={styles.avatarGrid}>
+            {ALL_PRESET_AVATARS.map((av) => {
+              const seed = (av as { seed: string }).seed;
+              const name = (av as { name?: string }).name ?? 'Avatar';
+              const isSelected = selectedPresetSeed === seed;
+              const imageSource = (av as (typeof ALL_PRESET_AVATARS)[number]).image;
+              return (
+                <View key={seed} style={styles.avatarGridCell}>
+                  <TouchableOpacity
+                    style={[styles.avatarGridItem, isSelected && styles.avatarGridItemSelected]}
+                    onPress={() => handleSelectPreset(seed)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={name}
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <Image source={imageSource as never} style={styles.avatarGridAvatar} />
+                    {isSelected ? (
+                      <View style={styles.avatarGridCheck}>
+                        <FontAwesome name="check" size={12} color={Theme.textOnPrimary} />
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -1725,6 +1781,19 @@ const styles = StyleSheet.create({
   },
   dropdownWrap: {
     marginTop: 8,
+  },
+  avatarGroupTitle: {
+    marginTop: 10,
+    marginBottom: 2,
+    marginHorizontal: 12,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  avatarGroupTitleWithGap: {
+    marginTop: 4,
   },
   dropdownList: {
     marginTop: 6,

@@ -1,5 +1,10 @@
-import { memo, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { memo, type ReactNode, type RefObject } from 'react';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+
+import {
+  effectiveKeyboardInset,
+  useKeyboardVisible,
+} from '@/lib/hooks/useKeyboardVisible';
 
 import { SignUpPulseShell } from './SignUpPulseShell';
 import { DRIVER_SIGNUP } from './signUpDriverTheme';
@@ -19,6 +24,7 @@ export interface SignUpMobileShellProps {
   headerSubtitle?: string;
   trustMode?: 'business' | 'driver';
   isDesktop?: boolean;
+  scrollRef?: RefObject<ScrollView | null>;
 }
 
 /**
@@ -33,8 +39,35 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
   children,
   trustMode = 'business',
   isDesktop = false,
+  scrollRef,
+  bodyMode = 'scroll',
+  scrollBottomPad = 24,
 }: SignUpMobileShellProps) {
   const theme = trustMode === 'driver' ? DRIVER_SIGNUP : PULSE_SIGNUP;
+  const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
+  const keyboardInset =
+    bodyMode === 'scroll'
+      ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
+      : 0;
+
+  const body =
+    bodyMode === 'scroll' ? (
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: scrollBottomPad + keyboardInset },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+    ) : (
+      children
+    );
 
   return (
     <SignUpPulseShell
@@ -46,7 +79,7 @@ export const SignUpMobileShell = memo(function SignUpMobileShell({
       isDesktop={isDesktop}
       theme={theme}
     >
-      <View style={styles.body}>{children}</View>
+      <View style={styles.body}>{body}</View>
     </SignUpPulseShell>
   );
 });
@@ -55,5 +88,14 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     minHeight: 0,
+  },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'web' ? 4 : 8,
   },
 });

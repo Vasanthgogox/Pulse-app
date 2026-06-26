@@ -45,10 +45,6 @@ import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvites
 import { useTabBarActiveLoadCount } from "@/lib/hooks/useTabBarActiveLoadCount";
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
-import {
-    useConnectionRequestsReceivedQuery,
-    useConnectionRequestsSentQuery,
-} from "@/lib/queries/useNetworkQueries";
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
@@ -213,8 +209,6 @@ export function DemoTabBar({
     markSharedLedgerRead,
   } = useAlertRegistryNotifications(orgId);
   const opsShelf = useOperationsShelfItems();
-  const receivedQ = useConnectionRequestsReceivedQuery(orgId);
-  const sentQ = useConnectionRequestsSentQuery(orgId);
   const { width: windowWidth } = useWindowDimensions();
   const isWebEarly = Platform.OS === "web";
   const isDesktopWebEarly = isWebEarly && windowWidth >= 1024;
@@ -399,11 +393,9 @@ export function DemoTabBar({
     setInviteActionId(null);
     if (error) {
       await refreshInboundProtocol();
-      await Promise.all([receivedQ.refetch(), sentQ.refetch()]);
       return;
     }
-    const refetchInvites = () =>
-      Promise.all([receivedQ.refetch(), sentQ.refetch()]);
+    const refetchInvites = () => refreshInboundProtocol();
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(() => {
         void refetchInvites().catch((refetchError) => {

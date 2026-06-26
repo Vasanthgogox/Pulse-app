@@ -97,8 +97,22 @@ function KeyRow({
     padded.push(null);
   }
 
+  const nonEmptyCount = cells.filter((cell) => cell != null).length;
+  const shouldCenterLikeKeyboard = columns === LETTER_COLS;
+  const rowWidthPercent = shouldCenterLikeKeyboard
+    ? Math.max(52, Math.round((nonEmptyCount / columns) * 100))
+    : 100;
+
   return (
-    <View style={styles.row}>
+    <View
+      style={[
+        styles.row,
+        shouldCenterLikeKeyboard && {
+          width: `${rowWidthPercent}%`,
+          alignSelf: "center",
+        },
+      ]}
+    >
       {padded.map((cell, colIdx) => {
         if (cell === null) {
           return <EmptySlot key={`empty-${colIdx}`} />;

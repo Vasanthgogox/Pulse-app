@@ -8,9 +8,15 @@
  * incurs one extra microtask; the module is cached after that.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  getMarketIndentsForOrganization,
+  syncIndentsWithCache,
+} from '@/features/indents/services/indents.service';
 import type { DirectQuoteRow } from '@/features/indents/services/direct-quotes.service';
 import type { IndentRow } from '@/features/indents/services/indents.service';
 import { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
+import { useAppQueryGate } from '@/lib/hooks/useAppQueryGate';
+import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 import { STALE } from '@/lib/queryClient';
@@ -29,7 +35,6 @@ export function useIndentsQuery(orgId: string | null) {
   return useQuery({
     queryKey: queryKeys.indents.finite(orgId ?? ''),
     queryFn: async () => {
-      const { syncIndentsWithCache } = await loadIndentsService();
       const existing =
         (qc.getQueryData(queryKeys.indents.finite(orgId ?? '')) as
           | Array<{ id: string }>
@@ -40,23 +45,29 @@ export function useIndentsQuery(orgId: string | null) {
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<IndentRow[]>(),
   });
 }
 
 /** Market-facing indents for GET LOAD / Find Work (visible to current org as integrated supplier). */
-export function useMarketIndentsQuery(orgId: string | null) {
+export function useMarketIndentsQuery(
+  orgId: string | null,
+  options?: { enabled?: boolean; urgent?: boolean },
+) {
+  const gateOpen = useAppQueryGate(orgId, { urgent: options?.urgent });
+  const enabled = gateOpen && options?.enabled !== false;
+
   return useQuery({
     queryKey: queryKeys.indents.market(orgId ?? ''),
     queryFn: async () => {
-      const { getMarketIndentsForOrganization } = await loadIndentsService();
       const res = await getMarketIndentsForOrganization(orgId!);
       if (res.error) throw res.error;
       return res.indents;
     },
-    enabled: !!orgId,
+    enabled,
     // Cross-org feed: partner shippers mutate indents outside this org's invalidation path.
     staleTime: STALE.frequent,
-    refetchOnMount: 'always',
+    refetchOnMount: refetchOnMountIfEntityListEmpty<IndentRow[]>(),
   });
 }
 
@@ -106,6 +117,7 @@ export function invalidateMarketIndentsForIntegratedSuppliers(
 
 /** My direct quotes for GET LOAD views (carrier side). */
 export function useMyDirectQuotesQuery(orgId: string | null) {
+  const gateOpen = useAppQueryGate(orgId);
   return useQuery<DirectQuoteRow[]>({
     queryKey: [...queryKeys.indents.finite(orgId ?? ''), 'my-direct-quotes'],
     queryFn: async () => {
@@ -114,8 +126,9 @@ export function useMyDirectQuotesQuery(orgId: string | null) {
       if (res.error) throw res.error;
       return res.quotes;
     },
-    enabled: !!orgId,
+    enabled: gateOpen,
     staleTime: STALE.moderate,
+    refetchOnMount: refetchOnMountIfEntityListEmpty<DirectQuoteRow[]>(),
   });
 }
 

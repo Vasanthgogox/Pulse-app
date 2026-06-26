@@ -17,6 +17,7 @@ export type ProductId =
   | 'pulse_core'
   | 'pulse_driver'
   | 'pulse_network'
+  | 'pulse_network_bidding'
   | 'pulse_chat'
   | 'pulse_pod_pro'
   | 'pulse_invoice_pro'
@@ -90,6 +91,7 @@ export const BUNDLED_ACTIVE_PRODUCT_IDS = [
   'pulse_core',
   'pulse_driver',
   'pulse_network',
+  'pulse_network_bidding',
   'pulse_chat',
 ] as const satisfies readonly ProductId[];
 
@@ -132,7 +134,7 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
 
   pulse_driver: {
     id: 'pulse_driver',
-    name: 'Pulse Driver',
+    name: 'Pulse Driver app',
     tagline: 'Native app for drivers on the road',
     description: 'Mobile-first experience for assigned drivers — trip execution, odometer and expense capture, POD upload, live status updates, and fleet chat. Free with Pulse Core.',
     icon: 'Smartphone',
@@ -159,7 +161,7 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
 
   pulse_network: {
     id: 'pulse_network',
-    name: 'Pulse Network',
+    name: 'Pulse Social network',
     tagline: 'Connect, grow, and win freight together',
     description: 'Build your logistics network — connect with verified partners, grow alliances, bid on loads, and share updates on your Pulse story feed.',
     icon: 'Network',
@@ -181,6 +183,32 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
       { name: 'Stories & Feed',      description: 'Share updates and follow partner activity',         icon: 'Rss' },
     ],
     vision: 'Your logistics rolodex — connected partners, open freight, and a feed that keeps your network in motion.',
+  },
+
+  pulse_network_bidding: {
+    id: 'pulse_network_bidding',
+    name: 'Pulse Network bidding',
+    tagline: 'Bid on integrated trip loads from your network',
+    description:
+      'Place and manage bids on freight posted by connected partners — integrated trip indents flow into your load board so you can quote, win, and deploy without leaving Pulse.',
+    icon: 'Gavel',
+    color: '#d97706',
+    status: 'active',
+    pricing: { model: 'free' },
+    dependencies: ['pulse_core', 'pulse_network'],
+    capabilities: [
+      'network_bidding',
+      'integrated_trip_bids',
+      'indent_bidding',
+      'marketplace_bid',
+    ],
+    modules: [
+      { name: 'Integrated trip bids', description: 'Bid on loads from connected shippers and brokers', icon: 'Truck' },
+      { name: 'Live bid board',       description: 'Track open indents and your submitted quotes',      icon: 'Gavel' },
+      { name: 'Award & deploy',       description: 'Win a bid and convert straight to trip execution',  icon: 'CheckCircle' },
+      { name: 'Rate history',         description: 'Past bids and lane pricing for smarter quotes',     icon: 'TrendingUp' },
+    ],
+    vision: 'Every integrated trip is an opportunity — discover partner freight, bid in seconds, and keep trucks moving.',
   },
 
   pulse_chat: {

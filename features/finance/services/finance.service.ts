@@ -26,10 +26,15 @@ import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { VALIDATION, dateISO } from "@/lib/validation";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 
-/** Join trips for ledger rows; older DBs may not have `trips.display_trip_id` yet (PostgREST 400). */
+/**
+ * Join trips via trip_id (not booking_ref).
+ * `transactions_booking_ref_fkey` also points at trips — unqualified `trips(...)` is ambiguous.
+ */
+const LEDGER_TX_TRIP_EMBED = "trips!trip_id";
 const LEDGER_TX_SELECT_WITH_TRIPS =
-  "*, trips(trip_number, display_trip_id, trip_code, trip_operational_code)" as const;
-const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY = "*, trips(trip_number)" as const;
+  `*, ${LEDGER_TX_TRIP_EMBED}(trip_number, display_trip_id, trip_code, trip_operational_code)` as const;
+const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY =
+  `*, ${LEDGER_TX_TRIP_EMBED}(trip_number)` as const;
 
 function isMissingTripsDisplayTripIdError(
   error: {
@@ -133,10 +138,16 @@ export async function getProfileImageBatch(
   if (ids.length === 0) return {};
 
   const profileMap = await getDriverProfileDisplayBatch(ids);
+  const entries = Object.entries(profileMap);
+  const urls = await Promise.all(
+    entries.map(([, profile]) =>
+      resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed),
+    ),
+  );
   const result: Record<string, string> = {};
-  for (const [driverId, profile] of Object.entries(profileMap)) {
-    const url = await resolveDriverAvatarFromProfileFields(profile.avatarUrl, profile.avatarSeed);
-    if (url) result[driverId] = url;
+  for (let i = 0; i < entries.length; i++) {
+    const url = urls[i];
+    if (url) result[entries[i][0]] = url;
   }
   return result;
 }

@@ -5,6 +5,8 @@
 export const DEFAULT_PAGE_SIZE = 50;
 export const LEDGER_PAGE_SIZE = 50;
 export const DRIVER_TRIPS_PAGE_SIZE = 30;
+/** Cap for finite-list sync/cache fetches (React Query `finite` keys). */
+export const FINITE_LIST_CAP = 500;
 
 export interface PageOpts {
   limit?: number;

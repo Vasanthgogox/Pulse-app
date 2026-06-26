@@ -35,6 +35,7 @@ export function OrgStep({ flow }: { flow: SignUpFlow }) {
         flow.loading
       }
       primaryLoading={flow.loading || !!flow.orgCheck?.loading}
+      keyboardAware
     >
       <SignUpPulseField
         label="Company / Organization Name"

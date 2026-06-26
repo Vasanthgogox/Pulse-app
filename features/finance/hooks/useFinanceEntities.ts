@@ -14,9 +14,9 @@ import { getAvailablePeriodOptions } from "@/features/vehicles/pnl";
 import { formatLedgerDate } from "@/lib/format";
 import type { ConnectionRequestRow } from "@/features/connections/services/connectionRequests.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
+import { useConnectionRequestsSentQuery } from '@/lib/hooks/useConnectionRequestsFromGlobalSync';
 import {
   useClientsQuery,
-  useConnectionRequestsSentQuery,
   useDriverOffersQuery,
   useDriversQuery,
   useIndentsForFinanceQuery,

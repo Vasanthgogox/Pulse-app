@@ -10,6 +10,7 @@
  */
 import { QueryClient } from '@tanstack/react-query';
 import type { QueryCacheNotifyEvent } from '@tanstack/react-query';
+import { isWithinAppQueryBootQuietPeriod } from '@/lib/hooks/appQueryGateState';
 
 /** Shared stale-time constants — import in query hooks to apply per-query tiers. */
 export const STALE = {
@@ -28,6 +29,9 @@ const GC_TIME_MS = 24 * 60 * 60 * 1000; // 24 h — keeps data alive for next co
 
 /** Threshold in ms above which a query is flagged as slow in dev. */
 const SLOW_QUERY_WARN_MS = 3_000;
+
+/** Multi-hop RPCs that routinely exceed 3s — suppress dev noise on boot. */
+const KNOWN_SLOW_QUERY_KEY_FRAGMENTS = ['"market"'] as const;
 
 /** Burst window for invalidation storm detection. */
 const INVALIDATION_STORM_WINDOW_MS = 1_000;
@@ -49,7 +53,12 @@ function attachDevObserver(client: QueryClient): void {
         const elapsed = Date.now() - start;
         startTimes.delete(key);
         if (elapsed > SLOW_QUERY_WARN_MS) {
-          console.warn(`[query] slow fetch ${elapsed}ms`, key.slice(0, 120));
+          const isKnownSlow =
+            KNOWN_SLOW_QUERY_KEY_FRAGMENTS.some((frag) => key.includes(frag)) &&
+            (isWithinAppQueryBootQuietPeriod() || elapsed < 8_000);
+          if (!isKnownSlow) {
+            console.warn(`[query] slow fetch ${elapsed}ms`, key.slice(0, 120));
+          }
         }
       }
       if (status === 'error') {

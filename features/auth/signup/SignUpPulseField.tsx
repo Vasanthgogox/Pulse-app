@@ -120,7 +120,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
         {trailing}
       </View>
       {errorMessage ? (
-        <Text style={fieldStyles.error}>{errorMessage}</Text>
+        <Text style={fieldStyles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{errorMessage}</Text>
       ) : hintMessage ? (
         <Text style={fieldStyles.hint}>{hintMessage}</Text>
       ) : null}
@@ -172,7 +172,7 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       fontSize: 14,
       fontWeight: '600',
       color: theme.text,
-      minHeight: 48,
+      minHeight: Platform.OS === 'web' ? 48 : 52,
       ...Platform.select({
         web: { outlineStyle: 'none', cursor: 'text' } as object,
       }),
@@ -183,7 +183,7 @@ function createFieldStyles(theme: SignUpTheme, dense: boolean) {
       paddingTop: 14,
     },
     inputWithTrailing: {
-      paddingRight: 48,
+      paddingRight: 4,
     },
     error: {
       fontSize: 12,

@@ -55,15 +55,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: Platform.OS === 'web' ? 22 : 26,
+    fontSize: Platform.OS === 'web' ? 20 : 26,
     fontWeight: '900',
     letterSpacing: -0.4,
-    lineHeight: Platform.OS === 'web' ? 28 : 32,
+    lineHeight: Platform.OS === 'web' ? 26 : 32,
     color: '#111827',
     textAlign: 'center',
   },
   titleCompact: {
-    fontSize: Platform.OS === 'web' ? 19 : 22,
+    fontSize: Platform.OS === 'web' ? 18 : 22,
     lineHeight: Platform.OS === 'web' ? 24 : 28,
     letterSpacing: -0.3,
   },
@@ -75,6 +75,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     maxWidth: 320,
+    alignSelf: 'center',
   },
   subtitleCompact: {
     fontSize: 13,

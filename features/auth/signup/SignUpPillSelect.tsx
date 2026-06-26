@@ -41,7 +41,7 @@ export function SignUpPillSelect<T extends string>({
         {label}
         {required ? <Text style={styles.req}> *</Text> : null}
       </Text>
-      <View style={styles.row}>
+      <View style={styles.row} accessibilityRole="radiogroup">
         {items.map((opt) => {
           const selected = value === opt.value;
           return (
@@ -53,8 +53,8 @@ export function SignUpPillSelect<T extends string>({
                 selected && styles.pillSelected,
                 pressed && styles.pillPressed,
               ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
             >
               <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>
                 {opt.label}
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   pillSubSelected: {
-    color: 'rgba(57, 123, 94, 0.75)',
+    color: PULSE_SIGNUP.primaryDark,
   },
   error: {
     fontSize: 12,

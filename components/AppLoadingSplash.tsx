@@ -6,9 +6,9 @@ import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import { tGlobal, useOptionalLanguage } from '@/contexts/LanguageContext';
 import { MotiView } from 'moti';
+import LottieView from 'lottie-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Image,
   StyleSheet,
   Text,
   View,
@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const LOGO = require('@/assets/images/splash-icon.png');
+const SPLASH_ANIMATION = require('@/assets/Animated folder/planet.json');
 
 export type AppLoadingSplashVariant =
   | 'preparing'
@@ -111,11 +111,13 @@ function AppLoadingSplashView({
         }}
         style={styles.logoWrap}
       >
-        <Image
-          source={LOGO}
-          style={styles.logo}
+        <LottieView
+          source={SPLASH_ANIMATION}
+          autoPlay
+          loop
+          speed={0.9}
           resizeMode="contain"
-          accessibilityIgnoresInvertColors
+          style={styles.logo}
         />
       </MotiView>
 
@@ -175,8 +177,8 @@ const styles = StyleSheet.create({
     marginBottom: Layout.spacingExtraLarge,
   },
   logo: {
-    width: 72,
-    height: 72,
+    width: 112,
+    height: 112,
   },
   messageWrap: {
     alignItems: 'center',

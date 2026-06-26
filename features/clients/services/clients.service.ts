@@ -147,7 +147,7 @@ export async function syncClientsWithCache(
     const clients = await syncDomainRows<ClientRow>({
       domain: 'clients',
       orgId,
-      schemaVersion: '1',
+      schemaVersion: '2',
       policy: { maxDeltaLagMs: 5 * 60_000, fullSyncEveryMs: 8 * 60 * 60_000 },
       currentRows,
       getFull: async () => {

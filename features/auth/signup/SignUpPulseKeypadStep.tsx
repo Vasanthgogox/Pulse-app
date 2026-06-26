@@ -14,7 +14,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import { DecimalKeypad } from '@/components/mobile-input/DecimalKeypad';
 import { applyKeypadPress, type KeypadKey } from '@/components/mobile-input/keypad';
-import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
+import { effectiveKeyboardInset, useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
 import { useSignupKeypadInput } from '@/lib/onboarding/useSignupKeypadInput';
 
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
@@ -260,8 +260,9 @@ export const SignUpPulseKeypadStep = memo(function SignUpPulseKeypadStep({
     </>
   );
 
-  const webKeyboardPad =
-    !useKeypad && keyboardVisible ? Math.max(keyboardHeight, 0) + 16 : 0;
+  const webKeyboardPad = !useKeypad
+    ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
+    : 0;
 
   const contentScrollInner = [
     styles.contentScrollInner,

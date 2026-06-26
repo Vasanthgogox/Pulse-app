@@ -104,7 +104,7 @@ export function useKeyboardVisible() {
           // Reset immediately in CSS so layout doesn't wait for React re-render.
           setCssKeyboardHeight(0);
           sync();
-        }, 120);
+        }, 200);
       };
 
       sync();

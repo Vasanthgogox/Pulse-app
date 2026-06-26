@@ -19,6 +19,7 @@ import {
   partyInitialsFromName,
   partyAvatarBackgroundColor,
   resolvePartyDisplayUri,
+  resolvePartyPhotoUriAsync,
 } from '@/lib/partyAvatarDisplay';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -43,9 +44,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const WEB_DESKTOP_BREAKPOINT = 600;
 
 type Props = {
   visible: boolean;
@@ -66,14 +70,76 @@ const LAVENDER = 'rgba(199,210,254,0.95)';
 const DISMISS_DRAG_PX = 72;
 const DISMISS_VELOCITY = 0.65;
 
-function offerIcon(kind: ConnectionOfferTile['icon'], size = 16) {
+type InvitePalette = {
+  gradientStart: string;
+  gradientEnd: string;
+  accent: string;
+  accentSoftBg: string;
+  accentSoftBorder: string;
+  textOnAccent: string;
+  mutedOnAccent: string;
+  inlinePillBg: string;
+};
+
+function colorWithAlpha(hex: string, alpha: number): string {
+  const safeAlpha = Math.min(1, Math.max(0, alpha));
+  const a = Math.round(safeAlpha * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${hex}${a}`;
+}
+
+function invitePaletteForType(type: string): InvitePalette {
+  const upper = type.toUpperCase();
+  const hasClient = upper.includes('CLIENT');
+  const hasSupplier = upper.includes('SUPPLIER');
+
+  if (hasSupplier && !hasClient) {
+    return {
+      gradientStart: Theme.loadDoneSubTabBgIdle,
+      gradientEnd: colorWithAlpha(Theme.loadDoneSubTabBg, 0.78),
+      accent: Theme.textPrimaryDark,
+      accentSoftBg: colorWithAlpha(Theme.loadDoneSubTabBg, 0.16),
+      accentSoftBorder: colorWithAlpha(Theme.loadDoneSubTabBg, 0.52),
+      textOnAccent: Theme.textPrimaryDark,
+      mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.68),
+      inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.62),
+    };
+  }
+
+  if (hasClient && !hasSupplier) {
+    return {
+      gradientStart: Theme.loadMainTabBgIdle,
+      gradientEnd: colorWithAlpha(Theme.loadMainTabBg, 0.82),
+      accent: Theme.textPrimaryDark,
+      accentSoftBg: colorWithAlpha(Theme.loadMainTabBg, 0.2),
+      accentSoftBorder: colorWithAlpha(Theme.loadMainTabBg, 0.56),
+      textOnAccent: Theme.textPrimaryDark,
+      mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.7),
+      inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.62),
+    };
+  }
+
+  return {
+    gradientStart: 'rgba(4, 120, 87, 0.16)',
+    gradientEnd: 'rgba(5, 150, 105, 0.24)',
+    accent: Theme.darkGreen,
+    accentSoftBg: colorWithAlpha(Theme.darkGreen, 0.12),
+    accentSoftBorder: colorWithAlpha(Theme.darkGreen, 0.3),
+    textOnAccent: Theme.textPrimaryDark,
+    mutedOnAccent: colorWithAlpha(Theme.textPrimaryDark, 0.72),
+    inlinePillBg: colorWithAlpha(Theme.textOnPrimary, 0.58),
+  };
+}
+
+function offerIcon(kind: ConnectionOfferTile['icon'], color: string, size = 16) {
   if (kind === 'client') {
-    return <Building2 size={size} color={PURPLE} strokeWidth={2.2} />;
+    return <Building2 size={size} color={color} strokeWidth={2.2} />;
   }
   if (kind === 'supplier') {
-    return <Truck size={size} color={PURPLE} strokeWidth={2.2} />;
+    return <Truck size={size} color={color} strokeWidth={2.2} />;
   }
-  return <Handshake size={size} color={PURPLE} strokeWidth={2.2} />;
+  return <Handshake size={size} color={color} strokeWidth={2.2} />;
 }
 
 export function BusinessConnectionRequestModal({
@@ -88,6 +154,8 @@ export function BusinessConnectionRequestModal({
   onNext,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && screenWidth >= WEB_DESKTOP_BREAKPOINT;
   const dragY = useRef(new Animated.Value(0)).current;
   const dismissingRef = useRef(false);
   const [shellVisible, setShellVisible] = useState(visible);
@@ -177,7 +245,7 @@ export function BusinessConnectionRequestModal({
     extrapolate: 'clamp',
   });
 
-  const orgLogoUri = useMemo(
+  const orgLogoFallbackUri = useMemo(
     () =>
       resolveOrgAvatarUri(
         invite.partnerOrgId,
@@ -188,6 +256,37 @@ export function BusinessConnectionRequestModal({
       ),
     [invite.logoUrl, invite.name, invite.orgAvatarSeed, invite.partnerOrgId],
   );
+  const [orgLogoUri, setOrgLogoUri] = useState<string>(orgLogoFallbackUri);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fallback = resolveOrgAvatarUri(
+      invite.partnerOrgId,
+      invite.name?.trim() || 'Organization',
+      invite.logoUrl ?? null,
+      invite.orgAvatarSeed ?? null,
+      null,
+    );
+    setOrgLogoUri(fallback);
+    resolvePartyPhotoUriAsync({
+      organizationImageUrl: invite.logoUrl ?? null,
+      avatarUrl: null,
+    })
+      .then((signedLogoUri) => {
+        if (cancelled) return;
+        if (signedLogoUri) {
+          setOrgLogoUri(signedLogoUri);
+          return;
+        }
+        setOrgLogoUri(fallback);
+      })
+      .catch(() => {
+        if (!cancelled) setOrgLogoUri(fallback);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invite.logoUrl, invite.name, invite.orgAvatarSeed, invite.partnerOrgId]);
 
   const orgName = invite.name?.trim() || 'Organization';
   const orgInitials = partyInitialsFromName(orgName);
@@ -225,6 +324,7 @@ export function BusinessConnectionRequestModal({
   );
   const nextSteps = useMemo(() => connectionNextSteps(orgName), [orgName]);
   const yourRolePill = connectionYourRolePill(invite.type);
+  const palette = useMemo(() => invitePaletteForType(invite.type), [invite.type]);
 
   const experienceValue = formatConnectionExperience(invite.orgCreatedAt);
   const tripsValue = formatConnectionTripsValue(invite.tripCount);
@@ -244,7 +344,7 @@ export function BusinessConnectionRequestModal({
       onRequestClose={requestDismiss}
       statusBarTranslucent
     >
-      <View style={[styles.backdrop, Platform.OS === 'web' ? styles.backdropWeb : null]}>
+      <View style={[styles.backdrop, isWebDesktop ? styles.backdropWebDesktop : (Platform.OS === 'web' ? styles.backdropWebMobile : null)]}>
         <Pressable
           style={styles.backdropTouch}
           onPress={requestDismiss}
@@ -255,29 +355,34 @@ export function BusinessConnectionRequestModal({
         <Animated.View
           style={[
             styles.sheet,
-            { transform: [{ translateY: sheetTranslate }] },
+            isWebDesktop ? styles.sheetWebDesktop : styles.sheetMobile,
+            !isWebDesktop && { transform: [{ translateY: sheetTranslate }] },
             isDragging && styles.sheetDragging,
           ]}
         >
-          <View
-            style={styles.sheetDragCapture}
-            {...panResponder.panHandlers}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <View style={styles.dragHandle} />
-          </View>
+          {!isWebDesktop ? (
+            <View
+              style={styles.sheetDragCapture}
+              {...panResponder.panHandlers}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <View style={styles.dragHandle} />
+            </View>
+          ) : null}
 
           <LinearGradient
-            colors={[PURPLE_DARK, PURPLE]}
+            colors={[palette.gradientStart, palette.gradientEnd]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.hero}
           >
             <View style={styles.heroTopRow}>
               <View style={styles.heroEyebrowRow}>
-                <Sparkles size={12} color={LAVENDER} strokeWidth={2.5} />
-                <Text style={styles.heroEyebrow}>BUSINESS CONNECTION</Text>
+                <Sparkles size={12} color={palette.mutedOnAccent} strokeWidth={2.5} />
+                <Text style={[styles.heroEyebrow, { color: palette.mutedOnAccent }]}>
+                  BUSINESS CONNECTION
+                </Text>
               </View>
               <View style={styles.heroTopActions}>
                 {queueTotal > 1 ? (
@@ -294,7 +399,7 @@ export function BusinessConnectionRequestModal({
                   accessibilityRole="button"
                   accessibilityLabel="Close"
                 >
-                  <X size={16} color="#fff" strokeWidth={2.5} />
+                  <X size={16} color={palette.textOnAccent} strokeWidth={2.5} />
                 </Pressable>
               </View>
             </View>
@@ -316,18 +421,20 @@ export function BusinessConnectionRequestModal({
                   )}
                 </View>
                 <View style={styles.heroTextBlock}>
-                  <Text style={styles.heroTitle} numberOfLines={1}>
+                  <Text style={[styles.heroTitle, { color: palette.textOnAccent }]} numberOfLines={1}>
                     {orgName}
                   </Text>
-                  <Text style={styles.heroOrgKicker} numberOfLines={1}>
+                  <Text style={[styles.heroOrgKicker, { color: palette.mutedOnAccent }]} numberOfLines={1}>
                     Business connection invite
                   </Text>
                   <View style={styles.heroPillRow}>
-                    <View style={styles.heroPill}>
-                      <Text style={styles.heroPillText}>{yourRolePill}</Text>
+                    <View style={[styles.heroPill, { backgroundColor: palette.inlinePillBg }]}>
+                      <Text style={[styles.heroPillText, { color: palette.textOnAccent }]}>{yourRolePill}</Text>
                     </View>
                     {inviteDateLabel ? (
-                      <Text style={styles.heroDate}>Sent {inviteDateLabel}</Text>
+                      <Text style={[styles.heroDate, { color: palette.mutedOnAccent }]}>
+                        Sent {inviteDateLabel}
+                      </Text>
                     ) : null}
                   </View>
                 </View>
@@ -406,8 +513,15 @@ export function BusinessConnectionRequestModal({
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionLabel}>YOUR ROLE</Text>
-              <View style={styles.offerPill}>
-                <Text style={styles.offerPillText}>
+              <View
+                style={[
+                  styles.offerPill,
+                  {
+                    backgroundColor: palette.accentSoftBg,
+                  },
+                ]}
+              >
+                <Text style={[styles.offerPillText, { color: palette.accent }]}>
                   {yourRoleTiles.length} role{yourRoleTiles.length !== 1 ? 's' : ''}
                 </Text>
               </View>
@@ -420,12 +534,18 @@ export function BusinessConnectionRequestModal({
                   style={[
                     styles.payTile,
                     i === 0 ? styles.payTilePrimary : styles.payTileSecondary,
+                    i === 0
+                      ? {
+                          backgroundColor: palette.accentSoftBg,
+                          borderColor: palette.accentSoftBorder,
+                        }
+                      : undefined,
                     yourRoleTiles.length === 1 ? styles.payTileFull : undefined,
                   ]}
                 >
                   <View style={styles.payTileRow}>
                     <View style={[styles.payTileIconWrap, i === 0 && styles.payTileIconPrimary]}>
-                      {offerIcon(tile.icon, 14)}
+                      {offerIcon(tile.icon, palette.accent, 14)}
                     </View>
                     <View style={styles.payTileCopy}>
                       <Text style={styles.payTileAmount} numberOfLines={1}>
@@ -434,7 +554,7 @@ export function BusinessConnectionRequestModal({
                       <Text style={styles.payTileSep} accessibilityElementsHidden>
                         ·
                       </Text>
-                      <Text style={styles.payTileLabel} numberOfLines={1}>
+                      <Text style={[styles.payTileLabel, { color: palette.accent }]} numberOfLines={1}>
                         {tile.label}
                       </Text>
                     </View>
@@ -447,14 +567,22 @@ export function BusinessConnectionRequestModal({
               <Text style={styles.nextTitle}>What happens next</Text>
               {nextSteps.map((item) => (
                 <View key={item} style={styles.nextRow}>
-                  <ArrowRight size={13} color={PURPLE} strokeWidth={2.4} />
+                  <ArrowRight size={13} color={palette.accent} strokeWidth={2.4} />
                   <Text style={styles.nextText}>{item}</Text>
                 </View>
               ))}
             </View>
 
-            <View style={styles.reminderBanner}>
-              <Sparkles size={12} color={PURPLE} strokeWidth={2.2} />
+            <View
+              style={[
+                styles.reminderBanner,
+                {
+                  borderColor: palette.accentSoftBorder,
+                  backgroundColor: palette.accentSoftBg,
+                },
+              ]}
+            >
+              <Sparkles size={12} color={palette.accent} strokeWidth={2.2} />
               <Text style={styles.reminderText}>
                 This request stays active until you accept or decline.
               </Text>
@@ -478,17 +606,19 @@ export function BusinessConnectionRequestModal({
                   activeOpacity={0.88}
                 >
                   <LinearGradient
-                    colors={[PURPLE, PURPLE_DARK]}
+                    colors={[palette.gradientStart, palette.gradientEnd]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.acceptGradient}
                   >
                     {busy ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <ActivityIndicator size="small" color={palette.textOnAccent} />
                     ) : (
                       <>
-                        <Check size={15} color="#fff" strokeWidth={3} />
-                        <Text style={styles.acceptText}>Accept & connect</Text>
+                        <Check size={15} color={palette.textOnAccent} strokeWidth={3} />
+                        <Text style={[styles.acceptText, { color: palette.textOnAccent }]}>
+                          Accept & connect
+                        </Text>
                       </>
                     )}
                   </LinearGradient>
@@ -502,7 +632,9 @@ export function BusinessConnectionRequestModal({
                   style={styles.nextRequestBtn}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.nextRequestText}>View next request</Text>
+                  <Text style={[styles.nextRequestText, { color: palette.accent }]}>
+                    View next request
+                  </Text>
                 </TouchableOpacity>
               ) : null}
 
@@ -535,7 +667,8 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  backdropWeb: {
+  // Desktop web: centered dialog
+  backdropWebDesktop: {
     position: 'fixed' as 'absolute',
     top: 0,
     left: 0,
@@ -544,20 +677,38 @@ const styles = StyleSheet.create({
     zIndex: 100000,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+  },
+  // Mobile web: bottom sheet (same as native)
+  backdropWebMobile: {
+    position: 'fixed' as 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100000,
+    justifyContent: 'flex-end',
   },
   sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
     overflow: 'hidden',
     backgroundColor: Theme.screenBackground,
-    maxHeight: Platform.OS === 'web' ? '92%' : '82%',
     flexDirection: 'column',
-    alignSelf: 'stretch',
     position: 'relative',
-    ...(Platform.OS === 'web'
-      ? { width: '100%', maxWidth: 440, borderRadius: 28 }
-      : {}),
+  },
+  // Desktop web: full dialog card, centered
+  sheetWebDesktop: {
+    borderRadius: 28,
+    width: '100%',
+    maxWidth: 460,
+    maxHeight: '92vh' as unknown as number,
+    alignSelf: 'center',
+  },
+  // Native + mobile web: bottom sheet
+  sheetMobile: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    alignSelf: 'stretch',
+    maxHeight: '86%',
   },
   sheetDragging: {
     opacity: 0.98,

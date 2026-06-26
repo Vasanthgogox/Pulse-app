@@ -1,4 +1,4 @@
-import { memo, type ReactNode, type RefObject } from 'react';
+import { memo, useEffect, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,8 +8,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useKeyboardVisible } from '@/lib/hooks/useKeyboardVisible';
+import {
+  effectiveKeyboardInset,
+  useKeyboardVisible,
+} from '@/lib/hooks/useKeyboardVisible';
 
 import { SignUpPulseFormStepProvider } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
@@ -57,12 +61,25 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   theme = PULSE_SIGNUP,
   secondaryAction,
 }: SignUpPulseFormStepProps) {
+  const insets = useSafeAreaInsets();
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
-  // On web, --app-vh is frozen to pre-keyboard height (keyboard overlays content),
-  // so we DO need to add keyboardHeight as scroll padding — same as native.
-  const bottomPad =
-    scrollPaddingBottom +
-    (keyboardAware && keyboardVisible ? Math.max(keyboardHeight, 0) : 0);
+  // On web, --app-vh is frozen while the keyboard overlays content (Android Chrome).
+  // Use a fallback inset when focus opens the keyboard before visualViewport reports height.
+  const keyboardInset = keyboardAware
+    ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
+    : 0;
+  const bottomPad = scrollPaddingBottom + keyboardInset;
+
+  useEffect(() => {
+    if (!keyboardAware || Platform.OS !== 'web' || !keyboardVisible || !scrollRef) {
+      return;
+    }
+    // Only fire on keyboard open, not on every height adjustment (avoids double-scroll jank).
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 380);
+    return () => clearTimeout(timer);
+  }, [keyboardAware, keyboardVisible, scrollRef]);
 
   const cta = (
     <View style={styles.ctaBlock}>
@@ -122,7 +139,11 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
           scroll
         )}
         {!inlinePrimary ? (
-          <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.bg }]}>
+          <View style={[styles.footer, {
+            borderTopColor: theme.border,
+            backgroundColor: theme.bg,
+            paddingBottom: Math.max(insets.bottom, 8),
+          }]}>
             {cta}
           </View>
         ) : null}
@@ -146,7 +167,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'web' ? 4 : 8,
+    paddingTop: Platform.OS === 'web' ? 12 : 8,
   },
   scrollContentCentered: {
     flexGrow: 1,
@@ -155,7 +176,6 @@ const styles = StyleSheet.create({
   footer: {
     paddingHorizontal: 24,
     paddingTop: 8,
-    paddingBottom: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   ctaBlock: {

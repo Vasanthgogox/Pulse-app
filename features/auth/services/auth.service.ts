@@ -630,12 +630,8 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
     const e164 = normalizeIndianPhoneForMetadata(pending.phone);
     if (e164) profileUpdates.phone = e164;
   }
-  if (Object.keys(profileUpdates).length > 0) {
-    await supabase().from("profiles").update(profileUpdates).eq("id", userId);
-  }
-
+  const orgUpdates: Record<string, unknown> = {};
   if (!pending.skipOrgCreation) {
-    const orgUpdates: Record<string, unknown> = {};
     if (pending.companyName?.trim()) orgUpdates.name = pending.companyName.trim();
     if (pending.operatingModel) orgUpdates.operating_model = pending.operatingModel;
     if (pending.addressLine?.trim()) orgUpdates.address_line = pending.addressLine.trim();
@@ -649,26 +645,36 @@ export async function applyPendingOAuthMetadata(): Promise<void> {
     if (pending.zone?.trim()) orgUpdates.zone = pending.zone.trim();
     if (pending.businessType?.trim()) orgUpdates.business_type = pending.businessType.trim();
     if (pending.employeeCount?.trim()) orgUpdates.employee_count = pending.employeeCount.trim();
-    if (Object.keys(orgUpdates).length > 0) {
-      const { data: membership } = await supabase()
-        .from("organization_members")
-        .select("organization_id")
-        .eq("user_id", userId)
-        .eq("status", "active")
-        .in("role", ["owner", "admin"])
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+  }
 
-      const orgFilter = membership?.organization_id
-        ? { column: "id" as const, value: membership.organization_id }
-        : { column: "owner_id" as const, value: userId };
+  // profiles.update and org_members.select both need only userId — run concurrently.
+  // organizations.update depends on the org_members result, so it waits after.
+  const [, membership] = await Promise.all([
+    Object.keys(profileUpdates).length > 0
+      ? supabase().from("profiles").update(profileUpdates).eq("id", userId)
+      : Promise.resolve(null),
+    Object.keys(orgUpdates).length > 0
+      ? supabase()
+          .from("organization_members")
+          .select("organization_id")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .in("role", ["owner", "admin"])
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve(null),
+  ]);
 
-      await supabase()
-        .from("organizations")
-        .update(orgUpdates)
-        .eq(orgFilter.column, orgFilter.value);
-    }
+  if (Object.keys(orgUpdates).length > 0) {
+    const orgId = (membership as { data?: { organization_id?: string } | null } | null)?.data?.organization_id;
+    const orgFilter = orgId
+      ? { column: "id" as const, value: orgId }
+      : { column: "owner_id" as const, value: userId };
+    await supabase()
+      .from("organizations")
+      .update(orgUpdates)
+      .eq(orgFilter.column, orgFilter.value);
   }
 
   void trySyncMyDriverRowsUserId();

@@ -64,7 +64,5 @@ export function useInvalidateClients() {
   const qc = useQueryClient();
   return (orgId: string) => {
     qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.clients.finite(orgId) });
-    qc.invalidateQueries({ queryKey: ['q', 'clients', orgId, 'infinite'] });
   };
 }
