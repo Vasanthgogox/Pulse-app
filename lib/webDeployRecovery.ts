@@ -89,11 +89,19 @@ function messageFromUnknownError(error: unknown): string {
   return String(error ?? '');
 }
 
-/** Install after root layout mounts (not from index.js — RN must init first). */
-export function installNativeBundleRecoveryHandler(): void {
-  if (platformOS() === 'web' || !__DEV__) return;
+/** Swallow benign Supabase auth lock races before LogBox / redbox. */
+function installSupabaseAuthLockErrorHandler(): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { isIgnorableSupabaseAuthLockError } = require('@/lib/supabaseAuthLock.util') as typeof import('@/lib/supabaseAuthLock.util');
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('unhandledrejection', (event) => {
+      if (isIgnorableSupabaseAuthLockError(event.reason)) {
+        event.preventDefault();
+      }
+    });
+  }
+
   const ErrorUtils = (
     global as typeof global & {
       ErrorUtils?: {
@@ -109,16 +117,23 @@ export function installNativeBundleRecoveryHandler(): void {
     if (isIgnorableSupabaseAuthLockError(error)) {
       return;
     }
-    const err =
-      error instanceof Error
-        ? error
-        : new Error(messageFromUnknownError(error));
-    if (isStaleNativeBundleError(err)) {
-      recoverStaleNativeBundle();
-      return;
+    if (__DEV__ && platformOS() !== 'web') {
+      const err =
+        error instanceof Error
+          ? error
+          : new Error(messageFromUnknownError(error));
+      if (isStaleNativeBundleError(err)) {
+        recoverStaleNativeBundle();
+        return;
+      }
     }
     previous(error, isFatal);
   });
+}
+
+/** Install after root layout mounts (not from index.js — RN must init first). */
+export function installNativeBundleRecoveryHandler(): void {
+  installSupabaseAuthLockErrorHandler();
 }
 
 /** Listen for script load failures before React error boundaries run. */
