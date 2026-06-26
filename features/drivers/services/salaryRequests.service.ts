@@ -82,7 +82,8 @@ export async function getSalaryRequestsByDriverIds(
     .from('driver_salary_requests')
     .select('*')
     .in('driver_id', driverIds)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(100);
   if (error) return { error: new Error(error.message), requests: [] };
   return { error: null, requests: (data ?? []) as SalaryRequestRow[] };
 }
