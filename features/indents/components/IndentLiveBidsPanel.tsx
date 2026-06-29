@@ -21,6 +21,8 @@ export interface IndentLiveBidsPanelProps {
   selectedQuoteId: string | null;
   onSelectQuote: (quoteId: string | null) => void;
   canSelect?: boolean;
+  /** linked_organization_id values the shipper already has as integrated suppliers */
+  connectedSupplierOrgIds?: Set<string>;
 }
 
 export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
@@ -31,6 +33,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
   selectedQuoteId,
   onSelectQuote,
   canSelect = true,
+  connectedSupplierOrgIds,
 }: IndentLiveBidsPanelProps) {
   const vm = useMemo(
     () => buildIndentLiveBidsViewModel(quotes, { targetRateInr }),
@@ -125,6 +128,7 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
             targetRateInr={targetRateInr}
             highestPendingAmount={vm.highestPendingAmount}
             pendingCount={vm.pendingCount}
+            isConnectedPartner={connectedSupplierOrgIds?.has(q.bidder_organization_id) ?? false}
             onPress={
               canSelect && isPending
                 ? () => onSelectQuote(isSelected ? null : q.id)

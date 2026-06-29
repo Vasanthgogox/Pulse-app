@@ -137,8 +137,13 @@ export async function getNetworkFeed(
   });
   if (error) return { error: new Error(error.message), posts: [] };
   const rawPosts = (data ?? []) as PostRow[];
+  // Keep own-org awarded/completed LOAD posts (is_active=false but source_indent_id set)
+  // so the story remains visible after the indent is awarded.
   const activePosts = rawPosts.filter(
-    (p) => p.is_active === true && !isPostExpired(p),
+    (p) =>
+      !isPostExpired(p) &&
+      (p.is_active === true ||
+        (p.organization_id === orgId && p.source_indent_id != null)),
   );
 
   // Best effort: auto-deactivate expired own stories so they disappear for everyone.

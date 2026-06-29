@@ -1127,7 +1127,7 @@ export function TripsHubTableView({
     if (q) {
       rows = rows.filter((t) => {
         const meta = partyMetaByTripId?.get(t.id);
-        const clientName = (clientNameByTripId?.[t.id] ?? t.client_name ?? "")
+        const clientName = (clientNameByTripId?.[t.id] ?? (t.organization_id !== currentOrganizationId ? "" : t.client_name ?? ""))
           .trim()
           .toLowerCase();
         const supplierName = (
@@ -1704,8 +1704,7 @@ export function TripsHubTableView({
             );
             const displayClient = (
               clientNameByTripId?.[t.id] ??
-              t.client_name ??
-              ""
+              (t.organization_id !== currentOrganizationId ? "" : t.client_name ?? "")
             ).trim();
             const supplierLine =
               (meta?.displaySupplierName ?? "").trim() || "—";
@@ -2492,8 +2491,7 @@ export function TripsHubTableView({
                   (
                     txRow?.party_name ??
                     clientNameByTripId?.[receiptTrip.id] ??
-                    receiptTrip.client_name ??
-                    "—"
+                    (receiptTrip.organization_id !== currentOrganizationId ? "—" : receiptTrip.client_name ?? "—")
                   ).trim() || "—";
                 const txRef = (txRow?.payment_reference ?? "—").trim() || "—";
                 return (
@@ -2503,8 +2501,7 @@ export function TripsHubTableView({
                         <Text style={styles.receiptParty} numberOfLines={1}>
                           {(
                             clientNameByTripId?.[receiptTrip.id] ??
-                            receiptTrip.client_name ??
-                            "—"
+                            (receiptTrip.organization_id !== currentOrganizationId ? "—" : receiptTrip.client_name ?? "—")
                           )
                             .trim()
                             .toUpperCase()}

@@ -23,7 +23,7 @@ interface AwardModalProps {
 }
 
 export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalProps) {
-  const { currentLoad, selectedQuoteId, awarding, sortedQuotes, pendingCount, lowestPendingAmount, quotesLoading } = award;
+  const { currentLoad, selectedQuoteId, awarding, sortedQuotes, pendingCount, lowestPendingAmount, quotesLoading, connectedSupplierOrgIds } = award;
 
   return (
     <Modal
@@ -160,6 +160,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                   selectedQuoteId={selectedQuoteId}
                   onSelectQuote={award.selectQuote}
                   canSelect={pendingCount > 0}
+                  connectedSupplierOrgIds={connectedSupplierOrgIds}
                 />
               </ScrollView>
               {pendingCount === 0 && (

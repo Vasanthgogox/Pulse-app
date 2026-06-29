@@ -697,8 +697,7 @@ export default function TripsScreen() {
       list = list.filter((t) => {
         const displayName = (
           shipperNameByTripId[t.id] ??
-          t.client_name ??
-          ""
+          (t.organization_id !== orgId ? "" : t.client_name ?? "")
         ).toLowerCase();
         const pickup = (t.pickup_area ?? "").toLowerCase();
         const drop = (t.drop_location ?? "").toLowerCase();
@@ -1071,7 +1070,7 @@ export default function TripsScreen() {
         return raw ? formatLedgerDate(raw) : "—";
       })();
       const clientName =
-        (shipperNameByTripId[trip.id] ?? trip.client_name ?? "—").trim() || "—";
+        (shipperNameByTripId[trip.id] ?? (trip.organization_id !== orgId ? "—" : trip.client_name ?? "—")).trim() || "—";
       const supplierName =
         (
           tripHubPartyMetaByTripId.get(trip.id)?.displaySupplierName ??
@@ -2105,7 +2104,7 @@ export default function TripsScreen() {
                     {rows.map((t) => {
                       const stage = getStageLabelForTrip(t);
                       const displayClientName =
-                        shipperNameByTripId[t.id] ?? t.client_name ?? "—";
+                        shipperNameByTripId[t.id] ?? (t.organization_id !== orgId ? "—" : t.client_name ?? "—");
                       const cardLedgerRows = transactionsByTripId.get(t.id) ?? [];
                       const hubLedger = summarizeTripLedgerForHub(cardLedgerRows);
                       const party = tripHubPartyMetaByTripId.get(t.id);
@@ -2203,7 +2202,7 @@ export default function TripsScreen() {
                     {rows.map((t) => {
                       const stage = getStageLabelForTrip(t);
                       const displayClientName =
-                        shipperNameByTripId[t.id] ?? t.client_name ?? "—";
+                        shipperNameByTripId[t.id] ?? (t.organization_id !== orgId ? "—" : t.client_name ?? "—");
                       const cardLedgerRows = transactionsByTripId.get(t.id) ?? [];
                       const hubLedger = summarizeTripLedgerForHub(cardLedgerRows);
                       const party = tripHubPartyMetaByTripId.get(t.id);
