@@ -2,7 +2,7 @@ import { ScrollViewStyleReset } from 'expo-router/html';
 
 import {
   SHELL_STYLE_ID,
-  VIEWPORT_CONTENT,
+  VIEWPORT_CONTENT_BASE,
   mobileWebReset,
   setupAndroidInteractiveWidgetViewport,
   setupViewportHeightBootstrap,
@@ -19,7 +19,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content={VIEWPORT_CONTENT} />
+        <meta name="viewport" content={VIEWPORT_CONTENT_BASE} />
 
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.

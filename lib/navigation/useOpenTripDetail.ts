@@ -1,3 +1,4 @@
+import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
 
@@ -11,7 +12,7 @@ export function useOpenTripDetail() {
     (tripId: string) => {
       const id = tripId.trim();
       if (!id) return;
-      router.push(`/trip/${id}` as const);
+      router.push(ROUTES.tripDetail(id) as never);
     },
     [router],
   );

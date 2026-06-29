@@ -313,7 +313,7 @@ export function LedgerExpandedCard({
             {transactionTypeLabel ?? "—"}
           </Text>
         </View>
-        <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+        <View style={styles.detailGridHalf}>
           <Text style={styles.detailLabel}>Aging</Text>
           <Text style={styles.detailValue}>{agingLabel}</Text>
         </View>
@@ -327,14 +327,14 @@ export function LedgerExpandedCard({
             </Text>
           </View>
           {hasTripDetail && tripNumber !== "—" ? (
-            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+            <View style={styles.detailGridHalf}>
               <Text style={styles.detailLabel}>Trip</Text>
               <Text style={styles.detailValue} numberOfLines={2}>
                 {tripNumber}
               </Text>
             </View>
           ) : (
-            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]} />
+            <View style={styles.detailGridHalf} />
           )}
         </View>
       ) : null}
@@ -343,7 +343,7 @@ export function LedgerExpandedCard({
           <Text style={styles.detailLabel}>Entry Date</Text>
           <Text style={styles.detailValue}>{formattedDate}</Text>
         </View>
-        <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+        <View style={styles.detailGridHalf}>
           <Text style={styles.detailLabel}>Amount Sync</Text>
           {showAmountReceived ? (
             <View style={styles.amountPillGreen}>
@@ -364,7 +364,7 @@ export function LedgerExpandedCard({
             <Text style={styles.detailLabel}>Payment mode</Text>
             <Text style={styles.detailValue}>{paymentMode ?? "—"}</Text>
           </View>
-          <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+          <View style={styles.detailGridHalf}>
             <Text style={styles.detailLabel}>Reference</Text>
             <Text style={styles.detailValue} numberOfLines={1}>
               {paymentReference ?? "—"}
@@ -396,12 +396,10 @@ export function LedgerExpandedCard({
               <Text style={[styles.detailValue, styles.detailValueBold]} numberOfLines={1}>
                 {tripNumber}
               </Text>
-              <View style={styles.detailUnderline} />
             </View>
-            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+            <View style={styles.detailGridHalf}>
               <Text style={styles.detailLabel}>Trip Date</Text>
               <Text style={styles.detailValue}>{tripDateStr}</Text>
-              <View style={styles.detailUnderline} />
             </View>
           </View>
           <View style={styles.detailGridRow}>
@@ -410,14 +408,12 @@ export function LedgerExpandedCard({
               <Text style={[styles.detailValue, styles.detailValueItalic]} numberOfLines={2}>
                 {routeStr || "—"}
               </Text>
-              <View style={styles.detailUnderline} />
             </View>
-            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+            <View style={styles.detailGridHalf}>
               <Text style={styles.detailLabel}>Client</Text>
               <Text style={styles.detailValue} numberOfLines={1}>
                 {clientStr || "—"}
               </Text>
-              <View style={styles.detailUnderline} />
             </View>
           </View>
           <View style={styles.detailGridRow}>
@@ -425,7 +421,7 @@ export function LedgerExpandedCard({
               <Text style={styles.detailLabel}>Client Price</Text>
               <Text style={styles.detailValue}>₹{formatNumFn(tripSaleValue)}</Text>
             </View>
-            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+            <View style={styles.detailGridHalf}>
               <Text style={styles.detailLabel}>Supplier Cost</Text>
               <Text style={styles.detailValue}>₹{formatNumFn(tripSupplierCost)}</Text>
             </View>
@@ -443,7 +439,7 @@ export function LedgerExpandedCard({
                 ₹{formatNumSignedFn(marginValue)}
               </Text>
             </View>
-            <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+            <View style={styles.detailGridHalf}>
               <Text style={[styles.detailLabel, styles.detailLabelItalic]}>Margin %</Text>
               <Text
                 style={[
@@ -467,7 +463,7 @@ export function LedgerExpandedCard({
                 </View>
               ) : null}
               {hasDriverStr ? (
-                <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+                <View style={styles.detailGridHalf}>
                   <Text style={styles.detailLabel}>Driver</Text>
                   <Text style={styles.detailValue} numberOfLines={1}>
                     {driverStr}
@@ -490,7 +486,7 @@ export function LedgerExpandedCard({
                 </View>
               ) : null}
               {hasDriverStr ? (
-                <View style={[styles.detailGridHalf, styles.detailGridHalfRight]}>
+                <View style={styles.detailGridHalf}>
                   <Text style={styles.detailLabel}>Driver</Text>
                   <Text style={styles.detailValue} numberOfLines={1}>
                     {driverStr}
@@ -742,7 +738,7 @@ export function LedgerExpandedCard({
 }
 
 const DETAIL_CARD_BG = "#FAFBFF";
-const SUMMARY_BAR_BG = "#0A0A0B";
+const LEDGER_PANEL_FILL = Theme.darkBackground;
 
 const styles = StyleSheet.create({
   detailOuter: {
@@ -838,8 +834,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   detailBlockHeader: {
-    backgroundColor: Theme.darkBackground,
-    paddingVertical: 5,
+    backgroundColor: LEDGER_PANEL_FILL,
+    paddingVertical: 6,
     paddingHorizontal: 12,
   },
   detailBlockHeaderText: {
@@ -851,21 +847,19 @@ const styles = StyleSheet.create({
   },
   detailBlockContent: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
+    paddingVertical: 12,
+    gap: 8,
   },
   detailGridRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 6,
+    gap: 12,
+    marginBottom: 8,
   },
   detailGridHalf: {
     flex: 1,
     minWidth: 0,
-  },
-  detailGridHalfRight: {
-    alignItems: "flex-end",
+    gap: 2,
   },
   detailLabel: {
     fontSize: 7,
@@ -896,7 +890,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
   },
   reconHero: {
-    backgroundColor: Theme.textPrimaryDark,
+    backgroundColor: LEDGER_PANEL_FILL,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -1299,24 +1293,26 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
   },
   summaryBar: {
-    backgroundColor: SUMMARY_BAR_BG,
+    backgroundColor: LEDGER_PANEL_FILL,
     borderRadius: 14,
     padding: 14,
-    marginTop: 6,
+    marginTop: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.1)",
   },
   summaryBarRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    gap: 8,
   },
   summaryBarRowLast: {
     marginBottom: 0,
   },
   summaryBarCell: {
     flex: 1,
-    alignItems: "center",
+    alignItems: "flex-start",
+    paddingHorizontal: 4,
   },
   summaryBarLabel: {
     fontSize: 8,
@@ -1367,13 +1363,13 @@ const styles = StyleSheet.create({
   txHistoryRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 10,
-    borderRadius: 9,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    gap: 8,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: Theme.darkBackground,
+    gap: 10,
   },
   txHistoryRowLast: {
     marginBottom: 0,
@@ -1393,7 +1389,8 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   txHistoryRowHighlighted: {
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: Theme.darkBackground,
+    borderColor: "rgba(255,255,255,0.28)",
   },
   txHistoryBody: {
     flex: 1,

@@ -2,7 +2,7 @@
  * Full-page Indian plate entry: display + segment guide + custom keypad (no system keyboard).
  */
 import { memo, useCallback, useMemo } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Truck } from "lucide-react-native";
 
 import Layout from "@/constants/Layout";
@@ -10,6 +10,8 @@ import Theme from "@/constants/Theme";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
 import { IndianVehicleRegistrationKeypad } from "@/components/indianVehicle/IndianVehicleRegistrationKeypad";
+import { useIndianVehiclePhysicalKeypad } from "@/components/indianVehicle/useIndianVehiclePhysicalKeypad";
+import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
 import {
   appendIndianVehicleChar,
   deleteIndianVehicleLastChar,
@@ -43,6 +45,8 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
     );
     const displayValue = value.trim();
     const showCursor = normLen < INDIAN_VEHICLE_TOTAL_LENGTH;
+    const inputPlatform = useInputPlatform();
+    const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";
 
     const handleKey = useCallback(
       (key: string) => {
@@ -54,6 +58,12 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
       },
       [onChangeText, value],
     );
+
+    useIndianVehiclePhysicalKeypad({
+      enabled: isDesktopWeb,
+      kind: keyboardKind,
+      onKey: handleKey,
+    });
 
     return (
       <View style={styles.root} testID={testID}>
@@ -77,11 +87,23 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
             ))}
           </View>
 
-          <View
-            style={[
+          <Pressable
+            onPress={() => {
+              if (!isDesktopWeb || typeof window === "undefined") return;
+              window.focus();
+            }}
+            disabled={!isDesktopWeb}
+            style={({ pressed }) => [
               styles.displayRow,
               error && styles.displayRowError,
+              isDesktopWeb && pressed && styles.displayRowPressed,
             ]}
+            accessibilityRole={isDesktopWeb ? "button" : undefined}
+            accessibilityLabel={
+              isDesktopWeb
+                ? "Vehicle registration. Type letters or numbers with your keyboard."
+                : displayValue || "Vehicle registration number"
+            }
           >
             <Truck size={20} color={Theme.iconMuted} style={styles.leadingIcon} />
             <Text
@@ -98,13 +120,14 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
               {displayValue || "TN 01 CM 2026"}
             </Text>
             {showCursor ? <View style={styles.cursor} /> : null}
-          </View>
+          </Pressable>
         </View>
 
         <View style={[styles.keypadDock, wizardShell && flow.keypadDockWizard]}>
           <IndianVehicleRegistrationKeypad
             kind={keyboardKind}
             onKey={handleKey}
+            normalizedLength={normLen}
           />
         </View>
       </View>
@@ -190,6 +213,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: "#fef2f2",
   },
+  displayRowPressed: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceLight,
+  },
   leadingIcon: {
     marginRight: 10,
   },
@@ -217,14 +244,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     alignSelf: "stretch",
     width: "100%",
-    paddingTop: 14,
+    paddingTop: 10,
     paddingBottom: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     marginHorizontal: -Layout.screenPaddingHorizontal,
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    backgroundColor: "transparent",
   },
 });

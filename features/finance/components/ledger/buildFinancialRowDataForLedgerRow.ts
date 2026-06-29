@@ -11,6 +11,10 @@ import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accoun
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import {
+  getTripDisplayNumber,
+  type TripRow,
+} from "@/features/trips/services/trips.service";
 
 export type LedgerTripDetailsMap = Record<
   string,
@@ -353,7 +357,7 @@ export function buildFinancialRowDataForLedgerRow(
             const party = getResolvedPartyName(r);
             return {
               id: r.id,
-              date: formatLedgerEntryDate(r.transaction_date),
+              date: r.transaction_date ?? r.created_at ?? "",
               typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
               in: r.amount_in ?? 0,
               out: r.amount_out ?? 0,
@@ -505,5 +509,96 @@ export function buildFinancialRowDataForLedgerRow(
             | "RAISED_BY_US"
             | "RECEIVED")
         : null,
+  };
+}
+
+export type TripLedgerEntityType = "CLIENT" | "SUPPLIER" | "DRIVER" | "VEHICLE";
+
+/** Builds FinancialRowData for trip-ledger detail + notification-style audit feed. */
+export function buildFinancialRowDataForTripLedger(params: {
+  entry: LedgerRow;
+  trip: TripRow;
+  allTripEntries: LedgerRow[];
+  entityType?: TripLedgerEntityType | null;
+  partyName?: string | null;
+  driverName?: string | null;
+  vehicleLabel?: string | null;
+  tripDisplayNumber?: string;
+}): FinancialRowData {
+  const {
+    entry,
+    trip,
+    allTripEntries,
+    entityType,
+    partyName,
+    driverName,
+    vehicleLabel,
+    tripDisplayNumber,
+  } = params;
+
+  const displayNum =
+    tripDisplayNumber?.trim() || getTripDisplayNumber(trip);
+
+  const ledgerPartyType =
+    entityType === "CLIENT"
+      ? "client"
+      : entityType === "SUPPLIER"
+        ? "supplier"
+        : entityType === "DRIVER"
+          ? "driver"
+          : entityType === "VEHICLE"
+            ? "vehicle"
+            : null;
+
+  const tripPaymentSummary = {
+    received: allTripEntries.reduce((s, r) => s + (r.amount_in ?? 0), 0),
+    paid: allTripEntries.reduce((s, r) => s + (r.amount_out ?? 0), 0),
+    entryCount: allTripEntries.length,
+  };
+
+  const resolvedParty =
+    partyName?.trim() ||
+    entry.party_name?.trim() ||
+    trip.client_name?.trim() ||
+    trip.supplier_name?.trim() ||
+    "—";
+
+  const sameTripTransactions = allTripEntries.map((r) => ({
+    id: r.id,
+    date: r.transaction_date ?? r.created_at ?? "",
+    typeLabel: getDoubleEntryDisplayLabel(r) ?? "—",
+    in: r.amount_in ?? 0,
+    out: r.amount_out ?? 0,
+    party: (r.party_name ?? resolvedParty).trim() || "—",
+  }));
+
+  return {
+    id: entry.id,
+    name: resolvedParty,
+    tripId: trip.id,
+    msn: displayNum,
+    tripDetail: {
+      trip_number: displayNum,
+      pickup_area: trip.pickup_area ?? undefined,
+      drop_location: trip.drop_location ?? undefined,
+      client_name: trip.client_name ?? undefined,
+      pickup_date: trip.pickup_date ?? trip.created_at ?? null,
+      vehicle_number: vehicleLabel ?? undefined,
+      client_price: trip.client_price ?? null,
+      supplier_rate: trip.supplier_rate ?? null,
+      driver_commission: trip.driver_commission ?? null,
+      supplier_id: trip.supplier_id ?? null,
+    },
+    ledgerPartyType,
+    vehicleNumber: vehicleLabel ?? null,
+    driverName: driverName ?? entry.driver_name ?? undefined,
+    in: entry.amount_in ?? 0,
+    out: entry.amount_out ?? 0,
+    transaction_date: entry.transaction_date ?? entry.created_at ?? null,
+    transactionTypeLabel: getDoubleEntryDisplayLabel(entry) ?? undefined,
+    desc: entry.description ?? undefined,
+    paymentMode: entry.payment_mode ?? undefined,
+    tripPaymentSummary,
+    sameTripTransactions,
   };
 }

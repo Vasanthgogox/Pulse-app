@@ -6,6 +6,7 @@ export interface AssignmentFlowFooterProps {
   onPrimaryPress: () => void;
   primaryDisabled?: boolean;
   loading?: boolean;
+  hint?: string | null;
   secondaryLabel?: string;
   onSecondaryPress?: () => void;
 }
@@ -16,6 +17,7 @@ export function AssignmentFlowFooter({
   onPrimaryPress,
   primaryDisabled = false,
   loading = false,
+  hint,
   secondaryLabel,
   onSecondaryPress,
 }: AssignmentFlowFooterProps) {
@@ -26,6 +28,7 @@ export function AssignmentFlowFooter({
       onPrimaryPress={onPrimaryPress}
       primaryDisabled={primaryDisabled}
       loading={loading}
+      hint={hint}
       secondaryLabel={secondaryLabel}
       onSecondaryPress={onSecondaryPress}
     />

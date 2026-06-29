@@ -243,30 +243,6 @@ function BentoMetricCard({
   );
 }
 
-function BentoSectionHeader({
-  missionLabel,
-  sections,
-}: {
-  missionLabel: string;
-  sections: string[];
-}) {
-  return (
-    <View style={styles.headerRow}>
-      <View style={styles.missionPulse}>
-        <View style={styles.missionPulseDot} />
-        <Text style={styles.missionPulseText}>{missionLabel}</Text>
-      </View>
-      <View style={styles.sectionLabels}>
-        {sections.map((label) => (
-          <Text key={label} style={styles.sectionLabel}>
-            {label}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 export type TripsHubBentoMetricsProps = {
   metricOrder: ActiveMetricTabId[];
   activeMetricTab: ActiveMetricTabId;
@@ -522,9 +498,6 @@ export type TripsHubHistoryBentoMetricsProps = {
     title: string;
     hint: string;
   };
-  missionPulseLabel: string;
-  receivableSectionLabel: string;
-  payableSectionLabel: string;
   isDesktop: boolean;
   style?: StyleProp<ViewStyle>;
 };
@@ -534,9 +507,6 @@ export function TripsHubHistoryBentoMetrics({
   activeMetricTab,
   onSelectMetric,
   getMetric,
-  missionPulseLabel,
-  receivableSectionLabel,
-  payableSectionLabel,
   isDesktop,
   style,
 }: TripsHubHistoryBentoMetricsProps) {
@@ -581,10 +551,6 @@ export function TripsHubHistoryBentoMetrics({
 
   return (
     <View style={[styles.hub, style]}>
-      <BentoSectionHeader
-        missionLabel={missionPulseLabel}
-        sections={[receivableSectionLabel, payableSectionLabel]}
-      />
       <View style={styles.bentoRow}>{items.map(renderCard)}</View>
     </View>
   );
@@ -606,52 +572,6 @@ const styles = StyleSheet.create({
   hub: {
     width: "100%" as const,
     marginBottom: 0,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 10,
-    paddingHorizontal: 2,
-    marginBottom: 14,
-  },
-  missionPulse: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-  },
-  missionPulseDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: BENTO_ACTIVE_BG,
-    opacity: 0.92,
-  },
-  missionPulseText: {
-    fontSize: FS_CAPTION + 1,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.45,
-    textTransform: "uppercase",
-  },
-  sectionLabels: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    flexWrap: "wrap",
-  },
-  sectionLabel: {
-    fontSize: FS_CAPTION - 1,
-    fontWeight: "600",
-    color: Theme.textMuted,
-    letterSpacing: 0.25,
   },
   bentoRow: {
     flexDirection: "row",

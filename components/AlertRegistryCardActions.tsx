@@ -267,18 +267,26 @@ export function RegistryPrimaryButton({
   onPress,
   disabled,
   compact = false,
+  backgroundColor,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   compact?: boolean;
+  /** Override default navy fill — e.g. chat accent on ledger audit actions. */
+  backgroundColor?: string;
 }) {
+  const accentStyle =
+    backgroundColor != null
+      ? { backgroundColor, borderColor: backgroundColor }
+      : null;
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       style={[
         alertRegistryActionStyles.primaryBtn,
+        accentStyle,
         compact && alertRegistryActionStyles.primaryBtnCompact,
         disabled && alertRegistryActionStyles.btnDisabled,
         compact && alertRegistryActionStyles.btnCompactFlex,
