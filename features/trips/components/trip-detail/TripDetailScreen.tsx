@@ -17,6 +17,7 @@ import {
 import { TripPayableReceivableSummaryCard } from "@/features/trips/components/trip-detail/adjustment/TripPayableReceivableSummaryCard";
 import { TripMarginHero } from "@/features/trips/components/trip-detail/TripMarginHero";
 import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
+import { TripAuditLogPanel } from "@/features/trips/components/trip-detail/TripAuditLogPanel";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import { latestTripSettlementLedgerEntry } from "@/features/trips/utils/tripSettlementLedgerEntries.util";
 import { computePartnerIndentFreightCost } from "@/features/finance/utils/partnerIndentFreightCost.util";
@@ -614,6 +615,7 @@ export default function TripDetailScreen({
   const [inlineAdjReason, setInlineAdjReason] = useState("");
   const [inlineAdjOtherReason, setInlineAdjOtherReason] = useState("");
   const [showReassignSheet, setShowReassignSheet] = useState(false);
+  const [showTripAuditLog, setShowTripAuditLog] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
   const [provisionVoidReason, setProvisionVoidReason] = useState("");
 
@@ -2161,34 +2163,34 @@ export default function TripDetailScreen({
             : undefined
         }
         receivableAction={
-          <>
-            <TouchableOpacity
-              style={[neoStyles.laneActionBtn, neoStyles.laneActionBtnPrimary]}
-              onPress={() => {
-                const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
-                pushTripLedgerQuickEntry(
-                  {
-                    ...tripLedgerNavContext,
-                    ledgerSyncExtraParams: {
-                      dueAmountIn: String(dueHint),
-                    },
+          <TouchableOpacity
+            style={[neoStyles.laneActionBtn, neoStyles.laneActionBtnPrimary]}
+            onPress={() => {
+              const dueHint = Math.max(0, Math.round(receivableAfterAdjustments));
+              pushTripLedgerQuickEntry(
+                {
+                  ...tripLedgerNavContext,
+                  ledgerSyncExtraParams: {
+                    dueAmountIn: String(dueHint),
                   },
-                  "client",
-                );
-              }}
-              activeOpacity={0.88}
-            >
-              <Feather name="credit-card" size={14} color="#fff" />
-              <Text style={neoStyles.laneActionBtnText} numberOfLines={2}>
-                Capture payment
-              </Text>
-            </TouchableOpacity>
-            {!hasLinkedClient ? (
-              <Text style={neoStyles.laneActionHint}>
-                Link a client to pre-fill receipt
-              </Text>
-            ) : null}
-          </>
+                },
+                "client",
+              );
+            }}
+            activeOpacity={0.88}
+          >
+            <Feather name="credit-card" size={14} color="#fff" />
+            <Text style={neoStyles.laneActionBtnText} numberOfLines={2}>
+              Capture payment
+            </Text>
+          </TouchableOpacity>
+        }
+        receivableActionHint={
+          !hasLinkedClient ? (
+            <Text style={neoStyles.laneActionHint}>
+              Link a client to pre-fill receipt
+            </Text>
+          ) : null
         }
         payableAction={
           showRecordSupplierPayoutCta ? (
@@ -2507,21 +2509,6 @@ export default function TripDetailScreen({
       return iso.slice(0, 16).replace("T", " ");
     }
   };
-  const fmtTimelineTime = (iso: string | null | undefined) => {
-    if (!iso) return "—";
-    try {
-      return new Date(iso)
-        .toLocaleTimeString("en-IN", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })
-        .toLowerCase();
-    } catch {
-      return "—";
-    }
-  };
-  const timelineRows = detail.driverActivityTimelineRows ?? [];
   void baseFreight;
   void additionalIncome;
   void deductions;
@@ -2576,9 +2563,9 @@ export default function TripDetailScreen({
               <TouchableOpacity
                 style={neoStyles.auditBtn}
                 activeOpacity={0.85}
-                onPress={() => router.push(`/trip-ledger/${trip.id}` as never)}
+                onPress={() => setShowTripAuditLog(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open trip ledger"
+                accessibilityLabel="Open trip audit log"
               >
                 <Feather name="clock" size={16} color="#94a3b8" />
                 <Text style={neoStyles.auditBtnText}>Audit Log</Text>
@@ -4833,9 +4820,8 @@ export default function TripDetailScreen({
               </View>
             </View>
 
-            {/* ── Map + Audit Trail ── */}
-            <View style={dStyles.row}>
-              <View style={[dStyles.card, dStyles.mapCol]}>
+            {/* ── Map ── */}
+            <View style={dStyles.card}>
                 <View style={dStyles.cardHeader}>
                   <FontAwesome
                     name="map"
@@ -4887,142 +4873,6 @@ export default function TripDetailScreen({
                   ) : null}
                 </View>
               </View>
-
-              <View style={[dStyles.card, dStyles.auditCol]}>
-                <View style={dStyles.cardHeader}>
-                  <View style={dStyles.timelineHeaderIcon}>
-                    <FontAwesome name="calendar-o" size={10} color="#0f172a" />
-                  </View>
-                  <Text style={dStyles.timelineHeaderTitle}>TRIP TIMELINE</Text>
-                </View>
-                <ScrollView
-                  style={dStyles.auditScroll}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
-                >
-                  {timelineRows.length === 0 ? (
-                    <Text style={dStyles.emptyText}>No activity yet</Text>
-                  ) : (
-                    timelineRows.map((item, idx) => {
-                      const isLast = idx === timelineRows.length - 1;
-                      if (item.kind === "status") {
-                        const tripFullyCompleted =
-                          statusLabel === "Completed" ||
-                          statusLower.includes("complet") ||
-                          statusLower.includes("deliver") ||
-                          statusLower === "done";
-                        const markGreen =
-                          tripFullyCompleted ||
-                          item.status_context === "completed" ||
-                          item.status_context === "in_transit";
-                        const iconTone = markGreen
-                          ? "#059669"
-                          : "rgba(15,23,42,0.35)";
-                        return (
-                          <View
-                            key={item.id}
-                            style={[
-                              dStyles.auditItem,
-                              isLast && dStyles.auditItemLast,
-                            ]}
-                          >
-                            <View style={dStyles.auditTrackCol}>
-                              <View
-                                style={[
-                                  dStyles.auditTimelineDot,
-                                  {
-                                    borderColor: iconTone,
-                                    backgroundColor: markGreen
-                                      ? "#ecfdf5"
-                                      : "#f8fafc",
-                                  },
-                                ]}
-                              >
-                                <View
-                                  style={[
-                                    dStyles.auditTimelineDotInner,
-                                    { backgroundColor: iconTone },
-                                  ]}
-                                />
-                              </View>
-                              {!isLast ? (
-                                <View style={dStyles.auditTimelineLine} />
-                              ) : null}
-                            </View>
-                            <View style={dStyles.auditContentRow}>
-                              <View style={dStyles.auditBody}>
-                                <Text style={dStyles.auditTitle}>
-                                  {item.status_label}
-                                </Text>
-                              </View>
-                              <View style={dStyles.auditMeta}>
-                                <Text style={dStyles.auditTime}>
-                                  {fmtTimelineTime(item.changed_at)}
-                                </Text>
-                                <FontAwesome
-                                  name="angle-down"
-                                  size={12}
-                                  color="rgba(15,23,42,0.35)"
-                                />
-                              </View>
-                            </View>
-                          </View>
-                        );
-                      }
-
-                      const row = item.row;
-                      const dName = row.driver_id_new
-                        ? (detail.assignmentDriverNames[row.driver_id_new] ??
-                          null)
-                        : null;
-                      const vLabel = row.vehicle_id_new
-                        ? (detail.assignmentVehicleLabels[row.vehicle_id_new] ??
-                          null)
-                        : null;
-
-                      return (
-                        <View
-                          key={row.id}
-                          style={[
-                            dStyles.auditItem,
-                            isLast && dStyles.auditItemLast,
-                          ]}
-                        >
-                          <View style={dStyles.auditTrackCol}>
-                            <View style={dStyles.auditTimelineDot}>
-                              <View style={dStyles.auditTimelineDotInner} />
-                            </View>
-                            {!isLast ? (
-                              <View style={dStyles.auditTimelineLine} />
-                            ) : null}
-                          </View>
-                          <View style={dStyles.auditContentRow}>
-                            <View style={dStyles.auditBody}>
-                              <Text style={dStyles.auditTitle}>Assigned</Text>
-                              <Text style={dStyles.auditDetail}>
-                                {dName || vLabel
-                                  ? [dName, vLabel].filter(Boolean).join(" · ")
-                                  : trip.pickup_area || "Driver assigned"}
-                              </Text>
-                            </View>
-                            <View style={dStyles.auditMeta}>
-                              <Text style={dStyles.auditTime}>
-                                {fmtTimelineTime(row.changed_at)}
-                              </Text>
-                              <FontAwesome
-                                name="angle-down"
-                                size={12}
-                                color="rgba(15,23,42,0.35)"
-                              />
-                            </View>
-                          </View>
-                        </View>
-                      );
-                    })
-                  )}
-                </ScrollView>
-              </View>
-            </View>
 
             {/* ── Driver / Vehicle + Documents ── */}
             {isAggregate && reassignMigrationBlocked ? (
@@ -5753,6 +5603,19 @@ export default function TripDetailScreen({
           }}
         />
       ) : null}
+
+      <TripAuditLogPanel
+        visible={showTripAuditLog}
+        onClose={() => setShowTripAuditLog(false)}
+        trip={trip}
+        organizationId={currentOrganization?.id ?? trip.organization_id}
+        currentUserId={detail.currentUserId}
+        assignmentAuditRows={detail.assignmentAuditRows}
+        assignmentDriverNames={detail.assignmentDriverNames}
+        assignmentVehicleLabels={detail.assignmentVehicleLabels}
+        timelineRows={detail.driverActivityTimelineRows ?? []}
+        tripLedgerEntries={detail.tripLedgerEntries}
+      />
 
       <Modal
         visible={!!detail.selectedDoc}
@@ -8744,6 +8607,7 @@ const neoStyles = StyleSheet.create({
   },
   laneActionBtn: {
     width: "100%",
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -8775,7 +8639,6 @@ const neoStyles = StyleSheet.create({
     color: Theme.buttonDarkText,
   },
   laneActionHint: {
-    marginTop: 4,
     color: Theme.textMuted,
     fontSize: 8,
     fontWeight: "600",

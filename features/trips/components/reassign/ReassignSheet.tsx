@@ -1,8 +1,15 @@
 import Theme from '@/constants/Theme';
 import { AddTripWizardProgress } from '@/features/trips/components/add-trip/AddTripWizardProgress';
+import { AggregateTrackingMobileStep } from '@/features/trips/components/add-trip/AggregateTrackingMobileStep';
+import {
+  isTripPhoneWizardStepComplete,
+  TRIP_PHONE_WIZARD_STEPS,
+  tripPhoneWizardSubtitle,
+} from '@/features/trips/components/allocation/tripPhoneAssignmentWizardSteps';
 import { AssignmentFlowShell } from '@/features/trips/components/assignment/AssignmentFlowShell';
 import { AssignmentFlowFooter } from '@/features/trips/components/assignment/assignmentFlowFooter';
 import { assignmentShellStyles } from '@/features/trips/styles/assignmentShellShared';
+import { useAggregateDriverPhoneLookup } from '@/features/trips/hooks/useAggregateDriverPhoneLookup';
 import { useDriverMaster } from '@/features/trips/hooks/useDriverMaster';
 import { useVehicleMaster } from '@/features/trips/hooks/useVehicleMaster';
 import { useReassignTrip } from '@/features/trips/hooks/useReassignTrip';
@@ -16,8 +23,9 @@ import {
   isTripReassignStaleError,
   tripReassignStaleUserMessage,
 } from '@/features/trips/utils/tripReassignConflict.util';
+import { isIndianVehiclePlateComplete } from '@/lib/indianVehicleInput.util';
 import { validatePhone } from '@/lib/phoneValidation';
-import { formatIndianVehicleNumber } from '@/lib/format';
+import { formatIndianVehicleNumber, formatMobileNumber } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -31,6 +39,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { ExistingDriverMatch } from '@/features/drivers/services/drivers.service';
+import type { AddTripIssueField } from '@/features/trips/components/add-trip/useAddTripForm';
 import {
   DriverReassignSection,
   type DriverReassignMode,
@@ -59,7 +69,12 @@ type Props = {
 
 type OtpSuccess = { code: string; expires_at: string | null };
 
-type ReassignWizardStep = 'driver' | 'vehicle' | 'review';
+type ReassignWizardStep =
+  | 'driver'
+  | 'driverPhone'
+  | 'driverName'
+  | 'vehicle'
+  | 'review';
 
 const REASSIGN_WIZARD_STEPS = [
   { id: 'driver', label: 'Driver' },
@@ -141,8 +156,19 @@ export function ReassignSheet({
     pendingVehicleId: string | null;
   } | null>(null);
   const [otpSuccess, setOtpSuccess] = useState<OtpSuccess | null>(null);
-  const [wizardStep, setWizardStep] = useState<ReassignWizardStep>('driver');
+  const [wizardStep, setWizardStep] = useState<ReassignWizardStep>(
+    isAggregate ? 'driverPhone' : 'driver',
+  );
+  const [driverNameManual, setDriverNameManual] = useState(false);
   const otpDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const aggregatePhoneLookup = useAggregateDriverPhoneLookup({
+    phone,
+    tripId: trip.id,
+    organizationId,
+    driverAssignOrgId,
+    enabled: visible && isAggregate,
+  });
 
   const currentDriverPhone = useMemo(() => {
     const d = drivers.find((x) => x.id === trip.driver_id);
@@ -166,7 +192,8 @@ export function ReassignSheet({
     setError(null);
     setPartialVehicleFailure(null);
     setOtpSuccess(null);
-    setWizardStep('driver');
+    setWizardStep(isAggregate ? 'driverPhone' : 'driver');
+    setDriverNameManual(false);
     setStaleConflict(false);
     setTripUpdatedAtSnapshot(trip.updated_at ?? null);
 
@@ -212,6 +239,8 @@ export function ReassignSheet({
         driverModeIsPhone,
         phone,
         currentDriverPhone,
+        currentDriverName,
+        driverNameInput,
         selectedDriverId,
         selectedVehicleId,
         adHocPlate,
@@ -222,11 +251,27 @@ export function ReassignSheet({
       driverModeIsPhone,
       phone,
       currentDriverPhone,
+      currentDriverName,
+      driverNameInput,
       selectedDriverId,
       selectedVehicleId,
       adHocPlate,
       isAggregate,
     ],
+  );
+
+  const existingTripVehiclePlate = useMemo(
+    () => formatIndianVehicleNumber(trip.vehicle_display_number ?? '').trim(),
+    [trip.vehicle_display_number],
+  );
+
+  const aggregateVehicleRequired = useMemo(
+    () =>
+      !(
+        trip.vehicle_id ||
+        isIndianVehiclePlateComplete(existingTripVehiclePlate)
+      ),
+    [trip.vehicle_id, existingTripVehiclePlate],
   );
 
   const meetsValidation = useMemo(() => {
@@ -236,7 +281,25 @@ export function ReassignSheet({
       if (!nameTrimmed || nameTrimmed.length < 2) return false;
       if (!trimmed || validatePhone(trimmed)) return false;
       if (isAggregate) {
-        return !!(selectedVehicleId || adHocPlate.trim());
+        if (aggregatePhoneLookup.inTrip) return false;
+        if (
+          aggregatePhoneLookup.matches.length > 1 &&
+          !aggregatePhoneLookup.selectedUserId
+        ) {
+          return false;
+        }
+        return isTripPhoneWizardStepComplete('vehicle', {
+          driverPhone: phone,
+          driverName: driverNameInput,
+          vehiclePlate: adHocPlate,
+          phoneComplete: aggregatePhoneLookup.phoneComplete,
+          phoneLookupLoading: aggregatePhoneLookup.loading,
+          phoneInTrip: aggregatePhoneLookup.inTrip,
+          phoneMatches: aggregatePhoneLookup.matches,
+          selectedMatchUserId: aggregatePhoneLookup.selectedUserId,
+          vehicleRequired: aggregateVehicleRequired,
+          existingVehiclePlate: existingTripVehiclePlate,
+        });
       }
       return !!selectedVehicleId;
     }
@@ -253,10 +316,23 @@ export function ReassignSheet({
     selectedVehicleId,
     adHocPlate,
     selectedDriverId,
+    aggregatePhoneLookup.inTrip,
+    aggregatePhoneLookup.matches,
+    aggregatePhoneLookup.selectedUserId,
+    aggregatePhoneLookup.phoneComplete,
+    aggregatePhoneLookup.loading,
+    aggregateVehicleRequired,
+    existingTripVehiclePlate,
   ]);
 
   const canConfirm = useMemo(() => {
-    if (!canAssign || saving || phoneBusy || otpSuccess) return false;
+    const phoneBlocked =
+      isAggregate && driverModeIsPhone
+        ? aggregatePhoneLookup.inTrip
+        : phoneBusy;
+    const lookupPending =
+      isAggregate && driverModeIsPhone && aggregatePhoneLookup.loading;
+    if (!canAssign || saving || phoneBlocked || lookupPending || otpSuccess) return false;
     if (isAggregate && migrationBlocked) return false;
     if (isAggregate && migrationChecking) return false;
     return hasChanges && meetsValidation;
@@ -264,6 +340,9 @@ export function ReassignSheet({
     canAssign,
     saving,
     phoneBusy,
+    aggregatePhoneLookup.inTrip,
+    aggregatePhoneLookup.loading,
+    driverModeIsPhone,
     otpSuccess,
     isAggregate,
     migrationBlocked,
@@ -455,7 +534,43 @@ export function ReassignSheet({
     return currentVehicleLabel ?? '—';
   }, [vehicles, selectedVehicleId, adHocPlate, currentVehicleLabel]);
 
+  const aggregateStepState = useMemo(
+    () => ({
+      driverPhone: phone,
+      driverName: driverNameInput,
+      vehiclePlate: adHocPlate,
+      phoneComplete: aggregatePhoneLookup.phoneComplete,
+      phoneLookupLoading: aggregatePhoneLookup.loading,
+      phoneInTrip: aggregatePhoneLookup.inTrip,
+      phoneMatches: aggregatePhoneLookup.matches,
+      selectedMatchUserId: aggregatePhoneLookup.selectedUserId,
+      vehicleRequired: aggregateVehicleRequired,
+      existingVehiclePlate: existingTripVehiclePlate,
+    }),
+    [
+      phone,
+      driverNameInput,
+      adHocPlate,
+      aggregatePhoneLookup.phoneComplete,
+      aggregatePhoneLookup.loading,
+      aggregatePhoneLookup.inTrip,
+      aggregatePhoneLookup.matches,
+      aggregatePhoneLookup.selectedUserId,
+      aggregateVehicleRequired,
+      existingTripVehiclePlate,
+    ],
+  );
+
   const canContinueDriver = useMemo(() => {
+    if (isAggregate && driverModeIsPhone) {
+      if (wizardStep === 'driverPhone') {
+        return isTripPhoneWizardStepComplete('driverPhone', aggregateStepState);
+      }
+      if (wizardStep === 'driverName') {
+        return isTripPhoneWizardStepComplete('driverName', aggregateStepState);
+      }
+      return false;
+    }
     if (driverModeIsPhone) {
       const trimmed = phone.trim();
       const nameTrimmed = driverNameInput.trim();
@@ -467,20 +582,54 @@ export function ReassignSheet({
       );
     }
     return !!selectedDriverId;
-  }, [driverModeIsPhone, driverNameInput, phone, phoneBusy, selectedDriverId]);
+  }, [
+    isAggregate,
+    driverModeIsPhone,
+    wizardStep,
+    aggregateStepState,
+    driverNameInput,
+    phone,
+    phoneBusy,
+    selectedDriverId,
+  ]);
 
   const canContinueVehicle = useMemo(() => {
-    if (isAggregate) return !!(selectedVehicleId || adHocPlate.trim());
+    if (isAggregate) {
+      return isTripPhoneWizardStepComplete('vehicle', aggregateStepState);
+    }
     return !!selectedVehicleId;
-  }, [isAggregate, selectedVehicleId, adHocPlate]);
+  }, [isAggregate, aggregateStepState, selectedVehicleId]);
 
   const wizardSubtitle = useMemo(() => {
+    if (isAggregate && driverModeIsPhone) {
+      if (wizardStep === 'driverPhone' || wizardStep === 'driverName' || wizardStep === 'vehicle' || wizardStep === 'review') {
+        return tripPhoneWizardSubtitle(wizardStep, true);
+      }
+    }
     if (wizardStep === 'driver') return 'Step 1 · Choose how to assign the driver';
     if (wizardStep === 'vehicle') return 'Step 2 · Fleet vehicle or registration';
     return 'Step 3 · Review — trip stage stays the same';
-  }, [wizardStep]);
+  }, [wizardStep, isAggregate, driverModeIsPhone]);
 
   const handleWizardPrimary = useCallback(() => {
+    if (isAggregate && driverModeIsPhone) {
+      if (wizardStep === 'driverPhone' && canContinueDriver) {
+        setWizardStep('driverName');
+        return;
+      }
+      if (wizardStep === 'driverName' && canContinueDriver) {
+        setWizardStep('vehicle');
+        return;
+      }
+      if (wizardStep === 'vehicle' && canContinueVehicle) {
+        setWizardStep('review');
+        return;
+      }
+      if (wizardStep === 'review') {
+        void handleConfirm();
+      }
+      return;
+    }
     if (wizardStep === 'driver') {
       if (canContinueDriver) setWizardStep('vehicle');
       return;
@@ -490,26 +639,142 @@ export function ReassignSheet({
       return;
     }
     void handleConfirm();
-  }, [wizardStep, canContinueDriver, canContinueVehicle, handleConfirm]);
+  }, [isAggregate, driverModeIsPhone, wizardStep, canContinueDriver, canContinueVehicle, handleConfirm]);
 
   const handleWizardBack = useCallback(() => {
+    if (isAggregate && driverModeIsPhone) {
+      if (wizardStep === 'driverName') setWizardStep('driverPhone');
+      else if (wizardStep === 'vehicle') setWizardStep('driverName');
+      else if (wizardStep === 'review') setWizardStep('vehicle');
+      else onClose();
+      return;
+    }
     if (wizardStep === 'vehicle') setWizardStep('driver');
     else if (wizardStep === 'review') setWizardStep('vehicle');
     else onClose();
-  }, [wizardStep, onClose]);
+  }, [isAggregate, driverModeIsPhone, wizardStep, onClose]);
 
   const wizardPrimaryDisabled = useMemo(() => {
+    if (isAggregate && driverModeIsPhone) {
+      if (wizardStep === 'driverPhone') {
+        return !canContinueDriver || aggregatePhoneLookup.loading;
+      }
+      if (wizardStep === 'driverName') {
+        return !canContinueDriver;
+      }
+      if (wizardStep === 'vehicle') return !canContinueVehicle;
+      return !canConfirm;
+    }
     if (wizardStep === 'driver') return !canContinueDriver;
     if (wizardStep === 'vehicle') return !canContinueVehicle;
     return !canConfirm;
-  }, [wizardStep, canContinueDriver, canContinueVehicle, canConfirm]);
+  }, [
+    isAggregate,
+    driverModeIsPhone,
+    wizardStep,
+    canContinueDriver,
+    canContinueVehicle,
+    canConfirm,
+    aggregatePhoneLookup.loading,
+  ]);
+
+  const reassignFooterHint = useMemo((): string | null => {
+    if (aggregatePhoneLookup.loading && isAggregate && driverModeIsPhone) {
+      return 'Checking driver availability…';
+    }
+    if (aggregatePhoneLookup.inTrip) {
+      return `This driver is on ${aggregatePhoneLookup.busyTripLabel ?? 'another active trip'} — use another number.`;
+    }
+    if (aggregatePhoneLookup.lookupError) return aggregatePhoneLookup.lookupError;
+    if (
+      isAggregate &&
+      driverModeIsPhone &&
+      aggregatePhoneLookup.matches.length > 1 &&
+      !aggregatePhoneLookup.selectedUserId
+    ) {
+      return 'Multiple driver profiles found — select one to continue.';
+    }
+    if (!hasChanges && meetsValidation) {
+      return 'Change driver, vehicle, or phone to confirm reassignment.';
+    }
+    if (error) return error;
+    return null;
+  }, [
+    aggregatePhoneLookup.loading,
+    aggregatePhoneLookup.inTrip,
+    aggregatePhoneLookup.busyTripLabel,
+    aggregatePhoneLookup.lookupError,
+    aggregatePhoneLookup.matches.length,
+    aggregatePhoneLookup.selectedUserId,
+    isAggregate,
+    driverModeIsPhone,
+    hasChanges,
+    meetsValidation,
+    error,
+  ]);
 
   const wizardPrimaryLabel = useMemo(() => {
     if (wizardStep === 'review') {
-      return driverModeIsPhone ? 'Assign by phone' : 'Confirm reassignment';
+      return isAggregate && driverModeIsPhone
+        ? 'Reassign by phone'
+        : driverModeIsPhone
+          ? 'Assign by phone'
+          : 'Confirm reassignment';
     }
     return 'Continue';
-  }, [wizardStep, driverModeIsPhone]);
+  }, [wizardStep, isAggregate, driverModeIsPhone]);
+
+  const aggregateTrackingInvalid = useCallback(
+    (field: AddTripIssueField) => {
+      if (field === 'driverPhone') {
+        return (
+          wizardStep === 'driverPhone' &&
+          !canContinueDriver &&
+          aggregatePhoneLookup.phoneComplete
+        );
+      }
+      if (field === 'driverName') {
+        return (
+          wizardStep === 'driverName' &&
+          driverNameInput.trim().length > 0 &&
+          driverNameInput.trim().length < 2
+        );
+      }
+      if (field === 'vehicleNumber') {
+        return wizardStep === 'vehicle' && !canContinueVehicle && !!adHocPlate.trim();
+      }
+      return false;
+    },
+    [
+      wizardStep,
+      canContinueDriver,
+      canContinueVehicle,
+      aggregatePhoneLookup.phoneComplete,
+      driverNameInput,
+      adHocPlate,
+    ],
+  );
+
+  const handleAggregatePhoneChange = useCallback(
+    (value: string) => setPhone(formatMobileNumber(value)),
+    [],
+  );
+
+  const handleAggregateDriverNameChange = useCallback((value: string) => {
+    setDriverNameManual(true);
+    setDriverNameInput(value);
+  }, []);
+
+  const handleSelectPhoneMatch = useCallback(
+    (match: ExistingDriverMatch) => {
+      aggregatePhoneLookup.applyMatch(match);
+      if (match.full_name?.trim()) {
+        setDriverNameManual(false);
+        setDriverNameInput(match.full_name.trim());
+      }
+    },
+    [aggregatePhoneLookup],
+  );
 
   const bannerBlock = (
     <>
@@ -641,6 +906,38 @@ export function ReassignSheet({
     </View>
   );
 
+  const aggregateAllocationStep =
+    isAggregate && driverModeIsPhone && useMobileWizard ? (
+      <AggregateTrackingMobileStep
+        step={
+          wizardStep === 'driverPhone' || wizardStep === 'driverName' || wizardStep === 'vehicle'
+            ? wizardStep
+            : 'driverPhone'
+        }
+        driverName={driverNameInput}
+        onDriverNameChange={handleAggregateDriverNameChange}
+        driverPhone={phone}
+        onDriverPhoneChange={handleAggregatePhoneChange}
+        vehicleText={adHocPlate}
+        onVehicleTextChange={(value) =>
+          setAdHocPlate(formatIndianVehicleNumber(value))
+        }
+        invalid={aggregateTrackingInvalid}
+        driverPhoneMatches={aggregatePhoneLookup.matches}
+        driverPhoneLookupLoading={aggregatePhoneLookup.loading}
+        selectedDriverMatchId={aggregatePhoneLookup.selectedUserId}
+        onSelectDriverMatch={handleSelectPhoneMatch}
+        driverPhoneInTrip={aggregatePhoneLookup.inTrip}
+        driverNameFromPlatform={aggregatePhoneLookup.suggestedName}
+        testIDPrefix="reassign-aggregate"
+      />
+    ) : null;
+
+  const wizardProgressSteps =
+    isAggregate && driverModeIsPhone ? TRIP_PHONE_WIZARD_STEPS : REASSIGN_WIZARD_STEPS;
+
+  const wizardFirstStep = isAggregate && driverModeIsPhone ? 'driverPhone' : 'driver';
+
   if (!canAssign) return null;
 
   return (
@@ -703,12 +1000,14 @@ export function ReassignSheet({
               }
               onClose={onClose}
               onBack={useMobileWizard ? handleWizardBack : undefined}
-              showBack={useMobileWizard && wizardStep !== 'driver'}
+              showBack={useMobileWizard && wizardStep !== wizardFirstStep}
               submitting={saving}
+              fillBody={useMobileWizard && isAggregate && driverModeIsPhone}
+              insightPreset="allocation"
               progress={
                 useMobileWizard ? (
                   <AddTripWizardProgress
-                    steps={REASSIGN_WIZARD_STEPS}
+                    steps={wizardProgressSteps}
                     currentStepId={wizardStep}
                   />
                 ) : undefined
@@ -726,20 +1025,91 @@ export function ReassignSheet({
                     useMobileWizard ? wizardPrimaryDisabled : !canConfirm
                   }
                   loading={saving}
+                  hint={reassignFooterHint}
                 />
               }
             >
               {bannerBlock}
               {useMobileWizard ? (
                 <>
-                  {wizardStep === 'driver' ? driverSection : null}
-                  {wizardStep === 'vehicle' ? vehicleSection : null}
-                  {wizardStep === 'review' ? reviewSection : null}
+                  {isAggregate && driverModeIsPhone ? (
+                    <>
+                      {wizardStep === 'driverPhone' ||
+                      wizardStep === 'driverName' ||
+                      wizardStep === 'vehicle'
+                        ? aggregateAllocationStep
+                        : null}
+                      {wizardStep === 'review' ? reviewSection : null}
+                    </>
+                  ) : (
+                    <>
+                      {wizardStep === 'driver' ? driverSection : null}
+                      {wizardStep === 'vehicle' ? vehicleSection : null}
+                      {wizardStep === 'review' ? reviewSection : null}
+                    </>
+                  )}
                 </>
               ) : (
                 <>
-                  {driverSection}
-                  {vehicleSection}
+                  {isAggregate && driverModeIsPhone ? (
+                    <>
+                      <AggregateTrackingMobileStep
+                        step="driverPhone"
+                        driverName={driverNameInput}
+                        onDriverNameChange={handleAggregateDriverNameChange}
+                        driverPhone={phone}
+                        onDriverPhoneChange={handleAggregatePhoneChange}
+                        vehicleText={adHocPlate}
+                        onVehicleTextChange={(value) =>
+                          setAdHocPlate(formatIndianVehicleNumber(value))
+                        }
+                        invalid={aggregateTrackingInvalid}
+                        driverPhoneMatches={aggregatePhoneLookup.matches}
+                        driverPhoneLookupLoading={aggregatePhoneLookup.loading}
+                        selectedDriverMatchId={aggregatePhoneLookup.selectedUserId}
+                        onSelectDriverMatch={handleSelectPhoneMatch}
+                        driverPhoneInTrip={aggregatePhoneLookup.inTrip}
+                        driverNameFromPlatform={aggregatePhoneLookup.suggestedName}
+                        testIDPrefix="reassign-aggregate"
+                      />
+                      <View style={{ height: 12 }} />
+                      <AggregateTrackingMobileStep
+                        step="driverName"
+                        driverName={driverNameInput}
+                        onDriverNameChange={handleAggregateDriverNameChange}
+                        driverPhone={phone}
+                        onDriverPhoneChange={handleAggregatePhoneChange}
+                        vehicleText={adHocPlate}
+                        onVehicleTextChange={(value) =>
+                          setAdHocPlate(formatIndianVehicleNumber(value))
+                        }
+                        invalid={aggregateTrackingInvalid}
+                        driverPhoneMatches={aggregatePhoneLookup.matches}
+                        selectedDriverMatchId={aggregatePhoneLookup.selectedUserId}
+                        onSelectDriverMatch={handleSelectPhoneMatch}
+                        testIDPrefix="reassign-aggregate"
+                      />
+                      <View style={{ height: 12 }} />
+                      <AggregateTrackingMobileStep
+                        step="vehicle"
+                        driverName={driverNameInput}
+                        onDriverNameChange={handleAggregateDriverNameChange}
+                        driverPhone={phone}
+                        onDriverPhoneChange={handleAggregatePhoneChange}
+                        vehicleText={adHocPlate}
+                        onVehicleTextChange={(value) =>
+                          setAdHocPlate(formatIndianVehicleNumber(value))
+                        }
+                        invalid={aggregateTrackingInvalid}
+                        testIDPrefix="reassign-aggregate"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      {driverSection}
+                      {vehicleSection}
+                    </>
+                  )}
                   {error ? <Text style={s.inlineError}>{error}</Text> : null}
                   {!hasChanges && meetsValidation ? (
                     <Text style={[s.rowSub, { marginTop: 8 }]}>

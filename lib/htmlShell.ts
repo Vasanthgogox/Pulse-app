@@ -20,9 +20,19 @@ export const SHELL_STYLE_ID = 'pulse-mobile-web-reset';
  *
  * viewport-fit=cover: Allows content to render under the device notch/home indicator,
  * so safe-area insets are applied correctly by the app.
+ *
+ * interactive-widget is NOT in the base meta — Safari/Firefox ignore it with a
+ * console warning. Android Chrome gets it via setupAndroidInteractiveWidgetViewport().
  */
-export const VIEWPORT_CONTENT =
-  'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content';
+/**
+ * Base viewport — safe on all browsers (Safari, Firefox, desktop).
+ * Does not include `interactive-widget` (Android Chrome only; added at runtime).
+ */
+export const VIEWPORT_CONTENT_BASE =
+  'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+
+/** @deprecated Use VIEWPORT_CONTENT_BASE — interactive-widget is Android-only. */
+export const VIEWPORT_CONTENT = VIEWPORT_CONTENT_BASE;
 
 /**
  * interactive-widget=overlays-content: Prevents Android Chrome from resizing the
@@ -162,11 +172,11 @@ export function ensureWebShellParity() {
 
   const viewport = document.querySelector('meta[name="viewport"]');
   if (viewport) {
-    viewport.setAttribute('content', VIEWPORT_CONTENT);
+    viewport.setAttribute('content', VIEWPORT_CONTENT_BASE);
   } else {
     const meta = document.createElement('meta');
     meta.setAttribute('name', 'viewport');
-    meta.setAttribute('content', VIEWPORT_CONTENT);
+    meta.setAttribute('content', VIEWPORT_CONTENT_BASE);
     document.head.appendChild(meta);
   }
 

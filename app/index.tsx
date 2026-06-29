@@ -18,11 +18,13 @@ import {
   isDriverSignupSuccessActiveSync,
 } from '@/lib/onboarding/businessSignupBranding.util';
 import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
+import { useLoadingStuck } from '@/lib/hooks/useLoadingStuck';
 import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, usePathname, useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -34,7 +36,7 @@ const SIGN_IN_BOOT_KEY = '__sign_in__';
 export default function Index() {
   const insets = useSafeAreaInsets();
   const isOnline = useIsOnline();
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, restoreError, refreshSession, clearRestoreError } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isFocused = useIsFocused();
@@ -128,7 +130,17 @@ export default function Index() {
     return 'generic' as const;
   }, [loading, profile, user]);
 
+  const bootActive = loading || Boolean(user && !profile);
+  const bootStuck = useLoadingStuck(bootActive);
+  const showConnectionIssue = Boolean(restoreError) || (bootStuck && bootActive);
+
+  const handleRetryBoot = () => {
+    clearRestoreError();
+    void refreshSession();
+  };
+
   const showOfflineHint = !loading && !isOnline;
+  const showBootRetry = showConnectionIssue && !showOfflineHint;
 
   return (
     <View style={styles.container}>
@@ -141,6 +153,26 @@ export default function Index() {
           ]}
         >
           <Text style={styles.splashHint}>{tGlobal('splashOfflineHint')}</Text>
+        </View>
+      ) : null}
+      {showBootRetry ? (
+        <View
+          style={[
+            styles.footer,
+            { paddingBottom: Math.max(insets.bottom, Layout.spacingMedium) },
+          ]}
+        >
+          <Text style={styles.splashHint}>
+            {restoreError?.message ?? tGlobal('splashCalmFooter')}
+          </Text>
+          <Pressable
+            style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.92 }]}
+            onPress={handleRetryBoot}
+            accessibilityRole="button"
+            accessibilityLabel={tGlobal('splashRetrySession')}
+          >
+            <Text style={styles.retryLabel}>{tGlobal('splashRetrySession')}</Text>
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -172,7 +204,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.sectionSpacing,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,

@@ -1541,6 +1541,8 @@ export function LedgerTransactionListView({
                                           >
                                             {routeWhyLine}
                                           </Text>
+                                        </View>
+                                        <View style={styles.fiscalCardRight}>
                                           {tripIdOnly ? (
                                             onMissionChange ? (
                                               <TouchableOpacity
@@ -1590,8 +1592,6 @@ export function LedgerTransactionListView({
                                               </View>
                                             )
                                           ) : null}
-                                        </View>
-                                        <View style={styles.fiscalCardRight}>
                                           <Text
                                             style={[
                                               styles.fiscalCardAmount,
@@ -3041,7 +3041,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 2,
-    paddingRight: 4,
+    paddingRight: 8,
   },
   fiscalCardParty: {
     fontSize: 12,
@@ -3069,16 +3069,15 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "flex-start",
     flexShrink: 0,
-    minWidth: 72,
-    paddingTop: 2,
-    gap: 4,
+    minWidth: 88,
+    maxWidth: 132,
+    gap: 6,
   },
   fiscalCardPill: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
+    alignSelf: "flex-end",
     gap: 4,
-    marginTop: 6,
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 16,

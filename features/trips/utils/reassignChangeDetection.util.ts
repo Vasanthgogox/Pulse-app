@@ -11,6 +11,8 @@ type ChangeArgs = {
   driverModeIsPhone: boolean;
   phone: string;
   currentDriverPhone: string | null;
+  currentDriverName?: string | null;
+  driverNameInput?: string;
   selectedDriverId: string | null;
   selectedVehicleId: string | null;
   adHocPlate: string;
@@ -23,6 +25,8 @@ export function hasReassignChanges({
   driverModeIsPhone,
   phone,
   currentDriverPhone,
+  currentDriverName,
+  driverNameInput,
   selectedDriverId,
   selectedVehicleId,
   adHocPlate,
@@ -36,13 +40,16 @@ export function hasReassignChanges({
     const phoneChanged =
       newPhone.length > 0 &&
       phoneLast10(newPhone) !== phoneLast10(currentDriverPhone ?? '');
+    const nameChanged =
+      (driverNameInput ?? '').trim().length > 0 &&
+      (driverNameInput ?? '').trim() !== (currentDriverName ?? '').trim();
     const vehicleChanged = (selectedVehicleId ?? null) !== (trip.vehicle_id ?? null);
     const plateChanged =
       isAggregate &&
       !selectedVehicleId &&
       newPlate.length > 0 &&
       newPlate !== currentPlate;
-    return phoneChanged || vehicleChanged || plateChanged;
+    return phoneChanged || nameChanged || vehicleChanged || plateChanged;
   }
 
   const driverChanged = (selectedDriverId ?? null) !== (trip.driver_id ?? null);

@@ -55,6 +55,7 @@ export const partyKeypadFlowStyles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   displayRow: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth,

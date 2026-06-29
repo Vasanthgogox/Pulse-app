@@ -32,6 +32,7 @@ import {
     getVehiclesByOrganization,
     type VehicleRow,
 } from "@/features/vehicles/services/vehicles.service";
+import { TripPhoneAssignmentWizard } from "@/features/trips/components/allocation/TripPhoneAssignmentWizard";
 import { AssignmentFlowFooter } from "@/features/trips/components/assignment/assignmentFlowFooter";
 import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellShared";
 import { PULSE_TRIP } from "@/features/trips/components/add-trip/addTripPulseTheme";
@@ -102,6 +103,16 @@ export interface TripAssignmentBlockProps {
   autoOpenPickerMode?: "driver" | "vehicle" | null;
   /** Bump this value to re-trigger auto-open for same mode. */
   autoOpenPickerNonce?: number;
+  /** Full-page flow: open assign-by-phone wizard on mount (aggregate trips). */
+  autoOpenPhoneWizard?: boolean;
+  autoOpenPhoneWizardNonce?: number;
+  /** After fleet driver save in full-page flow, parent opens vehicle step. */
+  advanceToVehicleAfterDriverSave?: boolean;
+  onFleetDriverSaved?: () => void;
+  /** User closed wizard without finishing (full-page assignment route). */
+  onFlowDismiss?: () => void;
+  /** Assignment flow finished (vehicle saved or phone OTP dismissed). */
+  onFlowComplete?: () => void;
   /** Optional extra content rendered inside this assignment card. */
   inlineSection?: ReactNode;
   /** Close parent overlays (e.g. trip “Current assignment” sheet on web) before opening add-driver / add-vehicle. */
@@ -130,6 +141,12 @@ export function TripAssignmentBlock({
   driverAssignOrgId,
   autoOpenPickerMode = null,
   autoOpenPickerNonce = 0,
+  autoOpenPhoneWizard = false,
+  autoOpenPhoneWizardNonce = 0,
+  advanceToVehicleAfterDriverSave = false,
+  onFleetDriverSaved,
+  onFlowDismiss,
+  onFlowComplete,
   inlineSection,
   onBeforeRegisterNavigate,
   showManifestCard = true,
@@ -153,6 +170,13 @@ export function TripAssignmentBlock({
     setPreviewDriverId(null);
     setPreviewVehicleId(null);
   }, []);
+
+  const dismissAssignmentFlow = useCallback(() => {
+    closeAssignModal();
+    setShowPhoneModal(false);
+    setPhoneAssignOtpReveal(null);
+    if (fullPageFlow) onFlowDismiss?.();
+  }, [closeAssignModal, fullPageFlow, onFlowDismiss]);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [phoneSaving, setPhoneSaving] = useState(false);
@@ -455,9 +479,21 @@ export function TripAssignmentBlock({
       forceOtpClaim: phoneModalIsReassign,
     };
     const vehicleNumNorm = normalizeVehicleNumber(phoneVehicleInput);
-    const matchedVehicle = vehicleNumNorm
+    const existingVehicleDisplay = (
+      trip.vehicle_display_number ??
+      propsVehicleLabel ??
+      ""
+    )
+      .trim()
+      .split("·")[0]
+      ?.trim();
+    const effectiveVehicleInput =
+      phoneVehicleInput.trim() ||
+      (phoneModalIsReassign ? formatIndianVehicleNumber(existingVehicleDisplay) : "");
+    const vehicleNumNormEffective = normalizeVehicleNumber(effectiveVehicleInput);
+    const matchedVehicle = vehicleNumNormEffective
       ? phoneModalVehicles.find(
-          (v) => normalizeVehicleNumber(v.vehicle_number) === vehicleNumNorm,
+          (v) => normalizeVehicleNumber(v.vehicle_number) === vehicleNumNormEffective,
         )
       : null;
     if (matchedVehicle) {
@@ -496,7 +532,7 @@ export function TripAssignmentBlock({
         trip.id,
         orgForDriver,
         trimmed,
-        matchedVehicle ? null : phoneVehicleInput.trim() || null,
+        matchedVehicle ? null : effectiveVehicleInput.trim() || null,
         matchedVehicle?.id ?? null,    // ← pass vehicle_id to RPC directly
       );
       if (rpcErr) {
@@ -526,12 +562,12 @@ export function TripAssignmentBlock({
         );
         if (vehicleErr)
           setPhoneError(humanizeTripIdInRpcError(vehicleErr.message, trip));
-      } else if (phoneVehicleInput.trim()) {
+      } else if (effectiveVehicleInput.trim()) {
         const { error: vehicleErr } = await updateTripAssignment(
           trip.id,
           {
             vehicle_id: null,
-            vehicle_display_number: phoneVehicleInput.trim(),
+            vehicle_display_number: effectiveVehicleInput.trim(),
           },
           auditOpts,
         );
@@ -541,7 +577,7 @@ export function TripAssignmentBlock({
     }
     const willHaveVehicleAssigned =
       !!matchedVehicle ||
-      !!phoneVehicleInput.trim() ||
+      !!effectiveVehicleInput.trim() ||
       !!trip.vehicle_id ||
       !!String(trip.vehicle_display_number ?? "").trim();
 
@@ -601,6 +637,7 @@ export function TripAssignmentBlock({
     setPhoneModalIsReassign(false);
     setPhoneAssignOtpReveal(null);
     onUpdated();
+    if (fullPageFlow) onFlowComplete?.();
   }, [
     trip.id,
     trip.driver_id,
@@ -615,8 +652,12 @@ export function TripAssignmentBlock({
     phoneModalVehicles,
     phoneModalIsReassign,
     currentUserId,
+    propsVehicleLabel,
+    trip.vehicle_display_number,
     normalizeVehicleNumber,
     onUpdated,
+    fullPageFlow,
+    onFlowComplete,
   ]);
 
   const handleRegenerateOtp = useCallback(async () => {
@@ -847,18 +888,34 @@ export function TripAssignmentBlock({
   ]);
 
   useEffect(() => {
-    if (!effectiveCanAssign || !autoOpenPickerMode) return;
+    if (!effectiveCanAssign) return;
+    if (autoOpenPhoneWizard && showAssignByPhone) {
+      openPhoneModal(
+        hasDriver || !!(previousDriverName ?? "").trim(),
+        propsVehicleLabel ?? trip.vehicle_display_number ?? "",
+      );
+      return;
+    }
+    if (!autoOpenPickerMode) return;
     if (autoOpenPickerMode === "driver") {
       openDriverPicker();
       return;
     }
     openVehiclePicker();
   }, [
+    autoOpenPhoneWizard,
+    autoOpenPhoneWizardNonce,
+    showAssignByPhone,
     autoOpenPickerMode,
     autoOpenPickerNonce,
     effectiveCanAssign,
     openDriverPicker,
     openVehiclePicker,
+    openPhoneModal,
+    hasDriver,
+    previousDriverName,
+    propsVehicleLabel,
+    trip.vehicle_display_number,
   ]);
 
   const aggregateDriverUsesPhone =
@@ -890,6 +947,9 @@ export function TripAssignmentBlock({
         }
         closeAssignModal();
         onUpdated();
+        if (fullPageFlow && advanceToVehicleAfterDriverSave) {
+          onFleetDriverSaved?.();
+        }
       } finally {
         setSaving(false);
       }
@@ -903,6 +963,9 @@ export function TripAssignmentBlock({
       activeDriverIds,
       activeDriverTripLabelById,
       closeAssignModal,
+      fullPageFlow,
+      advanceToVehicleAfterDriverSave,
+      onFleetDriverSaved,
     ],
   );
 
@@ -944,6 +1007,7 @@ export function TripAssignmentBlock({
           onVehicleDisplayChange?.(vehicleDisplayNumber);
         }
         onUpdated();
+        if (fullPageFlow) onFlowComplete?.();
       } finally {
         setSaving(false);
       }
@@ -959,6 +1023,8 @@ export function TripAssignmentBlock({
       activeVehicleIds,
       activeVehicleTripLabelById,
       closeAssignModal,
+      fullPageFlow,
+      onFlowComplete,
     ],
   );
 
@@ -1525,7 +1591,7 @@ export function TripAssignmentBlock({
           Platform.OS === "web" ? "overFullScreen" : pickerPresentation
         }
         transparent={Platform.OS === "web" && !fullPageFlow}
-        onRequestClose={closeAssignModal}
+        onRequestClose={dismissAssignmentFlow}
       >
         <View
           style={[
@@ -1582,7 +1648,7 @@ export function TripAssignmentBlock({
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={closeAssignModal}
+                onPress={dismissAssignmentFlow}
                 style={[
                   styles.allocModalCloseBtn,
                   isMobileAssignFlow && styles.allocModalCloseBtnPulse,
@@ -2007,7 +2073,7 @@ export function TripAssignmentBlock({
                   primaryDisabled={mobileAssignSaveDisabled}
                   loading={saving}
                   secondaryLabel="Close"
-                  onSecondaryPress={closeAssignModal}
+                  onSecondaryPress={dismissAssignmentFlow}
                 />
               </View>
             ) : (
@@ -2019,7 +2085,7 @@ export function TripAssignmentBlock({
               >
                 <TouchableOpacity
                   style={styles.allocDesktopFooterClose}
-                  onPress={closeAssignModal}
+                  onPress={dismissAssignmentFlow}
                   activeOpacity={0.9}
                 >
                   <Text style={styles.allocDesktopFooterCloseText}>Close</Text>
@@ -2030,247 +2096,50 @@ export function TripAssignmentBlock({
         </View>
       </Modal>
 
-      <Modal
+      <TripPhoneAssignmentWizard
         visible={showPhoneModal}
-        animationType={Platform.OS === "web" ? "fade" : "slide"}
-        presentationStyle={
-          Platform.OS === "web" ? "overFullScreen" : pickerPresentation
-        }
-        transparent={Platform.OS === "web" && !fullPageFlow}
-        onRequestClose={() => {
+        onClose={() => {
           setShowPhoneModal(false);
           setPhoneAssignOtpReveal(null);
+          if (fullPageFlow) onFlowDismiss?.();
         }}
-      >
-        <View
-          style={[
-            assignmentShellStyles.webModalBackdrop,
-            fullPageFlow && styles.fullPageBackdrop,
-          ]}
-        >
-          <View
-            style={[
-              assignmentShellStyles.assignModalWrapSlate,
-              fullPageFlow && styles.assignModalWrapFullPage,
-              { paddingTop: insets.top },
-            ]}
-          >
-            <View style={styles.assignModalHeader}>
-              <View style={styles.assignModalHeaderText}>
-                <Text style={styles.assignModalTitle}>
-                  {phoneAssignOtpReveal
-                    ? "OTP ready"
-                    : phoneModalIsReassign
-                      ? "Reassign driver by phone"
-                      : "Assign driver by phone"}
-                </Text>
-                <Text style={styles.assignModalSubtitle}>
-                  {phoneAssignOtpReveal
-                    ? "Share with driver for " + getTripDisplayNumber(trip)
-                    : phoneModalIsReassign
-                      ? "New driver for " + getTripDisplayNumber(trip)
-                      : "Enter driver phone for " + getTripDisplayNumber(trip)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowPhoneModal(false);
-                  setPhoneAssignOtpReveal(null);
-                }}
-                style={styles.assignModalCloseBtn}
-                hitSlop={8}
-                accessibilityLabel="Close"
-              >
-                <FontAwesome name="times" size={18} color={Theme.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            {phoneAssignOtpReveal ? (
-              <>
-                <ScrollView
-                  style={styles.assignModalScroll}
-                  contentContainerStyle={styles.assignModalScrollContent}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <View style={styles.phoneOtpRevealCard}>
-                    <View style={styles.phoneOtpRevealIconWrap}>
-                      <FontAwesome name="key" size={22} color="#4D3636" />
-                    </View>
-                    <Text style={styles.phoneOtpRevealTitle}>Verification code</Text>
-                    <Text style={styles.phoneOtpRevealCode}>
-                      {phoneAssignOtpReveal.code}
-                    </Text>
-                    {phoneAssignOtpReveal.expires_at ? (
-                      <Text style={styles.phoneOtpRevealExpiry}>
-                        Expires{" "}
-                        {new Date(
-                          phoneAssignOtpReveal.expires_at,
-                        ).toLocaleString("en-IN")}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.phoneOtpRevealHint}>
-                      Ask the driver to enter this code in the driver app to claim
-                      the trip. You can resend from trip details if needed.
-                    </Text>
-                  </View>
-                </ScrollView>
-                <View
-                  style={[
-                    styles.assignModalFooter,
-                    { paddingBottom: Math.max(24, insets.bottom) },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={styles.assignConfirmBtn}
-                    onPress={() => {
-                      setShowPhoneModal(false);
-                      setPhoneAssignOtpReveal(null);
-                      setPhoneInput("");
-                      setPhoneDriverNameInput("");
-                      setPhoneName(null);
-                      setPhoneVehicleInput("");
-                      setPhoneModalIsReassign(false);
-                    }}
-                    activeOpacity={0.9}
-                  >
-                    <FontAwesome name="check" size={20} color="#111827" />
-                    <Text style={styles.assignConfirmBtnText}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <ScrollView
-                  style={styles.assignModalScroll}
-                  contentContainerStyle={styles.assignModalScrollContent}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <Text style={styles.assignStepLabel}>Driver name</Text>
-                  <TextInput
-                    style={styles.phoneModalInput}
-                    placeholder="e.g. Suresh Kumar"
-                    placeholderTextColor={Theme.textMuted}
-                    value={phoneDriverNameInput}
-                    onChangeText={(v) => {
-                      setPhoneDriverNameInput(v);
-                      setPhoneError(null);
-                    }}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                  <Text
-                    style={[styles.assignStepLabel, styles.assignStepLabelSecond]}
-                  >
-                    Driver phone
-                  </Text>
-                  <TextInput
-                    style={styles.phoneModalInput}
-                    placeholder="e.g. +91 98765 43210"
-                    placeholderTextColor={Theme.textMuted}
-                    value={phoneInput}
-                    onChangeText={(v) => {
-                      setPhoneInput(formatMobileNumber(v));
-                      setPhoneError(null);
-                      setPhoneDriverBusy(false);
-                      setPhoneBusyTripLabel(null);
-                    }}
-                    keyboardType="phone-pad"
-                    autoCorrect={false}
-                    autoComplete="tel"
-                  />
-                  {phoneName ? (
-                    <View style={styles.phoneModalFoundWrap}>
-                      <Text style={styles.phoneModalFound}>Found: {phoneName}</Text>
-                      <Text style={styles.phoneModalHint}>
-                        {phoneModalIsReassign
-                          ? "Tap Reassign below, then share the new OTP with the driver."
-                          : "Tap Assign below to confirm."}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {phoneDriverBusy ? (
-                    <View style={styles.phoneModalBusyWrap}>
-                      <Text style={styles.phoneModalInTrip}>
-                        Driver currently on{" "}
-                        {phoneBusyTripLabel ?? "another ongoing trip"}
-                      </Text>
-                      <Text style={styles.phoneModalBusyHint}>
-                        Reach out to {phoneName ?? "this driver"} on{" "}
-                        {phoneInput.trim() || "their phone"} to confirm
-                        availability. If they are offline/unreachable, plan with
-                        another driver and assign this trip there.
-                      </Text>
-                    </View>
-                  ) : null}
-                  {phoneError ? (
-                    <Text style={styles.phoneModalError}>{phoneError}</Text>
-                  ) : null}
-
-                  <Text
-                    style={[styles.assignStepLabel, styles.assignStepLabelSecond]}
-                  >
-                    Vehicle (optional)
-                  </Text>
-                  <TextInput
-                    style={styles.phoneModalInput}
-                    placeholder="e.g. TN 01 AB 1234"
-                    placeholderTextColor={Theme.textMuted}
-                    value={phoneVehicleInput}
-                    onChangeText={(text) =>
-                      setPhoneVehicleInput(formatIndianVehicleNumberInput(text))
-                    }
-                    autoCorrect={false}
-                    autoCapitalize="characters"
-                  />
-                  <View style={styles.phoneProtocolCard}>
-                    <View style={styles.phoneProtocolIconWrap}>
-                      <FontAwesome name="mobile" size={18} color="#4D3636" />
-                    </View>
-                    <View style={styles.phoneProtocolBody}>
-                      <Text style={styles.phoneProtocolTitle}>Secure assignment</Text>
-                      <Text style={styles.phoneProtocolText}>
-                        Assigning by phone uses OTP verification. Share the code with
-                        the driver after you assign them.
-                      </Text>
-                    </View>
-                  </View>
-                </ScrollView>
-
-                <View
-                  style={[
-                    styles.assignModalFooter,
-                    { paddingBottom: Math.max(24, insets.bottom) },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.assignConfirmBtn,
-                      (phoneSaving || phoneDriverBusy) &&
-                        styles.assignConfirmBtnDisabled,
-                    ]}
-                    onPress={assignByPhone}
-                    disabled={phoneSaving || phoneDriverBusy}
-                    activeOpacity={0.9}
-                  >
-                    <FontAwesome name="user-plus" size={20} color="#111827" />
-                    <Text style={styles.assignConfirmBtnText}>
-                      {phoneSaving
-                        ? phoneModalIsReassign
-                          ? "Reassigning…"
-                          : "Assigning…"
-                        : phoneDriverBusy
-                          ? "Driver Busy"
-                          : phoneModalIsReassign
-                            ? "Reassign"
-                            : "Assign"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+        trip={trip}
+        organizationId={organizationId}
+        driverAssignOrgId={driverAssignOrgId ?? null}
+        isReassign={phoneModalIsReassign}
+        initialDriverName={phoneDriverNameInput}
+        initialVehicle={phoneVehicleInput}
+        driverPhone={phoneInput}
+        onDriverPhoneChange={setPhoneInput}
+        driverName={phoneDriverNameInput}
+        onDriverNameChange={setPhoneDriverNameInput}
+        vehiclePlate={phoneVehicleInput}
+        onVehiclePlateChange={setPhoneVehicleInput}
+        saving={phoneSaving}
+        error={phoneError}
+        onSubmit={assignByPhone}
+        otpReveal={phoneAssignOtpReveal}
+        onOtpDismiss={() => {
+          setShowPhoneModal(false);
+          setPhoneAssignOtpReveal(null);
+          setPhoneInput("");
+          setPhoneDriverNameInput("");
+          setPhoneName(null);
+          setPhoneVehicleInput("");
+          setPhoneModalIsReassign(false);
+          if (fullPageFlow) onFlowComplete?.();
+        }}
+        fullPageFlow={fullPageFlow}
+        vehicleRequired={
+          !!showAssignByPhone &&
+          !(
+            phoneModalIsReassign &&
+            (!!trip.vehicle_id ||
+              !!String(trip.vehicle_display_number ?? "").trim())
+          )
+        }
+        presentationStyle={pickerPresentation}
+      />
     </View>
   );
 }

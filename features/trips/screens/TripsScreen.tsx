@@ -3,6 +3,7 @@
  * Private Book = driver/vehicle assigned by you; Shared Ledger = assigned by another user.
  */
 import { PulsePillButton } from "@/components/PulsePillButton";
+import { ContentErrorState } from "@/components/ContentErrorState";
 import { SceneLoadingSplash } from "@/components/chromeLoadingScreens";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
 import type { HubGridPageSize } from "@/components/hub/hubGridCardLayout";
@@ -20,6 +21,8 @@ import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import { useAlertRegistryFinanceHandlers } from "@/lib/hooks/useAlertRegistryFinanceHandlers";
+import { useLoadingStuck } from "@/lib/hooks/useLoadingStuck";
+import { isInfrastructureErrorMessage } from "@/lib/supabaseHttp.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import { TripsLedgerExportModalGate } from "@/features/trips/components/TripsLedgerExportModalGate";
 import {
@@ -348,7 +351,10 @@ export default function TripsScreen() {
     [salaryRequestRows],
   );
   const currentOrganization = orgCtx?.currentOrganization ?? null;
-  const orgBootPending = !orgCtx || orgCtx.isLoading;
+  const orgLoading = orgCtx?.isLoading ?? !orgCtx;
+  const organizationError = orgCtx?.error ?? null;
+  const refreshOrganization = orgCtx?.refreshOrganization;
+  const orgBootPending = orgLoading;
   const orgId = canAccess ? (currentOrganization?.id ?? null) : null;
   const cachedTripsForOrg = orgId
     ? (queryClient.getQueryData(queryKeys.trips.finite(orgId)) as TripRow[] | undefined)
@@ -357,6 +363,8 @@ export default function TripsScreen() {
   const {
     data: tripsData = [],
     isPending: tripsLoading,
+    isError: tripsLoadFailed,
+    error: tripsLoadError,
     refetch: refetchTrips,
   } = useTripsQuery(orgId);
   const trips = tripsData as TripRow[];
@@ -445,6 +453,12 @@ export default function TripsScreen() {
   );
 
   const loading = tripsLoading && trips.length === 0 && !(cachedTripsForOrg?.length);
+  const tripsBootFailed =
+    tripsLoadFailed && trips.length === 0 && !(cachedTripsForOrg?.length);
+  const orgBootSplash =
+    canAccess && !orgId && !(cachedTripsForOrg?.length) && orgBootPending;
+  const bootSplashActive = orgBootSplash || loading || tripsBootFailed;
+  const bootStuck = useLoadingStuck(bootSplashActive);
 
   const isCompletedStatus = (s: string) => {
     const v = (s || "").toLowerCase();
@@ -1560,11 +1574,63 @@ export default function TripsScreen() {
     );
   }
 
-  if (orgBootPending && !orgId && !(cachedTripsForOrg?.length)) {
-    return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
+  if (!orgId) {
+    if (orgBootPending && !bootStuck) {
+      return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
+    }
+    if (organizationError || bootStuck) {
+      const infra = organizationError
+        ? isInfrastructureErrorMessage(organizationError.message)
+        : true;
+      return (
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <ContentErrorState
+            variant={infra ? "connection" : "workspace"}
+            message={organizationError?.message}
+            onRetry={() => void refreshOrganization?.()}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <ContentErrorState
+          variant="workspaceMissing"
+          onRetry={() => void refreshOrganization?.()}
+          retryLabel="Refresh"
+        />
+      </View>
+    );
   }
 
-  if (loading) {
+  if (loading || tripsBootFailed) {
+    if (tripsBootFailed) {
+      const message =
+        tripsLoadError instanceof Error ? tripsLoadError.message : undefined;
+      return (
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <ContentErrorState
+            variant={
+              message && isInfrastructureErrorMessage(message)
+                ? "connection"
+                : "loads"
+            }
+            message={message}
+            onRetry={() => void refetchTrips()}
+          />
+        </View>
+      );
+    }
+    if (bootStuck) {
+      return (
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <ContentErrorState
+            variant="connection"
+            onRetry={() => void refetchTrips()}
+          />
+        </View>
+      );
+    }
     return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
   }
 
@@ -1982,9 +2048,6 @@ export default function TripsScreen() {
                 activeMetricTab={activeHistoryMetricTab}
                 onSelectMetric={setActiveHistoryMetricTab}
                 getMetric={(id) => historyMetricCards[id]}
-                missionPulseLabel={tr("tripsHubSettlementPulse")}
-                receivableSectionLabel={tr("tripsHubMetricGroupReceivable")}
-                payableSectionLabel={tr("tripsHubMetricGroupPayable")}
                 isDesktop={isLargeScreen}
                 style={styles.tripMetricsScroll}
               />

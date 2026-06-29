@@ -132,17 +132,24 @@ function SettlementLaneCard({
             {settledAmount > 0 ? "−" : ""}
             {settledAmount > 0 ? formatINR(settledAmount) : "Nothing recorded"}
           </Text>
-          {settledAmount > 0 ? (
-            <Text
-              style={[
-                styles.metricSettledHint,
-                styles.metricLabelEnd,
-                isDesktop && styles.metricSettledHintDesktop,
-              ]}
-            >
-              {entityType === "client" ? "Collected" : "Paid"}
-            </Text>
-          ) : null}
+          <View
+            style={[
+              styles.metricSettledHintSlot,
+              isDesktop && styles.metricSettledHintSlotDesktop,
+            ]}
+          >
+            {settledAmount > 0 ? (
+              <Text
+                style={[
+                  styles.metricSettledHint,
+                  styles.metricLabelEnd,
+                  isDesktop && styles.metricSettledHintDesktop,
+                ]}
+              >
+                {entityType === "client" ? "Collected" : "Paid"}
+              </Text>
+            ) : null}
+          </View>
         </View>
       </View>
     </>
@@ -194,7 +201,29 @@ export interface TripPayableReceivableSummaryCardProps {
   onPressReceivable?: () => void;
   onPressPayable?: () => void;
   receivableAction?: ReactNode;
+  receivableActionHint?: ReactNode;
   payableAction?: ReactNode;
+  payableActionHint?: ReactNode;
+}
+
+function LaneActionFooter({
+  action,
+  hint,
+  isDesktop,
+}: {
+  action?: ReactNode;
+  hint?: ReactNode;
+  isDesktop: boolean;
+}) {
+  if (!action) return null;
+  return (
+    <View style={[styles.laneActionFooter, isDesktop && styles.laneActionFooterDesktop]}>
+      <View style={styles.laneActionBtnSlot}>{action}</View>
+      <View style={[styles.laneActionHintSlot, isDesktop && styles.laneActionHintSlotDesktop]}>
+        {hint ?? null}
+      </View>
+    </View>
+  );
 }
 
 export const TripPayableReceivableSummaryCard = memo(
@@ -209,48 +238,56 @@ export const TripPayableReceivableSummaryCard = memo(
       <View style={[styles.wrap, isDesktop && styles.wrapDesktop]}>
         {showReceivable ? (
           <View style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}>
-            <SettlementLaneCard
-              partyName={props.clientName}
-              avatarUrl={props.clientAvatarUrl}
-              avatarSeed={props.clientAvatarSeed}
-              organizationImageUrl={props.clientOrganizationImageUrl}
-              organizationAvatarSeed={props.clientOrganizationAvatarSeed}
-              isIntegrated={props.clientIntegrated}
-              entityType="client"
-              laneLabel="Receivable"
-              revisedAmount={props.revisedReceivable}
-              settledAmount={props.collectedAmount}
-              dueAmount={props.receivableDue}
-              accentColor={Theme.primary}
-              onPress={props.onPressReceivable}
-              layout={layout}
+            <View style={styles.laneCardGrow}>
+              <SettlementLaneCard
+                partyName={props.clientName}
+                avatarUrl={props.clientAvatarUrl}
+                avatarSeed={props.clientAvatarSeed}
+                organizationImageUrl={props.clientOrganizationImageUrl}
+                organizationAvatarSeed={props.clientOrganizationAvatarSeed}
+                isIntegrated={props.clientIntegrated}
+                entityType="client"
+                laneLabel="Receivable"
+                revisedAmount={props.revisedReceivable}
+                settledAmount={props.collectedAmount}
+                dueAmount={props.receivableDue}
+                accentColor={Theme.primary}
+                onPress={props.onPressReceivable}
+                layout={layout}
+              />
+            </View>
+            <LaneActionFooter
+              action={props.receivableAction}
+              hint={props.receivableActionHint}
+              isDesktop={isDesktop}
             />
-            {props.receivableAction ? (
-              <View style={styles.laneAction}>{props.receivableAction}</View>
-            ) : null}
           </View>
         ) : null}
         {showPayable ? (
           <View style={[styles.laneColumn, isDesktop && styles.laneColumnDesktop]}>
-            <SettlementLaneCard
-              partyName={props.payablePartyName}
-              avatarUrl={props.payableAvatarUrl}
-              avatarSeed={props.payableAvatarSeed}
-              organizationImageUrl={props.payableOrganizationImageUrl}
-              organizationAvatarSeed={props.payableOrganizationAvatarSeed}
-              isIntegrated={props.payableIntegrated}
-              entityType={props.payableEntityType ?? "supplier"}
-              laneLabel={props.payableLaneLabel ?? "Payable"}
-              revisedAmount={props.revisedPayable}
-              settledAmount={props.paidAmount}
-              dueAmount={props.payableDue}
-              accentColor="#0f766e"
-              onPress={props.onPressPayable}
-              layout={layout}
+            <View style={styles.laneCardGrow}>
+              <SettlementLaneCard
+                partyName={props.payablePartyName}
+                avatarUrl={props.payableAvatarUrl}
+                avatarSeed={props.payableAvatarSeed}
+                organizationImageUrl={props.payableOrganizationImageUrl}
+                organizationAvatarSeed={props.payableOrganizationAvatarSeed}
+                isIntegrated={props.payableIntegrated}
+                entityType={props.payableEntityType ?? "supplier"}
+                laneLabel={props.payableLaneLabel ?? "Payable"}
+                revisedAmount={props.revisedPayable}
+                settledAmount={props.paidAmount}
+                dueAmount={props.payableDue}
+                accentColor="#0f766e"
+                onPress={props.onPressPayable}
+                layout={layout}
+              />
+            </View>
+            <LaneActionFooter
+              action={props.payableAction}
+              hint={props.payableActionHint}
+              isDesktop={isDesktop}
             />
-            {props.payableAction ? (
-              <View style={styles.laneAction}>{props.payableAction}</View>
-            ) : null}
           </View>
         ) : null}
       </View>
@@ -272,16 +309,40 @@ const styles = StyleSheet.create({
   laneColumn: {
     flex: 1,
     minWidth: 0,
-    gap: 6,
+    flexDirection: "column",
+    alignItems: "stretch",
   },
-  laneColumnDesktop: {
-    gap: 8,
-  },
-  laneAction: {
-    width: "100%",
+  laneColumnDesktop: {},
+  laneCardGrow: {
+    flex: 1,
+    minHeight: 0,
     minWidth: 0,
   },
+  laneActionFooter: {
+    width: "100%",
+    minWidth: 0,
+    marginTop: 6,
+    gap: 4,
+  },
+  laneActionFooterDesktop: {
+    marginTop: 8,
+  },
+  laneActionBtnSlot: {
+    width: "100%",
+    minHeight: 38,
+    justifyContent: "center",
+  },
+  laneActionHintSlot: {
+    width: "100%",
+    minHeight: 15,
+    justifyContent: "flex-start",
+  },
+  laneActionHintSlotDesktop: {
+    minHeight: 16,
+  },
   card: {
+    flex: 1,
+    minHeight: 0,
     borderWidth: 1,
     borderColor: "#e6edf5",
     borderRadius: 12,
@@ -290,7 +351,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardDesktop: {
-    flex: 1,
     minWidth: 0,
     padding: 12,
     borderRadius: 14,
@@ -404,8 +464,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
   },
-  metricSettledHint: {
+  metricSettledHintSlot: {
+    minHeight: 10,
     marginTop: 1,
+    justifyContent: "flex-start",
+  },
+  metricSettledHintSlotDesktop: {
+    minHeight: 11,
+  },
+  metricSettledHint: {
     fontSize: 7,
     fontWeight: "700",
     letterSpacing: 0.4,

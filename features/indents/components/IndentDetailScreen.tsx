@@ -14,6 +14,7 @@ import {
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { IndentBidAmountEntry } from "@/features/indents/components/IndentBidAmountEntry";
 import { IndentGiveLoadPartiesStrip } from "@/features/indents/components/IndentGiveLoadPartiesStrip";
+import { IndentLinkedTripCard } from "@/features/indents/components/IndentLinkedTripCard";
 import { IndentReviewHubCard } from "@/features/indents/components/IndentReviewHubCard";
 import {
   IndentReviewHubBidsBody,
@@ -872,6 +873,17 @@ export function IndentDetailScreen({
                 />
               ) : null}
             </IndentReviewHubCard>
+
+            {linkedTrip ? (
+              <IndentLinkedTripCard
+                trip={linkedTrip}
+                driverLabel={linkedTripPartyLabels.driver}
+                vehicleLabel={linkedTripPartyLabels.vehicle}
+                allocationPending={!linkedTripPartyLabels.isAllocated}
+                compact={hubDense}
+                stacked={stackedHub}
+              />
+            ) : null}
           </>
         }
         bidsHeader={

@@ -97,8 +97,8 @@ function AppLoadingSplashView({
         },
         style,
       ]}
-      accessibilityRole="progressbar"
-      accessibilityLabel={resolvedMessage}
+      accessibilityRole="none"
+      accessibilityState={{ busy: true }}
     >
       <MotiView
         from={{ opacity: 0.88, scale: 0.96 }}
@@ -128,7 +128,13 @@ function AppLoadingSplashView({
         transition={{ type: 'timing', duration: 400 }}
         style={styles.messageWrap}
       >
-        <Text style={styles.title}>{resolvedMessage}</Text>
+        <Text
+          style={styles.title}
+          accessibilityRole="text"
+          accessibilityLiveRegion="polite"
+        >
+          {resolvedMessage}
+        </Text>
         <Text style={styles.subtitle}>{translate('splashCalmFooter')}</Text>
       </MotiView>
 

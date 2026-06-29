@@ -1,11 +1,21 @@
 /**
  * Full-page 10-digit Indian mobile entry with numeric keypad (no system keyboard).
  */
-import { memo, useCallback, type ReactNode } from "react";
-import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { memo, useCallback, useEffect, useRef, type ReactNode } from "react";
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInput as TextInputType,
+} from "react-native";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { KeypadKey } from "@/components/mobile-input/keypad";
+import { useInputPlatform } from "@/components/mobile-input/useInputPlatform";
+import { usePhysicalKeypadInput } from "@/components/mobile-input/usePhysicalKeypadInput";
 import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import { fullPageWizardStyles } from "@/components/full-page-wizard";
 import { partyKeypadFlowStyles as flow } from "@/components/party/keypad/partyKeypadFlowStyles";
@@ -42,6 +52,9 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
   const digits = formatMobileNumber(value);
   const showCursor = digits.length < maxLength;
   const useAppleKeypad = !wizardShell && keypadVariant === "apple";
+  const inputPlatform = useInputPlatform();
+  const isDesktopWeb = Platform.OS === "web" && inputPlatform === "desktop";
+  const inputRef = useRef<TextInputType>(null);
 
   const handleKey = useCallback(
     (key: KeypadKey) => {
@@ -50,33 +63,69 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
         return;
       }
       if (key === ".") return;
+      if (digits.length >= maxLength) return;
       onChangeText(formatMobileNumber(digits + key));
     },
-    [digits, onChangeText],
+    [digits, maxLength, onChangeText],
+  );
+
+  const focusInput = useCallback(() => {
+    if (isDesktopWeb) inputRef.current?.focus();
+  }, [isDesktopWeb]);
+
+  useEffect(() => {
+    if (!isDesktopWeb) return;
+    const timer = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [isDesktopWeb]);
+
+  usePhysicalKeypadInput({
+    enabled: isDesktopWeb,
+    onKey: handleKey,
+    allowDecimal: false,
+  });
+
+  const handleHiddenChange = useCallback(
+    (text: string) => {
+      onChangeText(formatMobileNumber(text));
+    },
+    [onChangeText],
   );
 
   return (
     <View style={flow.root} testID={Platform.OS === "web" ? undefined : testID}>
-      {Platform.OS === "web" ? (
-        <TextInput
-          testID={testID}
-          value={digits}
-          onChangeText={onChangeText}
-          keyboardType="phone-pad"
-          maxLength={maxLength}
-          style={flow.hiddenInput}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        />
-      ) : null}
-
       <View style={wizardShell ? flow.mainPaddedWizard : flow.mainPadded}>
         <View style={wizardShell ? fullPageWizardStyles.wizardFieldBlock : undefined}>
           <Text style={wizardShell ? fullPageWizardStyles.wizardFieldLabel : styles.label}>
             {label}
           </Text>
 
-          <View style={[flow.displayRow, error && flow.displayRowError]}>
+          <Pressable
+            onPress={focusInput}
+            disabled={!isDesktopWeb}
+            style={({ pressed }) => [
+              flow.displayRow,
+              error && flow.displayRowError,
+              isDesktopWeb && pressed && styles.displayRowPressed,
+            ]}
+            accessibilityRole={isDesktopWeb ? "button" : undefined}
+            accessibilityLabel={
+              isDesktopWeb ? `${label}. Click to type with keyboard.` : undefined
+            }
+          >
+            {isDesktopWeb ? (
+              <TextInput
+                ref={inputRef}
+                testID={testID}
+                value={digits}
+                onChangeText={handleHiddenChange}
+                keyboardType="phone-pad"
+                maxLength={maxLength}
+                autoFocus
+                style={styles.desktopCaptureInput}
+                accessibilityLabel={label}
+              />
+            ) : null}
             <View style={styles.cc}>
               <IndiaFlagIcon width={22} height={16} />
               <Text style={styles.ccText}>+91</Text>
@@ -95,7 +144,7 @@ export const PhoneNumberKeypadFlow = memo(function PhoneNumberKeypadFlow({
             {showCursor ? (
               <View style={[flow.cursor, wizardShell && styles.cursorWizard]} />
             ) : null}
-          </View>
+          </Pressable>
         </View>
 
         {footerExtras ? <View style={flow.extras}>{footerExtras}</View> : null}
@@ -154,5 +203,22 @@ const styles = StyleSheet.create({
   cursorWizard: {
     height: 28,
     backgroundColor: Theme.buttonPrimary,
+  },
+  displayRowPressed: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.surfaceLight,
+  },
+  desktopCaptureInput: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.02,
+    color: "transparent",
+    fontSize: 1,
+    ...Platform.select({
+      web: {
+        caretColor: "transparent",
+        outlineStyle: "none",
+      } as object,
+      default: {},
+    }),
   },
 });
