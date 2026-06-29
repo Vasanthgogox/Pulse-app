@@ -316,19 +316,9 @@ export function DemoTabBar({
       setShowNotifications(false);
 
       if (entityType === "CLIENT" && entityId) {
-        const q = new URLSearchParams({
-          shared: "1",
-          sharedAction: actionKind,
-        });
-        if (tripId) q.set("tripId", tripId);
-        router.push(`/client/${entityId}?${q.toString()}` as const);
+        router.push(`/client/${entityId}?tab=trips` as const);
       } else if (entityType === "SUPPLIER" && entityId) {
-        const q = new URLSearchParams({
-          shared: "1",
-          sharedAction: actionKind,
-        });
-        if (tripId) q.set("tripId", tripId);
-        router.push(`/supplier/${entityId}?${q.toString()}` as const);
+        router.push(`/supplier/${entityId}?tab=trips` as const);
       } else if (tripId) {
         router.push(`/trip-ledger/${tripId}` as const);
       } else {

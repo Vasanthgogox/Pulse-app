@@ -1,9 +1,11 @@
 /**
- * Trip audit log drawer / sheet — dedicated audit trail (not notifications).
+ * Trip activity drawer / sheet — user-level actions on a trip.
  */
 import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
 import { TripAuditLogContent } from "@/features/trips/components/trip-detail/TripAuditLogContent";
+import { getProfile } from "@/features/auth/services/auth.service";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
+import { getOrganizationMembers } from "@/features/organization/services/members.service";
 import type { DriverActivityTimelineRow } from "@/features/trips/components/trip-detail/hooks/useTripDetail";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import {
@@ -13,8 +15,9 @@ import {
 import {
   buildTripAuditLog,
   matchesTripAuditTab,
+  type TripActivityUserProfile,
 } from "@/lib/trips/buildTripAuditLog.util";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Modal,
   Platform,
@@ -37,8 +40,29 @@ export type TripAuditLogPanelProps = {
   assignmentVehicleLabels: Record<string, string>;
   timelineRows: DriverActivityTimelineRow[];
   tripLedgerEntries: LedgerRow[];
+  driverDisplayName?: string | null;
   loading?: boolean;
 };
+
+function collectActivityUserIds(
+  trip: TripRow,
+  assignmentAuditRows: TripAssignmentAuditRow[],
+  transactions: LedgerRow[],
+): string[] {
+  const ids = new Set<string>();
+  const add = (id: string | null | undefined) => {
+    const v = String(id ?? "").trim();
+    if (v) ids.add(v);
+  };
+  add(trip.created_by_user_id);
+  add(trip.created_by);
+  add(trip.owner_user_id);
+  add(trip.assigned_by_user_id);
+  add(trip.status_updated_by);
+  for (const row of assignmentAuditRows) add(row.changed_by);
+  for (const tx of transactions) add(tx.created_by);
+  return Array.from(ids);
+}
 
 export function TripAuditLogPanel({
   visible,
@@ -51,18 +75,104 @@ export function TripAuditLogPanel({
   assignmentVehicleLabels,
   timelineRows,
   tripLedgerEntries,
+  driverDisplayName,
   loading = false,
 }: TripAuditLogPanelProps) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isCompact = width < 768;
+  const [userDisplayById, setUserDisplayById] = useState<Record<string, string>>({});
+  const [userProfileById, setUserProfileById] = useState<
+    Record<string, TripActivityUserProfile>
+  >({});
+  const [resolvingUsers, setResolvingUsers] = useState(false);
 
   const tripRef = getTripDisplayNumber(trip, organizationId ?? undefined);
   const route = [trip.pickup_area, trip.drop_location].filter(Boolean).join(" → ");
 
+  const activityUserIds = useMemo(
+    () => collectActivityUserIds(trip, assignmentAuditRows, tripLedgerEntries),
+    [trip, assignmentAuditRows, tripLedgerEntries],
+  );
+
+  useEffect(() => {
+    if (!visible) return;
+    const orgId = organizationId ?? trip.organization_id;
+    if (!orgId && activityUserIds.length === 0) {
+      setUserDisplayById({});
+      setUserProfileById({});
+      return;
+    }
+
+    let cancelled = false;
+    setResolvingUsers(true);
+
+    void (async () => {
+      const displayMap: Record<string, string> = {};
+      const profileMap: Record<string, TripActivityUserProfile> = {};
+
+      const rememberProfile = (
+        uid: string,
+        profile: TripActivityUserProfile,
+      ) => {
+        profileMap[uid] = profile;
+        const name =
+          profile.full_name?.trim() ||
+          "";
+        if (name) displayMap[uid] = name;
+      };
+
+      if (orgId) {
+        const { members } = await getOrganizationMembers(orgId);
+        for (const member of members) {
+          const uid = String(member.user_id ?? "").trim();
+          if (!uid) continue;
+          rememberProfile(uid, {
+            full_name:
+              member.full_name?.trim() ||
+              member.phone?.trim() ||
+              member.email?.trim() ||
+              null,
+            avatar_url: member.avatar_url ?? null,
+            avatar_seed: null,
+          });
+        }
+      }
+
+      const unresolved = activityUserIds.filter((id) => !profileMap[id]);
+      await Promise.all(
+        unresolved.map(async (id) => {
+          const profile = await getProfile(id);
+          if (!profile) return;
+          rememberProfile(id, {
+            full_name:
+              profile.full_name?.trim() ||
+              profile.displayName?.trim() ||
+              profile.phone?.trim() ||
+              profile.email?.trim() ||
+              null,
+            avatar_url: profile.avatar_url ?? null,
+            avatar_seed: profile.avatar_seed ?? null,
+          });
+        }),
+      );
+
+      if (!cancelled) {
+        setUserDisplayById(displayMap);
+        setUserProfileById(profileMap);
+        setResolvingUsers(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, organizationId, trip.organization_id, activityUserIds]);
+
   const entries = useMemo(
     () =>
       buildTripAuditLog({
+        trip,
         tripRef,
         assignmentAuditRows,
         assignmentDriverNames,
@@ -70,8 +180,12 @@ export function TripAuditLogPanel({
         timelineRows,
         transactions: tripLedgerEntries,
         currentUserId,
+        userDisplayById,
+        userProfileById,
+        driverDisplayName: driverDisplayName ?? trip.driver_display_name,
       }),
     [
+      trip,
       tripRef,
       assignmentAuditRows,
       assignmentDriverNames,
@@ -79,16 +193,19 @@ export function TripAuditLogPanel({
       timelineRows,
       tripLedgerEntries,
       currentUserId,
+      userDisplayById,
+      userProfileById,
+      driverDisplayName,
     ],
   );
 
   const panel = (
     <TripAuditLogContent
-      title="Audit log"
+      title="Activity"
       subtitle={route ? `${tripRef} · ${route}` : tripRef}
       entries={entries}
       matchesTab={matchesTripAuditTab}
-      loading={loading}
+      loading={loading || resolvingUsers}
       onClose={onClose}
       shellStyle={styles.panelFullBleed}
     />

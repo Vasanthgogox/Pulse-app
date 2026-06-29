@@ -135,9 +135,8 @@ function CustomerDetailView({
   uniqueLinkedClientIdByOrgId: Map<string, string>;
 }) {
   const [detailTab, setDetailTab] = useState<
-    "receivables" | "by_trip" | "cash" | "shared"
+    "receivables" | "by_trip" | "cash"
   >("receivables");
-  const [isLinked, setIsLinked] = useState(false);
   const [byTripSearch, setByTripSearch] = useState("");
 
   const customerTrips = useMemo(() => {
@@ -204,7 +203,6 @@ function CustomerDetailView({
     { id: "receivables" as const, label: "Receivables" },
     { id: "by_trip" as const, label: "By Trip" },
     { id: "cash" as const, label: "Cash Flow" },
-    { id: "shared" as const, label: "Shared" },
   ];
 
   const filteredByTripList = useMemo(() => {
@@ -624,99 +622,6 @@ function CustomerDetailView({
           </View>
         )}
 
-        {/* Shared Ledger: linked = Net Synchrony + My Books/Client Data + actions; else = Ledger is Offline + Generate Synchrony Link */}
-        {detailTab === "shared" && (
-          <View style={detailStyles.section}>
-            {isLinked ? (
-              <View style={detailStyles.sharedCard}>
-                <View style={detailStyles.sharedSyncRow}>
-                  <Text style={detailStyles.sharedSyncTitle}>
-                    Net Synchrony
-                  </Text>
-                  <View style={detailStyles.sharedMismatchBadge}>
-                    <FontAwesome
-                      name="exclamation-circle"
-                      size={10}
-                      color="#ea580c"
-                    />
-                    <Text style={detailStyles.sharedMismatchText}>
-                      Mismatch Detected
-                    </Text>
-                  </View>
-                </View>
-                <View style={detailStyles.sharedGrid}>
-                  <View style={detailStyles.sharedGridCell}>
-                    <Text style={detailStyles.sharedGridLabel}>My Books</Text>
-                    <Text style={detailStyles.sharedGridValue}>
-                      ₹{received.toLocaleString("en-IN")}
-                    </Text>
-                  </View>
-                  <View style={detailStyles.sharedGridCell}>
-                    <Text style={detailStyles.sharedGridLabel}>
-                      Client Data
-                    </Text>
-                    <Text style={detailStyles.sharedGridValueMismatch}>
-                      ₹{Math.max(0, received - 5000).toLocaleString("en-IN")}
-                    </Text>
-                  </View>
-                </View>
-                <View style={detailStyles.sharedActions}>
-                  <TouchableOpacity
-                    style={detailStyles.sharedBtnPrimary}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={detailStyles.sharedBtnPrimaryText}>
-                      Accept Client Book
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={detailStyles.sharedBtnSecondary}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={detailStyles.sharedBtnSecondaryText}>
-                      Dispute Entry
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={detailStyles.inviteCard}>
-                <View style={detailStyles.inviteIconWrap}>
-                  <FontAwesome
-                    name="users"
-                    size={32}
-                    color={Theme.aggregatePillText}
-                  />
-                </View>
-                <Text style={detailStyles.inviteTitle}>Ledger is Offline</Text>
-                <Text style={detailStyles.inviteDesc}>
-                  {customer.name ?? "This client"} is not linked to your grid.
-                  Invite them to join the app and share ledger sync directly.
-                </Text>
-                <TouchableOpacity
-                  style={detailStyles.inviteCta}
-                  onPress={() => setIsLinked(true)}
-                  activeOpacity={0.9}
-                >
-                  <FontAwesome
-                    name="link"
-                    size={16}
-                    color={Theme.textOnPrimary}
-                  />
-                  <Text style={detailStyles.inviteCtaText}>
-                    Generate Synchrony Link
-                  </Text>
-                </TouchableOpacity>
-                <View style={detailStyles.inviteSecure}>
-                  <FontAwesome name="lock" size={12} color={Theme.textMuted} />
-                  <Text style={detailStyles.inviteSecureText}>
-                    Neural Handshake Secured
-                  </Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
       </ScrollView>
 
       <FAB onPress={() => {}} />

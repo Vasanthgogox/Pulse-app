@@ -1,30 +1,36 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
 
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { NativeHtmlWebView } from "@/components/NativeHtmlWebView";
 
 import Theme from "@/constants/Theme";
+import {
+  downloadProvisionNotePdf,
+  printProvisionNote,
+  shareProvisionNoteOnWhatsApp,
+  shareProvisionNotePdf,
+} from "@/features/trips/components/trip-detail/adjustment/provisionNoteShare.util";
 import {
   generateProvisionNotePdfUri,
   type ProvisionNotePdfContext,
 } from "@/features/trips/components/trip-detail/adjustment/tripProvisionNotePdf.util";
 import type { TripAdjustment, TripAdjustmentImpact } from "@/features/trips/services/tripAdjustments";
 import { isAdjustmentVoided } from "@/features/trips/services/tripAdjustments";
+
+type ProvisionAction = "print" | "whatsapp" | "share" | "download";
 
 function noteTitle(impact: TripAdjustmentImpact): string {
   return impact === "minus" ? "Credit Note" : "Debit Note";
@@ -66,6 +72,7 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
   const [printHtml, setPrintHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<ProvisionAction | null>(null);
 
   useEffect(() => {
     if (!props.visible || !props.context) {
@@ -74,6 +81,7 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
       setPrintHtml(null);
       setError(null);
       setLoading(false);
+      setActionBusy(null);
       return;
     }
 
@@ -102,42 +110,42 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
     };
   }, [props.visible, props.context]);
 
+  const runAction = useCallback(
+    async (action: ProvisionAction, fn: () => Promise<void>) => {
+      if (!props.context || loading || error || actionBusy) return;
+      setActionBusy(action);
+      try {
+        await fn();
+      } finally {
+        setActionBusy(null);
+      }
+    },
+    [props.context, loading, error, actionBusy],
+  );
+
   const handlePrint = useCallback(async () => {
-    if (!props.context) return;
-    try {
-      const html =
-        printHtml ?? (await generateProvisionNotePdfUri(props.context)).printHtml;
-      await Print.printAsync({ html });
-    } catch {
-      Alert.alert("Print", "Could not open the print dialog for this note.");
-    }
-  }, [props.context, printHtml]);
+    await runAction("print", async () => {
+      await printProvisionNote(props.context!, printHtml);
+    });
+  }, [props.context, printHtml, runAction]);
+
+  const handleWhatsApp = useCallback(async () => {
+    await runAction("whatsapp", async () => {
+      await shareProvisionNoteOnWhatsApp(props.context!);
+    });
+  }, [props.context, runAction]);
 
   const handleShare = useCallback(async () => {
-    if (!props.context) return;
-    try {
-      const title = noteTitle(props.context.adjustment.impact);
-      if (Platform.OS === "web") {
-        const html =
-          printHtml ?? (await generateProvisionNotePdfUri(props.context)).printHtml;
-        await Print.printAsync({ html });
-        Alert.alert("Share PDF", "Use your browser print dialog to save or share the PDF.");
-        return;
-      }
-      const uri = pdfUri ?? (await generateProvisionNotePdfUri(props.context)).uri;
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: "application/pdf",
-          dialogTitle: title,
-          UTI: "com.adobe.pdf",
-        });
-        return;
-      }
-      await Share.share({ url: uri, title });
-    } catch {
-      Alert.alert("Share", "Could not share this provision note.");
-    }
-  }, [props.context, printHtml, pdfUri]);
+    await runAction("share", async () => {
+      await shareProvisionNotePdf(props.context!, printHtml, pdfUri);
+    });
+  }, [props.context, printHtml, pdfUri, runAction]);
+
+  const handleDownload = useCallback(async () => {
+    await runAction("download", async () => {
+      await downloadProvisionNotePdf(props.context!, printHtml, pdfUri);
+    });
+  }, [props.context, printHtml, pdfUri, runAction]);
 
   if (!props.visible || !props.context) return null;
 
@@ -146,6 +154,7 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
   const canEdit =
     typeof props.onEdit === "function" &&
     !isAdjustmentVoided(props.context.adjustment);
+  const actionsDisabled = loading || Boolean(error) || actionBusy !== null;
 
   return (
     <Modal
@@ -171,6 +180,18 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
               {kind} · Trip {props.context.tripCode}
             </Text>
           </View>
+          {canEdit ? (
+            <Pressable
+              onPress={() => props.onEdit?.(props.context!.adjustment)}
+              style={styles.editBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${kind}`}
+            >
+              <Feather name="edit-2" size={18} color={Theme.primary} />
+            </Pressable>
+          ) : (
+            <View style={styles.editBtnSpacer} />
+          )}
         </View>
 
         <View style={styles.preview}>
@@ -192,28 +213,77 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
           )}
         </View>
 
-        <View style={styles.toolbar}>
-          {canEdit ? (
-            <TouchableOpacity
-              style={styles.toolBtn}
-              onPress={() => props.onEdit?.(props.context!.adjustment)}
-              activeOpacity={0.88}
-            >
-              <Feather name="edit-2" size={16} color={Theme.primary} />
-              <Text style={styles.toolBtnText}>Edit {kind}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity style={styles.toolBtn} onPress={() => void handlePrint()} activeOpacity={0.88}>
-            <Feather name="printer" size={16} color={Theme.primary} />
-            <Text style={styles.toolBtnText}>Print</Text>
-          </TouchableOpacity>
+        <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
           <TouchableOpacity
-            style={[styles.toolBtn, styles.toolBtnPrimary, !canEdit && styles.toolBtnPrimaryWide]}
-            onPress={() => void handleShare()}
+            style={[styles.actionBtn, actionsDisabled && styles.actionBtnDisabled]}
+            onPress={() => void handlePrint()}
+            disabled={actionsDisabled}
             activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Print provision note"
           >
-            <Feather name="share-2" size={16} color="#fff" />
-            <Text style={[styles.toolBtnText, styles.toolBtnTextPrimary]}>Share PDF</Text>
+            {actionBusy === "print" ? (
+              <LoadingIndicator size="small" color={Theme.textPrimary} />
+            ) : (
+              <FontAwesome name="print" size={16} color={Theme.textPrimary} />
+            )}
+            <Text style={styles.actionBtnText}>
+              {actionBusy === "print" ? "Printing…" : "Print"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, actionsDisabled && styles.actionBtnDisabled]}
+            onPress={() => void handleWhatsApp()}
+            disabled={actionsDisabled}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Share provision note on WhatsApp"
+          >
+            {actionBusy === "whatsapp" ? (
+              <LoadingIndicator size="small" color={Theme.textPrimary} />
+            ) : (
+              <FontAwesome name="whatsapp" size={16} color={Theme.textPrimary} />
+            )}
+            <Text style={styles.actionBtnText}>
+              {actionBusy === "whatsapp" ? "Opening…" : "WhatsApp"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, actionsDisabled && styles.actionBtnDisabled]}
+            onPress={() => void handleShare()}
+            disabled={actionsDisabled}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Share provision note PDF"
+          >
+            {actionBusy === "share" ? (
+              <LoadingIndicator size="small" color={Theme.textPrimary} />
+            ) : (
+              <FontAwesome name="share-alt" size={16} color={Theme.textPrimary} />
+            )}
+            <Text style={styles.actionBtnText}>
+              {actionBusy === "share" ? "Sharing…" : "Share"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, actionsDisabled && styles.actionBtnDisabled]}
+            onPress={() => void handleDownload()}
+            disabled={actionsDisabled}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel="Download provision note PDF"
+          >
+            {actionBusy === "download" ? (
+              <LoadingIndicator size="small" color={Theme.textPrimary} />
+            ) : (
+              <FontAwesome name="download" size={16} color={Theme.textPrimary} />
+            )}
+            <Text style={styles.actionBtnText}>
+              {actionBusy === "download" ? "Saving…" : "Download"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -224,7 +294,7 @@ export const ProvisionNotePdfModal = memo(function ProvisionNotePdfModal(
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: Theme.screenBackground,
   },
   header: {
     flexDirection: "row",
@@ -237,11 +307,25 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#fff",
+    backgroundColor: Theme.surface,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Theme.borderLight,
+  },
+  editBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  editBtnSpacer: {
+    width: 40,
+    height: 40,
   },
   headerText: { flex: 1, minWidth: 0, gap: 2, paddingTop: 4 },
   headerKicker: {
@@ -267,7 +351,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: Theme.borderLight,
-    backgroundColor: "#fff",
+    backgroundColor: Theme.surface,
   },
   webView: {
     flex: 1,
@@ -291,40 +375,36 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
     textAlign: "center",
   },
-  toolbar: {
+  actionBar: {
     flexDirection: "row",
-    gap: 10,
     paddingHorizontal: 14,
-    paddingTop: 12,
+    paddingTop: 16,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.screenBackground,
   },
-  toolBtn: {
+  actionBtn: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     paddingVertical: 12,
+    paddingHorizontal: 6,
+    backgroundColor: Theme.surface,
     borderRadius: 12,
-    backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: Theme.borderLight,
   },
-  toolBtnPrimary: {
-    backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderColor: Theme.primary,
+  actionBtnDisabled: {
+    opacity: 0.5,
   },
-  toolBtnPrimaryWide: {
-    flex: 2,
-  },
-  toolBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Theme.primary,
-  },
-  toolBtnTextPrimary: {
-    color: Theme.buttonPrimaryText,
+  actionBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.textPrimary,
+    letterSpacing: 0.3,
+    textAlign: "center",
   },
 });

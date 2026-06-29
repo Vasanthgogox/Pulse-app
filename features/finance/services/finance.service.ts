@@ -189,6 +189,8 @@ export interface LedgerRow {
   ledger_category?: string | null;
   /** Chat "Add to book" mirror — source transaction id (dedupe); migration 20260601100000. */
   chat_mirror_of_transaction_id?: string | null;
+  /** User who recorded the entry (profiles.id). */
+  created_by?: string | null;
 }
 
 export interface CreateLedgerEntryData {
@@ -236,6 +238,37 @@ function normalizePartyName(raw: string | null | undefined): string {
 
 function isGenericPartyName(raw: string | null | undefined): boolean {
   return GENERIC_PARTY_LABELS.has(normalizePartyName(raw).toLowerCase());
+}
+
+/** UI already picked trip + number (Ledger Sync) — skip pre-insert trip lookup. */
+function ledgerWriteHasUiTripContext(entry: CreateLedgerEntryData): boolean {
+  if (entry.ledgerWritePassthroughTripContext === true) return true;
+  return (
+    String(entry.trip_id ?? "").trim().length > 0 &&
+    String(entry.trip_number ?? "").trim().length > 0
+  );
+}
+
+function shouldResolveLedgerContactName(
+  contactType: LedgerContactType | null,
+  contactId: string | null | undefined,
+  fallbackPartyName: string,
+): boolean {
+  const id = normalizePartyName(contactId);
+  return (
+    !!contactType &&
+    id.length > 0 &&
+    isGenericPartyName(fallbackPartyName)
+  );
+}
+
+function scheduleLedgerInsertSideEffects(
+  orgId: string,
+  row: InsertedTxnRowForChat,
+): void {
+  void syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
+  void tryNotifyLinkedPartyChatAfterLedgerInsert(orgId, row);
+  notifyTripChatMessagesChanged();
 }
 
 async function resolveContactDisplayName(
@@ -718,6 +751,7 @@ function toLedgerRow(row: {
   ledger_entity_type?: string | null;
   ledger_flow_type?: string | null;
   ledger_category?: string | null;
+  created_by?: string | null;
 }): LedgerRow {
   const descriptionRaw = row.description ?? "ENTRY";
   const description = stripLedgerMeta(descriptionRaw) || "ENTRY";
@@ -788,6 +822,7 @@ function toLedgerRow(row: {
     ledger_entity_type: row.ledger_entity_type ?? interpreted.entity_type,
     ledger_flow_type: row.ledger_flow_type ?? interpreted.transaction_type,
     ledger_category: row.ledger_category ?? interpreted.category,
+    created_by: row.created_by ?? null,
   };
 }
 
@@ -1186,19 +1221,38 @@ export async function createLedgerEntry(
   const normalizedContactId = normalizePartyName(enriched.contact_id);
   const fallbackPartyName =
     normalizePartyName(enriched.party_name || "—") || "—";
-  const resolvedPartyName =
-    normalizedContactType && normalizedContactId
-      ? await resolveContactDisplayName(
+  const usePassthroughTrip = ledgerWriteHasUiTripContext(entry);
+  const resolveContactName = shouldResolveLedgerContactName(
+    normalizedContactType,
+    normalizedContactId,
+    fallbackPartyName,
+  );
+
+  const [resolvedPartyName, tripContext] = await Promise.all([
+    resolveContactName
+      ? resolveContactDisplayName(
           orgId,
-          normalizedContactType,
-          normalizedContactId,
+          normalizedContactType!,
+          normalizedContactId!,
         )
-      : null;
+      : Promise.resolve(null),
+    usePassthroughTrip
+      ? Promise.resolve({
+          tripId: enriched.trip_id ?? null,
+          tripNumber: enriched.trip_number ?? null,
+        })
+      : resolveTripContextForLedgerWrite({
+          orgId,
+          tripId: enriched.trip_id,
+          tripNumber: enriched.trip_number,
+          indentId: enriched.indent_id,
+        }),
+  ]);
   if (
     normalizedContactType &&
     normalizedContactId &&
     !resolvedPartyName &&
-    isGenericPartyName(fallbackPartyName)
+    resolveContactName
   ) {
     return {
       error: new Error(
@@ -1210,17 +1264,6 @@ export async function createLedgerEntry(
   const partyName = (
     (resolvedPartyName || fallbackPartyName).trim() || "—"
   ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
-  const tripContext = passthroughTripContext
-    ? {
-        tripId: enriched.trip_id ?? null,
-        tripNumber: enriched.trip_number ?? null,
-      }
-    : await resolveTripContextForLedgerWrite({
-        orgId,
-        tripId: enriched.trip_id,
-        tripNumber: enriched.trip_number,
-        indentId: enriched.indent_id,
-      });
   const description = passthroughTripContext
     ? String(enriched.description ?? "ENTRY").slice(
         0,
@@ -1309,9 +1352,7 @@ export async function createLedgerEntry(
     organization_id: string;
   };
 
-  await syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
-  await tryNotifyLinkedPartyChatAfterLedgerInsert(orgId, row);
-  notifyTripChatMessagesChanged();
+  scheduleLedgerInsertSideEffects(orgId, row);
 
   return { error: null, row: toLedgerRow(row) };
 }
@@ -1349,19 +1390,38 @@ export async function updateLedgerEntry(
   const normalizedContactId = normalizePartyName(enriched.contact_id);
   const fallbackPartyName =
     normalizePartyName(enriched.party_name || "—") || "—";
-  const resolvedPartyName =
-    normalizedContactType && normalizedContactId
-      ? await resolveContactDisplayName(
+  const usePassthroughTrip = ledgerWriteHasUiTripContext(entry);
+  const resolveContactName = shouldResolveLedgerContactName(
+    normalizedContactType,
+    normalizedContactId,
+    fallbackPartyName,
+  );
+
+  const [resolvedPartyName, tripContext] = await Promise.all([
+    resolveContactName
+      ? resolveContactDisplayName(
           orgId,
-          normalizedContactType,
-          normalizedContactId,
+          normalizedContactType!,
+          normalizedContactId!,
         )
-      : null;
+      : Promise.resolve(null),
+    usePassthroughTrip
+      ? Promise.resolve({
+          tripId: enriched.trip_id ?? null,
+          tripNumber: enriched.trip_number ?? null,
+        })
+      : resolveTripContextForLedgerWrite({
+          orgId,
+          tripId: enriched.trip_id,
+          tripNumber: enriched.trip_number,
+          indentId: enriched.indent_id,
+        }),
+  ]);
   if (
     normalizedContactType &&
     normalizedContactId &&
     !resolvedPartyName &&
-    isGenericPartyName(fallbackPartyName)
+    resolveContactName
   ) {
     return {
       error: new Error(
@@ -1373,17 +1433,6 @@ export async function updateLedgerEntry(
   const partyName = (
     (resolvedPartyName || fallbackPartyName).trim() || "—"
   ).slice(0, VALIDATION.PARTY_NAME_MAX_LENGTH);
-  const tripContext = passthroughTripContext
-    ? {
-        tripId: enriched.trip_id ?? null,
-        tripNumber: enriched.trip_number ?? null,
-      }
-    : await resolveTripContextForLedgerWrite({
-        orgId,
-        tripId: enriched.trip_id,
-        tripNumber: enriched.trip_number,
-        indentId: enriched.indent_id,
-      });
   const description = passthroughTripContext
     ? String(enriched.description ?? "ENTRY").slice(
         0,
@@ -1498,7 +1547,7 @@ export async function updateLedgerEntry(
     ledger_category?: string | null;
   };
 
-  await syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
+  void syncTripAmountPaidFromLedger(orgId, row.trip_id ?? null);
   // updateLedgerEntry intentionally does not post to chat to avoid duplicate events.
   return { error: null, row: toLedgerRow(row) };
 }

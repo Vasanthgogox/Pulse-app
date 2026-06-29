@@ -85,11 +85,6 @@ import { ROUTES } from "@/lib/routes";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LazySuspenseNullFallback } from "@/components/LazySuspenseFallback";
 
-const SharedLedgerContent = lazy(() =>
-  import("@/features/finance/components/SharedLedgerContent").then((m) => ({
-    default: m.SharedLedgerContent,
-  })),
-);
 const LedgerReportModal = lazy(() =>
   import("@/features/finance/components/LedgerReportModal").then((m) => ({
     default: m.LedgerReportModal,
@@ -237,10 +232,7 @@ export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
-  initialDetailSubTab?: "trips" | "cash" | "shared";
-  openSharedFromNotification?: boolean;
-  notificationAction?: string;
-  notificationTripId?: string;
+  initialDetailSubTab?: "trips" | "cash";
 }
 
 export default function ClientDetailScreen({
@@ -248,9 +240,6 @@ export default function ClientDetailScreen({
   onBack,
   autoOpenProfile,
   initialDetailSubTab,
-  openSharedFromNotification,
-  notificationAction,
-  notificationTripId,
 }: ClientDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -311,16 +300,13 @@ export default function ClientDetailScreen({
   const [clientReportKind, setClientReportKind] = useState<"receivable" | "pnl" | "ledger">(
     "receivable",
   );
-  /** Bumps SharedLedgerContent to open PDF/Excel (Shared tab) from header download. */
-  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
-    useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const lastFocusRefreshRef = useRef<number>(0);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">(
     initialDetailSubTab ?? "trips",
   );
   const [tripDatePeriod, setTripDatePeriod] =
@@ -376,10 +362,6 @@ export default function ClientDetailScreen({
   useEffect(() => {
     if (autoOpenProfile) openClientFullProfile();
   }, [autoOpenProfile, openClientFullProfile]);
-
-  useEffect(() => {
-    if (openSharedFromNotification) setDetailSubTab("shared");
-  }, [openSharedFromNotification]);
 
   useEffect(() => {
     const phone = client?.phone?.trim();
@@ -1558,10 +1540,6 @@ export default function ClientDetailScreen({
   }, []);
 
   const handleClientDownloadPress = useCallback(() => {
-    if (detailSubTab === "shared") {
-      setSharedLedgerDownloadSignal((n) => n + 1);
-      return;
-    }
     if (detailSubTab === "trips") {
       pickEntityReport(
         "Client report",
@@ -1642,7 +1620,6 @@ export default function ClientDetailScreen({
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
-    { id: "shared" as const, label: "Shared" },
   ];
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
@@ -1726,11 +1703,7 @@ export default function ClientDetailScreen({
             style={styles.downloadBtn}
             onPress={handleClientDownloadPress}
             activeOpacity={0.8}
-            accessibilityLabel={
-              detailSubTab === "shared"
-                ? "Download shared ledger report"
-                : "Download report"
-            }
+            accessibilityLabel="Download report"
           >
               <FontAwesome
                 name="cloud-download"
@@ -1750,7 +1723,7 @@ export default function ClientDetailScreen({
           },
           {
             paddingBottom:
-              canAddTransaction && detailSubTab !== "shared"
+              canAddTransaction
                 ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
                 : Layout.fabBottomOffset + insets.bottom,
           },
@@ -2633,55 +2606,6 @@ export default function ClientDetailScreen({
           </View>
         )}
 
-        {/* Tab: Shared */}
-        {detailSubTab === "shared" && client && (
-          <View
-            style={[
-              styles.sharedSection,
-              Platform.OS === "web" && styles.sharedSectionWeb,
-            ]}
-          >
-            <Suspense fallback={<LazySuspenseNullFallback />}>
-            <SharedLedgerContent
-              entity={{
-                id: client.id,
-                name: clientName,
-                linked_organization_id:
-                  client.linked_organization_id ?? undefined,
-                avatar_url: client.avatar_url ?? undefined,
-              }}
-              entityType="CLIENT"
-              trips={trips}
-              transactions={transactions}
-              organizationId={currentOrganization?.id ?? null}
-              integrated={Boolean(
-                client.is_integrated || client.linked_organization_id,
-              )}
-              embeddedInOverlay={true}
-              externalDownloadRequest={sharedLedgerDownloadSignal}
-              onRefresh={load}
-              initialNotificationAction={
-                (notificationAction as
-                  | import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction
-                  | undefined) ?? null
-              }
-              initialNotificationTripId={notificationTripId ?? null}
-              onRequestConnection={() => {
-                setIsLinked(true);
-                triggerSuccess("CONNECTION_REQUESTED");
-              }}
-              onInviteToApp={() => {
-                const message = `Join me on Pulse to sync our ledger and compare books with ${clientName}. Download Pulse to get started.`;
-                Share.share({ message, title: "Invite to Pulse" })
-                  .then(() => {
-                    triggerSuccess("INVITE_SENT");
-                  })
-                  .catch(() => {});
-              }}
-            />
-            </Suspense>
-          </View>
-        )}
       </ScrollView>
 
       {/* Success overlay */}
@@ -2696,7 +2620,7 @@ export default function ClientDetailScreen({
         </View>
       )}
 
-      {canAddTransaction && detailSubTab !== "shared" && (
+      {canAddTransaction && (
         <View
           style={[
             styles.fabWrap,

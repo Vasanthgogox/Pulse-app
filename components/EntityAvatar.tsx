@@ -37,9 +37,9 @@ export function EntityAvatar({
   showIntegrationBadge = true,
 }: EntityAvatarProps) {
   const badgeSize = Math.max(8, Math.round(size * 0.28));
-  /** Space for the status dot on the bottom-right corner (inside layout box). */
-  const badgePad = Math.ceil(badgeSize * 0.4);
-  const frame = size + badgePad;
+  /** Reserve space so the status dot sits outside the avatar ring (no border overlap). */
+  const badgeGutter = badgeSize;
+  const frame = size + badgeGutter;
 
   const useOfflineRoleIcon = shouldUseOfflinePartyRoleAvatar(
     isIntegrated,
@@ -81,7 +81,7 @@ export function EntityAvatar({
 
   return (
     <View style={[styles.frame, { width: frame, height: frame }]}>
-      <View style={{ width: size, height: size }}>{avatar}</View>
+      <View style={[styles.avatarAnchor, { width: size, height: size }]}>{avatar}</View>
       <View
         style={[
           styles.badge,
@@ -100,8 +100,12 @@ export function EntityAvatar({
 const styles = StyleSheet.create({
   frame: {
     position: "relative",
-    overflow: "visible",
     flexShrink: 0,
+  },
+  avatarAnchor: {
+    position: "absolute",
+    left: 0,
+    top: 0,
   },
   badge: {
     position: "absolute",

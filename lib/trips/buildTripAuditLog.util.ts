@@ -1,12 +1,43 @@
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import type { DriverActivityTimelineRow } from "@/features/trips/components/trip-detail/hooks/useTripDetail";
+import type { RegistryNotificationAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import type {
   TripAuditFilterTab,
   TripAuditLogCategory,
   TripAuditLogEntry,
+  TripAuditLogPerson,
 } from "@/lib/trips/tripAuditLog.types";
+
+export type TripActivityUserProfile = {
+  full_name?: string | null;
+  avatar_url?: string | null;
+  avatar_seed?: string | null;
+};
+
+function resolveActivityActorAvatar(
+  displayName: string,
+  userId: string | null | undefined,
+  userProfileById: Record<string, TripActivityUserProfile>,
+  entityType: PartyEntityType = "client",
+  colorSeed?: string | null,
+): RegistryNotificationAvatar {
+  const profile = userId ? userProfileById[userId] : undefined;
+  const name =
+    displayName.trim() ||
+    profile?.full_name?.trim() ||
+    "Team member";
+  return {
+    name,
+    entityType,
+    avatarUrl: profile?.avatar_url ?? null,
+    avatarSeed: profile?.avatar_seed ?? null,
+    initialsColorSeed: colorSeed ?? userId ?? name,
+  };
+}
 
 function formatAuditTimestamp(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -31,14 +62,16 @@ function formatAmount(n: number): string {
   return n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
-function resolveActorLabel(
-  changedBy: string | null | undefined,
+export function resolveTripActivityUserLabel(
+  userId: string | null | undefined,
   currentUserId: string | null | undefined,
-  fallback = "System",
+  userDisplayById: Record<string, string>,
+  fallback = "Team member",
 ): string {
-  if (!changedBy) return fallback;
-  if (currentUserId && changedBy === currentUserId) return "You";
-  return "Dispatcher";
+  if (!userId) return fallback;
+  if (currentUserId && userId === currentUserId) return "You";
+  const name = userDisplayById[userId]?.trim();
+  return name || fallback;
 }
 
 function categoryLabel(category: TripAuditLogCategory): string {
@@ -48,18 +81,93 @@ function categoryLabel(category: TripAuditLogCategory): string {
     case "assignment":
       return "Assignment";
     case "status":
-      return "Status";
+      return "Update";
     case "trip":
-      return "Trip";
+      return "Update";
     default:
-      return "Trip";
+      return "Update";
   }
 }
 
-function statusActorFallback(context: string): string {
-  if (context === "created") return "System";
-  if (context === "accepted") return "Driver";
-  return "Fleet";
+type StatusActivityContext =
+  | "started"
+  | "in_transit"
+  | "completed"
+  | "created"
+  | "accepted"
+  | "assigned";
+
+function statusActivityTitle(
+  context: StatusActivityContext,
+  fallbackLabel: string,
+): string {
+  switch (context) {
+    case "created":
+      return "created trip";
+    case "accepted":
+      return "accepted assignment";
+    case "started":
+    case "in_transit":
+      return "marked in transit";
+    case "completed":
+      return "marked complete";
+    default:
+      return fallbackLabel.charAt(0).toLowerCase() + fallbackLabel.slice(1);
+  }
+}
+
+function resolveStatusActor(
+  item: Extract<DriverActivityTimelineRow, { kind: "status" }>,
+  trip: TripRow,
+  userDisplayById: Record<string, string>,
+  currentUserId: string | null | undefined,
+  driverDisplayName: string | null | undefined,
+): string {
+  const context = item.status_context;
+  if (context === "created") {
+    const creatorId =
+      trip.created_by_user_id ?? trip.created_by ?? trip.owner_user_id ?? null;
+    return resolveTripActivityUserLabel(
+      creatorId,
+      currentUserId,
+      userDisplayById,
+      "Team member",
+    );
+  }
+  if (context === "accepted") {
+    return driverDisplayName?.trim() || "Driver";
+  }
+  if (trip.status_updated_role === "driver") {
+    return (
+      driverDisplayName?.trim() ||
+      resolveTripActivityUserLabel(
+        trip.status_updated_by,
+        currentUserId,
+        userDisplayById,
+        "Driver",
+      )
+    );
+  }
+  return resolveTripActivityUserLabel(
+    trip.status_updated_by,
+    currentUserId,
+    userDisplayById,
+    context === "assigned" ? "Dispatcher" : "Team member",
+  );
+}
+
+function statusDetailLine(
+  item: Extract<DriverActivityTimelineRow, { kind: "status" }>,
+  tripRef: string,
+  actor: string,
+): string {
+  const base = item.detail_line?.trim();
+  if (item.status_context === "created") {
+    return base && !base.toLowerCase().includes("system generated")
+      ? base
+      : `${actor} created ${tripRef}`;
+  }
+  return base || `${item.status_label} · ${tripRef}`;
 }
 
 export function matchesTripAuditTab(
@@ -69,13 +177,14 @@ export function matchesTripAuditTab(
   if (tab === "all") return true;
   if (tab === "payment") return entry.category === "payment";
   if (tab === "assignment") return entry.category === "assignment";
-  if (tab === "trip") {
+  if (tab === "updates") {
     return entry.category === "trip" || entry.category === "status";
   }
   return true;
 }
 
 export function buildTripAuditLog(params: {
+  trip: TripRow;
   tripRef: string;
   assignmentAuditRows: TripAssignmentAuditRow[];
   assignmentDriverNames: Record<string, string>;
@@ -83,8 +192,12 @@ export function buildTripAuditLog(params: {
   timelineRows: DriverActivityTimelineRow[];
   transactions: LedgerRow[] | null | undefined;
   currentUserId?: string | null;
+  userDisplayById?: Record<string, string>;
+  userProfileById?: Record<string, TripActivityUserProfile>;
+  driverDisplayName?: string | null;
 }): TripAuditLogEntry[] {
   const {
+    trip,
     tripRef,
     assignmentAuditRows,
     assignmentDriverNames,
@@ -92,6 +205,9 @@ export function buildTripAuditLog(params: {
     timelineRows,
     transactions,
     currentUserId,
+    userDisplayById = {},
+    userProfileById = {},
+    driverDisplayName,
   } = params;
 
   const entries: TripAuditLogEntry[] = [];
@@ -143,24 +259,96 @@ export function buildTripAuditLog(params: {
             : null,
     ].filter(Boolean) as string[];
 
+    const actorUserId = isDriverDeclined
+      ? null
+      : row.changed_by ?? trip.assigned_by_user_id ?? null;
+    const actor = isDriverDeclined
+      ? driverPrev?.trim() || "Driver"
+      : resolveTripActivityUserLabel(
+          actorUserId,
+          currentUserId,
+          userDisplayById,
+          "Dispatcher",
+        );
+    const actorAvatar = isDriverDeclined
+      ? resolveActivityActorAvatar(
+          actor,
+          null,
+          userProfileById,
+          "driver",
+          row.driver_id_prev ?? actor,
+        )
+      : resolveActivityActorAvatar(
+          actor,
+          actorUserId,
+          userProfileById,
+          "client",
+        );
+
+    const people: TripAuditLogPerson[] = [];
+    if (driver) {
+      people.push({
+        name: driver,
+        role: "Driver",
+        avatar: resolveActivityActorAvatar(
+          driver,
+          row.driver_id_new,
+          userProfileById,
+          "driver",
+          row.driver_id_new ?? driver,
+        ),
+      });
+    }
+    if (vehicle) {
+      people.push({
+        name: vehicle,
+        role: "Vehicle",
+        avatar: resolveActivityActorAvatar(
+          vehicle,
+          row.vehicle_id_new,
+          userProfileById,
+          "vehicle",
+          row.vehicle_id_new ?? vehicle,
+        ),
+      });
+    }
+    if (driverPrev && isReassign && driverPrev !== driver) {
+      people.push({
+        name: driverPrev,
+        role: "Previous driver",
+        avatar: resolveActivityActorAvatar(
+          driverPrev,
+          row.driver_id_prev,
+          userProfileById,
+          "driver",
+          row.driver_id_prev ?? driverPrev,
+        ),
+      });
+    }
+
     entries.push({
       id: `assign-${row.id}`,
       at: row.changed_at,
       category: "assignment",
       categoryLabel: categoryLabel("assignment"),
       title: isDriverDeclined
-        ? "Driver rejected assignment"
+        ? "rejected assignment"
         : isReassign
-          ? "Driver reassigned"
-          : "Driver assigned",
+          ? "reassigned driver"
+          : "assigned driver",
       recordedAtLabel: formatAuditTimestamp(row.changed_at),
-      recordedBy: isDriverDeclined
-        ? "Driver"
-        : resolveActorLabel(row.changed_by, currentUserId, "Fleet"),
+      recordedBy: actor,
+      actorAvatar,
+      contextLabel: isDriverDeclined
+        ? "Assignment declined"
+        : isReassign
+          ? "Reassignment"
+          : "Assignment",
       detail:
         detailLines.join(" · ") ||
-        `Assignment updated on trip ${tripRef}`,
+        `${actor} updated assignment on ${tripRef}`,
       detailLines: detailLines.length > 0 ? detailLines : undefined,
+      people: people.length > 0 ? people : undefined,
     });
   }
 
@@ -168,19 +356,67 @@ export function buildTripAuditLog(params: {
     if (item.kind !== "status") continue;
     if (item.status_context === "assigned") continue;
 
+    const actor = resolveStatusActor(
+      item,
+      trip,
+      userDisplayById,
+      currentUserId,
+      driverDisplayName ?? trip.driver_display_name,
+    );
     const label = item.status_label?.trim() || "Trip update";
     const category: TripAuditLogCategory =
       item.status_context === "created" ? "trip" : "status";
+    const statusUserId =
+      item.status_context === "created"
+        ? trip.created_by_user_id ?? trip.created_by ?? trip.owner_user_id ?? null
+        : item.status_context === "accepted" ||
+            trip.status_updated_role === "driver"
+          ? null
+          : trip.status_updated_by ?? null;
+    const statusEntityType: PartyEntityType =
+      item.status_context === "accepted" ||
+      trip.status_updated_role === "driver"
+        ? "driver"
+        : "client";
 
     entries.push({
       id: item.id,
       at: item.changed_at,
       category,
       categoryLabel: categoryLabel(category),
-      title: label,
+      title: statusActivityTitle(item.status_context, label),
       recordedAtLabel: formatAuditTimestamp(item.changed_at),
-      recordedBy: statusActorFallback(item.status_context),
-      detail: item.detail_line?.trim() || `${label} on ${tripRef}`,
+      recordedBy: actor,
+      actorAvatar: resolveActivityActorAvatar(
+        actor,
+        statusUserId,
+        userProfileById,
+        statusEntityType,
+        statusEntityType === "driver" ? trip.driver_id ?? actor : statusUserId,
+      ),
+      contextLabel:
+        item.status_context === "created"
+          ? "Trip created"
+          : item.status_context === "completed"
+            ? "Completed"
+            : "Status update",
+      detail: statusDetailLine(item, tripRef, actor),
+      people:
+        statusEntityType === "driver" && driverDisplayName
+          ? [
+              {
+                name: driverDisplayName,
+                role: "Driver",
+                avatar: resolveActivityActorAvatar(
+                  driverDisplayName,
+                  trip.driver_id,
+                  userProfileById,
+                  "driver",
+                  trip.driver_id ?? driverDisplayName,
+                ),
+              },
+            ]
+          : undefined,
     });
   }
 
@@ -196,18 +432,76 @@ export function buildTripAuditLog(params: {
     const party = (tx.party_name ?? tx.driver_name ?? "").trim() || "—";
     const at = tx.transaction_date ?? tx.created_at ?? "";
     const signedAmount = `${isIn ? "+" : "−"} ₹${formatAmount(amount)}`;
+    const actor = resolveTripActivityUserLabel(
+      tx.created_by,
+      currentUserId,
+      userDisplayById,
+      "Team member",
+    );
+
+    const partyAvatar = resolveActivityActorAvatar(
+      party,
+      null,
+      userProfileById,
+      tx.contact_type === "supplier"
+        ? "supplier"
+        : tx.contact_type === "driver"
+          ? "driver"
+          : "client",
+      party,
+    );
 
     entries.push({
       id: `payment-${tx.id}`,
       at,
       category: "payment",
       categoryLabel: categoryLabel("payment"),
-      title: isIn ? "Customer payment received" : "Supplier payment recorded",
+      title: isIn ? "recorded customer payment" : "recorded supplier payment",
       recordedAtLabel: formatAuditTimestamp(at),
-      recordedBy: resolveActorLabel(null, currentUserId, "Fleet"),
-      detail: `${signedAmount} · ${typeLabel}`,
+      recordedBy: actor,
+      actorAvatar: resolveActivityActorAvatar(
+        actor,
+        tx.created_by,
+        userProfileById,
+        "client",
+      ),
+      contextLabel: isIn ? "Cash in" : "Cash out",
+      detail: typeLabel,
       detailLines: party !== "—" ? [`Party: ${party}`] : undefined,
       amountLabel: signedAmount,
+      people:
+        party !== "—"
+          ? [{ name: party, role: isIn ? "Client" : "Supplier", avatar: partyAvatar }]
+          : undefined,
+    });
+  }
+
+  const hasCreated = entries.some((e) => e.id === "status-created" || e.title.toLowerCase().includes("created trip"));
+  if (!hasCreated && trip.created_at) {
+    const creatorId =
+      trip.created_by_user_id ?? trip.created_by ?? trip.owner_user_id ?? null;
+    const creator = resolveTripActivityUserLabel(
+      creatorId,
+      currentUserId,
+      userDisplayById,
+      "Team member",
+    );
+    entries.push({
+      id: "status-created-fallback",
+      at: trip.created_at,
+      category: "trip",
+      categoryLabel: categoryLabel("trip"),
+      title: "created trip",
+      recordedAtLabel: formatAuditTimestamp(trip.created_at),
+      recordedBy: creator,
+      actorAvatar: resolveActivityActorAvatar(
+        creator,
+        creatorId,
+        userProfileById,
+        "client",
+      ),
+      contextLabel: "Trip created",
+      detail: `${creator} created ${tripRef}`,
     });
   }
 

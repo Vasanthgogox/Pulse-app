@@ -78,23 +78,32 @@ function NotificationAvatar({
   compact?: boolean;
 }) {
   const showUnread = mode === "active" && isUnread;
+  const dotSize = compact ? 7 : 8;
+  const slot = size + dotSize;
   return (
-    <View style={[styles.avatarWrap, { width: size, height: size }]}>
-      <PartyAvatar
-        name={avatar.name}
-        entityType={avatar.entityType ?? "client"}
-        avatarUrl={avatar.avatarUrl}
-        avatarSeed={avatar.avatarSeed}
-        organizationImageUrl={avatar.organizationImageUrl}
-        organizationAvatarSeed={avatar.organizationAvatarSeed}
-        initialsColorSeed={avatar.initialsColorSeed}
-        size={size}
-        shape="circle"
-      />
+    <View style={[styles.avatarWrap, { width: slot, height: slot }]}>
+      <View style={[styles.avatarCore, { width: size, height: size }]}>
+        <PartyAvatar
+          name={avatar.name}
+          entityType={avatar.entityType ?? "client"}
+          avatarUrl={avatar.avatarUrl}
+          avatarSeed={avatar.avatarSeed}
+          organizationImageUrl={avatar.organizationImageUrl}
+          organizationAvatarSeed={avatar.organizationAvatarSeed}
+          initialsColorSeed={avatar.initialsColorSeed}
+          size={size}
+          shape="circle"
+        />
+      </View>
       <View
         style={[
           styles.statusDot,
           compact && styles.statusDotCompact,
+          {
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+          },
           showUnread ? styles.statusDotUnread : styles.statusDotRead,
         ]}
       />
@@ -320,18 +329,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   avatarWrap: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
     flexShrink: 0,
     position: "relative",
+  },
+  avatarCore: {
+    position: "absolute",
+    left: 0,
+    top: 0,
   },
   statusDot: {
     position: "absolute",
     right: 0,
     bottom: 0,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
   },

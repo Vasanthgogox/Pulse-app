@@ -144,7 +144,11 @@ export const LedgerProtocolWorkbench = memo(function LedgerProtocolWorkbench({
         compact && styles.workbenchCompact,
       ]}
     >
-      {children}
+      {stacked ? (
+        <View style={styles.workbenchStackedInner}>{children}</View>
+      ) : (
+        children
+      )}
     </View>
   );
 });
@@ -168,8 +172,15 @@ const styles = StyleSheet.create({
   },
   workbenchStacked: {
     flexDirection: "column",
-    gap: 10,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
+  },
+  workbenchStackedInner: {
+    width: "100%",
+    gap: 12,
   },
   workbenchCompact: {
     borderRadius: 14,

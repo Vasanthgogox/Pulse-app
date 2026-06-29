@@ -349,19 +349,6 @@ export default function LedgerSyncScreen() {
     [suppliers],
   );
 
-  /**
-   * Supplier POV on integrated getLoad: try origin/qunifiedbase-style write first (UI trip_id + plain
-   * description). finance.service still runs unanchored+QMETA retry if the DB rejects trip_id.
-   */
-  const qUnifiedPassthroughLedgerTripCreate = useMemo(() => {
-    if (!orgId || !params.tripId) return false;
-    const meta = tripDueMetaById[params.tripId];
-    if (!meta?.indent_id || !meta.isCrossOrgSupplier) return false;
-    const ownerOrg = meta.organization_id;
-    if (!ownerOrg || ownerOrg === orgId) return false;
-    return true;
-  }, [orgId, params.tripId, tripDueMetaById]);
-
   /** When opened from entity detail (vehicle/driver/client/supplier), show that entity's trips. For SUPPLIER, include owned trips and trips where org is client (integrated supplier-created). */
   const filteredTrips = useMemo(() => {
     if (!params.entityType || !params.entityId) return trips;
@@ -806,7 +793,7 @@ export default function LedgerSyncScreen() {
         indent_id: data.indentId ?? null,
         vehicle_number: data.vehicleNumber ?? null,
         driver_name: resolvedContactType === "driver" ? (data.driverName ?? null) : null,
-        ...(qUnifiedPassthroughLedgerTripCreate && !options?.entryId
+        ...(data.tripId && !options?.entryId
           ? { ledgerWritePassthroughTripContext: true as const }
           : {}),
       };
@@ -821,7 +808,7 @@ export default function LedgerSyncScreen() {
         throw new Error(error.message);
       }
 
-      await invalidateTransactions(orgId);
+      void invalidateTransactions(orgId);
       const refreshTripId = payload.trip_id ?? params.tripId ?? null;
       if (refreshTripId) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(refreshTripId) });
@@ -903,7 +890,6 @@ export default function LedgerSyncScreen() {
       params.salaryRequestId,
       t,
       tripDueMetaById,
-      qUnifiedPassthroughLedgerTripCreate,
     ]
   );
 

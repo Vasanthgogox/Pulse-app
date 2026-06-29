@@ -105,19 +105,9 @@ export function useAlertRegistryFinanceHandlers(): {
       const entityId = typeof payload.entity_id === "string" ? payload.entity_id : null;
 
       if (entityType === "CLIENT" && entityId) {
-        const q = new URLSearchParams({
-          shared: "1",
-          sharedAction: actionKind,
-        });
-        if (tripId) q.set("tripId", tripId);
-        router.push(`/client/${entityId}?${q.toString()}` as const);
+        router.push(`/client/${entityId}?tab=trips` as const);
       } else if (entityType === "SUPPLIER" && entityId) {
-        const q = new URLSearchParams({
-          shared: "1",
-          sharedAction: actionKind,
-        });
-        if (tripId) q.set("tripId", tripId);
-        router.push(`/supplier/${entityId}?${q.toString()}` as const);
+        router.push(`/supplier/${entityId}?tab=trips` as const);
       } else if (tripId) {
         router.push(`/trip-ledger/${tripId}` as const);
       } else {

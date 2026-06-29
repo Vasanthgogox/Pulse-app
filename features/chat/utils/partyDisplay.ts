@@ -31,6 +31,18 @@ export function shouldHideChatPartyName(name: string | null | undefined): boolea
 }
 
 /**
+ * Title-case party name for payment / ledger cards (not all-caps).
+ */
+export function formatElegantPartyName(name: string | null | undefined): string | null {
+  if (shouldHideChatPartyName(name)) return null;
+  return String(name)
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/**
  * Uppercase party line for chat (transaction-style casing), or `null` when the row should be omitted.
  */
 export function formatChatPartyName(name: string | null | undefined): string | null {
