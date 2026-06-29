@@ -234,6 +234,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
+    overflow: "hidden",
   },
   photoFrame: {
     backgroundColor: Theme.surface,
@@ -250,6 +251,8 @@ const styles = StyleSheet.create({
   initialsWrap: {
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    flexShrink: 0,
   },
   initialsText: {
     fontWeight: "400",

@@ -33,8 +33,12 @@ import { formatINR } from "@/lib/format";
 import type { LedgerTripSettlementPreview } from "@/lib/ledgerTripSettlementPreview.util";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { partyMobileWizardStyles as shell } from "@/components/party/partyMobileWizardStyles";
-import { LedgerReviewTicket } from "@/components/ledger/LedgerReviewTicket";
+import { LedgerReconSummaryCard } from "@/components/ledger/LedgerReconSummaryCard";
 import { LedgerTripSettlementNote } from "@/components/ledger/LedgerTripSettlementNote";
+import {
+  formatLedgerSettlementAmount,
+  LedgerSettlementPctDock,
+} from "@/components/ledger/LedgerSettlementPctDock";
 import {
   isLedgerCashPaymentMode,
   LEDGER_PAYMENT_MODES,
@@ -121,6 +125,7 @@ export interface LedgerMobileWizardProps {
   entryDate: string;
   onEntryDateChange: (iso: string) => void;
   reconRows: { label: string; value: string }[];
+  reconAmountText: string;
   canSubmit: boolean;
   onSubmit: () => void;
   onClose: () => void;
@@ -151,17 +156,6 @@ function resolveDueTotalInr(props: LedgerMobileWizardProps): number {
   }
   return 0;
 }
-
-function formatLedgerAmountValue(amount: number): string {
-  if (!Number.isFinite(amount) || amount <= 0) return "";
-  return amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-const SETTLEMENT_PCTS = [40, 50, 60, 70, 80, 90] as const;
-const FULL_SETTLEMENT_PCT = 100;
 
 function buildSteps(props: LedgerMobileWizardProps): LedgerWizardStep[] {
   const steps: LedgerWizardStep[] = [];
@@ -255,8 +249,8 @@ function stepMeta(step: LedgerWizardStep, props: LedgerMobileWizardProps) {
       };
     case "review":
       return {
-        title: props.isEditMode ? "Review update" : "Review & save",
-        hint: "Confirm before syncing to the ledger.",
+        title: props.isEditMode ? "Review update" : "Confirm sync",
+        hint: "Authorize this entry to post it to your books.",
       };
     default:
       return { title: "", hint: "" };
@@ -308,7 +302,6 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
   const [tripDueFilter, setTripDueFilter] = useState<"all" | "has_due">(
     props.defaultTripDueFilter ?? "all",
   );
-  const [selectedSettlementPct, setSelectedSettlementPct] = useState<number | null>(null);
 
   const dueTotalInr = useMemo(() => resolveDueTotalInr(props), [
     props.amountPlaceholder,
@@ -357,28 +350,10 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
 
   const handleAmountChange = useCallback(
     (value: string) => {
-      setSelectedSettlementPct(null);
       props.onAmountChange(value);
     },
     [props],
   );
-
-  const applySettlementPct = useCallback(
-    (pct: number) => {
-      if (dueTotalInr <= 0) return;
-      const value =
-        pct >= FULL_SETTLEMENT_PCT
-          ? dueTotalInr
-          : Math.round((dueTotalInr * pct) / 100);
-      setSelectedSettlementPct(pct >= FULL_SETTLEMENT_PCT ? FULL_SETTLEMENT_PCT : pct);
-      props.onAmountChange(formatLedgerAmountValue(value));
-    },
-    [dueTotalInr, props],
-  );
-
-  const applyFullPayment = useCallback(() => {
-    applySettlementPct(FULL_SETTLEMENT_PCT);
-  }, [applySettlementPct]);
 
   const lastSessionKeyRef = useRef(props.flowSessionKey ?? "");
   useEffect(() => {
@@ -389,7 +364,6 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
     setTripDueFilter(props.defaultTripDueFilter ?? "all");
     setPartySearch("");
     setTripSearch("");
-    setSelectedSettlementPct(null);
   }, [props.flowSessionKey, props.defaultTripDueFilter, steps, props]);
 
   const currentStep = steps[stepIndex] ?? "review";
@@ -462,8 +436,8 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
   const advanceLabel =
     currentStep === "review"
       ? props.isEditMode
-        ? "Update"
-        : "Save"
+        ? "Save Changes"
+        : "Confirm Sync"
       : "Continue";
 
   const renderDirection = () => (
@@ -494,64 +468,6 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
       </Pressable>
     </View>
   );
-
-  const renderSettlementPctDock = () => {
-    if (dueTotalInr <= 0) return null;
-    const fullActive = selectedSettlementPct === FULL_SETTLEMENT_PCT;
-    return (
-      <View style={styles.amountPctDock}>
-        <Text style={styles.pctSectionLabelCentered}>Quick settlement</Text>
-        <Pressable
-          style={({ pressed }) => [
-            styles.fullPayTile,
-            fullActive && styles.fullPayTileActive,
-            fullActive && { borderColor: accent },
-            pressed && styles.pctTilePressed,
-          ]}
-          onPress={applyFullPayment}
-          accessibilityRole="button"
-          accessibilityLabel={`Full payment, ${formatINR(dueTotalInr)}`}
-        >
-          <Text style={[styles.fullPayLabel, fullActive && { color: accent }]}>
-            Full payment
-          </Text>
-          <Text style={[styles.fullPayAmount, { color: accent }]}>
-            {formatINR(dueTotalInr)}
-          </Text>
-        </Pressable>
-        <Text style={styles.pctSubsectionLabel}>Or choose % of due</Text>
-        <View style={styles.pctGrid}>
-          {SETTLEMENT_PCTS.map((pct) => {
-            const preview = Math.round((dueTotalInr * pct) / 100);
-            const active = selectedSettlementPct === pct;
-            return (
-              <Pressable
-                key={pct}
-                style={({ pressed }) => [
-                  styles.pctTile,
-                  active && styles.pctTileActive,
-                  pressed && styles.pctTilePressed,
-                ]}
-                onPress={() => applySettlementPct(pct)}
-                accessibilityRole="button"
-                accessibilityLabel={`${pct} percent, ${formatINR(preview)}`}
-              >
-                <Text style={[styles.pctTilePct, active && styles.pctTilePctActive]}>
-                  {pct}%
-                </Text>
-                <Text
-                  style={[styles.pctTileAmt, active && styles.pctTileAmtActive]}
-                  numberOfLines={1}
-                >
-                  {formatINR(preview)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
 
   const renderAmount = () => {
     const isIn = props.type === "in";
@@ -594,7 +510,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
               type="currency"
               value={parseAmount(props.amountStr)}
               onChange={(_, numeric) => {
-                handleAmountChange(formatLedgerAmountValue(numeric));
+                handleAmountChange(formatLedgerSettlementAmount(numeric));
               }}
               label={isIn ? "Amount received" : "Amount paid"}
               submitLabel="Apply"
@@ -653,7 +569,13 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           </Pressable>
         </View>
         <View style={styles.amountFullPageBody}>{renderAmount()}</View>
-        {renderSettlementPctDock()}
+        <LedgerSettlementPctDock
+          dueTotalInr={dueTotalInr}
+          amountStr={props.amountStr}
+          onAmountChange={handleAmountChange}
+          accentColor={accent}
+          variant="light"
+        />
         <OperationalBottomActionBar>
           <OperationalButton
             intent="bottomSticky"
@@ -957,16 +879,13 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           />
         </View>
       ) : null}
-      <LedgerReviewTicket
-        type={props.type}
-        amountStr={props.amountStr}
-        partyDisplayName={props.partyDisplayName}
-        partyAvatarUrl={props.partyAvatarUrl}
-        partyAvatarSeed={props.partyAvatarSeed}
-        partyEntityType={props.partyEntityType}
-        partyIsIntegrated={props.partyIsIntegrated}
-        reconRows={props.reconRows}
+      <LedgerReconSummaryCard
+        amountText={props.reconAmountText}
+        direction={props.type}
+        rows={props.reconRows}
         isEditMode={props.isEditMode}
+        phase="review"
+        variant="flat"
       />
     </ScrollView>
   );
@@ -1076,13 +995,13 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
             {currentStep !== "review" ? (
               <Text style={[c.stepTitle, compact && styles.stepTitleCompact]}>{title}</Text>
             ) : (
-              <Text style={[c.stepTitle, compact && styles.stepTitleCompact]}>Review & save</Text>
+              <Text style={[c.stepTitle, compact && styles.stepTitleCompact]}>Confirm sync</Text>
             )}
             {hint && currentStep !== "review" ? (
               <Text style={[c.stepHint, compact && styles.stepHintCompact]}>{hint}</Text>
             ) : currentStep === "review" ? (
               <Text style={[c.stepHint, compact && styles.stepHintCompact]}>
-                Confirm details on your ticket before saving.
+                Authorize this entry to post it to your books.
               </Text>
             ) : null}
           </View>
@@ -1100,15 +1019,18 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           {currentStep === "review" ? (
             <Pressable
               style={[
-                styles.saveBtn,
-                (!props.canSubmit || props.submitting) && styles.saveBtnDisabled,
+                styles.confirmSyncBtn,
+                (!props.canSubmit || props.submitting) && styles.confirmSyncBtnDisabled,
               ]}
               onPress={handleAdvance}
               disabled={!props.canSubmit || props.submitting}
             >
-              <Check size={18} color="#fff" strokeWidth={2.8} />
-              <Text style={styles.saveBtnText}>
-                {props.submitting ? "Saving…" : advanceLabel}
+              <Text style={styles.confirmSyncBtnText}>
+                {props.submitting
+                  ? "Authorizing…"
+                  : props.isEditMode
+                    ? "Save Changes"
+                    : "Confirm Sync"}
               </Text>
             </Pressable>
           ) : (
@@ -1803,5 +1725,21 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.buttonDarkText,
     letterSpacing: 0.3,
+  },
+  confirmSyncBtn: {
+    alignSelf: "stretch",
+    backgroundColor: Theme.primary,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  confirmSyncBtnDisabled: { opacity: 0.55 },
+  confirmSyncBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textOnDark,
+    letterSpacing: 0.2,
   },
 });

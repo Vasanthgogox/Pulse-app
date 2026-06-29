@@ -68,8 +68,7 @@ export function EntityIdentityAvatar({
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "center",
-    overflow: "visible",
+    alignItems: "flex-start",
     flexShrink: 0,
   },
   rowWithName: {

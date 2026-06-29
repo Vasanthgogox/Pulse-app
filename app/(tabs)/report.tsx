@@ -8,7 +8,9 @@ import {
   Share,
   useWindowDimensions,
   Platform,
+  Pressable,
 } from 'react-native';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import * as FileSystem from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -18,6 +20,7 @@ import { TransactionRow } from '@/components/TransactionRow';
 import { formatINR } from '@/lib/format';
 import Theme from '@/constants/Theme';
 import { wrapPrintableReportHtml } from '@/lib/reportWatermark.util';
+import { printHtmlOnWeb } from '@/lib/webPrint.util';
 
 // Sample transaction data - replace with actual data from your service
 const sampleTransactions = [
@@ -125,7 +128,10 @@ export default function ReportScreen() {
         bodyHtml: `<h2>Report ${startDate} - ${endDate}</h2><pre>${buildReportMessage().replace(/</g, "&lt;")}</pre>`,
       });
       if (Platform.OS === 'web') {
-        await Print.printAsync({ html });
+        const ok = await printHtmlOnWeb(html, { title: `Report ${startDate} - ${endDate}` });
+        if (!ok) {
+          await Share.share({ message: buildReportMessage(), title: 'Report' });
+        }
         return;
       }
       const { uri } = await Print.printToFileAsync({ html });
@@ -241,34 +247,42 @@ export default function ReportScreen() {
         animationType="fade"
         onRequestClose={() => setDownloadModalVisible(false)}
       >
-        <TouchableOpacity
+        <Pressable
           style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
-          activeOpacity={1}
           onPress={() => setDownloadModalVisible(false)}
         >
-          <View style={[styles.downloadModalCard, { maxWidth: width * 0.85 }]}>
+          <Pressable
+            style={[styles.downloadModalCard, { maxWidth: width * 0.85 }]}
+            onPress={(event) => event.stopPropagation()}
+          >
             <Text style={styles.downloadModalTitle}>Download format</Text>
             <Text style={styles.downloadModalSubtitle}>Choose your preferred report file type</Text>
-            <TouchableOpacity
-              style={styles.downloadOption}
-              onPress={() => {
-                setDownloadModalVisible(false);
-                void handleDownloadPdf();
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.downloadOptionText}>PDF</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.downloadOption}
-              onPress={() => {
-                setDownloadModalVisible(false);
-                void handleDownloadCsv();
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.downloadOptionText}>CSV</Text>
-            </TouchableOpacity>
+            <View style={styles.downloadFormatRow}>
+              <TouchableOpacity
+                style={styles.downloadFormatTile}
+                onPress={() => {
+                  setDownloadModalVisible(false);
+                  void handleDownloadPdf();
+                }}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="file-pdf-o" size={22} color={Theme.teslaRed} />
+                <Text style={styles.downloadFormatTileTitle}>PDF</Text>
+                <Text style={styles.downloadFormatTileHint}>Download PDF</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.downloadFormatTile}
+                onPress={() => {
+                  setDownloadModalVisible(false);
+                  void handleDownloadCsv();
+                }}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="file-excel-o" size={22} color={Theme.darkGreen} />
+                <Text style={styles.downloadFormatTileTitle}>CSV</Text>
+                <Text style={styles.downloadFormatTileHint}>Spreadsheet</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               style={[styles.downloadOption, styles.downloadCancelOption]}
               onPress={() => setDownloadModalVisible(false)}
@@ -276,8 +290,8 @@ export default function ReportScreen() {
             >
               <Text style={[styles.downloadOptionText, styles.downloadCancelOptionText]}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <Modal
@@ -367,6 +381,36 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     marginTop: 4,
     marginBottom: 14,
+  },
+  downloadFormatRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    marginBottom: 10,
+  },
+  downloadFormatTile: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 108,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+  },
+  downloadFormatTileTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  downloadFormatTileHint: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textSecondary,
+    textAlign: 'center',
   },
   downloadOption: {
     backgroundColor: Theme.screenBackground,

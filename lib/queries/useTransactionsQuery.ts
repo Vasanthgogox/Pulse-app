@@ -68,13 +68,10 @@ export function useTransactionsInfiniteQuery(orgId: string | null, opts?: { page
 
 export function useInvalidateTransactions() {
   const qc = useQueryClient();
-  return useCallback(async (orgId: string) => {
-    await clearDomainCacheMeta('transactions', orgId);
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) }),
-      qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(orgId) }),
-      qc.invalidateQueries({ queryKey: ['q', 'transactions', orgId, 'infinite'] }),
-    ]);
-    await qc.refetchQueries({ queryKey: queryKeys.transactions.finite(orgId) });
+  return useCallback((orgId: string) => {
+    void clearDomainCacheMeta('transactions', orgId);
+    void qc.invalidateQueries({ queryKey: queryKeys.transactions.all(orgId) });
+    void qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(orgId) });
+    void qc.invalidateQueries({ queryKey: ['q', 'transactions', orgId, 'infinite'] });
   }, [qc]);
 }

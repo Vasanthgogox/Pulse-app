@@ -2,6 +2,7 @@
  * Provision CN/DN hub + in-modal wizard + success (mobile-aligned with ledger flow).
  */
 import Theme from "@/constants/Theme";
+import { ProvisionCnDnImpactTag } from "@/features/trips/components/trip-detail/adjustment/ProvisionCnDnImpactTag";
 import {
   ProvisionRevisedPartiesCard,
   type ProvisionCostBreakdownLine,
@@ -469,6 +470,11 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                 <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Deduct (CN)" : "Credit (CN)"}
                 </Text>
+                <ProvisionCnDnImpactTag
+                  type={isClient ? "revenue" : "cost"}
+                  impact="minus"
+                  isAssetDriverCost={isAssetDriverCost}
+                />
                 {isAssetDriverCost ? (
                   <Text style={styles.cnDnHint}>Damage · missing · late</Text>
                 ) : null}
@@ -490,6 +496,11 @@ export const ProvisionAdjustmentModal = memo(function ProvisionAdjustmentModal(
                 <Text style={styles.cnDnLabel}>
                   {isAssetDriverCost ? "Pay driver (DN)" : "Debit (DN)"}
                 </Text>
+                <ProvisionCnDnImpactTag
+                  type={isClient ? "revenue" : "cost"}
+                  impact="plus"
+                  isAssetDriverCost={isAssetDriverCost}
+                />
                 {isAssetDriverCost ? (
                   <Text style={styles.cnDnHint}>Tip · bonus · allowance</Text>
                 ) : null}

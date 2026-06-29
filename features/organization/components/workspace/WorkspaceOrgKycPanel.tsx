@@ -34,10 +34,12 @@ import {
   type OrgProfileFields,
 } from "@/features/organization/services/organization.service";
 import { useOrgRole } from "@/lib/hooks/useOrgRole";
+import { ROUTES } from "@/lib/routes";
 import * as Clipboard from "expo-clipboard";
-import { Lock } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { CheckCircle, Clock, Lock, ShieldCheck, XCircle } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { WorkspaceKyc } from "@/types/organization";
 
 type Props = {
@@ -49,6 +51,7 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
   const { currentOrganization } = useOrganization();
   const { canEdit } = useOrgRole();
   const { notice } = useWorkspaceFeedback();
+  const router = useRouter();
 
   const orgId = currentOrganization?.id ?? "";
   const orgName = currentOrganization?.name ?? "";
@@ -124,6 +127,14 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
       onBack={onBack}
     >
       <View style={styles.panelStack}>
+        {/* Business verification CTA — Sprint 1 */}
+        {canEdit ? (
+          <VerificationCallToAction
+            status={kyc?.verification_status ?? 'unverified'}
+            onPress={() => router.push(ROUTES.BUSINESS_VERIFY)}
+          />
+        ) : null}
+
         <View style={styles.detailCard}>
           <SectionHeader label="Identity & Compliance" color={kycAccent} />
           <KycProgressBlock pct={kycPct} barColor={progressColor} />
@@ -194,3 +205,79 @@ export function WorkspaceOrgKycPanel({ onBack }: Props) {
     </WorkspaceDetailLayout>
   );
 }
+
+// ─── Verification CTA card ────────────────────────────────────────────────────
+
+type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+
+function VerificationCallToAction({
+  status,
+  onPress,
+}: {
+  status:  VerificationStatus;
+  onPress: () => void;
+}) {
+  const config: Record<VerificationStatus, { label: string; sub: string; icon: React.ReactNode; accent: string; cta: string }> = {
+    unverified: {
+      label:  'Verify Your Business',
+      sub:    'Unlock marketplace bidding and referral payouts.',
+      icon:   <ShieldCheck size={20} color={Theme.primary} />,
+      accent: Theme.primary,
+      cta:    'Start Verification →',
+    },
+    pending: {
+      label:  'Verification Pending',
+      sub:    'Your profile is under review. Fields are locked.',
+      icon:   <Clock size={20} color="#F59E0B" />,
+      accent: '#F59E0B',
+      cta:    'View Submission →',
+    },
+    verified: {
+      label:  'Business Verified',
+      sub:    'Your profile has been approved.',
+      icon:   <CheckCircle size={20} color={Theme.success} />,
+      accent: Theme.success,
+      cta:    'View Details →',
+    },
+    rejected: {
+      label:  'Action Required',
+      sub:    'Verification was rejected. Please correct and resubmit.',
+      icon:   <XCircle size={20} color={Theme.destructive} />,
+      accent: Theme.destructive,
+      cta:    'Resubmit →',
+    },
+  };
+
+  const c = config[status];
+
+  return (
+    <Pressable style={[verifyStyles.card, { borderLeftColor: c.accent }]} onPress={onPress}>
+      <View style={verifyStyles.iconSlot}>{c.icon}</View>
+      <View style={verifyStyles.textBlock}>
+        <Text style={verifyStyles.label}>{c.label}</Text>
+        <Text style={verifyStyles.sub}>{c.sub}</Text>
+      </View>
+      <Text style={[verifyStyles.cta, { color: c.accent }]}>{c.cta}</Text>
+    </Pressable>
+  );
+}
+
+const verifyStyles = StyleSheet.create({
+  card: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             12,
+    padding:         14,
+    marginBottom:    12,
+    backgroundColor: Theme.surface,
+    borderRadius:    10,
+    borderWidth:     StyleSheet.hairlineWidth,
+    borderColor:     Theme.surfaceBorder,
+    borderLeftWidth: 3,
+  },
+  iconSlot:  { width: 32, alignItems: 'center' },
+  textBlock: { flex: 1 },
+  label:     { fontSize: 13, fontWeight: '600', color: Theme.primaryText, marginBottom: 2 },
+  sub:       { fontSize: 12, color: Theme.textSecondary, lineHeight: 16 },
+  cta:       { fontSize: 12, fontWeight: '600' },
+});

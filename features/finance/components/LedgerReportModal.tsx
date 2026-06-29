@@ -7,13 +7,29 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import * as XLSX from 'xlsx';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, Share, Alert, Linking,  Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  ScrollView,
+  Share,
+  Alert,
+  Linking,
+  Platform,
+  Pressable,
+  useWindowDimensions,
+} from 'react-native';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
+import { PULSE_METRONIC } from '@/features/business-pulse/components/pulseEnterpriseStyles';
 import { prependPulseExcelBanner } from '@/lib/reportWatermark.util';
 import { buildPulseIntelligenceReportHtml } from '@/lib/pulseReportPrint.util';
+import { printHtmlOnWeb, runAfterOverlayCloses } from '@/lib/webPrint.util';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { LedgerRow } from '../services/finance.service';
@@ -172,6 +188,90 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+const TABLE_HPAD = Layout.screenPaddingHorizontal;
+const COLUMN_GAP = 10;
+
+function parseReportTitle(title: string): { primary: string; secondary?: string } {
+  const sep = ' — ';
+  const idx = title.indexOf(sep);
+  if (idx === -1) return { primary: title };
+  return {
+    primary: title.slice(0, idx).trim(),
+    secondary: title.slice(idx + sep.length).trim(),
+  };
+}
+
+function getCustomColumnWidth(key: string): number {
+  switch (key) {
+    case 'trip': return 118;
+    case 'route': return 232;
+    case 'model': return 96;
+    case 'supplier': return 176;
+    case 'client': return 156;
+    case 'mission': return 92;
+    case 'status': return 100;
+    case 'partnerNote': return 132;
+    case 'sales':
+    case 'cost':
+    case 'paid':
+    case 'received':
+    case 'contract':
+      return 92;
+    case 'mySales':
+    case 'themSales':
+    case 'myReceived':
+    case 'themReceived':
+    case 'due':
+    case 'pnl':
+    case 'margin':
+      return 88;
+    case 'txns': return 48;
+    case 'lastTxn': return 80;
+    case 'settlement': return 72;
+    case 'commissionBasis': return 108;
+    case 'sync': return 56;
+    case 'you':
+    case 'partner':
+      return 84;
+    case 'refs': return 148;
+    case 'date': return 92;
+    default: return 96;
+  }
+}
+
+function getCustomCellMaxLines(key: string): number {
+  switch (key) {
+    case 'trip':
+    case 'route':
+    case 'supplier':
+    case 'client':
+    case 'partnerNote':
+    case 'refs':
+    case 'commissionBasis':
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function isMoneyColumn(key: string): boolean {
+  return (
+    key === 'sales' ||
+    key === 'cost' ||
+    key === 'paid' ||
+    key === 'received' ||
+    key === 'due' ||
+    key === 'pnl' ||
+    key === 'margin' ||
+    key === 'contract' ||
+    key === 'mySales' ||
+    key === 'themSales' ||
+    key === 'myReceived' ||
+    key === 'themReceived' ||
+    key === 'settlement'
+  );
+}
+
 export interface LedgerReportModalProps {
   visible: boolean;
   onClose: () => void;
@@ -200,6 +300,7 @@ export function LedgerReportModal({
 }: LedgerReportModalProps) {
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const [downloadInProgress, setDownloadInProgress] = useState(false);
   const [formatPickerVisible, setFormatPickerVisible] = useState(false);
   const [formatPickerMode, setFormatPickerMode] = useState<'download' | 'share'>('download');
@@ -257,35 +358,29 @@ export function LedgerReportModal({
     });
   }, [customReport, html, displayTitle]);
 
-  const getCustomColumnWidth = (key: string): number => {
-    switch (key) {
-      case 'trip': return 90;
-      case 'route': return 190;
-      case 'model': return 90;
-      case 'supplier': return 160;
-      case 'client': return 140;
-      case 'mission': return 88;
-      case 'status': return 96;
-      case 'partnerNote': return 120;
-      case 'mySales':
-      case 'themSales':
-      case 'myReceived':
-      case 'themReceived':
-      case 'due':
-        return 86;
-      case 'txns': return 44;
-      case 'lastTxn': return 72;
-      case 'settlement': return 64;
-      case 'commissionBasis': return 100;
-      case 'sync': return 52;
-      case 'you':
-      case 'partner':
-        return 80;
-      case 'refs': return 140;
-      case 'date': return 88;
-      default: return 90;
-    }
-  };
+  const reportTitleParts = useMemo(
+    () => parseReportTitle(displayTitle),
+    [displayTitle],
+  );
+
+  const customTableMinWidth = useMemo(() => {
+    if (!customReport) return 0;
+    const columnSum = customReport.columns.reduce(
+      (sum, col) => sum + getCustomColumnWidth(col.key),
+      0,
+    );
+    const gaps = Math.max(0, customReport.columns.length - 1) * COLUMN_GAP;
+    return columnSum + gaps + TABLE_HPAD * 2;
+  }, [customReport]);
+
+  const customTableWidth = Math.max(customTableMinWidth, windowWidth);
+  const showScrollHint =
+    isCustomReport &&
+    customReport &&
+    (customReport.columns.length > 4 || customTableMinWidth > windowWidth);
+  const recordCountLabel = isCustomReport
+    ? `${customReport!.rows.length} ${customReport!.rows.length === 1 ? 'record' : 'records'}`
+    : `${sortedTransactions.length} ${sortedTransactions.length === 1 ? 'entry' : 'entries'}`;
 
   const getCustomValueColor = (key: string, value: string): string | undefined => {
     const v = value.trim();
@@ -306,6 +401,16 @@ export function LedgerReportModal({
 
   const handlePrint = async () => {
     try {
+      if (Platform.OS === 'web') {
+        const ok = await printHtmlOnWeb(activeHtml, { title: displayTitle });
+        if (!ok) {
+          Alert.alert(
+            'Print',
+            'Could not open the print preview. Try Download PDF instead.',
+          );
+        }
+        return;
+      }
       await Print.printAsync({ html: activeHtml });
     } catch {
       Share.share({
@@ -334,9 +439,19 @@ export function LedgerReportModal({
     setDownloadInProgress(true);
     try {
       if (Platform.OS === 'web') {
-        await Print.printAsync({ html: activeHtml });
+        const ok = await printHtmlOnWeb(activeHtml, { title: displayTitle });
+        if (!ok) {
+          Alert.alert(
+            'PDF unavailable',
+            'Could not open the print preview. Check pop-up blockers or try Print from the toolbar.',
+          );
+          return;
+        }
         if (mode === 'share') {
-          Alert.alert('Share PDF', 'Use your browser print dialog to save/share the PDF.');
+          Alert.alert(
+            'Share PDF',
+            'In the print dialog, choose Save as PDF, then attach the file in your email or chat app.',
+          );
         }
         return;
       }
@@ -469,13 +584,19 @@ export function LedgerReportModal({
   };
 
   const handleSelectPdf = () => {
+    const mode = formatPickerMode;
     setFormatPickerVisible(false);
-    void handlePdfAction(formatPickerMode);
+    runAfterOverlayCloses(() => {
+      void handlePdfAction(mode);
+    });
   };
 
   const handleSelectExcel = () => {
+    const mode = formatPickerMode;
     setFormatPickerVisible(false);
-    void handleExcelAction(formatPickerMode);
+    runAfterOverlayCloses(() => {
+      void handleExcelAction(mode);
+    });
   };
 
   return (
@@ -487,13 +608,22 @@ export function LedgerReportModal({
     >
       <View style={[styles.overlay, styles.overlayFull]}>
         <View style={[styles.sheet, styles.sheetLight, styles.sheetFull]}>
-          <View style={[styles.header, { paddingTop: 16 + insets.top }]}>
+          <View style={[styles.header, { paddingTop: Layout.headerPaddingBelowInset + insets.top }]}>
             <View style={styles.headerTitleRow}>
-              <Text style={styles.headerTitle}>{displayTitle}</Text>
-              <Text style={styles.previewSubtitle}>Report preview</Text>
+              <Text style={styles.headerTitle} numberOfLines={2}>
+                {reportTitleParts.primary}
+              </Text>
+              {reportTitleParts.secondary ? (
+                <Text style={styles.headerReportKind} numberOfLines={1}>
+                  {reportTitleParts.secondary}
+                </Text>
+              ) : null}
+              <Text style={styles.previewSubtitle}>
+                Report preview · {recordCountLabel}
+              </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-              <FontAwesome name="times" size={18} color={Theme.textPrimary} />
+              <FontAwesome name="times" size={16} color={PULSE_METRONIC.text} />
             </TouchableOpacity>
           </View>
           {!hideCashSummary ? (
@@ -509,109 +639,179 @@ export function LedgerReportModal({
             </View>
           ) : null}
 
-          <View style={styles.tableHeader}>
-            {isCustomReport ? (
-              customReport!.columns.map((col) => (
-                <Text
-                  key={col.key}
-                  style={[
-                    styles.th,
-                    styles.thCustom,
-                    col.align === 'right' ? styles.thNum : undefined,
-                    { width: getCustomColumnWidth(col.key), textAlign: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left' },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {col.label}
-                </Text>
-              ))
-            ) : (
-              <>
-                <Text style={[styles.th, styles.thEntity]}>PARTY / DESC</Text>
-                <Text style={[styles.th, styles.thDate]}>DATE</Text>
-                <Text style={[styles.th, styles.thNum]}>{t("cashIn")}</Text>
-                <Text style={[styles.th, styles.thNum]}>{t("cashOut")}</Text>
-              </>
-            )}
-          </View>
+          {!isCustomReport ? (
+            <View style={[styles.tableHeader, styles.ledgerTableHeader]}>
+              <Text style={[styles.th, styles.thEntity]}>Party / ref</Text>
+              <Text style={[styles.th, styles.thDate]}>Date</Text>
+              <Text style={[styles.th, styles.thNumLedger]}>{t("cashIn")}</Text>
+              <Text style={[styles.th, styles.thNumLedger]}>{t("cashOut")}</Text>
+            </View>
+          ) : null}
 
-          <ScrollView
-            style={styles.list}
-            contentContainerStyle={[
-              styles.listContent,
-              (isCustomReport ? customReport!.rows.length === 0 : sortedTransactions.length === 0) && styles.listContentEmpty,
-            ]}
-            showsVerticalScrollIndicator={true}
-          >
-            {(isCustomReport ? customReport!.rows.length === 0 : sortedTransactions.length === 0) ? (
-              <Text style={styles.empty}>{t("noLedgerEntries")}</Text>
-            ) : (
-              isCustomReport
-                ? customReport!.rows.map((row, idx) => (
-                    <View key={`custom-row-${idx}`} style={styles.row}>
-                      {customReport!.columns.map((col) => (
-                        <Text
-                          key={`${idx}-${col.key}`}
-                          style={[
-                            styles.cellCustom,
-                            col.align === 'right' ? styles.cellNum : undefined,
-                            {
-                              width: getCustomColumnWidth(col.key),
-                              textAlign: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left',
-                              color: getCustomValueColor(col.key, row[col.key] == null ? '—' : String(row[col.key])) ?? Theme.textPrimary,
-                            },
-                          ]}
-                          numberOfLines={1}
+          {isCustomReport ? (
+            <View style={styles.customTableShell}>
+              {showScrollHint ? (
+                <View style={styles.scrollHintRow}>
+                  <Text style={styles.scrollHintText}>
+                    Swipe horizontally for all columns
+                  </Text>
+                  <FontAwesome name="long-arrow-right" size={11} color={PULSE_METRONIC.muted} />
+                </View>
+              ) : null}
+              <ScrollView
+                horizontal
+                style={styles.customTableScroll}
+                showsHorizontalScrollIndicator
+                contentContainerStyle={styles.customTableScrollContent}
+              >
+                <View style={[styles.customTablePane, { width: customTableWidth }]}>
+                  <View style={[styles.tableHeader, styles.customTableHeader]}>
+                    {customReport!.columns.map((col) => (
+                      <Text
+                        key={`hdr-${col.key}`}
+                        style={[
+                          styles.th,
+                          styles.thFixed,
+                          col.align === 'right' ? styles.thNum : undefined,
+                          {
+                            width: getCustomColumnWidth(col.key),
+                            textAlign:
+                              col.align === 'right'
+                                ? 'right'
+                                : col.align === 'center'
+                                  ? 'center'
+                                  : 'left',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {col.label}
+                      </Text>
+                    ))}
+                  </View>
+
+                  <ScrollView
+                    style={styles.list}
+                    nestedScrollEnabled
+                    contentContainerStyle={[
+                      styles.listContent,
+                      customReport!.rows.length === 0 && styles.listContentEmpty,
+                    ]}
+                    showsVerticalScrollIndicator
+                  >
+                    {customReport!.rows.length === 0 ? (
+                      <Text style={styles.empty}>{t("noLedgerEntries")}</Text>
+                    ) : (
+                      customReport!.rows.map((row, idx) => (
+                        <View
+                          key={`custom-row-${idx}`}
+                          style={[styles.row, styles.customDataRow]}
                         >
-                          {row[col.key] == null ? '—' : String(row[col.key])}
-                        </Text>
-                      ))}
+                          {customReport!.columns.map((col) => {
+                            const raw =
+                              row[col.key] == null ? '—' : String(row[col.key]);
+                            const valueColor =
+                              getCustomValueColor(col.key, raw) ?? PULSE_METRONIC.text;
+                            const money = isMoneyColumn(col.key);
+                            return (
+                              <Text
+                                key={`${idx}-${col.key}`}
+                                style={[
+                                  styles.cellFixed,
+                                  money ? styles.cellMoney : undefined,
+                                  col.align === 'right' ? styles.cellNum : undefined,
+                                  {
+                                    width: getCustomColumnWidth(col.key),
+                                    textAlign:
+                                      col.align === 'right'
+                                        ? 'right'
+                                        : col.align === 'center'
+                                          ? 'center'
+                                          : 'left',
+                                    color: valueColor,
+                                  },
+                                ]}
+                                numberOfLines={getCustomCellMaxLines(col.key)}
+                              >
+                                {raw}
+                              </Text>
+                            );
+                          })}
+                        </View>
+                      ))
+                    )}
+                  </ScrollView>
+                </View>
+              </ScrollView>
+            </View>
+          ) : (
+            <ScrollView
+              style={styles.list}
+              contentContainerStyle={[
+                styles.listContent,
+                sortedTransactions.length === 0 && styles.listContentEmpty,
+              ]}
+              showsVerticalScrollIndicator={true}
+            >
+              {sortedTransactions.length === 0 ? (
+                <Text style={styles.empty}>{t("noLedgerEntries")}</Text>
+              ) : (
+                sortedTransactions.map((row) => (
+                  <View key={row.id} style={[styles.row, styles.ledgerDataRow]}>
+                    <View style={styles.cellEntity}>
+                      <Text style={styles.entityName} numberOfLines={1}>{row.party_name}</Text>
+                      <Text style={styles.entityDesc} numberOfLines={2}>
+                        {getOperationalRef(row)}
+                      </Text>
                     </View>
-                  ))
-                : sortedTransactions.map((row) => (
-                <View key={row.id} style={styles.row}>
-                  <View style={styles.cellEntity}>
-                    <Text style={styles.entityName} numberOfLines={1}>{row.party_name}</Text>
-                    <Text style={styles.entityDesc} numberOfLines={1}>
-                      {getOperationalRef(row)}
+                    <Text style={styles.cellDate}>{formatDate(row.transaction_date)}</Text>
+                    <Text style={[styles.cellNum, styles.cellNumLedger, styles.positive]}>
+                      {(row.amount_in ?? 0) > 0 ? formatAmount(row.amount_in!) : '—'}
+                    </Text>
+                    <Text style={[styles.cellNum, styles.cellNumLedger, styles.negative]}>
+                      {(row.amount_out ?? 0) > 0 ? formatAmount(row.amount_out!) : '—'}
                     </Text>
                   </View>
-                  <Text style={styles.cellDate}>{formatDate(row.transaction_date)}</Text>
-                  <Text style={[styles.cellNum, styles.positive]}>
-                    {(row.amount_in ?? 0) > 0 ? formatAmount(row.amount_in!) : '—'}
-                  </Text>
-                  <Text style={[styles.cellNum, styles.negative]}>
-                    {(row.amount_out ?? 0) > 0 ? formatAmount(row.amount_out!) : '—'}
-                  </Text>
-                </View>
-              ))
-            )}
-          </ScrollView>
+                ))
+              )}
+            </ScrollView>
+          )}
 
-          <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom, paddingTop: 16 }]}>
-            <TouchableOpacity style={styles.actionBtn} onPress={handlePrint}>
-              <FontAwesome name="print" size={16} color={Theme.textPrimary} />
+          <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
+            <TouchableOpacity style={styles.actionBtn} onPress={handlePrint} activeOpacity={0.85}>
+              <View style={styles.actionIconWrap}>
+                <FontAwesome name="print" size={15} color={PULSE_METRONIC.text} />
+              </View>
               <Text style={styles.actionBtnText}>Print</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={handleWhatsApp}>
-              <FontAwesome name="whatsapp" size={16} color={Theme.textPrimary} />
+            <TouchableOpacity style={styles.actionBtn} onPress={handleWhatsApp} activeOpacity={0.85}>
+              <View style={styles.actionIconWrap}>
+                <FontAwesome name="whatsapp" size={16} color={PULSE_METRONIC.text} />
+              </View>
               <Text style={styles.actionBtnText}>WhatsApp</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
-              <FontAwesome name="share-alt" size={16} color={Theme.textPrimary} />
+            <TouchableOpacity style={styles.actionBtn} onPress={handleShare} activeOpacity={0.85}>
+              <View style={styles.actionIconWrap}>
+                <FontAwesome name="share-alt" size={15} color={PULSE_METRONIC.text} />
+              </View>
               <Text style={styles.actionBtnText}>Share</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, downloadInProgress && styles.actionBtnDisabled]}
               onPress={handleDownload}
               disabled={downloadInProgress}
+              activeOpacity={0.85}
             >
-              {downloadInProgress ? (
-                <LoadingIndicator size="small" color={Theme.textPrimary} />
-              ) : (
-                <FontAwesome name="download" size={16} color={Theme.textPrimary} />
-              )}
-              <Text style={styles.actionBtnText}>{downloadInProgress ? 'Generating…' : 'Download'}</Text>
+              <View style={styles.actionIconWrap}>
+                {downloadInProgress ? (
+                  <LoadingIndicator size="small" color={PULSE_METRONIC.text} />
+                ) : (
+                  <FontAwesome name="download" size={15} color={PULSE_METRONIC.text} />
+                )}
+              </View>
+              <Text style={styles.actionBtnText}>
+                {downloadInProgress ? 'Generating…' : 'Download'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -622,12 +822,14 @@ export function LedgerReportModal({
         animationType="fade"
         onRequestClose={() => setFormatPickerVisible(false)}
       >
-        <TouchableOpacity
+        <Pressable
           style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
-          activeOpacity={1}
           onPress={() => setFormatPickerVisible(false)}
         >
-          <View style={styles.downloadModalCard}>
+          <Pressable
+            style={styles.downloadModalCard}
+            onPress={(event) => event.stopPropagation()}
+          >
             <Text style={styles.downloadModalTitle}>
               {formatPickerMode === 'share' ? 'Share format' : 'Download format'}
             </Text>
@@ -636,16 +838,30 @@ export function LedgerReportModal({
                 ? 'Choose file format to share'
                 : 'Choose your preferred report file type'}
             </Text>
-            <TouchableOpacity style={styles.downloadOption} onPress={handleSelectPdf} activeOpacity={0.8}>
-              <Text style={styles.downloadOptionText}>
-                {formatPickerMode === 'share' ? 'Share as PDF' : 'Download PDF'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.downloadOption} onPress={handleSelectExcel} activeOpacity={0.8}>
-              <Text style={styles.downloadOptionText}>
-                {formatPickerMode === 'share' ? 'Share as Excel (.xlsx)' : 'Download Excel (.xlsx)'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.downloadFormatRow}>
+              <TouchableOpacity
+                style={styles.downloadFormatTile}
+                onPress={handleSelectPdf}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="file-pdf-o" size={22} color={Theme.teslaRed} />
+                <Text style={styles.downloadFormatTileTitle}>PDF</Text>
+                <Text style={styles.downloadFormatTileHint}>
+                  {formatPickerMode === 'share' ? 'Share document' : 'Download PDF'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.downloadFormatTile}
+                onPress={handleSelectExcel}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="file-excel-o" size={22} color={Theme.darkGreen} />
+                <Text style={styles.downloadFormatTileTitle}>Excel</Text>
+                <Text style={styles.downloadFormatTileHint}>
+                  {formatPickerMode === 'share' ? 'Share spreadsheet' : 'Download .xlsx'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               style={[styles.downloadOption, styles.downloadCancelOption]}
               onPress={() => setFormatPickerVisible(false)}
@@ -653,8 +869,8 @@ export function LedgerReportModal({
             >
               <Text style={[styles.downloadOptionText, styles.downloadCancelOptionText]}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
     </Modal>
   );
@@ -663,7 +879,7 @@ export function LedgerReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: PULSE_METRONIC.canvas,
   },
   overlayFull: {
     justifyContent: 'flex-start',
@@ -676,48 +892,72 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetLight: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: PULSE_METRONIC.canvas,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: TABLE_HPAD,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_METRONIC.border,
+    backgroundColor: Theme.cardWhite,
   },
   headerTitleRow: {
     flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Theme.textPrimary,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 17,
+    fontWeight: '700',
+    color: PULSE_METRONIC.text,
+    letterSpacing: -0.2,
+    lineHeight: 22,
+  },
+  headerReportKind: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: PULSE_METRONIC.text,
+    marginTop: 2,
+    letterSpacing: -0.1,
   },
   previewSubtitle: {
     fontSize: 12,
-    color: Theme.textSecondary,
-    marginTop: 2,
-    textTransform: 'none',
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
+    marginTop: 6,
   },
   closeBtn: {
-    padding: 8,
-    backgroundColor: Theme.surfaceGray,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: PULSE_METRONIC.border,
+    borderRadius: 18,
+    marginTop: 2,
   },
   actionBar: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    paddingHorizontal: TABLE_HPAD,
+    paddingTop: 12,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: PULSE_METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 4,
+      },
+      default: {},
+    }),
   },
   actionBtn: {
     flex: 1,
@@ -725,75 +965,125 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    backgroundColor: Theme.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PULSE_METRONIC.border,
+    minHeight: Layout.minTouchTargetSize + 12,
   },
   actionBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.55,
+  },
+  actionIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F8FA',
   },
   actionBtnText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Theme.textPrimary,
-    letterSpacing: 0.5,
+    fontSize: 11,
+    fontWeight: '600',
+    color: PULSE_METRONIC.text,
+    letterSpacing: -0.1,
   },
   summaryRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
+    paddingHorizontal: TABLE_HPAD,
+    paddingVertical: 16,
+    gap: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_METRONIC.border,
+    backgroundColor: '#F9FAFB',
   },
   summaryCell: {
     flex: 1,
   },
   summaryLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.textSecondary,
-    letterSpacing: 0.5,
+    fontSize: 11,
+    fontWeight: '600',
+    color: PULSE_METRONIC.muted,
+    letterSpacing: 0.2,
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   summaryValue: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
   positive: { color: Theme.darkGreen },
   negative: { color: Theme.teslaRed },
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surfaceBorder,
+    paddingHorizontal: TABLE_HPAD,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_METRONIC.border,
+    backgroundColor: '#F9FAFB',
+    gap: COLUMN_GAP,
+  },
+  customTableHeader: {
+    minHeight: 40,
   },
   th: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Theme.textMuted,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 11,
+    fontWeight: '600',
+    color: PULSE_METRONIC.muted,
+    letterSpacing: 0.15,
   },
-  thEntity: { flex: 1 },
-  thCustom: { flex: 1, fontSize: 8 },
-  thDate: { width: 72 },
-  thNum: { width: 64, textAlign: 'right' },
+  thEntity: { flex: 1, minWidth: 0 },
+  thFixed: { flexShrink: 0 },
+  thDate: { width: 80, flexShrink: 0 },
+  thNum: { textAlign: 'right', flexShrink: 0 },
+  thNumLedger: { width: 72, textAlign: 'right', flexShrink: 0 },
+  ledgerTableHeader: {
+    gap: COLUMN_GAP,
+  },
+  customTableShell: {
+    flex: 1,
+    minHeight: 120,
+    backgroundColor: Theme.cardWhite,
+  },
+  scrollHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    paddingHorizontal: TABLE_HPAD,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_METRONIC.border,
+    backgroundColor: '#F5F8FA',
+  },
+  scrollHintText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
+  },
+  customTableScroll: {
+    flex: 1,
+    minHeight: 120,
+    backgroundColor: Theme.cardWhite,
+  },
+  customTableScrollContent: {
+    flexGrow: 1,
+  },
+  customTablePane: {
+    flex: 1,
+    minHeight: 120,
+  },
   list: {
     flex: 1,
     minHeight: 120,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 20,
     flexGrow: 1,
   },
   listContentEmpty: {
@@ -803,44 +1093,69 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.borderLight,
+    paddingHorizontal: TABLE_HPAD,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_METRONIC.border,
+    gap: COLUMN_GAP,
   },
-  cellEntity: { flex: 1 },
+  customDataRow: {
+    alignItems: 'flex-start',
+    minHeight: 48,
+    paddingVertical: 11,
+  },
+  ledgerDataRow: {
+    alignItems: 'flex-start',
+    minHeight: 48,
+  },
+  cellEntity: { flex: 1, minWidth: 0 },
   entityName: {
     fontSize: 13,
-    fontWeight: '700',
-    color: Theme.textPrimary,
+    fontWeight: '600',
+    color: PULSE_METRONIC.text,
+    lineHeight: 18,
   },
   entityDesc: {
-    fontSize: 11,
-    color: Theme.textSecondary,
-    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
+    marginTop: 3,
+    lineHeight: 16,
   },
   cellDate: {
-    width: 72,
-    fontSize: 11,
-    color: Theme.textSecondary,
+    width: 80,
+    flexShrink: 0,
+    fontSize: 12,
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
   },
   cellNum: {
-    width: 64,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'right',
+    flexShrink: 0,
+    fontVariant: ['tabular-nums'],
   },
-  cellCustom: {
-    flex: 1,
-    fontSize: 10,
-    color: Theme.textPrimary,
-    paddingRight: 8,
+  cellNumLedger: {
+    width: 72,
+  },
+  cellFixed: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: PULSE_METRONIC.text,
+    flexShrink: 0,
+    lineHeight: 17,
+  },
+  cellMoney: {
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   empty: {
-    padding: 24,
+    padding: 28,
     textAlign: 'center',
-    fontSize: 12,
-    color: Theme.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    color: PULSE_METRONIC.muted,
   },
   modalOverlay: {
     flex: 1,
@@ -890,6 +1205,36 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     marginTop: 4,
     marginBottom: 14,
+  },
+  downloadFormatRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    marginBottom: 10,
+  },
+  downloadFormatTile: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 108,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 12,
+  },
+  downloadFormatTileTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Theme.textPrimaryDark,
+  },
+  downloadFormatTileHint: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Theme.textSecondary,
+    textAlign: 'center',
   },
   downloadOption: {
     backgroundColor: Theme.screenBackground,

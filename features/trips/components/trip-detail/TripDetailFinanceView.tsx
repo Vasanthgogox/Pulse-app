@@ -3,7 +3,7 @@
  * Grid Tracking Node, Protocol Specification (financial blueprint), Adjustment Registry,
  * Supplier Sync bar, Associated Handshakes.
  */
-import { TripFinancialCard } from "@/components/TripFinancialCard";
+import { ProvisionCnDnImpactTag } from "@/features/trips/components/trip-detail/adjustment/ProvisionCnDnImpactTag";
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
@@ -2550,6 +2550,7 @@ export function TripDetailFinanceView({
                         activeOpacity={0.88}
                       >
                         <Text style={styles.provisionDnLabel}>Credit (CN)</Text>
+                        <ProvisionCnDnImpactTag type="cost" impact="minus" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
@@ -2572,6 +2573,7 @@ export function TripDetailFinanceView({
                         activeOpacity={0.88}
                       >
                         <Text style={styles.provisionDnLabel}>Debit (DN)</Text>
+                        <ProvisionCnDnImpactTag type="cost" impact="plus" />
                       </TouchableOpacity>
                     </View>
 
@@ -4709,9 +4711,11 @@ const styles = StyleSheet.create({
   provisionDnBtn: {
     flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: 6,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
     backgroundColor: Theme.surfaceGray,
     borderWidth: 1,
     borderColor: Theme.borderLight,

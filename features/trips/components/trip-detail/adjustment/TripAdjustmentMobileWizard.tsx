@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 
 import { TripAdjustmentReviewTicket } from "@/features/trips/components/trip-detail/adjustment/TripAdjustmentReviewTicket";
+import { ProvisionCnDnImpactTag } from "@/features/trips/components/trip-detail/adjustment/ProvisionCnDnImpactTag";
 import {
   buildAdjustmentWizardSteps,
   FINANCE_PROTOCOL_CHIPS,
@@ -95,7 +96,10 @@ function stepMeta(
           }
         : {
             title: "Credit or debit?",
-            hint: "Credit note (CN) reduces the amount; debit note (DN) increases it.",
+            hint:
+              props.type === "revenue"
+                ? "CN reduces income · DN increases income"
+                : "CN reduces cost · DN increases cost",
           };
     case "protocol":
       return {
@@ -309,9 +313,14 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           <Text style={styles.laneTitle}>
             {isAssetDriverCost ? "Deduct from driver (CN)" : "Credit (CN)"}
           </Text>
-          <Text style={styles.laneSub}>
-            {isAssetDriverCost ? "Damage · missing · late delivery" : "Reduces amount"}
-          </Text>
+          <ProvisionCnDnImpactTag
+            type={props.type}
+            impact="minus"
+            isAssetDriverCost={isAssetDriverCost}
+          />
+          {isAssetDriverCost ? (
+            <Text style={styles.laneSub}>Damage · missing · late delivery</Text>
+          ) : null}
         </View>
       </Pressable>
       <Pressable
@@ -325,9 +334,14 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           <Text style={styles.laneTitle}>
             {isAssetDriverCost ? "Pay driver (DN)" : "Debit (DN)"}
           </Text>
-          <Text style={styles.laneSub}>
-            {isAssetDriverCost ? "Tip · bonus · allowance" : "Increases amount"}
-          </Text>
+          <ProvisionCnDnImpactTag
+            type={props.type}
+            impact="plus"
+            isAssetDriverCost={isAssetDriverCost}
+          />
+          {isAssetDriverCost ? (
+            <Text style={styles.laneSub}>Tip · bonus · allowance</Text>
+          ) : null}
         </View>
       </Pressable>
     </View>

@@ -4,7 +4,6 @@
  */
 import { LedgerFlowGuardAlert } from "@/components/LedgerFlowGuardAlert";
 import type { TripLedgerSmartTag } from "@/components/TripLedgerFinancialSummary";
-import { LedgerEntrySuccessView } from "@/components/ledger/LedgerEntrySuccessView";
 import { LedgerMobileWizard, type LedgerPaymentTypeItem } from "@/components/ledger/LedgerMobileWizard";
 import {
   LedgerPaymentTypeIcon,
@@ -19,6 +18,7 @@ import {
 import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerTripSettlementNote } from "@/components/ledger/LedgerTripSettlementNote";
+import { LedgerSettlementPctDock } from "@/components/ledger/LedgerSettlementPctDock";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Layout from "@/constants/Layout";
@@ -70,6 +70,7 @@ import {
     Check,
     CheckCircle2,
     ChevronLeft,
+    ChevronRight,
     CircleEllipsis,
     Clock,
     CreditCard,
@@ -838,23 +839,13 @@ export function AddTransactionModal({
    */
   const [ledgerMissionRegistryExpanded, setLedgerMissionRegistryExpanded] =
     useState(true);
+  /** Desktop full-page: 1 = sync mode & category, 2 = amount & date. */
+  const [ledgerDesktopWizardStep, setLedgerDesktopWizardStep] = useState<1 | 2>(1);
   /** Full-page ledger: show reconciliation summary in a confirm overlay before save. */
   const [ledgerSubmitConfirmVisible, setLedgerSubmitConfirmVisible] =
     useState(false);
   const [ledgerSubmitting, setLedgerSubmitting] = useState(false);
-  const [ledgerSuccess, setLedgerSuccess] = useState<{
-    isEditMode: boolean;
-    type: "in" | "out";
-    amount: number;
-    partyName: string;
-    partyEntityType?: PartyEntityType;
-    partyAvatarUrl?: string | null;
-    partyAvatarSeed?: string | null;
-    partyIsIntegrated?: boolean;
-    tripSummary?: string | null;
-    paymentModeLabel?: string | null;
-    referenceSummary?: string | null;
-  } | null>(null);
+  const [ledgerReconSucceeded, setLedgerReconSucceeded] = useState(false);
   const [ledgerFlowGuardAlert, setLedgerFlowGuardAlert] =
     useState<LedgerFlowGuardAlertContent | null>(null);
   const [ledgerSyncDatePickerVisible, setLedgerSyncDatePickerVisible] = useState(false);
@@ -2162,6 +2153,14 @@ export function AddTransactionModal({
     !supplierNeedsTrip &&
     !entryDateError;
 
+  const canAdvanceDesktopLedgerWizard =
+    hasValidParty &&
+    hasValidCategory &&
+    hasValidTrip &&
+    !supplierNeedsTrip;
+
+  const ledgerDesktopWizardActive = ledgerFullPageViewportFit && !isEditMode;
+
   const ledgerMobileFlow = fullPage && stackTripFinancialBand;
 
   const ledgerWizardFromPartyContext = Boolean(
@@ -2293,6 +2292,33 @@ export function AddTransactionModal({
       setMissionTripFilterDue("has_due");
     }
   }, [visible, fullPage, ledgerWizardFromPartyContext]);
+
+  useEffect(() => {
+    if (!visible) {
+      setLedgerDesktopWizardStep(1);
+      return;
+    }
+    if (ledgerFullPageViewportFit) {
+      setLedgerDesktopWizardStep(1);
+    }
+  }, [visible, ledgerWizardFlowSessionKey, ledgerFullPageViewportFit]);
+
+  useEffect(() => {
+    if (!ledgerDesktopWizardActive || ledgerDesktopWizardStep !== 2) return;
+    if (isEditMode || lockedAmount != null) return;
+    if (amountStr.replace(/,/g, "").trim()) return;
+    if (ledgerDueAmountInr != null && ledgerDueAmountInr > 0) {
+      setAmountStr(formatLedgerSyncAmountInput(ledgerDueAmountInr));
+    }
+  }, [
+    ledgerDesktopWizardActive,
+    ledgerDesktopWizardStep,
+    isEditMode,
+    lockedAmount,
+    amountStr,
+    ledgerDueAmountInr,
+    formatLedgerSyncAmountInput,
+  ]);
 
   useEffect(() => {
     if (!visible || !ledgerMobileFlow || isEditMode || lockedAmount != null) return;
@@ -3130,21 +3156,13 @@ export function AddTransactionModal({
           await Promise.resolve(onSubmit(data));
         }
         if (fullPage) {
-          setLedgerSuccess({
-            isEditMode,
-            type,
-            amount,
-            partyName: ledgerPartyVisual.name,
-            partyEntityType: ledgerPartyVisual.partyEntityType,
-            partyAvatarUrl: ledgerPartyVisual.partyAvatarUrl,
-            partyAvatarSeed: ledgerPartyVisual.partyAvatarSeed,
-            partyIsIntegrated: ledgerPartyVisual.partyIsIntegrated,
-            tripSummary,
-            paymentModeLabel: modeName,
-            referenceSummary: isLedgerCashPaymentMode(paymentModeId)
-              ? "— (cash)"
-              : paymentReference.trim() || "—",
-          });
+          if (ledgerSubmitConfirmVisible || ledgerMobileFlow) {
+            setLedgerReconSucceeded(true);
+          } else if (onSuccessDismiss) {
+            onSuccessDismiss();
+          } else {
+            onClose();
+          }
           return;
         }
         setAmountStr("");
@@ -3159,8 +3177,7 @@ export function AddTransactionModal({
     })();
   };
 
-  const handleLedgerSuccessDone = useCallback(() => {
-    setLedgerSuccess(null);
+  const dismissFullPageAfterLedgerSave = useCallback(() => {
     if (onSuccessDismiss) {
       onSuccessDismiss();
       return;
@@ -3168,8 +3185,14 @@ export function AddTransactionModal({
     onClose();
   }, [onSuccessDismiss, onClose]);
 
+  const handleLedgerReconSuccessComplete = useCallback(() => {
+    setLedgerReconSucceeded(false);
+    setLedgerSubmitConfirmVisible(false);
+    dismissFullPageAfterLedgerSave();
+  }, [dismissFullPageAfterLedgerSave]);
+
   const handleClose = () => {
-    setLedgerSuccess(null);
+    setLedgerReconSucceeded(false);
     setLedgerSubmitConfirmVisible(false);
     setLedgerSyncDatePickerVisible(false);
     setShowPartyPicker(false);
@@ -3327,6 +3350,10 @@ export function AddTransactionModal({
 
     /** Full-page ledger on desktop split layout. */
     const ledgerTripDesktopSplit = fullPage && !stackTripFinancialBand;
+    const ledgerDesktopOnSetupStep =
+      !ledgerDesktopWizardActive || ledgerDesktopWizardStep === 1;
+    const ledgerDesktopOnPaymentStep =
+      ledgerDesktopWizardActive && ledgerDesktopWizardStep === 2;
     const LEDGER_PROTOCOL_SUMMARY_LOGO = ledgerTripDesktopSplit ? 20 : mob ? 18 : 20;
     /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
     const missionListMaxHeight = stackTripFinancialBand
@@ -3438,16 +3465,19 @@ export function AddTransactionModal({
     );
     const syncModeCount = PAYMENT_MODES.length;
     const paymentTypeCount = paymentTypeItems.length;
-    /** Desktop split: one tile width for both rows so SYNC MODE / PAYMENT TYPE columns align. */
+    const LEDGER_DESKTOP_PROTOCOL_TILE_WIDTH = 76;
+    /** Desktop split: fixed tile width + horizontal scroll so CATEGORY row never clips. */
     const protocolDesktopTileCount = Math.max(syncModeCount, paymentTypeCount);
-    const protocolDesktopUnifiedTileWidth = Math.max(
-      44,
-      Math.floor(
-        (desktopRightPaneInnerW -
-          protocolTileGap * (protocolDesktopTileCount - 1)) /
-          protocolDesktopTileCount,
-      ),
-    );
+    const protocolDesktopUnifiedTileWidth = ledgerTripDesktopSplit
+      ? LEDGER_DESKTOP_PROTOCOL_TILE_WIDTH
+      : Math.max(
+          44,
+          Math.floor(
+            (desktopRightPaneInnerW -
+              protocolTileGap * (protocolDesktopTileCount - 1)) /
+              protocolDesktopTileCount,
+          ),
+        );
     const LEDGER_DESKTOP_TYPE_TILE_MIN = protocolDesktopUnifiedTileWidth;
     const paymentTypeFitsDesktopRow =
       paymentTypeCount * LEDGER_DESKTOP_TYPE_TILE_MIN +
@@ -3459,9 +3489,10 @@ export function AddTransactionModal({
     const protocolTypeTileWidth = ledgerTripDesktopSplit
       ? protocolDesktopUnifiedTileWidth
       : ledgerProtocolTileWidthMobile;
-    const protocolModeStripUsesScroll = mob || !ledgerTripDesktopSplit;
+    const protocolModeStripUsesScroll =
+      mob || !ledgerTripDesktopSplit || ledgerTripDesktopSplit;
     const protocolTypeStripUsesScroll =
-      mob || !ledgerTripDesktopSplit || !paymentTypeFitsDesktopRow;
+      mob || !ledgerTripDesktopSplit || !paymentTypeFitsDesktopRow || ledgerTripDesktopSplit;
 
     /** Desktop: SYNC MODE row, then PAYMENT TYPE row; compact mobile: single side-by-side row. */
     const ledgerProtocolModeStripOpen =
@@ -3474,27 +3505,127 @@ export function AddTransactionModal({
       !protocolModeStripUsesScroll &&
       syncModeCount < paymentTypeCount;
 
-    const ledgerModeCategoryTopBand = (
-      <LedgerProtocolWorkbench stacked={ledgerTripDesktopSplit} compact={mob}>
-        <LedgerProtocolStripSection
-          title="SYNC MODE"
-          variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-          stripOpen={ledgerProtocolModeStripOpen}
-          onExpand={() => setPaymentModeExpanded(true)}
-          summaryIcon={
-            <PaymentModeLogo modeId={paymentModeId} size={LEDGER_PROTOCOL_SUMMARY_LOGO} />
-          }
-          summaryLabel={selectedPaymentModeName}
-          usesScroll={protocolModeStripUsesScroll}
-          tileGap={protocolTileGap}
-          centerRow={protocolModeCenterRow}
-          sectionStyle={
-            ledgerTripDesktopSplit
-              ? undefined
+    const ledgerProtocolSyncModeSection = (
+      <LedgerProtocolStripSection
+        title="SYNC MODE"
+        variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+        stripOpen={ledgerProtocolModeStripOpen}
+        onExpand={() => setPaymentModeExpanded(true)}
+        summaryIcon={
+          <PaymentModeLogo modeId={paymentModeId} size={LEDGER_PROTOCOL_SUMMARY_LOGO} />
+        }
+        summaryLabel={selectedPaymentModeName}
+        usesScroll={protocolModeStripUsesScroll}
+        tileGap={protocolTileGap}
+        centerRow={protocolModeCenterRow}
+        sectionStyle={
+          ledgerDesktopOnPaymentStep
+            ? undefined
+            : ledgerTripDesktopSplit
+              ? styles.ledgerProtocolSectionStackBottom
               : stackTripFinancialBand
                 ? styles.ledgerProtocolSectionStackBottom
                 : styles.ledgerProtocolSectionSideLeft
-          }
+        }
+      >
+        {PAYMENT_MODES.map((opt) => {
+          const selected = paymentModeId === opt.id;
+          return (
+            <LedgerProtocolStripModeTile
+              key={opt.id}
+              modeId={opt.id}
+              label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
+              selected={selected}
+              variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+              width={protocolModeTileWidth}
+              onPress={() => {
+                setPaymentModeId(opt.id);
+                setPaymentModeExpanded(false);
+              }}
+            />
+          );
+        })}
+      </LedgerProtocolStripSection>
+    );
+
+    const ledgerProtocolCategorySection = (
+      <LedgerProtocolStripSection
+        title={
+          type === "in"
+            ? "PAYMENT TYPE"
+            : isDriverPayment
+              ? "PAYMENT TYPE"
+              : "CATEGORY"
+        }
+        variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+        stripOpen={ledgerProtocolTypeStripOpen}
+        onExpand={() => setPaymentTypeExpanded(true)}
+        summaryIcon={
+          <LedgerPaymentTypeIcon
+            kind={selectedPaymentTypeLabel ?? ""}
+            size={LEDGER_PROTOCOL_SUMMARY_LOGO}
+          />
+        }
+        summaryLabel={selectedPaymentTypeLabel ?? ""}
+        usesScroll={protocolTypeStripUsesScroll}
+        tileGap={protocolTileGap}
+        sectionStyle={
+          ledgerDesktopOnSetupStep && ledgerDesktopWizardActive
+            ? undefined
+            : ledgerTripDesktopSplit && !ledgerDesktopOnSetupStep
+              ? styles.ledgerProtocolSectionStackTop
+              : stackTripFinancialBand
+                ? styles.ledgerProtocolSectionStackTop
+                : styles.ledgerProtocolSectionSideRight
+        }
+      >
+        {paymentTypeItems.map((item) => (
+          <LedgerProtocolStripTypeTile
+            key={String(item.key)}
+            kind={item.label}
+            label={item.label}
+            selected={item.selected}
+            variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+            width={protocolTypeTileWidth}
+            onPress={item.onPress}
+          />
+        ))}
+      </LedgerProtocolStripSection>
+    );
+
+    const ledgerModeCategoryTopBand = (
+      <LedgerProtocolWorkbench stacked={ledgerTripDesktopSplit} compact={mob}>
+        {ledgerProtocolSyncModeSection}
+        {ledgerProtocolCategorySection}
+      </LedgerProtocolWorkbench>
+    );
+
+    const ledgerDesktopCategoryBand = (
+      <LedgerProtocolWorkbench stacked compact={mob}>
+        {ledgerProtocolCategorySection}
+      </LedgerProtocolWorkbench>
+    );
+
+    const ledgerDesktopModeBand = (
+      <View style={styles.ledgerDesktopPaymentSectionCard}>
+        <View style={styles.ledgerDesktopSectionHead}>
+          <View style={[styles.ledgerDesktopSectionIcon, styles.ledgerDesktopSectionIconMode]}>
+            <Banknote size={15} color={Theme.darkGreen} strokeWidth={2.2} />
+          </View>
+          <View style={styles.ledgerDesktopSectionHeadText}>
+            <Text style={styles.ledgerDesktopSectionEyebrow}>Payment mode</Text>
+            <Text style={styles.ledgerDesktopSectionHint}>How this money moved</Text>
+          </View>
+        </View>
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.ledgerDesktopModeStripRow,
+            { gap: protocolTileGap },
+          ]}
         >
           {PAYMENT_MODES.map((opt) => {
             const selected = paymentModeId === opt.id;
@@ -3513,49 +3644,8 @@ export function AddTransactionModal({
               />
             );
           })}
-        </LedgerProtocolStripSection>
-
-        <LedgerProtocolStripSection
-          title={
-            type === "in"
-              ? "PAYMENT TYPE"
-              : isDriverPayment
-                ? "PAYMENT TYPE"
-                : "CATEGORY"
-          }
-          variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-          stripOpen={ledgerProtocolTypeStripOpen}
-          onExpand={() => setPaymentTypeExpanded(true)}
-          summaryIcon={
-            <LedgerPaymentTypeIcon
-              kind={selectedPaymentTypeLabel ?? ""}
-              size={LEDGER_PROTOCOL_SUMMARY_LOGO}
-            />
-          }
-          summaryLabel={selectedPaymentTypeLabel ?? ""}
-          usesScroll={protocolTypeStripUsesScroll}
-          tileGap={protocolTileGap}
-          sectionStyle={
-            ledgerTripDesktopSplit
-              ? undefined
-              : stackTripFinancialBand
-                ? styles.ledgerProtocolSectionStackTop
-                : styles.ledgerProtocolSectionSideRight
-          }
-        >
-          {paymentTypeItems.map((item) => (
-            <LedgerProtocolStripTypeTile
-              key={String(item.key)}
-              kind={item.label}
-              label={item.label}
-              selected={item.selected}
-              variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-              width={protocolTypeTileWidth}
-              onPress={item.onPress}
-            />
-          ))}
-        </LedgerProtocolStripSection>
-      </LedgerProtocolWorkbench>
+        </ScrollView>
+      </View>
     );
 
     const ledgerSyncAmountHero = (
@@ -3570,11 +3660,12 @@ export function AddTransactionModal({
             ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
             stackTripFinancialBand && styles.syncAmountCardMobileAlign,
             ledgerTripDesktopSplit && styles.syncAmountCardDesktopHero,
+            ledgerDesktopOnPaymentStep && styles.syncAmountCardDesktopPaymentStep,
             selectedTripNoDueNotice && styles.syncAmountCardNoDueHighlight,
           ]}
         >
           <View style={styles.syncAmountGlow} pointerEvents="none" />
-          {ledgerWizardTripLedgerPreview ? (
+          {!ledgerDesktopOnPaymentStep && ledgerWizardTripLedgerPreview ? (
             <View style={styles.ledgerTripPreviewWrap}>
               <LedgerTripSettlementNote
                 preview={ledgerWizardTripLedgerPreview}
@@ -3582,7 +3673,7 @@ export function AddTransactionModal({
                 compact={mob}
               />
             </View>
-          ) : selectedTripNoDueNotice ? (
+          ) : !ledgerDesktopOnPaymentStep && selectedTripNoDueNotice ? (
             <View style={[styles.ledgerSyncNoDueBanner, mob && styles.ledgerMobNoDueBanner]}>
               <CircleEllipsis
                 size={mob ? 12 : 13}
@@ -3602,9 +3693,10 @@ export function AddTransactionModal({
               styles.syncAmountEyebrowPulse,
               stackTripFinancialBand && styles.syncSectionEyebrowMobile,
               mob && styles.ledgerMobSyncEyebrow,
+              ledgerDesktopOnPaymentStep && styles.ledgerDesktopAmountEyebrow,
             ]}
           >
-            Synchronization Magnitude
+            {ledgerDesktopOnPaymentStep ? "Amount" : "Synchronization Magnitude"}
           </Text>
           <View
             style={[
@@ -3647,6 +3739,15 @@ export function AddTransactionModal({
           (amount <= 0 || !Number.isFinite(parseFloat(amountStr.replace(/,/g, "")))) ? (
             <Text style={styles.fieldErrorText}>Enter a valid amount.</Text>
           ) : null}
+          {ledgerDueAmountInr != null && ledgerDueAmountInr > 0 ? (
+            <LedgerSettlementPctDock
+              dueTotalInr={ledgerDueAmountInr}
+              amountStr={amountStr}
+              onAmountChange={setAmountStr}
+              accentColor={type === "in" ? Theme.darkGreen : Theme.teslaRed}
+              variant={ledgerTripDesktopSplit ? "dark" : "light"}
+            />
+          ) : null}
         </View>
     );
 
@@ -3658,12 +3759,15 @@ export function AddTransactionModal({
             ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
             stackTripFinancialBand && styles.syncDateCardMobileAlign,
           ledgerTripDesktopSplit && styles.syncDateCardDesktopFull,
+          ledgerDesktopOnPaymentStep && styles.ledgerDesktopDatePanelNested,
           entryDateError && styles.ledgerSyncDateCardError,
         ]}
       >
-        <Text style={[styles.ledgerFieldEyebrow, mob && styles.ledgerMobFieldEyebrow]}>
-          Sync Date
-            </Text>
+        {!ledgerDesktopOnPaymentStep ? (
+          <Text style={[styles.ledgerFieldEyebrow, mob && styles.ledgerMobFieldEyebrow]}>
+            Sync Date
+          </Text>
+        ) : null}
         <View style={styles.ledgerSyncDatePresetRow}>
             <TouchableOpacity
               style={[
@@ -3805,6 +3909,158 @@ export function AddTransactionModal({
           </View>
         </View>
       ) : null;
+
+    const ledgerDesktopPaymentPreview =
+      ledgerDesktopOnPaymentStep && ledgerWizardTripLedgerPreview ? (
+        <View style={styles.ledgerDesktopPaymentPreview}>
+          <LedgerTripSettlementNote
+            preview={ledgerWizardTripLedgerPreview}
+            enteredInr={amount}
+            compact={false}
+          />
+        </View>
+      ) : ledgerDesktopOnPaymentStep && selectedTripNoDueNotice ? (
+        <View style={[styles.ledgerSyncNoDueBanner, styles.ledgerDesktopPaymentPreview]}>
+          <CircleEllipsis size={13} color={LedgerSyncPalette.muted} strokeWidth={2} />
+          <Text style={styles.ledgerSyncNoDueBannerText}>{selectedTripNoDueNotice}</Text>
+        </View>
+      ) : null;
+
+    const ledgerDesktopCategoryReminder = ledgerDesktopOnPaymentStep ? (
+      <View style={styles.ledgerDesktopCategoryReminder}>
+        <View style={styles.ledgerDesktopCategoryReminderMain}>
+          <View style={styles.ledgerDesktopCategoryReminderIcon}>
+            <LedgerPaymentTypeIcon kind={selectedPaymentTypeLabel ?? ""} size={18} />
+          </View>
+          <View style={styles.ledgerDesktopCategoryReminderTextCol}>
+            <Text style={styles.ledgerDesktopCategoryReminderLabel}>Category</Text>
+            <Text style={styles.ledgerDesktopCategoryReminderValue} numberOfLines={1}>
+              {selectedPaymentTypeLabel ?? "—"}
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => setLedgerDesktopWizardStep(1)}
+          style={styles.ledgerDesktopCategoryChangeBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Change category"
+        >
+          <Text style={styles.ledgerDesktopCategoryChangeText}>Change</Text>
+        </Pressable>
+      </View>
+    ) : null;
+
+    const ledgerDesktopReferenceSection =
+      needsLedgerPaymentReference && ledgerDesktopOnPaymentStep ? (
+        <View style={styles.ledgerDesktopPaymentSectionCard}>
+          <View style={styles.ledgerDesktopSectionHead}>
+            <View style={[styles.ledgerDesktopSectionIcon, styles.ledgerDesktopSectionIconRef]}>
+              <Hash size={15} color={Theme.primary} strokeWidth={2.2} />
+            </View>
+            <View style={styles.ledgerDesktopSectionHeadText}>
+              <Text style={styles.ledgerDesktopSectionEyebrow}>Reference / UTR</Text>
+              <Text style={styles.ledgerDesktopSectionHint}>Bank reference for validation</Text>
+            </View>
+          </View>
+          <View style={styles.ledgerDesktopReferenceInputWrap}>
+            <TextInput
+              style={styles.ledgerDesktopReferenceInput}
+              value={paymentReference}
+              onChangeText={setPaymentReference}
+              placeholder="Enter UTR or transaction reference"
+              placeholderTextColor={Theme.textMutedDemo}
+              autoCorrect={false}
+              autoCapitalize="characters"
+              accessibilityLabel="Reference Number or UTR"
+            />
+          </View>
+        </View>
+      ) : null;
+
+    const ledgerDesktopDateSection = ledgerDesktopOnPaymentStep ? (
+      <View style={styles.ledgerDesktopPaymentSectionCard}>
+        <View style={styles.ledgerDesktopSectionHead}>
+          <View style={[styles.ledgerDesktopSectionIcon, styles.ledgerDesktopSectionIconDate]}>
+            <Clock size={15} color={LedgerSyncPalette.ink} strokeWidth={2.2} />
+          </View>
+          <View style={styles.ledgerDesktopSectionHeadText}>
+            <Text style={styles.ledgerDesktopSectionEyebrow}>Sync date</Text>
+            <Text style={styles.ledgerDesktopSectionHint}>When this payment was made</Text>
+          </View>
+        </View>
+        {ledgerSyncDatePanel}
+      </View>
+    ) : null;
+
+    const ledgerDesktopSetupSummary = ledgerDesktopOnSetupStep ? (
+      <View style={styles.ledgerDesktopSetupSummary}>
+        <Text style={styles.ledgerDesktopSetupSummaryEyebrow}>Selected category</Text>
+        <View style={styles.ledgerDesktopSetupChipRow}>
+          <View style={styles.ledgerDesktopSetupChip}>
+            <LedgerPaymentTypeIcon kind={selectedPaymentTypeLabel ?? "—"} size={16} />
+            <Text style={styles.ledgerDesktopSetupChipText} numberOfLines={1}>
+              {selectedPaymentTypeLabel ?? "Select category"}
+            </Text>
+          </View>
+        </View>
+      </View>
+    ) : null;
+
+    const ledgerProvisionStepSetup = (
+      <View
+        style={[
+          styles.ledgerProvisionCard,
+          styles.ledgerProvisionCardPaneFill,
+          styles.ledgerDesktopSetupPane,
+        ]}
+      >
+        {ledgerDesktopCategoryBand}
+        {ledgerDesktopSetupSummary}
+      </View>
+    );
+
+    const ledgerProvisionStepPayment = (
+      <View
+        style={[
+          styles.ledgerProvisionCard,
+          styles.ledgerProvisionCardPaneFill,
+          styles.ledgerDesktopPaymentPane,
+        ]}
+      >
+        <ScrollView
+          style={styles.ledgerDesktopPaymentScroll}
+          contentContainerStyle={styles.ledgerDesktopPaymentScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {ledgerDesktopCategoryReminder}
+          {ledgerDesktopPaymentPreview}
+          <View style={styles.ledgerDesktopAmountSection}>
+            {ledgerSyncAmountHero}
+          </View>
+          {ledgerDesktopModeBand}
+          {ledgerDesktopReferenceSection}
+          {ledgerDesktopDateSection}
+        </ScrollView>
+      </View>
+    );
+
+    const ledgerProvisionBody = ledgerDesktopWizardActive ? (
+      ledgerDesktopOnSetupStep ? ledgerProvisionStepSetup : ledgerProvisionStepPayment
+    ) : (
+      <View
+        style={[
+          styles.ledgerProvisionCard,
+          mob && styles.ledgerMobProvision,
+          ledgerTripDesktopSplit && styles.ledgerProvisionCardPaneFill,
+        ]}
+      >
+        {ledgerModeCategoryTopBand}
+        {ledgerReferenceCard}
+        {ledgerSyncAmountHero}
+        {ledgerSyncDatePanel}
+      </View>
+    );
 
     const renderMissionTripDuePills = (
       clientDue: string | null,
@@ -4548,21 +4804,6 @@ export function AddTransactionModal({
       </View>
     );
 
-    const ledgerProvisionBody = (
-      <View
-        style={[
-          styles.ledgerProvisionCard,
-          mob && styles.ledgerMobProvision,
-          ledgerTripDesktopSplit && styles.ledgerProvisionCardPaneFill,
-        ]}
-      >
-        {ledgerModeCategoryTopBand}
-        {ledgerReferenceCard}
-        {ledgerSyncAmountHero}
-        {ledgerSyncDatePanel}
-      </View>
-    );
-
     const ledgerSyncDatePickerValue = ledgerDateFromIso(entryDate);
     const ledgerSyncAndroidPicker =
       ledgerSyncDatePickerVisible && Platform.OS === "android" ? (
@@ -4644,10 +4885,18 @@ export function AddTransactionModal({
           <View style={styles.ledgerV2HeaderLeft}>
                 <TouchableOpacity
               style={[styles.ledgerV2BackBtn, mob && styles.ledgerMobBackBtn]}
-              onPress={onClose}
+              onPress={() => {
+                if (ledgerDesktopOnPaymentStep) {
+                  setLedgerDesktopWizardStep(1);
+                } else {
+                  onClose();
+                }
+              }}
               activeOpacity={0.88}
                   accessibilityRole="button"
-              accessibilityLabel="Go back"
+              accessibilityLabel={
+                ledgerDesktopOnPaymentStep ? "Back to payment setup" : "Go back"
+              }
             >
               <ChevronLeft
                 size={mob ? 18 : 22}
@@ -4664,6 +4913,34 @@ export function AddTransactionModal({
                 <Text style={[styles.ledgerV2Sub, mob && styles.ledgerMobSub]} numberOfLines={1}>
                   {headerPartyName?.trim() || entryContextLabel?.trim()}
                 </Text>
+              ) : null}
+              {ledgerDesktopWizardActive ? (
+                <View style={styles.ledgerDesktopWizardMeta}>
+                  <View style={styles.ledgerDesktopWizardSteps}>
+                    <View
+                      style={[
+                        styles.ledgerDesktopWizardDot,
+                        ledgerDesktopWizardStep >= 1 && styles.ledgerDesktopWizardDotActive,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.ledgerDesktopWizardLine,
+                        ledgerDesktopWizardStep >= 2 && styles.ledgerDesktopWizardLineActive,
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.ledgerDesktopWizardDot,
+                        ledgerDesktopWizardStep >= 2 && styles.ledgerDesktopWizardDotActive,
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.ledgerDesktopWizardStepLabel}>
+                    Step {ledgerDesktopWizardStep} of 2 ·{" "}
+                    {ledgerDesktopWizardStep === 1 ? "Category" : "Amount & payment"}
+                  </Text>
+                </View>
               ) : null}
           </View>
           </View>
@@ -4739,6 +5016,7 @@ export function AddTransactionModal({
           </View>
         </View>
 
+        {!ledgerDesktopWizardActive ? (
             <View
               style={[
             styles.ledgerV2Grid,
@@ -4824,6 +5102,7 @@ export function AddTransactionModal({
             ) : null}
           </View>
         </View>
+        ) : null}
       </View>
       {ledgerSyncAndroidPicker}
       {ledgerSyncIosPicker}
@@ -4916,6 +5195,7 @@ export function AddTransactionModal({
                 entryDate={entryDate}
                 onEntryDateChange={setEntryDate}
                 reconRows={ledgerReconDetailRows}
+                reconAmountText={previewAmountText}
                 canSubmit={canSubmit}
                 onSubmit={() => {
                   Keyboard.dismiss();
@@ -5959,7 +6239,43 @@ export function AddTransactionModal({
               { paddingBottom: bottomInset + 16 },
             ]}
           >
-            {submitButton}
+            {ledgerDesktopWizardActive && ledgerDesktopWizardStep === 1 ? (
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  styles.submitBtnLedgerFullPage,
+                  !canAdvanceDesktopLedgerWizard && styles.submitBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (!canAdvanceDesktopLedgerWizard) return;
+                  Keyboard.dismiss();
+                  setLedgerDesktopWizardStep(2);
+                }}
+                disabled={!canAdvanceDesktopLedgerWizard}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.submitBtnText, styles.submitBtnTextLedger]}>
+                  Continue to amount
+                </Text>
+                <ChevronRight size={18} color={Theme.textOnDark} strokeWidth={2.5} />
+              </TouchableOpacity>
+            ) : ledgerDesktopWizardActive && ledgerDesktopWizardStep === 2 ? (
+              <View style={styles.ledgerDesktopFooterRow}>
+                <TouchableOpacity
+                  style={styles.ledgerDesktopFooterBackBtn}
+                  onPress={() => setLedgerDesktopWizardStep(1)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to payment setup"
+                >
+                  <ChevronLeft size={18} color={LedgerSyncPalette.ink} strokeWidth={2.5} />
+                  <Text style={styles.ledgerDesktopFooterBackText}>Category</Text>
+                </TouchableOpacity>
+                <View style={styles.ledgerDesktopFooterSubmitWrap}>{submitButton}</View>
+              </View>
+            ) : (
+              submitButton
+            )}
           </View>
         )}
       </View>
@@ -6120,25 +6436,6 @@ export function AddTransactionModal({
     return null;
   };
 
-  if (fullPage && ledgerSuccess) {
-    return (
-      <LedgerEntrySuccessView
-        isEditMode={ledgerSuccess.isEditMode}
-        type={ledgerSuccess.type}
-        amount={ledgerSuccess.amount}
-        partyName={ledgerSuccess.partyName}
-        partyEntityType={ledgerSuccess.partyEntityType}
-        partyAvatarUrl={ledgerSuccess.partyAvatarUrl}
-        partyAvatarSeed={ledgerSuccess.partyAvatarSeed}
-        partyIsIntegrated={ledgerSuccess.partyIsIntegrated}
-        tripSummary={ledgerSuccess.tripSummary}
-        paymentModeLabel={ledgerSuccess.paymentModeLabel}
-        referenceSummary={ledgerSuccess.referenceSummary}
-        onDone={handleLedgerSuccessDone}
-      />
-    );
-  }
-
   if (fullPage) {
     return (
       <>
@@ -6158,16 +6455,31 @@ export function AddTransactionModal({
           </Modal>
         ) : null}
         <LedgerReconSummaryModal
-          visible={ledgerSubmitConfirmVisible}
+          visible={
+            ledgerMobileFlow
+              ? ledgerSubmitting || ledgerReconSucceeded
+              : ledgerSubmitConfirmVisible
+          }
+          progressOnly={ledgerMobileFlow}
           amountText={previewAmountText}
           direction={type}
           rows={ledgerReconDetailRows}
           isEditMode={isEditMode}
-          onClose={() => setLedgerSubmitConfirmVisible(false)}
+          phase={
+            ledgerReconSucceeded
+              ? "success"
+              : ledgerSubmitting
+                ? "submitting"
+                : "review"
+          }
+          onClose={() => {
+            if (ledgerSubmitting || ledgerReconSucceeded) return;
+            setLedgerSubmitConfirmVisible(false);
+          }}
           onConfirm={() => {
-                      setLedgerSubmitConfirmVisible(false);
-                      commitLedgerSubmit();
-                    }}
+            commitLedgerSubmit();
+          }}
+          onSuccessComplete={handleLedgerReconSuccessComplete}
         />
         <LedgerFlowGuardAlert
           visible={ledgerFlowGuardAlert != null}
@@ -7161,12 +7473,15 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 18,
     minHeight: 56,
+    width: "100%",
+    alignSelf: "stretch",
   },
   submitBtnTextLedger: {
     ...FinanceTxnTypography.buttonLabel,
     fontSize: 11,
     letterSpacing: 1.4,
     fontWeight: "500",
+    color: Theme.textOnDark,
   },
   submitBtnTextLedgerTight: {
     letterSpacing: 0.8,
@@ -7358,6 +7673,285 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     justifyContent: "flex-start",
+  },
+  ledgerDesktopSetupPane: {
+    gap: 14,
+    justifyContent: "flex-start",
+  },
+  ledgerDesktopSetupSummary: {
+    marginTop: "auto",
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: LedgerSyncPalette.border,
+    gap: 8,
+  },
+  ledgerDesktopSetupSummaryEyebrow: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: LedgerSyncPalette.muted,
+  },
+  ledgerDesktopSetupChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  ledgerDesktopSetupChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: LedgerSyncPalette.page,
+    maxWidth: "100%",
+  },
+  ledgerDesktopSetupChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: LedgerSyncPalette.ink,
+    flexShrink: 1,
+  },
+  ledgerDesktopPaymentPane: {
+    padding: 0,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  ledgerDesktopPaymentScroll: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+  },
+  ledgerDesktopPaymentScrollContent: {
+    gap: 16,
+    padding: 16,
+    paddingBottom: 10,
+    flexGrow: 1,
+  },
+  ledgerDesktopPaymentPreview: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  ledgerDesktopCategoryReminder: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: LedgerSyncPalette.page,
+  },
+  ledgerDesktopCategoryReminderMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  ledgerDesktopCategoryReminderIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+  },
+  ledgerDesktopCategoryReminderTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  ledgerDesktopCategoryReminderLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: LedgerSyncPalette.muted,
+  },
+  ledgerDesktopCategoryReminderValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: LedgerSyncPalette.ink,
+  },
+  ledgerDesktopCategoryChangeBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: Theme.cardWhite,
+  },
+  ledgerDesktopCategoryChangeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.primary,
+  },
+  ledgerDesktopAmountSection: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  ledgerDesktopAmountEyebrow: {
+    letterSpacing: 2.4,
+    fontSize: 9,
+  },
+  ledgerDesktopPaymentSectionCard: {
+    width: "100%",
+    alignSelf: "stretch",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+  ledgerDesktopSectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  ledgerDesktopSectionHeadText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  ledgerDesktopSectionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  ledgerDesktopSectionIconMode: {
+    backgroundColor: "rgba(16,185,129,0.08)",
+    borderColor: "rgba(16,185,129,0.2)",
+  },
+  ledgerDesktopSectionIconRef: {
+    backgroundColor: "rgba(99,102,241,0.08)",
+    borderColor: "rgba(99,102,241,0.2)",
+  },
+  ledgerDesktopSectionIconDate: {
+    backgroundColor: LedgerSyncPalette.page,
+    borderColor: LedgerSyncPalette.border,
+  },
+  ledgerDesktopSectionEyebrow: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: LedgerSyncPalette.ink,
+    letterSpacing: -0.1,
+  },
+  ledgerDesktopSectionHint: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: LedgerSyncPalette.muted,
+    lineHeight: 14,
+  },
+  ledgerDesktopReferenceInputWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: LedgerSyncPalette.page,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  ledgerDesktopReferenceInput: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: LedgerSyncPalette.ink,
+    paddingVertical: 10,
+    ...Platform.select({ web: { outlineStyle: "none" } as object }),
+  },
+  ledgerDesktopDatePanelNested: {
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    gap: 10,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  ledgerDesktopModeStripRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingVertical: 2,
+  },
+  ledgerDesktopWizardMeta: {
+    marginTop: 8,
+    gap: 6,
+  },
+  ledgerDesktopWizardSteps: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  ledgerDesktopWizardDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: LedgerSyncPalette.border,
+  },
+  ledgerDesktopWizardDotActive: {
+    backgroundColor: LedgerSyncPalette.ink,
+  },
+  ledgerDesktopWizardLine: {
+    width: 28,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: LedgerSyncPalette.border,
+  },
+  ledgerDesktopWizardLineActive: {
+    backgroundColor: LedgerSyncPalette.ink,
+  },
+  ledgerDesktopWizardStepLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: LedgerSyncPalette.muted,
+    letterSpacing: 0.2,
+  },
+  ledgerDesktopFooterRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+    width: "100%",
+  },
+  ledgerDesktopFooterBackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: LedgerSyncPalette.surface,
+    minHeight: 56,
+  },
+  ledgerDesktopFooterBackText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: LedgerSyncPalette.ink,
+    letterSpacing: 0.3,
+  },
+  ledgerDesktopFooterSubmitWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   ledgerSyncDateCard: {
     backgroundColor: LedgerSyncPalette.page,
@@ -8577,6 +9171,12 @@ const styles = StyleSheet.create({
     paddingVertical: 22,
     paddingHorizontal: 18,
     justifyContent: "center",
+  },
+  syncAmountCardDesktopPaymentStep: {
+    minHeight: 0,
+    flexShrink: 0,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
   },
   syncAmountCardNoDueHighlight: {
     borderColor: "rgba(99, 102, 241, 0.35)",

@@ -684,62 +684,62 @@ export function FinancialRow({
   const ledgerPartyIdentity =
     type === "ledger" ? resolveFinancialRowPartyIdentity(data) : null;
 
-  /** Ledger collapsed row: [icon] name, category (uppercase), date/time — same layout as entity tabs. */
+  /** Ledger collapsed row: avatar + name / category / date in one aligned column. */
   const ledgerEntityLines =
     type === "ledger" ? (
-      <>
-        <View style={styles.cellNodeMainRow}>
-          {ledgerPartyIdentity ? (
-            <EntityIdentityAvatar
-              identity={ledgerPartyIdentity}
-              size="sm"
-              showIntegrationBadge
+      <View style={styles.ledgerEntityRow}>
+        {ledgerPartyIdentity ? (
+          <EntityIdentityAvatar
+            identity={ledgerPartyIdentity}
+            size="sm"
+            showIntegrationBadge
+          />
+        ) : showLedgerIntegrationIcon ? (
+          <View style={styles.ledgerEntityIconSlot}>
+            <FontAwesome
+              name={data.is_integrated ? 'link' : 'unlink'}
+              size={9}
+              color={data.is_integrated ? Theme.integratedIcon : Theme.nonIntegratedIcon}
             />
-          ) : showLedgerIntegrationIcon ? (
-            <View style={styles.cellNodeSubIntegrationIconWrap}>
-              <FontAwesome
-                name={data.is_integrated ? 'link' : 'unlink'}
-                size={9}
-                color={data.is_integrated ? Theme.integratedIcon : Theme.nonIntegratedIcon}
-              />
-            </View>
-          ) : null}
+          </View>
+        ) : null}
+        <View style={styles.ledgerEntityTextCol}>
           <Text style={styles.cellNodeMain} numberOfLines={1} ellipsizeMode="tail">
             {data.name ?? data.id ?? "—"}
           </Text>
-        </View>
-        <Text style={styles.cellNodeSubCategory} numberOfLines={1} ellipsizeMode="tail">
-          {(data.category ?? "GENERAL").toUpperCase()}
-        </Text>
-        {data.reconciliationLabel ? (
-          <View style={styles.ledgerReconRow}>
-            <View style={[styles.ledgerReconBadge, ledgerReconBadgeStyle]}>
-              <Text
-                style={[styles.ledgerReconBadgeText, ledgerReconTextStyle]}
-                numberOfLines={1}
-              >
-                {data.reconciliationLabel.toUpperCase()}
-              </Text>
+          <Text style={styles.cellNodeSubCategory} numberOfLines={1} ellipsizeMode="tail">
+            {(data.category ?? "GENERAL").toUpperCase()}
+          </Text>
+          {data.reconciliationLabel ? (
+            <View style={styles.ledgerReconRow}>
+              <View style={[styles.ledgerReconBadge, ledgerReconBadgeStyle]}>
+                <Text
+                  style={[styles.ledgerReconBadgeText, ledgerReconTextStyle]}
+                  numberOfLines={1}
+                >
+                  {data.reconciliationLabel.toUpperCase()}
+                </Text>
+              </View>
+              {data.reconciliationActionLabel ? (
+                <Text
+                  style={styles.ledgerReconActionText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {data.reconciliationActionLabel}
+                </Text>
+              ) : null}
             </View>
-            {data.reconciliationActionLabel ? (
-              <Text
-                style={styles.ledgerReconActionText}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {data.reconciliationActionLabel}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-        <Text
-          style={styles.cellNodeSubDate}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          {formatLedgerDateTime(data.transaction_date)}
-        </Text>
-      </>
+          ) : null}
+          <Text
+            style={styles.cellNodeSubDate}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {formatLedgerDateTime(data.transaction_date)}
+          </Text>
+        </View>
+      </View>
     ) : null;
 
   /** Drivers tab: red = disconnected (left_at set), green = ACTIVE, grey = offline/other */
@@ -1229,6 +1229,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     minWidth: 0,
+  },
+  ledgerEntityRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    minWidth: 0,
+  },
+  ledgerEntityIconSlot: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  ledgerEntityTextCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingTop: 1,
   },
   driverStatusDotOnline: { backgroundColor: Theme.darkGreen },
   driverStatusDotOffline: { backgroundColor: Theme.teslaRed },

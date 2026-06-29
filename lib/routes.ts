@@ -57,6 +57,8 @@ export const ROUTES = {
   BRANDING_SETTINGS: '/branding-settings' as const,
   /** Canonical org hub: logo, name, KYC, team, invoice branding. */
   WORKSPACE:         '/workspace'         as const,
+  /** Step-through business verification wizard (Sprint 1). */
+  BUSINESS_VERIFY:   '/business-verify'   as const,
   /** Own-org network profile hub (Details / Team / My Profile tabs on desktop). */
   networkOrgHub: (
     tab:
@@ -124,14 +126,14 @@ export const ROUTES = {
     type: "client" | "supplier" | "driver",
     partyId: string,
   ) => `/public-profile/${type}/${encodeURIComponent(partyId)}` as const,
-  /** Finance entity detail (trips, cash flow, shared ledger). */
-  clientDetail: (clientId: string, tab?: 'trips' | 'cash' | 'shared') => {
+  /** Finance entity detail (trips, cash flow). */
+  clientDetail: (clientId: string, tab?: 'trips' | 'cash') => {
     const base = `/client/${encodeURIComponent(clientId)}` as const;
     if (!tab) return base;
     return `${base}?tab=${encodeURIComponent(tab)}` as const;
   },
-  /** Finance entity detail (trips, cash flow, shared ledger). */
-  supplierDetail: (supplierId: string, tab?: 'trips' | 'cash' | 'shared') => {
+  /** Finance entity detail (trips, cash flow). */
+  supplierDetail: (supplierId: string, tab?: 'trips' | 'cash') => {
     const base = `/supplier/${encodeURIComponent(supplierId)}` as const;
     if (!tab) return base;
     return `${base}?tab=${encodeURIComponent(tab)}` as const;

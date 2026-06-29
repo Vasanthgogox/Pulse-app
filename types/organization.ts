@@ -54,6 +54,9 @@ export interface TeamInvite {
 
 export type KycVerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
+export type RegistrationType = 'proprietorship' | 'llp' | 'pvt_ltd' | 'public_ltd' | 'partnership';
+export type AddressProofType = 'lease' | 'utility_bill' | 'other';
+
 export interface WorkspaceKyc {
   id: string;
   name: string;
@@ -64,7 +67,23 @@ export interface WorkspaceKyc {
   msme_number: string | null;
   tan_number: string | null;
   iec_number: string | null;
+  // Sprint 1: verification pipeline
+  registration_type: RegistrationType | null;
+  address_line: string | null;
+  city: string | null;
+  state: string | null;
+  address_pincode: string | null;
+  address_proof_path: string | null;
+  address_proof_type: AddressProofType | null;
+  frozen_at: string | null;
+  submitted_at: string | null;
   verification_status: KycVerificationStatus;
   verified_at: string | null;
   kyc_rejected_reason: string | null;
+  rejection_reasons: { checklist: string[]; notes: string } | null;
+}
+
+/** True when the profile is locked and mobile fields must be read-only. */
+export function isVerificationFrozen(status: KycVerificationStatus): boolean {
+  return status === 'pending' || status === 'verified';
 }

@@ -1971,26 +1971,11 @@ export function LedgerTransactionListView({
                           const leftContent = useTimelineLayout ? (
                             <>
                               {customAvatar ? (
-                                <View
-                                  style={[
-                                    styles.timelineCardAvatarImageWrap,
-                                    isIn
-                                      ? styles.avatarWrapIn
-                                      : styles.avatarWrapOut,
-                                  ]}
-                                >
+                                <View style={styles.timelineCardAvatarImageWrap}>
                                   {customAvatar}
                                 </View>
                               ) : (
-                                <View
-                                  style={[
-                                    styles.timelineCardAvatar,
-                                    { backgroundColor: avatarBg },
-                                    isIn
-                                      ? styles.avatarWrapIn
-                                      : styles.avatarWrapOut,
-                                  ]}
-                                >
+                                <View style={styles.timelineCardAvatar}>
                                   <Text
                                     style={[
                                       styles.avatarText,
@@ -2177,7 +2162,9 @@ export function LedgerTransactionListView({
                                     ? styles.rowCardTimeline
                                     : styles.rowCard,
                                   (isExpanded || isHighlighted) &&
-                                    styles.rowCardHighlighted,
+                                    (useTimelineLayout
+                                      ? styles.rowCardTimelineHighlighted
+                                      : styles.rowCardHighlighted),
                                 ]}
                               >
                                 {cardContent}
@@ -2998,7 +2985,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   fiscalCard: {
-    backgroundColor: Theme.screenBackground,
     paddingVertical: 4,
     position: "relative",
     zIndex: 1,
@@ -3855,19 +3841,13 @@ const styles = StyleSheet.create({
   rowCardTimeline: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: Theme.screenBackground,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    backgroundColor: "transparent",
+    paddingVertical: 12,
+    paddingHorizontal: 0,
     gap: 12,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.04)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 6,
-    elevation: 1,
-    overflow: "hidden",
+  },
+  rowCardTimelineHighlighted: {
+    backgroundColor: "transparent",
   },
   timelineCardAvatar: {
     width: 40,
@@ -3875,7 +3855,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
   },
   timelineCardAvatarImageWrap: {
     width: 40,
@@ -3884,7 +3863,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
   },
   timelineCardBody: {
     flex: 1,
@@ -3943,12 +3921,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(248,250,252,0.5)",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
     maxWidth: "100%",
   },
   tripPillCheckIcon: {
@@ -4014,12 +3986,8 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   tripPillTextOnly: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(248,250,252,0.5)",
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   tripPillTextOnlyLabel: {
     fontSize: FONT_SIZE_CAPTION,

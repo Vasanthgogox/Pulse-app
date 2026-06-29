@@ -10,7 +10,6 @@ import {
 import {
   AlertTriangle,
   CheckCircle,
-  ChevronRight,
   Truck,
   MapPin,
   Navigation,
@@ -27,15 +26,13 @@ import {
   CHAT_TEXT_SECONDARY,
 } from "@/features/chat/chatTheme";
 import { CHAT_MOBILE } from "@/features/chat/chatMobileLayout";
-import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
+import { formatElegantPartyName } from "@/features/chat/utils/partyDisplay";
 import Theme from "@/constants/Theme";
-import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import {
-  partyAvatarBackgroundColor,
-  partyAvatarInitialsTextColor,
   partyInitialsFromName,
 } from "@/lib/partyAvatarDisplay";
 import type { LedgerEventMetadata, TripMessageRow } from "../types/chat.types";
+import { ChatPaymentEventIcon } from "./ChatPaymentEventIcon";
 import {
   resolveDriverSwapAvatars,
   resolveSystemUpdateDriverAvatar,
@@ -354,36 +351,23 @@ export function ChatLedgerEventCard({
   const { from: fromParty, to: toParty } = splitOrgLine(orgLine);
 
   const titleParty = flow === "in" ? fromParty : toParty;
-  const titleDisplay = formatChatPartyName(titleParty);
-  const namedOther = [fromParty, toParty].find((p) => formatChatPartyName(p));
-  const avatarSeedName = titleDisplay ? titleParty : namedOther || "Payment";
-  const avatarBg = partyAvatarBackgroundColor(avatarSeedName);
-  const avatarFg = partyAvatarInitialsTextColor(avatarBg);
+  const titleDisplay = formatElegantPartyName(titleParty);
   const dateUpper = formatTripEventSheetDate(message.created_at);
   const metaMid = [paymentModeLabel, meta.category].filter(Boolean).join(" · ") || "—";
-  const routeLine = `${fromParty.toUpperCase()} → ${toParty.toUpperCase()}`;
+  const routeLine = `${formatElegantPartyName(fromParty) ?? fromParty} → ${formatElegantPartyName(toParty) ?? toParty}`;
 
   const isCredit = flow === "in";
-  const amountColor = isCredit ? "#047857" : "#be123c";
+  const amountColor = isCredit ? "#047857" : "#BE123C";
+  const iconSize = 28;
 
   const avatarEl = (
-    <View style={[s.ledgerAvatarWrap, s.ledgerAvatarWrapAlign, isMobile && s.ledgerAvatarWrapMobile]}>
-      <View
-        style={[
-          s.ledgerAvatar,
-          isMobile && s.ledgerAvatarMobile,
-          { backgroundColor: avatarBg },
-        ]}
-      >
-        <Text style={[s.ledgerAvatarInitials, { color: avatarFg }]}>
-          {partyInitialsFromName(avatarSeedName)}
-        </Text>
-      </View>
-      <View
-        style={[
-          s.ledgerAvatarDot,
-          { backgroundColor: isDisputed ? "#f59e0b" : "#22c55e" },
-        ]}
+    <View style={[s.ledgerIconWrap, isMobile && s.ledgerIconWrapMobile]}>
+      <ChatPaymentEventIcon
+        flow={flow}
+        paymentMode={paymentModeLabel}
+        isAcknowledged={isAcknowledged}
+        isDisputed={isDisputed}
+        size={iconSize}
       />
     </View>
   );
@@ -427,7 +411,10 @@ export function ChatLedgerEventCard({
               {bodyEl}
             </View>
             <View style={s.ledgerFooterMobile}>
-              <Text style={[s.ledgerAmountMobile, { color: amountColor }]} numberOfLines={1}>
+              <Text
+                style={[s.ledgerAmountMobile, { color: amountColor }]}
+                numberOfLines={1}
+              >
                 {flowPrefix}
                 {amountLabel}
               </Text>
@@ -438,19 +425,18 @@ export function ChatLedgerEventCard({
           </>
         ) : (
           <>
-            {avatarEl}
-            {bodyEl}
-            <View style={s.ledgerRight}>
-              <Text style={[s.ledgerAmount, { color: amountColor }]} numberOfLines={1}>
+            <View style={s.ledgerDesktopTop}>
+              {avatarEl}
+              {bodyEl}
+            </View>
+            <View style={s.ledgerFooterMobile}>
+              <Text style={[s.ledgerAmountMobile, { color: amountColor }]} numberOfLines={1}>
                 {flowPrefix}
                 {amountLabel}
               </Text>
-              <Text style={s.ledgerTimeRight} numberOfLines={1}>
+              <Text style={s.ledgerTimeMobile} numberOfLines={1}>
                 {displayTime}
               </Text>
-            </View>
-            <View style={s.ledgerChevronWrap}>
-              <ChevronRight size={14} color="#cbd5e1" />
             </View>
           </>
         )}
@@ -510,139 +496,83 @@ const s = StyleSheet.create({
     marginVertical: 4,
   },
   ledgerCard: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 10,
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e8ecf1",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.045,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E4E6EF",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    shadowColor: "#181C32",
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
-  ledgerAvatarWrap: {
-    width: 34,
-    height: 34,
-    position: "relative",
+  ledgerIconWrap: {
     flexShrink: 0,
+    marginTop: 1,
   },
-  ledgerAvatarWrapAlign: {
-    alignSelf: "center",
+  ledgerIconWrapMobile: {
+    marginTop: 0,
   },
-  ledgerAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  ledgerAvatarInitials: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  ledgerAvatarDot: {
-    position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#ffffff",
+  ledgerDesktopTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
   },
   ledgerBody: {
     flex: 1,
     minWidth: 0,
     gap: 3,
     justifyContent: "center",
-    paddingVertical: 1,
+    paddingVertical: 0,
+    paddingTop: 1,
   },
   ledgerTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
-    lineHeight: 17,
-  },
-  ledgerMeta: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#64748b",
-    letterSpacing: 0.02,
-    lineHeight: 15,
-  },
-  ledgerRoute: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#94a3b8",
-    letterSpacing: 0.1,
+    color: "#181C32",
+    letterSpacing: -0.1,
     lineHeight: 14,
   },
-  ledgerRight: {
-    alignSelf: "stretch",
-    justifyContent: "center",
-    alignItems: "flex-end",
-    flexShrink: 0,
-    gap: 3,
-    paddingLeft: 12,
-    marginLeft: 2,
-    borderLeftWidth: 1,
-    borderLeftColor: "#f1f5f9",
-    minWidth: 86,
-    maxWidth: "36%",
-  },
-  ledgerAmount: {
-    fontSize: 13,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
-    letterSpacing: -0.3,
-    lineHeight: 17,
-  },
-  ledgerTimeRight: {
+  ledgerMeta: {
     fontSize: 10,
-    fontWeight: "600",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
-    opacity: 0.95,
+    fontWeight: "400",
+    color: "#78829D",
+    letterSpacing: -0.02,
+    lineHeight: 13,
   },
-  ledgerChevronWrap: {
-    justifyContent: "center",
-    alignSelf: "center",
-    paddingLeft: 4,
-    marginLeft: 2,
+  ledgerRoute: {
+    fontSize: 9,
+    fontWeight: "400",
+    color: "#A1A5B7",
+    letterSpacing: 0,
+    lineHeight: 12,
   },
   ledgerNotesBelow: {
-    marginTop: 6,
-    fontSize: 11,
-    color: "#64748b",
-    lineHeight: 15,
-    fontWeight: "600",
+    marginTop: 5,
+    fontSize: 10,
+    color: "#78829D",
+    lineHeight: 13,
+    fontWeight: "400",
     paddingHorizontal: 2,
   },
   ledgerFooterStatus: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    gap: 5,
+    marginTop: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E4E6EF",
     alignSelf: "flex-start",
   },
   ledgerFooterStatusText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#047857",
   },
   ledgerActions: {
@@ -660,8 +590,8 @@ const s = StyleSheet.create({
     minHeight: 34,
   },
   ledgerAddBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.buttonPrimaryText,
   },
   ledgerDisputeBtn: {
@@ -676,8 +606,8 @@ const s = StyleSheet.create({
     minHeight: 34,
   },
   ledgerDisputeBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "600",
     color: "#b45309",
   },
   ledgerWrapMobile: {
@@ -687,75 +617,62 @@ const s = StyleSheet.create({
     marginVertical: CHAT_MOBILE.eventCardGap / 2,
   },
   ledgerCardMobile: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    paddingHorizontal: CHAT_MOBILE.eventCardPadH,
-    paddingVertical: CHAT_MOBILE.eventCardPadV,
-    borderRadius: CHAT_MOBILE.eventCardRadius,
-    borderColor: "#E9EDEF",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderColor: "#E4E6EF",
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
     gap: 0,
   },
   ledgerTopRowMobile: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 10,
-  },
-  ledgerAvatarWrapMobile: {
-    width: CHAT_MOBILE.eventAvatar,
-    height: CHAT_MOBILE.eventAvatar,
-  },
-  ledgerAvatarMobile: {
-    width: CHAT_MOBILE.eventAvatar,
-    height: CHAT_MOBILE.eventAvatar,
-    borderRadius: CHAT_MOBILE.eventAvatar / 2,
+    gap: 8,
   },
   ledgerTitleMobile: {
-    fontSize: CHAT_MOBILE.eventTitleSize,
-    lineHeight: CHAT_MOBILE.eventTitleLine,
-    fontWeight: "600",
-    color: "#111B21",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "500",
+    color: "#181C32",
+    letterSpacing: -0.1,
   },
   ledgerMetaMobile: {
-    fontSize: CHAT_MOBILE.eventMetaSize,
-    lineHeight: CHAT_MOBILE.eventMetaLine,
-    color: "#667781",
-    fontWeight: "500",
-    letterSpacing: 0,
-    textTransform: "none",
+    fontSize: 10,
+    lineHeight: 13,
+    color: "#78829D",
+    fontWeight: "400",
+    letterSpacing: -0.02,
   },
   ledgerRouteMobile: {
-    fontSize: CHAT_MOBILE.eventSubSize,
-    lineHeight: 14,
-    color: "#8696A0",
+    fontSize: 9,
+    lineHeight: 12,
+    color: "#A1A5B7",
+    fontWeight: "400",
     letterSpacing: 0,
-    textTransform: "none",
   },
   ledgerFooterMobile: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 7,
+    paddingTop: 7,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#E9EDEF",
+    borderTopColor: "#E4E6EF",
     gap: 8,
   },
   ledgerAmountMobile: {
-    fontSize: CHAT_MOBILE.eventAmountSize,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
+    letterSpacing: -0.15,
     flexShrink: 1,
   },
   ledgerTimeMobile: {
-    fontSize: CHAT_MOBILE.eventTimeSize,
-    fontWeight: "600",
-    color: "#8696A0",
+    fontSize: 9,
+    fontWeight: "400",
+    color: "#A1A5B7",
     flexShrink: 0,
-    textTransform: "none",
     letterSpacing: 0,
   },
 

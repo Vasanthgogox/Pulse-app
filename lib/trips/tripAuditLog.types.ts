@@ -1,6 +1,14 @@
+import type { RegistryNotificationAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
+
 export type TripAuditLogCategory = "payment" | "trip" | "assignment" | "status";
 
-export type TripAuditFilterTab = "all" | "trip" | "assignment" | "payment";
+export type TripAuditFilterTab = "all" | "updates" | "assignment" | "payment";
+
+export type TripAuditLogPerson = {
+  name: string;
+  role?: string;
+  avatar: RegistryNotificationAvatar;
+};
 
 export type TripAuditLogEntry = {
   id: string;
@@ -10,7 +18,12 @@ export type TripAuditLogEntry = {
   title: string;
   recordedAtLabel: string;
   recordedBy: string;
+  actorAvatar: RegistryNotificationAvatar;
+  /** Secondary context in meta line — e.g. Payment · Assignment */
+  contextLabel?: string;
   detail: string;
   detailLines?: string[];
   amountLabel?: string;
+  /** Other people involved (driver, party, previous assignee). */
+  people?: TripAuditLogPerson[];
 };

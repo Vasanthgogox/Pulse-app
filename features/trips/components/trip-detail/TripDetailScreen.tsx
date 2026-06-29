@@ -2565,10 +2565,10 @@ export default function TripDetailScreen({
                 activeOpacity={0.85}
                 onPress={() => setShowTripAuditLog(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open trip audit log"
+                accessibilityLabel="Open trip activity"
               >
                 <Feather name="clock" size={16} color="#94a3b8" />
-                <Text style={neoStyles.auditBtnText}>Audit Log</Text>
+                <Text style={neoStyles.auditBtnText}>Activity</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={neoStyles.manifestChatBtn}
@@ -5615,6 +5615,7 @@ export default function TripDetailScreen({
         assignmentVehicleLabels={detail.assignmentVehicleLabels}
         timelineRows={detail.driverActivityTimelineRows ?? []}
         tripLedgerEntries={detail.tripLedgerEntries}
+        driverDisplayName={detail.driverName}
       />
 
       <Modal

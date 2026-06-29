@@ -25,7 +25,6 @@ import { getDriversByOrganization, type DriverRow } from "@/features/drivers";
 import {
     getTransactionsByOrganization,
     LedgerReportModal,
-    SharedLedgerContent,
     type LedgerRow,
 } from "@/features/finance";
 import { LedgerTransactionListView } from "@/features/finance/components/LedgerTransactionListView";
@@ -145,10 +144,7 @@ export interface SupplierDetailScreenProps {
   supplierId: string;
   onBack: () => void;
   autoOpenProfile?: boolean;
-  initialDetailSubTab?: "trips" | "cash" | "shared";
-  openSharedFromNotification?: boolean;
-  notificationAction?: string;
-  notificationTripId?: string;
+  initialDetailSubTab?: "trips" | "cash";
 }
 
 export default function SupplierDetailScreen({
@@ -156,9 +152,6 @@ export default function SupplierDetailScreen({
   onBack,
   autoOpenProfile,
   initialDetailSubTab,
-  openSharedFromNotification,
-  notificationAction,
-  notificationTripId,
 }: SupplierDetailScreenProps) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -207,13 +200,11 @@ export default function SupplierDetailScreen({
   const [supplierReportKind, setSupplierReportKind] = useState<
     "payable" | "ledger"
   >("payable");
-  const [sharedLedgerDownloadSignal, setSharedLedgerDownloadSignal] =
-    useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash" | "shared">(
+  const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">(
     initialDetailSubTab ?? "trips",
   );
   const [tripDatePeriod, setTripDatePeriod] =
@@ -302,10 +293,6 @@ export default function SupplierDetailScreen({
   useEffect(() => {
     if (autoOpenProfile) setShowProfileModal(true);
   }, [autoOpenProfile]);
-
-  useEffect(() => {
-    if (openSharedFromNotification) setDetailSubTab("shared");
-  }, [openSharedFromNotification]);
 
   useEffect(() => {
     const phone = supplier?.phone?.trim();
@@ -1169,10 +1156,6 @@ export default function SupplierDetailScreen({
   }, []);
 
   const handleSupplierDownloadPress = useCallback(() => {
-    if (detailSubTab === "shared") {
-      setSharedLedgerDownloadSignal((n) => n + 1);
-      return;
-    }
     if (detailSubTab === "trips") {
       pickEntityReport(
         "Supplier report",
@@ -1269,7 +1252,6 @@ export default function SupplierDetailScreen({
   const tabConfig = [
     { id: "trips" as const, label: "Trips" },
     { id: "cash" as const, label: "Cash Flow" },
-    { id: "shared" as const, label: "Shared" },
   ];
   const heroDecorAnimatedStyle = isWebDesktop
     ? {
@@ -1347,11 +1329,7 @@ export default function SupplierDetailScreen({
             style={styles.downloadBtn}
             onPress={handleSupplierDownloadPress}
             activeOpacity={0.8}
-            accessibilityLabel={
-              detailSubTab === "shared"
-                ? "Download shared ledger report"
-                : "Download report"
-            }
+            accessibilityLabel="Download report"
           >
               <FontAwesome
                 name="cloud-download"
@@ -1371,7 +1349,7 @@ export default function SupplierDetailScreen({
           },
           {
             paddingBottom:
-              canAddTransaction && detailSubTab !== "shared"
+              canAddTransaction
                 ? Layout.fabBottomOffset + Layout.fabSize + insets.bottom
                 : Layout.fabBottomOffset + insets.bottom,
           },
@@ -2100,56 +2078,9 @@ export default function SupplierDetailScreen({
           </View>
         )}
 
-        {detailSubTab === "shared" && supplier && (
-          <View
-            style={[
-              styles.sharedSection,
-              Platform.OS === "web" && styles.sharedSectionWeb,
-            ]}
-          >
-            <SharedLedgerContent
-              entity={{
-                id: supplier.id,
-                name: supplierName,
-                linked_organization_id: supplier.linked_organization_id,
-                avatar_url: supplier.avatar_url ?? undefined,
-              }}
-              entityType="SUPPLIER"
-              trips={trips}
-              transactions={transactions}
-              organizationId={currentOrganization?.id ?? null}
-              integrated={Boolean(
-                supplier.supplier_type === "integrated" ||
-                supplier.linked_organization_id,
-              )}
-              embeddedInOverlay={true}
-              externalDownloadRequest={sharedLedgerDownloadSignal}
-              onRefresh={load}
-              initialNotificationAction={
-                (notificationAction as
-                  | import("@/features/finance/components/SharedLedgerContent").SharedLedgerNotificationAction
-                  | undefined) ?? null
-              }
-              initialNotificationTripId={notificationTripId ?? null}
-              onRequestConnection={() => {
-                setIsLinked(true);
-                triggerSuccess("CONNECTION_REQUESTED");
-              }}
-              onInviteToApp={() => {
-                const message = `Join me on Pulse to sync our ledger and compare books with ${supplierName}. Download Pulse to get started.`;
-                Share.share({ message, title: "Invite to Pulse" })
-                  .then(() => {
-                    // After sharing, show a friendlier message
-                    triggerSuccess("INVITE_SENT");
-                  })
-                  .catch(() => {});
-              }}
-            />
-          </View>
-        )}
       </ScrollView>
 
-      {canAddTransaction && detailSubTab !== "shared" && (
+      {canAddTransaction && (
         <View
           style={[
             styles.fabWrap,
