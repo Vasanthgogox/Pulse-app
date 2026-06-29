@@ -377,6 +377,14 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
                     </Text>
                   </View>
                 ) : null}
+                {alertInfo.tone === "overdue" ? (
+                  <View style={styles.alertLine}>
+                    <AlertTriangle size={12} color={alertPanel.dueIcon} strokeWidth={2.2} />
+                    <Text style={[styles.alertDueText, alertPanel.dueLine]} numberOfLines={2}>
+                      Contact shipper to confirm — pickup window has passed
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             ) : null}
 

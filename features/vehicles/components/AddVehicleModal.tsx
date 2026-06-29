@@ -27,9 +27,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatIndianVehicleNumberInput } from "@/lib/format";
 import { dateISO, validateIndianVehicleNumber } from "@/lib/validation";
 import {
-    getCapacityRecommendations,
-} from "../utils/indianTruckData.util";
-import {
     AXLE_CHIP_OPTIONS,
     BODY_LENGTH_SELECT_OPTIONS,
     getBodyTypeOptions,
@@ -126,7 +123,6 @@ export function AddVehicleModal({
     }
   }, [visible]);
 
-  const capacityRecommendations = useMemo(() => getCapacityRecommendations(capacity).slice(0, 6), [capacity]);
   const bodyTypeOptions = useMemo(() => getBodyTypeOptions(vehicleCategory), [vehicleCategory]);
 
   const openBodyLengthPicker = () => {
@@ -386,22 +382,6 @@ export function AddVehicleModal({
     },
   ];
   const labelStyle = [styles.label, { color: Theme.textMutedDemo }];
-
-  const renderRecommendationHint = (
-    items: string[],
-    currentValue: string,
-  ) => {
-    if (items.length === 0) return null;
-    const displayItems = items
-      .filter((item) => item.trim().toLowerCase() !== currentValue.trim().toLowerCase())
-      .slice(0, 5);
-    if (displayItems.length === 0) return null;
-    return (
-      <Text style={styles.recommendationHint}>
-        Recommended: {displayItems.join(", ")}
-      </Text>
-    );
-  };
 
   const renderStep = () => {
     switch (step.key) {

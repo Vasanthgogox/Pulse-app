@@ -193,6 +193,14 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
                 </Text>
               </View>
             ) : null}
+            {alertInfo.tone === "overdue" ? (
+              <View style={styles.alertLine}>
+                <AlertTriangle size={12} color={alertPanel.icon} strokeWidth={2.2} />
+                <Text style={[styles.alertDue, alertPanel.text]} numberOfLines={2}>
+                  Contact shipper to confirm — pickup window has passed
+                </Text>
+              </View>
+            ) : null}
             {!alertInfo.awardedAgoLabel && !alertInfo.dueByLabel && alertInfo.summaryLine ? (
               <Text style={[styles.alertDue, alertPanel.text]} numberOfLines={2}>
                 {alertInfo.summaryLine}

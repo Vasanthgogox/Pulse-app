@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 import Theme from "@/constants/Theme";
 
-const ITEM_H = 52;
-const VISIBLE = 3; // compact: 1 above, selected, 1 below
+const ITEM_H = 48;
+const FADE_COLOR_SOLID = "rgba(255,255,255,0.96)";
+const FADE_COLOR_TRANS = "rgba(255,255,255,0)";
+const VISIBLE = 5; // 2 above, selected, 2 below
 const DIAL_H = ITEM_H * VISIBLE;
-const PAD = 1; // padding rows each side = (VISIBLE-1)/2
+const PAD = 2; // padding rows each side = (VISIBLE-1)/2
 
 // Common Indian truck tonnages
 export const CAPACITY_VALUES: string[] = [
@@ -23,7 +26,7 @@ interface Props {
   onChange: (v: string) => void;
 }
 
-export function CapacityDialPicker({ value, onChange }: Props) {
+function CapacityDialPickerNative({ value, onChange }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const lastIndex = useRef(-1);
 
@@ -34,11 +37,9 @@ export function CapacityDialPicker({ value, onChange }: Props) {
     return idx >= 0 ? idx : 0;
   };
 
-  // Scroll to selected value on mount / external change
   useEffect(() => {
     const idx = getIndex(resolvedValue);
     if (idx === lastIndex.current) return;
-    // Small timeout so the ScrollView has laid out
     const t = setTimeout(() => {
       scrollRef.current?.scrollTo({ y: idx * ITEM_H, animated: false });
     }, 50);
@@ -46,12 +47,10 @@ export function CapacityDialPicker({ value, onChange }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedValue]);
 
-  // Fire onChange on mount if value was empty
   useEffect(() => {
     if (!value || !CAPACITY_VALUES.includes(value)) {
       onChange(CAPACITY_VALUES[0]!);
     }
-  // only on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -68,9 +67,7 @@ export function CapacityDialPicker({ value, onChange }: Props) {
 
   return (
     <View style={styles.root}>
-      {/* Selection highlight */}
       <View style={styles.selectorBar} pointerEvents="none" />
-
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -82,37 +79,115 @@ export function CapacityDialPicker({ value, onChange }: Props) {
         contentContainerStyle={styles.content}
         bounces={false}
       >
-        {/* Top pad */}
         {Array.from({ length: PAD }).map((_, i) => (
           <View key={`t${i}`} style={styles.padItem} />
         ))}
-
         {CAPACITY_VALUES.map((v) => {
           const active = v === resolvedValue;
           return (
             <View key={v} style={styles.item}>
-              <Text style={[styles.label, active && styles.labelActive]}>
-                {v}
-              </Text>
+              <Text style={[styles.label, active && styles.labelActive]}>{v}</Text>
               <Text style={[styles.unit, active && styles.unitActive]}>TON</Text>
             </View>
           );
         })}
-
-        {/* Bottom pad */}
         {Array.from({ length: PAD }).map((_, i) => (
           <View key={`b${i}`} style={styles.padItem} />
         ))}
       </ScrollView>
-
-      {/* Fade masks */}
-      <View style={[styles.fade, styles.fadeTop]} pointerEvents="none" />
-      <View style={[styles.fade, styles.fadeBot]} pointerEvents="none" />
+      <LinearGradient
+        colors={[FADE_COLOR_SOLID, FADE_COLOR_TRANS]}
+        style={[styles.fade, styles.fadeTop]}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={[FADE_COLOR_TRANS, FADE_COLOR_SOLID]}
+        style={[styles.fade, styles.fadeBot]}
+        pointerEvents="none"
+      />
     </View>
   );
 }
 
+function CapacityDialPickerWeb({ value, onChange }: Props) {
+  const resolvedValue = value && CAPACITY_VALUES.includes(value) ? value : CAPACITY_VALUES[0]!;
+
+  useEffect(() => {
+    if (!value || !CAPACITY_VALUES.includes(value)) {
+      onChange(CAPACITY_VALUES[0]!);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <View style={styles.webRoot}>
+      {/* Invisible native select covers the entire touchable area for interaction */}
+      {/* @ts-ignore */}
+      <select
+        value={resolvedValue}
+        onChange={(e: { target: { value: string } }) => onChange(e.target.value)}
+        style={webSelectOverlay}
+      >
+        {CAPACITY_VALUES.map((v) => (
+          // @ts-ignore
+          <option key={v} value={v}>{v} TON</option>
+        ))}
+      </select>
+      {/* Visible styled display — matches other TextInput fields */}
+      <View style={styles.webDisplay} pointerEvents="none">
+        <Text style={styles.webDisplayText}>{resolvedValue} TON</Text>
+        <Text style={styles.webCaret}>⌄</Text>
+      </View>
+    </View>
+  );
+}
+
+const webSelectOverlay = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  opacity: 0,
+  cursor: "pointer",
+  zIndex: 2,
+  fontSize: 16,
+} as object;
+
+export function CapacityDialPicker(props: Props) {
+  if (Platform.OS === "web") return <CapacityDialPickerWeb {...props} />;
+  return <CapacityDialPickerNative {...props} />;
+}
+
 const styles = StyleSheet.create({
+  webRoot: {
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E5E7",
+    backgroundColor: "#FBFBFB",
+    marginBottom: 12,
+    position: "relative",
+    justifyContent: "center",
+  },
+  webDisplay: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    pointerEvents: "none",
+  },
+  webDisplayText: {
+    fontSize: 15,
+    color: "#1e293b",
+    fontWeight: "400",
+  },
+  webCaret: {
+    fontSize: 16,
+    color: "#94a3b8",
+    lineHeight: 16,
+  },
   root: {
     height: DIAL_H,
     overflow: "hidden",
@@ -139,19 +214,21 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   label: {
-    fontSize: 18,
-    fontWeight: "500",
+    fontSize: 16,
+    fontWeight: "400",
     color: Theme.textMuted,
     minWidth: 48,
     textAlign: "right",
+    opacity: 0.45,
   },
   labelActive: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+    opacity: 1,
   },
   unit: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "600",
     color: "transparent",
     letterSpacing: 0.4,
@@ -176,17 +253,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    height: ITEM_H * 0.9,
+    height: ITEM_H * PAD,
     zIndex: 2,
-  } as object,
+  },
   fadeTop: {
     top: 0,
-    // @ts-ignore web only
-    background: `linear-gradient(to bottom, ${Theme.cardWhite}ee, transparent)`,
   },
   fadeBot: {
     bottom: 0,
-    // @ts-ignore web only
-    background: `linear-gradient(to top, ${Theme.cardWhite}ee, transparent)`,
   },
 });
