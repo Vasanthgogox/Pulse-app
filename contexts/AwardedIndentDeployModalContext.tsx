@@ -236,7 +236,7 @@ export function AwardedIndentDeployModalProvider({ children }: { children: React
     const indentId = activeItem.indent.id;
     setDeployFlowIndentId(indentId);
     router.push(
-      ROUTES.indentAllocation(indentId, "vehicle") as import("expo-router").Href,
+      ROUTES.indentAllocation(indentId) as import("expo-router").Href,
     );
   }, [activeItem, router]);
 
