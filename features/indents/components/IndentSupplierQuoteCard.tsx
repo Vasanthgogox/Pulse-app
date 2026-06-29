@@ -154,7 +154,7 @@ function metricValueStyle(tone: IndentBidMetricTone) {
   }
 }
 
-function PulseuoteTicketPerforation() {
+function QuoteTicketPerforation() {
   return (
     <View style={styles.perforation} pointerEvents="none">
       <View style={styles.notchLeft} />
