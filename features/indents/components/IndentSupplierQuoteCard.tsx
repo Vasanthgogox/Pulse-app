@@ -164,7 +164,7 @@ function QuoteTicketPerforation() {
   );
 }
 
-function PulseuoteFooterMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
+function QuoteFooterMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
   const shown = metrics.slice(0, 2);
   return (
     <View style={styles.metricsRow}>

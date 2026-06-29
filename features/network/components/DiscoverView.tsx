@@ -24,6 +24,7 @@ import {
   isNetworkHubSplitStacked,
   NETWORK_HUB_GRID_GAP_PX,
   NETWORK_HUB_GRID_ROW_PADDING_H,
+  NETWORK_HUB_SPLIT_GRID_COLUMNS,
 } from "@/features/network/constants/networkHubGrid";
 import { useNetworkDiscovery } from '@/features/network/hooks/useNetworkDiscovery';
 import type { DiscoverOrg } from '@/features/network/services/discover.service';
