@@ -1566,6 +1566,7 @@ export function AddTripFormFields({
                         value={state.tons}
                         onChangeText={(t) => onPadValueChange(setters.setTons, t)}
                         keyboardType="decimal-pad"
+                        inputMode="decimal"
                         autoCorrect={false}
                         inputAccessoryViewID={kbAccessoryId}
                         onFocus={() => {
@@ -2880,6 +2881,7 @@ export function AddTripFormFields({
                               setters.setDriverPhone(formatMobileNumber(v));
                             }}
                             keyboardType="phone-pad"
+                            inputMode="tel"
                             maxLength={10}
                             ref={driverPhoneInputRef}
                             inputAccessoryViewID={kbAccessoryId}

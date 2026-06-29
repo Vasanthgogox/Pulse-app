@@ -3,6 +3,7 @@
  * Steps: fill form → review and confirm → Finance entity handlers.
  */
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import { CapacityDialPicker } from "@/components/CapacityDialPicker";
 import Theme from "@/constants/Theme";
 import type {
   AddClientFormData,
@@ -16,14 +17,14 @@ import {
 import type { SupplierFormData } from "@/features/suppliers/components/AddSupplierModal";
 import type { AddVehicleCompletePayload } from "@/features/vehicles/components/AddVehicleModal";
 import {
-  getAxleRecommendations,
   getCapacityRecommendations,
 } from "@/features/vehicles/utils/indianTruckData.util";
 import {
+  AXLE_CHIP_OPTIONS,
   BODY_LENGTH_SELECT_OPTIONS,
+  getBodyTypeOptions,
   OTHER_LABEL,
   VEHICLE_CATEGORY_LABELS,
-  getModelSelectOptions,
   normalizeBodyLengthKey,
 } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import { partyAddModalChromeStyles } from "@/components/PartyAddModalChrome";
@@ -213,12 +214,11 @@ interface VehicleDraftStorage {
   organizationId: string | null;
   registration: string;
   category: string;
-  model: string;
-  modelIsOther: boolean;
   capacity: string;
   bodyLength: string;
   bodyLengthIsOther: boolean;
   axle: string;
+  bodyType?: string;
 }
 
 function readDraft<T>(storageKey: string): T | null {
@@ -267,24 +267,20 @@ type SummaryIcon = ComponentType<{
 function vehiclePayloadFromInputs(
   reg: string,
   vehicleCategory: string,
-  model: string,
   capacity: string,
   bodyLength: string,
   axle: string,
+  bodyType: string,
 ): AddVehicleCompletePayload {
   const vehicleNumber = formatIndianVehicleNumberInput(reg).trim();
-  const typeSummary =
-    [vehicleCategory, model].filter((s) => s?.trim()).join(" • ").trim() ||
-    [model.trim(), capacity.trim()].filter(Boolean).join(" · ") ||
-    "Other";
   return {
     vehicleSource: "organization",
     vehicleNumber,
-    vehicleType: typeSummary,
+    vehicleType: vehicleCategory.trim() || "Other",
     capacity: capacity.trim(),
     vehicleBrand: vehicleCategory.trim() || null,
-    vehicleModel: model.trim() || null,
-    vehicleBodyType: null,
+    vehicleModel: null,
+    vehicleBodyType: bodyType.trim() || null,
     vehicleSize: bodyLength.trim() || null,
     vehicleAxle: axle.trim() || null,
     documents: {},
@@ -417,14 +413,12 @@ function PartyRegistrationPortalInner(
   // Vehicle — aligned with AddVehicleModal (category chips + preset pickers + specs)
   const [vehicleReg, setVehicleReg] = useState("");
   const [vehicleCategory, setVehicleCategory] = useState("");
-  const [vehicleModel, setVehicleModel] = useState("");
-  const [modelIsOther, setModelIsOther] = useState(false);
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [vehicleCapacity, setVehicleCapacity] = useState("");
   const [vehicleBodyFt, setVehicleBodyFt] = useState("");
   const [bodyLengthIsOther, setBodyLengthIsOther] = useState(false);
   const [bodyLengthPickerOpen, setBodyLengthPickerOpen] = useState(false);
   const [vehicleAxle, setVehicleAxle] = useState("");
+  const [vehicleBodyType, setVehicleBodyType] = useState("");
 
   useEffect(() => {
     if (!visible) return;
@@ -455,14 +449,12 @@ function PartyRegistrationPortalInner(
     setDriverPhoneLookupError(null);
     setVehicleReg("");
     setVehicleCategory("");
-    setVehicleModel("");
-    setModelIsOther(false);
-    setModelPickerOpen(false);
     setVehicleCapacity("");
     setVehicleBodyFt("");
     setBodyLengthIsOther(false);
     setBodyLengthPickerOpen(false);
     setVehicleAxle("");
+    setVehicleBodyType("");
     setInviteeMatch(null);
     setPhoneSearchLoading(false);
     setSearchedNoResult(false);
@@ -506,12 +498,11 @@ function PartyRegistrationPortalInner(
       if (draft && draft.organizationId === (organizationId ?? null)) {
         setVehicleReg(draft.registration);
         setVehicleCategory(draft.category);
-        setVehicleModel(draft.model);
-        setModelIsOther(draft.modelIsOther);
         setVehicleCapacity(draft.capacity);
         setVehicleBodyFt(draft.bodyLength);
         setBodyLengthIsOther(draft.bodyLengthIsOther);
         setVehicleAxle(draft.axle);
+        if (draft.bodyType) setVehicleBodyType(draft.bodyType);
       }
     }
   }, [visible, initialKind, organizationId, initialClientPrefill]);
@@ -583,12 +574,11 @@ function PartyRegistrationPortalInner(
       organizationId: organizationId ?? null,
       registration: vehicleReg,
       category: vehicleCategory,
-      model: vehicleModel,
-      modelIsOther,
       capacity: vehicleCapacity,
       bodyLength: vehicleBodyFt,
       bodyLengthIsOther,
       axle: vehicleAxle,
+      bodyType: vehicleBodyType,
     } satisfies VehicleDraftStorage);
   }, [
     visible,
@@ -596,12 +586,11 @@ function PartyRegistrationPortalInner(
     organizationId,
     vehicleReg,
     vehicleCategory,
-    vehicleModel,
-    modelIsOther,
     vehicleCapacity,
     vehicleBodyFt,
     bodyLengthIsOther,
     vehicleAxle,
+    vehicleBodyType,
   ]);
 
   // Add Client / Supplier — debounced phone lookup (AddClientModal / AddSupplierModal parity).
@@ -705,10 +694,6 @@ function PartyRegistrationPortalInner(
   };
 
   const insets = useSafeAreaInsets();
-  const axleRecommendations = useMemo(
-    () => getAxleRecommendations(vehicleAxle).slice(0, 8),
-    [vehicleAxle],
-  );
   const capacityRecommendations = useMemo(
     () => getCapacityRecommendations(vehicleCapacity).slice(0, 6),
     [vehicleCapacity],
@@ -829,12 +814,11 @@ function PartyRegistrationPortalInner(
     }
     if (
       !vehicleCategory.trim() ||
-      !vehicleModel.trim() ||
       !vehicleCapacity.trim() ||
       !vehicleBodyFt.trim()
     ) {
       setFormError(
-        "Select vehicle category, type & model, load capacity, and body length (use the lists or type manually).",
+        "Select vehicle category, load capacity, and body length (use the lists or type manually).",
       );
       return false;
     }
@@ -850,7 +834,6 @@ function PartyRegistrationPortalInner(
     driverDl,
     vehicleReg,
     vehicleCategory,
-    vehicleModel,
     vehicleCapacity,
     vehicleBodyFt,
     driverRegisteredAtPhone,
@@ -1018,10 +1001,10 @@ function PartyRegistrationPortalInner(
           vehiclePayloadFromInputs(
             vehicleReg,
             vehicleCategory,
-            vehicleModel,
             vehicleCapacity,
             vehicleBodyFt,
             vehicleAxle,
+            vehicleBodyType,
           ),
         );
         clearDraft(VEHICLE_DRAFT_STORAGE_KEY);
@@ -1135,12 +1118,13 @@ function PartyRegistrationPortalInner(
         emphasis: true,
       },
       {
-        label: "Category & model",
-        value: [vehicleCategory.trim(), vehicleModel.trim()]
-          .filter(Boolean)
-          .join(" · "),
+        label: "Vehicle category",
+        value: vehicleCategory.trim() || "—",
         Icon: Truck,
       },
+      ...(vehicleBodyType.trim()
+        ? [{ label: "Body type", value: vehicleBodyType.trim(), Icon: Truck }]
+        : []),
       { label: "Load capacity", value: vehicleCapacity.trim(), Icon: Layers },
       {
         label: "Body length",
@@ -1168,10 +1152,10 @@ function PartyRegistrationPortalInner(
     driverCommissionPerKm,
     vehicleReg,
     vehicleCategory,
-    vehicleModel,
     vehicleCapacity,
     vehicleBodyFt,
     vehicleAxle,
+    vehicleBodyType,
   ]);
 
   if (!visible) return null;
@@ -1589,7 +1573,7 @@ function PartyRegistrationPortalInner(
     (vehicleWizardStep === "registration" &&
       !validateIndianVehicleNumber(vehicleReg)) ||
     (vehicleWizardStep === "category" && Boolean(vehicleCategory.trim())) ||
-    (vehicleWizardStep === "model" && Boolean(vehicleModel.trim())) ||
+    vehicleWizardStep === "model" ||
     (vehicleWizardStep === "specs" &&
       Boolean(vehicleCapacity.trim()) &&
       Boolean(vehicleBodyFt.trim()));
@@ -1614,10 +1598,6 @@ function PartyRegistrationPortalInner(
       return;
     }
     if (vehicleWizardStep === "model") {
-      if (!vehicleModel.trim()) {
-        setFormError("Select or enter a model.");
-        return;
-      }
       setVehicleWizardStep("specs");
       return;
     }
@@ -1634,10 +1614,7 @@ function PartyRegistrationPortalInner(
     capacityRecommendations,
     vehicleCapacity,
   );
-  const vehicleWizardAxleHint = renderPortalSpecHint(
-    axleRecommendations,
-    vehicleAxle,
-  );
+  const vehicleWizardAxleHint = null;
 
   const renderVehiclePickerModals = (opts?: { overlay?: boolean }) => {
     const useOverlay = opts?.overlay === true;
@@ -1668,94 +1645,6 @@ function PartyRegistrationPortalInner(
         </Modal>
       );
     };
-
-    const modelSheet = (
-        <KeyboardAvoidingView
-          style={styles.vehiclePickBackdrop}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setModelPickerOpen(false)}
-          />
-          <View
-            style={[
-              styles.vehiclePickSheet,
-              {
-                paddingBottom: insets.bottom + 16,
-                maxHeight: Dimensions.get("window").height * 0.72,
-              },
-            ]}
-          >
-            <Text style={styles.vehiclePickTitle}>Model</Text>
-            <Text style={styles.vehiclePickHint}>
-              Presets for the selected category, or Other to type manually.
-            </Text>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator
-              style={styles.vehiclePickScroll}
-            >
-              {getModelSelectOptions(vehicleCategory).map((opt) => (
-                <TouchableOpacity
-                  key={`model-${normalizeBodyLengthKey(opt)}`}
-                  style={[
-                    styles.vehiclePickRow,
-                    normalizeBodyLengthKey(vehicleModel) ===
-                      normalizeBodyLengthKey(opt) &&
-                      !modelIsOther &&
-                      styles.vehiclePickRowActive,
-                  ]}
-                  onPress={() => {
-                    setModelIsOther(false);
-                    setVehicleModel(opt);
-                    setModelPickerOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.vehiclePickRowText,
-                      normalizeBodyLengthKey(vehicleModel) ===
-                        normalizeBodyLengthKey(opt) &&
-                        !modelIsOther &&
-                        styles.vehiclePickRowTextActive,
-                    ]}
-                  >
-                    {opt}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[
-                  styles.vehiclePickRow,
-                  modelIsOther && styles.vehiclePickRowActive,
-                ]}
-                onPress={() => {
-                  setModelIsOther(true);
-                  setVehicleModel("");
-                  setModelPickerOpen(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.vehiclePickRowText,
-                    modelIsOther && styles.vehiclePickRowTextActive,
-                  ]}
-                >
-                  {OTHER_LABEL} — type manually
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.vehiclePickDone}
-              onPress={() => setModelPickerOpen(false)}
-            >
-              <Text style={styles.vehiclePickDoneText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-    );
 
     const bodyLengthSheet = (
         <KeyboardAvoidingView
@@ -1847,7 +1736,6 @@ function PartyRegistrationPortalInner(
 
     return (
       <>
-        {wrapPicker(modelPickerOpen, () => setModelPickerOpen(false), modelSheet)}
         {wrapPicker(
           bodyLengthPickerOpen,
           () => setBodyLengthPickerOpen(false),
@@ -2013,15 +1901,7 @@ function PartyRegistrationPortalInner(
               vehicleReg={vehicleReg}
               onVehicleRegChange={setVehicleReg}
               vehicleCategory={vehicleCategory}
-              onVehicleCategoryChange={setVehicleCategory}
-              vehicleModel={vehicleModel}
-              onVehicleModelChange={setVehicleModel}
-              modelIsOther={modelIsOther}
-              onOpenModelPicker={() => setModelPickerOpen(true)}
-              onChooseModelFromList={() => {
-                setModelIsOther(false);
-                setModelPickerOpen(true);
-              }}
+              onVehicleCategoryChange={(cat) => { setVehicleCategory(cat); setVehicleBodyType(""); }}
               vehicleCapacity={vehicleCapacity}
               onVehicleCapacityChange={setVehicleCapacity}
               vehicleBodyFt={vehicleBodyFt}
@@ -2034,6 +1914,8 @@ function PartyRegistrationPortalInner(
               }}
               vehicleAxle={vehicleAxle}
               onVehicleAxleChange={setVehicleAxle}
+              vehicleBodyType={vehicleBodyType}
+              onVehicleBodyTypeChange={setVehicleBodyType}
               capacityHint={vehicleWizardCapacityHint}
               axleHint={vehicleWizardAxleHint}
               formError={formError}
@@ -2584,7 +2466,7 @@ function PartyRegistrationPortalInner(
                               styles.vehicleChip,
                               vehicleCategory === cat && styles.vehicleChipActive,
                             ]}
-                            onPress={() => setVehicleCategory(cat)}
+                            onPress={() => { setVehicleCategory(cat); setVehicleBodyType(""); }}
                             testID={`party-vehicle-category-${cat}`}
                           >
                             <Text
@@ -2601,91 +2483,39 @@ function PartyRegistrationPortalInner(
                         ))}
                       </View>
                     </Field>
-                    <Field label="Type & model">
-                      {modelIsOther ? (
-                        <View style={styles.inputIconRow}>
-                          <Truck
-                            size={18}
-                            color={Theme.textMuted}
-                            style={styles.inputLeadingIcon}
-                          />
-                          <TextInput
-                            style={[styles.input, styles.inputPadded]}
-                            placeholder="e.g. BharatBenz 3523R"
-                            placeholderTextColor={Theme.textMuted}
-                            value={vehicleModel}
-                            onChangeText={setVehicleModel}
-                            testID="party-vehicle-model-input"
-                          />
-                        </View>
-                      ) : (
-                        <View style={styles.inputIconRow}>
-                          <Truck
-                            size={18}
-                            color={Theme.textMuted}
-                            style={styles.inputLeadingIcon}
-                          />
-                          <Pressable
-                            style={[
-                              styles.input,
-                              styles.inputPadded,
-                              styles.presetFieldPress,
-                            ]}
-                            onPress={() => setModelPickerOpen(true)}
-                            testID="party-vehicle-model-picker"
-                          >
-                            <Text
-                              style={
-                                vehicleModel.trim()
-                                  ? styles.presetFieldValue
-                                  : styles.presetFieldPlaceholder
-                              }
-                              numberOfLines={2}
+                    {getBodyTypeOptions(vehicleCategory).length > 0 ? (
+                      <Field label="Body type" optionalHint="optional">
+                        <View style={styles.vehicleChipRow}>
+                          {getBodyTypeOptions(vehicleCategory).map((opt) => (
+                            <Pressable
+                              key={opt}
+                              style={[
+                                styles.vehicleChip,
+                                vehicleBodyType === opt && styles.vehicleChipActive,
+                              ]}
+                              onPress={() => setVehicleBodyType(vehicleBodyType === opt ? "" : opt)}
+                              testID={`party-vehicle-body-type-${opt}`}
                             >
-                              {vehicleModel.trim()
-                                ? vehicleModel
-                                : "Tap to select model"}
-                            </Text>
-                          </Pressable>
+                              <Text
+                                style={[
+                                  styles.vehicleChipText,
+                                  vehicleBodyType === opt && styles.vehicleChipTextActive,
+                                ]}
+                              >
+                                {opt}
+                              </Text>
+                            </Pressable>
+                          ))}
                         </View>
-                      )}
-                      {modelIsOther ? (
-                        <Pressable
-                          onPress={() => {
-                            setModelIsOther(false);
-                            setModelPickerOpen(true);
-                          }}
-                          style={styles.presetLinkWrap}
-                        >
-                          <Text style={styles.presetLinkText}>
-                            Choose from list instead
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                    </Field>
+                      </Field>
+                    ) : null}
                     <View style={[styles.row2, layoutWide && styles.row2Web]}>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
                         <Field label="Load capacity">
-                          <View style={styles.inputIconRow}>
-                            <Layers
-                              size={18}
-                              color={Theme.textMuted}
-                              style={styles.inputLeadingIcon}
-                            />
-                            <TextInput
-                              style={[styles.input, styles.inputPadded]}
-                              placeholder="e.g. 7.5 or 20 tons"
-                              placeholderTextColor={Theme.textMuted}
-                              keyboardType="decimal-pad"
-                              value={vehicleCapacity}
-                              onChangeText={setVehicleCapacity}
-                              testID="party-vehicle-capacity-input"
-                            />
-                          </View>
-                          {renderPortalSpecHint(
-                            capacityRecommendations,
-                            vehicleCapacity,
-                          )}
+                          <CapacityDialPicker
+                            value={vehicleCapacity}
+                            onChange={setVehicleCapacity}
+                          />
                         </Field>
                       </View>
                       <View style={layoutWide ? styles.row2Grow : undefined}>
@@ -2736,25 +2566,28 @@ function PartyRegistrationPortalInner(
                       </View>
                     </View>
                     <Field label="Axle configuration" optionalHint="optional">
-                      <View style={styles.inputIconRow}>
-                        <RotateCcw
-                          size={18}
-                          color={Theme.textMuted}
-                          style={styles.inputLeadingIcon}
-                        />
-                        <TextInput
-                          style={[styles.input, styles.inputPadded]}
-                          placeholder="e.g. 6×4"
-                          placeholderTextColor={Theme.textMuted}
-                          value={vehicleAxle}
-                          onChangeText={setVehicleAxle}
-                          testID="party-vehicle-axle-input"
-                        />
+                      <View style={styles.vehicleChipRow}>
+                        {AXLE_CHIP_OPTIONS.map((opt) => (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              styles.vehicleChip,
+                              vehicleAxle === opt && styles.vehicleChipActive,
+                            ]}
+                            onPress={() => setVehicleAxle(vehicleAxle === opt ? "" : opt)}
+                            testID={`party-vehicle-axle-${opt}`}
+                          >
+                            <Text
+                              style={[
+                                styles.vehicleChipText,
+                                vehicleAxle === opt && styles.vehicleChipTextActive,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        ))}
                       </View>
-                      {renderPortalSpecHint(
-                        axleRecommendations,
-                        vehicleAxle,
-                      )}
                     </Field>
                   </>
                 )}
@@ -3378,9 +3211,8 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: Theme.buttonPrimaryRadius,
-    paddingVertical: 14,
     borderRadius: 14,
+    paddingVertical: 14,
   },
   confirmBtnText: {
     ...FinanceTxnTypography.buttonLabel,

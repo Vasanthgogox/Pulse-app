@@ -6,7 +6,8 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import Theme from "@/constants/Theme";
 import { IndianVehicleRegistrationKeypadFlow } from "@/components/indianVehicle/IndianVehicleRegistrationKeypadFlow";
-import { VEHICLE_CATEGORY_LABELS } from "@/features/vehicles/utils/vehicleFormOptions.util";
+import { AXLE_CHIP_OPTIONS, getBodyTypeOptions, VEHICLE_CATEGORY_LABELS } from "@/features/vehicles/utils/vehicleFormOptions.util";
+import { CapacityDialPicker } from "@/components/CapacityDialPicker";
 import { PartyMobileWizardShell } from "./PartyMobileWizardShell";
 import { partyMobileWizardStyles as styles } from "./partyMobileWizardStyles";
 
@@ -37,11 +38,6 @@ export interface PartyVehicleMobileWizardProps {
   onVehicleRegChange: (value: string) => void;
   vehicleCategory: string;
   onVehicleCategoryChange: (value: string) => void;
-  vehicleModel: string;
-  onVehicleModelChange: (value: string) => void;
-  modelIsOther: boolean;
-  onOpenModelPicker: () => void;
-  onChooseModelFromList: () => void;
   vehicleCapacity: string;
   onVehicleCapacityChange: (value: string) => void;
   vehicleBodyFt: string;
@@ -51,6 +47,8 @@ export interface PartyVehicleMobileWizardProps {
   onChooseBodyLengthFromList: () => void;
   vehicleAxle: string;
   onVehicleAxleChange: (value: string) => void;
+  vehicleBodyType: string;
+  onVehicleBodyTypeChange: (value: string) => void;
   capacityHint?: ReactNode;
   axleHint?: ReactNode;
 
@@ -71,11 +69,6 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
   onVehicleRegChange,
   vehicleCategory,
   onVehicleCategoryChange,
-  vehicleModel,
-  onVehicleModelChange,
-  modelIsOther,
-  onOpenModelPicker,
-  onChooseModelFromList,
   vehicleCapacity,
   onVehicleCapacityChange,
   vehicleBodyFt,
@@ -85,6 +78,8 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
   onChooseBodyLengthFromList,
   vehicleAxle,
   onVehicleAxleChange,
+  vehicleBodyType,
+  onVehicleBodyTypeChange,
   capacityHint,
   axleHint,
   formError,
@@ -111,7 +106,7 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
       case "category":
         return "Vehicle category";
       case "model":
-        return "Type & model";
+        return "Body type";
       case "specs":
         return "Load & dimensions";
       default:
@@ -126,7 +121,7 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
       case "category":
         return "Pick the category that best matches this truck.";
       case "model":
-        return "Choose from presets or type a custom model.";
+        return "Pick the body configuration for this vehicle (optional).";
       case "specs":
         return "Capacity, body length, and optional axle configuration.";
       default:
@@ -155,7 +150,7 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
                   styles.chip,
                   vehicleCategory === cat && styles.chipActive,
                 ]}
-                onPress={() => onVehicleCategoryChange(cat)}
+                onPress={() => { onVehicleCategoryChange(cat); onVehicleBodyTypeChange(""); }}
                 testID={`party-vehicle-category-${cat}`}
               >
                 <Text
@@ -171,65 +166,38 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
             ))}
           </View>
         );
-      case "model":
+      case "model": {
+        const bodyTypeOpts = getBodyTypeOptions(vehicleCategory);
+        if (bodyTypeOpts.length === 0) return null;
         return (
           <View style={styles.fieldBlock}>
-            <Text style={styles.fieldLabel}>MODEL</Text>
-            {modelIsOther ? (
-              <>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. BharatBenz 3523R"
-                  placeholderTextColor={Theme.textMuted}
-                  value={vehicleModel}
-                  onChangeText={onVehicleModelChange}
-                  autoFocus
-                  testID="party-vehicle-model-input"
-                />
-                <Pressable onPress={onChooseModelFromList} style={styles.skipLink}>
-                  <Text style={[styles.skipLinkText, { color: Theme.primary }]}>
-                    Choose from list instead
+            <View style={styles.labelRow}>
+              <Text style={styles.fieldLabel}>BODY TYPE</Text>
+              <Text style={styles.optionalPill}>OPTIONAL</Text>
+            </View>
+            <View style={styles.chipGrid}>
+              {bodyTypeOpts.map((opt) => (
+                <Pressable
+                  key={opt}
+                  style={[styles.chip, vehicleBodyType === opt && styles.chipActive]}
+                  onPress={() => onVehicleBodyTypeChange(vehicleBodyType === opt ? "" : opt)}
+                  testID={`party-vehicle-body-type-${opt}`}
+                >
+                  <Text style={[styles.chipText, vehicleBodyType === opt && styles.chipTextActive]}>
+                    {opt}
                   </Text>
                 </Pressable>
-              </>
-            ) : (
-              <Pressable
-                style={[styles.input, styles.presetPress]}
-                onPress={onOpenModelPicker}
-                testID="party-vehicle-model-picker"
-              >
-                <Text
-                  style={
-                    vehicleModel.trim()
-                      ? styles.presetValue
-                      : styles.presetPlaceholder
-                  }
-                  numberOfLines={2}
-                >
-                  {vehicleModel.trim()
-                    ? vehicleModel
-                    : "Tap to select model"}
-                </Text>
-              </Pressable>
-            )}
+              ))}
+            </View>
           </View>
         );
+      }
       case "specs":
         return (
           <View style={{ gap: 20 }}>
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>LOAD CAPACITY</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. 7.5 or 20 tons"
-                placeholderTextColor={Theme.textMuted}
-                keyboardType="decimal-pad"
-                value={vehicleCapacity}
-                onChangeText={onVehicleCapacityChange}
-                autoFocus
-                testID="party-vehicle-capacity-input"
-              />
-              {capacityHint}
+              <CapacityDialPicker value={vehicleCapacity} onChange={onVehicleCapacityChange} />
             </View>
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>BODY LENGTH (FT)</Text>
@@ -280,15 +248,28 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
                 <Text style={styles.fieldLabel}>AXLE</Text>
                 <Text style={styles.optionalPill}>OPTIONAL</Text>
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. 6×4"
-                placeholderTextColor={Theme.textMuted}
-                value={vehicleAxle}
-                onChangeText={onVehicleAxleChange}
-                testID="party-vehicle-axle-input"
-              />
-              {axleHint}
+              <View style={styles.chipGrid}>
+                {AXLE_CHIP_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt}
+                    style={[
+                      styles.chip,
+                      vehicleAxle === opt && styles.chipActive,
+                    ]}
+                    onPress={() => onVehicleAxleChange(vehicleAxle === opt ? "" : opt)}
+                    testID={`party-vehicle-axle-${opt}`}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        vehicleAxle === opt && styles.chipTextActive,
+                      ]}
+                    >
+                      {opt}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           </View>
         );

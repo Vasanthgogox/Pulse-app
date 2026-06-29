@@ -268,6 +268,7 @@ export const TripCommodityFields = memo(function TripCommodityFields({
           placeholder="Load weight in tons"
           placeholderTextColor={Theme.placeholder}
           keyboardType="decimal-pad"
+          inputMode="decimal"
         />
       </View>
     ) : null;
