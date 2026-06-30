@@ -3,11 +3,7 @@
 export type WorkspaceId =
   | 'commerce'
   | 'operations'
-  | 'execution'
-  | 'finance'
-  | 'network'
-  | 'intelligence'
-  | 'admin';
+  | 'execution';
 
 export interface WorkspaceRoute {
   label: string;
@@ -64,35 +60,6 @@ export const PULSE_WORKSPACES: PulseWorkspace[] = [
       { label: 'Dispatch', path: '/execution/dispatch' },
       { label: 'Driver', path: '/execution/driver' },
     ],
-  },
-  {
-    id: 'finance',
-    label: 'Pulse Finance',
-    description: 'Settlement, invoice, ledger',
-    active: false,
-    milestone: 3,
-    routes: [],
-  },
-  {
-    id: 'network',
-    label: 'Pulse Network',
-    description: 'Marketplace, exchange, bidding',
-    active: false,
-    routes: [],
-  },
-  {
-    id: 'intelligence',
-    label: 'Pulse Intelligence',
-    description: 'AI agents, optimization, forecasting',
-    active: false,
-    routes: [],
-  },
-  {
-    id: 'admin',
-    label: 'Pulse Admin',
-    description: 'Identity, integrations, observatory',
-    active: false,
-    routes: [],
   },
 ];
 

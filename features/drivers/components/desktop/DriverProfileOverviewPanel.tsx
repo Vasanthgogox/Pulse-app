@@ -1,8 +1,11 @@
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import { hubStyles as styles } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { PartyProfileIntelSections } from "@/features/party/components/PartyProfileIntelSections";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { driverToPublicEntity } from "@/features/public-profile/mappers";
 import { formatINRChip } from "@/lib/format";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 
 type Props = {
@@ -45,6 +48,7 @@ function HighlightRow({
 export function DriverProfileOverviewPanel({ driver, tripCount, vehicleLabel }: Props) {
   const compact = useProfileHubCompact();
   const rowProps = { compact };
+  const publicEntity = useMemo(() => driverToPublicEntity(driver), [driver]);
 
   const compParts = [
     driver.payable_amount != null && driver.payable_amount > 0
@@ -60,6 +64,7 @@ export function DriverProfileOverviewPanel({ driver, tripCount, vehicleLabel }: 
 
   return (
     <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
+      {compact ? <PartyProfileIntelSections entity={publicEntity} /> : null}
       <View style={[styles.splitRow, compact && mobile.splitColumn]}>
         <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
           <View style={[styles.card, compact && mobile.cardCompact]}>

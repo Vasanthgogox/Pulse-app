@@ -8,7 +8,7 @@
 import Theme from "@/constants/Theme";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 
-export type PartyRoleLabel = "CLIENT" | "SUPPLIER" | "DRIVER";
+export type PartyRoleLabel = "CLIENT" | "SUPPLIER" | "DRIVER" | "VEHICLE";
 
 export type PartyEntityAccent = {
   ring: string;
@@ -40,11 +40,20 @@ const DRIVER_ACCENT: PartyEntityAccent = {
   tint: Theme.networkSupplierTintBg,
 };
 
+/** Fleet vehicles — slate / steel tone. */
+const VEHICLE_ACCENT: PartyEntityAccent = {
+  ring: "#64748B",
+  glow: "rgba(100, 116, 139, 0.32)",
+  glowCore: "rgba(148, 163, 184, 0.18)",
+  tint: "#F1F5F9",
+};
+
 export function partyAccentFromEntityType(
   entityType: PartyEntityType,
 ): PartyEntityAccent {
   if (entityType === "supplier") return SUPPLIER_ACCENT;
   if (entityType === "driver") return DRIVER_ACCENT;
+  if (entityType === "vehicle") return VEHICLE_ACCENT;
   return CLIENT_ACCENT;
 }
 
@@ -53,5 +62,6 @@ export function partyAccentFromConnectionRole(
 ): PartyEntityAccent {
   if (role === "SUPPLIER") return SUPPLIER_ACCENT;
   if (role === "DRIVER") return DRIVER_ACCENT;
+  if (role === "VEHICLE") return VEHICLE_ACCENT;
   return CLIENT_ACCENT;
 }

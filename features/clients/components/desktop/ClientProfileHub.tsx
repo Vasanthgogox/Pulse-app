@@ -21,22 +21,27 @@ import type { ClientManagementBundle, ClientProfileTab } from "@/features/client
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import { computeKycScore } from "@/features/clients/utils/clientManagement.util";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import {
+  PartyProfileCompactChrome,
+  publicEntityToChromeModel,
+} from "@/features/party/components/PartyProfileCompactChrome";
+import {
+  ProfileHubChatActionIcon,
+  ProfileHubHeaderIconButton,
+} from "@/features/party/components/ProfileHubAnimatedIcons";
+import { clientToPublicEntity } from "@/features/public-profile/mappers";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
   ProfileHubChatSplitLayout,
   profileHubChatPartnerFromParty,
 } from "@/features/network/components/desktop/ProfileHubChatSplitLayout";
-import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
-import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { useLayoutInsets } from "@/lib/layoutInsets";
-import { ROUTES } from "@/lib/routes";
 import { ClientProfileHubHero } from "@/features/clients/components/desktop/ClientProfileHubHero";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import { getLinkedOrgProfile, updateClient } from "@/features/clients/services/clients.service";
-import { ArrowLeft, MessageSquare, Plus, User } from "lucide-react-native";
+import { METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
-import { useRouter } from "expo-router";
 
 type SidebarProps = {
   client: ClientRow;
@@ -99,7 +104,6 @@ export function ClientProfileHub({
   onBack,
   onRefresh,
 }: Props) {
-  const router = useRouter();
   const compact = useProfileHubCompact();
   const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<ClientProfileTab>(initialTab);
@@ -255,13 +259,19 @@ export function ClientProfileHub({
     { value: String(bundle.contacts.length), label: "CONTACTS" },
   ];
 
-  const statCellCompactStyle = (idx: number) => {
-    if (!compact) return undefined;
-    if (idx === 1) return mobile.statCellGridTopRight;
-    if (idx === 2) return mobile.statCellGridBottomLeft;
-    if (idx === 3) return mobile.statCellGridBottomRight;
-    return undefined;
-  };
+  const chromeModel = useMemo(
+    () => publicEntityToChromeModel(clientToPublicEntity(client)),
+    [client],
+  );
+
+  const chatActionButton = (
+    <ProfileHubHeaderIconButton
+      onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
+      accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+    >
+      <ProfileHubChatActionIcon size={36} active={chatOpen} />
+    </ProfileHubHeaderIconButton>
+  );
 
   const hubScroll = (
     <ScrollView
@@ -274,50 +284,11 @@ export function ClientProfileHub({
       showsVerticalScrollIndicator={false}
     >
       {compact ? (
-        <View style={mobile.pageChrome}>
-          <View style={mobile.chromeTopRow}>
-            {onBack ? (
-              <Pressable
-                onPress={onBack}
-                style={mobile.chromeBackBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-              >
-                <ArrowLeft size={20} color={METRONIC.text} strokeWidth={2.2} />
-              </Pressable>
-            ) : null}
-            <View style={mobile.chromeTitleBlock}>
-              <Text style={mobile.chromeTitle} numberOfLines={2}>
-                {client.name?.trim() || "Client"}
-              </Text>
-              {(contactPerson || locationLabel) ? (
-                <Text style={mobile.chromeSubtitle} numberOfLines={1}>
-                  {[contactPerson, locationLabel].filter(Boolean).join(" · ")}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={mobile.chromePillsScroll}
-            contentContainerStyle={mobile.chromePillsContent}
-          >
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>CLIENT</Text>
-            </View>
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>
-                {isIntegrated ? "INTEGRATED" : "NOT IN APP"}
-              </Text>
-            </View>
-            <View style={[mobile.chromePill, mobile.chromePillWarn]}>
-              <Text style={[mobile.chromePillText, mobile.chromePillTextWarn]}>
-                KYC {kyc.score}%
-              </Text>
-            </View>
-          </ScrollView>
-        </View>
+        <PartyProfileCompactChrome
+          model={chromeModel}
+          onBack={onBack}
+          chatAction={chatActionButton}
+        />
       ) : (
         <ClientProfileHubHero
           client={client}
@@ -363,114 +334,17 @@ export function ClientProfileHub({
           })}
         </ScrollView>
 
-        {compact ? (
-          <View style={mobile.tabActionsRow}>
-            <Pressable
-              style={mobile.tabActionPrimary}
-              onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
-              accessibilityRole="button"
-              accessibilityLabel="Create trip"
-            >
-              <Plus size={16} color={Theme.textOnPrimary} strokeWidth={2.5} />
-              <Text style={mobile.tabActionPrimaryText}>Create trip</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                mobile.tabActionIcon,
-                chatOpen && mobile.tabActionIconActive,
-              ]}
-              onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
-              accessibilityRole="button"
-              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
-            >
-              <MessageSquare
-                size={18}
-                color={chatOpen ? Theme.primary : METRONIC.text}
-                strokeWidth={2}
-              />
-            </Pressable>
-            <Pressable
-              style={mobile.tabActionIcon}
-              onPress={() => setTab("finance")}
-              accessibilityRole="button"
-              accessibilityLabel="Ledger"
-            >
-              <Text style={{ fontSize: 11, fontWeight: "800", color: METRONIC.text }}>₹</Text>
-            </Pressable>
-            <Pressable
-              style={mobile.tabActionIcon}
-              onPress={() => setEditOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Edit profile"
-            >
-              <User size={18} color={METRONIC.text} strokeWidth={2} />
-            </Pressable>
-          </View>
-        ) : (
+        {!compact ? (
           <View style={styles.tabActions}>
-            <Pressable
-              style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
-              onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}
-            >
-              <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>Create trip</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.tabActionBtn,
-                chatOpen && chatStyles.tabActionIconBtnActive,
-              ]}
+            <ProfileHubHeaderIconButton
               onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
-              accessibilityRole="button"
               accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
             >
-              <MessageSquare
-                size={14}
-                color={chatOpen ? Theme.primary : Theme.textSecondary}
-                strokeWidth={2}
-              />
-              <Text
-                style={[
-                  styles.tabActionBtnText,
-                  chatOpen && { color: Theme.primary, fontWeight: "700" },
-                ]}
-              >
-                Chat
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.tabActionBtn}
-              onPress={() => setTab("finance")}
-            >
-              <Text style={styles.tabActionBtnText}>Ledger</Text>
-            </Pressable>
-            <Pressable
-              style={styles.tabActionBtn}
-              onPress={() => setEditOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Edit profile"
-            >
-              <User size={14} color={Theme.textSecondary} strokeWidth={2} />
-              <Text style={styles.tabActionBtnText}>Edit</Text>
-            </Pressable>
+              <ProfileHubChatActionIcon size={36} active={chatOpen} />
+            </ProfileHubHeaderIconButton>
           </View>
-        )}
+        ) : null}
       </View>
-
-      {compact ? (
-        <View style={[cpStyles.metricsWrap, mobile.metricsWrapCompact]}>
-          <View style={[styles.statsBar, mobile.statsBarGrid]}>
-            {stats.map((s, idx) => (
-              <View
-                key={s.label}
-                style={[styles.statCell, mobile.statCellGrid, statCellCompactStyle(idx)]}
-              >
-                <Text style={[styles.statValue, mobile.statValueCompact]}>{s.value}</Text>
-                <Text style={[styles.statLabel, mobile.statLabelCompact]}>{s.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
 
       {compact ? panel : (
         <View style={cpStyles.hubBodyRow}>

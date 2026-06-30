@@ -1,7 +1,10 @@
 import { hubStyles as styles } from "@/features/clients/components/desktop/clientProfileHub.styles";
+import { PartyProfileIntelSections } from "@/features/party/components/PartyProfileIntelSections";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { vehicleToPublicEntity } from "@/features/public-profile/mappers";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 
 type Props = { vehicle: VehicleRow; tripCount: number };
@@ -40,6 +43,10 @@ function HighlightRow({
 export function VehicleProfileOverviewPanel({ vehicle, tripCount }: Props) {
   const compact = useProfileHubCompact();
   const rowProps = { compact };
+  const publicEntity = useMemo(
+    () => vehicleToPublicEntity(vehicle, tripCount),
+    [vehicle, tripCount],
+  );
 
   const docs = vehicle.documents;
   const docLines = [
@@ -51,6 +58,7 @@ export function VehicleProfileOverviewPanel({ vehicle, tripCount }: Props) {
 
   return (
     <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
+      {compact ? <PartyProfileIntelSections entity={publicEntity} /> : null}
       <View style={[styles.splitRow, compact && mobile.splitColumn]}>
         <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
           <View style={[styles.card, compact && mobile.cardCompact]}>

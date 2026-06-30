@@ -936,9 +936,10 @@ export const slackMobileStyles = StyleSheet.create({
     minWidth: 0,
   },
   threadTopPartyTabs: {
-    marginTop: 2,
-    alignSelf: "flex-start",
-    maxWidth: "100%",
+    marginTop: 0,
+    alignSelf: "stretch",
+    width: "100%",
+    minWidth: 0,
   },
   threadCompactRoleTag: {
     paddingHorizontal: 7,

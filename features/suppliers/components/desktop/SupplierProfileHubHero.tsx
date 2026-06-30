@@ -5,6 +5,10 @@ import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import {
+  ProfileHubLottieIcon,
+  type ProfileHubLottieKey,
+} from "@/features/party/components/ProfileHubAnimatedIcons";
+import {
   METRONIC,
   hubStyles as styles,
   spStyles as _spStyles,
@@ -175,22 +179,29 @@ export function SupplierProfileHubHero({
 
           {/* Quick stats */}
           <View style={spStyles.heroStatsRow}>
-            <View style={spStyles.heroStatItem}>
-              <Text style={spStyles.heroStatValue}>{totalTrips}</Text>
-              <Text style={spStyles.heroStatLabel}>TRIPS</Text>
-            </View>
-            <View style={spStyles.heroStatDivider} />
-            <View style={spStyles.heroStatItem}>
-              <Text style={[spStyles.heroStatValue, totalPayable > 0 && { color: "#F6C000" }]}>
-                {inr(totalPayable)}
-              </Text>
-              <Text style={spStyles.heroStatLabel}>PAYABLE</Text>
-            </View>
-            <View style={spStyles.heroStatDivider} />
-            <View style={spStyles.heroStatItem}>
-              <Text style={spStyles.heroStatValue}>{performanceScore}</Text>
-              <Text style={spStyles.heroStatLabel}>SCORE</Text>
-            </View>
+            {(
+              [
+                { value: String(totalTrips), label: "TRIPS", lottie: "truck" as ProfileHubLottieKey },
+                { value: inr(totalPayable), label: "PAYABLE", lottie: "payment" as ProfileHubLottieKey },
+                { value: String(performanceScore), label: "SCORE", lottie: "signals" as ProfileHubLottieKey },
+              ] as const
+            ).map((stat, idx, arr) => (
+              <View key={stat.label} style={{ flex: 1, flexDirection: "row", alignItems: "stretch" }}>
+                {idx > 0 ? <View style={spStyles.heroStatDivider} /> : null}
+                <View style={[spStyles.heroStatItem, { flex: 1 }]}>
+                  <ProfileHubLottieIcon name={stat.lottie} size={20} glyphScale={1.15} />
+                  <Text
+                    style={[
+                      spStyles.heroStatValue,
+                      stat.label === "PAYABLE" && totalPayable > 0 && { color: "#F6C000" },
+                    ]}
+                  >
+                    {stat.value}
+                  </Text>
+                  <Text style={spStyles.heroStatLabel}>{stat.label}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         </View>
       </View>

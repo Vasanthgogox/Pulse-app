@@ -30,8 +30,16 @@ import {
   ProfileHubChatSplitLayout,
   profileHubChatPartnerFromParty,
 } from "@/features/network/components/desktop/ProfileHubChatSplitLayout";
-import { networkDesktopChatStyles as chatStyles } from "@/features/network/components/desktop/networkDesktopChat.styles";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import {
+  PartyProfileCompactChrome,
+  publicEntityToChromeModel,
+} from "@/features/party/components/PartyProfileCompactChrome";
+import {
+  ProfileHubChatActionIcon,
+  ProfileHubHeaderIconButton,
+} from "@/features/party/components/ProfileHubAnimatedIcons";
+import { supplierToPublicEntity } from "@/features/public-profile/mappers";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import { SupplierProfileHubHero } from "@/features/suppliers/components/desktop/SupplierProfileHubHero";
 import { useLayoutInsets } from "@/lib/layoutInsets";
@@ -41,7 +49,7 @@ import { getLinkedOrgProfileForSupplier, updateSupplier } from "@/features/suppl
 import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { ArrowLeft, FileText, MessageSquare, MoreHorizontal, Plus } from "lucide-react-native";
+import { FileText, Plus } from "lucide-react-native";
 
 type SupplierSidebarProps = {
   bundle: SupplierManagementBundle;
@@ -385,20 +393,19 @@ export function SupplierProfileHub({
     }
   })();
 
-  const stats = [
-    { value: String(trips.length), label: "TRIPS" },
-    { value: String(bundle.contracts.length), label: "CONTRACTS" },
-    { value: String(bundle.fleet.length), label: "FLEET" },
-    { value: String(bundle.drivers.length), label: "DRIVERS" },
-  ];
+  const chromeModel = useMemo(
+    () => publicEntityToChromeModel(supplierToPublicEntity(supplier)),
+    [supplier],
+  );
 
-  const statCellCompactStyle = (idx: number) => {
-    if (!compact) return undefined;
-    if (idx === 1) return mobile.statCellGridTopRight;
-    if (idx === 2) return mobile.statCellGridBottomLeft;
-    if (idx === 3) return mobile.statCellGridBottomRight;
-    return undefined;
-  };
+  const chatActionButton = (
+    <ProfileHubHeaderIconButton
+      onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
+      accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+    >
+      <ProfileHubChatActionIcon size={36} active={chatOpen} />
+    </ProfileHubHeaderIconButton>
+  );
 
   const hubScroll = (
     <ScrollView
@@ -411,31 +418,11 @@ export function SupplierProfileHub({
       showsVerticalScrollIndicator={false}
     >
       {compact ? (
-        <View style={mobile.pageChrome}>
-          <View style={mobile.chromeTopRow}>
-            {onBack ? (
-              <Pressable onPress={onBack} style={mobile.chromeBackBtn} accessibilityRole="button" accessibilityLabel="Go back">
-                <ArrowLeft size={20} color={METRONIC.text} strokeWidth={2.2} />
-              </Pressable>
-            ) : null}
-            <View style={mobile.chromeTitleBlock}>
-              <Text style={mobile.chromeTitle} numberOfLines={2}>{displayName}</Text>
-              <Text style={mobile.chromeSubtitle} numberOfLines={1}>
-                {[supplier.contact_person, supplier.phone].filter(Boolean).join(" · ") || "Supplier profile"}
-              </Text>
-            </View>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={mobile.chromePillsScroll} contentContainerStyle={mobile.chromePillsContent}>
-            <View style={mobile.chromePill}><Text style={mobile.chromePillText}>SUPPLIER</Text></View>
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>{isIntegrated ? "INTEGRATED" : (supplier.supplier_type ?? "offline").toUpperCase()}</Text>
-            </View>
-            <View style={[mobile.chromePill, mobile.chromePillWarn]}>
-              <Text style={[mobile.chromePillText, mobile.chromePillTextWarn]}>KYC {kycScore}%</Text>
-            </View>
-            <View style={mobile.chromePill}><Text style={mobile.chromePillText}>SCORE {perfScore}</Text></View>
-          </ScrollView>
-        </View>
+        <PartyProfileCompactChrome
+          model={chromeModel}
+          onBack={onBack}
+          chatAction={chatActionButton}
+        />
       ) : (
         <SupplierProfileHubHero
           supplier={supplier}
@@ -470,57 +457,17 @@ export function SupplierProfileHub({
           })}
         </ScrollView>
 
-        {compact ? (
-          <View style={mobile.tabActionsRow}>
-            <Pressable style={mobile.tabActionPrimary} onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}>
-              <Plus size={16} color={Theme.textOnPrimary} strokeWidth={2.5} />
-              <Text style={mobile.tabActionPrimaryText}>Create trip</Text>
-            </Pressable>
-            <Pressable style={[mobile.tabActionIcon, chatOpen && mobile.tabActionIconActive]} onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}>
-              <MessageSquare size={18} color={chatOpen ? Theme.primary : METRONIC.text} strokeWidth={2} />
-            </Pressable>
-            <Pressable style={mobile.tabActionIcon} onPress={() => setTab("finance")}>
-              <Text style={{ fontSize: 11, fontWeight: "800", color: METRONIC.text }}>₹</Text>
-            </Pressable>
-            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
-              <MoreHorizontal size={18} color={METRONIC.text} strokeWidth={2} />
-            </Pressable>
-          </View>
-        ) : (
+        {!compact ? (
           <View style={styles.tabActions}>
-            <Pressable style={[styles.tabActionBtn, styles.tabActionBtnPrimary]} onPress={() => router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])}>
-              <Plus size={14} color={Theme.textOnPrimary} strokeWidth={2.5} />
-              <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>Create trip</Text>
-            </Pressable>
-            <Pressable style={[styles.tabActionBtn, chatOpen && chatStyles.tabActionIconBtnActive]} onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}>
-              <MessageSquare size={14} color={chatOpen ? Theme.primary : METRONIC.text} strokeWidth={2} />
-              <Text style={[styles.tabActionBtnText, chatOpen && { color: Theme.primary, fontWeight: "700" }]}>Chat</Text>
-            </Pressable>
-            <Pressable style={styles.tabActionBtn} onPress={() => setTab("finance")} hitSlop={8}>
-              <Text style={styles.tabActionBtnText}>Ledger</Text>
-            </Pressable>
-            <Pressable style={styles.tabActionIconBtn} onPress={() => Alert.alert("Supplier options", "Edit, invite to platform, or export supplier data.", [{ text: "Edit supplier", onPress: () => {} }, { text: "Export data", onPress: () => {} }, { text: "Cancel", style: "cancel" }])} hitSlop={8}>
-              <MoreHorizontal size={16} color={METRONIC.text} />
-            </Pressable>
+            <ProfileHubHeaderIconButton
+              onPress={() => (chatOpen ? setChatOpen(false) : openIntegratedChat())}
+              accessibilityLabel={chatOpen ? "Close chat" : "Open chat"}
+            >
+              <ProfileHubChatActionIcon size={36} active={chatOpen} />
+            </ProfileHubHeaderIconButton>
           </View>
-        )}
+        ) : null}
       </View>
-
-      {compact ? (
-        <View style={mobile.metricsWrapCompact}>
-          <View style={[styles.statsBar, mobile.statsBarGrid]}>
-            {stats.map((s, idx) => (
-              <View
-                key={s.label}
-                style={[styles.statCell, mobile.statCellGrid, statCellCompactStyle(idx)]}
-              >
-                <Text style={[styles.statValue, mobile.statValueCompact]}>{s.value}</Text>
-                <Text style={[styles.statLabel, mobile.statLabelCompact]}>{s.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      ) : null}
 
       {compact ? panel : (
         <View style={supplierStyles.hubBodyRow}>
