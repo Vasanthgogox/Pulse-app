@@ -23,6 +23,12 @@ import {
   withBundledActiveProducts,
 } from "@/lib/productRegistry";
 import {
+  getSuiteById,
+  getSuiteForProduct,
+  PULSE_PLATFORM_CATALOG,
+  type PlatformSuiteId,
+} from "@/lib/pulsePlatformCatalog";
+import {
   WORKSPACE_ACCENT,
   WORKSPACE_ACCENT_BORDER,
   WORKSPACE_ELEGANT_BADGE,
@@ -380,6 +386,65 @@ function ProductCatalogGrid({
   );
 }
 
+function PlatformCatalogSections({
+  products,
+  activeProductIds,
+  waitlistedProductIds,
+  columns,
+  onJoinWaitlist,
+  onManage,
+}: {
+  products: ProductDefinition[];
+  activeProductIds: Set<ProductId>;
+  waitlistedProductIds: Set<ProductId>;
+  columns: number;
+  onJoinWaitlist: (product: ProductDefinition) => void;
+  onManage: (product: ProductDefinition) => void;
+}) {
+  const productsBySuite = useMemo(() => {
+    const buckets = new Map<PlatformSuiteId, ProductDefinition[]>();
+    for (const suite of PULSE_PLATFORM_CATALOG) {
+      buckets.set(suite.id, []);
+    }
+    for (const product of products) {
+      const suiteId = getSuiteForProduct(product.id);
+      buckets.get(suiteId)?.push(product);
+    }
+    return buckets;
+  }, [products]);
+
+  if (products.length === 0) {
+    return (
+      <View style={s.emptyWrap}>
+        <Text style={s.emptyTitle}>No modules in this view</Text>
+        <Text style={s.emptyBody}>Try another filter to browse the Pulse catalogue.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.pillarCatalogStack}>
+      {PULSE_PLATFORM_CATALOG.map((suite) => {
+        const suiteProducts = productsBySuite.get(suite.id) ?? [];
+        if (suiteProducts.length === 0) return null;
+        return (
+          <View key={suite.id} style={s.pillarCatalogSection}>
+            <Text style={s.pillarCatalogTitle}>{getSuiteById(suite.id).label}</Text>
+            <ProductCatalogGrid
+              products={suiteProducts}
+              activeProductIds={activeProductIds}
+              waitlistedProductIds={waitlistedProductIds}
+              columns={columns}
+              onJoinWaitlist={onJoinWaitlist}
+              onManage={onManage}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Waitlist modal ────────────────────────────────────────────────────────────
 
 interface WaitlistModalProps {
@@ -636,7 +701,7 @@ export function WorkspaceProductsPanel({ onBack }: Props) {
               <ActivityIndicator color={NAVY} />
             </View>
           ) : (
-            <ProductCatalogGrid
+            <PlatformCatalogSections
               products={filteredProducts}
               activeProductIds={activeProductIds}
               waitlistedProductIds={waitlistedProductIds}
@@ -710,6 +775,19 @@ const s = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textMuted,
     lineHeight: 18,
+  },
+  pillarCatalogStack: {
+    gap: 28,
+  },
+  pillarCatalogSection: {
+    gap: 14,
+  },
+  pillarCatalogTitle: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
   },
 
   loadingWrap: {

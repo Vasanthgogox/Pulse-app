@@ -1,0 +1,33 @@
+{
+  "name": "@pulse/platform-identity",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pulse Platform Identity Service — Sprint 1 (frozen v1)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/architecture tests/contract",
+    "test:integration": "vitest run tests/integration",
+    "test:exit-checklist": "vitest run tests/integration/sprint1-exit.test.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "@pulse/contracts": "file:../../contracts",
+    "@pulse/platform-observability": "file:../observability",
+    "@supabase/supabase-js": "^2.49.8",
+    "hono": "^4.8.3",
+    "jose": "^6.0.11",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@pulse/platform-testing": "file:../testing",
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

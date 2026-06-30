@@ -1,5 +1,5 @@
 /**
- * Pulse Products — Metronic-aligned 3-column grid in hub body.
+ * Pulse Platform — pillar-grouped module grid in workspace hub body.
  */
 import Theme from "@/constants/Theme";
 import {
@@ -10,10 +10,6 @@ import { StyleSheet } from "react-native";
 
 export const productGridStyles = StyleSheet.create({
   section: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: METRONIC.border,
-    backgroundColor: METRONIC.heroBg,
     overflow: "hidden",
   },
   sectionHeader: {
@@ -21,12 +17,9 @@ export const productGridStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8,
-    backgroundColor: "#F9F9F9",
-    borderBottomWidth: 1,
-    borderBottomColor: METRONIC.border,
+    paddingHorizontal: 2,
+    paddingTop: 4,
+    paddingBottom: 10,
   },
   sectionHeaderLeft: {
     flex: 1,
@@ -76,12 +69,30 @@ export const productGridStyles = StyleSheet.create({
     fontWeight: "600",
     color: HUB_PURPLE,
   },
+  pillarStack: {
+    paddingBottom: 4,
+  },
+  suiteStack: {
+    paddingBottom: 4,
+  },
+  pillarBlock: {},
+  pillarBlockSpaced: {
+    marginTop: 10,
+  },
+  pillarLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: METRONIC.text,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginBottom: 6,
+    paddingHorizontal: 2,
+    opacity: 0.72,
+  },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    paddingHorizontal: 10,
-    paddingTop: 10,
-    paddingBottom: 12,
+    marginHorizontal: -4,
   },
   gridCell: {
     width: "33.333%",

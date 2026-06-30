@@ -45,7 +45,9 @@
     "audit": "node tools/serve.js",
     "db:push-both": "bash scripts/push-both-dbs.sh",
     "functions:deploy": "supabase functions deploy",
-    "functions:deploy-both": "bash scripts/push-both-dbs.sh"
+    "functions:deploy-both": "bash scripts/push-both-dbs.sh",
+    "oms:dev": "npm run dev --prefix oms",
+    "oms:build": "npm run build --prefix oms"
   },
   "dependencies": {
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
