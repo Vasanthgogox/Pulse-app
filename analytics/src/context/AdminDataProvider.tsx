@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type {
   Organization, AdminContextValue, AccountFilter,
   OrgUser, UsageMetric, FeatureFlag,
-  BillingTier, BusinessApplication, AppStatus,
+  BillingTier, AppStatus,
   AuditEntry, AutomatedCheck, BusinessDocument,
 } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
@@ -19,7 +19,13 @@ export function useAdmin(): AdminContextValue {
 
 // ─── Map DB row → Organization ────────────────────────────────────────────────
 
-function mapOrg(row: Record<string, unknown>, members: Record<string, unknown>[]): Organization {
+function mapOrg(
+  row: Record<string, unknown>,
+  members: Record<string, unknown>[],
+  tripCounts: Record<string, number>,
+  featureFlagMap: Record<string, Record<string, boolean>>,
+  auditByOrg: Record<string, AuditEntry[]>,
+): Organization {
   const status = mapStatus(row.verification_status as string);
 
   const users: OrgUser[] = members.map((m) => ({
@@ -31,19 +37,24 @@ function mapOrg(row: Record<string, unknown>, members: Record<string, unknown>[]
     lastLogin: null,
   }));
 
+  const tripCount = (tripCounts[row.id as string] ?? 0) as number;
+  const usagePct = Math.min(100, Math.round((tripCount / 200) * 100));
+  const usageVariant: UsageMetric['variant'] = usagePct >= 90 ? 'danger' : usagePct >= 70 ? 'warning' : 'default';
+
   const usage: UsageMetric[] = [
     {
       id: 'trips', label: 'Trips this month',
-      pct: Math.min(100, ((row.trip_count as number) ?? 0) / 2),
-      detail: `${(row.trip_count as number) ?? 0} trips`,
-      variant: 'default',
+      pct: usagePct,
+      detail: `${tripCount} trips`,
+      variant: usageVariant,
     },
   ];
 
+  const dbFlags = featureFlagMap[row.id as string] ?? {};
   const flags: FeatureFlag[] = [
-    { id: 'load_board',  label: 'Load Board',    description: 'Access to marketplace load board', enabled: true },
-    { id: 'analytics',   label: 'Analytics',     description: 'Finance & fleet analytics',         enabled: false },
-    { id: 'ai_dispatch', label: 'AI Dispatch',   description: 'AI-powered dispatch suggestions',   enabled: false },
+    { id: 'load_board',  label: 'Load Board',    description: 'Access to marketplace load board', enabled: dbFlags['load_board']  ?? true },
+    { id: 'analytics',   label: 'Analytics',     description: 'Finance & fleet analytics',         enabled: dbFlags['analytics']   ?? false },
+    { id: 'ai_dispatch', label: 'AI Dispatch',   description: 'AI-powered dispatch suggestions',   enabled: dbFlags['ai_dispatch'] ?? false },
   ];
 
   return {
@@ -53,17 +64,17 @@ function mapOrg(row: Record<string, unknown>, members: Record<string, unknown>[]
     entity_type:          mapEntityType(row.registration_type as string),
     gstin:                (row.gstin as string) ?? '—',
     pan:                  (row.business_pan as string) ?? '—',
-    cin:                  undefined,
+    cin:                  (row.cin as string) ?? undefined,
     registration_number:  (row.gstin as string) ?? '—',
     registration_date:    (row.created_at as string) ?? '',
     directors:            [],
-    registered_address:   (row.address_pincode as string) ? `Pincode: ${row.address_pincode}` : '—',
-    pincode:              (row.address_pincode as string) ?? '',
-    city:                 '—',
-    state:                '—',
-    contact_name:         '—',
-    contact_email:        '—',
-    contact_phone:        (row.phone as string) ?? '—',
+    registered_address:   [row.address_line, row.city, row.state].filter(Boolean).join(', ') || '—',
+    pincode:              (row.pincode as string) ?? (row.address_pincode as string) ?? '',
+    city:                 (row.city as string) ?? '—',
+    state:                (row.state as string) ?? '—',
+    contact_name:         members[0] ? ((members[0] as Record<string, unknown>).display_name as string ?? '—') : '—',
+    contact_email:        members[0] ? ((members[0] as Record<string, unknown>).email as string ?? '—') : '—',
+    contact_phone:        '—',
     submission_date:      (row.submitted_at as string) ?? (row.created_at as string) ?? '',
     status,
     risk_score:           'Low',
@@ -74,7 +85,7 @@ function mapOrg(row: Record<string, unknown>, members: Record<string, unknown>[]
     escalation_reason:    undefined,
     automated_checks:     mapChecks(row),
     documents:            [] as BusinessDocument[],
-    audit_trail:          [] as AuditEntry[],
+    audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
     billing_tier:         'Starter' as BillingTier,
     api_usage:            0,
     users,
@@ -105,6 +116,22 @@ function mapEntityType(r: string): Organization['entity_type'] {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function mapAuditEventType(prev: string | null, next: string): AuditEntry['event_type'] {
+  if (!prev) return 'submitted';
+  if (next === 'verified') return 'approved';
+  if (next === 'rejected') return 'rejected';
+  if (next === 'pending')  return 'escalated';
+  return 'comment';
+}
+
+function auditTitle(prev: string | null, next: string): string {
+  if (!prev) return 'Application submitted';
+  if (next === 'verified') return 'Approved';
+  if (next === 'rejected') return 'Rejected';
+  if (next === 'pending')  return 'Escalated for review';
+  return `Status changed to ${next}`;
 }
 
 function mapChecks(row: Record<string, unknown>): AutomatedCheck[] {
@@ -183,7 +210,53 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const mapped = (orgs ?? []).map((o) => mapOrg(o as Record<string, unknown>, byOrg[o.id] ?? []));
+      // Fetch this-month trip counts per org
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data: tripRows } = await supabase
+        .from('trips')
+        .select('organization_id')
+        .gte('created_at', monthStart);
+      const tripCounts: Record<string, number> = {};
+      for (const t of (tripRows ?? [])) {
+        const oid = t.organization_id as string;
+        tripCounts[oid] = (tripCounts[oid] ?? 0) + 1;
+      }
+
+      // Fetch audit logs for all orgs
+      const { data: auditRows } = await supabase
+        .from('verification_audit_logs')
+        .select('*')
+        .order('created_at', { ascending: true });
+      const auditByOrg: Record<string, AuditEntry[]> = {};
+      for (const a of (auditRows ?? [])) {
+        const oid = a.org_id as string;
+        if (!auditByOrg[oid]) auditByOrg[oid] = [];
+        auditByOrg[oid].push({
+          id:         a.id as string,
+          timestamp:  a.created_at as string,
+          actor:      (a.changed_by as string) ?? 'system',
+          actor_type: a.changed_by ? 'admin' : 'system',
+          event_type: mapAuditEventType(a.previous_status as string | null, a.new_status as string),
+          title:      auditTitle(a.previous_status as string | null, a.new_status as string),
+          detail:     (a.notes as string) ?? undefined,
+        });
+      }
+
+      // Fetch feature flags for all orgs
+      const { data: flagRows } = await supabase
+        .from('org_feature_flags')
+        .select('org_id, flag_id, enabled');
+      const featureFlagMap: Record<string, Record<string, boolean>> = {};
+      for (const f of (flagRows ?? [])) {
+        const oid = f.org_id as string;
+        if (!featureFlagMap[oid]) featureFlagMap[oid] = {};
+        featureFlagMap[oid][f.flag_id as string] = f.enabled as boolean;
+      }
+
+      const mapped = (orgs ?? []).map((o) =>
+        mapOrg(o as Record<string, unknown>, byOrg[o.id] ?? [], tripCounts, featureFlagMap, auditByOrg),
+      );
       setApplications(mapped);
       if (mapped.length > 0 && !selectedId) setSelectedId(mapped[0].id);
     } catch (e) {
@@ -249,9 +322,24 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
     } finally { setIsActing(false); }
   }, [loadData]);
 
-  const toggleFeatureFlag = useCallback(async (_orgId: string, _flagId: string) => {
-    // Feature flags not yet in DB — no-op for now
-  }, []);
+  const toggleFeatureFlag = useCallback(async (orgId: string, flagId: string) => {
+    const org = applications.find(a => a.id === orgId);
+    if (!org) return;
+    const flag = org.feature_flags.find(f => f.id === flagId);
+    if (!flag) return;
+    const newEnabled = !flag.enabled;
+    // Optimistic update
+    setApplications(prev => prev.map(a =>
+      a.id !== orgId ? a : {
+        ...a,
+        feature_flags: a.feature_flags.map(f => f.id === flagId ? { ...f, enabled: newEnabled } : f),
+      },
+    ));
+    await supabase
+      .from('org_feature_flags')
+      .upsert({ org_id: orgId, flag_id: flagId, enabled: newEnabled, updated_at: new Date().toISOString() },
+        { onConflict: 'org_id,flag_id' });
+  }, [applications]);
 
   const value: AdminContextValue = {
     applications,
