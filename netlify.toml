@@ -20,9 +20,75 @@
 [functions]
   directory = "netlify/functions"
 
-# OMS SPA — must come before the /* catch-all
+# OMS SPA routes — must come before the /* catch-all
+# Covers both /oms/* (post-base change) and current /dashboard, /orders etc (pre-base)
 [[redirects]]
   from   = "/oms/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/dashboard"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/orders"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/orders/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/customers"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/products"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/warehouses"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution-plans"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution-plans/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/observatory"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/settings"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/onboarding"
   to     = "/oms/index.html"
   status = 200
 
