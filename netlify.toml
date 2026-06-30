@@ -9,10 +9,10 @@
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
   CI            = "true"
-  VITE_SUPABASE_URL = "https://nafxpivddesgsrthmosv.supabase.co"
+  VITE_SUPABASE_URL      = "https://nafxpivddesgsrthmosv.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hZnhwaXZkZGVzZ3NydGhtb3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2OTg3NTYsImV4cCI6MjA4NjI3NDc1Nn0.nXCf5LrTXtg9NNi850MKTCcG_FEE7Tb4qbpP7ftoVBY"
   # VITE_ADMIN_TOKEN and VITE_SUPABASE_SERVICE_ROLE_KEY must be set in
   # Netlify Dashboard → Site settings → Environment variables (never commit secrets)
-  # OMS env — VITE_SUPABASE_ANON_KEY must be set in Netlify Dashboard (not here)
 
 # Dependency install: Netlify caches npm from package-lock.json (no custom plugin).
 # Keep NODE_VERSION + .nvmrc aligned so cache keys stay stable.
