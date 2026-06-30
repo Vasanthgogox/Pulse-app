@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build:web && npm run build:admin"
+  command = "npm run build:web && npm run build:admin && npm run build:oms"
   publish = "dist"
 
 [build.environment]
@@ -12,12 +12,19 @@
   VITE_SUPABASE_URL = "https://nafxpivddesgsrthmosv.supabase.co"
   # VITE_ADMIN_TOKEN and VITE_SUPABASE_SERVICE_ROLE_KEY must be set in
   # Netlify Dashboard → Site settings → Environment variables (never commit secrets)
+  # OMS env — VITE_SUPABASE_ANON_KEY must be set in Netlify Dashboard (not here)
 
 # Dependency install: Netlify caches npm from package-lock.json (no custom plugin).
 # Keep NODE_VERSION + .nvmrc aligned so cache keys stay stable.
 
 [functions]
   directory = "netlify/functions"
+
+# OMS SPA — must come before the /* catch-all
+[[redirects]]
+  from   = "/oms/*"
+  to     = "/oms/index.html"
+  status = 200
 
 # SPA client routes only. Existing files under dist/ are served first; missing
 # hashed *.js from an older deploy fall through to index.html (HTML as JS →
@@ -53,5 +60,15 @@
 
 [[headers]]
   for = "/ops-9f3a2c/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/oms/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/oms/index.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
