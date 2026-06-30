@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build:web"
+  command = "npm run build:web && npm run build:admin"
   publish = "dist"
 
 [build.environment]
@@ -9,6 +9,9 @@
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
   CI            = "true"
+  VITE_SUPABASE_URL = "https://nafxpivddesgsrthmosv.supabase.co"
+  # VITE_ADMIN_TOKEN and VITE_SUPABASE_SERVICE_ROLE_KEY must be set in
+  # Netlify Dashboard → Site settings → Environment variables (never commit secrets)
 
 # Dependency install: Netlify caches npm from package-lock.json (no custom plugin).
 # Keep NODE_VERSION + .nvmrc aligned so cache keys stay stable.
@@ -42,3 +45,13 @@
   for = "/_expo/static/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/ops-9f3a2c/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/ops-9f3a2c/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
