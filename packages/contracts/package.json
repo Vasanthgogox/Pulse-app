@@ -1,0 +1,11 @@
+{
+  "name": "@pulse/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pulse platform kernel — frozen contracts for all services",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

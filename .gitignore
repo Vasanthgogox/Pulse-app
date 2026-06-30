@@ -71,7 +71,9 @@ dist-test-bundle/
 
 # empty monorepo stubs
 apps/web/.next/
-h
+
+# Playwright MCP local cache/state
+.playwright-mcp/
 
 # OpenClaw (local agent workspace — not app source)
 .openclaw/

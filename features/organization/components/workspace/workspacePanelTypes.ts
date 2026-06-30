@@ -15,7 +15,7 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
   settings: "Workspace settings",
   team: "Team members",
   kyc: "Org identity & KYC",
-  products: "Pulse Products",
+  products: "Pulse Platform",
   "ocr-usage": "Pulse Scan usage",
   language: "Language",
   region: "Region",
@@ -24,7 +24,7 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
 export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>> = {
   account: "Manage your personal identity",
   "account-edit": "Update your name, photo and status",
-  products: "Your logistics business operating system",
+  products: "Eight suites — execution, commerce, network, finance, and more",
   "ocr-usage": "OCR scans, quota, and quality metrics for your workspace",
 };
 

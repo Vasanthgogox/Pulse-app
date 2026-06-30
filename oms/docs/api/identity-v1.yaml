@@ -1,0 +1,632 @@
+openapi: 3.0.3
+info:
+  title: Pulse Identity API
+  version: 1.0.0
+  description: |
+    Platform Identity Service — sole authority for tenant, organization, business unit,
+    warehouse scope, user identity, and roles.
+
+    All API responses use the platform envelope:
+    - Success: `{ success: true, data, meta: { requestId, schemaVersion, correlationId? } }`
+    - Error: `{ success: false, error: { code, message, details? } }`
+
+servers:
+  - url: http://localhost:3101
+    description: Local Identity service
+  - url: https://api.pulse.example.com/identity/v1
+    description: Production (via Gateway)
+
+tags:
+  - name: Health
+    description: Process, readiness, and version probes
+  - name: Auth
+    description: Login and session
+  - name: Organizations
+    description: Tenant root
+  - name: BusinessUnits
+    description: Flat org divisions (not a tree)
+  - name: Warehouses
+    description: Fulfillment locations
+  - name: Users
+    description: Invitations and membership
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: health
+      summary: Process liveness probe
+      security: []
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthAlive'
+
+  /ready:
+    get:
+      tags: [Health]
+      operationId: ready
+      summary: Readiness probe — database and migrations
+      security: []
+      responses:
+        '200':
+          description: Service ready to accept traffic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReady'
+        '503':
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReady'
+
+  /version:
+    get:
+      tags: [Health]
+      operationId: version
+      summary: Service and schema version metadata
+      security: []
+      responses:
+        '200':
+          description: Version metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthVersion'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Authenticate user and issue JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful
+          headers:
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: Current user profile and tenant context
+      responses:
+        '200':
+          description: Current session
+          headers:
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserSuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /organizations:
+    post:
+      tags: [Organizations]
+      operationId: createOrganization
+      summary: Create organization (tenant root)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+      responses:
+        '201':
+          description: Organization created
+          headers:
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+            X-Correlation-Id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationSuccessEnvelope'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /business-units:
+    post:
+      tags: [BusinessUnits]
+      operationId: createBusinessUnit
+      summary: Create business unit under organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBusinessUnitRequest'
+      responses:
+        '201':
+          description: Business unit created
+          headers:
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessUnitSuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /warehouses:
+    post:
+      tags: [Warehouses]
+      operationId: createWarehouse
+      summary: Create warehouse (fulfillment location)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWarehouseRequest'
+      responses:
+        '201':
+          description: Warehouse created
+          headers:
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WarehouseSuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/invite:
+    post:
+      tags: [Users]
+      operationId: inviteUser
+      summary: Invite user to organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteUserRequest'
+      responses:
+        '201':
+          description: Invitation sent
+          headers:
+            X-Request-Id:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationSuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Platform JWT issued by Identity Service. Claims include:
+        `schemaVersion`, `sub`, `tenantId`, `organizationId`, `businessUnitId`,
+        `warehouseIds`, `role`, `membershipId`.
+
+  schemas:
+    ResponseMeta:
+      type: object
+      required: [requestId, schemaVersion]
+      properties:
+        requestId:
+          type: string
+        schemaVersion:
+          type: string
+          example: v1
+        correlationId:
+          type: string
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          $ref: '#/components/schemas/ApiError'
+
+    HealthAlive:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          enum: [identity]
+
+    HealthReady:
+      type: object
+      required: [status, service, schemaReachable, missingMigrations]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        service:
+          type: string
+          enum: [identity]
+        schemaReachable:
+          type: boolean
+        missingMigrations:
+          type: array
+          items:
+            type: string
+
+    HealthVersion:
+      type: object
+      required: [service, serviceVersion, schemaVersion, apiSchemaVersion]
+      properties:
+        service:
+          type: string
+          enum: [identity]
+        serviceVersion:
+          type: string
+        schemaVersion:
+          type: string
+          description: Latest applied identity DB migration version
+        apiSchemaVersion:
+          type: string
+          example: v1
+        gitCommit:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        membershipId:
+          type: string
+
+    LoginResponse:
+      type: object
+      required: [accessToken, expiresIn, tokenType, user]
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+        tokenType:
+          type: string
+          enum: [Bearer]
+        user:
+          $ref: '#/components/schemas/CurrentUser'
+
+    LoginSuccessEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: '#/components/schemas/LoginResponse'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    CurrentUser:
+      type: object
+      required: [id, email, role, schemaVersion, tenantId, organizationId, membershipId, warehouseIds]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        schemaVersion:
+          type: string
+        tenantId:
+          type: string
+        organizationId:
+          type: string
+        businessUnitId:
+          type: string
+        membershipId:
+          type: string
+        warehouseIds:
+          type: array
+          items:
+            type: string
+
+    CurrentUserSuccessEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: '#/components/schemas/CurrentUser'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    Role:
+      type: string
+      enum: [admin, planner, operator]
+
+    CreateOrganizationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        legalName:
+          type: string
+
+    Organization:
+      type: object
+      required: [id, name, tenantId, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        legalName:
+          type: string
+        tenantId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    OrganizationSuccessEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: '#/components/schemas/Organization'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    CreateBusinessUnitRequest:
+      type: object
+      required: [organizationId, name, code]
+      properties:
+        organizationId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+
+    BusinessUnit:
+      type: object
+      required: [id, organizationId, name, code]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+
+    BusinessUnitSuccessEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: '#/components/schemas/BusinessUnit'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    CreateWarehouseRequest:
+      type: object
+      required: [organizationId, name, code]
+      properties:
+        organizationId:
+          type: string
+        businessUnitId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+
+    Address:
+      type: object
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+
+    Warehouse:
+      type: object
+      required: [id, organizationId, name, code]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        businessUnitId:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+
+    WarehouseSuccessEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: '#/components/schemas/Warehouse'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    InviteUserRequest:
+      type: object
+      required: [organizationId, email, role]
+      properties:
+        organizationId:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+        businessUnitId:
+          type: string
+
+    Invitation:
+      type: object
+      required: [id, organizationId, email, role, status, expiresAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        businessUnitId:
+          type: string
+        status:
+          type: string
+          enum: [pending, accepted, expired, revoked]
+        expiresAt:
+          type: string
+          format: date-time
+
+    InvitationSuccessEnvelope:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: '#/components/schemas/Invitation'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Insufficient permissions
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Resource conflict
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+security:
+  - bearerAuth: []
