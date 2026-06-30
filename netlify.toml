@@ -5,7 +5,7 @@
 [build.environment]
   NODE_VERSION  = "20"
   # Use cached packages before hitting the registry
-  NPM_FLAGS     = "--prefer-offline"
+  NPM_FLAGS     = "--prefer-offline --legacy-peer-deps"
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
   CI            = "true"
