@@ -38,7 +38,6 @@ export function classifyTripMetric(
 ): TripMetricId {
   const s = normStatus(trip.status);
   const hasDriver = trip.driver_id != null && String(trip.driver_id).trim() !== "";
-  const hasStarted = !!(trip.started_at && String(trip.started_at).trim());
 
   if (!hasDriver || s === "cancelled") return "unassigned";
 
@@ -65,17 +64,16 @@ export function classifyTripMetric(
   if (
     s === "picked_up" ||
     s === "pickup" ||
-    (s === "in_progress" && !hasStarted)
+    s === "in_progress"
   ) {
+    // `in_progress` means arrived at pickup / loading, even after started_at is
+    // set — matches driver app's own step model (deriveDriverFlowStepFromTrip).
+    // Only an explicit `in_transit` status means the driver has departed pickup.
     return "loading";
   }
 
   if (s === "assigned") {
     return "assigned";
-  }
-
-  if (s === "in_progress" && hasStarted) {
-    return "in_transit";
   }
 
   if (s === "draft") return "unassigned";

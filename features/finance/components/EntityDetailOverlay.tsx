@@ -932,9 +932,14 @@ export function EntityDetailOverlay({
             const adj = adjustmentsForTripId(tripFinanceAdjRecord, t.id);
             let sales: number;
             if (entityType === "CLIENT") {
-              const base = isIntegratedShipperClient
-                ? Number(t.supplier_rate ?? 0)
-                : Number(t.client_price ?? 0);
+              // TODO(temp-fix): `paid`/`inByTrip` below is ledger cash tied to `client_price`
+              // regardless of entity type, so `sales` must match client_price here too — using
+              // supplier_rate for integrated shipper clients made received > sales and clamped
+              // `due` to 0, hiding real mismatches (see AJIO TRP003: sales 45k vs received 66.7k).
+              // Real fix is a shared finance-presentation helper (see tech-debt note below) —
+              // this file independently reimplements sales/due logic already centralized in
+              // features/finance/utils/tripSettlement.util.ts (tripHubRevenue/tripHubCost).
+              const base = Number(t.client_price ?? 0);
               sales = adjustedRevenue(base, adj);
             } else if (entityType === "SUPPLIER") {
               if (isTripWhereWeAreClient) {
