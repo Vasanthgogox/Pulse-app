@@ -18,6 +18,7 @@ import {
 import { useRealtimeDiscoverInvalidation } from '@/features/network/hooks/useRealtimeDiscoverInvalidation';
 
 const SEARCH_DEBOUNCE_MS = 300;
+const PAGE_SIZE = 40;
 
 export type UseNetworkDiscoveryOptions = {
   orgId: string | null;
@@ -32,6 +33,8 @@ export function useNetworkDiscovery({
 }: UseNetworkDiscoveryOptions) {
   const [orgs, setOrgs] = useState<DiscoverOrg[]>([]);
   const [loading, setLoading] = useState(() => Boolean(orgId && enabled));
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [hasFetched, setHasFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -81,7 +84,7 @@ export function useNetworkDiscovery({
     const { orgs: results, error: err } = await discoverOrganizations(
       currentOrgId,
       term,
-      40,
+      PAGE_SIZE,
       0,
     );
 
@@ -108,9 +111,46 @@ export function useNetworkDiscovery({
 
     setDiscoveryCache(currentOrgId, term, results);
     setOrgs(results);
+    setHasMore(results.length >= PAGE_SIZE);
     setLoading(false);
     setError(null);
   }, [enabled]);
+
+  const loadMoreOrgs = useCallback(async () => {
+    const currentOrgId = orgIdRef.current;
+    if (!currentOrgId || !enabled || loadingMore || !hasMore) return;
+
+    const term = searchRef.current;
+    const gen = fetchGenRef.current;
+    setLoadingMore(true);
+
+    const { orgs: results, error: err } = await discoverOrganizations(
+      currentOrgId,
+      term,
+      PAGE_SIZE,
+      orgs.length,
+    );
+
+    if (!isMountedRef.current || gen !== fetchGenRef.current) return;
+
+    if (err) {
+      setLoadingMore(false);
+      return;
+    }
+
+    setOrgs((prev) => {
+      const seen = new Set(prev.map((o) => o.id));
+      const fresh = results.filter((o) => !seen.has(o.id));
+      const merged = [...prev, ...fresh];
+      setDiscoveryCache(currentOrgId, term, merged);
+      // Stop paginating once a page yields no new orgs — offset drift from
+      // concurrent inserts/removals can otherwise make results.length keep
+      // hitting PAGE_SIZE while contributing nothing, looping forever.
+      setHasMore(results.length >= PAGE_SIZE && fresh.length > 0);
+      return merged;
+    });
+    setLoadingMore(false);
+  }, [enabled, loadingMore, hasMore, orgs.length]);
 
   useEffect(() => {
     if (!orgId || !enabled) {
@@ -120,6 +160,7 @@ export function useNetworkDiscovery({
       return;
     }
     setLoading(true);
+    setHasMore(true);
     void fetchOrgs(debouncedSearch);
   }, [orgId, debouncedSearch, enabled, fetchOrgs]);
 
@@ -163,6 +204,9 @@ export function useNetworkDiscovery({
   return {
     orgs,
     loading,
+    loadingMore,
+    hasMore,
+    loadMoreOrgs,
     hasFetched,
     error,
     refetch,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
+import * as XLSX from 'xlsx';
 
 // ─── Web-only guard ───────────────────────────────────────────────────────────
 if (Platform.OS !== 'web') {
@@ -733,6 +734,41 @@ function AuditApp() {
     showToast(`${type === 'before' ? 'Before' : 'After'} snapshot taken`);
   }
 
+  function exportExcel() {
+    const rows = actions.map((a, i) => {
+      const v = vers[a.id];
+      return {
+        '#': a.is_subflow ? '' : i + 1,
+        ID: a.id,
+        Action: a.action,
+        'Flow Group': a.flow_group ?? '',
+        Route: a.route ?? '',
+        Service: a.service ?? '',
+        Inserts: (a.ins_tables ?? []).join(', '),
+        Updates: (a.upd_tables ?? []).join(', '),
+        Deletes: (a.del_tables ?? []).join(', '),
+        Trigger: a.trigger_name ?? '',
+        'Audit Table': a.audit_table ?? '',
+        Priority: a.priority,
+        'Verify Status': v?.status ? v.status.toUpperCase() : '',
+        'Verify Notes': v?.notes ?? '',
+        'Verified At': v?.verified_at ?? '',
+        Tester: v?.tester_name ?? '',
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 6 }, { wch: 34 }, { wch: 20 }, { wch: 24 }, { wch: 20 },
+      { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 22 }, { wch: 22 }, { wch: 9 },
+      { wch: 13 }, { wch: 30 }, { wch: 20 }, { wch: 12 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Flow Matrix');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    XLSX.writeFile(wb, `pulse-audit-matrix-${stamp}.xlsx`);
+    showToast(`Exported ${rows.length} rows`, 'ok');
+  }
+
   async function saveVerification() {
     if (!selId || !sb()) return;
     const { error } = await sb().from('pulse_audit_verifications').upsert({
@@ -1227,6 +1263,7 @@ function AuditApp() {
           <div className="rg">
             <span className="rg-lbl">Home</span>
             <button className="rbtn" onClick={() => load()}>⟳ Refresh</button>
+            <button className="rbtn" onClick={exportExcel}>⬇ Export Excel</button>
           </div>
           <div className="rg">
             <span className="rg-lbl">DBA</span>

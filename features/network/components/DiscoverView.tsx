@@ -313,6 +313,8 @@ export function DiscoverView({
   const {
     orgs,
     loading,
+    hasMore,
+    loadMoreOrgs,
     hasFetched,
     error,
     refetch: refetchDiscover,
@@ -389,6 +391,12 @@ export function DiscoverView({
     [signalRecommended, connectableOrgs],
   );
   const rest = connectableOrgs.filter((o) => o.score <= 0);
+  /** Backfill source once recommendationPool is exhausted by dismissals. */
+  const backfillPool = useMemo(() => {
+    if (signalRecommended.length === 0) return recommendationPool;
+    const poolIds = new Set(recommendationPool.map((o) => o.id));
+    return [...recommendationPool, ...rest.filter((o) => !poolIds.has(o.id))];
+  }, [recommendationPool, rest, signalRecommended]);
 
   const growGridColumns = useMemo(
     () => getNetworkHubGrowGridColumns(windowWidth),
@@ -398,18 +406,18 @@ export function DiscoverView({
 
   const growNetworkRecommendations = useMemo(() => {
     const slots: ScoredOrg[] = [];
-    for (const org of recommendationPool) {
+    for (const org of backfillPool) {
       if (dismissedRecommendationIds.has(org.id)) continue;
       slots.push(org);
       if (slots.length >= growSectionLimit) break;
     }
     return slots;
-  }, [recommendationPool, dismissedRecommendationIds, growSectionLimit]);
+  }, [backfillPool, dismissedRecommendationIds, growSectionLimit]);
 
   const peopleYouMayKnow = useMemo(() => {
     const growIds = new Set(growNetworkRecommendations.map((o) => o.id));
     const slots: ScoredOrg[] = [];
-    for (const org of recommendationPool) {
+    for (const org of backfillPool) {
       if (dismissedRecommendationIds.has(org.id)) continue;
       if (growIds.has(org.id)) continue;
       slots.push(org);
@@ -417,7 +425,7 @@ export function DiscoverView({
     }
     return slots;
   }, [
-    recommendationPool,
+    backfillPool,
     dismissedRecommendationIds,
     growNetworkRecommendations,
     growSectionLimit,
@@ -426,6 +434,17 @@ export function DiscoverView({
   const handleDismissRecommendation = useCallback((targetOrgId: string) => {
     setDismissedRecommendationIds((prev) => new Set(prev).add(targetOrgId));
   }, []);
+
+  /** Fetch the next page before dismissals exhaust the local backfill pool. */
+  const undismissedBackfillCount = useMemo(
+    () => backfillPool.filter((o) => !dismissedRecommendationIds.has(o.id)).length,
+    [backfillPool, dismissedRecommendationIds],
+  );
+  useEffect(() => {
+    if (!hasMore) return;
+    if (undismissedBackfillCount > growSectionLimit * 2) return;
+    void loadMoreOrgs();
+  }, [hasMore, loadMoreOrgs, undismissedBackfillCount, growSectionLimit]);
 
   const embeddedHubRecommendations = useMemo(
     () => [...growNetworkRecommendations, ...peopleYouMayKnow],
