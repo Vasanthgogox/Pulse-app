@@ -18,6 +18,8 @@ import {
 import { PaymentModeLogo } from "@/components/ledger/paymentModeLogos";
 import { LedgerReconSummaryModal } from "@/components/ledger/LedgerReconSummaryModal";
 import { LedgerTripSettlementNote } from "@/components/ledger/LedgerTripSettlementNote";
+import { LedgerFocusedTripCard } from "@/components/ledger/LedgerFocusedTripCard";
+import { LedgerHeaderTripDetail } from "@/components/ledger/LedgerHeaderTripDetail";
 import { LedgerSettlementPctDock } from "@/components/ledger/LedgerSettlementPctDock";
 import { LedgerWebDateField } from "@/components/ledger/LedgerWebDateField";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
@@ -38,7 +40,7 @@ import {
     isIntegratedSupplierRow,
     isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
-import { formatIndianVehicleNumber, formatINR } from "@/lib/format";
+import { formatIndianVehicleNumber, formatINR, formatLedgerAmountInput } from "@/lib/format";
 import {
     buildMissionTripPendingChips,
     deriveLedgerLockedEntityType,
@@ -55,6 +57,11 @@ import {
     type LedgerLockedEntityType,
 } from "@/lib/ledgerPartySmartTagPolicy";
 import { resolveLedgerTripSettlementPreview } from "@/lib/ledgerTripSettlementPreview.util";
+import {
+  adjustmentsForTripId,
+  useTripFinanceAdjustmentsMap,
+} from "@/lib/queries/useTripFinanceAdjustmentsQuery";
+import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
 import { dateISO, VALIDATION } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -699,6 +706,8 @@ interface AddTransactionModalProps {
   ledgerTransactions?: LedgerRow[] | null;
   /** Commission terms by driver id — improves driver payable on smart tags. */
   driverOffersByDriverId?: Record<string, DriverOffer> | null;
+  /** Preloaded CN/DN lines keyed by trip id (e.g. from LedgerSyncScreen). */
+  tripAdjustmentsByTripId?: Record<string, TripAdjustment[]>;
   /** Full-page ledger header subtitle (e.g. org name). */
   ledgerWorkspaceSubtitle?: string;
 }
@@ -743,6 +752,7 @@ export function AddTransactionModal({
   dueAmountOut = null,
   ledgerTransactions = null,
   driverOffersByDriverId = null,
+  tripAdjustmentsByTripId: tripAdjustmentsByTripIdProp,
   ledgerWorkspaceSubtitle,
 }: AddTransactionModalProps) {
   const insets = useSafeAreaInsets();
@@ -862,6 +872,8 @@ export function AddTransactionModal({
   const scrollRef = useRef<ScrollView>(null);
   /** Skip clearing smart-tag state when trip id is set by applyTripSmartTag / selectMissionTrip. */
   const skipSmartTagClearRef = useRef(false);
+  /** User picked a partial % or typed amount — block trip-preview auto-fill from overwriting. */
+  const ledgerAmountUserEditedRef = useRef(false);
 
   const isEditMode = Boolean(initialEntry?.id);
   /** Lock from route/entity when id is anchored; display name may resolve a tick later (avoids layout flip). */
@@ -1024,11 +1036,28 @@ export function AddTransactionModal({
 
   /** Full-page global ledger: show all trips until party is chosen (trip-first). */
   const ledgerMissionTripsBase = useMemo(() => {
-    if (hidePartyForCashOut && type === "out") return filteredTrips;
-    if (fullPage && !tripLocked && partyContext === "all" && partyId == null) {
-      return safeTrips;
+    let base: TripOption[];
+    if (hidePartyForCashOut && type === "out") {
+      base = filteredTrips;
+    } else if (fullPage && !tripLocked && partyContext === "all" && partyId == null) {
+      base = safeTrips;
+    } else {
+      base = filteredTrips;
     }
-    return filteredTrips;
+
+    const presetIds = new Set<string>();
+    const presetFromProps = (defaultTripId ?? "").trim();
+    if (presetFromProps) presetIds.add(presetFromProps);
+    const presetFromSelection = (selectedTripIds[0] ?? "").trim();
+    if (presetFromSelection) presetIds.add(presetFromSelection);
+
+    let merged = base;
+    for (const pid of presetIds) {
+      if (merged.some((t) => t.id === pid)) continue;
+      const preset = safeTrips.find((t) => t.id === pid);
+      if (preset) merged = [preset as TripOption, ...merged];
+    }
+    return merged;
   }, [
     fullPage,
     tripLocked,
@@ -1038,6 +1067,8 @@ export function AddTransactionModal({
     safeTrips,
     hidePartyForCashOut,
     type,
+    defaultTripId,
+    selectedTripIds,
   ]);
 
   /** Web: avoid useDeferredValue here — concurrent follow-up renders were visibly tearing the trip list. */
@@ -1098,12 +1129,6 @@ export function AddTransactionModal({
     if (!fullPage || !visible || initialEntry?.id) return;
     void AsyncStorage.setItem(LEDGER_LAST_PAYMENT_MODE_KEY, paymentModeId);
   }, [fullPage, visible, paymentModeId, initialEntry?.id]);
-
-  useEffect(() => {
-    if (isLedgerCashPaymentMode(paymentModeId) && paymentReference.trim() !== "") {
-      setPaymentReference("");
-    }
-  }, [paymentModeId, paymentReference]);
 
   useEffect(() => {
     if (smartTagHighlight == null || smartTagSuggestedAmount == null) return;
@@ -1193,7 +1218,13 @@ export function AddTransactionModal({
   const tripFinancialPreviewByTripId = useMemo(() => {
     const m: Record<string, ReturnType<typeof computeTripEntryFinancialSnapshot>> = {};
     const txs = ledgerTransactions ?? [];
-    for (const raw of ledgerMissionTripsBase) {
+    const tripsForPreview = [...ledgerMissionTripsBase];
+    for (const tid of selectedTripIds) {
+      if (!tid || tripsForPreview.some((t) => t.id === tid)) continue;
+      const extra = resolveTripOptionById(tid);
+      if (extra) tripsForPreview.push(extra);
+    }
+    for (const raw of tripsForPreview) {
       const t = raw as TripOption;
       if (t.client_price == null && t.supplier_rate == null) continue;
       m[t.id] = computeTripEntryFinancialSnapshot(
@@ -1206,7 +1237,37 @@ export function AddTransactionModal({
       );
     }
     return m;
-  }, [ledgerMissionTripsBase, ledgerTransactions, viewerOrgId, driverOffersByDriverId]);
+  }, [
+    ledgerMissionTripsBase,
+    selectedTripIds,
+    resolveTripOptionById,
+    ledgerTransactions,
+    viewerOrgId,
+    driverOffersByDriverId,
+  ]);
+
+  const missionTripPreviewReady = useMemo(
+    () =>
+      Boolean(
+        selectedTripIds[0] && tripFinancialPreviewByTripId[selectedTripIds[0]],
+      ),
+    [selectedTripIds, tripFinancialPreviewByTripId],
+  );
+
+  const focusedLedgerTripIds = useMemo(() => {
+    if (!fullPage) return [];
+    const ids = new Set<string>();
+    const selected = selectedTripIds[0];
+    if (selected) ids.add(selected);
+    const preset = (defaultTripId ?? "").trim();
+    if (preset) ids.add(preset);
+    return [...ids];
+  }, [fullPage, selectedTripIds, defaultTripId]);
+
+  const { record: focusedTripAdjustmentsRecord } = useTripFinanceAdjustmentsMap(
+    viewerOrgId,
+    focusedLedgerTripIds,
+  );
 
   const missionTripsFiltered = useMemo(() => {
     return missionTrips.filter((t) => {
@@ -1396,8 +1457,25 @@ export function AddTransactionModal({
   );
 
   const formatLedgerSyncAmountInput = useCallback((value: number) => {
-    if (!Number.isFinite(value) || value <= 0) return "";
-    return formatAmountDuePlaceholder(value);
+    return formatLedgerAmountInput(value);
+  }, []);
+
+  const handleLedgerQuickAmountChange = useCallback(
+    (value: string) => {
+      ledgerAmountUserEditedRef.current = true;
+      const parsed = parseFloat(String(value).replace(/,/g, "").trim());
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setAmountStr("");
+        return;
+      }
+      setAmountStr(formatLedgerAmountInput(parsed));
+    },
+    [],
+  );
+
+  const handleLedgerAmountInputChange = useCallback((value: string) => {
+    ledgerAmountUserEditedRef.current = true;
+    setAmountStr(value);
   }, []);
 
   /** Selected trip(s): placeholder = sum of suggested dues, not party-wide totals from props. */
@@ -1420,11 +1498,23 @@ export function AddTransactionModal({
   ]);
 
   const ledgerDueAmountInr = useMemo(() => {
+    const explicitDue = type === "in" ? dueAmountIn : dueAmountOut;
+    const tid = selectedTripIds[0];
+    if (
+      explicitDue != null &&
+      explicitDue > 0 &&
+      defaultTripId &&
+      tid === defaultTripId
+    ) {
+      const trip = tid ? resolveTripOptionById(tid) : null;
+      const fromTrip = trip ? getLedgerTripDueWeight(trip) : 0;
+      if (fromTrip <= 0 || Math.abs(fromTrip - explicitDue) > 0.01) {
+        return explicitDue;
+      }
+    }
     const parsed = parseFloat(String(ledgerAmountPlaceholder).replace(/,/g, "").trim());
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    const direct = type === "in" ? dueAmountIn : dueAmountOut;
-    if (direct != null && direct > 0) return direct;
-    const tid = selectedTripIds[0];
+    if (explicitDue != null && explicitDue > 0) return explicitDue;
     if (tid) {
       const trip = resolveTripOptionById(tid);
       if (trip) {
@@ -1438,6 +1528,7 @@ export function AddTransactionModal({
     type,
     dueAmountIn,
     dueAmountOut,
+    defaultTripId,
     selectedTripIds,
     resolveTripOptionById,
     getLedgerTripDueWeight,
@@ -1531,6 +1622,149 @@ export function AddTransactionModal({
       selectLedgerTrip,
     ],
   );
+
+  const ledgerFocusedTripForSummary = useMemo(() => {
+    const tid = selectedTripIds[0] ?? (defaultTripId?.trim() || null);
+    if (!tid) return null;
+    return (
+      missionTripsFiltered.find((trip) => trip.id === tid) ??
+      missionTrips.find((trip) => trip.id === tid) ??
+      resolveTripOptionById(tid)
+    );
+  }, [
+    selectedTripIds,
+    defaultTripId,
+    missionTripsFiltered,
+    missionTrips,
+    resolveTripOptionById,
+  ]);
+
+  const headerTripNumber =
+    (ledgerFocusedTripForSummary?.trip_number ?? "").trim() ||
+    (tripNumber ?? "").trim() ||
+    (lockedTripDisplay ?? "").trim() ||
+    null;
+  const headerTripRoute = useMemo(() => {
+    const fromSummary = (ledgerFocusedTripForSummary?.route_label ?? "").trim();
+    if (fromSummary) return fromSummary;
+    const tid = selectedTripIds[0] ?? (defaultTripId?.trim() || null);
+    if (!tid) return null;
+    const trip =
+      ledgerFocusedTripForSummary ??
+      missionTrips.find((t) => t.id === tid) ??
+      resolveTripOptionById(tid);
+    const route = (trip?.route_label ?? "").trim();
+    return route || null;
+  }, [
+    ledgerFocusedTripForSummary,
+    selectedTripIds,
+    defaultTripId,
+    missionTrips,
+    resolveTripOptionById,
+  ]);
+  const hasLinkedTripContext = Boolean(
+    tripLocked ||
+      selectedTripIds.length > 0 ||
+      (defaultTripId ?? "").trim(),
+  );
+  const showHeaderTripDetail = Boolean(headerTripNumber && hasLinkedTripContext);
+
+  const ledgerFocusedTripCardElement = useMemo(() => {
+    const t = ledgerFocusedTripForSummary;
+    if (!t) return null;
+    const routeLine = (t.route_label || "").trim() || "—";
+    const preview = tripFinancialPreviewByTripId[t.id];
+    const fin = preview?.financials;
+    const tripPayType = preview?.trip_type;
+    const parties = tripPartyIdsFromTrip(t);
+    const showClientDuePill =
+      !ledgerLockedEntityType || ledgerLockedEntityType === "CLIENT";
+    const showSupplierDuePill =
+      !ledgerLockedEntityType || ledgerLockedEntityType === "SUPPLIER";
+    const showDriverDuePill =
+      !ledgerLockedEntityType || ledgerLockedEntityType === "DRIVER";
+    const pendingChips = buildMissionTripPendingChips(
+      type,
+      fin,
+      tripPayType,
+      formatINR,
+      ledgerLockedEntityType,
+      lockedPartyId ?? null,
+      parties,
+      isTripInLockedPartyScope(t),
+    );
+    const showNoDueTag =
+      preview != null &&
+      !tripFinancialSnapshotHasRelevantDue(preview, type, ledgerLockedEntityType);
+    const noDueTagLabel = ledgerTripNoDueTagLabel(type, ledgerLockedEntityType);
+    const tripAdjustments = (() => {
+      const fromProp = adjustmentsForTripId(tripAdjustmentsByTripIdProp, t.id);
+      if (fromProp.length > 0) return fromProp;
+      return adjustmentsForTripId(focusedTripAdjustmentsRecord, t.id);
+    })();
+    const revisedLaneAmount =
+      type === "in" ? Number(t.client_price ?? 0) : Number(t.supplier_rate ?? 0);
+    const compact = stackTripFinancialBand;
+
+    return (
+      <LedgerFocusedTripCard
+        tripNumber={t.trip_number}
+        routeLabel={routeLine}
+        flowType={type}
+        adjustments={tripAdjustments}
+        revisedAmount={revisedLaneAmount}
+        financialSnapshot={preview}
+        ledgerTransactions={ledgerTransactions}
+        tripId={t.id}
+        showClientLane={showClientDuePill}
+        showSupplierLane={showSupplierDuePill}
+        showDriverLane={showDriverDuePill}
+        showNoDueTag={showNoDueTag}
+        noDueTagLabel={noDueTagLabel}
+        compact={compact}
+        hideTripIdentity={showHeaderTripDetail}
+        chips={pendingChips.map((c) => ({
+          key: `${c.tag}-${c.disabled ? "d" : "a"}`,
+          label: c.label,
+          disabled: c.disabled,
+          onPress: () => {
+            if (c.disabled) {
+              if (c.tag === "client") {
+                Alert.alert(
+                  "Different party · Cash IN",
+                  "Client receipts use Cash IN. Switch to IN to record money from the client.",
+                );
+              } else {
+                Alert.alert(
+                  "Different party · Cash OUT",
+                  "Supplier and driver payments use Cash OUT. Switch to OUT to record this payment.",
+                );
+              }
+              return;
+            }
+            applyTripSmartTag(t, c.tag);
+          },
+        }))}
+        noDuePillLabel={
+          pendingChips.length === 0 && showNoDueTag ? noDueTagLabel : null
+        }
+      />
+    );
+  }, [
+    ledgerFocusedTripForSummary,
+    tripFinancialPreviewByTripId,
+    type,
+    ledgerLockedEntityType,
+    lockedPartyId,
+    isTripInLockedPartyScope,
+    tripPartyIdsFromTrip,
+    tripAdjustmentsByTripIdProp,
+    focusedTripAdjustmentsRecord,
+    showHeaderTripDetail,
+    ledgerTransactions,
+    stackTripFinancialBand,
+    applyTripSmartTag,
+  ]);
 
   const lastNoDueAlertTripIdRef = useRef<string | null>(null);
 
@@ -1635,6 +1869,7 @@ export function AddTransactionModal({
   const selectMissionTrip = useCallback(
     (trip: TripOption | null) => {
       if (!trip) {
+        ledgerAmountUserEditedRef.current = false;
         if (smartTagSuggestedAmount != null) {
           const parsed = parseFloat(amountStr.replace(/,/g, ""));
           if (
@@ -1652,6 +1887,7 @@ export function AddTransactionModal({
         selectLedgerTrip(trip.id);
         return;
       }
+      ledgerAmountUserEditedRef.current = false;
       fillLedgerAmountFromTripDue(trip, { showNoDueAlert: true });
     },
     [
@@ -1677,23 +1913,33 @@ export function AddTransactionModal({
 
   useEffect(() => {
     if (!visible || !fullPage || isEditMode || lockedAmount != null) return;
-    if (!selectedMissionTripId) return;
+    if (!selectedMissionTripId || !missionTripPreviewReady) return;
+    if (ledgerAmountUserEditedRef.current) return;
+    if (amountStr.replace(/,/g, "").trim()) return;
     const trip = resolveTripOptionById(selectedMissionTripId);
     if (!trip) return;
-    const preview = tripFinancialPreviewByTripId[selectedMissionTripId];
-    if (!preview) return;
     fillLedgerAmountFromTripDue(trip, { showNoDueAlert: false });
   }, [
-    type,
     visible,
     fullPage,
     isEditMode,
     lockedAmount,
     selectedMissionTripId,
-    tripFinancialPreviewByTripId,
+    missionTripPreviewReady,
+    amountStr,
     resolveTripOptionById,
     fillLedgerAmountFromTripDue,
   ]);
+
+  useEffect(() => {
+    ledgerAmountUserEditedRef.current = false;
+  }, [selectedMissionTripId, type]);
+
+  useEffect(() => {
+    if (!visible) {
+      ledgerAmountUserEditedRef.current = false;
+    }
+  }, [visible]);
 
   const partyOptions = useMemo(() => {
     if (type === "in" && selectedTrip) {
@@ -2162,6 +2408,19 @@ export function AddTransactionModal({
   const ledgerDesktopWizardActive = ledgerFullPageViewportFit && !isEditMode;
 
   const ledgerMobileFlow = fullPage && stackTripFinancialBand;
+  /** Opened from trip detail — desktop single-page; mobile uses 2-step wizard. */
+  const ledgerTripDirectCapture =
+    fullPage &&
+    !isEditMode &&
+    Boolean(tripLocked || (defaultTripId ?? "").trim());
+  const ledgerTripDirectTwoStepFlow =
+    ledgerTripDirectCapture && ledgerMobileFlow && !isEditMode;
+  const ledgerUseMobileWizard = ledgerMobileFlow;
+  const ledgerCaptureSinglePageActive =
+    fullPage &&
+    !isEditMode &&
+    (ledgerFullPageViewportFit ||
+      (ledgerTripDirectCapture && !ledgerMobileFlow));
 
   const ledgerWizardFromPartyContext = Boolean(
     entryContextLabel ||
@@ -2304,15 +2563,15 @@ export function AddTransactionModal({
   }, [visible, ledgerWizardFlowSessionKey, ledgerFullPageViewportFit]);
 
   useEffect(() => {
-    if (!ledgerDesktopWizardActive || ledgerDesktopWizardStep !== 2) return;
+    if (!ledgerCaptureSinglePageActive) return;
     if (isEditMode || lockedAmount != null) return;
+    if (ledgerAmountUserEditedRef.current) return;
     if (amountStr.replace(/,/g, "").trim()) return;
     if (ledgerDueAmountInr != null && ledgerDueAmountInr > 0) {
       setAmountStr(formatLedgerSyncAmountInput(ledgerDueAmountInr));
     }
   }, [
-    ledgerDesktopWizardActive,
-    ledgerDesktopWizardStep,
+    ledgerCaptureSinglePageActive,
     isEditMode,
     lockedAmount,
     amountStr,
@@ -2321,7 +2580,7 @@ export function AddTransactionModal({
   ]);
 
   useEffect(() => {
-    if (!visible || !ledgerMobileFlow || isEditMode || lockedAmount != null) return;
+    if (!visible || !ledgerUseMobileWizard || isEditMode || lockedAmount != null) return;
     if (amountStr.replace(/,/g, "").trim()) return;
     const partyDue = type === "in" ? dueAmountIn : dueAmountOut;
     if (partyDue != null && partyDue > 0) {
@@ -2329,7 +2588,7 @@ export function AddTransactionModal({
     }
   }, [
     visible,
-    ledgerMobileFlow,
+    ledgerUseMobileWizard,
     isEditMode,
     lockedAmount,
     amountStr,
@@ -2345,7 +2604,10 @@ export function AddTransactionModal({
         label: cat,
         kind: cat,
         selected: category === cat,
-        onPress: () => setCategory(cat),
+        onPress: () => {
+          setCategory(cat);
+          setPaymentTypeExpanded(false);
+        },
       }));
     }
     if (isDriverPayment) {
@@ -2358,6 +2620,7 @@ export function AddTransactionModal({
           onPress: () => {
             setDriverPaymentType(opt.type);
             setCategory(null);
+            setPaymentTypeExpanded(false);
           },
         })),
         ...VEHICLE_CATEGORIES.map((cat) => ({
@@ -2368,6 +2631,7 @@ export function AddTransactionModal({
           onPress: () => {
             setDriverPaymentType(null);
             setCategory(cat);
+            setPaymentTypeExpanded(false);
           },
         })),
       ];
@@ -2377,7 +2641,10 @@ export function AddTransactionModal({
       label: cat,
       kind: cat,
       selected: category === cat,
-      onPress: () => setCategory(cat),
+      onPress: () => {
+        setCategory(cat);
+        setPaymentTypeExpanded(false);
+      },
     }));
   }, [
     type,
@@ -2388,6 +2655,15 @@ export function AddTransactionModal({
   ]);
 
   const ledgerWizardShowPaymentType = ledgerWizardPaymentTypeItems.length > 0;
+
+  const ledgerMobileTwoStepTripFlow =
+    ledgerUseMobileWizard &&
+    !ledgerTripDirectTwoStepFlow &&
+    tripLocked &&
+    !isEditMode &&
+    ledgerWizardShowPaymentType &&
+    (isPartyLocked || partyId != null) &&
+    Boolean(defaultType);
 
   useEffect(() => {
     if (!paymentModeId) {
@@ -3156,7 +3432,7 @@ export function AddTransactionModal({
           await Promise.resolve(onSubmit(data));
         }
         if (fullPage) {
-          if (ledgerSubmitConfirmVisible || ledgerMobileFlow) {
+          if (ledgerSubmitConfirmVisible || ledgerUseMobileWizard) {
             setLedgerReconSucceeded(true);
           } else if (onSuccessDismiss) {
             onSuccessDismiss();
@@ -3227,7 +3503,7 @@ export function AddTransactionModal({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    if (fullPage && !ledgerMobileFlow) {
+    if (fullPage && !ledgerUseMobileWizard) {
       Keyboard.dismiss();
       closeAllPickers();
       setLedgerSubmitConfirmVisible(true);
@@ -3350,21 +3626,21 @@ export function AddTransactionModal({
 
     /** Full-page ledger on desktop split layout. */
     const ledgerTripDesktopSplit = fullPage && !stackTripFinancialBand;
-    const ledgerDesktopOnSetupStep =
-      !ledgerDesktopWizardActive || ledgerDesktopWizardStep === 1;
-    const ledgerDesktopOnPaymentStep =
-      ledgerDesktopWizardActive && ledgerDesktopWizardStep === 2;
+    /** Desktop capture: single page — category + amount on right; mode + UTR on left. */
+    const ledgerDesktopOnSetupStep = false;
+    const ledgerDesktopOnPaymentStep = ledgerCaptureSinglePageActive;
     const LEDGER_PROTOCOL_SUMMARY_LOGO = ledgerTripDesktopSplit ? 20 : mob ? 18 : 20;
     /** Stacked mobile/tablet: cap list height; desktop split fills the matched pane height. */
     const missionListMaxHeight = stackTripFinancialBand
       ? Math.min(240, Math.max(140, Math.floor(Dimensions.get("window").height * 0.26)))
       : 320;
-    const selectedLedgerTripId = selectedTripIds[0] ?? null;
+    const selectedLedgerTripId =
+      selectedTripIds[0] ?? (defaultTripId?.trim() || null);
     const activeLedgerTrip =
       selectedLedgerTripId != null
         ? (missionTripsFiltered.find((t) => t.id === selectedLedgerTripId) ??
           missionTrips.find((t) => t.id === selectedLedgerTripId) ??
-          null)
+          resolveTripOptionById(selectedLedgerTripId))
         : null;
     /** Minimize voyage registry after selection (all full-page widths; previously desktop-only). */
     const ledgerTripFocusMode =
@@ -3570,7 +3846,7 @@ export function AddTransactionModal({
         usesScroll={protocolTypeStripUsesScroll}
         tileGap={protocolTileGap}
         sectionStyle={
-          ledgerDesktopOnSetupStep && ledgerDesktopWizardActive
+          ledgerDesktopOnSetupStep && ledgerCaptureSinglePageActive
             ? undefined
             : ledgerTripDesktopSplit && !ledgerDesktopOnSetupStep
               ? styles.ledgerProtocolSectionStackTop
@@ -3600,10 +3876,97 @@ export function AddTransactionModal({
       </LedgerProtocolWorkbench>
     );
 
-    const ledgerDesktopCategoryBand = (
-      <LedgerProtocolWorkbench stacked compact={mob}>
-        {ledgerProtocolCategorySection}
-      </LedgerProtocolWorkbench>
+    const ledgerDesktopLeftCategoryTitle =
+      type === "in"
+        ? "Payment type"
+        : isDriverPayment
+          ? "Payment type"
+          : "Category";
+
+    const ledgerDesktopProtocolStrip = (items: React.ReactNode) => (
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="always"
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.ledgerDesktopProtocolStripRow,
+          { gap: protocolTileGap },
+        ]}
+      >
+        {items}
+      </ScrollView>
+    );
+
+    const capturePaymentTypeCollapsed =
+      ledgerCaptureSinglePageActive &&
+      !paymentTypeExpanded &&
+      Boolean(selectedPaymentTypeLabel);
+    const capturePaymentModeCollapsed =
+      ledgerCaptureSinglePageActive && !paymentModeExpanded && Boolean(paymentModeId);
+
+    const ledgerDesktopLeftCategoryBand = (
+      <View style={styles.ledgerDesktopPaymentSectionCard}>
+        <View style={styles.ledgerDesktopSectionHead}>
+          <View style={[styles.ledgerDesktopSectionIcon, styles.ledgerDesktopSectionIconCategory]}>
+            <LedgerPaymentTypeIcon
+              kind={selectedPaymentTypeLabel ?? "Trip Payment"}
+              size={15}
+            />
+          </View>
+          <View style={styles.ledgerDesktopSectionHeadText}>
+            <Text style={styles.ledgerDesktopSectionEyebrow}>
+              {ledgerDesktopLeftCategoryTitle}
+            </Text>
+            {!capturePaymentTypeCollapsed ? (
+              <Text style={styles.ledgerDesktopSectionHint}>
+                What kind of entry is this?
+              </Text>
+            ) : null}
+          </View>
+          {capturePaymentTypeCollapsed ? (
+            <TouchableOpacity
+              style={styles.ledgerDesktopCategoryChangeBtn}
+              onPress={() => setPaymentTypeExpanded(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ledgerDesktopCategoryChangeText}>Change</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {capturePaymentTypeCollapsed ? (
+          <TouchableOpacity
+            style={styles.selectorSummaryCard}
+            onPress={() => setPaymentTypeExpanded(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.selectorSummaryMain}>
+              <View style={styles.selectorSummaryIconSm}>
+                <LedgerPaymentTypeIcon
+                  kind={selectedPaymentTypeLabel ?? ""}
+                  size={22}
+                />
+              </View>
+              <Text style={styles.selectorSummaryText}>{selectedPaymentTypeLabel}</Text>
+            </View>
+            <FontAwesome name="chevron-down" size={11} color={Theme.textMutedDemo} />
+          </TouchableOpacity>
+        ) : (
+          ledgerDesktopProtocolStrip(
+            paymentTypeItems.map((item) => (
+              <LedgerProtocolStripTypeTile
+                key={String(item.key)}
+                kind={item.label}
+                label={item.label}
+                selected={item.selected}
+                variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                width={protocolTypeTileWidth}
+                onPress={item.onPress}
+              />
+            )),
+          )
+        )}
+      </View>
     );
 
     const ledgerDesktopModeBand = (
@@ -3614,37 +3977,55 @@ export function AddTransactionModal({
           </View>
           <View style={styles.ledgerDesktopSectionHeadText}>
             <Text style={styles.ledgerDesktopSectionEyebrow}>Payment mode</Text>
-            <Text style={styles.ledgerDesktopSectionHint}>How this money moved</Text>
+            {!capturePaymentModeCollapsed ? (
+              <Text style={styles.ledgerDesktopSectionHint}>How this money moved</Text>
+            ) : null}
           </View>
+          {capturePaymentModeCollapsed ? (
+            <TouchableOpacity
+              style={styles.ledgerDesktopCategoryChangeBtn}
+              onPress={() => setPaymentModeExpanded(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ledgerDesktopCategoryChangeText}>Change</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
-        <ScrollView
-          horizontal
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.ledgerDesktopModeStripRow,
-            { gap: protocolTileGap },
-          ]}
-        >
-          {PAYMENT_MODES.map((opt) => {
-            const selected = paymentModeId === opt.id;
-            return (
-              <LedgerProtocolStripModeTile
-                key={opt.id}
-                modeId={opt.id}
-                label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
-                selected={selected}
-                variant={LEDGER_PROTOCOL_STRIP_VARIANT}
-                width={protocolModeTileWidth}
-                onPress={() => {
-                  setPaymentModeId(opt.id);
-                  setPaymentModeExpanded(false);
-                }}
-              />
-            );
-          })}
-        </ScrollView>
+        {capturePaymentModeCollapsed ? (
+          <TouchableOpacity
+            style={styles.selectorSummaryCard}
+            onPress={() => setPaymentModeExpanded(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.selectorSummaryMain}>
+              <View style={styles.selectorSummaryIconSm}>
+                <PaymentModeLogo modeId={paymentModeId} size={22} />
+              </View>
+              <Text style={styles.selectorSummaryText}>{selectedPaymentModeName}</Text>
+            </View>
+            <FontAwesome name="chevron-down" size={11} color={Theme.textMutedDemo} />
+          </TouchableOpacity>
+        ) : (
+          ledgerDesktopProtocolStrip(
+            PAYMENT_MODES.map((opt) => {
+              const selected = paymentModeId === opt.id;
+              return (
+                <LedgerProtocolStripModeTile
+                  key={opt.id}
+                  modeId={opt.id}
+                  label={PAYMENT_MODE_LABEL_SHORT[opt.id] ?? opt.name}
+                  selected={selected}
+                  variant={LEDGER_PROTOCOL_STRIP_VARIANT}
+                  width={protocolModeTileWidth}
+                  onPress={() => {
+                    setPaymentModeId(opt.id);
+                    setPaymentModeExpanded(false);
+                  }}
+                />
+              );
+            }),
+          )
+        )}
       </View>
     );
 
@@ -3654,17 +4035,21 @@ export function AddTransactionModal({
             styles.syncAmountCard,
             styles.syncAmountCardSide,
             styles.syncHeroBandCard,
-            styles.syncAmountCardPulse,
-            ledgerTripDesktopSplit && styles.syncAmountCardPulseDesktop,
+            ledgerDesktopOnPaymentStep
+              ? styles.syncAmountCardLight
+              : styles.syncAmountCardPulse,
+            !ledgerDesktopOnPaymentStep && ledgerTripDesktopSplit && styles.syncAmountCardPulseDesktop,
             mob && styles.ledgerMobSyncAmount,
             ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
             stackTripFinancialBand && styles.syncAmountCardMobileAlign,
-            ledgerTripDesktopSplit && styles.syncAmountCardDesktopHero,
+            !ledgerDesktopOnPaymentStep && ledgerTripDesktopSplit && styles.syncAmountCardDesktopHero,
             ledgerDesktopOnPaymentStep && styles.syncAmountCardDesktopPaymentStep,
             selectedTripNoDueNotice && styles.syncAmountCardNoDueHighlight,
           ]}
         >
-          <View style={styles.syncAmountGlow} pointerEvents="none" />
+          {!ledgerDesktopOnPaymentStep ? (
+            <View style={styles.syncAmountGlow} pointerEvents="none" />
+          ) : null}
           {!ledgerDesktopOnPaymentStep && ledgerWizardTripLedgerPreview ? (
             <View style={styles.ledgerTripPreviewWrap}>
               <LedgerTripSettlementNote
@@ -3687,17 +4072,18 @@ export function AddTransactionModal({
               </Text>
             </View>
           ) : null}
+          {!ledgerDesktopOnPaymentStep ? (
           <Text
             style={[
               styles.syncAmountEyebrow,
               styles.syncAmountEyebrowPulse,
               stackTripFinancialBand && styles.syncSectionEyebrowMobile,
               mob && styles.ledgerMobSyncEyebrow,
-              ledgerDesktopOnPaymentStep && styles.ledgerDesktopAmountEyebrow,
             ]}
           >
-            {ledgerDesktopOnPaymentStep ? "Amount" : "Synchronization Magnitude"}
+            Synchronization Magnitude
           </Text>
+          ) : null}
           <View
             style={[
               styles.syncAmountRow,
@@ -3709,9 +4095,9 @@ export function AddTransactionModal({
               style={[
                 styles.syncRupee,
                 styles.syncRupeeSide,
-                styles.syncRupeePulse,
+                ledgerDesktopOnPaymentStep ? styles.syncRupeeLight : styles.syncRupeePulse,
                 mob && styles.ledgerMobSyncRupee,
-                ledgerTripDesktopSplit && styles.syncAmountHeroRupeeDesktop,
+                !ledgerDesktopOnPaymentStep && ledgerTripDesktopSplit && styles.syncAmountHeroRupeeDesktop,
               ]}
             >
               ₹
@@ -3720,15 +4106,15 @@ export function AddTransactionModal({
               style={[
                 styles.syncAmountInput,
                 styles.syncAmountInputSide,
-                styles.syncAmountInputPulse,
+                ledgerDesktopOnPaymentStep ? styles.syncAmountInputLight : styles.syncAmountInputPulse,
                 mob && styles.ledgerMobSyncInput,
                 stackTripFinancialBand && styles.syncAmountInputMobileLeft,
-                ledgerTripDesktopSplit && styles.syncAmountHeroInputDesktop,
+                !ledgerDesktopOnPaymentStep && ledgerTripDesktopSplit && styles.syncAmountHeroInputDesktop,
               ]}
               placeholder={ledgerAmountPlaceholder}
               placeholderTextColor={Theme.textMutedDemo}
               value={amountStr}
-              onChangeText={setAmountStr}
+              onChangeText={handleLedgerAmountInputChange}
               keyboardType="decimal-pad"
               autoCorrect={false}
               spellCheck={false}
@@ -3743,32 +4129,21 @@ export function AddTransactionModal({
             <LedgerSettlementPctDock
               dueTotalInr={ledgerDueAmountInr}
               amountStr={amountStr}
-              onAmountChange={setAmountStr}
+              onAmountChange={handleLedgerQuickAmountChange}
               accentColor={type === "in" ? Theme.darkGreen : Theme.teslaRed}
-              variant={ledgerTripDesktopSplit ? "dark" : "light"}
+              variant="light"
             />
           ) : null}
         </View>
     );
 
-    const ledgerSyncDatePanel = (
-        <View
-          style={[
-          styles.ledgerSyncDateCard,
-          mob && styles.ledgerMobDateCard,
-            ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
-            stackTripFinancialBand && styles.syncDateCardMobileAlign,
-          ledgerTripDesktopSplit && styles.syncDateCardDesktopFull,
-          ledgerDesktopOnPaymentStep && styles.ledgerDesktopDatePanelNested,
-          entryDateError && styles.ledgerSyncDateCardError,
+    const ledgerSyncDatePresetPills = (
+      <View
+        style={[
+          styles.ledgerSyncDatePresetRow,
+          ledgerDesktopOnPaymentStep && styles.ledgerSyncDatePresetRowInline,
         ]}
       >
-        {!ledgerDesktopOnPaymentStep ? (
-          <Text style={[styles.ledgerFieldEyebrow, mob && styles.ledgerMobFieldEyebrow]}>
-            Sync Date
-          </Text>
-        ) : null}
-        <View style={styles.ledgerSyncDatePresetRow}>
             <TouchableOpacity
               style={[
               styles.ledgerSyncDatePresetPill,
@@ -3814,10 +4189,14 @@ export function AddTransactionModal({
               </Text>
             </TouchableOpacity>
           </View>
+    );
+
+    const ledgerSyncDateFieldControl = (
             <Pressable
               style={({ pressed }) => [
             styles.ledgerSyncDateField,
             mob && styles.ledgerMobDateField,
+            ledgerDesktopOnPaymentStep && styles.ledgerSyncDateFieldInline,
             Platform.OS === "web" && styles.ledgerSyncDateFieldWeb,
             pressed && Platform.OS !== "web" && styles.ledgerSyncDateFieldPressed,
           ]}
@@ -3847,6 +4226,36 @@ export function AddTransactionModal({
             <FontAwesome name="calendar" size={mob ? 12 : 14} color={Theme.textMutedDemo} />
           </View>
             </Pressable>
+    );
+
+    const ledgerSyncDatePanel = (
+        <View
+          style={[
+          styles.ledgerSyncDateCard,
+          mob && styles.ledgerMobDateCard,
+            ledgerSyncHeroStack && styles.syncHeroCardFullWidth,
+            stackTripFinancialBand && styles.syncDateCardMobileAlign,
+          ledgerTripDesktopSplit && styles.syncDateCardDesktopFull,
+          ledgerDesktopOnPaymentStep && styles.ledgerDesktopDatePanelNested,
+          entryDateError && styles.ledgerSyncDateCardError,
+        ]}
+      >
+        {!ledgerDesktopOnPaymentStep ? (
+          <Text style={[styles.ledgerFieldEyebrow, mob && styles.ledgerMobFieldEyebrow]}>
+            Sync Date
+          </Text>
+        ) : null}
+        {ledgerDesktopOnPaymentStep ? (
+          <View style={styles.ledgerSyncDateInlineRow}>
+            {ledgerSyncDatePresetPills}
+            {ledgerSyncDateFieldControl}
+          </View>
+        ) : (
+          <>
+            {ledgerSyncDatePresetPills}
+            {ledgerSyncDateFieldControl}
+          </>
+        )}
           {entryDateError ? <Text style={styles.fieldErrorText}>{entryDateError}</Text> : null}
         </View>
     );
@@ -3867,8 +4276,7 @@ export function AddTransactionModal({
 
     const needsLedgerPaymentReference = !isLedgerCashPaymentMode(paymentModeId);
 
-    const ledgerReferenceCard =
-      needsLedgerPaymentReference ? (
+    const ledgerReferenceCard = (
         <View
           style={[
             styles.syncReferenceCard,
@@ -3895,7 +4303,11 @@ export function AddTransactionModal({
               style={[styles.syncReferenceInputPill, mob && styles.ledgerMobRefInputText]}
               value={paymentReference}
               onChangeText={setPaymentReference}
-              placeholder="Bank reference for validation"
+              placeholder={
+                needsLedgerPaymentReference
+                  ? "NEFT / UPI / bank reference"
+                  : "UTR or reference (optional)"
+              }
               placeholderTextColor={Theme.textMutedDemo}
               autoCorrect={false}
               autoCapitalize="characters"
@@ -3908,7 +4320,7 @@ export function AddTransactionModal({
             />
           </View>
         </View>
-      ) : null;
+      );
 
     const ledgerDesktopPaymentPreview =
       ledgerDesktopOnPaymentStep && ledgerWizardTripLedgerPreview ? (
@@ -3926,32 +4338,7 @@ export function AddTransactionModal({
         </View>
       ) : null;
 
-    const ledgerDesktopCategoryReminder = ledgerDesktopOnPaymentStep ? (
-      <View style={styles.ledgerDesktopCategoryReminder}>
-        <View style={styles.ledgerDesktopCategoryReminderMain}>
-          <View style={styles.ledgerDesktopCategoryReminderIcon}>
-            <LedgerPaymentTypeIcon kind={selectedPaymentTypeLabel ?? ""} size={18} />
-          </View>
-          <View style={styles.ledgerDesktopCategoryReminderTextCol}>
-            <Text style={styles.ledgerDesktopCategoryReminderLabel}>Category</Text>
-            <Text style={styles.ledgerDesktopCategoryReminderValue} numberOfLines={1}>
-              {selectedPaymentTypeLabel ?? "—"}
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          onPress={() => setLedgerDesktopWizardStep(1)}
-          style={styles.ledgerDesktopCategoryChangeBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Change category"
-        >
-          <Text style={styles.ledgerDesktopCategoryChangeText}>Change</Text>
-        </Pressable>
-      </View>
-    ) : null;
-
-    const ledgerDesktopReferenceSection =
-      needsLedgerPaymentReference && ledgerDesktopOnPaymentStep ? (
+    const ledgerDesktopReferenceSection = (
         <View style={styles.ledgerDesktopPaymentSectionCard}>
           <View style={styles.ledgerDesktopSectionHead}>
             <View style={[styles.ledgerDesktopSectionIcon, styles.ledgerDesktopSectionIconRef]}>
@@ -3959,7 +4346,11 @@ export function AddTransactionModal({
             </View>
             <View style={styles.ledgerDesktopSectionHeadText}>
               <Text style={styles.ledgerDesktopSectionEyebrow}>Reference / UTR</Text>
-              <Text style={styles.ledgerDesktopSectionHint}>Bank reference for validation</Text>
+              <Text style={styles.ledgerDesktopSectionHint}>
+                {needsLedgerPaymentReference
+                  ? "NEFT / UPI / bank transaction reference"
+                  : "Optional for cash payments"}
+              </Text>
             </View>
           </View>
           <View style={styles.ledgerDesktopReferenceInputWrap}>
@@ -3967,7 +4358,11 @@ export function AddTransactionModal({
               style={styles.ledgerDesktopReferenceInput}
               value={paymentReference}
               onChangeText={setPaymentReference}
-              placeholder="Enter UTR or transaction reference"
+              placeholder={
+                needsLedgerPaymentReference
+                  ? "Enter UTR or bank reference"
+                  : "UTR or reference (optional)"
+              }
               placeholderTextColor={Theme.textMutedDemo}
               autoCorrect={false}
               autoCapitalize="characters"
@@ -3975,7 +4370,7 @@ export function AddTransactionModal({
             />
           </View>
         </View>
-      ) : null;
+      );
 
     const ledgerDesktopDateSection = ledgerDesktopOnPaymentStep ? (
       <View style={styles.ledgerDesktopPaymentSectionCard}>
@@ -3992,61 +4387,36 @@ export function AddTransactionModal({
       </View>
     ) : null;
 
-    const ledgerDesktopSetupSummary = ledgerDesktopOnSetupStep ? (
-      <View style={styles.ledgerDesktopSetupSummary}>
-        <Text style={styles.ledgerDesktopSetupSummaryEyebrow}>Selected category</Text>
-        <View style={styles.ledgerDesktopSetupChipRow}>
-          <View style={styles.ledgerDesktopSetupChip}>
-            <LedgerPaymentTypeIcon kind={selectedPaymentTypeLabel ?? "—"} size={16} />
-            <Text style={styles.ledgerDesktopSetupChipText} numberOfLines={1}>
-              {selectedPaymentTypeLabel ?? "Select category"}
-            </Text>
-          </View>
-        </View>
-      </View>
-    ) : null;
-
-    const ledgerProvisionStepSetup = (
-      <View
-        style={[
-          styles.ledgerProvisionCard,
-          styles.ledgerProvisionCardPaneFill,
-          styles.ledgerDesktopSetupPane,
-        ]}
-      >
-        {ledgerDesktopCategoryBand}
-        {ledgerDesktopSetupSummary}
-      </View>
-    );
-
-    const ledgerProvisionStepPayment = (
-      <View
-        style={[
-          styles.ledgerProvisionCard,
-          styles.ledgerProvisionCardPaneFill,
-          styles.ledgerDesktopPaymentPane,
-        ]}
-      >
+    const ledgerProvisionStepCombined = (
         <ScrollView
           style={styles.ledgerDesktopPaymentScroll}
           contentContainerStyle={styles.ledgerDesktopPaymentScrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
-          {ledgerDesktopCategoryReminder}
           {ledgerDesktopPaymentPreview}
-          <View style={styles.ledgerDesktopAmountSection}>
-            {ledgerSyncAmountHero}
+          <View style={styles.ledgerDesktopPaymentSectionCard}>
+            <View style={styles.ledgerDesktopSectionHead}>
+              <View style={[styles.ledgerDesktopSectionIcon, styles.ledgerDesktopSectionIconAmount]}>
+                <Banknote size={15} color={Theme.darkGreen} strokeWidth={2.2} />
+              </View>
+              <View style={styles.ledgerDesktopSectionHeadText}>
+                <Text style={styles.ledgerDesktopSectionEyebrow}>Amount</Text>
+                <Text style={styles.ledgerDesktopSectionHint}>
+                  {type === "in" ? "How much was received" : "How much was paid"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.ledgerDesktopAmountSection}>
+              {ledgerSyncAmountHero}
+            </View>
           </View>
-          {ledgerDesktopModeBand}
-          {ledgerDesktopReferenceSection}
           {ledgerDesktopDateSection}
         </ScrollView>
-      </View>
     );
 
-    const ledgerProvisionBody = ledgerDesktopWizardActive ? (
-      ledgerDesktopOnSetupStep ? ledgerProvisionStepSetup : ledgerProvisionStepPayment
+    const ledgerProvisionBody = ledgerCaptureSinglePageActive ? (
+      ledgerProvisionStepCombined
     ) : (
       <View
         style={[
@@ -4137,7 +4507,46 @@ export function AddTransactionModal({
       );
     };
 
-    const missionLedgerBlock = (
+    const missionLedgerBlock = ledgerCaptureSinglePageActive ? (
+      <View style={[styles.missionCard, styles.missionCardTripPaneFill]}>
+        <ScrollView
+          style={styles.ledgerDesktopLeftScroll}
+          contentContainerStyle={styles.ledgerDesktopLeftPaymentStack}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.missionHead, styles.ledgerDesktopCaptureHead]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.missionTitle, styles.missionTitleCapture]}>Settlement</Text>
+            </View>
+            {ledgerTripDirectCapture ? null : ledgerTripFocusMode || ledgerNoTripMinimized ? (
+              <TouchableOpacity
+                onPress={() => {
+                  setLedgerMissionRegistryExpanded(true);
+                  if (selectedLedgerTripId) selectMissionTrip(null);
+                }}
+                activeOpacity={0.85}
+                hitSlop={8}
+              >
+                <Text style={styles.missionChangeTripBtnCapture}>Change trip</Text>
+              </TouchableOpacity>
+            ) : tripLocked && activeLedgerTrip ? (
+              <Text style={styles.missionLockedTripHint} numberOfLines={1}>
+                Linked from trip
+              </Text>
+            ) : null}
+          </View>
+          {(ledgerTripFocusMode || tripLocked || ledgerTripDirectCapture) &&
+          activeLedgerTrip &&
+          ledgerFocusedTripCardElement
+            ? ledgerFocusedTripCardElement
+            : null}
+          {ledgerDesktopLeftCategoryBand}
+          {ledgerDesktopModeBand}
+          {ledgerDesktopReferenceSection}
+        </ScrollView>
+      </View>
+    ) : (
       <View
         style={[
           styles.missionCard,
@@ -4148,11 +4557,13 @@ export function AddTransactionModal({
         <View style={[styles.missionHead, mob && styles.ledgerMobMissionHead]}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.missionTitle, mob && styles.ledgerMobMissionTitle]}>
-              {ledgerTripFocusMode
-                ? "Focused Node"
-                : ledgerNoTripMinimized
-                  ? "No voyage linked"
-                  : "Select Voyage Registry"}
+              {showHeaderTripDetail
+                ? "Settlement"
+                : ledgerTripFocusMode || (tripLocked && activeLedgerTrip)
+                  ? "Focused Node"
+                  : ledgerNoTripMinimized
+                    ? "No voyage linked"
+                    : "Select Voyage Registry"}
             </Text>
           </View>
           {ledgerTripFocusMode || ledgerNoTripMinimized ? (
@@ -4166,6 +4577,10 @@ export function AddTransactionModal({
             >
               <Text style={styles.missionChangeTripBtn}>Change Trip</Text>
             </TouchableOpacity>
+          ) : tripLocked && activeLedgerTrip ? (
+            <Text style={styles.missionLockedTripHint} numberOfLines={1}>
+              Linked from trip
+            </Text>
           ) : null}
         </View>
         {!tripLocked && !ledgerTripFocusMode && !ledgerNoTripMinimized ? (
@@ -4357,195 +4772,15 @@ export function AddTransactionModal({
           </ScrollView>
           </View>
         ) : null}
-        {tripLocked ? (
+        {tripLocked && !activeLedgerTrip ? (
           <View style={styles.missionLocked}>
             <Text style={styles.missionLockedLabel}>Trip locked</Text>
             <Text style={styles.missionLockedVal} numberOfLines={2}>
               {tripNumber || lockedTripDisplay || "—"}
             </Text>
           </View>
-        ) : ledgerTripFocusMode && activeLedgerTrip ? (
-          (() => {
-            const t = activeLedgerTrip;
-            const routeLine = (t.route_label || "").trim() || "—";
-            const preview = tripFinancialPreviewByTripId[t.id];
-            const fin = preview?.financials;
-            const tripPayType = preview?.trip_type;
-            const parties = tripPartyIdsFromTrip(t);
-            const showClientDuePill =
-              !ledgerLockedEntityType || ledgerLockedEntityType === "CLIENT";
-            const showSupplierDuePill =
-              !ledgerLockedEntityType || ledgerLockedEntityType === "SUPPLIER";
-            const showDriverDuePill =
-              !ledgerLockedEntityType || ledgerLockedEntityType === "DRIVER";
-            const clientDueAmt =
-              fin && showClientDuePill
-                ? ledgerDisplayClientDue(fin, type, ledgerLockedEntityType)
-                : 0;
-            const clientDue = clientDueAmt > 0 ? formatINR(clientDueAmt) : null;
-            const supplierDueAmt =
-              fin && showSupplierDuePill
-                ? ledgerDisplaySupplierDue(fin, type, tripPayType, ledgerLockedEntityType)
-                : 0;
-            const supplierDue = supplierDueAmt > 0 ? formatINR(supplierDueAmt) : null;
-            const driverDueAmt =
-              fin && showDriverDuePill
-                ? ledgerDisplayDriverDue(fin, type, tripPayType, ledgerLockedEntityType)
-                : 0;
-            const driverDue = driverDueAmt > 0 ? formatINR(driverDueAmt) : null;
-            const focusedPendingChips = buildMissionTripPendingChips(
-              type,
-              fin,
-              tripPayType,
-              formatINR,
-              ledgerLockedEntityType,
-              lockedPartyId ?? null,
-              parties,
-              isTripInLockedPartyScope(t),
-            );
-            const showNoDueTag =
-              preview != null &&
-              !tripFinancialSnapshotHasRelevantDue(preview, type, ledgerLockedEntityType);
-            const noDueTagLabel = ledgerTripNoDueTagLabel(type, ledgerLockedEntityType);
-            return (
-              <View style={[styles.ledgerFocusedTripCard, mob && styles.ledgerMobFocusedCard]}>
-                <View style={styles.ledgerFocusedTripWatermark} pointerEvents="none">
-                  <Route
-                    size={mob ? 56 : 72}
-                    color="rgba(255,255,255,0.06)"
-                    strokeWidth={1.5}
-                  />
-                </View>
-                <View style={styles.ledgerFocusedTripInner}>
-                  <View style={styles.ledgerFocusedTripHead}>
-                    <Text
-                      style={[styles.ledgerFocusedTripId, mob && styles.ledgerMobFocusedId]}
-                      numberOfLines={1}
-                    >
-                      {t.trip_number}
-                    </Text>
-                    <View
-                      style={[styles.ledgerFocusedTripCheck, mob && styles.ledgerMobFocusedCheck]}
-                    >
-                      <Check size={mob ? 14 : 16} color={Theme.textOnDark} strokeWidth={3} />
-                    </View>
-                  </View>
-                  <Text
-                    style={[styles.ledgerFocusedTripRoute, mob && styles.ledgerMobFocusedRoute]}
-                    numberOfLines={2}
-                  >
-                    {routeLine}
-                  </Text>
-                  {(clientDue || supplierDue || driverDue || showNoDueTag) && (
-                    <View style={styles.ledgerFocusedTripDues}>
-                      {clientDue ? (
-                        <View style={styles.ledgerFocusedTripDueRow}>
-                          <Text style={styles.ledgerFocusedTripDueLabel}>Client Sync</Text>
-                          <Text style={styles.ledgerFocusedTripDueIn}>{clientDue}</Text>
-                        </View>
-                      ) : showNoDueTag && type === "in" && showClientDuePill ? (
-                        <View style={styles.ledgerFocusedTripDueRow}>
-                          <Text style={styles.ledgerFocusedTripDueLabel}>Client Sync</Text>
-                          <Text style={styles.ledgerFocusedTripNoDueVal}>{noDueTagLabel}</Text>
-                        </View>
-                      ) : null}
-                      {supplierDue ? (
-                        <View style={styles.ledgerFocusedTripDueRow}>
-                          <Text style={styles.ledgerFocusedTripDueLabel}>Supply Node</Text>
-                          <Text style={styles.ledgerFocusedTripDueOut}>{supplierDue}</Text>
-                        </View>
-                      ) : showNoDueTag && type === "out" && showSupplierDuePill ? (
-                        <View style={styles.ledgerFocusedTripDueRow}>
-                          <Text style={styles.ledgerFocusedTripDueLabel}>Supply Node</Text>
-                          <Text style={styles.ledgerFocusedTripNoDueVal}>{noDueTagLabel}</Text>
-                        </View>
-                      ) : null}
-                      {driverDue ? (
-                        <View style={styles.ledgerFocusedTripDueRow}>
-                          <Text style={styles.ledgerFocusedTripDueLabel}>Driver</Text>
-                          <Text style={styles.ledgerFocusedTripDueOut}>{driverDue}</Text>
-                        </View>
-                      ) : showNoDueTag && type === "out" && showDriverDuePill ? (
-                        <View style={styles.ledgerFocusedTripDueRow}>
-                          <Text style={styles.ledgerFocusedTripDueLabel}>Driver</Text>
-                          <Text style={styles.ledgerFocusedTripNoDueVal}>{noDueTagLabel}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
-                  {focusedPendingChips.length > 0 ? (
-                    <View style={styles.ledgerFocusedTripChips}>
-                      {focusedPendingChips.map((c) => (
-                        <TouchableOpacity
-                          key={`${c.tag}-${c.disabled ? "d" : "a"}`}
-                          style={[
-                            styles.missionTripPendingChip,
-                            styles.ledgerFocusedTripChip,
-                            c.disabled && styles.missionTripPendingChipDisabled,
-                          ]}
-                          onPress={() => {
-                            if (c.disabled) {
-                              if (c.tag === "client") {
-                                Alert.alert(
-                                  "Different party · Cash IN",
-                                  "Client receipts use Cash IN. Switch to IN to record money from the client.",
-                                );
-                              } else {
-                                Alert.alert(
-                                  "Different party · Cash OUT",
-                                  "Supplier and driver payments use Cash OUT. Switch to OUT to record this payment.",
-                                );
-                              }
-                              return;
-                            }
-                            applyTripSmartTag(t, c.tag);
-                          }}
-                          activeOpacity={0.85}
-                        >
-                          <Text
-                            style={[
-                              styles.missionTripPendingChipText,
-                              styles.ledgerFocusedTripChipText,
-                              c.disabled && styles.missionTripPendingChipTextDisabled,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {c.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  ) : showNoDueTag ? (
-                    <View
-                      style={[
-                        styles.missionTripChipsInline,
-                        mob && styles.ledgerMobPendingChipsRow,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.missionTripNoDuePill,
-                          styles.ledgerFocusedNoDuePill,
-                          mob && styles.ledgerMobNoDuePill,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.missionTripNoDuePillText,
-                            styles.ledgerFocusedNoDuePillText,
-                            mob && styles.ledgerMobNoDuePillText,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {noDueTagLabel}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            );
-          })()
+        ) : (ledgerTripFocusMode || tripLocked) && activeLedgerTrip && ledgerFocusedTripCardElement ? (
+          ledgerFocusedTripCardElement
         ) : ledgerNoTripMinimized ? (
           <View
             style={[styles.ledgerFocusedTripCard, mob && styles.ledgerMobFocusedCard]}
@@ -4872,31 +5107,23 @@ export function AddTransactionModal({
           styles.ledgerV2Shell,
           stackTripFinancialBand && styles.ledgerV2ShellMobileTablet,
           mob && styles.ledgerMobShell,
-          ledgerTripDesktopSplit && styles.ledgerV2ShellFill,
+          (ledgerTripDesktopSplit || ledgerTripDirectCapture) && styles.ledgerV2ShellFill,
         ]}
       >
         <View
           style={[
             styles.ledgerV2HeaderLedger,
             mob && styles.ledgerMobHeader,
-            ledgerTripDesktopSplit && styles.ledgerV2HeaderLedgerShrink,
+            (ledgerTripDesktopSplit || ledgerTripDirectCapture) && styles.ledgerV2HeaderLedgerShrink,
           ]}
         >
           <View style={styles.ledgerV2HeaderLeft}>
                 <TouchableOpacity
               style={[styles.ledgerV2BackBtn, mob && styles.ledgerMobBackBtn]}
-              onPress={() => {
-                if (ledgerDesktopOnPaymentStep) {
-                  setLedgerDesktopWizardStep(1);
-                } else {
-                  onClose();
-                }
-              }}
+              onPress={onClose}
               activeOpacity={0.88}
                   accessibilityRole="button"
-              accessibilityLabel={
-                ledgerDesktopOnPaymentStep ? "Back to payment setup" : "Go back"
-              }
+              accessibilityLabel="Go back"
             >
               <ChevronLeft
                 size={mob ? 18 : 22}
@@ -4906,44 +5133,29 @@ export function AddTransactionModal({
                 </TouchableOpacity>
             <View style={[styles.ledgerV2HeaderDivider, mob && styles.ledgerMobHeaderDivider]} />
           <View style={styles.ledgerV2HeaderTitleBlock}>
-              <Text style={[styles.ledgerV2Title, mob && styles.ledgerMobTitle]}>
-                {isEditMode ? "Edit ledger" : "Ledger"}
-              </Text>
-              {headerPartyName?.trim() || entryContextLabel?.trim() ? (
-                <Text style={[styles.ledgerV2Sub, mob && styles.ledgerMobSub]} numberOfLines={1}>
-                  {headerPartyName?.trim() || entryContextLabel?.trim()}
-                </Text>
-              ) : null}
-              {ledgerDesktopWizardActive ? (
-                <View style={styles.ledgerDesktopWizardMeta}>
-                  <View style={styles.ledgerDesktopWizardSteps}>
-                    <View
-                      style={[
-                        styles.ledgerDesktopWizardDot,
-                        ledgerDesktopWizardStep >= 1 && styles.ledgerDesktopWizardDotActive,
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.ledgerDesktopWizardLine,
-                        ledgerDesktopWizardStep >= 2 && styles.ledgerDesktopWizardLineActive,
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.ledgerDesktopWizardDot,
-                        ledgerDesktopWizardStep >= 2 && styles.ledgerDesktopWizardDotActive,
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.ledgerDesktopWizardStepLabel}>
-                    Step {ledgerDesktopWizardStep} of 2 ·{" "}
-                    {ledgerDesktopWizardStep === 1 ? "Category" : "Amount & payment"}
-                  </Text>
-                </View>
-              ) : null}
+              <LedgerHeaderTripDetail
+                title={
+                  ledgerCaptureSinglePageActive
+                    ? isEditMode
+                      ? "Edit ledger"
+                      : "Record payment"
+                    : isEditMode
+                      ? "Edit ledger"
+                      : "Ledger"
+                }
+                partyName={headerPartyName?.trim() || entryContextLabel?.trim() || null}
+                tripNumber={showHeaderTripDetail ? headerTripNumber : null}
+                routeLabel={showHeaderTripDetail ? headerTripRoute : null}
+                hint={
+                  ledgerCaptureSinglePageActive && !showHeaderTripDetail
+                    ? "Category, amount & sync"
+                    : null
+                }
+                compact={mob}
+              />
           </View>
           </View>
+          {defaultType || tripLocked || isEditMode ? null : (
           <View style={[styles.toggleWrap, styles.toggleWrapLedgerPulse]}>
             <TouchableOpacity
               style={[
@@ -4984,6 +5196,7 @@ export function AddTransactionModal({
               </Text>
             </TouchableOpacity>
           </View>
+          )}
         </View>
 
         <View
@@ -4992,6 +5205,7 @@ export function AddTransactionModal({
             stackTripFinancialBand && styles.ledgerV2TripFirstBandStack,
             mob && styles.ledgerMobTripBand,
             ledgerTripDesktopSplit && styles.ledgerV2TripFirstBandFill,
+            ledgerCaptureSinglePageActive && styles.ledgerV2TripFirstBandCapture,
           ]}
         >
           <View
@@ -5000,6 +5214,7 @@ export function AddTransactionModal({
               stackTripFinancialBand && styles.ledgerTripPaneCardStack,
               mob && styles.ledgerMobPaneCard,
               ledgerTripDesktopSplit && styles.ledgerTripPaneCardLeftRegistry,
+              ledgerCaptureSinglePageActive && styles.ledgerTripPaneCardTransparent,
             ]}
           >
             {missionLedgerBlock}
@@ -5010,13 +5225,14 @@ export function AddTransactionModal({
               stackTripFinancialBand && styles.ledgerTripPaneCardStack,
               mob && styles.ledgerMobPaneCard,
               ledgerTripDesktopSplit && styles.ledgerTripPaneCardRightWide,
+              ledgerCaptureSinglePageActive && styles.ledgerTripPaneCardTransparent,
             ]}
           >
             {ledgerProvisionBody}
           </View>
         </View>
 
-        {!ledgerDesktopWizardActive ? (
+        {!ledgerCaptureSinglePageActive ? (
             <View
               style={[
             styles.ledgerV2Grid,
@@ -5122,7 +5338,8 @@ export function AddTransactionModal({
           styles.panel,
           fullPage && styles.panelFullPage,
           ledgerFullPageViewportFit && styles.panelFullPageColumn,
-          fullPage && { paddingHorizontal: ledgerFullPagePadH },
+          ledgerTripDirectCapture && styles.panelFullPageColumn,
+          fullPage && !ledgerUseMobileWizard && { paddingHorizontal: ledgerFullPagePadH },
           {
             paddingBottom: fullPage
               ? 0
@@ -5133,7 +5350,8 @@ export function AddTransactionModal({
           },
         ]}
       >
-        {ledgerFullPageViewportFit ? (
+        {ledgerFullPageViewportFit ||
+        (ledgerTripDirectCapture && !ledgerMobileFlow) ? (
           <View style={[styles.panelScroll, styles.panelScrollViewportFit]}>
             <View
               style={[
@@ -5144,13 +5362,13 @@ export function AddTransactionModal({
               {renderLedgerSyncV2()}
             </View>
           </View>
-        ) : (fullPage && ledgerMobileFlow) ? (
+        ) : fullPage && ledgerUseMobileWizard ? (
           <View style={[styles.panelScroll, styles.panelScrollViewportFit]}>
             <View
               style={[
                 styles.panelScrollInner,
                 styles.panelScrollInnerFullPageLedger,
-                { flex: 1, minHeight: 0 },
+                styles.panelScrollInnerMobileWizard,
               ]}
             >
               <LedgerMobileWizard
@@ -5160,7 +5378,7 @@ export function AddTransactionModal({
                 onTypeChange={requestLedgerFlowType}
                 typeLocked={Boolean(defaultType) || tripLocked || isEditMode}
                 amountStr={amountStr}
-                onAmountChange={setAmountStr}
+                onAmountChange={handleLedgerQuickAmountChange}
                 amountPlaceholder={ledgerAmountPlaceholder}
                 dueAmountInr={ledgerDueAmountInr}
                 partyId={partyId}
@@ -5174,7 +5392,7 @@ export function AddTransactionModal({
                 partyIsIntegrated={ledgerPartyVisual.partyIsIntegrated}
                 hidePartyStep={partyOptions.length === 0}
                 submitting={ledgerSubmitting}
-                selectedTripId={selectedTripIds[0] ?? null}
+                selectedTripId={selectedTripIds[0] ?? defaultTripId ?? null}
                 onTripSelect={(id) => {
                   const trip = id ? resolveTripOptionById(id) : null;
                   selectMissionTrip(trip);
@@ -5189,7 +5407,14 @@ export function AddTransactionModal({
                 paymentTypeItems={ledgerWizardPaymentTypeItems}
                 showPaymentTypeStep={ledgerWizardShowPaymentType}
                 paymentModeId={paymentModeId}
-                onPaymentModeSelect={setPaymentModeId}
+                onPaymentModeSelect={(id) => {
+                  setPaymentModeId(id);
+                  setPaymentModeExpanded(false);
+                }}
+                paymentTypeExpanded={paymentTypeExpanded}
+                onPaymentTypeExpandedChange={setPaymentTypeExpanded}
+                paymentModeExpanded={paymentModeExpanded}
+                onPaymentModeExpandedChange={setPaymentModeExpanded}
                 paymentReference={paymentReference}
                 onPaymentReferenceChange={setPaymentReference}
                 entryDate={entryDate}
@@ -5205,6 +5430,17 @@ export function AddTransactionModal({
                 flowSessionKey={ledgerWizardFlowSessionKey}
                 compact
                 tripLedgerPreview={ledgerWizardTripLedgerPreview}
+                focusedTripCard={ledgerFocusedTripCardElement}
+                twoStepTripLockedFlow={ledgerMobileTwoStepTripFlow}
+                tripDirectTwoStepFlow={ledgerTripDirectTwoStepFlow}
+                submitButtonLabel="Authorize Financial Sync"
+                headerTripNumber={showHeaderTripDetail ? headerTripNumber : null}
+                headerTripRoute={showHeaderTripDetail ? headerTripRoute : null}
+                headerPartyName={
+                  showHeaderTripDetail
+                    ? headerPartyName?.trim() || entryContextLabel?.trim() || null
+                    : null
+                }
               />
             </View>
           </View>
@@ -5446,26 +5682,28 @@ export function AddTransactionModal({
                 )}
               </View>
 
-              {!isLedgerCashPaymentMode(paymentModeId) && (
-                <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
-                  <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={paymentReference}
-                    onChangeText={setPaymentReference}
-                    placeholder="Refer the bank to validate"
-                    placeholderTextColor={Theme.textMutedDemo}
-                    autoCorrect={false}
-                    autoCapitalize="characters"
-                    accessibilityLabel="Reference Number or UTR"
-                    onFocus={() => {
-                      if (fullPage && scrollRef.current) {
-                        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-                      }
-                    }}
-                  />
-                </View>
-              )}
+              <View style={[styles.fieldBlockFull, { marginTop: 0, borderTopWidth: 0 }]}>
+                <Text style={[styles.tagLabel, styles.fieldLabel]}>REFERENCE NO / UTR</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={paymentReference}
+                  onChangeText={setPaymentReference}
+                  placeholder={
+                    isLedgerCashPaymentMode(paymentModeId)
+                      ? "UTR or bank reference (optional)"
+                      : "NEFT / UPI / bank reference"
+                  }
+                  placeholderTextColor={Theme.textMutedDemo}
+                  autoCorrect={false}
+                  autoCapitalize="characters"
+                  accessibilityLabel="Reference Number or UTR"
+                  onFocus={() => {
+                    if (fullPage && scrollRef.current) {
+                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+                    }
+                  }}
+                />
+              </View>
             </View>
 
             <View style={styles.flowCard}>
@@ -6231,51 +6469,16 @@ export function AddTransactionModal({
         </ScrollView>
         )}
 
-        {fullPage && !ledgerMobileFlow && (
+        {fullPage && !ledgerUseMobileWizard && (
           <View
             style={[
               styles.fullPageFooter,
               ledgerFullPageViewportFit && styles.fullPageFooterPinned,
+              ledgerTripDirectCapture && styles.fullPageFooterPinned,
               { paddingBottom: bottomInset + 16 },
             ]}
           >
-            {ledgerDesktopWizardActive && ledgerDesktopWizardStep === 1 ? (
-              <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  styles.submitBtnLedgerFullPage,
-                  !canAdvanceDesktopLedgerWizard && styles.submitBtnDisabled,
-                ]}
-                onPress={() => {
-                  if (!canAdvanceDesktopLedgerWizard) return;
-                  Keyboard.dismiss();
-                  setLedgerDesktopWizardStep(2);
-                }}
-                disabled={!canAdvanceDesktopLedgerWizard}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.submitBtnText, styles.submitBtnTextLedger]}>
-                  Continue to amount
-                </Text>
-                <ChevronRight size={18} color={Theme.textOnDark} strokeWidth={2.5} />
-              </TouchableOpacity>
-            ) : ledgerDesktopWizardActive && ledgerDesktopWizardStep === 2 ? (
-              <View style={styles.ledgerDesktopFooterRow}>
-                <TouchableOpacity
-                  style={styles.ledgerDesktopFooterBackBtn}
-                  onPress={() => setLedgerDesktopWizardStep(1)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to payment setup"
-                >
-                  <ChevronLeft size={18} color={LedgerSyncPalette.ink} strokeWidth={2.5} />
-                  <Text style={styles.ledgerDesktopFooterBackText}>Category</Text>
-                </TouchableOpacity>
-                <View style={styles.ledgerDesktopFooterSubmitWrap}>{submitButton}</View>
-              </View>
-            ) : (
-              submitButton
-            )}
+            {submitButton}
           </View>
         )}
       </View>
@@ -6456,11 +6659,11 @@ export function AddTransactionModal({
         ) : null}
         <LedgerReconSummaryModal
           visible={
-            ledgerMobileFlow
+            ledgerUseMobileWizard
               ? ledgerSubmitting || ledgerReconSucceeded
               : ledgerSubmitConfirmVisible
           }
-          progressOnly={ledgerMobileFlow}
+          progressOnly={ledgerUseMobileWizard}
           amountText={previewAmountText}
           direction={type}
           rows={ledgerReconDetailRows}
@@ -6717,6 +6920,8 @@ const styles = StyleSheet.create({
   ledgerMobRefInput: { paddingVertical: 10, paddingHorizontal: 12, gap: 8, borderRadius: 20 },
   ledgerMobRefEyebrow: { fontSize: 8, letterSpacing: 1.5 },
   ledgerMobFocusedCard: { padding: 12, borderRadius: 16 },
+  ledgerMobFocusedInner: { gap: 8, width: "100%", minWidth: 0 },
+  ledgerMobFocusedChips: { marginTop: 2, gap: 4 },
   ledgerMobFocusedId: { fontSize: 12 },
   ledgerMobFocusedCheck: { width: 26, height: 26, borderRadius: 13 },
   ledgerMobFocusedRoute: { fontSize: 10, lineHeight: 14 },
@@ -7513,6 +7718,11 @@ const styles = StyleSheet.create({
     minHeight: 0,
     gap: 12,
   },
+  panelScrollInnerMobileWizard: {
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
   ledgerV2TripFirstBand: {
     width: "100%",
     marginBottom: 10,
@@ -7525,6 +7735,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     marginBottom: 0,
+  },
+  ledgerV2TripFirstBandCapture: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 20,
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 8,
+    gap: 12,
   },
   ledgerV2TripFirstBandStack: {
     flexDirection: "column",
@@ -7559,6 +7777,14 @@ const styles = StyleSheet.create({
   ledgerTripPaneCardRightWide: {
     flex: 7,
     flexDirection: "column",
+  },
+  ledgerTripPaneCardTransparent: {
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    padding: 0,
+    borderRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   ledgerV2HeaderLedger: {
     flexDirection: "row",
@@ -7723,14 +7949,44 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  ledgerDesktopLeftPaymentStack: {
+    gap: 10,
+    paddingTop: 0,
+    paddingBottom: 16,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  ledgerDesktopLeftScroll: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  ledgerDesktopProtocolStripRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    paddingVertical: 2,
+  },
+  ledgerDesktopCaptureHead: {
+    marginBottom: 4,
+    paddingHorizontal: 2,
+  },
+  ledgerDesktopSinglePageHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: LedgerSyncPalette.muted,
+    marginTop: 2,
+    letterSpacing: 0.2,
+  },
   ledgerDesktopPaymentScroll: {
     flex: 1,
     minHeight: 0,
     width: "100%",
   },
   ledgerDesktopPaymentScrollContent: {
-    gap: 16,
-    padding: 16,
+    gap: 10,
+    padding: 0,
     paddingBottom: 10,
     flexGrow: 1,
   },
@@ -7808,9 +8064,9 @@ const styles = StyleSheet.create({
   ledgerDesktopPaymentSectionCard: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: LedgerSyncPalette.border,
+    borderColor: "#e6edf5",
     backgroundColor: Theme.cardWhite,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -7843,6 +8099,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(16,185,129,0.08)",
     borderColor: "rgba(16,185,129,0.2)",
   },
+  ledgerDesktopSectionIconCategory: {
+    backgroundColor: "rgba(99,102,241,0.08)",
+    borderColor: "rgba(99,102,241,0.2)",
+  },
   ledgerDesktopSectionIconRef: {
     backgroundColor: "rgba(99,102,241,0.08)",
     borderColor: "rgba(99,102,241,0.2)",
@@ -7850,6 +8110,10 @@ const styles = StyleSheet.create({
   ledgerDesktopSectionIconDate: {
     backgroundColor: LedgerSyncPalette.page,
     borderColor: LedgerSyncPalette.border,
+  },
+  ledgerDesktopSectionIconAmount: {
+    backgroundColor: "rgba(16,185,129,0.08)",
+    borderColor: "rgba(16,185,129,0.2)",
   },
   ledgerDesktopSectionEyebrow: {
     fontSize: 12,
@@ -7886,11 +8150,6 @@ const styles = StyleSheet.create({
     gap: 10,
     shadowOpacity: 0,
     elevation: 0,
-  },
-  ledgerDesktopModeStripRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    paddingVertical: 2,
   },
   ledgerDesktopWizardMeta: {
     marginTop: 8,
@@ -7971,6 +8230,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
+  },
+  ledgerSyncDatePresetRowInline: {
+    flexWrap: "nowrap",
+    flexShrink: 0,
+  },
+  ledgerSyncDateInlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  ledgerSyncDateFieldInline: {
+    flex: 1,
+    minWidth: 120,
+    alignSelf: "stretch",
   },
   ledgerSyncDatePresetPill: {
     paddingVertical: 6,
@@ -8668,6 +8944,21 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 2,
   },
+  missionChangeTripBtnCapture: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: LedgerSyncPalette.ink,
+    textTransform: "uppercase",
+    letterSpacing: 1.8,
+  },
+  missionLockedTripHint: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    flexShrink: 0,
+  },
   missionCard: {
     flex: 1,
     minHeight: 0,
@@ -8687,6 +8978,13 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.columnTitle,
     color: LedgerSyncPalette.muted,
     letterSpacing: 1.2,
+  },
+  missionTitleCapture: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
+    lineHeight: 12,
   },
   missionSub: {
     marginTop: 4,
@@ -8899,16 +9197,18 @@ const styles = StyleSheet.create({
   ledgerFocusedTripCard: {
     width: "100%",
     alignSelf: "stretch",
-    borderRadius: 20,
-    backgroundColor: LedgerSyncPalette.ink,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: LedgerSyncPalette.border,
+    backgroundColor: LedgerSyncPalette.surface,
     padding: 16,
     overflow: "hidden",
     position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 5,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
   },
   ledgerFocusedTripWatermark: {
     position: "absolute",
@@ -8929,7 +9229,7 @@ const styles = StyleSheet.create({
   },
   ledgerFocusedTripId: {
     ...FinanceTxnTypography.partyTitle,
-    color: Theme.textOnDark,
+    color: LedgerSyncPalette.ink,
     flex: 1,
     minWidth: 0,
   },
@@ -8943,21 +9243,25 @@ const styles = StyleSheet.create({
   },
   ledgerFocusedTripRoute: {
     ...FinanceTxnTypography.routeWhy,
-    color: "rgba(255,255,255,0.55)",
+    color: LedgerSyncPalette.muted,
     marginTop: 2,
+    width: "100%",
+    minWidth: 0,
   },
   ledgerFocusedTripChips: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     marginTop: 4,
+    width: "100%",
+    minWidth: 0,
   },
   ledgerFocusedTripChip: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "#f8fafc",
+    borderColor: "#e2e8f0",
   },
   ledgerFocusedTripChipText: {
-    color: Theme.textOnDark,
+    color: LedgerSyncPalette.ink,
   },
   ledgerFocusedTripDues: {
     gap: 8,
@@ -8972,24 +9276,24 @@ const styles = StyleSheet.create({
   ledgerFocusedTripDueLabel: {
     fontSize: 9,
     fontWeight: "900",
-    color: "rgba(255,255,255,0.35)",
+    color: LedgerSyncPalette.muted,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },
   ledgerFocusedTripDueIn: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#6EE7B7",
+    color: Theme.positive,
   },
   ledgerFocusedTripDueOut: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#FDA4AF",
+    color: LedgerSyncPalette.rose,
   },
   ledgerFocusedTripNoDueVal: {
     ...FinanceTxnTypography.noDueChip,
     fontSize: 10,
-    color: "rgba(255,255,255,0.5)",
+    color: Theme.textMuted,
   },
   ledgerModeIcon3D: {
     borderRadius: 16,
@@ -9175,8 +9479,9 @@ const styles = StyleSheet.create({
   syncAmountCardDesktopPaymentStep: {
     minHeight: 0,
     flexShrink: 0,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    gap: 4,
   },
   syncAmountCardNoDueHighlight: {
     borderColor: "rgba(99, 102, 241, 0.35)",
@@ -9415,6 +9720,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
+  syncAmountCardLight: {
+    backgroundColor: LedgerSyncPalette.page,
+    borderColor: "transparent",
+    borderWidth: 0,
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    overflow: "visible",
+    position: "relative",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   /** Desktop hero: do not clip large tabular figures (web TextInput). */
   syncAmountCardPulseDesktop: {
     overflow: "visible",
@@ -9436,6 +9753,13 @@ const styles = StyleSheet.create({
     ...FinanceTxnTypography.amount,
     color: "#64748B",
   },
+  syncRupeeLight: {
+    ...FinanceTxnTypography.amount,
+    color: LedgerSyncPalette.muted,
+    fontSize: 28,
+    fontWeight: "800",
+    lineHeight: 34,
+  },
   syncAmountInputPulse: {
     ...FinanceTxnTypography.amount,
     fontSize: 13,
@@ -9445,6 +9769,26 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: "100%",
     textAlign: "center",
+  },
+  syncAmountInputLight: {
+    ...FinanceTxnTypography.amount,
+    fontSize: 32,
+    fontWeight: "800",
+    color: LedgerSyncPalette.ink,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: "100%",
+    textAlign: "center",
+    paddingVertical: 6,
+    marginVertical: 0,
+    letterSpacing: -0.4,
+    ...Platform.select({
+      web: {
+        outlineStyle: "none",
+        boxSizing: "border-box" as const,
+      } as object,
+      default: {},
+    }),
   },
   missionTripRowCompact: {
     flexDirection: "row",

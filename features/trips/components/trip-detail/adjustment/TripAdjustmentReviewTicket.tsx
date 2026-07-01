@@ -65,9 +65,9 @@ export const TripAdjustmentReviewTicket = memo(function TripAdjustmentReviewTick
           <Text style={styles.fieldLabel}>Lane</Text>
           <Text style={styles.fieldValue}>{laneLabel(props.type)}</Text>
         </View>
-        <View style={[styles.statCell, styles.statCellRight]}>
-          <Text style={[styles.fieldLabel, styles.alignRight]}>Effect</Text>
-          <Text style={[styles.fieldValue, styles.alignRight]}>
+        <View style={styles.statCell}>
+          <Text style={styles.fieldLabel}>Effect</Text>
+          <Text style={styles.fieldValue}>
             {props.impact === "plus" ? "Increases amount" : "Reduces amount"}
           </Text>
         </View>
@@ -114,11 +114,12 @@ const styles = StyleSheet.create({
   },
   amountEyebrow: {
     ...FinanceTxnTypography.fieldLabel,
+    fontSize: 8,
     color: Theme.textMuted,
   },
   amountValue: {
     marginTop: 2,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
     letterSpacing: -0.8,
     fontVariant: ["tabular-nums"],
@@ -137,26 +138,25 @@ const styles = StyleSheet.create({
   },
   statRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
-  statCell: { flex: 1, minWidth: 0, gap: 2 },
-  statCellRight: { alignItems: "flex-end" },
+  statCell: { flex: 1, minWidth: 0, gap: 3 },
   fieldLabel: {
     ...FinanceTxnTypography.fieldLabel,
+    fontSize: 8,
     color: Theme.textMuted,
   },
   fieldValue: {
     ...FinanceTxnTypography.fieldValue,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 15,
   },
-  alignRight: { textAlign: "right" },
-  reasonBlock: { gap: 4 },
+  reasonBlock: { gap: 3 },
   reasonValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   revisedBlock: {
     marginTop: 4,
@@ -171,26 +171,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   revisedBase: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textMuted,
     fontVariant: ["tabular-nums"],
   },
   revisedArrow: {
-    fontSize: 14,
+    fontSize: 12,
     color: Theme.textMuted,
   },
   revisedValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
   },
   stubHint: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     color: Theme.textMuted,
     fontStyle: "italic",
-    lineHeight: 14,
+    lineHeight: 13,
     marginTop: 2,
   },
 });

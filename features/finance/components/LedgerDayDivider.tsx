@@ -1,11 +1,13 @@
 /**
- * Cash-flow day separator — chat date pill centered, Paid / Rcvd on the flanks.
- * `──── Paid ₹X   [29 May]   Rcvd ₹Y ────`
+ * Cash-flow day separator — compact summary bar (date + paid + received).
  */
 import { formatChatDividerDate } from "@/features/chat/components/shared/ChatDateDivider";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
+export const CASH_LEDGER_MAX_WIDTH = 680;
 
 type FlowFilter = "all" | "out" | "in";
 
@@ -34,12 +36,12 @@ export function LedgerDayDivider({
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.side}>
-        <View style={styles.line} />
+      <View style={styles.bar}>
         <Pressable
           onPress={() => onFlowFilter(flowFilter === "out" ? "all" : "out")}
           style={[
             styles.metric,
+            styles.metricLeft,
             flowFilter === "out" && styles.metricActiveOut,
           ]}
           accessibilityRole="button"
@@ -50,35 +52,33 @@ export function LedgerDayDivider({
             {paidLabel}
           </Text>
         </Pressable>
-      </View>
 
-      <Pressable
-        onPress={onToggleExpand}
-        style={styles.datePill}
-        accessibilityRole="button"
-        accessibilityLabel={dateLabel}
-      >
-        <Text style={styles.datePillText} numberOfLines={1}>
-          {dateLabel}
-        </Text>
-      </Pressable>
+        <Pressable
+          onPress={onToggleExpand}
+          style={styles.datePill}
+          accessibilityRole="button"
+          accessibilityLabel={dateLabel}
+        >
+          <Text style={styles.datePillText} numberOfLines={1}>
+            {dateLabel}
+          </Text>
+        </Pressable>
 
-      <View style={styles.side}>
         <Pressable
           onPress={() => onFlowFilter(flowFilter === "in" ? "all" : "in")}
           style={[
             styles.metric,
+            styles.metricRight,
             flowFilter === "in" && styles.metricActiveIn,
           ]}
           accessibilityRole="button"
           accessibilityLabel={`Received ${receivedLabel}`}
         >
-          <Text style={styles.metricKey}>Rcvd</Text>
+          <Text style={[styles.metricKey, styles.metricKeyRight]}>Rcvd</Text>
           <Text style={styles.metricInValue} numberOfLines={1}>
             {receivedLabel}
           </Text>
         </Pressable>
-        <View style={styles.line} />
       </View>
     </View>
   );
@@ -86,84 +86,87 @@ export function LedgerDayDivider({
 
 const styles = StyleSheet.create({
   wrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 18,
-    marginBottom: 4,
-    gap: 10,
-    minWidth: 0,
     width: "100%",
+    maxWidth: CASH_LEDGER_MAX_WIDTH,
+    alignSelf: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 10,
+    paddingBottom: 8,
     zIndex: 2,
   },
-  side: {
-    flex: 1,
+  bar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
+    gap: 10,
+    backgroundColor: METRONIC.bodyBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     minWidth: 0,
-  },
-  line: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#CBD5E1",
-    minWidth: 10,
   },
   metric: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 4,
-    flexShrink: 1,
+    flex: 1,
     minWidth: 0,
-    paddingHorizontal: 4,
+    gap: 2,
     paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  metricLeft: {
+    alignItems: "flex-start",
+  },
+  metricRight: {
+    alignItems: "flex-end",
   },
   metricActiveOut: {
-    backgroundColor: "rgba(248,113,113,0.08)",
+    backgroundColor: Theme.negativeMuted,
   },
   metricActiveIn: {
-    backgroundColor: "rgba(34,197,94,0.08)",
+    backgroundColor: Theme.positiveMuted,
   },
   metricKey: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "600",
-    color: Theme.textMuted,
-    letterSpacing: 0.45,
+    color: METRONIC.muted,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
+  metricKeyRight: {
+    textAlign: "right",
+  },
   metricOutValue: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.teslaRed,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.negative,
     fontVariant: ["tabular-nums"],
-    flexShrink: 1,
   },
   metricInValue: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.darkGreen,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.positive,
     fontVariant: ["tabular-nums"],
-    flexShrink: 1,
+    textAlign: "right",
   },
   datePill: {
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
-    minWidth: 72,
+    minWidth: 84,
   },
   datePillText: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: "600",
-    color: Theme.textSecondary,
-    letterSpacing: 0.15,
+    color: METRONIC.text,
+    letterSpacing: 0.1,
     textAlign: "center",
   },
 });

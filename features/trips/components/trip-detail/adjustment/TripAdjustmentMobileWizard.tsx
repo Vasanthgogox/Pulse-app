@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -71,6 +72,8 @@ function parseAmount(raw: string): number {
   const n = Math.round(parseFloat(raw.replace(/,/g, "")) || 0);
   return Number.isFinite(n) ? n : 0;
 }
+
+const WIZARD_REVIEW_MAX_WIDTH = 480;
 
 function stepMeta(
   step: TripAdjustmentWizardStep,
@@ -155,6 +158,8 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   props: TripAdjustmentMobileWizardProps,
 ) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isWide = windowWidth >= 680;
   const laneLocked = props.laneLocked === true;
   const impactLocked = props.impactLocked === true;
   const reasonLocked = props.reasonLocked === true;
@@ -452,19 +457,27 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
   );
 
   const renderReview = () => (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.reviewScroll}>
-      <TripAdjustmentReviewTicket
-        type={props.type}
-        impact={props.impact}
-        amount={amountNum}
-        reason={
-          selectedReason ||
-          (props.type === "revenue" ? "Revenue adjustment" : "Cost adjustment")
-        }
-        tripCode={props.tripCode}
-        baseAmount={props.reviewBaseAmount}
-        revisedAmount={props.reviewRevisedAmount}
-      />
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={[
+        styles.reviewScroll,
+        isWide && styles.reviewScrollWide,
+      ]}
+    >
+      <View style={styles.reviewColumn}>
+        <TripAdjustmentReviewTicket
+          type={props.type}
+          impact={props.impact}
+          amount={amountNum}
+          reason={
+            selectedReason ||
+            (props.type === "revenue" ? "Revenue adjustment" : "Cost adjustment")
+          }
+          tripCode={props.tripCode}
+          baseAmount={props.reviewBaseAmount}
+          revisedAmount={props.reviewRevisedAmount}
+        />
+      </View>
     </ScrollView>
   );
 
@@ -525,8 +538,19 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           <View style={shell.backBtnSpacer} />
         </View>
 
-        <View style={[shell.body, styles.bodyCompact]}>
-          <View style={styles.stepHeader}>
+        <View
+          style={[
+            shell.body,
+            styles.bodyCompact,
+            effectiveStep === "review" && styles.bodyReview,
+          ]}
+        >
+          <View
+            style={[
+              styles.stepHeader,
+              effectiveStep === "review" && isWide && styles.stepHeaderReviewWide,
+            ]}
+          >
             <View style={styles.compactContext}>
               <View style={shell.titleRow}>
                 <View style={shell.liveDot} />
@@ -546,19 +570,29 @@ export const TripAdjustmentMobileWizard = memo(function TripAdjustmentMobileWiza
           {body}
         </View>
 
-        <View style={[shell.footer, styles.footerCompact, { paddingBottom: insets.bottom + 12 }]}>
+        <View
+          style={[
+            shell.footer,
+            styles.footerCompact,
+            effectiveStep === "review" && styles.footerReview,
+            Platform.OS === "web" && effectiveStep === "review" && styles.footerReviewWeb,
+            { paddingBottom: insets.bottom + 12 },
+          ]}
+        >
           {effectiveStep === "review" ? (
-            <Pressable
-              style={[
-                styles.saveBtn,
-                (!props.canSubmit || props.submitting) && styles.saveBtnDisabled,
-              ]}
-              onPress={handleAdvance}
-              disabled={!props.canSubmit || props.submitting}
-            >
-              <Check size={18} color="#fff" strokeWidth={2.8} />
-              <Text style={styles.saveBtnText}>{advanceLabel}</Text>
-            </Pressable>
+            <View style={styles.footerReviewInner}>
+              <Pressable
+                style={[
+                  styles.saveBtn,
+                  (!props.canSubmit || props.submitting) && styles.saveBtnDisabled,
+                ]}
+                onPress={handleAdvance}
+                disabled={!props.canSubmit || props.submitting}
+              >
+                <Check size={18} color="#fff" strokeWidth={2.8} />
+                <Text style={styles.saveBtnText}>{advanceLabel}</Text>
+              </Pressable>
+            </View>
           ) : (
             <>
               <Pressable
@@ -759,19 +793,59 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     lineHeight: 17,
   },
-  reviewScroll: { paddingBottom: 8 },
-  saveBtn: {
+  reviewScroll: {
+    paddingBottom: 8,
+    width: "100%",
+  },
+  reviewScrollWide: {
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 8,
+  },
+  reviewColumn: {
+    width: "100%",
+    maxWidth: WIZARD_REVIEW_MAX_WIDTH,
+    alignSelf: "center",
+  },
+  bodyReview: {
     flex: 1,
+    minHeight: 0,
+    alignItems: "center",
+  },
+  stepHeaderReviewWide: {
+    width: "100%",
+    maxWidth: WIZARD_REVIEW_MAX_WIDTH,
+    alignSelf: "center",
+  },
+  footerReview: {
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    width: "100%",
+  },
+  footerReviewWeb: {
+    flexShrink: 0,
+    backgroundColor: Theme.screenBackground,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  footerReviewInner: {
+    width: "100%",
+    maxWidth: WIZARD_REVIEW_MAX_WIDTH,
+    alignSelf: "center",
+  },
+  saveBtn: {
+    alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 14,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
+    minHeight: 48,
   },
   saveBtnDisabled: { opacity: 0.45 },
   saveBtnText: {

@@ -3195,7 +3195,7 @@ export default function TripDetailScreen({
                                 row.isIn ? "arrow-down-left" : "arrow-up-right"
                               }
                               size={16}
-                              color={row.isIn ? "#10b981" : "#f43f5e"}
+                              color={row.isIn ? Theme.primary : "#f43f5e"}
                             />
                           </View>
                           <View style={styles.refTxnTextWrap}>
@@ -4480,7 +4480,7 @@ export default function TripDetailScreen({
                                       : "arrow-up-right"
                                   }
                                   size={20}
-                                  color={row.isIn ? "#10b981" : "#f43f5e"}
+                                  color={row.isIn ? Theme.primary : "#f43f5e"}
                                 />
                               </View>
                               <View style={neoStyles.txnInfo}>
@@ -8115,7 +8115,9 @@ const neoStyles = StyleSheet.create({
     borderRadius: 11,
   },
   financePreviewTxnIconIn: {
-    backgroundColor: "#ecfdf5",
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   financePreviewTxnIconOut: {
     backgroundColor: "#fff1f2",
@@ -8156,7 +8158,7 @@ const neoStyles = StyleSheet.create({
     fontSize: 14,
   },
   financePreviewTxnAmtIn: {
-    color: "#059669",
+    color: Theme.primary,
   },
   financePreviewTxnAmtOut: {
     color: "#e11d48",
@@ -9938,9 +9940,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   refTxnIconIn: {
-    backgroundColor: "#ecfdf5",
+    backgroundColor: "#F1F5F9",
     borderWidth: 1,
-    borderColor: "#bbf7d0",
+    borderColor: "#E2E8F0",
   },
   refTxnIconOut: {
     backgroundColor: "#fff1f2",
@@ -9970,7 +9972,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   refTxnAmountIn: {
-    color: "#10b981",
+    color: Theme.primary,
   },
   refTxnAmountOut: {
     color: "#f43f5e",

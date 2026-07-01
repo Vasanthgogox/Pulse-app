@@ -9,6 +9,7 @@ type TinyEmptyLottieProps = {
   size?: number;
   speed?: number;
   renderScale?: number;
+  loop?: boolean;
 };
 
 export function TinyEmptyLottie({
@@ -16,6 +17,7 @@ export function TinyEmptyLottie({
   size = 56,
   speed = 0.85,
   renderScale = EMPTY_LOTTIE_RENDER_SCALE,
+  loop = true,
 }: TinyEmptyLottieProps) {
   const renderSize = Math.round(size * renderScale);
   const offset = (size - renderSize) / 2;
@@ -24,7 +26,7 @@ export function TinyEmptyLottie({
       <LottieView
         source={source}
         autoPlay
-        loop
+        loop={loop}
         speed={speed}
         resizeMode="contain"
         style={{

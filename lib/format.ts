@@ -29,6 +29,15 @@ export function formatINRChip(value: number): string {
   return formatINR(n).replace(/\s/g, "");
 }
 
+/** Indian grouping + 2 decimals for ledger amount inputs and quick-set chips. */
+export function formatLedgerAmountInput(amount: number | null | undefined): string {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return "";
+  return amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 /** Short date for ledger e.g. "26 FEB". */
 export function formatLedgerDate(dateStr: string): string {
   const d = new Date(dateStr);
