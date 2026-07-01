@@ -2,21 +2,18 @@
  * Quick-settlement % chips (40–90% + full payment) for ledger amount entry.
  */
 import { memo, useCallback, useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 
 import Theme from "@/constants/Theme";
 import { LedgerSyncPalette } from "@/constants/LedgerSyncPalette";
-import { formatINR } from "@/lib/format";
+import { formatINR, formatLedgerAmountInput } from "@/lib/format";
 
 export const SETTLEMENT_PCTS = [40, 50, 60, 70, 80, 90] as const;
 export const FULL_SETTLEMENT_PCT = 100;
 
+/** @deprecated Use formatLedgerAmountInput from @/lib/format */
 export function formatLedgerSettlementAmount(amount: number): string {
-  if (!Number.isFinite(amount) || amount <= 0) return "";
-  return amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatLedgerAmountInput(amount);
 }
 
 function parseLedgerAmountStr(value: string): number | null {
@@ -43,7 +40,7 @@ export type LedgerSettlementPctDockProps = {
   amountStr: string;
   onAmountChange: (value: string) => void;
   accentColor: string;
-  /** Light = mobile wizard; dark = desktop sync hero card. */
+  /** Light = default cards; dark = legacy ink hero (avoid on new layouts). */
   variant?: "light" | "dark";
 };
 
@@ -63,11 +60,12 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
   const applySettlementPct = useCallback(
     (pct: number) => {
       if (dueTotalInr <= 0) return;
+      Keyboard.dismiss();
       const value =
         pct >= FULL_SETTLEMENT_PCT
           ? dueTotalInr
           : Math.round((dueTotalInr * pct) / 100);
-      onAmountChange(formatLedgerSettlementAmount(value));
+      onAmountChange(formatLedgerAmountInput(value));
     },
     [dueTotalInr, onAmountChange],
   );
@@ -93,7 +91,7 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
           fullActive && styles.fullPayTileActive,
           fullActive && { borderColor: accentColor },
           fullActive && dark && { backgroundColor: "rgba(255,255,255,0.08)" },
-          pressed && styles.pctTilePressed,
+          pressed && styles.tilePressed,
         ]}
         onPress={() => applySettlementPct(FULL_SETTLEMENT_PCT)}
         accessibilityRole="button"
@@ -120,8 +118,9 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
                 styles.pctTile,
                 dark && styles.pctTileDark,
                 active && styles.pctTileActive,
-                active && dark && { borderColor: accentColor, backgroundColor: "rgba(255,255,255,0.1)" },
-                pressed && styles.pctTilePressed,
+                active && { borderColor: accentColor },
+                active && dark && { backgroundColor: "rgba(255,255,255,0.1)" },
+                pressed && styles.tilePressed,
               ]}
               onPress={() => applySettlementPct(pct)}
               accessibilityRole="button"
@@ -142,6 +141,7 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
                   styles.pctTileAmt,
                   dark && styles.pctTileAmtDark,
                   active && styles.pctTileAmtActive,
+                  active && !dark && { color: LedgerSyncPalette.ink },
                   active && dark && { color: Theme.textOnDark },
                 ]}
                 numberOfLines={1}
@@ -158,30 +158,29 @@ export const LedgerSettlementPctDock = memo(function LedgerSettlementPctDock({
 
 const styles = StyleSheet.create({
   dock: {
-    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 4,
-    marginTop: 8,
+    marginTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e2e8f0",
+    borderTopColor: LedgerSyncPalette.border,
     width: "100%",
     alignSelf: "stretch",
-    backgroundColor: Theme.screenBackground,
+    minWidth: 0,
+    zIndex: 2,
   },
   dockDark: {
     borderTopColor: "rgba(255,255,255,0.12)",
     marginTop: 10,
     paddingTop: 14,
-    paddingHorizontal: 0,
     backgroundColor: "transparent",
   },
   sectionLabel: {
-    marginBottom: 6,
+    marginBottom: 8,
     fontSize: 8,
     fontWeight: "800",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    color: Theme.textMuted,
+    color: LedgerSyncPalette.muted,
     lineHeight: 10,
     textAlign: "center",
     width: "100%",
@@ -191,13 +190,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   subsectionLabel: {
-    marginTop: 8,
-    marginBottom: 6,
+    marginTop: 10,
+    marginBottom: 8,
     fontSize: 8,
     fontWeight: "700",
     letterSpacing: 0.4,
     textTransform: "uppercase",
-    color: Theme.textMuted,
+    color: LedgerSyncPalette.muted,
     lineHeight: 10,
     textAlign: "center",
     width: "100%",
@@ -208,14 +207,15 @@ const styles = StyleSheet.create({
   fullPayTile: {
     width: "100%",
     borderWidth: 1.5,
-    borderColor: "#e2e8f0",
+    borderColor: LedgerSyncPalette.border,
     borderRadius: 12,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: LedgerSyncPalette.page,
     paddingVertical: 10,
     paddingHorizontal: 12,
     alignItems: "center",
     gap: 2,
     minHeight: 52,
+    cursor: "pointer",
   },
   fullPayTileDark: {
     borderColor: "rgba(255,255,255,0.18)",
@@ -245,41 +245,38 @@ const styles = StyleSheet.create({
   pctGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 8,
     width: "100%",
-    justifyContent: "center",
+    justifyContent: "space-between",
   },
   pctTile: {
     width: "31%",
-    minWidth: 88,
     flexGrow: 1,
+    flexShrink: 0,
     borderWidth: 1,
-    borderColor: "#e6edf5",
+    borderColor: LedgerSyncPalette.border,
     borderRadius: 10,
     backgroundColor: Theme.cardWhite,
     paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     alignItems: "center",
+    justifyContent: "center",
     gap: 2,
-    minHeight: 48,
+    minHeight: 50,
+    cursor: "pointer",
   },
   pctTileDark: {
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(255,255,255,0.04)",
   },
   pctTileActive: {
-    borderColor: Theme.primary,
     backgroundColor: Theme.pulseIndigoWash,
     borderWidth: 1.5,
-  },
-  pctTilePressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
   },
   pctTilePct: {
     fontSize: 13,
     fontWeight: "900",
-    color: Theme.textPrimaryDark,
+    color: LedgerSyncPalette.ink,
     fontVariant: ["tabular-nums"],
     lineHeight: 16,
   },
@@ -292,7 +289,7 @@ const styles = StyleSheet.create({
   pctTileAmt: {
     fontSize: 9,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: LedgerSyncPalette.muted,
     fontVariant: ["tabular-nums"],
     lineHeight: 12,
     textAlign: "center",
@@ -301,7 +298,9 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.55)",
   },
   pctTileAmtActive: {
-    color: Theme.textPrimaryDark,
     fontWeight: "800",
+  },
+  tilePressed: {
+    opacity: 0.88,
   },
 });

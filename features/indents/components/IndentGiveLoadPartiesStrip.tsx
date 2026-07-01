@@ -17,10 +17,11 @@ import {
   View,
 } from "react-native";
 
-const FACE_SIZE = 36;
-const RING_SIZE = 44;
-const TILE_WIDTH = 52;
-const TILE_LABEL_LINE = 12;
+const FACE_SIZE = 34;
+const RING_SIZE = 42;
+const SLOT_SIZE = 46;
+const TILE_WIDTH = 58;
+const TILE_LABEL_LINE = 13;
 const MAX_VISIBLE = 6;
 
 export type IndentGiveLoadPartiesStripProps = {
@@ -70,13 +71,11 @@ function resolveInsightCopy(
 
 function PartyTile({
   label,
-  accentLabel,
   onPress,
   accessibilityLabel,
   children,
 }: {
   label: string;
-  accentLabel?: boolean;
   onPress?: () => void;
   accessibilityLabel: string;
   children: ReactNode;
@@ -89,14 +88,34 @@ function PartyTile({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
     >
-      <View style={styles.avatarSlot}>{children}</View>
-      <Text
-        style={[styles.tileLabel, accentLabel && styles.tileLabelAccent]}
-        numberOfLines={1}
-      >
+      {children}
+      <Text style={styles.tileLabel} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+function AvatarTileSlot({
+  ringStyle,
+  badge,
+  children,
+}: {
+  ringStyle: object | object[];
+  badge?: "bid" | "integrated";
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.avatarSlot}>
+      <View style={[styles.faceRing, ringStyle]}>{children}</View>
+      {badge === "bid" ? (
+        <View style={styles.bidBadge}>
+          <Check size={8} color={Theme.textOnPrimary} strokeWidth={3} />
+        </View>
+      ) : badge === "integrated" ? (
+        <View style={styles.integratedDot} />
+      ) : null}
+    </View>
   );
 }
 
@@ -117,11 +136,9 @@ function PartyFace({
       onPress={onPress}
       accessibilityLabel={`${party.displayName}${hasBid ? ", bid received" : ""}`}
     >
-      <View
-        style={[
-          styles.faceRing,
-          hasBid ? styles.faceRingBid : styles.faceRingIdle,
-        ]}
+      <AvatarTileSlot
+        ringStyle={hasBid ? styles.faceRingBid : styles.faceRingIdle}
+        badge={hasBid ? "bid" : "integrated"}
       >
         <EntityAvatar
           name={party.displayName}
@@ -131,14 +148,10 @@ function PartyFace({
           avatarUrl={party.avatarUrl}
           avatarSeed={party.avatarSeed}
           isIntegrated
+          showIntegrationBadge={false}
           size={FACE_SIZE}
         />
-      </View>
-      {hasBid ? (
-        <View style={styles.bidBadge}>
-          <Check size={9} color={Theme.textOnPrimary} strokeWidth={3} />
-        </View>
-      ) : null}
+      </AvatarTileSlot>
     </PartyTile>
   );
 }
@@ -197,25 +210,24 @@ export function IndentGiveLoadPartiesStrip({
               onPress={onAddParties}
               accessibilityLabel={`${overflow} more suppliers`}
             >
-              <View style={styles.overflowCircle}>
+              <AvatarTileSlot ringStyle={styles.faceRingOverflow}>
                 <Text style={styles.overflowText}>+{overflow}</Text>
-              </View>
+              </AvatarTileSlot>
             </PartyTile>
           ) : null}
 
           <PartyTile
             label="Add"
-            accentLabel
             onPress={onAddParties}
             accessibilityLabel="Add integrated suppliers"
           >
-            <View style={styles.addCircle}>
+            <AvatarTileSlot ringStyle={styles.faceRingAdd}>
               <UserPlus
-                size={compact ? 15 : 16}
-                color={Theme.loadAddButtonText}
+                size={16}
+                color={Theme.primary}
                 strokeWidth={2.2}
               />
-            </View>
+            </AvatarTileSlot>
           </PartyTile>
         </ScrollView>
       </View>
@@ -295,35 +307,36 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   supplierRow: {
-    backgroundColor: Theme.surfaceLight,
-    borderRadius: 12,
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
   },
   supplierRowCompact: {
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
   scrollContent: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 4,
-    paddingHorizontal: 2,
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   tile: {
     width: TILE_WIDTH,
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   tilePressed: {
     opacity: 0.88,
     transform: [{ scale: 0.97 }],
   },
   avatarSlot: {
-    width: RING_SIZE,
-    height: RING_SIZE,
+    width: SLOT_SIZE,
+    height: SLOT_SIZE,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -335,60 +348,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
+    overflow: "hidden",
   },
   faceRingBid: {
     borderColor: Theme.positive,
-    backgroundColor: "rgba(21,128,61,0.06)",
+    backgroundColor: "rgba(21,128,61,0.08)",
   },
   faceRingIdle: {
     borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  faceRingAdd: {
+    borderColor: Theme.borderLight,
+    borderStyle: "dashed",
     backgroundColor: Theme.cardWhite,
+  },
+  faceRingOverflow: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primary,
+  },
+  integratedDot: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: Theme.positive,
+    borderWidth: 1.5,
+    borderColor: Theme.cardWhite,
+    zIndex: 2,
   },
   bidBadge: {
     position: "absolute",
-    top: -1,
-    right: -1,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    right: 0,
+    bottom: 0,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
     backgroundColor: Theme.positive,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 3,
   },
   tileLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: Theme.textSecondary,
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
     textAlign: "center",
     width: TILE_WIDTH,
     lineHeight: TILE_LABEL_LINE,
     minHeight: TILE_LABEL_LINE,
-  },
-  tileLabelAccent: {
-    color: Theme.loadAddButtonText,
-  },
-  addCircle: {
-    width: RING_SIZE,
-    height: RING_SIZE,
-    borderRadius: RING_SIZE / 2,
-    backgroundColor: Theme.cardWhite,
-    borderWidth: 1.5,
-    borderColor: Theme.loadStatusTabTrayBorder,
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  overflowCircle: {
-    width: RING_SIZE,
-    height: RING_SIZE,
-    borderRadius: RING_SIZE / 2,
-    backgroundColor: Theme.loadAddButtonText,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: Theme.cardWhite,
   },
   overflowText: {
     fontSize: 11,

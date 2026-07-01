@@ -7,12 +7,17 @@ import {
   METRONIC,
 } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import {
+  PartyProfileCompactChrome,
+  publicEntityToChromeModel,
+} from "@/features/party/components/PartyProfileCompactChrome";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { driverToPublicEntity } from "@/features/public-profile/mappers";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
-import { ArrowLeft, MoreHorizontal, Wallet } from "lucide-react-native";
-import { useState } from "react";
+import { Wallet } from "lucide-react-native";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -46,25 +51,10 @@ export function DriverProfileHub({
   const layoutInsets = useLayoutInsets();
   const [tab, setTab] = useState<DriverProfileTab>("overview");
 
-  const displayName = driver.name?.trim() || "Driver";
-
-  const stats = [
-    { value: String(tripCount), label: "TRIPS" },
-    { value: String(ratingCount), label: "RATINGS" },
-    { value: String(tenureCount), label: "TENURES" },
-    {
-      value: driver.assigned_vehicle_id ? "1" : "0",
-      label: "VEHICLE",
-    },
-  ];
-
-  const statCellCompactStyle = (idx: number) => {
-    if (!compact) return undefined;
-    if (idx === 1) return mobile.statCellGridTopRight;
-    if (idx === 2) return mobile.statCellGridBottomLeft;
-    if (idx === 3) return mobile.statCellGridBottomRight;
-    return undefined;
-  };
+  const chromeModel = useMemo(
+    () => publicEntityToChromeModel(driverToPublicEntity(driver)),
+    [driver],
+  );
 
   const panel =
     tab === "overview" ? (
@@ -117,47 +107,7 @@ export function DriverProfileHub({
       showsVerticalScrollIndicator={false}
     >
       {compact ? (
-        <View style={mobile.pageChrome}>
-          <View style={mobile.chromeTopRow}>
-            {onBack ? (
-              <Pressable
-                onPress={onBack}
-                style={mobile.chromeBackBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-              >
-                <ArrowLeft size={20} color={METRONIC.text} strokeWidth={2.2} />
-              </Pressable>
-            ) : null}
-            <View style={mobile.chromeTitleBlock}>
-              <Text style={mobile.chromeTitle} numberOfLines={2}>
-                {displayName}
-              </Text>
-              <Text style={mobile.chromeSubtitle} numberOfLines={1}>
-                {[vehicleLabel, driver.phone?.trim()].filter(Boolean).join(" · ") ||
-                  "Driver profile"}
-              </Text>
-            </View>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={mobile.chromePillsScroll}
-            contentContainerStyle={mobile.chromePillsContent}
-          >
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>DRIVER</Text>
-            </View>
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>
-                {driver.assigned_vehicle_id ? "ASSIGNED" : "UNASSIGNED"}
-              </Text>
-            </View>
-            <View style={mobile.chromePill}>
-              <Text style={mobile.chromePillText}>{tripCount} TRIPS</Text>
-            </View>
-          </ScrollView>
-        </View>
+        <PartyProfileCompactChrome model={chromeModel} onBack={onBack} />
       ) : (
         <DriverProfileHubHero driver={driver} tripCount={tripCount} onBack={onBack} />
       )}
@@ -198,62 +148,6 @@ export function DriverProfileHub({
             );
           })}
         </ScrollView>
-
-        {compact ? (
-          <View style={mobile.tabActionsRow}>
-            <Pressable
-              style={mobile.tabActionPrimary}
-              onPress={() =>
-                router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])
-              }
-            >
-              <Text style={mobile.tabActionPrimaryText}>Assign trip</Text>
-            </Pressable>
-            <Pressable style={mobile.tabActionIcon} hitSlop={8}>
-              <MoreHorizontal size={18} color={METRONIC.text} strokeWidth={2} />
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.tabActions}>
-            <Pressable
-              style={[styles.tabActionBtn, styles.tabActionBtnPrimary]}
-              onPress={() =>
-                router.push(ROUTES.ADD_TRIP as Parameters<typeof router.push>[0])
-              }
-            >
-              <Text style={[styles.tabActionBtnText, styles.tabActionBtnTextOn]}>
-                Assign trip
-              </Text>
-            </Pressable>
-            <Pressable style={styles.tabActionBtn} hitSlop={8}>
-              <MoreHorizontal size={16} color={Theme.textSecondary} strokeWidth={2} />
-            </Pressable>
-          </View>
-        )}
-      </View>
-
-      <View style={[cpStyles.metricsWrap, compact && mobile.metricsWrapCompact]}>
-        <View style={[styles.statsBar, compact && mobile.statsBarGrid]}>
-          {stats.map((s, idx) => (
-            <View
-              key={s.label}
-              style={[
-                styles.statCell,
-                !compact && cpStyles.statCellCompact,
-                !compact && idx === stats.length - 1 && styles.statCellLast,
-                compact && mobile.statCellGrid,
-                statCellCompactStyle(idx),
-              ]}
-            >
-              <Text style={[styles.statValue, compact && mobile.statValueCompact]}>
-                {s.value}
-              </Text>
-              <Text style={[styles.statLabel, compact && mobile.statLabelCompact]}>
-                {s.label}
-              </Text>
-            </View>
-          ))}
-        </View>
       </View>
 
       {panel}

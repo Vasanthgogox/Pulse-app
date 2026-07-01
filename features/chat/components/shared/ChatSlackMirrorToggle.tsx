@@ -63,20 +63,21 @@ export function ChatSlackMirrorToggle({
     ]).start();
   }, [activeId, variant, partyGlow]);
 
+  const indicatorInset = variant === "party" ? 4 : 3;
   const indicatorStyle =
     axis === "x"
       ? {
           transform: [{ translateX: translate }],
           width: indicatorSize > 0 ? indicatorSize : 0,
-          top: 3,
-          bottom: 3,
+          top: indicatorInset,
+          bottom: indicatorInset,
           opacity: indicatorSize > 0 ? 1 : 0,
         }
       : {
           transform: [{ translateY: translate }],
           height: indicatorSize > 0 ? indicatorSize : 0,
-          left: 3,
-          right: 3,
+          left: indicatorInset,
+          right: indicatorInset,
           opacity: indicatorSize > 0 ? 1 : 0,
         };
 
@@ -98,9 +99,17 @@ export function ChatSlackMirrorToggle({
           ? styles.partyIndicator
           : styles.filterIndicator;
   const twoPartyMode = variant === "party" && items.length === 2;
+  const multiPartyMode = variant === "party" && items.length >= 3;
 
   return (
-    <View style={[trackStyle, twoPartyMode && styles.partyTrackTwoItem, style]}>
+    <View
+      style={[
+        trackStyle,
+        twoPartyMode && styles.partyTrackTwoItem,
+        multiPartyMode && styles.partyTrackMulti,
+        style,
+      ]}
+    >
       <Animated.View style={[styles.indicatorBase, indicatorVariantStyle, indicatorStyle]}>
         {variant === "party" ? (
           <Animated.View
@@ -194,6 +203,7 @@ export function ChatSlackMirrorToggle({
               style={[
                 styles.partyItem,
                 twoPartyMode && styles.partyItemTwoItem,
+                multiPartyMode && styles.partyItemMulti,
                 item.disabled && styles.partyItemOff,
               ]}
               onPress={() => !item.disabled && onSelect(item.id)}
@@ -220,6 +230,7 @@ export function ChatSlackMirrorToggle({
                     style={[styles.partyName, active && styles.partyNameActive]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
+                    includeFontPadding={false}
                   >
                     {item.label}
                   </Text>
@@ -229,6 +240,7 @@ export function ChatSlackMirrorToggle({
                     style={[styles.partyRole, active && styles.partyRoleActive]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
+                    includeFontPadding={false}
                   >
                     {item.subLabel}
                   </Text>
@@ -432,7 +444,8 @@ const styles = StyleSheet.create({
   },
   partyTrack: {
     flexDirection: "row",
-    padding: 3,
+    alignItems: "center",
+    padding: 4,
     borderRadius: 16,
     backgroundColor: "#F4F5F7",
     borderWidth: 1,
@@ -444,6 +457,11 @@ const styles = StyleSheet.create({
     width: "auto",
     minWidth: 268,
     maxWidth: 340,
+  },
+  partyTrackMulti: {
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
   },
   partyIndicator: {
     backgroundColor: "#111A36",
@@ -472,9 +490,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     minWidth: 118,
-    minHeight: 38,
+    minHeight: 40,
     gap: 6,
     zIndex: 2,
   },
@@ -483,6 +501,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: undefined,
     paddingHorizontal: 10,
+  },
+  partyItemMulti: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: undefined,
+    paddingHorizontal: 8,
   },
   partyItemOff: {
     opacity: 0.45,
@@ -506,10 +530,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
-    gap: 1,
+    gap: 2,
   },
   partyName: {
     fontSize: 10,
+    lineHeight: 12,
     fontWeight: "700",
     color: "#374151",
     letterSpacing: 0.05,
@@ -520,6 +545,7 @@ const styles = StyleSheet.create({
   },
   partyRole: {
     fontSize: 9,
+    lineHeight: 11,
     fontWeight: "500",
     color: "#9CA3AF",
   },

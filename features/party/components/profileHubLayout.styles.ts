@@ -16,8 +16,8 @@ export const profileHubLayoutStyles = StyleSheet.create({
   pageChrome: {
     paddingHorizontal: GUTTER,
     paddingTop: 8,
-    paddingBottom: 8,
-    gap: 6,
+    paddingBottom: 10,
+    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
@@ -48,16 +48,16 @@ export const profileHubLayoutStyles = StyleSheet.create({
     gap: 2,
   },
   chromeTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
     color: METRONIC.text,
-    letterSpacing: -0.25,
-    lineHeight: 19,
+    letterSpacing: -0.2,
+    lineHeight: 18,
   },
   chromeSubtitle: {
     fontSize: 11,
     fontWeight: '500',
-    color: METRONIC.subtle,
+    color: METRONIC.muted,
     lineHeight: 14,
   },
   chromePillsScroll: {
@@ -68,6 +68,44 @@ export const profileHubLayoutStyles = StyleSheet.create({
     gap: 6,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  /** Badges + trailing chrome actions on one row */
+  chromeBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  chromeBadgeGroup: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  /** Trailing icon in chrome badge row (chat, etc.) */
+  chromeInlineAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.cardWhite,
+    flexShrink: 0,
+  },
+  chromeInlineActionActive: {
+    borderColor: Theme.primary,
+    backgroundColor: '#F5F3FF',
+  },
+  /** @deprecated use chromeBadgeRow + chromeInlineAction */
+  chromeActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+    width: '100%',
   },
   chromePill: {
     paddingHorizontal: 9,
@@ -140,15 +178,17 @@ export const profileHubLayoutStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: 40,
+    height: 40,
     paddingHorizontal: 12,
     borderRadius: 9,
     backgroundColor: METRONIC.text,
   },
   tabActionPrimaryText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
+    lineHeight: 16,
     color: Theme.textOnPrimary,
+    includeFontPadding: false,
   },
   tabActionIcon: {
     width: 40,
@@ -206,15 +246,19 @@ export const profileHubLayoutStyles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   statValueCompact: {
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 18,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 17,
+    color: METRONIC.text,
   },
   statLabelCompact: {
-    fontSize: 8,
-    letterSpacing: 0.45,
-    lineHeight: 10,
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    lineHeight: 11,
     textAlign: 'center',
+    color: METRONIC.muted,
+    textTransform: 'uppercase',
   },
 
   panelCompact: {
@@ -301,7 +345,7 @@ export const profileHubLayoutStyles = StyleSheet.create({
   },
   kvValueStacked: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '400',
     color: METRONIC.text,
     textAlign: 'left',
     width: '100%',

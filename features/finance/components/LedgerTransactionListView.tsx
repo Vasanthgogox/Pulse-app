@@ -4,6 +4,11 @@
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
+import {
+  LedgerEntryReceiptDetailTable,
+  type LedgerEntryReceiptDetailRow,
+} from "@/components/ledger/LedgerEntryReceiptCard";
+import { LEDGER_RECEIPT } from "@/components/ledger/ledgerEntryReceiptPalette";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
@@ -14,8 +19,9 @@ import {
     getLedgerFlowForRow,
     LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
+import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { getTripOperationalDisplay } from "@/features/operations/display";
-import { LedgerDayDivider } from "@/features/finance/components/LedgerDayDivider";
+import { LedgerDayDivider, CASH_LEDGER_MAX_WIDTH } from "@/features/finance/components/LedgerDayDivider";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatIndianVehicleNumber, formatINRChip, formatLedgerAmount } from "@/lib/format";
 import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";
@@ -98,7 +104,7 @@ function defaultDriverPartyAvatar(
       avatarUrl={avatarUrl}
       avatarSeed={avatarSeed}
       entityType="driver"
-      size={40}
+      size={44}
     />
   );
 }
@@ -267,64 +273,48 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
   const note = (row.description ?? "").trim();
   const inAmt = Number(row.amount_in ?? 0);
   const outAmt = Number(row.amount_out ?? 0);
+  const isIn = inAmt > 0;
+  const amount = isIn ? inAmt : outAmt;
   const hasNote = note && note !== "GENERAL";
   const hasReconciliation = !!row.reconciliation_label;
+  const statusLabel = isIn ? "Payment received" : "Payment sent";
+  const amountColor = isIn ? LEDGER_RECEIPT.amountIn : LEDGER_RECEIPT.amountOut;
+
+  const details: LedgerEntryReceiptDetailRow[] = [
+    { label: "Date", value: dateStr },
+    {
+      label: "Payment mode",
+      value: row.payment_mode?.trim() || "—",
+    },
+    {
+      label: "Reference",
+      value: row.payment_reference?.trim() || "—",
+    },
+    { label: "Party", value: party },
+  ];
+  if (hasNote) {
+    details.push({ label: "Note", value: note, multiline: true });
+  }
 
   return (
-    <View style={styles.detailCard}>
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Type</Text>
-        <Text style={styles.detailValue} numberOfLines={1}>
+    <View style={styles.receiptExpandedWrap}>
+      <View style={styles.receiptExpandedHero}>
+        <View style={styles.receiptStatusPill}>
+          <Text style={styles.receiptStatusText}>{statusLabel}</Text>
+        </View>
+        <Text style={styles.receiptTitle} numberOfLines={2}>
           {typeLabel}
         </Text>
-      </View>
-      {getLedgerFlowForRow(row) ? (
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Flow</Text>
-          <View style={styles.detailValue}>
-            <LedgerFlowChip row={row} />
-          </View>
-        </View>
-      ) : null}
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Entry date</Text>
-        <Text style={styles.detailValue}>{dateStr}</Text>
-      </View>
-      {inAmt > 0 && (
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Amount received</Text>
-          <Text style={[styles.detailValue, styles.detailValueGreen]}>
-            ₹{formatLedgerAmount(inAmt)}
-          </Text>
-        </View>
-      )}
-      {outAmt > 0 && (
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Amount paid</Text>
-          <Text style={[styles.detailValue, styles.detailValueRed]}>
-            ₹{formatLedgerAmount(outAmt)}
-          </Text>
-        </View>
-      )}
-      <View style={[styles.detailRow, !hasNote && styles.detailRowLast]}>
-        <Text style={styles.detailLabel}>Party</Text>
-        <Text style={styles.detailValue} numberOfLines={2}>
-          {party}
+        <Text style={[styles.receiptAmount, { color: amountColor }]}>
+          {isIn ? "+" : "−"} ₹{formatLedgerAmount(amount)}
         </Text>
       </View>
-      {(row.payment_mode || row.payment_reference) && (
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Payment</Text>
-          <Text style={styles.detailValue} numberOfLines={2}>
-            {[row.payment_mode, row.payment_reference && `Ref ${row.payment_reference}`]
-              .filter(Boolean)
-              .join(" · ")}
-          </Text>
-        </View>
-      )}
-      {hasReconciliation && (
-        <View style={[styles.detailRow, !hasNote && styles.detailRowLast]}>
-          <Text style={styles.detailLabel}>Reconcile</Text>
+
+      <LedgerEntryReceiptDetailTable rows={details} />
+
+      {hasReconciliation ? (
+        <View style={styles.receiptReconWrap}>
+          <Text style={styles.receiptReconLabel}>Reconcile</Text>
           <View style={styles.detailReconValueWrap}>
             <Text style={styles.detailReconBadge}>{row.reconciliation_label}</Text>
             {row.reconciliation_action_label ? (
@@ -334,15 +324,14 @@ function TransactionRowDetail({ row }: { row: LedgerRow }) {
             ) : null}
           </View>
         </View>
-      )}
-      {hasNote && (
-        <View style={[styles.detailRow, styles.detailRowLast]}>
-          <Text style={styles.detailLabel}>Note</Text>
-          <Text style={styles.detailValue} numberOfLines={2}>
-            {note}
-          </Text>
+      ) : null}
+
+      {getLedgerFlowForRow(row) ? (
+        <View style={styles.receiptFlowWrap}>
+          <Text style={styles.receiptReconLabel}>Flow</Text>
+          <LedgerFlowChip row={row} />
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -794,7 +783,7 @@ export function LedgerTransactionListView({
     <View style={[styles.wrap, embedInParentScroll && styles.wrapEmbedded]}>
       {showHistoryHeader && useTimelineLayout && showFiscalSubTabs ? (
         <View
-          style={[styles.streamHeader, fullWidth && { paddingHorizontal: 16 }]}
+          style={styles.streamHeader}
         >
           <View style={styles.streamHeaderTop}>
             <View style={styles.streamHeaderTopLeft}>
@@ -1406,12 +1395,7 @@ export function LedgerTransactionListView({
                       {useTimelineLayout ? (
                         isSectionExpanded(key) &&
                         effectiveFiscalSubTab === "transaction" ? (
-                          <View
-                            style={[
-                              styles.fiscalTransactionRows,
-                              fullWidth && { paddingHorizontal: 0 },
-                            ]}
-                          >
+                          <View style={styles.fiscalTransactionRows}>
                             {(() => {
                               const flowFilter = getSectionFlowFilter(key);
                               const filteredRows =
@@ -1434,7 +1418,7 @@ export function LedgerTransactionListView({
                                           : 0,
                                     )
                                   : filteredRows;
-                              return txRows.map((row, rowIndex) => {
+                              return txRows.map((row) => {
                                 const typeLabel =
                                   getDoubleEntryDisplayLabel(row) ??
                                   row.description ??
@@ -1471,17 +1455,8 @@ export function LedgerTransactionListView({
                                 );
                                 const avatarBg = avatarColor(partyName);
                                 const customAvatar = resolvePartyAvatarForRow(row);
-                                const isLastRow =
-                                  rowIndex === txRows.length - 1;
                                 return (
-                                  <View
-                                    key={row.id}
-                                    style={[
-                                      styles.fiscalCardWrap,
-                                      !isLastRow &&
-                                        styles.fiscalCardWrapSeparator,
-                                    ]}
-                                  >
+                                  <View key={row.id} style={styles.fiscalCardWrap}>
                                     <TouchableOpacity
                                       style={[
                                         styles.fiscalCard,
@@ -2331,7 +2306,8 @@ const styles = StyleSheet.create({
   },
   /** Do not use flexGrow here — it breaks vertical scrolling on web (content fills viewport). */
   ledgerMainScrollContent: {
-    width: '100%',
+    width: "100%",
+    alignItems: "center",
   },
   emptyState: {
     alignItems: "center",
@@ -2434,7 +2410,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   streamHeader: {
-    paddingHorizontal: Layout.screenPaddingHorizontal + 8,
+    width: "100%",
+    maxWidth: CASH_LEDGER_MAX_WIDTH,
+    alignSelf: "center",
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: Layout.sectionSpacing,
     paddingBottom: Layout.headerPaddingBelowInset,
     backgroundColor: Theme.screenBackground,
@@ -2973,91 +2952,90 @@ const styles = StyleSheet.create({
   dateSyncBarCardIconOut: { backgroundColor: "rgba(239,68,68,0.25)" },
   dateSyncBarCardIconIn: { backgroundColor: "rgba(16,185,129,0.25)" },
   fiscalTransactionRows: {
+    width: "100%",
+    maxWidth: CASH_LEDGER_MAX_WIDTH,
+    alignSelf: "center",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 10,
+    paddingTop: 4,
     paddingBottom: Layout.sectionSpacing / 2,
   },
-  fiscalCardWrap: {},
-  fiscalCardWrapSeparator: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    paddingBottom: 10,
-    marginBottom: 4,
+  fiscalCardWrap: {
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    marginBottom: 8,
+    overflow: "hidden",
   },
   fiscalCard: {
-    paddingVertical: 4,
     position: "relative",
     zIndex: 1,
   },
   fiscalCardExpanded: {
-    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: METRONIC.border,
   },
   fiscalCardInner: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     gap: 12,
     minWidth: 0,
   },
   fiscalCardAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 1,
     flexShrink: 0,
   },
   fiscalCardAvatarImageWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 1,
     flexShrink: 0,
   },
   fiscalCardAvatarText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "600",
   },
   fiscalCardBody: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
-    paddingRight: 8,
+    gap: 3,
+    paddingRight: 4,
   },
   fiscalCardParty: {
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.25,
     textTransform: "uppercase",
-    color: Theme.textPrimaryDark,
+    color: Theme.primary,
   },
   fiscalCardDate: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: Theme.textMuted,
+    fontSize: 10,
+    fontWeight: "500",
+    color: METRONIC.muted,
+    letterSpacing: 0.2,
     textTransform: "uppercase",
-    letterSpacing: 0.35,
-    marginTop: 2,
   },
   fiscalCardRouteWhy: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
-    color: Theme.textSecondary,
-    marginTop: 3,
-    lineHeight: 15,
+    color: METRONIC.subtle,
+    lineHeight: 17,
   },
   fiscalCardRight: {
     alignItems: "flex-end",
-    justifyContent: "flex-start",
+    justifyContent: "center",
     flexShrink: 0,
-    minWidth: 88,
-    maxWidth: 132,
-    gap: 6,
+    gap: 5,
+    maxWidth: 128,
   },
   fiscalCardPill: {
     flexDirection: "row",
@@ -3066,34 +3044,35 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: Theme.surfaceGray,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderRadius: 999,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(21,128,61,0.2)",
     maxWidth: "100%",
   },
   fiscalCardPillIcon: { marginRight: 0 },
   fiscalCardPillText: {
-    fontSize: 7,
+    fontSize: 9,
     fontWeight: "600",
-    color: Theme.primary,
-    fontStyle: "italic",
-    letterSpacing: 0.15,
-    textTransform: "uppercase",
+    color: Theme.positive,
+    letterSpacing: 0.1,
     flexShrink: 1,
   },
   fiscalCardAmount: {
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: "600",
-    fontStyle: "italic",
     letterSpacing: -0.3,
+    fontVariant: ["tabular-nums"],
   },
-  fiscalCardAmountIn: { color: Theme.darkGreen },
-  fiscalCardAmountOut: { color: Theme.teslaRed },
+  fiscalCardAmountIn: { color: Theme.primary },
+  fiscalCardAmountOut: { color: Theme.negative },
   fiscalExpanded: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    paddingTop: 4,
+    paddingHorizontal: 12,
+    paddingBottom: 16,
+    paddingTop: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: METRONIC.border,
+    backgroundColor: METRONIC.bodyBg,
   },
   fiscalExpandedLedger: {
     backgroundColor: Theme.surface,
@@ -3748,8 +3727,10 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   sectionTimeline: {
-    marginTop: 6,
-    marginBottom: 4,
+    marginTop: 4,
+    marginBottom: 2,
+    width: "100%",
+    alignItems: "center",
   },
   sectionBar: {
     flexDirection: "row",
@@ -4324,6 +4305,69 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "500",
     color: Theme.primary ?? Theme.teslaRed,
+  },
+  receiptExpandedWrap: {
+    backgroundColor: LEDGER_RECEIPT.cardBg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: LEDGER_RECEIPT.border,
+    padding: 14,
+    gap: 12,
+    width: "100%",
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  receiptExpandedHero: {
+    alignItems: "center",
+    gap: 6,
+    width: "100%",
+  },
+  receiptStatusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: LEDGER_RECEIPT.statusBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LEDGER_RECEIPT.statusBorder,
+  },
+  receiptStatusText: {
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: LEDGER_RECEIPT.statusText,
+  },
+  receiptTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: LEDGER_RECEIPT.title,
+    textAlign: "center",
+    letterSpacing: -0.15,
+  },
+  receiptAmount: {
+    fontSize: 28,
+    fontWeight: "600",
+    letterSpacing: -0.5,
+    fontVariant: ["tabular-nums"],
+    textAlign: "center",
+  },
+  receiptReconWrap: {
+    gap: 6,
+    paddingTop: 2,
+  },
+  receiptFlowWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingTop: 2,
+  },
+  receiptReconLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: LEDGER_RECEIPT.label,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   detailCard: {
     backgroundColor: Theme.surfaceLight ?? "rgba(0,0,0,0.03)",

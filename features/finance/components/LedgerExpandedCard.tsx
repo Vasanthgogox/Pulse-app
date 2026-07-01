@@ -181,7 +181,7 @@ function TransactionHistoryRow({
         <FontAwesome
           name={isIn ? "arrow-down" : "arrow-up"}
           size={12}
-          color={isIn ? Theme.darkGreen : Theme.teslaRed}
+          color={isIn ? Theme.primary : Theme.teslaRed}
         />
       </View>
       <View style={s.txHistoryBody}>
@@ -1415,7 +1415,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   txHistoryAmountIn: {
-    color: Theme.darkGreen,
+    color: Theme.primary,
   },
   txHistoryAmountOut: {
     color: Theme.teslaRed,

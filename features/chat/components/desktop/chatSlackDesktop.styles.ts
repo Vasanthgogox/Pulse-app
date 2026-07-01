@@ -547,7 +547,8 @@ export const slackDesktopStyles = StyleSheet.create({
     minWidth: 0,
   },
   threadHeaderTopToggleOnly: {
-    alignItems: "flex-start",
+    alignItems: "center",
+    width: "100%",
   },
   threadTitle: {
     flex: 1,
@@ -569,15 +570,17 @@ export const slackDesktopStyles = StyleSheet.create({
     marginTop: 2,
   },
   threadTopPartyTabs: {
-    alignSelf: "flex-start",
-    flexGrow: 0,
-    flexShrink: 0,
+    alignSelf: "stretch",
+    width: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   threadPartyToggle: {
-    alignSelf: "flex-start",
-    width: "auto",
-    minWidth: 268,
-    maxWidth: 340,
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
   },
   threadCompactRoleTag: {
     paddingHorizontal: 8,

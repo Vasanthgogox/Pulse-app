@@ -12,11 +12,14 @@ import { formatClientPhoneDisplay } from "@/features/clients/utils/clientManagem
 import { NetworkDesktopHeadquarterMap } from "@/features/network/components/desktop/NetworkDesktopHeadquarterMap";
 import { hubStyles as styles, METRONIC } from "@/features/clients/components/desktop/clientProfileHub.styles";
 import { PartyHighlightsCard } from "@/features/party/components/PartyHighlightsCard";
+import { PartyProfileIntelSections } from "@/features/party/components/PartyProfileIntelSections";
 import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
 import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { clientToPublicEntity } from "@/features/public-profile/mappers";
+import type { ClientRow } from "@/features/clients/services/clients.service";
 import { formatINR } from "@/lib/format";
 import { CheckCircle2, ChevronDown, Download, Globe, Mail, MapPin, Phone, Save, X } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -269,8 +272,16 @@ export function ClientProfileOverviewPanel({ bundle, orgId, clientId, onRefresh,
     { key: "corporate", label: "Corporate", value: corporate },
   ];
 
+  const publicEntity = useMemo(
+    () => clientToPublicEntity(bundle.client as ClientRow),
+    [bundle.client],
+  );
+
   return (
     <View style={[styles.detailsBody, compact && mobile.detailsBodyCompact]}>
+      {compact && !highlightsEditing && !kamEditing && !commercialEditing ? (
+        <PartyProfileIntelSections entity={publicEntity} />
+      ) : null}
       <View style={[styles.splitRow, compact && mobile.splitColumn]}>
         <View style={[styles.sidebar, compact && mobile.sidebarFull]}>
           {highlightsEditing ? (

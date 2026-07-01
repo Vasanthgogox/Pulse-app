@@ -30,6 +30,13 @@ import {
 import { buildLedgerSyncDescriptionLine } from "@/features/finance/ledger/ledgerEntryModel";
 import { getTripLedgerEntries } from "@/features/finance/utils/getTripLedgerEntries";
 import { getSuppliersByOrganization, type SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import {
+  adjustedCost,
+  adjustedRevenue,
+  fetchTripFinanceAdjustmentsByTripIds,
+  normTripFinanceAdjustmentKey,
+  type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
 import { getTripDisplayNumber, getTripsByOrganization, getTripsWhereOrgIsClient, getTripsWhereOrgIsSupplier, supplierRowToTripRow, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { getVehiclesByOrganization } from "@/features/vehicles/services/vehicles.service";
@@ -212,6 +219,9 @@ export default function LedgerSyncScreen() {
   const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
   const [trips, setTrips] = useState<TripOptionWithOrg[]>([]);
   const [tripDueMetaById, setTripDueMetaById] = useState<Record<string, TripDueMeta>>({});
+  const [tripAdjustmentsByTripId, setTripAdjustmentsByTripId] = useState<
+    Record<string, TripAdjustment[]>
+  >({});
   const [transactions, setTransactions] = useState<LedgerRow[] | null>(null);
   const [driverOffers, setDriverOffers] = useState<Record<string, DriverOffer>>({});
   const [editingEntry, setEditingEntry] = useState<LedgerRow | null>(null);
@@ -249,7 +259,7 @@ export default function LedgerSyncScreen() {
         getTripsByOrganization(orgId),
         getTripsWhereOrgIsClient(orgId),
         getTripsWhereOrgIsSupplier(orgId),
-      ]).then(([ownedRes, asClientRes, asSupplierRes]) => {
+      ]).then(async ([ownedRes, asClientRes, asSupplierRes]) => {
         const owned = ownedRes?.error ? [] : (ownedRes?.trips ?? []);
         const asClient = asClientRes?.error ? [] : (asClientRes?.trips ?? []);
         const asSupplier = asSupplierRes?.error ? [] : (asSupplierRes?.trips ?? []).map(supplierRowToTripRow);
@@ -274,11 +284,22 @@ export default function LedgerSyncScreen() {
           }
         }
         const asSupplierIds = new Set(asSupplier.map((t) => t.id));
+        const adjustmentsByTripId = await fetchTripFinanceAdjustmentsByTripIds(
+          merged.map((t) => t.id),
+        );
+        const adjustmentsRecord: Record<string, TripAdjustment[]> = {};
+        adjustmentsByTripId.forEach((list, key) => {
+          if (list.length > 0) adjustmentsRecord[key] = list;
+        });
         const tripDueMeta: Record<string, TripDueMeta> = {};
         merged.forEach((t: TripRow) => {
+          const adjustments =
+            adjustmentsByTripId.get(normTripFinanceAdjustmentKey(t.id)) ?? [];
+          const baseClient = Number(t.client_price ?? 0);
+          const baseSupplier = Number(t.supplier_rate ?? 0);
           tripDueMeta[t.id] = {
-            client_price: Number(t.client_price ?? 0),
-            supplier_rate: Number(t.supplier_rate ?? 0),
+            client_price: adjustedRevenue(baseClient, adjustments),
+            supplier_rate: adjustedCost(baseSupplier, adjustments),
             organization_id: t.organization_id ?? null,
             indent_id: t.indent_id ?? null,
             isCrossOrgSupplier: asSupplierIds.has(t.id) && t.organization_id !== orgId,
@@ -300,8 +321,8 @@ export default function LedgerSyncScreen() {
             route_label: [t.pickup_area, t.drop_location].filter(Boolean).join(' → ') || null,
             trip_date: formatLedgerDate(t.pickup_date || t.created_at),
             organization_id: t.organization_id,
-            client_price: t.client_price ?? null,
-            supplier_rate: t.supplier_rate ?? null,
+            client_price: meta?.client_price ?? t.client_price ?? null,
+            supplier_rate: meta?.supplier_rate ?? t.supplier_rate ?? null,
             driver_commission: t.driver_commission ?? null,
             distance: t.distance ?? null,
             is_cross_org_supplier: meta?.isCrossOrgSupplier ?? false,
@@ -310,7 +331,7 @@ export default function LedgerSyncScreen() {
             completed_at: t.completed_at ?? null,
           } as TripOptionWithOrg;
         });
-        return { options, tripDueMeta };
+        return { options, tripDueMeta, adjustmentsRecord };
       }),
       getTransactionsByOrganization(orgId).then(({ error, transactions: txs }) => (error ? [] : (txs ?? []))),
       getDriverOffersByOrganization(orgId).then((r) =>
@@ -325,6 +346,7 @@ export default function LedgerSyncScreen() {
         setVehicles(v);
         setTrips(tripLoad.options);
         setTripDueMetaById(tripLoad.tripDueMeta);
+        setTripAdjustmentsByTripId(tripLoad.adjustmentsRecord);
         setTransactions(txs);
         setDriverOffers(offers ?? {});
         if (params.entryId && txs.length > 0) {
@@ -1138,6 +1160,7 @@ export default function LedgerSyncScreen() {
         dueAmountOut={effectiveDueAmountOut}
         ledgerTransactions={transactions}
         driverOffersByDriverId={driverOffers}
+        tripAdjustmentsByTripId={tripAdjustmentsByTripId}
       />
     </View>
   );

@@ -40,6 +40,7 @@ export type NetworkProfileInviteHeroProps = {
 function roleToEntityType(role: PartyRoleLabel): PartyEntityType {
   if (role === "DRIVER") return "driver";
   if (role === "SUPPLIER") return "supplier";
+  if (role === "VEHICLE") return "vehicle";
   return "client";
 }
 

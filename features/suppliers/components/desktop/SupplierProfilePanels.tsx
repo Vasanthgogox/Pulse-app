@@ -2,7 +2,7 @@
  * Supplier profile panels — all 10 tab content components.
  * Each panel receives the SupplierManagementBundle and renders its section.
  */
-import { formatINR } from "@/lib/format";
+import { formatINR, formatRelative } from "@/lib/format";
 import Theme from "@/constants/Theme";
 import {
   METRONIC,
@@ -56,6 +56,14 @@ import {
   Wallet,
   Zap,
 } from "lucide-react-native";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import {
+  ProfileHubLottieIcon,
+  type ProfileHubLottieKey,
+} from "@/features/party/components/ProfileHubAnimatedIcons";
+import { PartyProfileIntelSections } from "@/features/party/components/PartyProfileIntelSections";
+import { supplierToPublicEntity } from "@/features/public-profile/mappers";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
   updateSupplierOnboarding,
   type OnboardingAgreementStatus,
@@ -65,12 +73,13 @@ import { createSupplierComplianceDoc, deleteSupplierComplianceDoc, type Supplier
 import { createSupplierContract } from "@/features/suppliers/services/supplierContracts.service";
 import { createSupplierVehicle } from "@/features/suppliers/services/supplierFleet.service";
 import { createSupplierWarehouse } from "@/features/suppliers/services/supplierWarehouses.service";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -141,7 +150,35 @@ function TrafficLight({ status }: { status: "green" | "amber" | "red" }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  compact,
+  last,
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+  last?: boolean;
+}) {
+  if (compact) {
+    return (
+      <View
+        style={[
+          mobile.kvRowStacked,
+          !last && {
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: METRONIC.border,
+          },
+        ]}
+      >
+        <Text style={mobile.kvLabelStacked}>{label}</Text>
+        <Text style={mobile.kvValueStacked} numberOfLines={4}>
+          {value === "—" ? "Not set" : value}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={spStyles.infoRow}>
       <Text style={spStyles.infoLabel}>{label}</Text>
@@ -150,13 +187,21 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── TAB 1: Overview ───────────────────────────────────────────────────────────
+function SupplierPanelShell({ children }: { children: React.ReactNode }) {
+  const compact = useProfileHubCompact();
+  return (
+    <View style={[styles.panel, compact && mobile.panelCompact]}>
+      {children}
+    </View>
+  );
+}
 
 export function SupplierProfileOverviewPanel({ bundle, isIntegrated, linkedOrgId, onImportFromProfile }: BundleProps & {
   isIntegrated?: boolean;
   linkedOrgId?: string | null;
   onImportFromProfile?: () => Promise<void>;
 }) {
+  const compact = useProfileHubCompact();
   const [importing, setImporting] = useState(false);
   const { supplier, trips, transactions, performance } = bundle;
   const completed = trips.filter((t) =>
@@ -169,101 +214,150 @@ export function SupplierProfileOverviewPanel({ bundle, isIntegrated, linkedOrgId
     .filter((tx) => (tx.amount_in ?? 0) > 0)
     .reduce((s, tx) => s + (tx.amount_in ?? 0), 0);
 
+  const detailRows: [string, string][] = [
+    ["Company", supplier.company_name ?? supplier.name ?? "—"],
+    ["Contact person", supplier.contact_person ?? "—"],
+    ["Phone", supplier.phone ?? "—"],
+    ["Email", supplier.email ?? "—"],
+    ["GST Number", supplier.gstin ?? "—"],
+    ["Address", supplier.address ?? "—"],
+    ["Type", supplier.supplier_type ?? "offline"],
+    ["Vehicle types", (supplier.vehicle_types ?? []).join(", ") || "—"],
+    ["Operating areas", (supplier.operating_areas ?? []).join(", ") || "—"],
+    ["Onboarding", supplier.onboarding_agreement_status ?? "pending"],
+    ["Verified", supplier.is_verified ? "Yes" : "No"],
+  ];
+
+  const kpiItems: { label: string; value: string; lottie: ProfileHubLottieKey }[] = [
+    { label: "Total trips", value: String(trips.length), lottie: "truck" },
+    { label: "Completed", value: String(completed.length), lottie: "deliveryComplete" },
+    { label: "Payable", value: formatINR(totalPayable), lottie: "payment" },
+    { label: "Paid", value: formatINR(totalPaid), lottie: "savings" },
+  ];
+
+  const publicEntity = useMemo(() => supplierToPublicEntity(supplier), [supplier]);
+
+  const platformProfileCard = isIntegrated && linkedOrgId && onImportFromProfile ? (
+    <View style={[spStyles.dataCard, compact && spStyles.dataCardCompact]}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+        <Download size={14} color={METRONIC.subtle} strokeWidth={2} />
+        <Text style={[styles.sectionTitle, compact && mobile.sectionTitleCompact, { marginLeft: 6, marginBottom: 0 }]}>
+          Platform profile
+        </Text>
+      </View>
+      <Text style={{ fontSize: 12, color: METRONIC.muted, marginBottom: 10, lineHeight: 17 }}>
+        This supplier is on Pulse. Import their verified GSTIN, address, and website directly from their profile.
+      </Text>
+      <Pressable
+        onPress={async () => {
+          setImporting(true);
+          await onImportFromProfile();
+          setImporting(false);
+        }}
+        disabled={importing}
+        style={[
+          {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            backgroundColor: METRONIC.link,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 8,
+            alignSelf: "flex-start",
+          },
+          compact && spStyles.importBtnCompact,
+        ]}
+      >
+        {importing
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <Download size={13} color="#fff" strokeWidth={2} />}
+        <Text style={{ fontSize: 13, fontWeight: "600", color: "#fff" }}>
+          {importing ? "Importing…" : "Import from profile"}
+        </Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const scorecardCard = performance ? (
+    <View style={[spStyles.dataCard, compact && spStyles.dataCardCompact]}>
+      <Text style={[styles.sectionTitle, compact && mobile.sectionTitleCompact, { marginBottom: compact ? 8 : 12 }]}>
+        Performance scorecard
+      </Text>
+      <View style={compact ? spStyles.scorecardBodyCompact : undefined}>
+        <View style={spStyles.scorecardRing}>
+          <Text style={spStyles.scorecardScore}>{performance.overall_score}</Text>
+          <Text style={spStyles.scorecardGrade}>{performance.grade}</Text>
+        </View>
+        <View style={compact ? { width: "100%" } : undefined}>
+          {[
+            ["On-time pickup", `${performance.on_time_pickup_pct}%`],
+            ["On-time delivery", `${performance.on_time_delivery_pct}%`],
+            ["POD compliance", `${performance.pod_compliance_pct}%`],
+            ["Trip acceptance", `${performance.trip_acceptance_pct}%`],
+            ["Settlement compliance", `${performance.settlement_compliance_pct}%`],
+          ].map(([l, v], idx, arr) => (
+            <InfoRow key={l} label={l} value={v} compact={compact} last={idx === arr.length - 1} />
+          ))}
+        </View>
+      </View>
+    </View>
+  ) : null;
+
+  const contractsCard = bundle.contracts.length > 0 ? (
+    <View style={[spStyles.dataCard, compact && spStyles.dataCardCompact]}>
+      <Text style={[styles.sectionTitle, compact && mobile.sectionTitleCompact, { marginBottom: 8 }]}>
+        Active contracts
+      </Text>
+      {bundle.contracts.filter((c) => c.status === "active").map((c) => (
+        <View key={c.id} style={spStyles.contractRow}>
+          <FileText size={14} color={METRONIC.link} strokeWidth={2} />
+          <Text style={spStyles.contractName} numberOfLines={1}>{c.contract_name}</Text>
+          <Text style={spStyles.contractExpiry}>{c.expiry_date ?? "No expiry"}</Text>
+        </View>
+      ))}
+    </View>
+  ) : null;
+
   return (
-    <View style={styles.panel}>
-      <View style={spStyles.overviewGrid}>
-        {/* Left: KPI cards */}
-        <View style={spStyles.overviewLeft}>
-          <View style={spStyles.kpiGrid}>
-            {[
-              { label: "Total trips", value: String(trips.length), icon: <Truck size={18} color={METRONIC.link} />, tone: "blue" },
-              { label: "Completed", value: String(completed.length), icon: <CheckCircle2 size={18} color="#50CD89" />, tone: "green" },
-              { label: "Payable", value: formatINR(totalPayable), icon: <IndianRupee size={18} color="#F6C000" />, tone: "warn" },
-              { label: "Paid", value: formatINR(totalPaid), icon: <Wallet size={18} color="#50CD89" />, tone: "green" },
-            ].map((k) => (
-              <View key={k.label} style={spStyles.kpiCard}>
-                <View style={spStyles.kpiIcon}>{k.icon}</View>
-                <Text style={spStyles.kpiValue}>{k.value}</Text>
+    <View style={[styles.panel, compact && mobile.panelCompact]}>
+      {compact ? <PartyProfileIntelSections entity={publicEntity} /> : null}
+      <View style={compact ? spStyles.overviewStack : spStyles.overviewGrid}>
+        <View style={compact ? spStyles.overviewSection : spStyles.overviewLeft}>
+          <View style={[spStyles.kpiGrid, compact && spStyles.kpiGridCompact]}>
+            {kpiItems.map((k) => (
+              <View key={k.label} style={[spStyles.kpiCard, compact && spStyles.kpiCardCompact]}>
+                <View style={spStyles.kpiIcon}>
+                  <ProfileHubLottieIcon name={k.lottie} size={28} glyphScale={1.15} />
+                </View>
+                <Text style={[spStyles.kpiValue, compact && spStyles.kpiValueCompact]}>{k.value}</Text>
                 <Text style={spStyles.kpiLabel}>{k.label}</Text>
               </View>
             ))}
           </View>
 
-          <View style={[spStyles.dataCard, { marginTop: 16 }]}>
-            <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Supplier details</Text>
-            {[
-              ["Company", supplier.company_name ?? supplier.name ?? "—"],
-              ["Contact person", supplier.contact_person ?? "—"],
-              ["Phone", supplier.phone ?? "—"],
-              ["Email", supplier.email ?? "—"],
-              ["GST Number", supplier.gstin ?? "—"],
-              ["Address", supplier.address ?? "—"],
-              ["Type", supplier.supplier_type ?? "offline"],
-              ["Vehicle types", (supplier.vehicle_types ?? []).join(", ") || "—"],
-              ["Operating areas", (supplier.operating_areas ?? []).join(", ") || "—"],
-              ["Onboarding", supplier.onboarding_agreement_status ?? "pending"],
-              ["Verified", supplier.is_verified ? "Yes" : "No"],
-            ].map(([l, v]) => <InfoRow key={l} label={l} value={v} />)}
-          </View>
-        </View>
-
-        {/* Right: Performance + Import */}
-        <View style={spStyles.overviewRight}>
-          {isIntegrated && linkedOrgId && onImportFromProfile ? (
-            <View style={spStyles.dataCard}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                <Download size={14} color={METRONIC.subtle} strokeWidth={2} />
-                <Text style={[styles.sectionTitle, { marginLeft: 6, marginBottom: 0 }]}>Platform profile</Text>
-              </View>
-              <Text style={{ fontSize: 12, color: METRONIC.muted, marginBottom: 10 }}>
-                This supplier is on Pulse. Import their verified GSTIN, address, and website directly from their profile.
+          {!compact ? (
+            <View style={[spStyles.dataCard, { marginTop: 16 }]}>
+              <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>
+                Supplier details
               </Text>
-              <Pressable
-                onPress={async () => {
-                  setImporting(true);
-                  await onImportFromProfile();
-                  setImporting(false);
-                }}
-                disabled={importing}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: METRONIC.link, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, alignSelf: 'flex-start' }}
-              >
-                {importing
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Download size={13} color="#fff" strokeWidth={2} />}
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#fff' }}>{importing ? 'Importing…' : 'Import from profile'}</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {performance ? (
-            <View style={spStyles.dataCard}>
-              <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>Performance scorecard</Text>
-              <View style={spStyles.scorecardRing}>
-                <Text style={spStyles.scorecardScore}>{performance.overall_score}</Text>
-                <Text style={spStyles.scorecardGrade}>{performance.grade}</Text>
-              </View>
-              {[
-                ["On-time pickup", `${performance.on_time_pickup_pct}%`],
-                ["On-time delivery", `${performance.on_time_delivery_pct}%`],
-                ["POD compliance", `${performance.pod_compliance_pct}%`],
-                ["Trip acceptance", `${performance.trip_acceptance_pct}%`],
-                ["Settlement compliance", `${performance.settlement_compliance_pct}%`],
-              ].map(([l, v]) => <InfoRow key={l} label={l} value={v} />)}
-            </View>
-          ) : null}
-
-          {bundle.contracts.length > 0 && (
-            <View style={[spStyles.dataCard, { marginTop: 12 }]}>
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Active contracts</Text>
-              {bundle.contracts.filter((c) => c.status === "active").map((c) => (
-                <View key={c.id} style={spStyles.contractRow}>
-                  <FileText size={14} color={METRONIC.link} strokeWidth={2} />
-                  <Text style={spStyles.contractName} numberOfLines={1}>{c.contract_name}</Text>
-                  <Text style={spStyles.contractExpiry}>{c.expiry_date ?? "No expiry"}</Text>
-                </View>
+              {detailRows.map(([l, v], idx) => (
+                <InfoRow
+                  key={l}
+                  label={l}
+                  value={v}
+                  compact={false}
+                  last={idx === detailRows.length - 1}
+                />
               ))}
             </View>
-          )}
+          ) : null}
+        </View>
+
+        <View style={compact ? spStyles.overviewSection : spStyles.overviewRight}>
+          {platformProfileCard}
+          {scorecardCard}
+          {contractsCard}
         </View>
       </View>
     </View>
@@ -309,7 +403,7 @@ export function SupplierProfileKycPanel({ bundle, orgId, supplierId, onRefresh, 
   };
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       <View style={spStyles.kycScoreBanner}>
         <View style={spStyles.kycScoreRing}>
           <Text style={spStyles.kycScoreValue}>{score}%</Text>
@@ -442,7 +536,7 @@ export function SupplierProfileKycPanel({ bundle, orgId, supplierId, onRefresh, 
           ])}
         />
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -487,7 +581,7 @@ export function SupplierProfileCompliancePanel({ bundle, orgId, supplierId, onRe
   const red = docs.filter((d) => d.status === "red").length;
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       {/* Health summary */}
       <View style={spStyles.complianceHealthRow}>
         {[
@@ -587,7 +681,7 @@ export function SupplierProfileCompliancePanel({ bundle, orgId, supplierId, onRe
         ))}
         <Text style={spStyles.alertConfigHint}>Automatic reminders before document expiry</Text>
       </View>
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -766,7 +860,7 @@ export function SupplierProfileContractsPanel({ bundle, orgId, supplierId, onRef
   const expired = contracts.filter((c) => c.status === "expired");
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       <SupplierOnboardingAgreementCard bundle={bundle} orgId={orgId} onRefresh={onRefresh} />
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -861,7 +955,7 @@ export function SupplierProfileContractsPanel({ bundle, orgId, supplierId, onRef
           ) : null}
         </>
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -901,7 +995,7 @@ export function SupplierProfileFleetPanel({ bundle, orgId, supplierId, onRefresh
   };
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <Text style={styles.sectionTitle}>{fleet.length} vehicle{fleet.length !== 1 ? "s" : ""}</Text>
         {orgId && supplierId ? (
@@ -991,7 +1085,7 @@ export function SupplierProfileFleetPanel({ bundle, orgId, supplierId, onRefresh
           ])}
         />
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -1001,7 +1095,7 @@ export function SupplierProfileDriversPanel({ bundle }: BundleProps) {
   const { drivers } = bundle;
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       <View style={spStyles.contractsHeaderRow}>
         <Text style={styles.sectionTitle}>{drivers.length} drivers</Text>
         <Pressable style={spStyles.addBtn}>
@@ -1029,7 +1123,7 @@ export function SupplierProfileDriversPanel({ bundle }: BundleProps) {
           ])}
         />
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -1069,7 +1163,7 @@ export function SupplierProfileWarehousesPanel({ bundle, orgId, supplierId, onRe
   };
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <Text style={styles.sectionTitle}>{warehouses.length} warehouse{warehouses.length !== 1 ? "s" : ""}</Text>
         {orgId && supplierId ? (
@@ -1156,7 +1250,7 @@ export function SupplierProfileWarehousesPanel({ bundle, orgId, supplierId, onRe
           ))}
         </View>
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -1167,9 +1261,9 @@ export function SupplierProfilePerformancePanel({ bundle }: BundleProps) {
 
   if (!performance) {
     return (
-      <View style={styles.panel}>
+      <SupplierPanelShell>
         <Empty message="No performance data available." />
-      </View>
+      </SupplierPanelShell>
     );
   }
 
@@ -1193,7 +1287,7 @@ export function SupplierProfilePerformancePanel({ bundle }: BundleProps) {
     : "#F1416C";
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       {/* Overall score */}
       <View style={spStyles.performanceHeader}>
         <View style={[spStyles.scorecardRing, { borderColor: gradeColor }]}>
@@ -1224,7 +1318,7 @@ export function SupplierProfilePerformancePanel({ bundle }: BundleProps) {
           </View>
         ))}
       </View>
-    </View>
+    </SupplierPanelShell>
   );
 }
 
@@ -1252,7 +1346,7 @@ export function SupplierProfileFinancePanel({ bundle }: BundleProps) {
   }
 
   return (
-    <View style={styles.panel}>
+    <SupplierPanelShell>
       {/* Summary */}
       <View style={spStyles.financeKpiRow}>
         {[
@@ -1308,80 +1402,85 @@ export function SupplierProfileFinancePanel({ bundle }: BundleProps) {
           })()}
         />
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }
 
 // ── TAB 10: Timeline ──────────────────────────────────────────────────────────
 
-const TIMELINE_ICONS: Record<string, React.ReactNode> = {
-  supplier_created:   <Zap size={14} color="#fff" strokeWidth={2.5} />,
-  contract_uploaded:  <FileText size={14} color="#fff" strokeWidth={2} />,
-  kyc_approved:       <ShieldCheck size={14} color="#fff" strokeWidth={2} />,
-  vehicle_added:      <Truck size={14} color="#fff" strokeWidth={2} />,
-  driver_added:       <User size={14} color="#fff" strokeWidth={2} />,
-  trip_assigned:      <Briefcase size={14} color="#fff" strokeWidth={2} />,
-  penalty_applied:    <AlertTriangle size={14} color="#fff" strokeWidth={2} />,
-  penalty_waived:     <CheckCircle2 size={14} color="#fff" strokeWidth={2} />,
-  payment_released:   <IndianRupee size={14} color="#fff" strokeWidth={2} />,
-  document_expired:   <AlertCircle size={14} color="#fff" strokeWidth={2} />,
-  status_changed:     <Flag size={14} color="#fff" strokeWidth={2} />,
+const TIMELINE_LOTTIE: Record<string, ProfileHubLottieKey> = {
+  supplier_created: "signals",
+  contract_uploaded: "contract",
+  kyc_approved: "security",
+  vehicle_added: "truck",
+  driver_added: "drivers",
+  trip_assigned: "logistics",
+  penalty_applied: "signals",
+  penalty_waived: "deliveryComplete",
+  payment_released: "payment",
+  document_expired: "security",
+  status_changed: "signals",
 };
 
-const TIMELINE_COLORS: Record<string, string> = {
-  supplier_created:  "#3E97FF",
-  contract_uploaded: "#50CD89",
-  kyc_approved:      "#50CD89",
-  vehicle_added:     "#F6C000",
-  driver_added:      "#F6C000",
-  trip_assigned:     "#3E97FF",
-  penalty_applied:   "#F1416C",
-  penalty_waived:    "#50CD89",
-  payment_released:  "#50CD89",
-  document_expired:  "#F1416C",
-  status_changed:    METRONIC.subtle,
-};
+function formatEventTypeLabel(type: string): string {
+  return type.replace(/_/g, " ");
+}
+
+function formatEventMeta(meta: Record<string, string> | null | undefined): string | null {
+  if (!meta) return null;
+  const parts = Object.entries(meta)
+    .filter(([, v]) => v?.trim())
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 export function SupplierProfileTimelinePanel({ bundle }: BundleProps) {
   const { timeline } = bundle;
   const events = [...timeline].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return (
-    <View style={styles.panel}>
-      <SectionTitle>Audit trail</SectionTitle>
+    <SupplierPanelShell>
+      <SectionTitle>Activity log</SectionTitle>
       <Text style={spStyles.timelineNote}>All changes are immutable and permanently recorded.</Text>
       {events.length === 0 ? (
         <Empty message="No events recorded yet." />
       ) : (
-        <View style={spStyles.timeline}>
+        <View style={spStyles.activityFeed}>
           {events.map((event, idx) => {
-            const color = TIMELINE_COLORS[event.event_type] ?? METRONIC.subtle;
-            const icon = TIMELINE_ICONS[event.event_type] ?? <Zap size={14} color="#fff" strokeWidth={2} />;
+            const lottie = TIMELINE_LOTTIE[event.event_type] ?? "signals";
             const isLast = idx === events.length - 1;
+            const actor = event.actor?.trim() || "System";
+            const context = formatEventTypeLabel(event.event_type);
+            const metaLine = formatEventMeta(event.meta);
             return (
-              <View key={event.id} style={spStyles.timelineItem}>
-                <View style={spStyles.timelineLeft}>
-                  <View style={[spStyles.timelineIconCircle, { backgroundColor: color }]}>{icon}</View>
-                  {!isLast && <View style={spStyles.timelineLine} />}
+              <View
+                key={event.id}
+                style={[spStyles.activityFeedItem, isLast && spStyles.activityFeedItemLast]}
+              >
+                <View style={spStyles.activityFeedIcon}>
+                  <ProfileHubLottieIcon name={lottie} size={24} glyphScale={1.2} />
                 </View>
-                <View style={spStyles.timelineContent}>
-                  <Text style={spStyles.timelineTitle}>{event.description}</Text>
-                  <View style={spStyles.timelineMeta}>
-                    <Calendar size={11} color={METRONIC.muted} strokeWidth={2} />
-                    <Text style={spStyles.timelineDate}>{event.created_at.slice(0, 10)}</Text>
-                    {event.actor ? (
-                      <>
-                        <User size={11} color={METRONIC.muted} strokeWidth={2} />
-                        <Text style={spStyles.timelineDate}>{event.actor}</Text>
-                      </>
-                    ) : null}
-                  </View>
+                <View style={spStyles.activityFeedBody}>
+                  <Text style={spStyles.activityFeedHeadline} numberOfLines={4}>
+                    <Text style={spStyles.activityFeedActor}>{actor}</Text>
+                    <Text style={spStyles.activityFeedAction}> {event.description}</Text>
+                  </Text>
+                  <Text style={spStyles.activityFeedMeta}>
+                    {formatRelative(event.created_at)} · {context}
+                  </Text>
+                  {metaLine ? (
+                    <View style={spStyles.activityFeedDetail}>
+                      <Text style={spStyles.activityFeedDetailText} numberOfLines={3}>
+                        {metaLine}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             );
           })}
         </View>
       )}
-    </View>
+    </SupplierPanelShell>
   );
 }

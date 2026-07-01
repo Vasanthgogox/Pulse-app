@@ -31,16 +31,16 @@ export const supplierStyles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   heroStatValue: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "600",
     color: METRONIC.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   heroStatLabel: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "600",
     color: METRONIC.muted,
-    letterSpacing: 0.6,
+    letterSpacing: 0.4,
     marginTop: 2,
     textTransform: "uppercase",
   },
@@ -66,6 +66,17 @@ export const supplierStyles = StyleSheet.create({
     minWidth: 0,
     gap: 0,
   },
+  overviewStack: {
+    flexDirection: "column",
+    width: "100%",
+    alignSelf: "stretch",
+    gap: 8,
+  },
+  overviewSection: {
+    width: "100%",
+    minWidth: 0,
+    gap: 8,
+  },
 
   // KPI cards
   kpiGrid: {
@@ -73,6 +84,10 @@ export const supplierStyles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 12,
     marginBottom: 0,
+  },
+  kpiGridCompact: {
+    gap: 8,
+    width: "100%",
   },
   kpiCard: {
     minWidth: 140,
@@ -85,26 +100,40 @@ export const supplierStyles = StyleSheet.create({
     gap: 4,
     alignItems: "center",
   },
+  kpiCardCompact: {
+    width: "48%",
+    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "48%",
+    padding: 12,
+  },
   kpiIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: "#F9FAFB",
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#F5F8FA",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 6,
+    overflow: "hidden",
   },
   kpiValue: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "600",
     color: METRONIC.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
+  },
+  kpiValueCompact: {
+    fontSize: 16,
+    fontWeight: "500",
   },
   kpiLabel: {
     fontSize: 11,
     fontWeight: "500",
-    color: METRONIC.subtle,
+    color: METRONIC.muted,
     textAlign: "center",
+    lineHeight: 15,
   },
 
   // Data card wrapper
@@ -114,6 +143,21 @@ export const supplierStyles = StyleSheet.create({
     borderColor: METRONIC.border,
     backgroundColor: Theme.cardWhite,
     padding: 16,
+  },
+  dataCardCompact: {
+    padding: 12,
+    borderRadius: 10,
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  scorecardBodyCompact: {
+    width: "100%",
+    alignItems: "center",
+    gap: 10,
+  },
+  importBtnCompact: {
+    alignSelf: "stretch",
+    justifyContent: "center",
   },
 
   // Info rows (label: value pairs)
@@ -136,10 +180,40 @@ export const supplierStyles = StyleSheet.create({
   infoValue: {
     flex: 1,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "400",
     color: METRONIC.text,
     textAlign: "right",
     flexWrap: "wrap",
+  },
+
+  detailGridCompact: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    width: "100%",
+  },
+  detailCellCompact: {
+    width: "48%",
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "48%",
+    minWidth: 0,
+    gap: 2,
+    paddingVertical: 2,
+  },
+  detailLabelCompact: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: METRONIC.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+    lineHeight: 13,
+  },
+  detailValueCompact: {
+    fontSize: 12,
+    fontWeight: "400",
+    color: METRONIC.text,
+    lineHeight: 17,
   },
 
   // Contracts
@@ -458,9 +532,9 @@ export const supplierStyles = StyleSheet.create({
   },
   scorecardScore: {
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "600",
     color: "#50CD89",
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   scorecardGrade: {
     fontSize: 11,
@@ -579,6 +653,81 @@ export const supplierStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: METRONIC.muted,
+  },
+
+  // Activity feed — Metronic notifications / activity log pattern
+  activityFeed: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+    overflow: "hidden",
+  },
+  activityFeedItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: METRONIC.border,
+    backgroundColor: Theme.cardWhite,
+  },
+  activityFeedItemLast: {
+    borderBottomWidth: 0,
+  },
+  activityFeedIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F5F8FA",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    overflow: "hidden",
+  },
+  activityFeedBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  activityFeedHeadline: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: METRONIC.text,
+  },
+  activityFeedActor: {
+    fontWeight: "600",
+    color: METRONIC.text,
+  },
+  activityFeedAction: {
+    fontWeight: "400",
+    color: METRONIC.text,
+  },
+  activityFeedMeta: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    color: METRONIC.muted,
+  },
+  activityFeedDetail: {
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#F5F8FA",
+    gap: 2,
+  },
+  activityFeedDetailText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+    color: "#78829D",
+  },
+  statLottieWrap: {
+    marginBottom: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   // Data table alt row

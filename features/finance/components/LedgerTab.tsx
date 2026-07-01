@@ -305,7 +305,7 @@ export function LedgerTab({
             organizationImageUrl={props.organizationImageUrl}
             organizationAvatarSeed={props.organizationAvatarSeed}
             entityType={props.entityType}
-            size={40}
+            size={44}
           />
         );
       }}

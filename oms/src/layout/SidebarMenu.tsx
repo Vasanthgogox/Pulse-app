@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useExecution } from '@/context/ExecutionProvider';
-import { getActiveWorkspace, PULSE_WORKSPACES } from '@/types/workspaces';
+import { getActiveWorkspace } from '@/types/workspaces';
 import { isExecutionWorkspacePath, isNavPathActive } from '@/lib/workspace-routes';
 
 type NavHeading = { heading: string };
@@ -43,7 +43,7 @@ export function SidebarMenu() {
   const { pendingJobs } = useExecution();
   const isExecution = isExecutionWorkspacePath(pathname);
   const workspace = isExecution
-    ? PULSE_WORKSPACES.find(w => w.id === 'execution')!
+    ? ({ label: 'Pulse Execution', description: 'Fleet, driver, POD, trips' })
     : getActiveWorkspace();
   const nav = isExecution ? EXECUTION_NAV : COMMERCE_NAV;
   const pendingCount = orders.filter(o => o.status === 'Pending Consolidation').length;
@@ -114,12 +114,6 @@ export function SidebarMenu() {
           >
             Operations / Execution {pendingJobs.length > 0 && !isExecution ? `· ${pendingJobs.length} to dispatch` : ''}
           </Link>
-          {PULSE_WORKSPACES.filter(w => !['commerce', 'execution', 'operations'].includes(w.id)).map(w => (
-            <div key={w.id} className="px-2 py-1.5 rounded-lg text-2xs text-muted-foreground/50 cursor-not-allowed" title={`${w.label} — ${w.description}`}>
-              {w.label}
-              {w.milestone && <span className="ml-1 opacity-60">M{w.milestone}</span>}
-            </div>
-          ))}
         </div>
       </div>
     </nav>

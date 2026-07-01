@@ -80,12 +80,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
         label: "POD",
         productId: "pulse_pod_pro",
       },
-      {
-        id: "execution_settlement",
-        label: "Settlement",
-        productId: "pulse_finance_pro",
-        future: true,
-      },
     ],
   },
   {
@@ -101,13 +95,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
       {
         id: "commerce_inventory",
         label: "Inventory",
-        productId: "pulse_marketplace",
-        activeProductIds: ["pulse_marketplace", "pulse_core"],
-        future: true,
-      },
-      {
-        id: "commerce_crm",
-        label: "CRM",
         productId: "pulse_marketplace",
         activeProductIds: ["pulse_marketplace", "pulse_core"],
         future: true,
@@ -150,12 +137,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
         label: "Bidding",
         productId: "pulse_network_bidding",
       },
-      {
-        id: "network_connect",
-        label: "Connect",
-        productId: "pulse_network",
-        future: true,
-      },
     ],
   },
   {
@@ -171,18 +152,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
         id: "finance_invoice",
         label: "Invoice",
         productId: "pulse_invoice_pro",
-      },
-      {
-        id: "finance_payments",
-        label: "Payments",
-        productId: "pulse_invoice_pro",
-        future: true,
-      },
-      {
-        id: "finance_escrow",
-        label: "Escrow",
-        productId: "pulse_finance_pro",
-        future: true,
       },
     ],
   },
@@ -210,18 +179,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
         id: "workforce_talent",
         label: "Talent",
         productId: "pulse_talent",
-      },
-      {
-        id: "workforce_identity",
-        label: "Identity",
-        productId: "pulse_people",
-        future: true,
-      },
-      {
-        id: "workforce_learning",
-        label: "Learning",
-        productId: "pulse_talent",
-        future: true,
       },
     ],
   },

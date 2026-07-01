@@ -190,6 +190,96 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
   };
 }
 
+/* ───────────────────────────────────────────── Vehicle ───────────────────────────────────────────── */
+
+function yearsSinceIsoVehicle(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const years = (Date.now() - t) / (365.25 * 24 * 60 * 60 * 1000);
+  return Math.max(0, Math.round(years * 10) / 10);
+}
+
+function formatMonthYearVehicle(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
+/** Vehicle profile chrome — same shape as client/supplier public preview. */
+export function vehicleToPublicEntity(
+  v: import("@/features/vehicles/services/vehicles.service").VehicleRow,
+  tripCount: number,
+): PublicProfileEntity {
+  const display =
+    v.registration_number?.trim() ||
+    v.vehicle_number?.trim() ||
+    "Vehicle";
+  const tenureYears = yearsSinceIsoVehicle(v.created_at);
+  const docCount = [
+    v.documents?.rc?.expiryDate,
+    v.documents?.insurance?.expiryDate,
+    v.documents?.fitness?.expiryDate,
+    v.documents?.pollution?.expiryDate,
+  ].filter(Boolean).length;
+
+  const metrics: PublicProfileEntity["metrics"] = [
+    {
+      label: "TRIPS",
+      value: String(tripCount),
+      tint: tripCount > 0 ? "positive" : "default",
+    },
+    {
+      label: "DOCUMENTS",
+      value: String(docCount),
+      tint: docCount >= 3 ? "positive" : docCount > 0 ? "warning" : "default",
+    },
+    {
+      label: "FLEET STATUS",
+      value: (v.status ?? "active").toUpperCase(),
+      tint: (v.status ?? "active") === "active" ? "positive" : "warning",
+    },
+  ];
+
+  const facts: PublicProfileFact[] = [];
+  if (v.vehicle_type?.trim()) {
+    facts.push({ icon: "truck", label: "Vehicle type", value: v.vehicle_type });
+  }
+  if (v.capacity?.trim()) {
+    facts.push({ icon: "briefcase", label: "Capacity", value: v.capacity });
+  }
+  if (v.registration_number?.trim()) {
+    facts.push({ icon: "id", label: "Registration", value: v.registration_number });
+  }
+  const joined = formatMonthYearVehicle(v.created_at);
+  if (joined) {
+    facts.push({ icon: "calendar", label: "Added to fleet", value: joined });
+  }
+
+  return {
+    id: v.id,
+    entityType: "driver",
+    name: display,
+    initials: buildInitials(display),
+    avatarUrl: null,
+    avatarSeed: null,
+    isIntegrated: true,
+    isVerified: docCount >= 2,
+    subtitle: v.vehicle_type ?? null,
+    bio: v.capacity
+      ? `${display} — ${v.capacity} capacity unit on your fleet roster.`
+      : `${display} is registered on your fleet roster.`,
+    metrics,
+    facts,
+    fullDetailHref: `/vehicle/${v.id}`,
+    primaryCtaLabel: "Open vehicle ledger",
+    synergyHeadline: "Fleet operations hub",
+    synergyBody:
+      "Trips, compliance documents, and operating costs stay linked to this vehicle in one passbook.",
+  };
+}
+
 /* ───────────────────────────────────────────── Driver ───────────────────────────────────────────── */
 
 export function driverToPublicEntity(d: DriverRow): PublicProfileEntity {
