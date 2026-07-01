@@ -85,9 +85,9 @@ function isCompleted(status: string) {
   return s === 'completed' || s === 'delivered' || s === 'done';
 }
 
-/** Trip earnings for driver: 0 for aggregate (offline payment), else driver_commission / 10% supplier_rate / 10% client_price. */
-function tripEarnings(t: tripsService.TripRow): number {
-  return tripEarningsForDriver(t);
+/** Trip earnings for driver: 0 for aggregate (offline payment), else driver_commission / commission% of client_price / 10% supplier_rate. */
+function tripEarnings(t: tripsService.TripRow, payoutTerms?: { commissionPercent?: number | null; commissionPerKm?: number | null } | null): number {
+  return tripEarningsForDriver(t, payoutTerms ?? undefined);
 }
 
 /** Active fleet row, including reconnect when accept cleared invite but left_at was stale server-side. */
@@ -266,48 +266,61 @@ export default function DriverWalletScreen() {
       .catch(() => {});
   }, []);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     if (!profile?.uid) {
       setLoading(false);
       return;
     }
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
-    Promise.all([
-      driversService.getLinkedDriversForCurrentUser(profile.uid),
-      driversService.getDriverInvitesReceived(),
-    ]).then(([driversRes, invRes]) => {
+    try {
+      console.log('[Wallet] load() start — uid:', profile.uid);
+      const driversRes = await driversService.getLinkedDriversForCurrentUser(profile.uid);
       const drivers = driversRes.drivers ?? [];
-      setInvites(invRes.invites ?? []);
+      console.log('[Wallet] linkedDrivers:', drivers.length, drivers.map(d => ({ id: d.id, name: d.name, org: d.organization_id, commission: d.commission_percent, payable: d.payable_amount })));
       setLinkedDrivers(drivers);
-      if (drivers.length > 0) {
-        setDriver(drivers.find((d) => !d.left_at) ?? drivers[0]);
-        const driverIds = drivers.map((d) => d.id);
-        Promise.all([
-          tripsService.getDriverUiTripsByDriverIds(driverIds),
-          driversService.getDriverLedgerByDriverIds(driverIds),
-          salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
-        ]).then(([tRes, ledgerRes, salaryReqRes]) => {
-          setTrips(tRes.trips ?? []);
-          setLedgerEntries(ledgerRes.entries ?? []);
-          setSalaryRequests(salaryReqRes.requests ?? []);
-          setLoading(false);
-          initialLoadDoneRef.current = true;
-          isRefreshingRef.current = false;
-          setRefreshing(false);
-        });
-      } else {
+
+      if (drivers.length === 0) {
+        console.log('[Wallet] no linked drivers — showing empty state');
         setSalaryRequests([]);
         setLoading(false);
         initialLoadDoneRef.current = true;
         isRefreshingRef.current = false;
         setRefreshing(false);
+        return;
       }
-    }).catch(() => {
+
+      setDriver(drivers.find((d) => !d.left_at) ?? drivers[0]);
+      const driverIds = drivers.map((d) => d.id);
+      console.log('[Wallet] driverIds:', driverIds);
+
+      // Fire all remaining fetches in parallel — no waterfall
+      const [invRes, tRes, ledgerRes, salaryReqRes] = await Promise.all([
+        driversService.getDriverInvitesReceived(),
+        tripsService.getDriverUiTripsByDriverIds(driverIds),
+        driversService.getDriverLedgerByDriverIds(driverIds),
+        salaryRequestsService.getSalaryRequestsByDriverIds(driverIds),
+      ]);
+
+      console.log('[Wallet] invites:', invRes.invites?.length ?? 0, invRes.invites?.map(i => ({ org: i.from_organization_id, status: i.status, commission: i.commission_percent })));
+      console.log('[Wallet] trips:', tRes.trips?.length ?? 0, tRes.trips?.map(t => ({ id: t.id, trip: t.trip_number, status: t.status, org: t.organization_id, driver: t.driver_id, commission: t.driver_commission })));
+      console.log('[Wallet] ledger entries:', ledgerRes.entries?.length ?? 0);
+      console.log('[Wallet] salary requests:', salaryReqRes.requests?.length ?? 0);
+
+      setInvites(invRes.invites ?? []);
+      setTrips(tRes.trips ?? []);
+      setLedgerEntries(ledgerRes.entries ?? []);
+      setSalaryRequests(salaryReqRes.requests ?? []);
       setLoading(false);
       initialLoadDoneRef.current = true;
       isRefreshingRef.current = false;
       setRefreshing(false);
-    });
+    } catch (err) {
+      console.error('[Wallet] load() error:', err);
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    }
   }, [profile?.uid]);
 
   useEffect(() => {
@@ -361,6 +374,30 @@ export default function DriverWalletScreen() {
   const sortedLedgerEntries = useMemo(() => {
     return [...ledgerEntries].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [ledgerEntries]);
+
+  // Pre-built O(1) map of payout terms keyed by "driverId:orgId".
+  const payoutTermsMap = useMemo(() => {
+    const map = new Map<string, { commissionPercent: number | null; commissionPerKm: number | null }>();
+    for (const d of linkedDrivers) {
+      const inv = invites.find(
+        (i) =>
+          (i.status || '').toLowerCase() === 'accepted' &&
+          String(i.from_organization_id ?? '') === String(d.organization_id ?? ''),
+      );
+      map.set(`${String(d.id ?? '')}:${String(d.organization_id ?? '')}`, {
+        commissionPercent: inv?.commission_percent ?? d.commission_percent ?? null,
+        commissionPerKm: inv?.commission_per_km ?? d.commission_per_km ?? null,
+      });
+    }
+    console.log('[Wallet] payoutTermsMap:', Object.fromEntries(map));
+    return map;
+  }, [linkedDrivers, invites]);
+
+  const payoutTermsForTrip = useCallback(
+    (t: tripsService.TripRow) =>
+      payoutTermsMap.get(`${String(t.driver_id ?? '')}:${String(t.organization_id ?? '')}`) ?? null,
+    [payoutTermsMap],
+  );
 
   const receivedLedgerEntries = useMemo(() => {
     // Settlement credits only (used for "received"/"settled" UI).
@@ -967,8 +1004,10 @@ export default function DriverWalletScreen() {
 
     const pending = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) === 0);
     const received = visibleTrips.filter((t) => (receivedByTripId[t.id] ?? 0) > 0);
-    const pendingSum = pending.reduce((s, t) => s + tripEarnings(t), 0);
-    const receivedSum = received.reduce((s, t) => s + tripEarnings(t), 0);
+    const pendingSum = pending.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
+    const receivedSum = received.reduce((s, t) => s + tripEarnings(t, payoutTermsForTrip(t)), 0);
+    console.log('[Wallet] completedTrips:', visibleTrips.length, '| pending:', pending.length, '| received:', received.length, '| pendingTotal:', pendingSum, '| receivedTotal:', receivedSum);
+    console.log('[Wallet] per-trip earnings:', visibleTrips.map(t => ({ trip: t.trip_number, commission: t.driver_commission, earned: tripEarnings(t, payoutTermsForTrip(t)), receivedAmt: receivedByTripId[t.id] ?? 0 })));
     const list =
       transactionFilter === 'pending'
         ? pending
@@ -1150,7 +1189,7 @@ export default function DriverWalletScreen() {
           String(trip.organization_id ?? '') === String(fleet.orgId) &&
           String(trip.driver_id ?? '') === String(fleet.driverId),
       );
-      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
+      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip, payoutTermsForTrip(trip)), 0));
       // Received for trip progress = only verified settlements.
       const received = Math.round(
         ledgerEntries
@@ -1486,7 +1525,7 @@ export default function DriverWalletScreen() {
           String(trip.organization_id ?? '') === orgId &&
           String(trip.driver_id ?? '') === String(d.id),
       );
-      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip), 0));
+      const earned = Math.round(fleetTrips.reduce((sum, trip) => sum + tripEarnings(trip, payoutTermsForTrip(trip)), 0));
       const received = Math.round(
         ledgerEntries
           .filter(
@@ -1541,7 +1580,7 @@ export default function DriverWalletScreen() {
           String(t.organization_id ?? '') === orgId &&
           String(t.driver_id ?? '') === String(d.id),
       );
-      const earned = Math.round(fleetTrips.reduce((sum, t) => sum + tripEarnings(t), 0));
+      const earned = Math.round(fleetTrips.reduce((sum, t) => sum + tripEarnings(t, payoutTermsForTrip(t)), 0));
       return {
         driverId: d.id,
         orgId,
@@ -1793,7 +1832,7 @@ export default function DriverWalletScreen() {
       const tripId = trip.id;
       setMarkFleetTripLoadingId(tripId);
       try {
-        const earnings = Math.round(tripEarnings(trip));
+        const earnings = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
         if (earnings <= 0) {
           Alert.alert('No earnings', 'Trip earnings could not be calculated. Please check trip details.');
           return;
@@ -1959,7 +1998,7 @@ export default function DriverWalletScreen() {
 
       const tripDisplay = getDriverTripDisplayNumber(trip, driverTripNumberById);
       const roundedAmount = Math.round(amount);
-      const expectedAmt = Math.round(tripEarnings(trip));
+      const expectedAmt = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
       const writeOffAmt = expectedAmt > roundedAmount ? expectedAmt - roundedAmount : 0;
       if (sourceLedger) {
         setSettledSuccessState({
@@ -1994,7 +2033,7 @@ export default function DriverWalletScreen() {
       setMarkPaidConfirmState({
         trip,
         amount,
-        expectedAmount: shortfall?.expectedAmount ?? Math.round(tripEarnings(trip)),
+        expectedAmount: shortfall?.expectedAmount ?? Math.round(tripEarnings(trip, payoutTermsForTrip(trip))),
         writeOffAmount: shortfall?.writeOffAmount ?? 0,
         hasPaymentShortfall: shortfall?.hasPaymentShortfall ?? false,
         sourceLedger: sourceLedger ?? null,

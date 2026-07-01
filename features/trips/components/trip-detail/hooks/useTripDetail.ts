@@ -392,7 +392,8 @@ export function useTripDetail({
     currentOrganization?.id ?? null,
   );
   const displayClientName = trip
-    ? (shipperNameByTripId[trip.id] ?? trip.client_name ?? undefined)
+    ? (shipperNameByTripId[trip.id] ??
+        (trip.organization_id !== currentOrganization?.id ? undefined : trip.client_name ?? undefined))
     : undefined;
 
   // ── Derived flags ─────────────────────────────────────────────────────────

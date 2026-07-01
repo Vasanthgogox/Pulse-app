@@ -130,7 +130,7 @@ const ActiveWorkspaceContext = createContext<ActiveWorkspaceState | undefined>(u
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, status: authStatus } = useAuth();
   const { setCurrentOrganization } = useOrganization();
 
   // Capture setter in a ref so loadWorkspaces never needs it as a dep.
@@ -258,13 +258,14 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   // re-firing when the auth object reference changes but the uid is the same.
 
   useEffect(() => {
+    if (authStatus === 'restoring') return; // auth not confirmed yet — do not query
     const signal = { cancelled: false };
     sessionSignalRef.current = signal;
     void loadWorkspaces(signal);
     return () => {
       signal.cancelled = true;
     };
-  }, [userId, loadWorkspaces]); // loadWorkspaces is now stable → fires only when userId changes
+  }, [userId, authStatus, loadWorkspaces]); // authStatus guard prevents ghost requests during startup race
 
   // ── Public actions ──────────────────────────────────────────────────────────
 

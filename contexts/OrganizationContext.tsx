@@ -58,7 +58,8 @@ export function useOrganization() {
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const { user, profile, status } = useAuth();
-  const [currentOrganization, setCurrentOrganization] = useState<CurrentOrganization | null>(null);
+  const userId = user?.uid ?? null;
+  const [currentOrganization, setCurrentOrganizationState] = useState<CurrentOrganization | null>(null);
   const prevOrgIdRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -67,24 +68,47 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const userRef = useRef(user);
   userRef.current = user;
 
+  /**
+   * Tracks which userId had its org state populated by ActiveWorkspaceContext.
+   * When set, OrganizationContext skips its own fetch for that user — avoiding
+   * a duplicate startup request. Cleared on userId change so a different user
+   * always gets a fresh fetch. refreshOrganization bypasses this guard entirely.
+   */
+  const workspacePopulatedForUserRef = useRef<string | null>(null);
+
+  // Public setter — wraps state setter so ActiveWorkspaceContext can signal
+  // that it has already populated org state for the current user.
+  const setCurrentOrganization = useCallback((org: CurrentOrganization | null) => {
+    const currentUid = userRef.current?.uid ?? null;
+    if (currentUid) workspacePopulatedForUserRef.current = currentUid;
+    setCurrentOrganizationState(org);
+  }, []);
+
   /** `signal.cancelled` is set in effect cleanup (user change, unmount). Refresh uses `sessionSignalRef` so it honours the same cancellation. */
-  const loadOrganizationsForSession = useCallback(async (signal: { cancelled: boolean }) => {
+  const loadOrganizationsForSession = useCallback(async (signal: { cancelled: boolean }, forceRefresh = false) => {
     const stale = () => signal.cancelled;
     const staleForUser = (uid: string) => stale() || userRef.current?.uid !== uid;
 
     const sessionUser = userRef.current;
     if (!sessionUser) {
       if (stale()) return;
-      setCurrentOrganization(null);
+      setCurrentOrganizationState(null);
       setIsLoading(false);
       return;
     }
 
     if (profile?.role === 'driver') {
       if (stale()) return;
-      setCurrentOrganization(null);
+      setCurrentOrganizationState(null);
       setError(null);
       setIsLoading(false);
+      return;
+    }
+
+    // Skip fetch if ActiveWorkspaceContext already populated org state for this
+    // exact user session. forceRefresh (used by refreshOrganization) bypasses this.
+    if (!forceRefresh && workspacePopulatedForUserRef.current === sessionUser.uid) {
+      if (!stale()) setIsLoading(false);
       return;
     }
 
@@ -99,17 +123,17 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       if (err) {
         setError(err);
         if (!isInfrastructureErrorMessage(err.message)) {
-          setCurrentOrganization(null);
+          setCurrentOrganizationState(null);
         }
       } else if (organizations.length > 0) {
-        setCurrentOrganization(organizations[0]);
+        setCurrentOrganizationState(organizations[0]);
       } else {
-        setCurrentOrganization(null);
+        setCurrentOrganizationState(null);
       }
     } catch (e) {
       if (staleForUser(sessionUid)) return;
       setError(e instanceof Error ? e : new Error(String(e)));
-      setCurrentOrganization(null);
+      setCurrentOrganizationState(null);
     } finally {
       if (!staleForUser(sessionUid)) {
         // Only mark once during cold boot — not on every org refresh.
@@ -120,10 +144,13 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   }, [profile?.role]);
 
   const refreshOrganization = useCallback(async () => {
-    await loadOrganizationsForSession(sessionSignalRef.current);
+    await loadOrganizationsForSession(sessionSignalRef.current, true); // forceRefresh — bypasses workspace guard
   }, [loadOrganizationsForSession]);
 
   useEffect(() => {
+    // Clear workspace-populated flag on user change so a different user always
+    // gets a fresh fetch — prevents the guard from skipping after account switch.
+    workspacePopulatedForUserRef.current = null;
     if (status === 'restoring') return;
     const signal = { cancelled: false };
     sessionSignalRef.current = signal;
@@ -131,7 +158,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     return () => {
       signal.cancelled = true;
     };
-  }, [user, status, loadOrganizationsForSession]);
+  }, [userId, status, loadOrganizationsForSession]);
 
   useEffect(() => {
     if (!error || !isInfrastructureErrorMessage(error.message)) return;
@@ -141,7 +168,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       void refreshOrganization();
     }, retryMs);
     return () => clearTimeout(t);
-  }, [error, status, user, profile?.role, refreshOrganization]);
+  }, [error, status, userId, profile?.role, refreshOrganization]);
 
   // Invalidate non-realtime TanStack Query cache on org switch to prevent cross-org data bleed.
   // Realtime-covered queries self-update; the rest need a forced eviction.

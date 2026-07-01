@@ -20,6 +20,8 @@ interface UseAwardQuoteParams {
   queryClient: QueryClient;
   invalidateIndents: ReturnType<typeof useInvalidateIndents>;
   onSuccess: (msg: string) => void;
+  /** linked_organization_id values from the shipper's suppliers — used to badge connected bidders */
+  connectedSupplierOrgIds?: Set<string>;
 }
 
 export interface AwardQuoteResult {
@@ -31,6 +33,7 @@ export interface AwardQuoteResult {
   pendingCount: number;
   lowestPendingAmount: number | null;
   quotesLoading: boolean;
+  connectedSupplierOrgIds: Set<string>;
   open: (load: IndentRow) => void;
   close: () => void;
   selectQuote: (id: string | null) => void;
@@ -42,6 +45,7 @@ export function useAwardQuote({
   queryClient,
   invalidateIndents,
   onSuccess,
+  connectedSupplierOrgIds = new Set(),
 }: UseAwardQuoteParams): AwardQuoteResult {
   const invalidatePosts = useInvalidatePosts(orgId);
   const [currentLoad, setCurrentLoad] = useState<IndentRow | null>(null);
@@ -143,6 +147,18 @@ export function useAwardQuote({
       );
       return;
     }
+    const confirmed = await new Promise<boolean>((resolve) =>
+      Alert.alert(
+        "Confirm Award",
+        `Award this load to ${winner.bidder_organization_name ?? "this supplier"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Award", style: "destructive", onPress: () => resolve(true) },
+        ],
+      )
+    );
+    if (!confirmed) return;
+
     try {
       setAwarding(true);
       const { error: acceptErr } = await updateDirectQuoteStatus(
@@ -227,6 +243,7 @@ export function useAwardQuote({
     pendingCount,
     lowestPendingAmount,
     quotesLoading,
+    connectedSupplierOrgIds,
     open,
     close,
     selectQuote,

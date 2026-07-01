@@ -32,6 +32,8 @@ export interface IndentLiveBidCardProps {
   targetRateInr?: number;
   highestPendingAmount?: number | null;
   pendingCount?: number;
+  /** True when the bidder is already an integrated partner of the viewing org */
+  isConnectedPartner?: boolean;
   onPress?: () => void;
 }
 
@@ -152,6 +154,7 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
   targetRateInr = 0,
   highestPendingAmount = null,
   pendingCount = 0,
+  isConnectedPartner = false,
   onPress,
 }: IndentLiveBidCardProps) {
   const partyName = (quote.bidder_organization_name ?? "Supplier").trim() || "Supplier";
@@ -223,9 +226,20 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
           showIntegrationBadge={false}
         />
         <View style={styles.body}>
-          <Text style={styles.partyKicker}>
-            {isAccepted ? "AWARDED BID" : "LIVE BID"}
-          </Text>
+          <View style={styles.kickerRow}>
+            <Text style={styles.partyKicker}>
+              {isAccepted ? "AWARDED BID" : "LIVE BID"}
+            </Text>
+            {isConnectedPartner ? (
+              <View style={styles.partnerPill}>
+                <Text style={styles.partnerPillText}>CONNECTED</Text>
+              </View>
+            ) : (
+              <View style={[styles.partnerPill, styles.partnerPillNew]}>
+                <Text style={[styles.partnerPillText, styles.partnerPillTextNew]}>NEW PARTNER</Text>
+              </View>
+            )}
+          </View>
           <View style={styles.titleRow}>
             <Text style={styles.partyName} numberOfLines={2}>
               {partyName}
@@ -368,11 +382,38 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingTop: 1,
   },
+  kickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 0,
+  },
   partyKicker: {
     ...indentReviewHubText.fieldLabel,
     color: BID.kicker,
     fontSize: 7,
-    marginBottom: 0,
+  },
+  partnerPill: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  partnerPillText: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+    color: Theme.positive,
+  },
+  partnerPillNew: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  partnerPillTextNew: {
+    color: "#C2410C",
   },
   titleRow: {
     flexDirection: "row",

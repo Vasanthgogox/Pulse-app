@@ -46,6 +46,7 @@ yarn-error.*
 coverage/
 test-results/
 playwright-report/
+.playwright-mcp/
 
 # logs
 *.log

@@ -4,6 +4,7 @@
  * When visible is true, shows as Ledger-style bottom-sheet popup; when undefined, full-screen wizard (e.g. route).
  */
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
+import { CapacityDialPicker } from "@/components/CapacityDialPicker";
 import { partyAddModalChromeStyles } from "@/components/PartyAddModalChrome";
 import { WizardStepLayout } from "@/components/WizardStepLayout";
 import Layout from "@/constants/Layout";
@@ -26,15 +27,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatIndianVehicleNumberInput } from "@/lib/format";
 import { dateISO, validateIndianVehicleNumber } from "@/lib/validation";
 import {
-    getAxleRecommendations,
-    getCapacityRecommendations,
-} from "../utils/indianTruckData.util";
-import {
+    AXLE_CHIP_OPTIONS,
     BODY_LENGTH_SELECT_OPTIONS,
+    getBodyTypeOptions,
     normalizeBodyLengthKey,
     OTHER_LABEL,
     VEHICLE_CATEGORY_LABELS,
-    getModelSelectOptions,
 } from "../utils/vehicleFormOptions.util";
 import {
     DOCUMENT_EXPIRY_ORDER,
@@ -90,12 +88,10 @@ export function AddVehicleModal({
     useState<VehicleSource>("organization");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [vehicleCategory, setVehicleCategory] = useState("");
-  const [model, setModel] = useState("");
   const [bodyLength, setBodyLength] = useState("");
   const [bodyLengthIsOther, setBodyLengthIsOther] = useState(false);
   const [bodyLengthPickerOpen, setBodyLengthPickerOpen] = useState(false);
-  const [modelIsOther, setModelIsOther] = useState(false);
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [bodyType, setBodyType] = useState("");
   const [axle, setAxle] = useState("");
   const [capacity, setCapacity] = useState("");
   const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
@@ -115,12 +111,10 @@ export function AddVehicleModal({
       setVehicleSource("organization");
       setVehicleNumber("");
       setVehicleCategory("");
-      setModel("");
-      setModelIsOther(false);
-      setModelPickerOpen(false);
       setBodyLength("");
       setBodyLengthIsOther(false);
       setBodyLengthPickerOpen(false);
+      setBodyType("");
       setAxle("");
       setCapacity("");
       setExpiryDates({});
@@ -129,29 +123,7 @@ export function AddVehicleModal({
     }
   }, [visible]);
 
-  const axleRecommendations = useMemo(() => getAxleRecommendations(axle).slice(0, 8), [axle]);
-  const capacityRecommendations = useMemo(() => getCapacityRecommendations(capacity).slice(0, 6), [capacity]);
-
-  const vehicleTypeLabel = useMemo(() => {
-    const parts = [vehicleCategory, model].filter(Boolean);
-    return parts.join(" ") || "";
-  }, [vehicleCategory, model]);
-
-  const openModelPicker = () => {
-    setModelPickerOpen(true);
-  };
-
-  const selectModelPreset = (value: string) => {
-    setModelIsOther(false);
-    setModel(value);
-    setModelPickerOpen(false);
-  };
-
-  const selectModelOtherFromPicker = () => {
-    setModelIsOther(true);
-    setModel("");
-    setModelPickerOpen(false);
-  };
+  const bodyTypeOptions = useMemo(() => getBodyTypeOptions(vehicleCategory), [vehicleCategory]);
 
   const openBodyLengthPicker = () => {
     setBodyLengthPickerOpen(true);
@@ -192,7 +164,7 @@ export function AddVehicleModal({
           ]}
         >
           <Text style={pickerModalStyles.sheetTitle}>Body length (ft)</Text>
-          <Text style={pickerModalStyles.sheetHint}>Scroll to choose a preset or Other to type manually.</Text>
+          <Text style={pickerModalStyles.sheetHint}>Pick a size or choose Other to type manually.</Text>
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
@@ -249,135 +221,27 @@ export function AddVehicleModal({
     </Modal>
   );
 
-  const renderModelPickerSheet = () => (
-    <Modal
-      visible={modelPickerOpen}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setModelPickerOpen(false)}
-    >
-      <KeyboardAvoidingView
-        style={pickerModalStyles.backdrop}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => setModelPickerOpen(false)}
-        />
-        <View
-          style={[
-            pickerModalStyles.sheet,
-            {
-              paddingBottom: insets.bottom + 16,
-              maxHeight: Dimensions.get("window").height * 0.72,
-            },
-          ]}
-        >
-          <Text style={pickerModalStyles.sheetTitle}>Model</Text>
-          <Text style={pickerModalStyles.sheetHint}>
-            Scroll to choose a preset or Other to type manually.
-          </Text>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator
-            style={pickerModalStyles.sheetScroll}
-          >
-            {getModelSelectOptions(vehicleCategory).map((opt) => (
-              <TouchableOpacity
-                key={`model-${normalizeBodyLengthKey(opt)}`}
-                style={[
-                  pickerModalStyles.optionRow,
-                  normalizeBodyLengthKey(model) === normalizeBodyLengthKey(opt) &&
-                    !modelIsOther &&
-                    pickerModalStyles.optionRowActive,
-                ]}
-                onPress={() => selectModelPreset(opt)}
-              >
-                <Text
-                  style={[
-                    pickerModalStyles.optionText,
-                    normalizeBodyLengthKey(model) === normalizeBodyLengthKey(opt) &&
-                      !modelIsOther &&
-                      pickerModalStyles.optionTextActive,
-                  ]}
-                >
-                  {opt}
-                </Text>
-              </TouchableOpacity>
-            ))}
+  const renderBodyTypeField = () => {
+    if (bodyTypeOptions.length === 0) return null;
+    return (
+      <View style={{ marginBottom: 4 }}>
+        <Text style={labelStyle}>Body type</Text>
+        <View style={styles.pickerRow}>
+          {bodyTypeOptions.map((opt) => (
             <TouchableOpacity
-              style={[
-                pickerModalStyles.optionRow,
-                modelIsOther && pickerModalStyles.optionRowActive,
-              ]}
-              onPress={selectModelOtherFromPicker}
+              key={opt}
+              style={[styles.chip, bodyType === opt && styles.chipActive]}
+              onPress={() => setBodyType(bodyType === opt ? "" : opt)}
             >
-              <Text
-                style={[
-                  pickerModalStyles.optionText,
-                  modelIsOther && pickerModalStyles.optionTextActive,
-                ]}
-              >
-                {OTHER_LABEL} — type manually
+              <Text style={[styles.chipText, bodyType === opt && styles.chipTextActive]}>
+                {opt}
               </Text>
             </TouchableOpacity>
-          </ScrollView>
-          <TouchableOpacity
-            style={pickerModalStyles.doneBtn}
-            onPress={() => setModelPickerOpen(false)}
-          >
-            <Text style={pickerModalStyles.doneBtnText}>Done</Text>
-          </TouchableOpacity>
+          ))}
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
-  const renderModelField = () => (
-    <View style={{ marginBottom: 4 }}>
-      <Text style={labelStyle}>
-        Model <Text style={styles.requiredMark}>*</Text>
-      </Text>
-      {modelIsOther ? (
-        <TextInput
-          style={inputStyle}
-          placeholder="Type model"
-          placeholderTextColor={Theme.placeholder}
-          value={model}
-          onChangeText={setModel}
-          autoCorrect={false}
-          spellCheck={false}
-          autoComplete="off"
-        />
-      ) : (
-        <TouchableOpacity
-          style={[inputStyle, styles.bodyLengthTouchable]}
-          onPress={openModelPicker}
-          activeOpacity={0.75}
-        >
-          <Text
-            style={[
-              styles.bodyLengthTouchableText,
-              !model && { color: Theme.placeholder },
-            ]}
-          >
-            {model || "Tap to select model"}
-          </Text>
-        </TouchableOpacity>
-      )}
-      {modelIsOther ? (
-        <TouchableOpacity
-          onPress={openModelPicker}
-          style={styles.switchToPresetLink}
-        >
-          <Text style={styles.switchToPresetLinkText}>
-            Choose from list instead
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
+      </View>
+    );
+  };
 
   const renderBodyLengthField = () => (
     <View style={{ marginBottom: 4 }}>
@@ -419,19 +283,32 @@ export function AddVehicleModal({
     </View>
   );
 
+  const renderAxleChipField = () => (
+    <View style={{ marginBottom: 4 }}>
+      <Text style={labelStyle}>Axle</Text>
+      <View style={styles.pickerRow}>
+        {AXLE_CHIP_OPTIONS.map((opt) => (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.chip, axle === opt && styles.chipActive]}
+            onPress={() => setAxle(axle === opt ? "" : opt)}
+          >
+            <Text style={[styles.chipText, axle === opt && styles.chipTextActive]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
   const step = STEPS[stepIndex];
   const isReview = step.key === "review";
-  const canProceedInfo = ownAssetOnly
-    ? !!vehicleNumber.trim() &&
-        !!vehicleCategory.trim() &&
-        !!bodyLength.trim() &&
-        !!model.trim() &&
-        !!capacity.trim()
-    : !!vehicleNumber.trim() &&
-        !!vehicleCategory.trim() &&
-        !!model.trim() &&
-        !!bodyLength.trim() &&
-        !!capacity.trim();
+  const canProceedInfo =
+    !!vehicleNumber.trim() &&
+    !!vehicleCategory.trim() &&
+    !!bodyLength.trim() &&
+    !!capacity.trim();
 
   const handleNext = () => {
     if (isReview) {
@@ -461,17 +338,14 @@ export function AddVehicleModal({
           if (exp) documents[key] = { url: "", expiryDate: exp };
         });
       }
-      const typeSummary =
-        [vehicleCategory, model].filter((s) => s?.trim()).join(" • ").trim() ||
-        "Other";
       const result = onComplete({
         vehicleSource: ownAssetOnly ? "organization" : vehicleSource,
         vehicleNumber: vehicleNumber.trim(),
-        vehicleType: ownAssetOnly ? typeSummary : (vehicleTypeLabel || typeSummary),
+        vehicleType: vehicleCategory.trim() || "Other",
         capacity: capacity.trim(),
         vehicleBrand: vehicleCategory.trim() || null,
-        vehicleModel: model.trim() || null,
-        vehicleBodyType: null,
+        vehicleModel: null,
+        vehicleBodyType: bodyType.trim() || null,
         vehicleSize: bodyLength.trim() || null,
         vehicleAxle: axle || null,
         documents,
@@ -509,22 +383,6 @@ export function AddVehicleModal({
   ];
   const labelStyle = [styles.label, { color: Theme.textMutedDemo }];
 
-  const renderRecommendationHint = (
-    items: string[],
-    currentValue: string,
-  ) => {
-    if (items.length === 0) return null;
-    const displayItems = items
-      .filter((item) => item.trim().toLowerCase() !== currentValue.trim().toLowerCase())
-      .slice(0, 5);
-    if (displayItems.length === 0) return null;
-    return (
-      <Text style={styles.recommendationHint}>
-        Recommended: {displayItems.join(", ")}
-      </Text>
-    );
-  };
-
   const renderStep = () => {
     switch (step.key) {
       case "info":
@@ -558,7 +416,7 @@ export function AddVehicleModal({
                       styles.chip,
                       vehicleCategory === cat && styles.chipActive,
                     ]}
-                    onPress={() => setVehicleCategory(cat)}
+                    onPress={() => { setVehicleCategory(cat); setBodyType(""); }}
                   >
                     <Text
                       style={[
@@ -571,37 +429,13 @@ export function AddVehicleModal({
                   </TouchableOpacity>
                 ))}
               </View>
-              {renderModelField()}
+              {renderBodyTypeField()}
               {renderBodyLengthField()}
               <Text style={labelStyle}>
-                Capacity (TON) <Text style={styles.requiredMark}>*</Text>
+                Load capacity <Text style={styles.requiredMark}>*</Text>
               </Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="e.g. 7.5"
-                placeholderTextColor={Theme.placeholder}
-                value={capacity}
-                onChangeText={setCapacity}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-                keyboardType="decimal-pad"
-              />
-              {renderRecommendationHint(capacityRecommendations, capacity)}
-              <Text style={labelStyle}>
-                Axle
-              </Text>
-              <TextInput
-                style={inputStyle}
-                placeholder="e.g. 6x4"
-                placeholderTextColor={Theme.placeholder}
-                value={axle}
-                onChangeText={setAxle}
-                autoCorrect={false}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              {renderRecommendationHint(axleRecommendations, axle)}
+              <CapacityDialPicker value={capacity} onChange={setCapacity} />
+              {renderAxleChipField()}
             </ScrollView>
           );
         }
@@ -682,35 +516,13 @@ export function AddVehicleModal({
                 </TouchableOpacity>
               ))}
             </View>
-            {renderModelField()}
+            {renderBodyTypeField()}
             {renderBodyLengthField()}
             <Text style={labelStyle}>
-              Load capacity (TON) <Text style={styles.requiredMark}>*</Text>
+              Load capacity <Text style={styles.requiredMark}>*</Text>
             </Text>
-            <TextInput
-              style={inputStyle}
-              placeholder="e.g. 7.5"
-              placeholderTextColor={Theme.placeholder}
-              value={capacity}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              keyboardType="decimal-pad"
-              onChangeText={setCapacity}
-            />
-            {renderRecommendationHint(capacityRecommendations, capacity)}
-            <Text style={labelStyle}>Axle</Text>
-            <TextInput
-              style={inputStyle}
-              placeholder="e.g. 6x4"
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              placeholderTextColor={Theme.placeholder}
-              value={axle}
-              onChangeText={setAxle}
-            />
-            {renderRecommendationHint(axleRecommendations, axle)}
+            <CapacityDialPicker value={capacity} onChange={setCapacity} />
+            {renderAxleChipField()}
           </ScrollView>
         );
       case "documents":
@@ -759,17 +571,15 @@ export function AddVehicleModal({
                     : "Partner Vehicle"}
               </Text>
               <Text style={styles.reviewSub}>
-                {ownAssetOnly
-                  ? [
-                      vehicleCategory,
-                      model,
-                      bodyLength,
-                      capacity.trim() ? `${capacity.trim()} TON` : null,
-                      axle,
-                    ]
-                      .filter(Boolean)
-                      .join(" • ") || "—"
-                  : `${vehicleTypeLabel || "—"} • ${capacity.trim() ? `${capacity.trim()} TON` : "—"}`}
+                {[
+                  vehicleCategory,
+                  bodyType,
+                  bodyLength,
+                  capacity.trim() ? `${capacity.trim()} TON` : null,
+                  axle,
+                ]
+                  .filter(Boolean)
+                  .join(" • ") || "—"}
               </Text>
             </View>
             {!ownAssetOnly &&
@@ -916,7 +726,6 @@ export function AddVehicleModal({
           </KeyboardAvoidingView>
         </Modal>
         {renderBodyLengthPickerSheet()}
-        {renderModelPickerSheet()}
         <ThemedAlertModal
           visible={showCreateSuccess}
           title="Vehicle added successfully"
@@ -957,7 +766,6 @@ export function AddVehicleModal({
         {renderStep()}
       </WizardStepLayout>
       {renderBodyLengthPickerSheet()}
-      {renderModelPickerSheet()}
       <ThemedAlertModal
         visible={showCreateSuccess}
         title="Vehicle added successfully"

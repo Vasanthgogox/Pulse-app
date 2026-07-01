@@ -137,8 +137,13 @@ export async function getNetworkFeed(
   });
   if (error) return { error: new Error(error.message), posts: [] };
   const rawPosts = (data ?? []) as PostRow[];
+  // Keep own-org awarded/completed LOAD posts (is_active=false but source_indent_id set)
+  // so the story remains visible after the indent is awarded.
   const activePosts = rawPosts.filter(
-    (p) => p.is_active === true && !isPostExpired(p),
+    (p) =>
+      !isPostExpired(p) &&
+      (p.is_active === true ||
+        (p.organization_id === orgId && p.source_indent_id != null)),
   );
 
   // Best effort: auto-deactivate expired own stories so they disappear for everyone.
@@ -219,6 +224,20 @@ export async function createPost(
   }
 
   return { error: new Error(primary.error.message), postId: null };
+}
+
+export async function getPostById(
+  postId: string,
+): Promise<{ error: Error | null; post: PostRow | null }> {
+  const { data, error } = await supabase()
+    .from('posts')
+    .select('*, organizations(name)')
+    .eq('id', postId)
+    .single();
+  if (error) return { error: new Error(error.message), post: null };
+  const raw = data as (PostRow & { organizations?: { name: string } | null });
+  const row: PostRow = { ...raw, org_name: raw.org_name ?? raw.organizations?.name ?? '' };
+  return { error: null, post: normalizeFeedPost(row) };
 }
 
 export async function deactivatePost(

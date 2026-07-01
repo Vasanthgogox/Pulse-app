@@ -12,6 +12,7 @@ import { StoryOwnerFooterActions } from "@/features/network/components/StoryDeta
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import {
   deactivatePost,
+  getPostById,
   isPostVisibleForOrg,
   type PostRow,
 } from "@/features/network/services/posts.service";
@@ -42,6 +43,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Alert,
   Easing,
@@ -242,6 +244,20 @@ export default function StoryDetailScreen() {
     : seedPost ? [seedPost]
     : [];
 
+  // Direct fetch by postId when feed cache is empty (e.g. opened via shared URL).
+  const directPostQ = useQuery({
+    queryKey: ["q", "posts", "direct", params.postId],
+    queryFn: async () => {
+      const { post } = await getPostById(params.postId!);
+      return post;
+    },
+    enabled: Boolean(params.postId && storyList.length === 0),
+    staleTime: 30_000,
+  });
+  const directPost = directPostQ.data ?? null;
+  const resolvedStoryList: PostRow[] = storyList.length > 0 ? storyList : directPost ? [directPost] : [];
+  const isLoadingPost = storyList.length === 0 && directPostQ.isLoading;
+
   const [current, setCurrent] = useState(0);
   const [bidPost, setBidPost] = useState<PostRow | null>(null);
   const [editBidMode, setEditBidMode] = useState(false);
@@ -253,33 +269,33 @@ export default function StoryDetailScreen() {
   const recordedViewsRef = useRef<Set<string>>(new Set());
 
   const goNext = useCallback(() => {
-    if (current < storyList.length - 1) { progress.setValue(0); setCurrent((c) => c + 1); }
+    if (current < resolvedStoryList.length - 1) { progress.setValue(0); setCurrent((c) => c + 1); }
     else router.back();
-  }, [current, storyList.length, progress, router]);
+  }, [current, resolvedStoryList.length, progress, router]);
 
   const goPrev = useCallback(() => {
     if (current > 0) { progress.setValue(0); setCurrent((c) => c - 1); }
   }, [current, progress]);
 
   useEffect(() => {
-    if (storyList.length === 0) return;
+    if (resolvedStoryList.length === 0) return;
     if (animRef.current) animRef.current.stop();
     progress.setValue(0);
     animRef.current = Animated.timing(progress, { toValue: 1, duration: STORY_DURATION, easing: Easing.linear, useNativeDriver: false });
     animRef.current.start(({ finished }) => { if (finished) goNext(); });
     return () => { if (animRef.current) animRef.current.stop(); };
-  }, [current, storyList.length, goNext, progress]);
+  }, [current, resolvedStoryList.length, goNext, progress]);
 
   const initialStoryIndex = useMemo(() => {
     const targetPostId = params.postId ?? "";
-    if (!targetPostId || storyList.length === 0) return 0;
-    const idx = storyList.findIndex((p) => p.id === targetPostId);
+    if (!targetPostId || resolvedStoryList.length === 0) return 0;
+    const idx = resolvedStoryList.findIndex((p) => p.id === targetPostId);
     return idx >= 0 ? idx : 0;
-  }, [storyList, params.postId]);
+  }, [resolvedStoryList, params.postId]);
 
   useEffect(() => { setCurrent(initialStoryIndex); progress.setValue(0); }, [initialStoryIndex, progress]);
 
-  const post = storyList[current];
+  const post = resolvedStoryList[current];
 
   useEffect(() => {
     if (!post) return;
@@ -408,6 +424,10 @@ export default function StoryDetailScreen() {
         >
           <X size={16} color={INK} strokeWidth={2.25} />
         </Pressable>
+        {isLoadingPost
+          ? <ActivityIndicator size="large" color={Theme.primary} />
+          : <Text style={{ color: Theme.textMuted, fontSize: 14, fontWeight: '500' }}>Story not found</Text>
+        }
       </View>
     );
   }
@@ -416,7 +436,7 @@ export default function StoryDetailScreen() {
     <View style={styles.container}>
       {isLoad ? <View style={styles.ambientGlow} pointerEvents="none" /> : null}
       <View style={[styles.progressRow, { paddingTop: insets.top + 8 }]}>
-        {storyList.map((_, i) => (
+        {resolvedStoryList.map((_, i) => (
           <ProgressSegment key={i} index={i} current={current} progress={progress} />
         ))}
       </View>
@@ -426,10 +446,10 @@ export default function StoryDetailScreen() {
         <View style={styles.topBarLeft}>
           <View style={styles.topBarText}>
             <View style={styles.orgBrandRow}>
-              <Text style={[styles.orgTitle, post.org_name.trim().toUpperCase() === "PULSE" && styles.orgTitlePulse]} numberOfLines={1}>
+              <Text style={[styles.orgTitle, (post.org_name ?? '').trim().toUpperCase() === "PULSE" && styles.orgTitlePulse]} numberOfLines={1}>
                 {post.org_name}
               </Text>
-              {post.org_name.trim().toUpperCase() === "PULSE" ? <View style={styles.pulseGreenDot} /> : null}
+              {(post.org_name ?? '').trim().toUpperCase() === "PULSE" ? <View style={styles.pulseGreenDot} /> : null}
             </View>
             <Text style={styles.timeAgoLabel}>{timeAgo(post.created_at)}</Text>
           </View>

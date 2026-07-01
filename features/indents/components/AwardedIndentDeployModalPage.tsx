@@ -97,8 +97,20 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
   const indentNo = getIndentDisplayNumber(indent);
   const origin = indent.pickup_area || "—";
   const dest = indent.drop_location || "—";
-  const vehicleType = (indent.vehicle_type || "—").toUpperCase();
+  const vehicleType = indent.vehicle_type ? indent.vehicle_type.toUpperCase() : null;
   const tonsToCarry = formatIndentTonsToCarry(indent.weight);
+  const hasTons = indent.weight != null && indent.weight > 0;
+  // Tile: show tons as amount when available, else show vehicle type as amount
+  const tonsTileAmount = hasTons ? tonsToCarry : (vehicleType ?? "—");
+  // When no tons: don't repeat load_type in tile (already shown as chip in header)
+  const tonsTileHint = hasTons ? (vehicleType ?? null) : null;
+  const loadType = indent.load_type ? indent.load_type : null;
+
+  // "2 details" → real inline detail chips
+  const detailChips: string[] = [];
+  if (loadType) detailChips.push(loadType);
+  if (vehicleType && hasTons) detailChips.push(vehicleType);
+  if (!hasTons && !loadType && vehicleType) detailChips.push(vehicleType);
 
   const pickupDateLabel = useMemo(() => {
     const raw = indent.pickup_date ?? indent.created_at;
@@ -209,8 +221,12 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
       <View style={styles.body}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionLabel}>YOUR OFFER</Text>
-          <View style={styles.offerPill}>
-            <Text style={styles.offerPillText}>2 details</Text>
+          <View style={styles.offerPillRow}>
+            {detailChips.map((chip) => (
+              <View key={chip} style={styles.offerPill}>
+                <Text style={styles.offerPillText}>{chip}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
@@ -231,12 +247,14 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
               <Scale size={15} color={VEHICLE_ACCENT} strokeWidth={2.2} />
             </View>
             <Text style={styles.payTileAmount} numberOfLines={1}>
-              {tonsToCarry}
+              {tonsTileAmount}
             </Text>
-            <Text style={styles.payTileLabel}>TONS TO CARRY</Text>
-            <Text style={styles.payTileHint} numberOfLines={1}>
-              {vehicleType}
-            </Text>
+            <Text style={styles.payTileLabel}>{hasTons ? "TONS TO CARRY" : "VEHICLE TYPE"}</Text>
+            {tonsTileHint ? (
+              <Text style={styles.payTileHint} numberOfLines={1}>
+                {tonsTileHint}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -269,6 +287,14 @@ export const AwardedIndentDeployModalPage = memo(function AwardedIndentDeployMod
                   numberOfLines={2}
                 >
                   {timing.dueByLabel}
+                </Text>
+              </View>
+            ) : null}
+            {timing.tone === "overdue" ? (
+              <View style={styles.timingLine}>
+                <AlertTriangle size={12} color="#DC2626" strokeWidth={2.2} />
+                <Text style={[styles.timingText, styles.timingDueOverdue]} numberOfLines={2}>
+                  Contact shipper to confirm — pickup window has passed
                 </Text>
               </View>
             ) : null}

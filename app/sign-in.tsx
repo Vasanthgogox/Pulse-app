@@ -53,6 +53,7 @@ export default function SignIn() {
     email?: string | string[];
     oauth_error?: string | string[];
     password_reset?: string | string[];
+    returnTo?: string | string[];
   }>();
   const isOnline = useIsOnline();
   const { user, signIn, signInWithGoogle, restoreError, clearRestoreError } = useAuth();
@@ -113,8 +114,11 @@ export default function SignIn() {
   }, []);
 
   useEffect(() => {
-    if (user) router.replace(ROUTES.INDEX);
-  }, [user, router]);
+    if (user) {
+      const returnTo = typeof params.returnTo === 'string' ? decodeURIComponent(params.returnTo) : null;
+      router.replace((returnTo ?? ROUTES.INDEX) as Href);
+    }
+  }, [user, router, params.returnTo]);
 
   useEffect(() => {
     const next = getEmailFromParams(params);
@@ -329,7 +333,11 @@ export default function SignIn() {
 
     <View style={styles.signUpRow}>
       <Text style={styles.signUpMuted}>New to Pulse? </Text>
-      <Pressable onPress={() => router.push(ROUTES.ONBOARDING.HUB)}>
+      <Pressable onPress={() => {
+        const returnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
+        const dest = returnTo ? `${ROUTES.ONBOARDING.HUB}?returnTo=${returnTo}` : ROUTES.ONBOARDING.HUB;
+        router.push(dest as '/');
+      }}>
         <Text style={styles.signUpLink}>Create account</Text>
       </Pressable>
     </View>

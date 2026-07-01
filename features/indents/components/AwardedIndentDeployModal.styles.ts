@@ -204,6 +204,12 @@ export const deployModalStyles = StyleSheet.create({
     textTransform: "uppercase",
     color: Theme.textMuted,
   },
+  offerPillRow: {
+    flexDirection: "row",
+    gap: 4,
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
   offerPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,

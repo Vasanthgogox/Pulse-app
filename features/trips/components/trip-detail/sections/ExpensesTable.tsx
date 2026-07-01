@@ -4,6 +4,7 @@
 import { FeatureBanner } from "@/components/FeatureBanner";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Theme from "@/constants/Theme";
 
 export interface ExpenseRow {
   id: string;

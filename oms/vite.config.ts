@@ -24,6 +24,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'lottie-react'],
   },
+  base: '/oms/',
   build: {
     chunkSizeWarningLimit: 3000,
   },

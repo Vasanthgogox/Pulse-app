@@ -1,20 +1,96 @@
 [build]
-  command = "npm run build:web"
+  command = "npm run build:web && npm run build:admin && npm run build:oms"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION  = "20"
   # Use cached packages before hitting the registry
-  NPM_FLAGS     = "--prefer-offline"
+  NPM_FLAGS     = "--prefer-offline --legacy-peer-deps"
   # Expo export is memory-hungry; give it headroom
   NODE_OPTIONS  = "--max-old-space-size=4096"
   CI            = "true"
+  VITE_SUPABASE_URL      = "https://nafxpivddesgsrthmosv.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hZnhwaXZkZGVzZ3NydGhtb3N2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2OTg3NTYsImV4cCI6MjA4NjI3NDc1Nn0.nXCf5LrTXtg9NNi850MKTCcG_FEE7Tb4qbpP7ftoVBY"
+  # VITE_ADMIN_TOKEN and VITE_SUPABASE_SERVICE_ROLE_KEY must be set in
+  # Netlify Dashboard → Site settings → Environment variables (never commit secrets)
 
 # Dependency install: Netlify caches npm from package-lock.json (no custom plugin).
 # Keep NODE_VERSION + .nvmrc aligned so cache keys stay stable.
 
 [functions]
   directory = "netlify/functions"
+
+# OMS SPA routes — must come before the /* catch-all
+# Covers both /oms/* (post-base change) and current /dashboard, /orders etc (pre-base)
+[[redirects]]
+  from   = "/oms/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/dashboard"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/orders"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/orders/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/customers"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/products"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/warehouses"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution-plans"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution-plans/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/execution/*"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/observatory"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/settings"
+  to     = "/oms/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/onboarding"
+  to     = "/oms/index.html"
+  status = 200
 
 # SPA client routes only. Existing files under dist/ are served first; missing
 # hashed *.js from an older deploy fall through to index.html (HTML as JS →
@@ -42,3 +118,23 @@
   for = "/_expo/static/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/ops-9f3a2c/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/ops-9f3a2c/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/oms/"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/oms/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

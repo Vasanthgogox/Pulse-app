@@ -448,7 +448,11 @@ export function LoadCenterView({
   );
 
   // ── Award Quote hook ────────────────────────────────────────────────────────
-  const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess });
+  const connectedSupplierOrgIds = useMemo(
+    () => new Set(suppliers.map((s) => s.linked_organization_id).filter(Boolean) as string[]),
+    [suppliers],
+  );
+  const awardModal = useAwardQuote({ orgId, queryClient, invalidateIndents, onSuccess: triggerSuccess, connectedSupplierOrgIds });
 
   const openIndentAllocation = useCallback(
     (load: IndentRow) => {

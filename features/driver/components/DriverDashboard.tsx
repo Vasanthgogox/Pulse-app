@@ -834,7 +834,13 @@ export default function DriverDashboard() {
     </View>
   );
 
-  const activeMission = allTrips.find((t) => isTripInProgress(t));
+  const activeMissionLive = allTrips.find((t) => isTripInProgress(t));
+  // Keep showing the completed trip card until the driver taps Close (justCompletedTrip guard).
+  const justCompletedTripRow =
+    justCompletedTrip && !activeMissionLive
+      ? (allTrips.find((t) => isCompletedStatus(t.status)) ?? null)
+      : null;
+  const activeMission = activeMissionLive ?? justCompletedTripRow ?? undefined;
   const incomingTrips = allTrips.filter((t) => isAssignedNotStarted(t.status));
   const firstIncoming = incomingTrips.find((t) => t.id !== declinedTripId) ?? null;
   // Load-based (assign by phone): trip is in pendingOtpTrips, not allTrips. Use same assignment card and flow.
@@ -938,14 +944,17 @@ export default function DriverDashboard() {
     if (!tripStillExists) closeOtpClaim();
   }, [allTrips, closeOtpClaim, effectiveFirstIncoming, otpClaimTripId, pendingOtpTripsRequiringOtp]);
 
-  // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen
-  const acceptedInviteForOrg =
-    effectiveFirstIncoming &&
-    (invites.find(
-      (i) =>
-        (i.from_organization_id ?? '').trim() === (effectiveFirstIncoming.organization_id ?? '').trim() &&
-        String(i.status ?? '').toLowerCase() === 'accepted'
-    ) ?? null);
+  // Use driver's accepted offer (commission % or per km) for this org so commission matches control screen.
+  // Look up invite against whichever trip is active — incoming OR in-mission (so completed screen shows real earnings).
+  const commissionLookupOrgId =
+    (activeMission ?? effectiveFirstIncoming)?.organization_id ?? null;
+  const acceptedInviteForOrg = commissionLookupOrgId
+    ? (invites.find(
+        (i) =>
+          (i.from_organization_id ?? '').trim() === commissionLookupOrgId.trim() &&
+          String(i.status ?? '').toLowerCase() === 'accepted'
+      ) ?? null)
+    : null;
   const offerForCommission = acceptedInviteForOrg
     ? {
         commissionPercent: acceptedInviteForOrg.commission_percent ?? null,

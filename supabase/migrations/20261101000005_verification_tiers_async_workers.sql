@@ -365,18 +365,22 @@ GRANT EXECUTE ON FUNCTION public.get_tier_capabilities(uuid) TO authenticated;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- STEP 8: pg_cron dispatch — every 60 seconds, pick up QUEUED jobs
 -- ─────────────────────────────────────────────────────────────────────────────
-DO $$
+DO $outer$
+DECLARE
+  v_has_cron boolean;
+  v_has_net  boolean;
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
-  AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net')
-  THEN
+  SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') INTO v_has_cron;
+  SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net')  INTO v_has_net;
+
+  IF v_has_cron AND v_has_net THEN
     BEGIN PERFORM cron.unschedule('dispatch_verification_workers');
     EXCEPTION WHEN others THEN NULL; END;
 
     PERFORM cron.schedule(
       'dispatch_verification_workers',
       '* * * * *',
-      $$
+      $cron$
         SELECT net.http_post(
           url     := current_setting('app.supabase_url', true)
                      || '/functions/v1/verification-worker',
@@ -391,8 +395,8 @@ BEGIN
           AND j.attempts < 4
           AND j.next_attempt_at <= now()
         LIMIT 5;
-      $$
+      $cron$
     );
   END IF;
 END;
-$$;
+$outer$;

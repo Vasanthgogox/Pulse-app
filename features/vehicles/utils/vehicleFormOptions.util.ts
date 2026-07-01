@@ -92,6 +92,26 @@ export const BODY_LENGTH_SELECT_OPTIONS = dedupePreserveOrder(RAW_SCROLL_PRESET_
 
 export const OTHER_LABEL = "Other";
 
+const BODY_TYPE_BY_CATEGORY: Record<string, string[]> = {
+  "Mini Truck / LCV":   ["Open Body", "Closed Body", "Flatbed"],
+  "Open Body Truck":    ["Open Body", "Half Body", "Full Body", "Flatbed"],
+  "Closed Container":   ["Closed Body", "Half Body", "Full Body", "Curtain Side"],
+  "Trailer":            ["Flatbed", "Closed Body", "Curtain Side", "Full Body"],
+  "Tanker":             [],
+  "Tipper":             [],
+  "Other":              ["Open Body", "Closed Body", "Half Body", "Full Body", "Flatbed", "Curtain Side"],
+};
+
+export function getBodyTypeOptions(category: string): string[] {
+  const c = category.trim();
+  return BODY_TYPE_BY_CATEGORY[c] ?? ["Open Body", "Closed Body", "Half Body", "Full Body", "Flatbed", "Curtain Side"];
+}
+
+export const AXLE_CHIP_OPTIONS = [
+  "1 Axle", "2 Axle", "3 Axle",
+  "4x2", "6x2", "6x4", "8x2", "10x2", "10x4",
+] as const;
+
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b),

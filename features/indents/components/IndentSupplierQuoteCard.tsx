@@ -154,7 +154,7 @@ function metricValueStyle(tone: IndentBidMetricTone) {
   }
 }
 
-function PulseuoteTicketPerforation() {
+function QuoteTicketPerforation() {
   return (
     <View style={styles.perforation} pointerEvents="none">
       <View style={styles.notchLeft} />
@@ -164,7 +164,7 @@ function PulseuoteTicketPerforation() {
   );
 }
 
-function PulseuoteFooterMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
+function QuoteFooterMetrics({ metrics }: { metrics: IndentBidFooterMetric[] }) {
   const shown = metrics.slice(0, 2);
   return (
     <View style={styles.metricsRow}>
@@ -374,6 +374,14 @@ export const IndentSupplierQuoteCard = memo(function IndentSupplierQuoteCard({
                     )}
                     <Text style={[styles.alertDueText, alertPanel.dueLine]} numberOfLines={2}>
                       {alertInfo.dueByLabel}
+                    </Text>
+                  </View>
+                ) : null}
+                {alertInfo.tone === "overdue" ? (
+                  <View style={styles.alertLine}>
+                    <AlertTriangle size={12} color={alertPanel.dueIcon} strokeWidth={2.2} />
+                    <Text style={[styles.alertDueText, alertPanel.dueLine]} numberOfLines={2}>
+                      Contact shipper to confirm — pickup window has passed
                     </Text>
                   </View>
                 ) : null}

@@ -5,7 +5,7 @@
 import { supabase } from '@/lib/supabase';
 import type { TripRow } from '@/features/trips/services/trips.service';
 
-export type DriverFlowStepId = 'accepted' | 'pickup' | 'transit' | 'reached' | 'completed';
+export type DriverFlowStepId = 'accepted' | 'pickup' | 'lr' | 'transit' | 'reached' | 'completed';
 
 export interface ParsedDriverStatusNote {
   step: string;
@@ -27,6 +27,12 @@ export const DRIVER_PREDEFINED_STATUS_BY_STEP: Record<DriverFlowStepId, string[]
     'Package secured',
     'Ready to depart',
     'Waiting for documents',
+  ],
+  lr: [
+    'LR collected',
+    'Loading slip attached',
+    'Goods loaded and sealed',
+    'Departing with LR',
   ],
   transit: [
     'En route to destination',

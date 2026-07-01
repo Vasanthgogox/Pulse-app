@@ -25,6 +25,8 @@
     "bundle:analyze:open": "npx expo-atlas",
     "build": "npm run build:web",
     "build:web": "expo export --platform web && node scripts/compress-dist.js",
+  "build:admin": "cd analytics && npm install --prefer-offline && npm run build && cp -r dist ../dist/ops-9f3a2c",
+    "build:oms": "cd oms && npm install --prefer-offline --legacy-peer-deps && npm run build && cp -r dist ../dist/oms",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "test": "jest",
     "test:e2e": "detox test -c ios.sim.debug",

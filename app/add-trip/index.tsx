@@ -181,6 +181,8 @@ export default function AddTripPage() {
       advance_paid: normalizedAdvancePaid,
       notes: data.notes ?? undefined,
       driver_id: data.driver_id ?? undefined,
+      driver_commission_percent: data.driver_commission_percent ?? undefined,
+      driver_commission_per_km: data.driver_commission_per_km ?? undefined,
       vehicle_id: data.vehicle_id ?? undefined,
       owner_user_id: profile?.uid ?? userId,
       created_by_user_id: profile?.uid ?? userId,
