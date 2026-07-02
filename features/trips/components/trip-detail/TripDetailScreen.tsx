@@ -407,8 +407,8 @@ function ManifestHeroBridgePartyEnd({
     entityType === "driver" &&
     !!String(vehicleLabel ?? "").trim();
   const badgeSize = Math.max(10, Math.round(avatarSize * 0.42));
-  const iconWrapSize = avatarSize + 4;
   const stackSize = avatarSize + (showVehicleBadge ? 6 : 0);
+  const iconWrapSize = stackSize;
 
   return (
     <View style={[styles.refHeroBridgeCol, styles.refHeroBridgeColRight]}>
@@ -448,6 +448,7 @@ function ManifestHeroBridgePartyEnd({
             organizationImageUrl={organizationImageUrl ?? undefined}
             organizationAvatarSeed={organizationAvatarSeed ?? undefined}
             isIntegrated={isIntegrated}
+            showIntegrationBadge={false}
           />
           {showVehicleBadge ? (
             <View
@@ -541,6 +542,7 @@ function NeoManifestHeroBridgePartyEnd({
           organizationImageUrl={organizationImageUrl ?? undefined}
           organizationAvatarSeed={organizationAvatarSeed ?? undefined}
           isIntegrated={isIntegrated}
+          showIntegrationBadge={false}
         />
         {showVehicleBadge ? (
           <View
@@ -566,6 +568,8 @@ export default function TripDetailScreen({
   entryContext,
   clientIdFromContext,
   clientNameFromContext,
+  initialTab,
+  initialFinanceSubTab,
   onBack,
 }: TripDetailScreenProps) {
   const insets = useSafeAreaInsets();
@@ -573,7 +577,7 @@ export default function TripDetailScreen({
   const { currentOrganization } = useOrganization();
   const { t } = useLanguage();
   const { width: screenWidth } = useWindowDimensions();
-  const [activeTab, setActiveTab] = useState<Tab>("trip");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "trip");
   useTripVerificationSync();
   useTripOperationsSync();
   const tripOperationsSummaryQuery = useTripOperationsSummary(tripId || null, {
@@ -581,7 +585,7 @@ export default function TripDetailScreen({
   });
   const [financeSubTab, setFinanceSubTab] = useState<
     "summary" | "transactions"
-  >("summary");
+  >(initialFinanceSubTab ?? "summary");
   const [previewLedgerTx, setPreviewLedgerTx] = useState<LedgerRow | null>(
     null,
   );
@@ -2706,6 +2710,7 @@ export default function TripDetailScreen({
                         detail.clientPartyAvatarFields?.avatarSeed ?? undefined
                       }
                       isIntegrated={clientPartyIntegrated}
+                      showIntegrationBadge={false}
                     />
                   </View>
                   <View style={styles.refHeroBridgeTextCol}>
@@ -3434,6 +3439,7 @@ export default function TripDetailScreen({
                           undefined
                         }
                         isIntegrated={clientPartyIntegrated}
+                        showIntegrationBadge={false}
                       />
                       <View style={neoStyles.heroPartyText}>
                         <Text style={neoStyles.heroKicker}>CLIENT</Text>
@@ -7102,7 +7108,7 @@ const neoStyles = StyleSheet.create({
   },
   heroBridge: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
     paddingBottom: 18,
@@ -7114,7 +7120,7 @@ const neoStyles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 12,
   },
   heroPartyRight: {

@@ -56,6 +56,8 @@ export type PartyAvatarProps = {
   entityType?: PartyEntityType;
   /** When `false`, role entities show role icon plates (offline party state). */
   isIntegrated?: boolean;
+  /** Ledger / flat lists: role icon without tinted plate or border. */
+  flatRolePlate?: boolean;
   size: number;
   /** `rounded` matches attribution / shipper picker tiles (not full circle). */
   shape?: PartyAvatarShape;
@@ -75,6 +77,7 @@ export function PartyAvatar({
   avatarSeed,
   entityType = "client",
   isIntegrated,
+  flatRolePlate = false,
   size,
   shape = "circle",
   style,
@@ -91,6 +94,24 @@ export function PartyAvatar({
         : roleType === "driver"
           ? User
           : Building2;
+    if (flatRolePlate) {
+      return (
+        <View
+          accessibilityLabel={accessibilityLabel}
+          style={[
+            styles.offlineRoleFlatWrap,
+            { width: size, height: size, borderRadius: radius },
+            style,
+          ]}
+        >
+          <Icon
+            size={offlinePartyRoleIconSize(size)}
+            color={Theme.textMuted}
+            strokeWidth={2.2}
+          />
+        </View>
+      );
+    }
     return (
       <View
         accessibilityLabel={accessibilityLabel}
@@ -235,6 +256,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexShrink: 0,
     overflow: "hidden",
+  },
+  offlineRoleFlatWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    backgroundColor: "transparent",
   },
   photoFrame: {
     backgroundColor: Theme.surface,

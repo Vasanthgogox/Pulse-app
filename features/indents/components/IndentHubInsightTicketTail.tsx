@@ -7,7 +7,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
-import { AlertTriangle, Clock3, Trophy } from "lucide-react-native";
+import {
+  IndentHubAlertPulseIcon,
+  IndentHubClockPulseIcon,
+  IndentHubGlyphSlot,
+  IndentHubMedalGlyph,
+  IndentHubTrophyGlyph,
+} from "@/features/indents/components/IndentHubAnimatedGlyphs";
 
 import Theme from "@/constants/Theme";
 import { IndentHubPerforation } from "@/features/indents/components/IndentHubPerforation";
@@ -161,7 +167,13 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
             ) : null}
             {reco ? (
               <View style={[styles.recoRow, compact && styles.recoRowCompact]}>
-                <Feather name={recoIcon} size={compact ? 10 : 11} color={RECO_STAR} />
+                {recoIcon === "star" ? (
+                  <IndentHubGlyphSlot size={compact ? 12 : 13}>
+                    <IndentHubMedalGlyph size={compact ? 12 : 13} />
+                  </IndentHubGlyphSlot>
+                ) : (
+                  <Feather name="info" size={compact ? 10 : 11} color={RECO_STAR} />
+                )}
                 <Text
                   style={[styles.recoText, compact && styles.recoTextCompact]}
                   numberOfLines={2}
@@ -177,17 +189,21 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
           <View style={[styles.alertPanel, alertPanel.panel]}>
             {alertInfo.awardedAgoLabel ? (
               <View style={styles.alertLine}>
-                <Trophy size={12} color="#D97706" strokeWidth={2.2} />
+                <IndentHubGlyphSlot size={14} alignTop>
+                  <IndentHubTrophyGlyph size={14} />
+                </IndentHubGlyphSlot>
                 <Text style={styles.alertAwarded}>{alertInfo.awardedAgoLabel}</Text>
               </View>
             ) : null}
             {alertInfo.dueByLabel ? (
               <View style={styles.alertLine}>
-                {alertInfo.tone === "overdue" ? (
-                  <AlertTriangle size={12} color={alertPanel.icon} strokeWidth={2.2} />
-                ) : (
-                  <Clock3 size={12} color={alertPanel.icon} strokeWidth={2.2} />
-                )}
+                <IndentHubGlyphSlot size={14} alignTop>
+                  {alertInfo.tone === "overdue" ? (
+                    <IndentHubAlertPulseIcon color={alertPanel.icon} size={12} />
+                  ) : (
+                    <IndentHubClockPulseIcon color={alertPanel.icon} size={12} />
+                  )}
+                </IndentHubGlyphSlot>
                 <Text style={[styles.alertDue, alertPanel.text]} numberOfLines={2}>
                   {alertInfo.dueByLabel}
                 </Text>
@@ -195,7 +211,9 @@ export const IndentHubInsightTicketTail = memo(function IndentHubInsightTicketTa
             ) : null}
             {alertInfo.tone === "overdue" ? (
               <View style={styles.alertLine}>
-                <AlertTriangle size={12} color={alertPanel.icon} strokeWidth={2.2} />
+                <IndentHubGlyphSlot size={14} alignTop>
+                  <IndentHubAlertPulseIcon color={alertPanel.icon} size={12} />
+                </IndentHubGlyphSlot>
                 <Text style={[styles.alertDue, alertPanel.text]} numberOfLines={2}>
                   Contact shipper to confirm — pickup window has passed
                 </Text>
@@ -360,7 +378,7 @@ const styles = StyleSheet.create({
   },
   alertLine: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
   },
   alertAwarded: {

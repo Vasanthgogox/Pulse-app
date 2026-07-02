@@ -1755,8 +1755,6 @@ export function EntityDetailOverlay({
             selectedEntityTransactions && selectedEntityTransactions.length > 0 ? (
               <LedgerTransactionListView
                 transactions={selectedEntityTransactions}
-                highlightId={expandedEntityLedgerRowId}
-                expandedDesktopThreeColumn
                 showTitle={false}
                 driverRows={ledgerDriverRowsForAvatars}
               />
@@ -4694,7 +4692,7 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
   },
   entityCardShell: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     marginHorizontal: 0,
     marginBottom: 8,
     borderRadius: 10,
@@ -4734,7 +4732,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   darkBlock: {
-    backgroundColor: "#000000",
+    backgroundColor: Theme.financeHeroBg,
     width: "100%",
     paddingBottom: 4,
     shadowColor: Theme.shadow,
@@ -5154,7 +5152,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     textTransform: "uppercase",
   },
   ledgerExpandedBlockContent: {
@@ -5218,7 +5216,7 @@ const styles = StyleSheet.create({
     color: Theme.teslaRed,
   },
   ledgerExpandedPaymentDark: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     marginHorizontal: 0,
     marginTop: 2,
     paddingHorizontal: 10,
@@ -5939,7 +5937,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Theme.textOnDark,
     letterSpacing: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     paddingVertical: 10,
     paddingHorizontal: 12,
     textTransform: "uppercase",
@@ -6416,7 +6414,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   successCard: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     paddingVertical: 24,
     paddingHorizontal: 32,
     borderRadius: 24,

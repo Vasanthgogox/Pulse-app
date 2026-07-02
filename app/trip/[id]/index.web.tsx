@@ -2,7 +2,7 @@ import { LazySuspenseInlineFallback } from '@/components/LazySuspenseFallback';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
 import type { TripDetailScreenProps } from '@/features/trips/components/trip-detail/TripDetailScreen.types';
-import { ROUTES } from '@/lib/routes';
+import { ROUTES, parseTripDetailRouteParams } from '@/lib/routes';
 import { useSafeBack } from '@/lib/useSafeBack';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Suspense, lazy, useEffect } from 'react';
@@ -21,6 +21,8 @@ const TripDetailScreen = lazy(
 export default function TripDetailRoute() {
   const raw = useLocalSearchParams<{
     id: string;
+    tab?: string;
+    financeSubTab?: string;
     entryContext?: string;
     clientIdFromContext?: string;
     clientNameFromContext?: string;
@@ -43,24 +45,15 @@ export default function TripDetailRoute() {
     return <AuthRedirectScreen onSignIn={() => router.replace(ROUTES.SIGN_IN_DIRECT)} />;
   }
 
-  const tripId = typeof raw.id === 'string' ? raw.id : raw.id?.[0] ?? '';
-  const entryContext =
-    typeof raw.entryContext === 'string' &&
-    (raw.entryContext === 'supplier' ||
-      raw.entryContext === 'vehicle' ||
-      raw.entryContext === 'client')
-      ? (raw.entryContext as TripDetailScreenProps['entryContext'])
-      : undefined;
-  const clientIdFromContext =
-    typeof raw.clientIdFromContext === 'string' ? raw.clientIdFromContext : undefined;
-  const clientNameFromContext =
-    typeof raw.clientNameFromContext === 'string' ? raw.clientNameFromContext : undefined;
+  const parsed = parseTripDetailRouteParams(raw);
 
   const screenProps: TripDetailScreenProps = {
-    tripId,
-    entryContext,
-    clientIdFromContext,
-    clientNameFromContext,
+    tripId: parsed.tripId,
+    entryContext: parsed.entryContext,
+    clientIdFromContext: parsed.clientIdFromContext,
+    clientNameFromContext: parsed.clientNameFromContext,
+    initialTab: parsed.tab,
+    initialFinanceSubTab: parsed.financeSubTab,
     onBack: safeBack,
   };
 

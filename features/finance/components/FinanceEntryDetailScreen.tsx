@@ -1,9 +1,19 @@
+import { LedgerEntryReceiptCard } from "@/components/ledger/LedgerEntryReceiptCard";
 import Theme from "@/constants/Theme";
+import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
+import { ledgerReceiptFromFinancialRowData } from "@/features/finance/utils/ledgerTransactionReceipt.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React from "react";
-import { ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LedgerExpandedCardFromData, type FinancialRowData } from "./FinancialRow";
 
 export interface FinanceEntryDetailScreenProps {
   data: FinancialRowData;
@@ -17,11 +27,37 @@ export interface FinanceEntryDetailScreenProps {
 export function FinanceEntryDetailScreen({
   data,
   onBack,
-  onDownloadPress,
-  onOpenCompareVerify,
   embedded = false,
+  onViewTripDetail,
 }: FinanceEntryDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 768;
+  const receipt = ledgerReceiptFromFinancialRowData(data);
+  const showViewAll = Boolean(onViewTripDetail && receipt.tripId);
+
+  const receiptCard = (
+    <LedgerEntryReceiptCard
+      desktop={isDesktop}
+      statusLabel={receipt.statusLabel}
+      title={receipt.title}
+      amount={receipt.amount}
+      isIn={receipt.isIn}
+      details={receipt.details}
+      secondaryAction={showViewAll ? { label: "Close", onPress: onBack } : undefined}
+      primaryAction={
+        showViewAll
+          ? {
+              label: "View all on trip",
+              onPress: () => {
+                onBack();
+                onViewTripDetail?.();
+              },
+            }
+          : { label: "Done", onPress: onBack }
+      }
+    />
+  );
 
   if (embedded) {
     return (
@@ -33,11 +69,7 @@ export function FinanceEntryDetailScreen({
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
         >
-          <LedgerExpandedCardFromData
-            data={data}
-            onDownloadPress={onDownloadPress}
-            onOpenCompareVerify={onOpenCompareVerify}
-          />
+          <View style={styles.receiptCenter}>{receiptCard}</View>
         </ScrollView>
       </View>
     );
@@ -67,11 +99,7 @@ export function FinanceEntryDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <LedgerExpandedCardFromData
-          data={data}
-          onDownloadPress={onDownloadPress}
-          onOpenCompareVerify={onOpenCompareVerify}
-        />
+        <View style={styles.receiptCenter}>{receiptCard}</View>
       </ScrollView>
     </View>
   );
@@ -90,6 +118,8 @@ const styles = StyleSheet.create({
   },
   embeddedScrollContent: {
     paddingBottom: 8,
+    flexGrow: 1,
+    justifyContent: "center",
   },
   topRow: {
     paddingHorizontal: 16,
@@ -109,6 +139,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bodyContent: {
-    paddingTop: 0,
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  receiptCenter: {
+    width: "100%",
+    maxWidth: 440,
+    alignSelf: "center",
   },
 });

@@ -453,7 +453,7 @@ export const Theme = {
   networkGlassBtnNeutralBorder: "rgba(255,255,255,0.9)",
 
   // ---- Finance unified-base parity cards ----
-  financeHeroBg: "#1D1D1F",
+  financeHeroBg: "#4D3636",
   financeHeroBorder: "rgba(255,255,255,0.12)",
   financeHeroRangeBg: "rgba(255,255,255,0.08)",
   financeHeroRangeBorder: "rgba(255,255,255,0.22)",

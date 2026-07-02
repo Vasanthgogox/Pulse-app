@@ -286,6 +286,7 @@ export function SuppliersTab({
                 avatarSeed={avatarData?.avatar_seed}
                 entityType="supplier"
                 isIntegrated={!!data.is_integrated}
+                badgeOverlay
               />
               <View style={[styles.tableCell, styles.ctEntity]}>
                 <View style={styles.tableEntityHeader}>

@@ -9,6 +9,7 @@ import {
   rejectBid,
   withdrawBid,
 } from '@/features/network/services/bids.service';
+import { recordStoryView } from '@/features/network/services/story-views.service';
 import { queryKeys } from '@/lib/queryKeys';
 
 function invalidateIndentOfferCounts(qc: QueryClient) {
@@ -47,14 +48,25 @@ export function useMyBidQuery(postId: string | null, orgId: string | null) {
 export function useSubmitBidMutation(postId: string | null, orgId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { amount: number; note?: string }) =>
-      submitPulseBidWithDirectQuote({ postId: postId!, bidderOrganizationId: orgId!, ...input }),
+    mutationFn: async (input: { amount: number; note?: string; orgName?: string }) => {
+      const res = await submitPulseBidWithDirectQuote({
+        postId: postId!,
+        bidderOrganizationId: orgId!,
+        amount: input.amount,
+        note: input.note,
+      });
+      if (!res.error && postId && orgId) {
+        await recordStoryView(postId, orgId, input.orgName?.trim() ?? "");
+      }
+      return res;
+    },
     onSuccess: () => {
       try {
         if (postId) {
           qc.invalidateQueries({ queryKey: queryKeys.bids.forPost(postId) });
           qc.invalidateQueries({ queryKey: queryKeys.bids.myBid(postId, orgId ?? '') });
           qc.invalidateQueries({ queryKey: queryKeys.posts.detail(postId) });
+          qc.invalidateQueries({ queryKey: queryKeys.storyViews.forPost(postId) });
         }
         if (orgId) {
           qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });

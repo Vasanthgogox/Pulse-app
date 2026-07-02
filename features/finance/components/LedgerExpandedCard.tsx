@@ -738,7 +738,7 @@ export function LedgerExpandedCard({
 }
 
 const DETAIL_CARD_BG = "#FAFBFF";
-const LEDGER_PANEL_FILL = Theme.darkBackground;
+const LEDGER_PANEL_FILL = Theme.financeHeroBg;
 
 const styles = StyleSheet.create({
   detailOuter: {
@@ -1368,7 +1368,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     gap: 10,
   },
   txHistoryRowLast: {
@@ -1389,7 +1389,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   txHistoryRowHighlighted: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     borderColor: "rgba(255,255,255,0.28)",
   },
   txHistoryBody: {

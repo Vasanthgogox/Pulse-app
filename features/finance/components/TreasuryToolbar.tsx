@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   wrapper: {
     marginHorizontal: 8,
     marginBottom: 8,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     borderRadius: 2,
     borderWidth: 1,
     borderColor: Theme.separatorDark,

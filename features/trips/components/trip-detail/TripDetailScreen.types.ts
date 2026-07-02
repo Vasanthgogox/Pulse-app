@@ -1,4 +1,9 @@
 /** Shared props for trip detail (TripDetailScreen). */
+import type {
+  TripDetailRouteFinanceSubTab,
+  TripDetailRouteTab,
+} from "@/lib/routes";
+
 export interface TripDetailScreenProps {
   tripId: string;
   /**
@@ -10,5 +15,9 @@ export interface TripDetailScreenProps {
   /** When entryContext="client", the local client id/name for integrated flows. */
   clientIdFromContext?: string;
   clientNameFromContext?: string;
+  /** Deep link: open Finance Hub, Journey Log, etc. on first paint. */
+  initialTab?: TripDetailRouteTab;
+  /** Deep link: Finance Hub sub-tab (Summary vs Transactions). */
+  initialFinanceSubTab?: TripDetailRouteFinanceSubTab;
   onBack: () => void;
 }

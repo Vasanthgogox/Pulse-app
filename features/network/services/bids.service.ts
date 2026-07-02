@@ -1,6 +1,7 @@
 /**
  * Bids service — submit, accept, reject, withdraw bids on load posts.
  */
+import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
 import { supabase } from '@/lib/supabase';
 
 export type BidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
@@ -18,6 +19,33 @@ export interface BidRow {
   status: BidStatus;
   created_at: string;
   updated_at: string;
+}
+
+async function enrichBidderOrgNames(bids: BidRow[]): Promise<BidRow[]> {
+  const missingIds = [
+    ...new Set(
+      bids
+        .filter((b) => !b.bidder_org_name?.trim())
+        .map((b) => b.bidder_organization_id)
+        .filter(Boolean),
+    ),
+  ];
+  if (missingIds.length === 0) return bids;
+
+  const profiles = await getLinkedOrgProfilesBatch(missingIds);
+  return bids.map((bid) => {
+    if (bid.bidder_org_name?.trim()) return bid;
+    const profile = profiles[bid.bidder_organization_id];
+    const name = profile?.organizationName?.trim();
+    if (!name || name === 'Connected') return bid;
+    return {
+      ...bid,
+      bidder_org_name: name,
+      bidder_org_logo_url: bid.bidder_org_logo_url ?? profile.logoUrl ?? null,
+      bidder_org_avatar_seed:
+        bid.bidder_org_avatar_seed ?? profile.avatarSeed ?? profile.orgAvatarSeed ?? null,
+    };
+  });
 }
 
 export async function getBidsForPost(
@@ -76,7 +104,8 @@ export async function getBidsForPost(
     };
   });
 
-  return { error: null, bids };
+  const enriched = await enrichBidderOrgNames(bids);
+  return { error: null, bids: enriched };
 }
 
 export async function submitBid(input: {

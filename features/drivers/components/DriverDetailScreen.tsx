@@ -2124,7 +2124,6 @@ export default function DriverDetailScreen({
               showHistoryHeader={false}
               showGridFooter={false}
               embedInParentScroll={true}
-              expandedDesktopThreeColumn
               driverRows={driver ? [driver] : []}
             />
           </View>

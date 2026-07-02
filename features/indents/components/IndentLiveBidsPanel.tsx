@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Feather from "@expo/vector-icons/Feather";
+import { IndentHubMedalGlyph, IndentHubGlyphSlot } from "@/features/indents/components/IndentHubAnimatedGlyphs";
 
 import { EntityAvatar } from "@/components/EntityAvatar";
 import Theme from "@/constants/Theme";
@@ -68,7 +68,9 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
           accessibilityLabel={`Select recommended bid from ${recommendedQuote.bidder_organization_name ?? "supplier"}`}
         >
           <View style={styles.recoHeader}>
-            <Feather name="star" size={12} color={Theme.primary} />
+            <IndentHubGlyphSlot size={14}>
+              <IndentHubMedalGlyph size={14} />
+            </IndentHubGlyphSlot>
             <Text style={styles.recoKicker}>Recommended</Text>
             <Text style={styles.recoMeta}>
               {vm.pendingCount} live bid{vm.pendingCount === 1 ? "" : "s"}

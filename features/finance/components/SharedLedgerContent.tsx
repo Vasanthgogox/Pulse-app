@@ -3467,7 +3467,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
-    borderColor: "#111827",
+    borderColor: Theme.financeHeroBg,
     borderWidth: 1,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -3477,7 +3477,7 @@ const styles = StyleSheet.create({
   varianceBtnDisputeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#111827",
+    color: Theme.financeHeroBg,
     marginLeft: 6,
   },
   varianceBtnWebDesktop: {

@@ -3,6 +3,7 @@
  */
 import Theme from "@/constants/Theme";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import Feather from "@expo/vector-icons/Feather";
 import { ArrowUpRight, Eye } from "lucide-react-native";
 import {
   Platform,
@@ -19,36 +20,69 @@ const WA_GREEN = "#25D366";
 
 type StoryOwnerActionsProps = {
   viewsLabel: string;
+  bidsLabel?: string;
   hint: string;
   primaryLabel: string;
   onViewersPress: () => void;
+  onBidsPress?: () => void;
   onPrimaryPress: () => void;
   onShareWhatsApp: () => void;
 };
 
 export function StoryOwnerFooterActions({
   viewsLabel,
+  bidsLabel,
   hint,
   primaryLabel,
   onViewersPress,
+  onBidsPress,
   onPrimaryPress,
   onShareWhatsApp,
 }: StoryOwnerActionsProps) {
   const { width } = useWindowDimensions();
   const sideBySide = width >= 380;
+  const showBids = Boolean(onBidsPress && bidsLabel);
 
   return (
     <View style={styles.wrap}>
-      <Pressable
-        style={({ pressed }) => [styles.viewersPill, pressed && styles.pressedSoft]}
-        onPress={onViewersPress}
-        hitSlop={6}
-      >
-        <View style={styles.viewersIconWrap}>
-          <Eye size={12} color={INK} strokeWidth={2.25} />
-        </View>
-        <Text style={styles.viewersPillText}>{viewsLabel}</Text>
-      </Pressable>
+      <View style={[styles.metricsRow, showBids && styles.metricsRowSplit]}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.metricPill,
+            showBids && styles.metricPillSplit,
+            pressed && styles.pressedSoft,
+          ]}
+          onPress={onViewersPress}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="View story viewers"
+        >
+          <View style={styles.viewersIconWrap}>
+            <Eye size={12} color={INK} strokeWidth={2.25} />
+          </View>
+          <Text style={styles.viewersPillText}>{viewsLabel}</Text>
+        </Pressable>
+
+        {showBids ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.metricPill,
+              styles.metricPillSplit,
+              styles.bidsPill,
+              pressed && styles.pressedSoft,
+            ]}
+            onPress={onBidsPress}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="View bids"
+          >
+            <View style={[styles.viewersIconWrap, styles.bidsIconWrap]}>
+              <Feather name="inbox" size={12} color={INK} />
+            </View>
+            <Text style={styles.viewersPillText}>{bidsLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       <Text style={styles.hint}>{hint}</Text>
 
@@ -109,6 +143,34 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 10,
   },
+  metricsRow: {
+    width: "100%",
+    alignItems: "center",
+  },
+  metricsRowSplit: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  metricPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: Theme.loadStatusTabTrayBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.loadStatusTabBorderSoft,
+  },
+  metricPillSplit: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bidsPill: {
+    backgroundColor: Theme.loadAddButtonBg,
+    borderColor: Theme.loadStatusTabBorderSoft,
+  },
   viewersPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -129,6 +191,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.loadAddButtonBg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  bidsIconWrap: {
+    backgroundColor: "rgba(255,255,255,0.92)",
   },
   viewersPillText: {
     fontSize: 11,

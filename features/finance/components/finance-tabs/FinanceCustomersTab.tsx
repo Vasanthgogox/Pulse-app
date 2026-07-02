@@ -19,8 +19,6 @@ export function FinanceCustomersTab(props: FinanceTabBodyProps) {
     connectionRequestsSent,
     tripPartyMap,
     tripDetailsMap,
-    tripOptions: trips,
-    onLedgerMissionChange,
     topContent,
     refreshing,
     onRefresh,
@@ -57,8 +55,6 @@ export function FinanceCustomersTab(props: FinanceTabBodyProps) {
       tripPartyMap={tripPartyMap}
       ledgerRows={filteredLedgerForDisplay}
       tripDetailsMap={tripDetailsMap}
-      tripOptions={trips}
-      onMissionChange={onLedgerMissionChange}
       topContent={topContent}
       refreshing={refreshing}
       onRefresh={onRefresh}

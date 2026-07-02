@@ -344,6 +344,7 @@ export function DriversTab({
                   avatarSeed={driver?.avatar_seed}
                   entityType="driver"
                   isIntegrated={isIntegrated}
+                  badgeOverlay
                 />
                 <View style={[styles.tableCell, styles.ctEntity]}>
                   <View style={styles.tableEntityHeader}>

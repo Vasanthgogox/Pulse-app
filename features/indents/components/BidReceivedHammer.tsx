@@ -46,12 +46,24 @@ export function BidReceivedHammer({ visible, size = 14 }: BidReceivedHammerProps
 
   if (!visible) return null;
   return (
-    <Animated.View style={[styles.wrap, { transform: [{ rotate }] }]}>
-      <FontAwesome name="gavel" size={size} color={Theme.positive} />
-    </Animated.View>
+    <View style={styles.slot}>
+      <Animated.View style={[styles.wrap, { transform: [{ rotate }] }]}>
+        <FontAwesome name="gavel" size={size} color={Theme.positive} />
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {},
+  slot: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  wrap: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

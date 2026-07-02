@@ -9,7 +9,7 @@ import {
 } from "@/features/network/components/LoadCenterNetworkGrowNudge";
 import Theme from "@/constants/Theme";
 import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   Platform,
   Pressable,
@@ -21,6 +21,8 @@ import {
 
 const MAX_VISIBLE = 4;
 const FACE_SIZE = 28;
+const RING_SIZE = FACE_SIZE + 2;
+const SLOT_SIZE = RING_SIZE + 4;
 
 type Props = {
   mode: "supplier" | "client";
@@ -28,6 +30,15 @@ type Props = {
   onAddToNetwork: () => void;
   onPartyPress: (party: LoadCenterIntegratedParty) => void;
 };
+
+function PartyFaceSlot({ children }: { children: ReactNode }) {
+  return (
+    <View style={styles.faceSlot}>
+      <View style={styles.faceRing}>{children}</View>
+      <View style={styles.integratedDot} />
+    </View>
+  );
+}
 
 export function LoadCenterIntegratedPartiesRow({
   mode,
@@ -42,13 +53,13 @@ export function LoadCenterIntegratedPartiesRow({
     : LOAD_CENTER_NETWORK_NUDGE_TRACK_HEIGHT;
   const visible = parties.slice(0, MAX_VISIBLE);
   const overflow = Math.max(0, parties.length - MAX_VISIBLE);
-  const overlap = 9;
+  const overlap = 10;
   const nudgeMode = mode === "supplier" ? "give" : "get";
 
   const stackWidth = useMemo(() => {
     const slots = visible.length + (overflow > 0 ? 1 : 0);
     if (slots <= 0) return 0;
-    return FACE_SIZE + Math.max(0, slots - 1) * (FACE_SIZE - overlap);
+    return SLOT_SIZE + Math.max(0, slots - 1) * (SLOT_SIZE - overlap);
   }, [overflow, visible.length]);
 
   return (
@@ -68,7 +79,7 @@ export function LoadCenterIntegratedPartiesRow({
               key={party.id}
               onPress={() => onPartyPress(party)}
               style={({ pressed }) => [
-                styles.faceSlot,
+                styles.facePressable,
                 index > 0 && { marginLeft: -overlap },
                 { zIndex: index + 1 },
                 pressed && styles.facePressed,
@@ -77,7 +88,7 @@ export function LoadCenterIntegratedPartiesRow({
               accessibilityLabel={party.displayName}
               hitSlop={4}
             >
-              <View style={styles.faceFrame}>
+              <PartyFaceSlot>
                 <EntityAvatar
                   name={party.displayName}
                   entityType={party.entityType}
@@ -87,15 +98,16 @@ export function LoadCenterIntegratedPartiesRow({
                   avatarSeed={party.avatarSeed}
                   isIntegrated
                   size={FACE_SIZE}
+                  showIntegrationBadge={false}
                 />
-              </View>
+              </PartyFaceSlot>
             </Pressable>
           ))}
           {overflow > 0 ? (
             <Pressable
               onPress={onAddToNetwork}
               style={({ pressed }) => [
-                styles.faceSlot,
+                styles.facePressable,
                 { marginLeft: -overlap, zIndex: MAX_VISIBLE + 1 },
                 pressed && styles.facePressed,
               ]}
@@ -103,8 +115,10 @@ export function LoadCenterIntegratedPartiesRow({
               accessibilityLabel={`${overflow} more integrated ${mode === "supplier" ? "suppliers" : "clients"}`}
               hitSlop={4}
             >
-              <View style={[styles.faceFrame, styles.overflowFrame]}>
-                <Text style={styles.overflowText}>+{overflow}</Text>
+              <View style={styles.faceSlot}>
+                <View style={[styles.faceRing, styles.overflowFrame]}>
+                  <Text style={styles.overflowText}>+{overflow}</Text>
+                </View>
               </View>
             </Pressable>
           ) : null}
@@ -112,7 +126,7 @@ export function LoadCenterIntegratedPartiesRow({
       ) : null}
 
       {parties.length > 0 ? (
-        <View style={[styles.divider, { height: trackHeight - 6 }]} />
+        <View style={[styles.divider, { height: trackHeight - 8 }]} />
       ) : null}
 
       <LoadCenterNetworkGrowNudge
@@ -140,7 +154,7 @@ const styles = StyleSheet.create({
   stackWrap: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     flexShrink: 0,
   },
   divider: {
@@ -149,20 +163,29 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     alignSelf: "center",
   },
-  faceSlot: {
-    width: FACE_SIZE + 2,
-    height: FACE_SIZE + 2,
+  facePressable: {
+    width: SLOT_SIZE,
+    height: SLOT_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
-  faceFrame: {
-    borderRadius: (FACE_SIZE + 2) / 2,
+  faceSlot: {
+    width: SLOT_SIZE,
+    height: SLOT_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  faceRing: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    borderRadius: RING_SIZE / 2,
     borderWidth: 2,
     borderColor: Theme.cardWhite,
     backgroundColor: Theme.cardWhite,
-    overflow: "visible",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
     ...Platform.select({
       web: {
         boxShadow: "0 1px 4px rgba(77, 54, 54, 0.08)",
@@ -176,6 +199,18 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  integratedDot: {
+    position: "absolute",
+    right: 1,
+    bottom: 1,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.positive,
+    borderWidth: 1.5,
+    borderColor: Theme.cardWhite,
+    zIndex: 2,
+  },
   facePressed: {
     opacity: 0.9,
     transform: [{ scale: 0.98 }],
@@ -183,10 +218,6 @@ const styles = StyleSheet.create({
   overflowFrame: {
     backgroundColor: Theme.loadAddButtonText,
     borderColor: Theme.cardWhite,
-    width: FACE_SIZE + 2,
-    height: FACE_SIZE + 2,
-    alignItems: "center",
-    justifyContent: "center",
   },
   overflowText: {
     fontSize: 9,

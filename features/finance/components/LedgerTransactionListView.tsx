@@ -1,27 +1,29 @@
 /**
  * Ledger entries in a compact transaction list: grouped by day/month,
- * with cumulative Paid/Received per section and tappable trip association.
+ * with cumulative Paid/Received per section.
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { TinyEmptyLottie } from "@/components/TinyEmptyLottie";
-import {
-  LedgerEntryReceiptDetailTable,
-  type LedgerEntryReceiptDetailRow,
-} from "@/components/ledger/LedgerEntryReceiptCard";
-import { LEDGER_RECEIPT } from "@/components/ledger/ledgerEntryReceiptPalette";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { getDoubleEntryDisplayLabel } from "@/features/finance/accounting/accountingModel";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
     getLedgerFlowForRow,
     LedgerFlowChip,
 } from "@/features/finance/components/LedgerFlowChip";
+import { LedgerTransactionPreviewModal } from "@/features/finance/components/LedgerTransactionPreviewModal";
 import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 import { getTripOperationalDisplay } from "@/features/operations/display";
-import { LedgerDayDivider, CASH_LEDGER_MAX_WIDTH } from "@/features/finance/components/LedgerDayDivider";
+import { LedgerDayDivider } from "@/features/finance/components/LedgerDayDivider";
+import {
+  CASH_LEDGER_MAX_WIDTH,
+  LEDGER_DESKTOP_BREAKPOINT,
+  LEDGER_DESKTOP_PADDING,
+  LEDGER_RIGHT_COLUMN_WIDTH,
+} from "@/features/finance/components/ledger/ledgerTransactionLayout";
 import { type LedgerRow } from "@/features/finance/services/finance.service";
 import { formatIndianVehicleNumber, formatINRChip, formatLedgerAmount } from "@/lib/format";
 import { EMPTY_STATE_LOTTIE } from "@/lib/emptyStateLottieAssets";
@@ -29,21 +31,18 @@ import { partyAvatarHasRenderableOutput, partyAvatarInitialsTextColor } from "@/
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from "react-native";
 import {
     FinanceAnalyticsView,
     type AnalyticsTripDetailMap,
 } from "./FinanceAnalyticsView";
-import {
-    LedgerExpandedCardFromData,
-    type FinancialRowData,
-} from "./FinancialRow";
-import { TripPickerModal, type TripPickerOption } from "./TripPickerModal";
 
 /** Shared layout: timeline left anchor width and separator alignment. */
 const TIMELINE_ANCHOR_WIDTH = 80;
@@ -104,7 +103,7 @@ function defaultDriverPartyAvatar(
       avatarUrl={avatarUrl}
       avatarSeed={avatarSeed}
       entityType="driver"
-      size={44}
+      size={32}
     />
   );
 }
@@ -264,296 +263,20 @@ function tripNumberForPill(
   return num === "—" ? null : num;
 }
 
-/** Compact expandable detail for a single transaction row (Type, Date, Amount, Party, Note). */
-function TransactionRowDetail({ row }: { row: LedgerRow }) {
-  const typeLabel =
-    getDoubleEntryDisplayLabel(row) ?? row.description ?? row.party_name ?? "—";
-  const dateStr = formatTxDateLong(row.transaction_date ?? row.created_at);
-  const party = (row.party_name ?? "").trim() || "—";
-  const note = (row.description ?? "").trim();
-  const inAmt = Number(row.amount_in ?? 0);
-  const outAmt = Number(row.amount_out ?? 0);
-  const isIn = inAmt > 0;
-  const amount = isIn ? inAmt : outAmt;
-  const hasNote = note && note !== "GENERAL";
-  const hasReconciliation = !!row.reconciliation_label;
-  const statusLabel = isIn ? "Payment received" : "Payment sent";
-  const amountColor = isIn ? LEDGER_RECEIPT.amountIn : LEDGER_RECEIPT.amountOut;
-
-  const details: LedgerEntryReceiptDetailRow[] = [
-    { label: "Date", value: dateStr },
-    {
-      label: "Payment mode",
-      value: row.payment_mode?.trim() || "—",
-    },
-    {
-      label: "Reference",
-      value: row.payment_reference?.trim() || "—",
-    },
-    { label: "Party", value: party },
-  ];
-  if (hasNote) {
-    details.push({ label: "Note", value: note, multiline: true });
-  }
-
-  return (
-    <View style={styles.receiptExpandedWrap}>
-      <View style={styles.receiptExpandedHero}>
-        <View style={styles.receiptStatusPill}>
-          <Text style={styles.receiptStatusText}>{statusLabel}</Text>
-        </View>
-        <Text style={styles.receiptTitle} numberOfLines={2}>
-          {typeLabel}
-        </Text>
-        <Text style={[styles.receiptAmount, { color: amountColor }]}>
-          {isIn ? "+" : "−"} ₹{formatLedgerAmount(amount)}
-        </Text>
-      </View>
-
-      <LedgerEntryReceiptDetailTable rows={details} />
-
-      {hasReconciliation ? (
-        <View style={styles.receiptReconWrap}>
-          <Text style={styles.receiptReconLabel}>Reconcile</Text>
-          <View style={styles.detailReconValueWrap}>
-            <Text style={styles.detailReconBadge}>{row.reconciliation_label}</Text>
-            {row.reconciliation_action_label ? (
-              <Text style={styles.detailReconAction}>
-                {row.reconciliation_action_label}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
-
-      {getLedgerFlowForRow(row) ? (
-        <View style={styles.receiptFlowWrap}>
-          <Text style={styles.receiptReconLabel}>Flow</Text>
-          <LedgerFlowChip row={row} />
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-/** Expanded card: Associated Trip detail only + same-trip transactions list (no Ledger Details block). */
-function TimelineExpandedDetail({
-  row,
-  tripDetailsMap,
-  allTransactions,
-  onDownloadPress,
-}: {
-  row: LedgerRow;
-  tripDetailsMap?: TripDetailMap;
-  /** All ledger rows; same-trip entries are shown in Transaction History. */
-  allTransactions?: LedgerRow[];
-  onDownloadPress?: () => void;
-}) {
-  const tripId = tripNumberForPill(row, tripDetailsMap);
-  const routeStr = tripRouteOnly(row, tripDetailsMap);
-  const vehicleStr =
-    row.trip_id && tripDetailsMap?.[row.trip_id]
-      ? (tripDetailsMap[row.trip_id].vehicle_number ?? "").trim()
-      : "";
-  const tripDateStr =
-    row.trip_id && tripDetailsMap?.[row.trip_id]
-      ? formatTxDateLong(tripDetailsMap[row.trip_id].pickup_date ?? undefined)
-      : formatTxDateLong(row.transaction_date ?? row.created_at);
-
-  const sameTripRows = useMemo(() => {
-    if (!row.trip_id || !allTransactions?.length) return [];
-    return allTransactions.filter((r) => r.trip_id === row.trip_id);
-  }, [row.trip_id, allTransactions]);
-
-  return (
-    <View style={styles.timelineExpandedWrap}>
-      <View style={styles.timelineExpandedMissionBlock}>
-        <View style={styles.timelineExpandedMissionHeader}>
-          <Text style={styles.timelineExpandedMissionHeaderText}>
-            Associated Trip
-          </Text>
-        </View>
-        <View style={styles.timelineExpandedMissionInner}>
-          <View style={styles.timelineExpandedMissionRow}>
-            <View style={styles.timelineExpandedHalf}>
-              <Text style={styles.timelineExpandedMissionLabel}>Trip ID</Text>
-              <Text
-                style={styles.timelineExpandedMissionValue}
-                numberOfLines={1}
-              >
-                {tripId ?? "—"}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.timelineExpandedHalf,
-                styles.timelineExpandedHalfRight,
-              ]}
-            >
-              <Text style={styles.timelineExpandedMissionLabel}>
-                Registry Date
-              </Text>
-              <Text style={styles.timelineExpandedValue}>{tripDateStr}</Text>
-            </View>
-          </View>
-          <View style={styles.timelineExpandedMissionRow}>
-            <View style={styles.timelineExpandedHalf}>
-              <Text style={styles.timelineExpandedMissionLabel}>
-                Route Corridor
-              </Text>
-              <Text
-                style={[
-                  styles.timelineExpandedValue,
-                  styles.timelineExpandedValueItalic,
-                ]}
-                numberOfLines={1}
-              >
-                {routeStr ?? "—"}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.timelineExpandedHalf,
-                styles.timelineExpandedHalfRight,
-              ]}
-            >
-              <Text style={styles.timelineExpandedMissionLabel}>
-                Asset Type
-              </Text>
-              <Text
-                style={[
-                  styles.timelineExpandedValue,
-                  styles.timelineExpandedValueItalic,
-                ]}
-                numberOfLines={1}
-              >
-                {vehicleStr || "—"}
-              </Text>
-            </View>
-          </View>
-          {sameTripRows.length > 0 && (
-            <>
-              <View style={styles.timelineExpandedTxDivider} />
-              <Text style={styles.timelineExpandedTxTitle}>
-                Transaction History
-              </Text>
-              <View style={styles.timelineExpandedTxList}>
-                {sameTripRows.map((r, idx) => {
-                  const typeLabel =
-                    getDoubleEntryDisplayLabel(r) ??
-                    r.description ??
-                    r.party_name ??
-                    "—";
-                  const party = (r.party_name ?? "").trim() || "—";
-                  const dateStr = formatTxDate(
-                    r.transaction_date ?? r.created_at,
-                  );
-                  const inAmt = Number(r.amount_in ?? 0);
-                  const outAmt = Number(r.amount_out ?? 0);
-                  const isIn = inAmt > 0;
-                  const amount = isIn ? inAmt : outAmt;
-                  const isHighlighted = r.id === row.id;
-                  return (
-                    <View
-                      key={r.id}
-                      style={[
-                        styles.timelineExpandedTxRow,
-                        idx === sameTripRows.length - 1 &&
-                          styles.timelineExpandedTxRowLast,
-                        isHighlighted &&
-                          styles.timelineExpandedTxRowHighlighted,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.timelineExpandedTxIcon,
-                          isIn
-                            ? styles.timelineExpandedTxIconIn
-                            : styles.timelineExpandedTxIconOut,
-                        ]}
-                      >
-                        <FontAwesome
-                          name={isIn ? "arrow-down" : "arrow-up"}
-                          size={8}
-                          color={isIn ? Theme.darkGreen : Theme.teslaRed}
-                        />
-                      </View>
-                      <View style={styles.timelineExpandedTxBody}>
-                        <Text
-                          style={styles.timelineExpandedTxLabel}
-                          numberOfLines={1}
-                        >
-                          {typeLabel}
-                        </Text>
-                        <Text
-                          style={styles.timelineExpandedTxSub}
-                          numberOfLines={1}
-                        >
-                          {dateStr} · {party}
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.timelineExpandedTxAmount,
-                          isIn
-                            ? styles.timelineExpandedTxAmountIn
-                            : styles.timelineExpandedTxAmountOut,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {isIn ? "+" : "−"} ₹{formatLedgerAmount(amount)}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </>
-          )}
-          <TouchableOpacity
-            style={styles.timelineExpandedExportBtn}
-            onPress={onDownloadPress}
-            activeOpacity={0.8}
-          >
-            <FontAwesome
-              name="cloud-download"
-              size={10}
-              color={Theme.textOnPrimary}
-            />
-            <Text style={styles.timelineExpandedExportText}>
-              Export Protocol Node
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 export interface LedgerTransactionListViewProps {
   transactions: LedgerRow[];
-  /** When set, tapping a row calls this with the row id (expand/collapse). */
+  /** Optional hook when a row is tapped (preview modal still opens). */
   onRowPress?: (id: string) => void;
-  /** Row id that is currently expanded; show detail view below it. */
-  expandedRowId?: string | null;
-  /** Precomputed FinancialRowData for the expanded row (table-style detail: trip + same-trip transactions). */
-  expandedRowData?: FinancialRowData | null;
-  /**
-   * Web desktop (≥1024): render expanded row as three columns (Ledger | Trip | Settlement/history).
-   * Enable only on party-detail transaction surfaces — leave false for main Finance Cash ledger.
-   */
-  expandedDesktopThreeColumn?: boolean;
   /** Optional row id to highlight. */
   highlightId?: string | null;
+  /** Navigate to all transactions on the linked trip (receipt primary action). */
+  onViewAllOnTrip?: (tripId: string) => void;
   /** Show section title above the list. Default true. */
   showTitle?: boolean;
   /** Map trip_id -> detail; used to show trip number/route on row and in expand. */
   tripDetailsMap?: TripDetailMap;
   /** Resolve vehicle registration when row/trip map omit vehicle_number. */
   getVehicleNumberForTripId?: (tripId: string | null) => string | null;
-  /** Trip options for "Link to trip" (when onMissionChange provided). */
-  tripOptions?: TripPickerOption[];
-  /** Called when user links an entry to a trip. */
-  onMissionChange?: (entryId: string, tripId: string) => void;
   /** Optional: show "History" header with Search/Scan buttons (Tesla minimal style). */
   showHistoryHeader?: boolean;
   onSearchPress?: () => void;
@@ -592,15 +315,11 @@ export interface LedgerTransactionListViewProps {
 export function LedgerTransactionListView({
   transactions,
   onRowPress,
-  expandedRowId,
-  expandedRowData,
-  expandedDesktopThreeColumn = false,
   highlightId,
+  onViewAllOnTrip,
   showTitle = true,
   tripDetailsMap,
   getVehicleNumberForTripId,
-  tripOptions = [],
-  onMissionChange,
   showHistoryHeader = false,
   onSearchPress,
   onScanPress,
@@ -621,8 +340,30 @@ export function LedgerTransactionListView({
   loadingMore = false,
 }: LedgerTransactionListViewProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktopLedger =
+    Platform.OS === "web" && windowWidth >= LEDGER_DESKTOP_BREAKPOINT;
+  const ledgerContentMaxWidth = isDesktopLedger || !fullWidth
+    ? CASH_LEDGER_MAX_WIDTH
+    : undefined;
+  const ledgerContentPadding = isDesktopLedger
+    ? LEDGER_DESKTOP_PADDING
+    : fullWidth
+      ? LEDGER_DESKTOP_PADDING
+      : Layout.screenPaddingHorizontal;
+  const ledgerColumnAligned = isDesktopLedger;
   const { t } = useLanguage();
-  const [tripPickerRowId, setTripPickerRowId] = useState<string | null>(null);
+  const [previewTransaction, setPreviewTransaction] = useState<LedgerRow | null>(
+    null,
+  );
+  const handleRowPress = useCallback(
+    (id: string) => {
+      const row = transactions.find((r) => r.id === id) ?? null;
+      if (row) setPreviewTransaction(row);
+      onRowPress?.(id);
+    },
+    [transactions, onRowPress],
+  );
   const [fiscalViewModeInternal, setFiscalViewModeInternal] = useState<
     "card" | "table"
   >("card");
@@ -713,7 +454,6 @@ export function LedgerTransactionListView({
     );
   }
 
-  const tripOptionIds = new Set(tripOptions.map((o) => o.id));
   const [fiscalSubTab, setFiscalSubTab] = useState<
     "transaction" | "table" | "analytics"
   >("transaction");
@@ -973,6 +713,9 @@ export function LedgerTransactionListView({
                     flowFilter={flowFilter}
                     onToggleExpand={() => toggleSectionExpanded(key)}
                     onFlowFilter={(filter) => setSectionFlowFilter(key, filter)}
+                    maxWidth={ledgerContentMaxWidth}
+                    contentPaddingHorizontal={ledgerContentPadding}
+                    columnAligned={ledgerColumnAligned}
                   />
                   {isSectionExpanded(key) ? (
                     <View style={styles.tableViewMetaRow}>
@@ -1057,16 +800,11 @@ export function LedgerTransactionListView({
                                   undefined,
                               )
                             : dateStr;
-                        const isExpanded =
-                          expandedRowId != null && row.id === expandedRowId;
                         return (
                           <View key={row.id}>
                             <TouchableOpacity
-                              style={[
-                                styles.tableViewRow,
-                                isExpanded && styles.tableViewRowExpanded,
-                              ]}
-                              onPress={() => onRowPress?.(row.id)}
+                              style={styles.tableViewRow}
+                              onPress={() => handleRowPress(row.id)}
                               activeOpacity={0.7}
                             >
                               <View
@@ -1188,123 +926,7 @@ export function LedgerTransactionListView({
                                 )}
                               </View>
                             </TouchableOpacity>
-                            {isExpanded && (
-                              <View style={styles.tableViewExpanded}>
-                                <View style={styles.tableViewExpandedCard}>
-                                  <View style={styles.tableViewExpandedTop}>
-                                    <View
-                                      style={styles.tableViewExpandedNarrative}
-                                    >
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedNarrativeLabel
-                                        }
-                                      >
-                                        Note
-                                      </Text>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedNarrativeText
-                                        }
-                                        numberOfLines={3}
-                                      >
-                                        {(row.description ?? "").trim() || "—"}
-                                      </Text>
-                                    </View>
-                                    <TouchableOpacity
-                                      style={styles.tableViewExpandedExportBtn}
-                                      onPress={() => onExportPress?.(row.id)}
-                                      activeOpacity={0.8}
-                                      hitSlop={Layout.touchTargetHitSlop}
-                                    >
-                                      <FontAwesome
-                                        name="cloud-download"
-                                        size={12}
-                                        color={Theme.textOnPrimary}
-                                      />
-                                    </TouchableOpacity>
-                                  </View>
-                                  <View
-                                    style={styles.tableViewExpandedDivider}
-                                  />
-                                  <View style={styles.tableViewExpandedGrid}>
-                                    <View>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedGridLabel
-                                        }
-                                      >
-                                        Trip
-                                      </Text>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedGridValue
-                                        }
-                                        numberOfLines={1}
-                                      >
-                                        {tripIdOnly ?? "—"}
-                                      </Text>
-                                    </View>
-                                    <View>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedGridLabel
-                                        }
-                                      >
-                                        Vehicle
-                                      </Text>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedGridValue
-                                        }
-                                        numberOfLines={1}
-                                      >
-                                        {getVehicleForRow(row) || "—"}
-                                      </Text>
-                                    </View>
-                                    <View>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedGridLabel
-                                        }
-                                      >
-                                        Date
-                                      </Text>
-                                      <Text
-                                        style={
-                                          styles.tableViewExpandedGridValue
-                                        }
-                                        numberOfLines={1}
-                                      >
-                                        {formatTxDateLong(
-                                          row.transaction_date ??
-                                            row.created_at,
-                                        )}
-                                      </Text>
-                                    </View>
-                                  </View>
-                                </View>
-                                {onMissionChange && (
-                                  <View style={styles.linkTripWrap}>
-                                    <TouchableOpacity
-                                      style={styles.linkTripBtn}
-                                      onPress={() => setTripPickerRowId(row.id)}
-                                      activeOpacity={0.7}
-                                    >
-                                      <FontAwesome
-                                        name="link"
-                                        size={11}
-                                        color={Theme.primary}
-                                      />
-                                      <Text style={styles.linkTripText}>
-                                        Link to trip
-                                      </Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                )}
-                              </View>
-                            )}
-                          </View>
+                            </View>
                         );
                       })}
                     </View>
@@ -1365,6 +987,9 @@ export function LedgerTransactionListView({
                             onFlowFilter={(filter) =>
                               setSectionFlowFilter(key, filter)
                             }
+                            maxWidth={ledgerContentMaxWidth}
+                            contentPaddingHorizontal={ledgerContentPadding}
+                            columnAligned={ledgerColumnAligned}
                           />
                         ) : (
                           <View style={styles.sectionBar}>
@@ -1395,7 +1020,15 @@ export function LedgerTransactionListView({
                       {useTimelineLayout ? (
                         isSectionExpanded(key) &&
                         effectiveFiscalSubTab === "transaction" ? (
-                          <View style={styles.fiscalTransactionRows}>
+                          <View
+                            style={[
+                              styles.fiscalTransactionRows,
+                              ledgerContentMaxWidth != null &&
+                                styles.fiscalTransactionRowsConstrained,
+                              (fullWidth || isDesktopLedger) &&
+                                styles.fiscalTransactionRowsFullWidth,
+                            ]}
+                          >
                             {(() => {
                               const flowFilter = getSectionFlowFilter(key);
                               const filteredRows =
@@ -1408,17 +1041,10 @@ export function LedgerTransactionListView({
                                     : sectionRows.filter(
                                         (r) => Number(r.amount_in ?? 0) > 0,
                                       );
-                              const txRows =
-                                expandedRowId != null
-                                  ? [...filteredRows].sort((a, b) =>
-                                      a.id === expandedRowId
-                                        ? -1
-                                        : b.id === expandedRowId
-                                          ? 1
-                                          : 0,
-                                    )
-                                  : filteredRows;
-                              return txRows.map((row) => {
+                              const txRows = filteredRows;
+                              return (
+                                <View>
+                                  {txRows.map((row, rowIndex) => {
                                 const typeLabel =
                                   getDoubleEntryDisplayLabel(row) ??
                                   row.description ??
@@ -1432,9 +1058,6 @@ export function LedgerTransactionListView({
                                 const outAmt = Number(row.amount_out ?? 0);
                                 const isIn = inAmt > 0;
                                 const amount = isIn ? inAmt : outAmt;
-                                const isExpanded =
-                                  expandedRowId != null &&
-                                  row.id === expandedRowId;
                                 const partyName =
                                   (row.party_name ?? "").trim() ||
                                   typeLabel ||
@@ -1455,17 +1078,27 @@ export function LedgerTransactionListView({
                                 );
                                 const avatarBg = avatarColor(partyName);
                                 const customAvatar = resolvePartyAvatarForRow(row);
+                                const isLastRow = rowIndex === txRows.length - 1;
                                 return (
-                                  <View key={row.id} style={styles.fiscalCardWrap}>
+                                  <View
+                                    key={row.id}
+                                    style={[
+                                      styles.fiscalCardWrap,
+                                      !isLastRow && styles.fiscalCardWrapSeparator,
+                                    ]}
+                                  >
                                     <TouchableOpacity
-                                      style={[
-                                        styles.fiscalCard,
-                                        isExpanded && styles.fiscalCardExpanded,
-                                      ]}
-                                      onPress={() => onRowPress?.(row.id)}
+                                      style={styles.fiscalCard}
+                                      onPress={() => handleRowPress(row.id)}
                                       activeOpacity={0.9}
                                     >
-                                      <View style={styles.fiscalCardInner}>
+                                      <View
+                                        style={[
+                                          styles.fiscalCardInner,
+                                          (fullWidth || isDesktopLedger) &&
+                                            styles.fiscalCardInnerFullWidth,
+                                        ]}
+                                      >
                                         {customAvatar ? (
                                           <View
                                             style={
@@ -1479,6 +1112,9 @@ export function LedgerTransactionListView({
                                             style={[
                                               styles.fiscalCardAvatar,
                                               { backgroundColor: avatarBg },
+                                              isIn
+                                                ? styles.fiscalCardAvatarIn
+                                                : styles.fiscalCardAvatarOut,
                                             ]}
                                           >
                                             <Text
@@ -1512,60 +1148,31 @@ export function LedgerTransactionListView({
                                           </Text>
                                           <Text
                                             style={styles.fiscalCardRouteWhy}
-                                            numberOfLines={2}
+                                            numberOfLines={1}
                                           >
                                             {routeWhyLine}
                                           </Text>
                                         </View>
                                         <View style={styles.fiscalCardRight}>
                                           {tripIdOnly ? (
-                                            onMissionChange ? (
-                                              <TouchableOpacity
-                                                style={styles.fiscalCardPill}
-                                                onPress={(e) => {
-                                                  e?.stopPropagation?.();
-                                                  setTripPickerRowId(row.id);
-                                                }}
-                                                activeOpacity={0.8}
-                                                hitSlop={8}
+                                            <View style={styles.fiscalCardPill}>
+                                              <FontAwesome
+                                                name="check-circle"
+                                                size={8}
+                                                color={Theme.darkGreen}
+                                                style={
+                                                  styles.fiscalCardPillIcon
+                                                }
+                                              />
+                                              <Text
+                                                style={
+                                                  styles.fiscalCardPillText
+                                                }
+                                                numberOfLines={1}
                                               >
-                                                <FontAwesome
-                                                  name="check-circle"
-                                                  size={7}
-                                                  color={Theme.darkGreen}
-                                                  style={
-                                                    styles.fiscalCardPillIcon
-                                                  }
-                                                />
-                                                <Text
-                                                  style={
-                                                    styles.fiscalCardPillText
-                                                  }
-                                                  numberOfLines={1}
-                                                >
-                                                  {tripIdOnly}
-                                                </Text>
-                                              </TouchableOpacity>
-                                            ) : (
-                                              <View style={styles.fiscalCardPill}>
-                                                <FontAwesome
-                                                  name="check-circle"
-                                                  size={7}
-                                                  color={Theme.darkGreen}
-                                                  style={
-                                                    styles.fiscalCardPillIcon
-                                                  }
-                                                />
-                                                <Text
-                                                  style={
-                                                    styles.fiscalCardPillText
-                                                  }
-                                                  numberOfLines={1}
-                                                >
-                                                  {tripIdOnly}
-                                                </Text>
-                                              </View>
-                                            )
+                                                {tripIdOnly}
+                                              </Text>
+                                            </View>
                                           ) : null}
                                           <Text
                                             style={[
@@ -1582,44 +1189,11 @@ export function LedgerTransactionListView({
                                         </View>
                                       </View>
                                     </TouchableOpacity>
-                                    {isExpanded && (
-                                      <View style={styles.fiscalExpanded}>
-                                        {expandedRowData != null &&
-                                        expandedRowId === row.id ? (
-                                          <LedgerExpandedCardFromData
-                                            data={expandedRowData}
-                                            enableDesktopThreeColumn={
-                                              expandedDesktopThreeColumn
-                                            }
-                                          />
-                                        ) : (
-                                          <TransactionRowDetail row={row} />
-                                        )}
-                                        {onMissionChange && (
-                                          <View style={styles.linkTripWrap}>
-                                            <TouchableOpacity
-                                              style={styles.linkTripBtn}
-                                              onPress={() =>
-                                                setTripPickerRowId(row.id)
-                                              }
-                                              activeOpacity={0.7}
-                                            >
-                                              <FontAwesome
-                                                name="link"
-                                                size={11}
-                                                color={Theme.primary}
-                                              />
-                                              <Text style={styles.linkTripText}>
-                                                Link to trip
-                                              </Text>
-                                            </TouchableOpacity>
-                                          </View>
-                                        )}
-                                      </View>
-                                    )}
-                                  </View>
+                                    </View>
                                 );
-                              });
+                              })}
+                                </View>
+                              );
                             })()}
                           </View>
                         ) : null
@@ -1667,44 +1241,26 @@ export function LedgerTransactionListView({
                             const inAmt = Number(row.amount_in ?? 0);
                             const outAmt = Number(row.amount_out ?? 0);
                             const isIn = inAmt > 0;
-                            const isExpanded =
-                              expandedRowId != null && row.id === expandedRowId;
                             const partyName =
                               (row.party_name ?? "").trim() || typeLabel || "—";
                             const vehicleStr = getVehicleForRow(row);
                             const hasTrip =
                               tripIdOnly != null && tripIdOnly !== "";
                             const tableTripPill = hasTrip ? (
-                              onMissionChange ? (
-                                <TouchableOpacity
-                                  style={styles.tableMissionPill}
-                                  onPress={() => setTripPickerRowId(row.id)}
-                                  activeOpacity={0.7}
-                                  hitSlop={8}
+                              <View style={styles.tableMissionPill}>
+                                <Text
+                                  style={styles.tableMissionPillText}
+                                  numberOfLines={1}
                                 >
-                                  <Text
-                                    style={styles.tableMissionPillText}
-                                    numberOfLines={1}
-                                  >
-                                    {tripIdOnly?.slice(0, 5) ?? ""}
-                                  </Text>
-                                </TouchableOpacity>
-                              ) : (
-                                <View style={styles.tableMissionPill}>
-                                  <Text
-                                    style={styles.tableMissionPillText}
-                                    numberOfLines={1}
-                                  >
-                                    {tripIdOnly ?? ""}
-                                  </Text>
-                                </View>
-                              )
+                                  {tripIdOnly ?? ""}
+                                </Text>
+                              </View>
                             ) : null;
                             return (
                               <View key={row.id}>
                                 <TouchableOpacity
                                   style={styles.tableRow}
-                                  onPress={() => onRowPress?.(row.id)}
+                                  onPress={() => handleRowPress(row.id)}
                                   activeOpacity={0.7}
                                 >
                                   <View
@@ -1769,42 +1325,7 @@ export function LedgerTransactionListView({
                                     </Text>
                                   </View>
                                 </TouchableOpacity>
-                                {isExpanded && (
-                                  <View style={styles.tableExpandedWrap}>
-                                    {expandedRowData != null &&
-                                    expandedRowId === row.id ? (
-                                      <LedgerExpandedCardFromData
-                                        data={expandedRowData}
-                                        enableDesktopThreeColumn={
-                                          expandedDesktopThreeColumn
-                                        }
-                                      />
-                                    ) : (
-                                      <TransactionRowDetail row={row} />
-                                    )}
-                                    {onMissionChange && (
-                                      <View style={styles.linkTripWrap}>
-                                        <TouchableOpacity
-                                          style={styles.linkTripBtn}
-                                          onPress={() =>
-                                            setTripPickerRowId(row.id)
-                                          }
-                                          activeOpacity={0.7}
-                                        >
-                                          <FontAwesome
-                                            name="link"
-                                            size={11}
-                                            color={Theme.primary}
-                                          />
-                                          <Text style={styles.linkTripText}>
-                                            Link to trip
-                                          </Text>
-                                        </TouchableOpacity>
-                                      </View>
-                                    )}
-                                  </View>
-                                )}
-                              </View>
+                                </View>
                             );
                           })}
                         </View>
@@ -1828,10 +1349,9 @@ export function LedgerTransactionListView({
                           const outAmt = Number(row.amount_out ?? 0);
                           const isIn = inAmt > 0;
                           const amount = isIn ? inAmt : outAmt;
-                          const isExpanded =
-                            expandedRowId != null && row.id === expandedRowId;
-                          const isHighlighted =
-                            highlightId != null && row.id === highlightId;
+                          const isRowActive =
+                            (highlightId != null && row.id === highlightId) ||
+                            previewTransaction?.id === row.id;
                           const partyName =
                             (row.party_name ?? "").trim() || typeLabel || "—";
                           const routeStr = tripRouteOnly(row, tripDetailsMap);
@@ -1871,61 +1391,20 @@ export function LedgerTransactionListView({
                                 </View>
                               ) : null}
                               {hasTrip ? (
-                                onMissionChange ? (
-                                  <TouchableOpacity
-                                    style={styles.tripPillWithCheck}
-                                    onPress={() => setTripPickerRowId(row.id)}
-                                    activeOpacity={0.7}
-                                    hitSlop={8}
-                                  >
-                                    <FontAwesome
-                                      name="check-circle"
-                                      size={8}
-                                      color={Theme.darkGreen}
-                                      style={styles.tripPillCheckIcon}
-                                    />
-                                    <Text
-                                      style={styles.tripPillTextOnlyLabel}
-                                      numberOfLines={1}
-                                    >
-                                      {tripIdOnly}
-                                    </Text>
-                                  </TouchableOpacity>
-                                ) : (
-                                  <View style={styles.tripPillWithCheck}>
-                                    <FontAwesome
-                                      name="check-circle"
-                                      size={8}
-                                      color={Theme.darkGreen}
-                                      style={styles.tripPillCheckIcon}
-                                    />
-                                    <Text
-                                      style={styles.tripPillTextOnlyLabel}
-                                      numberOfLines={1}
-                                    >
-                                      {tripIdOnly}
-                                    </Text>
-                                  </View>
-                                )
-                              ) : onMissionChange ? (
-                                <TouchableOpacity
-                                  style={styles.tripPillLink}
-                                  onPress={() => setTripPickerRowId(row.id)}
-                                  activeOpacity={0.7}
-                                  hitSlop={8}
-                                >
+                                <View style={styles.tripPillWithCheck}>
                                   <FontAwesome
-                                    name="link"
+                                    name="check-circle"
                                     size={8}
-                                    color={Theme.primary}
+                                    color={Theme.darkGreen}
+                                    style={styles.tripPillCheckIcon}
                                   />
                                   <Text
-                                    style={styles.tripPillLinkText}
+                                    style={styles.tripPillTextOnlyLabel}
                                     numberOfLines={1}
                                   >
-                                    Link trip
+                                    {tripIdOnly}
                                   </Text>
-                                </TouchableOpacity>
+                                </View>
                               ) : null}
                             </View>
                           );
@@ -1950,7 +1429,15 @@ export function LedgerTransactionListView({
                                   {customAvatar}
                                 </View>
                               ) : (
-                                <View style={styles.timelineCardAvatar}>
+                                <View
+                                  style={[
+                                    styles.timelineCardAvatar,
+                                    { backgroundColor: avatarBg },
+                                    isIn
+                                      ? styles.avatarWrapIn
+                                      : styles.avatarWrapOut,
+                                  ]}
+                                >
                                   <Text
                                     style={[
                                       styles.avatarText,
@@ -2061,33 +1548,25 @@ export function LedgerTransactionListView({
                                 <LedgerFlowChip row={row} />
                               ) : null}
                               {tripPillContent}
-                              {onRowPress ? (
-                                <TouchableOpacity
-                                  style={styles.amountTouchArea}
-                                  onPress={() => onRowPress(row.id)}
-                                  activeOpacity={0.72}
-                                >
-                                  {amountEl}
-                                </TouchableOpacity>
-                              ) : (
-                                amountEl
-                              )}
+                              <TouchableOpacity
+                                style={styles.amountTouchArea}
+                                onPress={() => handleRowPress(row.id)}
+                                activeOpacity={0.72}
+                              >
+                                {amountEl}
+                              </TouchableOpacity>
                             </View>
                           );
 
                           const cardContent = useTimelineLayout ? (
                             <>
-                              {onRowPress ? (
-                                <TouchableOpacity
-                                  style={styles.rowTouchable}
-                                  onPress={() => onRowPress(row.id)}
-                                  activeOpacity={0.72}
-                                >
-                                  {leftContent}
-                                </TouchableOpacity>
-                              ) : (
-                                leftContent
-                              )}
+                              <TouchableOpacity
+                                style={styles.rowTouchable}
+                                onPress={() => handleRowPress(row.id)}
+                                activeOpacity={0.72}
+                              >
+                                {leftContent}
+                              </TouchableOpacity>
                               <View style={styles.rightCol}>
                                 {getLedgerFlowForRow(row) ? (
                                   <LedgerFlowChip row={row} />
@@ -2096,7 +1575,7 @@ export function LedgerTransactionListView({
                                 {onRowPress ? (
                                   <TouchableOpacity
                                     style={styles.amountTouchArea}
-                                    onPress={() => onRowPress(row.id)}
+                                    onPress={() => handleRowPress(row.id)}
                                     activeOpacity={0.72}
                                   >
                                     {amountEl}
@@ -2108,17 +1587,13 @@ export function LedgerTransactionListView({
                             </>
                           ) : (
                             <>
-                              {onRowPress ? (
-                                <TouchableOpacity
-                                  style={styles.rowTouchable}
-                                  onPress={() => onRowPress(row.id)}
-                                  activeOpacity={0.72}
-                                >
-                                  {leftContent}
-                                </TouchableOpacity>
-                              ) : (
-                                leftContent
-                              )}
+                              <TouchableOpacity
+                                style={styles.rowTouchable}
+                                onPress={() => handleRowPress(row.id)}
+                                activeOpacity={0.72}
+                              >
+                                {leftContent}
+                              </TouchableOpacity>
                               {rightBlock}
                             </>
                           );
@@ -2136,7 +1611,7 @@ export function LedgerTransactionListView({
                                   useTimelineLayout
                                     ? styles.rowCardTimeline
                                     : styles.rowCard,
-                                  (isExpanded || isHighlighted) &&
+                                  isRowActive &&
                                     (useTimelineLayout
                                       ? styles.rowCardTimelineHighlighted
                                       : styles.rowCardHighlighted),
@@ -2144,51 +1619,6 @@ export function LedgerTransactionListView({
                               >
                                 {cardContent}
                               </View>
-                              {isExpanded && (
-                                <>
-                                  {useTimelineLayout ? (
-                                    <TimelineExpandedDetail
-                                      row={row}
-                                      tripDetailsMap={tripDetailsMap}
-                                      allTransactions={transactions}
-                                      onDownloadPress={
-                                        onExportPress
-                                          ? () => onExportPress(row.id)
-                                          : undefined
-                                      }
-                                    />
-                                  ) : expandedRowData != null ? (
-                                    <LedgerExpandedCardFromData
-                                      data={expandedRowData}
-                                      enableDesktopThreeColumn={
-                                        expandedDesktopThreeColumn
-                                      }
-                                    />
-                                  ) : (
-                                    <TransactionRowDetail row={row} />
-                                  )}
-                                  {onMissionChange && !useTimelineLayout && (
-                                    <View style={styles.linkTripWrap}>
-                                      <TouchableOpacity
-                                        style={styles.linkTripBtn}
-                                        onPress={() =>
-                                          setTripPickerRowId(row.id)
-                                        }
-                                        activeOpacity={0.7}
-                                      >
-                                        <FontAwesome
-                                          name="link"
-                                          size={11}
-                                          color={Theme.primary}
-                                        />
-                                        <Text style={styles.linkTripText}>
-                                          Link to trip
-                                        </Text>
-                                      </TouchableOpacity>
-                                    </View>
-                                  )}
-                                </>
-                              )}
                             </View>
                           );
                         })
@@ -2220,66 +1650,12 @@ export function LedgerTransactionListView({
           })()
         )}
       </View>
-      {tripPickerRowId &&
-        (() => {
-          const row = transactions.find((r) => r.id === tripPickerRowId);
-          if (!row || !onMissionChange) return null;
-          const partyKey = (row.party_name ?? "").trim().toLowerCase();
-          const recIds = [
-            ...new Set(
-              transactions
-                .filter(
-                  (r) =>
-                    (r.party_name ?? "").trim().toLowerCase() === partyKey &&
-                    r.trip_id != null &&
-                    tripOptionIds.has(r.trip_id),
-                )
-                .map((r) => r.trip_id!),
-            ),
-          ];
-          const filtered =
-            recIds.length > 0 || row.trip_id != null
-              ? tripOptions.filter(
-                  (t) =>
-                    recIds.includes(t.id) ||
-                    (row.trip_id != null && t.id === row.trip_id),
-                )
-              : tripOptions;
-          const opts = filtered.map((t) => {
-            const detail = tripDetailsMap?.[t.id];
-            const route =
-              (t as { route?: string | null }).route ??
-              (t as { route_label?: string | null }).route_label ??
-              (detail
-                ? [detail.pickup_area, detail.drop_location]
-                    .filter(Boolean)
-                    .join(" → ") || null
-                : null);
-            const vehicle_type =
-              (t as { vehicle_type?: string | null }).vehicle_type ??
-              detail?.vehicle_body_type ??
-              detail?.vehicle_type ??
-              null;
-            return {
-              ...t,
-              route: route ?? undefined,
-              vehicle_type: vehicle_type ?? undefined,
-            };
-          });
-          return (
-            <TripPickerModal
-              visible={true}
-              onClose={() => setTripPickerRowId(null)}
-              tripOptions={opts}
-              recommendedTripIds={recIds}
-              selectedTripId={row.trip_id ?? null}
-              onSelect={(tripId) => {
-                onMissionChange(row.id, tripId);
-                setTripPickerRowId(null);
-              }}
-            />
-          );
-        })()}
+      <LedgerTransactionPreviewModal
+        visible={previewTransaction != null}
+        transaction={previewTransaction}
+        onClose={() => setPreviewTransaction(null)}
+        onViewAllOnTrip={onViewAllOnTrip}
+      />
     </View>
   );
 }
@@ -2307,7 +1683,7 @@ const styles = StyleSheet.create({
   /** Do not use flexGrow here — it breaks vertical scrolling on web (content fills viewport). */
   ledgerMainScrollContent: {
     width: "100%",
-    alignItems: "center",
+    alignItems: "stretch",
   },
   emptyState: {
     alignItems: "center",
@@ -2401,7 +1777,6 @@ const styles = StyleSheet.create({
   fiscalAddBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
@@ -2457,7 +1832,6 @@ const styles = StyleSheet.create({
   streamHeaderAddBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
@@ -2953,49 +2327,66 @@ const styles = StyleSheet.create({
   dateSyncBarCardIconIn: { backgroundColor: "rgba(16,185,129,0.25)" },
   fiscalTransactionRows: {
     width: "100%",
-    maxWidth: CASH_LEDGER_MAX_WIDTH,
-    alignSelf: "center",
+    alignSelf: "stretch",
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 4,
+    paddingTop: 6,
     paddingBottom: Layout.sectionSpacing / 2,
   },
-  fiscalCardWrap: {
-    backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: METRONIC.border,
-    marginBottom: 8,
-    overflow: "hidden",
+  fiscalTransactionRowsFullWidth: {
+    paddingHorizontal: LEDGER_DESKTOP_PADDING,
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
+  fiscalTransactionRowsConstrained: {
+    width: CASH_LEDGER_MAX_WIDTH,
+    maxWidth: "100%",
+    alignSelf: "center",
+  },
+  fiscalCardWrap: {},
+  fiscalCardWrapSeparator: {
+    paddingBottom: 4,
   },
   fiscalCard: {
-    position: "relative",
-    zIndex: 1,
+    backgroundColor: "transparent",
+    paddingVertical: 2,
   },
   fiscalCardExpanded: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: METRONIC.border,
   },
+  fiscalCardExpandedDesktop: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: METRONIC.border,
+  },
   fiscalCardInner: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 12,
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+    gap: 10,
     minWidth: 0,
   },
+  fiscalCardInnerFullWidth: {
+    paddingVertical: 10,
+  },
   fiscalCardAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    borderWidth: 1.5,
+  },
+  fiscalCardAvatarIn: {
+    borderColor: Theme.positiveMuted,
+  },
+  fiscalCardAvatarOut: {
+    borderColor: Theme.negativeMuted,
   },
   fiscalCardAvatarImageWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    overflow: "hidden",
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -3003,69 +2394,78 @@ const styles = StyleSheet.create({
   fiscalCardAvatarText: {
     fontSize: 11,
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
   fiscalCardBody: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
-    paddingRight: 4,
+    justifyContent: "center",
+    gap: 2,
+    paddingTop: 4,
   },
   fiscalCardParty: {
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0.25,
+    fontSize: 11,
+    fontWeight: "500",
+    fontStyle: "italic",
+    letterSpacing: 0,
     textTransform: "uppercase",
-    color: Theme.primary,
+    color: Theme.textPrimaryDark,
   },
   fiscalCardDate: {
-    fontSize: 10,
+    fontSize: 7,
     fontWeight: "500",
-    color: METRONIC.muted,
-    letterSpacing: 0.2,
+    fontStyle: "normal",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginTop: 2,
   },
   fiscalCardRouteWhy: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: METRONIC.subtle,
-    lineHeight: 17,
+    fontSize: 7,
+    fontWeight: "400",
+    fontStyle: "italic",
+    color: Theme.textMuted,
+    marginTop: 1,
+    lineHeight: 10,
+    opacity: 0.95,
   },
   fiscalCardRight: {
     alignItems: "flex-end",
     justifyContent: "center",
+    gap: 6,
     flexShrink: 0,
-    gap: 5,
-    maxWidth: 128,
+    width: LEDGER_RIGHT_COLUMN_WIDTH,
+    minWidth: LEDGER_RIGHT_COLUMN_WIDTH,
+    paddingTop: 4,
   },
   fiscalCardPill: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-end",
     gap: 4,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    backgroundColor: Theme.positiveMuted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(21,128,61,0.2)",
-    maxWidth: "100%",
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    maxWidth: LEDGER_RIGHT_COLUMN_WIDTH,
   },
   fiscalCardPillIcon: { marginRight: 0 },
   fiscalCardPillText: {
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: "600",
-    color: Theme.positive,
-    letterSpacing: 0.1,
+    color: Theme.primary,
+    fontStyle: "italic",
+    letterSpacing: 0.15,
+    textTransform: "uppercase",
     flexShrink: 1,
   },
   fiscalCardAmount: {
-    fontSize: 15,
-    fontWeight: "600",
-    letterSpacing: -0.3,
+    fontSize: 11,
+    fontWeight: "500",
+    fontStyle: "normal",
+    letterSpacing: 0,
     fontVariant: ["tabular-nums"],
+    textAlign: "right",
   },
-  fiscalCardAmountIn: { color: Theme.primary },
-  fiscalCardAmountOut: { color: Theme.negative },
+  fiscalCardAmountIn: { color: Theme.darkGreen },
+  fiscalCardAmountOut: { color: Theme.teslaRed },
   fiscalExpanded: {
     paddingHorizontal: 12,
     paddingBottom: 16,
@@ -3073,6 +2473,10 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: METRONIC.border,
     backgroundColor: METRONIC.bodyBg,
+  },
+  fiscalExpandedDesktop: {
+    paddingHorizontal: 16,
+    paddingBottom: 18,
   },
   fiscalExpandedLedger: {
     backgroundColor: Theme.surface,
@@ -3087,7 +2491,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 8,
     paddingHorizontal: 20,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
   },
   fiscalExpandedLedgerBarText: {
     fontSize: 8,
@@ -3185,9 +2589,6 @@ const styles = StyleSheet.create({
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
   },
   fiscalExpandedExportText: {
     fontSize: 9,
@@ -3730,6 +3131,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 2,
     width: "100%",
+    alignSelf: "stretch",
+    /** Center the constrained day-divider + transaction column reliably on web
+     *  (don't rely only on each child's alignSelf inside an embedded parent scroll). */
     alignItems: "center",
   },
   sectionBar: {
@@ -3838,10 +3242,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   timelineCardAvatarImageWrap: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 18,
-    overflow: "hidden",
+    overflow: "visible",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4305,69 +3709,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "500",
     color: Theme.primary ?? Theme.teslaRed,
-  },
-  receiptExpandedWrap: {
-    backgroundColor: LEDGER_RECEIPT.cardBg,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: LEDGER_RECEIPT.border,
-    padding: 14,
-    gap: 12,
-    width: "100%",
-    alignSelf: "stretch",
-    minWidth: 0,
-  },
-  receiptExpandedHero: {
-    alignItems: "center",
-    gap: 6,
-    width: "100%",
-  },
-  receiptStatusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: LEDGER_RECEIPT.statusBg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LEDGER_RECEIPT.statusBorder,
-  },
-  receiptStatusText: {
-    fontSize: 10,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    color: LEDGER_RECEIPT.statusText,
-  },
-  receiptTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: LEDGER_RECEIPT.title,
-    textAlign: "center",
-    letterSpacing: -0.15,
-  },
-  receiptAmount: {
-    fontSize: 28,
-    fontWeight: "600",
-    letterSpacing: -0.5,
-    fontVariant: ["tabular-nums"],
-    textAlign: "center",
-  },
-  receiptReconWrap: {
-    gap: 6,
-    paddingTop: 2,
-  },
-  receiptFlowWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingTop: 2,
-  },
-  receiptReconLabel: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: LEDGER_RECEIPT.label,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
   },
   detailCard: {
     backgroundColor: Theme.surfaceLight ?? "rgba(0,0,0,0.03)",

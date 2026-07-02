@@ -57,7 +57,7 @@ export function TreasurySummaryBanner({
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
     marginHorizontal: 8,
     marginBottom: 8,
     borderRadius: 2,

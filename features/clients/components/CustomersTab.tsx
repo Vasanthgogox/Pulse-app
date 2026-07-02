@@ -2011,6 +2011,7 @@ export function CustomersTab({
                 avatarSeed={avatarData?.avatar_seed}
                 entityType="client"
                 isIntegrated={!!data.is_integrated}
+                badgeOverlay
               />
               <View style={[styles.customerTableCell, styles.ctEntity]}>
                 <Text
