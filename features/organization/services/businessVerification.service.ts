@@ -92,6 +92,10 @@ export interface DocVerifyResult {
   route_to_manual: boolean;
   message:         string;
   score?:          number;
+  extracted?: {
+    gstin: string | null;
+    pan:   string | null;
+  };
 }
 
 /** Calls gemini-doc-verify right after upload. Network/config failures are
@@ -104,12 +108,25 @@ async function verifyUploadedDocument(
   typedGstin?:  string,
   typedPan?:    string,
 ): Promise<DocVerifyResult | null> {
+  console.log('%c[OCR] 1/4 starting', 'color:#2563eb', { documentType, storagePath, typedGstin, typedPan });
+
   const { data: { session } } = await supabase().auth.getSession();
   const token = session?.access_token ?? '';
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
+  if (!supabaseUrl) {
+    console.error('%c[OCR] ABORT: EXPO_PUBLIC_SUPABASE_URL is empty', 'color:#dc2626');
+    return null;
+  }
+  if (!token) {
+    console.warn('%c[OCR] no auth session token — request will likely 401', 'color:#d97706');
+  }
+
+  const url = `${supabaseUrl}/functions/v1/gemini-doc-verify`;
+  console.log('%c[OCR] 2/4 calling edge function', 'color:#2563eb', url);
+
   try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/gemini-doc-verify`, {
+    const res = await fetch(url, {
       method:  'POST',
       headers: {
         'Content-Type':  'application/json',
@@ -122,9 +139,30 @@ async function verifyUploadedDocument(
         typed_pan:     typedPan,
       }),
     });
-    if (!res.ok) return null; // config/network issue — don't block on it
-    return await res.json() as DocVerifyResult;
-  } catch {
+
+    console.log('%c[OCR] 3/4 HTTP response', 'color:#2563eb', res.status, res.statusText);
+
+    if (!res.ok) {
+      const bodyText = await res.text();
+      console.error('%c[OCR] ABORT: non-OK response', 'color:#dc2626', res.status, bodyText);
+      return null; // config/network issue — don't block on it
+    }
+    const result = await res.json() as DocVerifyResult;
+    console.log(
+      '%c[OCR] 4/4 result',
+      result.passed ? 'color:#16a34a' : 'color:#d97706',
+      {
+        passed:          result.passed,
+        route_to_manual: result.route_to_manual,
+        message:         result.message,
+        score:           result.score,
+        extracted_gstin: result.extracted?.gstin,
+        extracted_pan:   result.extracted?.pan,
+      },
+    );
+    return result;
+  } catch (e) {
+    console.error('%c[OCR] ABORT: request threw', 'color:#dc2626', e);
     return null;
   }
 }

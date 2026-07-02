@@ -76,6 +76,14 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
+  try {
+    return await handle(req);
+  } catch (e) {
+    return json({ error: `Unhandled error: ${e instanceof Error ? e.message : String(e)}` }, 500);
+  }
+});
+
+async function handle(req: Request): Promise<Response> {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const supabaseUrl    = Deno.env.get('SUPABASE_URL')              ?? '';
   const geminiKey       = Deno.env.get('GEMINI_API_KEY')            ?? '';
@@ -97,11 +105,19 @@ Deno.serve(async (req: Request) => {
   if (!document_type) return json({ error: 'document_type required' }, 400);
 
   // ── 1. Fetch signed URL for the private document ──────────────────────────
+  // Storage's /sign endpoint requires `apikey` alongside `Authorization` when
+  // the project uses the new sb_secret_/sb_publishable_ key format — Bearer
+  // alone returns "Invalid Compact JWS" since sb_secret_ keys aren't JWTs.
+  // Encode each path segment separately — encoding the whole path (with `/`
+  // as %2F) bakes the wrong path into the signed token, so the storage
+  // backend later rejects the download with "InvalidSignature".
+  const encodedStoragePath = storage_path.split('/').map(encodeURIComponent).join('/');
   const signedUrlRes = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/verification-documents/${encodeURIComponent(storage_path)}`,
+    `${supabaseUrl}/storage/v1/object/sign/verification-documents/${encodedStoragePath}`,
     {
       method: 'POST',
       headers: {
+        'apikey':        serviceRoleKey,
         'Authorization': `Bearer ${serviceRoleKey}`,
         'Content-Type':  'application/json',
       },
@@ -110,13 +126,22 @@ Deno.serve(async (req: Request) => {
   );
 
   if (!signedUrlRes.ok) {
-    return json({ error: 'Failed to generate signed URL for document' }, 500);
+    const errText = await signedUrlRes.text();
+    return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
   }
   const { signedURL } = await signedUrlRes.json() as { signedURL: string };
+  // signedURL from Storage's /sign endpoint is relative (e.g. "/object/sign/...")
+  // — fetch() requires an absolute URL, so prefix with the storage base.
+  const absoluteSignedUrl = signedURL.startsWith('http')
+    ? signedURL
+    : `${supabaseUrl}/storage/v1${signedURL}`;
 
   // ── 2. Download document bytes ─────────────────────────────────────────────
-  const docRes = await fetch(signedURL);
-  if (!docRes.ok) return json({ error: 'Failed to download document from storage' }, 500);
+  const docRes = await fetch(absoluteSignedUrl);
+  if (!docRes.ok) {
+    const errText = await docRes.text();
+    return json({ error: `Failed to download document from storage: ${docRes.status} ${errText} url=${absoluteSignedUrl}` }, 500);
+  }
 
   const docBuffer = await docRes.arrayBuffer();
   const docBytes  = new Uint8Array(docBuffer);
@@ -184,7 +209,13 @@ Return ONLY the JSON — no markdown, no explanation.`;
     return json({ error: 'Failed to parse extracted fields from Gemini response' }, 500);
   }
 
+  const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+  const PAN_REGEX   = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
   // ── 4. Evaluate result per document type ───────────────────────────────────
+  // Empty typed value means the field hasn't been filled yet — client
+  // auto-fills it from `extracted` instead of comparing. Still requires the
+  // extracted value to match the real GSTIN/PAN format before trusting it.
   if (document_type === 'gst_certificate') {
     if (!extracted.legible || !extracted.gstin) {
       return json({
@@ -193,16 +224,31 @@ Return ONLY the JSON — no markdown, no explanation.`;
         extracted,
       });
     }
-    const score = taxIdSimilarity(typed_gstin ?? '', extracted.gstin);
+    const extractedGstin = extracted.gstin.toUpperCase().replace(/\s/g, '');
+    if (!GSTIN_REGEX.test(extractedGstin)) {
+      return json({
+        passed: false, route_to_manual: true,
+        message: `Extracted text (${extractedGstin}) doesn't look like a valid GSTIN. Please upload a clearer photo.`,
+        extracted,
+      });
+    }
+    if (!typed_gstin?.trim()) {
+      return json({
+        passed: true, route_to_manual: false,
+        message: `Read GSTIN ${extractedGstin} from this document.`,
+        extracted: { ...extracted, gstin: extractedGstin },
+      });
+    }
+    const score = taxIdSimilarity(typed_gstin, extractedGstin);
     const passed = score >= HARD_THRESHOLD;
     return json({
       passed,
       route_to_manual: !passed,
       message: passed
         ? 'GST certificate matches the GSTIN you entered.'
-        : `The GSTIN on this document (${extracted.gstin}) doesn't match what you entered (${typed_gstin}). Please check and re-upload.`,
+        : `The GSTIN on this document (${extractedGstin}) doesn't match what you entered (${typed_gstin}). Please check and re-upload.`,
       score: Math.round(score * 100),
-      extracted,
+      extracted: { ...extracted, gstin: extractedGstin },
     });
   }
 
@@ -214,16 +260,31 @@ Return ONLY the JSON — no markdown, no explanation.`;
         extracted,
       });
     }
-    const score = taxIdSimilarity(typed_pan ?? '', extracted.pan);
+    const extractedPan = extracted.pan.toUpperCase().replace(/\s/g, '');
+    if (!PAN_REGEX.test(extractedPan)) {
+      return json({
+        passed: false, route_to_manual: true,
+        message: `Extracted text (${extractedPan}) doesn't look like a valid PAN. Please upload a clearer photo.`,
+        extracted,
+      });
+    }
+    if (!typed_pan?.trim()) {
+      return json({
+        passed: true, route_to_manual: false,
+        message: `Read PAN ${extractedPan} from this document.`,
+        extracted: { ...extracted, pan: extractedPan },
+      });
+    }
+    const score = taxIdSimilarity(typed_pan, extractedPan);
     const passed = score >= HARD_THRESHOLD;
     return json({
       passed,
       route_to_manual: !passed,
       message: passed
         ? 'PAN card matches the PAN you entered.'
-        : `The PAN on this document (${extracted.pan}) doesn't match what you entered (${typed_pan}). Please check and re-upload.`,
+        : `The PAN on this document (${extractedPan}) doesn't match what you entered (${typed_pan}). Please check and re-upload.`,
       score: Math.round(score * 100),
-      extracted,
+      extracted: { ...extracted, pan: extractedPan },
     });
   }
 
@@ -244,4 +305,4 @@ Return ONLY the JSON — no markdown, no explanation.`;
       : "This doesn't look like an address proof document. Please upload a lease agreement, utility bill, or similar.",
     extracted,
   });
-});
+}

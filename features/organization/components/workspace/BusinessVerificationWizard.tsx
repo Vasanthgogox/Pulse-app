@@ -720,13 +720,23 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     const fileName = asset.fileName ?? `gst-certificate-${Date.now()}.jpg`;
     const file: VerificationDocumentFile = { uri: asset.uri, mimeType, fileName, base64: asset.base64 ?? undefined };
 
+    console.log('%c[WIZARD] GST cert upload starting', 'color:#7c3aed', { fileName, mimeType, currentGstin: step1.gstin });
     setStep1(s => ({ ...s, gstCertUploading: true, gstCertUploadError: null }));
-    const { path, error } = await uploadVerificationDocument(orgId, 'gst_certificate', file, { gstin: step1.gstin });
+    const { path, error, verify } = await uploadVerificationDocument(orgId, 'gst_certificate', file, { gstin: step1.gstin });
+    console.log('%c[WIZARD] GST cert upload finished', 'color:#7c3aed', { path, error: error?.message, verify });
     if (error || !path) {
       setStep1(s => ({ ...s, gstCertUploading: false, gstCertUploadError: error?.message ?? 'Upload failed. Please try again.' }));
       return;
     }
-    setStep1(s => ({ ...s, gstCertUploading: false, gstCertPath: path, gstCertFileName: fileName, gstCertUploadError: null }));
+    // Auto-fill GSTIN from the document only if the field was still empty —
+    // never overwrite something the user already typed.
+    const extractedGstin = !step1.gstin.trim() ? verify?.extracted?.gstin ?? null : null;
+    console.log('%c[WIZARD] GST autofill decision', 'color:#7c3aed', { currentGstin: step1.gstin, extractedGstin, willAutofill: !!extractedGstin });
+    setStep1(s => ({
+      ...s,
+      gstCertUploading: false, gstCertPath: path, gstCertFileName: fileName, gstCertUploadError: null,
+      ...(extractedGstin ? { gstin: extractedGstin, gstinValidated: false, gstinError: null } : null),
+    }));
   });
 
   const handlePickPanCard = () => pickDocumentAsset(async asset => {
@@ -734,13 +744,21 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     const fileName = asset.fileName ?? `pan-card-${Date.now()}.jpg`;
     const file: VerificationDocumentFile = { uri: asset.uri, mimeType, fileName, base64: asset.base64 ?? undefined };
 
+    console.log('%c[WIZARD] PAN card upload starting', 'color:#7c3aed', { fileName, mimeType, currentPan: step1.pan });
     setStep1(s => ({ ...s, panCardUploading: true, panCardUploadError: null }));
-    const { path, error } = await uploadVerificationDocument(orgId, 'pan_card', file, { pan: step1.pan });
+    const { path, error, verify } = await uploadVerificationDocument(orgId, 'pan_card', file, { pan: step1.pan });
+    console.log('%c[WIZARD] PAN card upload finished', 'color:#7c3aed', { path, error: error?.message, verify });
     if (error || !path) {
       setStep1(s => ({ ...s, panCardUploading: false, panCardUploadError: error?.message ?? 'Upload failed. Please try again.' }));
       return;
     }
-    setStep1(s => ({ ...s, panCardUploading: false, panCardPath: path, panCardFileName: fileName, panCardUploadError: null }));
+    const extractedPan = !step1.pan.trim() ? verify?.extracted?.pan ?? null : null;
+    console.log('%c[WIZARD] PAN autofill decision', 'color:#7c3aed', { currentPan: step1.pan, extractedPan, willAutofill: !!extractedPan });
+    setStep1(s => ({
+      ...s,
+      panCardUploading: false, panCardPath: path, panCardFileName: fileName, panCardUploadError: null,
+      ...(extractedPan ? { pan: extractedPan } : null),
+    }));
   });
 
   const handleNext = async () => {

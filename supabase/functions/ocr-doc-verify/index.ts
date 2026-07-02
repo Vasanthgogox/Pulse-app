@@ -99,11 +99,19 @@ Deno.serve(async (req: Request) => {
   if (!storage_path) return json({ error: 'storage_path required' }, 400);
 
   // ── 1. Fetch signed URL for the private document ──────────────────────────
+  // Storage's /sign endpoint requires `apikey` alongside `Authorization` when
+  // the project uses the new sb_secret_/sb_publishable_ key format — Bearer
+  // alone returns "Invalid Compact JWS" since sb_secret_ keys aren't JWTs.
+  // Encode each path segment separately — encoding the whole path (with `/`
+  // as %2F) bakes the wrong path into the signed token, so the storage
+  // backend later rejects the download with "InvalidSignature".
+  const encodedStoragePath = storage_path.split('/').map(encodeURIComponent).join('/');
   const signedUrlRes = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/verification-documents/${encodeURIComponent(storage_path)}`,
+    `${supabaseUrl}/storage/v1/object/sign/verification-documents/${encodedStoragePath}`,
     {
       method: 'POST',
       headers: {
+        'apikey':        serviceRoleKey,
         'Authorization': `Bearer ${serviceRoleKey}`,
         'Content-Type':  'application/json',
       },
@@ -112,12 +120,18 @@ Deno.serve(async (req: Request) => {
   );
 
   if (!signedUrlRes.ok) {
-    return json({ error: 'Failed to generate signed URL for document' }, 500);
+    const errText = await signedUrlRes.text();
+    return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
   }
   const { signedURL } = await signedUrlRes.json() as { signedURL: string };
+  // signedURL from Storage's /sign endpoint is relative (e.g. "/object/sign/...")
+  // — fetch() requires an absolute URL, so prefix with the storage base.
+  const absoluteSignedUrl = signedURL.startsWith('http')
+    ? signedURL
+    : `${supabaseUrl}/storage/v1${signedURL}`;
 
   // ── 2. Download document bytes ─────────────────────────────────────────────
-  const docRes = await fetch(signedURL);
+  const docRes = await fetch(absoluteSignedUrl);
   if (!docRes.ok) return json({ error: 'Failed to download document from storage' }, 500);
 
   const docBuffer = await docRes.arrayBuffer();
