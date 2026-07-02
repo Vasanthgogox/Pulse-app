@@ -11,8 +11,6 @@ import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
     buildFinancialRowDataForLedgerRow,
     formatLedgerEntryDate,
-    formatLedgerRoute,
-    formatLedgerTripDateForDisplay,
     resolveLedgerPartyName,
 } from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
 import { getTripOperationalDisplay } from "@/features/operations/display";
@@ -25,15 +23,16 @@ import {
 import { useDisputeMapQuery, useDriverProfileImagesQuery } from "@/lib/queries";
 import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
+import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { getDoubleEntryDisplayLabel } from "../accounting/accountingModel";
 import * as financeService from "../services/finance.service";
-import { FinanceEntryDetailScreen } from "./FinanceEntryDetailScreen";
 import { FinancePromoCard } from "./FinancePromoCard";
 import { FinancialRow, type FinancialRowData } from "./FinancialRow";
 import { LedgerTransactionListView } from "./LedgerTransactionListView";
+import { LedgerTransactionPreviewModal } from "./LedgerTransactionPreviewModal";
 
 export type LedgerViewMode = "table" | "transaction";
 
@@ -50,14 +49,6 @@ export interface LedgerTabProps {
   onEntitySelect?: (partyName: string) => void;
   /** When provided, resolve vehicle number for a trip (e.g. for vehicle cash-out display when not stored in DB). */
   getVehicleNumberForTripId?: (tripId: string | null) => string | null;
-  /** Ledger SOURCE column: trip options for dropdown (link entry to trip). */
-  tripOptions?: {
-    id: string;
-    trip_number: string;
-    route?: string | null;
-    trip_date?: string | null;
-    vehicle_number?: string | null;
-  }[];
   /** Map trip_id -> detail to show in table when a trip is selected. */
   tripDetailsMap?: Record<
     string,
@@ -75,8 +66,6 @@ export interface LedgerTabProps {
       supplier_display_name?: string | null;
     }
   >;
-  /** When provided, changing trip in SOURCE dropdown updates the entry and refreshes. */
-  onMissionChange?: (entryId: string, tripId: string) => void;
   /** View mode: table (default) or transaction (GPay-style list). */
   viewMode?: LedgerViewMode;
   onViewModeChange?: (mode: LedgerViewMode) => void;
@@ -110,9 +99,7 @@ export function LedgerTab({
   onRowSelect,
   onEntitySelect,
   getVehicleNumberForTripId,
-  tripOptions = [],
   tripDetailsMap = {},
-  onMissionChange,
   viewMode: viewModeProp,
   showFiscalSubTabs = true,
   clientRows = [],
@@ -127,7 +114,6 @@ export function LedgerTab({
   const router = useRouter();
   const isViewOnly = onAddTransactionPress === undefined;
   const isControlled = transactionsProp !== undefined;
-  const [expandedLedgerRowId, setExpandedLedgerRowId] = useState<string | null>(null);
   const viewMode = viewModeProp ?? "table";
 
   const clientById = new Map(clientRows.map(c => [c.id, c]));
@@ -153,9 +139,8 @@ export function LedgerTab({
   }, [clientRows, supplierRows]);
 
   const { disputesByTripId } = useDisputeMapQuery(organizationId);
-  const [selectedDetailData, setSelectedDetailData] = useState<FinancialRowData | null>(
-    null,
-  );
+  const [previewLedgerRow, setPreviewLedgerRow] =
+    useState<financeService.LedgerRow | null>(null);
 
   const getResolvedPartyName = useCallback(
     (row: financeService.LedgerRow) =>
@@ -224,8 +209,6 @@ export function LedgerTab({
     );
   }
 
-  const tripOptionIds = new Set((tripOptions ?? []).map((t) => t.id));
-
   function buildFinancialRowDataForRow(
     row: financeService.LedgerRow,
   ): FinancialRowData {
@@ -248,28 +231,17 @@ export function LedgerTab({
   }
 
   function openLedgerDetail(row: financeService.LedgerRow) {
-    const rowData = buildFinancialRowDataForRow(row);
-    setSelectedDetailData(rowData);
+    setPreviewLedgerRow(row);
   }
-
-  const expandedRow =
-    viewMode === "transaction" && expandedLedgerRowId != null
-      ? transactionListRows.find((r) => r.id === expandedLedgerRowId) ?? null
-      : null;
-  const expandedRowData =
-    expandedRow != null ? buildFinancialRowDataForRow(expandedRow) : null;
 
   const transactionContent = (
     <LedgerTransactionListView
       transactions={transactionListRows}
       onLoadMore={!isControlled && hasNextPage ? fetchNextPage : undefined}
       loadingMore={!isControlled && isFetchingNextPage}
-      onRowPress={(id) => {
-        setExpandedLedgerRowId((prev) => (prev === id ? null : id));
-      }}
-      expandedRowId={expandedLedgerRowId}
-      expandedRowData={expandedRowData}
-      highlightId={expandedLedgerRowId}
+      onViewAllOnTrip={(tripId) =>
+        router.push(ROUTES.tripDetailFinanceTransactions(tripId) as never)
+      }
       showTitle={false}
       showHistoryHeader={true}
       showGridFooter={true}
@@ -278,8 +250,6 @@ export function LedgerTab({
       onAddTransactionPress={onAddTransactionPress}
       tripDetailsMap={tripDetailsMap}
       getVehicleNumberForTripId={getVehicleNumberForTripId}
-      tripOptions={tripOptions}
-      onMissionChange={onMissionChange}
       fullWidth
       renderPartyAvatar={(row) => {
         const name = getResolvedPartyName(row);
@@ -305,7 +275,8 @@ export function LedgerTab({
             organizationImageUrl={props.organizationImageUrl}
             organizationAvatarSeed={props.organizationAvatarSeed}
             entityType={props.entityType}
-            size={44}
+            isIntegrated={identity.isIntegrated}
+            size={32}
           />
         );
       }}
@@ -371,51 +342,6 @@ export function LedgerTab({
             : restSublineTrip
               ? `${entryDateStr} · ${restSublineTrip}`
               : entryDateStr;
-        const partyKey = (getResolvedPartyName(row) ?? "").trim().toLowerCase();
-        const recommendedTripIds =
-          partyKey === ""
-            ? []
-            : [
-                ...new Set(
-                  rows
-                    .filter(
-                      (r) =>
-                        (getResolvedPartyName(r) ?? "").trim().toLowerCase() ===
-                        partyKey &&
-                        r.trip_id != null &&
-                        tripOptionIds.has(r.trip_id),
-                    )
-                    .map((r) => r.trip_id!),
-                ),
-              ];
-        /** Only show associated trips in dropdown (+ current trip if set so selection is visible), with route detail. */
-        const tripOptionsForRow =
-          recommendedTripIds.length > 0 || row.trip_id != null
-            ? tripOptions
-                .filter(
-                  (t) =>
-                    recommendedTripIds.includes(t.id) ||
-                    (row.trip_id != null && t.id === row.trip_id),
-                )
-                .map((t) => {
-                  const detail = tripDetailsMap[t.id];
-                  return {
-                    id: t.id,
-                    trip_number: t["trip_number"],
-                    route: formatLedgerRoute(detail),
-                    trip_date:
-                      (t as { trip_date?: string | null }).trip_date ??
-                      (detail?.pickup_date
-                        ? formatLedgerTripDateForDisplay(detail.pickup_date)
-                        : null),
-                    vehicle_number:
-                      detail?.vehicle_number ??
-                      (t as { vehicle_number?: string | null })
-                        .vehicle_number ??
-                      null,
-                  };
-                })
-            : [];
         const tripDetail =
           row.trip_id != null && tripDetailsMap[row.trip_id]
             ? tripDetailsMap[row.trip_id]
@@ -532,36 +458,24 @@ export function LedgerTab({
                     )
                 : undefined
             }
-            tripOptions={tripOptionsForRow}
-            recommendedTripIds={recommendedTripIds}
-            onMissionChange={onMissionChange}
-            expandedRowId={expandedLedgerRowId}
-            onExpandedChange={setExpandedLedgerRowId}
           />
         );
       })
       )}
-      {selectedDetailData && viewMode !== "transaction" ? (
-        <View style={styles.inlineReceiptWrap}>
-          <FinanceEntryDetailScreen
-            data={selectedDetailData}
-            onViewTripDetail={() => {
-              if (selectedDetailData?.tripId) {
-                router.push(`/trip/${selectedDetailData.tripId}` as const);
-              }
-            }}
-            onBack={() => setSelectedDetailData(null)}
-            embedded
-          />
-        </View>
+      {previewLedgerRow && viewMode !== "transaction" ? (
+        <LedgerTransactionPreviewModal
+          visible
+          transaction={previewLedgerRow}
+          onClose={() => setPreviewLedgerRow(null)}
+        />
       ) : null}
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  ledgerWrap: { flex: 1, minHeight: 0, backgroundColor: "#FBFBFF" },
-  ledgerWrapEmbedded: { width: "100%", minWidth: 0, backgroundColor: "#FBFBFF" },
+  ledgerWrap: { flex: 1, minHeight: 0, backgroundColor: "transparent" },
+  ledgerWrapEmbedded: { width: "100%", minWidth: 0, backgroundColor: "transparent" },
   ledgerSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -609,7 +523,6 @@ const styles = StyleSheet.create({
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
-    borderRadius: 8,
   },
   emptyStateAddBtnText: {
     fontSize: 13,

@@ -7,6 +7,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { IndentHubBidKickerGlyph } from "@/features/indents/components/IndentHubAnimatedGlyphs";
 import { IndentHubInsightTicketTail } from "@/features/indents/components/IndentHubInsightTicketTail";
 
 import { EntityAvatar } from "@/components/EntityAvatar";
@@ -227,8 +228,13 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         />
         <View style={styles.body}>
           <View style={styles.kickerRow}>
+            <IndentHubBidKickerGlyph
+              variant={
+                isAccepted ? "awarded" : isRejected ? "rejected" : "live"
+              }
+            />
             <Text style={styles.partyKicker}>
-              {isAccepted ? "AWARDED BID" : "LIVE BID"}
+              {isAccepted ? "AWARDED BID" : isRejected ? "REJECTED BID" : "LIVE BID"}
             </Text>
             {isConnectedPartner ? (
               <View style={styles.partnerPill}>
@@ -372,7 +378,7 @@ const styles = StyleSheet.create({
   },
   topSection: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
     zIndex: 1,
   },
@@ -380,7 +386,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 2,
-    paddingTop: 1,
   },
   kickerRow: {
     flexDirection: "row",
@@ -479,7 +484,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 4,
     flexShrink: 0,
-    paddingTop: 1,
   },
   amountHero: {
     flexDirection: "row",

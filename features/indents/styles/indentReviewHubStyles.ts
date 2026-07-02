@@ -431,6 +431,13 @@ export const indentReviewHubSplitLayout = StyleSheet.create({
     minWidth: 280,
     minHeight: 0,
     backgroundColor: Theme.screenBackground,
+    ...Platform.select({
+      web: {
+        backgroundImage:
+          "radial-gradient(ellipse 80% 50% at 50% 0%, rgba(205,233,247,0.35), transparent)",
+      } as object,
+      default: {},
+    }),
   },
   bidsPaneHeader: {
     flexDirection: "row",
@@ -462,7 +469,7 @@ export const indentReviewHubSplitLayout = StyleSheet.create({
   bidsPaneScrollContent: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
-    flexGrow: 0,
+    flexGrow: 1,
   },
   bidsPaneScrollContentCompact: {
     paddingTop: 8,

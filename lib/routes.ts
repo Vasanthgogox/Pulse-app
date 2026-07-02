@@ -4,6 +4,33 @@
  * Use these instead of hardcoded string literals everywhere in the app.
  * Benefits: find-all-references, rename-safety, and a single place to update paths.
  */
+export type TripDetailRouteTab = "trip" | "finance" | "expenses" | "docs";
+export type TripDetailRouteFinanceSubTab = "summary" | "transactions";
+
+export type TripDetailRouteOptions = {
+  tab?: TripDetailRouteTab;
+  financeSubTab?: TripDetailRouteFinanceSubTab;
+  entryContext?: "supplier" | "vehicle" | "client";
+  clientIdFromContext?: string;
+  clientNameFromContext?: string;
+};
+
+function tripDetailRouteQuery(options?: TripDetailRouteOptions): string {
+  if (!options) return "";
+  const params = new URLSearchParams();
+  if (options.tab) params.set("tab", options.tab);
+  if (options.financeSubTab) params.set("financeSubTab", options.financeSubTab);
+  if (options.entryContext) params.set("entryContext", options.entryContext);
+  if (options.clientIdFromContext) {
+    params.set("clientIdFromContext", options.clientIdFromContext);
+  }
+  if (options.clientNameFromContext) {
+    params.set("clientNameFromContext", options.clientNameFromContext);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const ROUTES = {
   INDEX: '/',
   /** Marketing landing (web). */
@@ -162,7 +189,11 @@ export const ROUTES = {
   addCommodityType: (kind: 'vehicle' | 'product') =>
     `/add-commodity-type?kind=${kind}` as const,
   /** Trip detail (operations hub). */
-  tripDetail: (tripId: string) => `/trip/${encodeURIComponent(tripId)}` as const,
+  tripDetail: (tripId: string, options?: TripDetailRouteOptions) =>
+    `/trip/${encodeURIComponent(tripId)}${tripDetailRouteQuery(options)}` as const,
+  /** Trip detail → Finance Hub → Transactions (ledger rows for the trip). */
+  tripDetailFinanceTransactions: (tripId: string) =>
+    `/trip/${encodeURIComponent(tripId)}?tab=finance&financeSubTab=transactions` as const,
   /** Full-screen driver & vehicle assignment from trip detail (Change). */
   tripAssignment: (tripId: string, focus?: 'driver' | 'vehicle') => {
     const base = `/trip/${encodeURIComponent(tripId)}/assignment` as const;
@@ -208,6 +239,48 @@ export const ROUTES = {
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
 } as const;
+
+function routeParamOne(
+  raw: Record<string, string | string[] | undefined>,
+  key: string,
+): string | undefined {
+  const v = raw[key];
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) return v[0];
+  return undefined;
+}
+
+/** Parse `/trip/[id]` search params into trip detail screen props. */
+export function parseTripDetailRouteParams(
+  raw: Record<string, string | string[] | undefined>,
+): TripDetailRouteOptions & { tripId: string } {
+  const tripId = routeParamOne(raw, "id") ?? "";
+  const tab = routeParamOne(raw, "tab");
+  const financeSubTab = routeParamOne(raw, "financeSubTab");
+  const entryContext = routeParamOne(raw, "entryContext");
+  const clientIdFromContext = routeParamOne(raw, "clientIdFromContext");
+  const clientNameFromContext = routeParamOne(raw, "clientNameFromContext");
+
+  return {
+    tripId,
+    tab:
+      tab === "finance" || tab === "expenses" || tab === "docs" || tab === "trip"
+        ? tab
+        : undefined,
+    financeSubTab:
+      financeSubTab === "summary" || financeSubTab === "transactions"
+        ? financeSubTab
+        : undefined,
+    entryContext:
+      entryContext === "supplier" ||
+      entryContext === "vehicle" ||
+      entryContext === "client"
+        ? entryContext
+        : undefined,
+    clientIdFromContext,
+    clientNameFromContext,
+  };
+}
 
 /** True when the user is on the full-screen indent deploy / allocation wizard. */
 export function isIndentAllocationPath(pathname: string | null | undefined): boolean {

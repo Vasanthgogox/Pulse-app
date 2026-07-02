@@ -4,9 +4,14 @@ import Theme from "@/constants/Theme";
 import { indentReviewHubText } from "@/features/indents/styles/indentReviewHubStyles";
 import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import {
+  IndentHubAuctionGlyph,
+  IndentHubLivePulseDot,
+  IndentHubTrophyGlyph,
+} from "@/features/indents/components/IndentHubAnimatedGlyphs";
 import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Platform,
@@ -40,6 +45,168 @@ export type IndentBidsAwaitingPanelProps = {
   onShareStory?: () => void;
   onShareWhatsApp?: () => void;
 };
+
+const LISTENING_TIPS = [
+  "Partners see your route, vehicle type, and target rate.",
+  "Pulse story puts your load in front of your network for 24 hours.",
+  "WhatsApp shares a one-tap bid link with your contacts.",
+] as const;
+
+function PulseRings({ size }: { size: number }) {
+  const ringA = useRef(new Animated.Value(0)).current;
+  const ringB = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const mk = (v: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(v, {
+            toValue: 1,
+            duration: 2200,
+            useNativeDriver: Platform.OS !== "web",
+          }),
+          Animated.timing(v, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: Platform.OS !== "web",
+          }),
+        ]),
+      );
+    const a = mk(ringA, 0);
+    const b = mk(ringB, 700);
+    a.start();
+    b.start();
+    return () => {
+      a.stop();
+      b.stop();
+    };
+  }, [ringA, ringB]);
+
+  const ringStyle = (v: Animated.Value) => ({
+    position: "absolute" as const,
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    borderWidth: 1.5,
+    borderColor: SKY,
+    opacity: v.interpolate({
+      inputRange: [0, 0.15, 1],
+      outputRange: [0.55, 0.35, 0],
+    }),
+    transform: [
+      {
+        scale: v.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.72, 1.35],
+        }),
+      },
+    ],
+  });
+
+  return (
+    <>
+      <Animated.View style={ringStyle(ringA)} />
+      <Animated.View style={ringStyle(ringB)} />
+    </>
+  );
+}
+
+function BidLifecycleStrip({
+  canBroadcast,
+  isListening,
+  compact,
+}: {
+  canBroadcast: boolean;
+  isListening: boolean;
+  compact?: boolean;
+}) {
+  const steps = canBroadcast
+    ? (["Ready", "Go live", "Collect bids"] as const)
+    : (["Posted", "Listening", "Award"] as const);
+  const activeIndex = canBroadcast ? 0 : isListening ? 1 : 0;
+
+  return (
+    <View style={[styles.lifecycleStrip, compact && styles.lifecycleStripCompact]}>
+      {steps.map((label, index) => {
+        const done = index < activeIndex;
+        const active = index === activeIndex;
+        return (
+          <View key={label} style={styles.lifecycleRowItem}>
+            {index > 0 ? (
+              <View
+                style={[
+                  styles.lifecycleConnector,
+                  (done || active) && styles.lifecycleConnectorActive,
+                ]}
+              />
+            ) : null}
+            <View style={styles.lifecycleStep}>
+              <View
+                style={[
+                  styles.lifecycleDot,
+                  done && styles.lifecycleDotDone,
+                  active && styles.lifecycleDotActive,
+                ]}
+              >
+                {done ? (
+                  <Feather name="check" size={8} color={Theme.textOnPrimary} />
+                ) : active ? (
+                  <View style={styles.lifecycleDotPulse} />
+                ) : null}
+              </View>
+              <Text
+                style={[
+                  styles.lifecycleLabel,
+                  active && styles.lifecycleLabelActive,
+                  done && styles.lifecycleLabelDone,
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function ListeningTipsCarousel({ compact }: { compact?: boolean }) {
+  const [index, setIndex] = useState(0);
+  const fade = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      Animated.timing(fade, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: Platform.OS !== "web",
+      }).start(({ finished }) => {
+        if (!finished) return;
+        setIndex((i) => (i + 1) % LISTENING_TIPS.length);
+        Animated.timing(fade, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: Platform.OS !== "web",
+        }).start();
+      });
+    }, 4200);
+    return () => clearInterval(id);
+  }, [fade]);
+
+  return (
+    <Animated.View
+      style={[styles.tipsCard, compact && styles.tipsCardCompact, { opacity: fade }]}
+    >
+      <Feather name="info" size={11} color={INK} />
+      <Text style={styles.tipsText} numberOfLines={2}>
+        {LISTENING_TIPS[index]}
+      </Text>
+    </Animated.View>
+  );
+}
 
 function ListeningDots() {
   const a = useRef(new Animated.Value(0)).current;
@@ -140,6 +307,7 @@ function ShareActionTile({
             {hint}
           </Text>
         </View>
+        <Feather name="chevron-right" size={14} color={MUTED} />
       </LinearGradient>
     </Pressable>
   );
@@ -239,12 +407,14 @@ export function LiveBidsSectionHeader({
     <View style={styles.sectionHeaderRow}>
       <Text style={styles.sectionTitle}>{title}</Text>
       {showTrophy ? (
-        <FontAwesome name="trophy" size={14} color={Theme.driverGold} />
+        <IndentHubTrophyGlyph size={18} />
       ) : isListening && count === 0 ? (
         <View style={styles.listeningChip}>
-          <View style={styles.listeningDot} />
+          <IndentHubLivePulseDot />
           <Text style={styles.listeningChipText}>LIVE</Text>
         </View>
+      ) : count > 0 ? (
+        <IndentHubAuctionGlyph size={18} />
       ) : null}
       <View
         style={[
@@ -296,8 +466,19 @@ export function IndentBidsAwaitingPanel({
   const showLiveKicker = isListening;
   const showShareActions = isListening && (onShareStory || onShareWhatsApp);
 
-  const lottieSize = stacked ? (compact ? 60 : 72) : compact ? 72 : 88;
-  const lottieRenderScale = stacked ? 2 : 2.2;
+  const lottieSize = paneFill
+    ? compact
+      ? 80
+      : 96
+    : stacked
+      ? compact
+        ? 60
+        : 72
+      : compact
+        ? 72
+        : 88;
+  const lottieRenderScale = paneFill ? 2.4 : stacked ? 2 : 2.2;
+  const lottieStageSize = paneFill ? (compact ? 136 : 156) : undefined;
 
   const inner = (
     <View
@@ -315,6 +496,12 @@ export function IndentBidsAwaitingPanel({
           paneFill && !stacked && styles.contentColumnPane,
         ]}
       >
+      <BidLifecycleStrip
+        canBroadcast={canBroadcast}
+        isListening={isListening}
+        compact={compact || stacked}
+      />
+
       {showLiveKicker ? (
         <View style={[styles.liveBanner, stacked && styles.liveBannerStacked]}>
           <View style={styles.livePulseDot} />
@@ -339,8 +526,15 @@ export function IndentBidsAwaitingPanel({
             compact && styles.lottieStageCompact,
             stacked && styles.lottieStageStacked,
             stacked && compact && styles.lottieStageStackedCompact,
+            paneFill && styles.lottieStagePane,
+            paneFill && compact && styles.lottieStagePaneCompact,
+            lottieStageSize != null && {
+              width: lottieStageSize,
+              height: lottieStageSize,
+            },
           ]}
         >
+          {isListening ? <PulseRings size={lottieStageSize ?? 112} /> : null}
           <LinearGradient
             colors={["#F8FCFF", "#EAF6FD"]}
             start={{ x: 0.2, y: 0 }}
@@ -383,6 +577,10 @@ export function IndentBidsAwaitingPanel({
           </Text>
         </View>
       </View>
+
+      {isListening && paneFill && !stacked ? (
+        <ListeningTipsCarousel compact={compact} />
+      ) : null}
 
       {canBroadcast && onBroadcast ? (
         <TouchableOpacity
@@ -480,12 +678,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.loadStatusTabBorderSoft,
   },
-  listeningDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: Theme.positive,
-  },
   listeningChipText: {
     fontSize: 7,
     fontWeight: "800",
@@ -557,6 +749,10 @@ const styles = StyleSheet.create({
     width: "100%",
     marginBottom: 0,
     marginTop: 0,
+    flex: 1,
+    minHeight: 320,
+    borderRadius: 20,
+    paddingVertical: 20,
   },
   cardPaneFillListening: {
     paddingTop: 14,
@@ -609,6 +805,9 @@ const styles = StyleSheet.create({
   },
   contentStackPaneFill: {
     width: "100%",
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingVertical: 20,
   },
   contentStackStacked: {
     alignItems: "stretch",
@@ -628,6 +827,112 @@ const styles = StyleSheet.create({
   },
   contentColumnPane: {
     alignSelf: "center",
+    maxWidth: 440,
+    gap: 16,
+  },
+  lifecycleStrip: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    width: "100%",
+    paddingHorizontal: 4,
+    marginBottom: 2,
+  },
+  lifecycleStripCompact: {
+    marginBottom: 0,
+  },
+  lifecycleRowItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    minWidth: 0,
+  },
+  lifecycleStep: {
+    flex: 1,
+    alignItems: "center",
+    gap: 5,
+    minWidth: 0,
+  },
+  lifecycleConnector: {
+    flex: 1,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: Theme.borderLight,
+    marginTop: 9,
+    minWidth: 8,
+  },
+  lifecycleConnectorActive: {
+    backgroundColor: SKY,
+  },
+  lifecycleDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lifecycleDotDone: {
+    backgroundColor: Theme.positive,
+    borderColor: Theme.positive,
+  },
+  lifecycleDotActive: {
+    borderColor: INK,
+    backgroundColor: SKY,
+  },
+  lifecycleDotPulse: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Theme.positive,
+  },
+  lifecycleLabel: {
+    fontSize: 7,
+    fontWeight: "700",
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+    textAlign: "center",
+  },
+  lifecycleLabelActive: {
+    color: INK,
+    fontWeight: "800",
+  },
+  lifecycleLabelDone: {
+    color: Theme.positive,
+  },
+  tipsCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(205,233,247,0.35)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.loadStatusTabBorderSoft,
+  },
+  tipsCardCompact: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  tipsText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: "500",
+    lineHeight: 14,
+    color: MUTED,
+  },
+  lottieStagePane: {
+    width: 156,
+    height: 156,
+  },
+  lottieStagePaneCompact: {
+    width: 136,
+    height: 136,
   },
   liveBanner: {
     flexDirection: "row",
@@ -874,10 +1179,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 14,
     borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    gap: 8,
-    minHeight: 64,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 10,
+    minHeight: 68,
     ...Platform.select({
       ios: {
         shadowColor: Theme.shadow,

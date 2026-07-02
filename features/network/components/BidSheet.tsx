@@ -4,6 +4,7 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from '@/constants/Theme';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { createDirectQuote } from '@/features/indents/services/direct-quotes.service';
 import {
   getVisibleIndentById,
@@ -64,6 +65,7 @@ function splitLocation(label: string | null | undefined): { primary: string; sec
 
 export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess }: BidSheetProps) {
   const insets = useSafeAreaInsets();
+  const { currentOrganization } = useOrganization();
   const { width: viewportWidth } = useWindowDimensions();
   const isDesktop =
     Platform.OS === 'web' && viewportWidth >= DESKTOP_MIN_WIDTH;
@@ -184,7 +186,11 @@ export function BidSheet({ visible, post, orgId, existingBid, onClose, onSuccess
         if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
       }
     } else {
-      const submitRes = await submitMutation.mutateAsync({ amount: parsedAmount, note: note.trim() || undefined });
+      const submitRes = await submitMutation.mutateAsync({
+        amount: parsedAmount,
+        note: note.trim() || undefined,
+        orgName: currentOrganization?.name ?? "",
+      });
       submitError = submitRes.error;
       if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
     }

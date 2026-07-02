@@ -351,11 +351,11 @@ export function TripPnLDetailSheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
   },
   sheet: {
     flex: 1,
-    backgroundColor: Theme.darkBackground,
+    backgroundColor: Theme.financeHeroBg,
   },
   header: {
     flexDirection: "row",

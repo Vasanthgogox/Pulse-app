@@ -1,12 +1,11 @@
 /**
  * Unified shell footer + bottom nav (pulse-unified-base aligned).
  */
+import type { RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { DemoTabBarMobileFooter } from "@/components/demo/DemoTabBarMobileFooter";
 import { WebNavMirrorToggle } from "@/components/demo/WebNavMirrorToggle";
 import { WEB_TOP_NAV_ICON } from "@/components/demo/webTopNavIcon.tokens";
-import type { RegistryFilterTab } from "@/components/AlertRegistryPanel";
 import { NotificationBellIcon } from "@/components/NotificationBellIcon";
-import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { RegistryWebDrawer } from "@/components/RegistryWebDrawer";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -22,36 +21,41 @@ import {
 } from "@/contexts/DemoTabBarScrollContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import type { InboundProtocolInviteItem } from "@/lib/globalSync/inboundProtocol.types";
 import { preloadChatRoute } from "@/lib/preloadChatWarmup";
 import { preloadFinanceWarmup } from "@/lib/preloadFinanceWarmup";
 import { preloadPulseLoadsRoute, preloadTabScreen } from "@/lib/preloadRoutes";
-import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { useQueryClient } from "@tanstack/react-query";
 // Chat unread badges read from a tiny external signal — importing
 // `useTripChat` / `useIntegratedChat` here would drag the entire chat graph
 // (~256 KB) into the startup chunk. Chat providers (lazy) publish into this
 // signal as their counts change.
+import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
+import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
+import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
+import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
     getTotalChatUnreadCount as readTotalChatUnread,
     subscribeChatUnreadSignal,
 } from "@/lib/chatUnreadSignal";
-import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistryNotifications";
-import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
+import { useOperationsShelfItems } from "@/lib/globalSync/useOperationsDerived";
 import { useProtocolInvitesWithDriverSent } from "@/lib/hooks/useProtocolInvitesWithDriverSent";
 import { useTabBarActiveLoadCount } from "@/lib/hooks/useTabBarActiveLoadCount";
+import {
+    resolveTabBarLayoutPlatform,
+    tabBarFooterPadding,
+} from "@/lib/layoutInsets";
 import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
+import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 import { resolveSharedActionKind } from "@/lib/sharedLedger/registryLabels";
-import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
-import { LinearGradient } from "expo-linear-gradient";
-import { DollarSign, Inbox, LineChart, MessageSquare, Signpost, Truck } from "lucide-react-native";
 import { usePathname, useRouter } from "expo-router";
-import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { DollarSign, Inbox, LineChart, MessageSquare, Signpost, Truck } from "lucide-react-native";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
     Image,
     Platform,
@@ -70,11 +74,6 @@ import Animated, {
     useSharedValue,
     withTiming,
 } from "react-native-reanimated";
-import {
-  tabBarFooterPadding,
-  resolveTabBarLayoutPlatform,
-} from "@/lib/layoutInsets";
-import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 
 // Drawer panels load on first open — statically importing AlertRegistryPanel
 // would drag drivers/clients/suppliers queries (~100 KB) into the startup chunk.

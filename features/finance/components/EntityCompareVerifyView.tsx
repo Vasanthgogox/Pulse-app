@@ -1173,7 +1173,7 @@ export function EntityCompareVerifyView({
               accessibilityRole="button"
               accessibilityLabel="Raise dispute"
             >
-              <FontAwesome name="exclamation-triangle" size={10} color="#111827" />
+              <FontAwesome name="exclamation-triangle" size={10} color={Theme.financeHeroBg} />
               <Text style={styles.raiseDisputeBtnText}>Raise Dispute</Text>
             </TouchableOpacity>
           </View>
@@ -1193,7 +1193,7 @@ export function EntityCompareVerifyView({
               accessibilityRole="button"
               accessibilityLabel="Raise dispute"
             >
-              <FontAwesome name="exclamation-triangle" size={10} color="#111827" />
+              <FontAwesome name="exclamation-triangle" size={10} color={Theme.financeHeroBg} />
               <Text style={styles.raiseDisputeBtnText}>Raise Dispute</Text>
             </TouchableOpacity>
           </View>
@@ -1736,7 +1736,7 @@ export function EntityCompareVerifyView({
                                         <FontAwesome
                                           name="exclamation-triangle"
                                           size={12}
-                                          color="#111827"
+                                          color={Theme.financeHeroBg}
                                         />
                                         <Text
                                           style={styles.raiseDisputeBtnText}
@@ -2878,7 +2878,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     backgroundColor: "#FFFFFF",
-    borderColor: "#111827",
+    borderColor: Theme.financeHeroBg,
     borderWidth: 1,
     minHeight: 48,
     paddingVertical: 12,
@@ -2888,7 +2888,7 @@ const styles = StyleSheet.create({
   raiseDisputeBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#111827",
+    color: Theme.financeHeroBg,
   },
   receivedBar: {
     marginTop: 12,

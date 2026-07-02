@@ -29,7 +29,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { LedgerExpandedCard } from "./LedgerExpandedCard";
-import { TripPickerModal } from "./TripPickerModal";
 
 const AVATAR_COLORS = [
   Theme.primary,
@@ -476,17 +475,6 @@ interface FinancialRowProps {
   onSelect?: (data: FinancialRowData) => void;
   /** Ledger only: when provided, tapping the entity (party name) cell calls this instead of onSelect. */
   onEntityPress?: (data: FinancialRowData) => void;
-  /** Ledger only: trip options for mission dropdown (route, date, vehicle for display) */
-  tripOptions?: {
-    id: string;
-    trip_number: string;
-    route?: string | null;
-    trip_date?: string | null;
-    vehicle_number?: string | null;
-  }[];
-  /** Ledger only: trip ids to show as "Recommended" (e.g. trips this party is already associated with). */
-  recommendedTripIds?: string[];
-  onMissionChange?: (rowId: string, tripId: string) => void;
   /** Ledger only: when set, only one row can be expanded at a time (controlled). Id of the expanded row or null. */
   expandedRowId?: string | null;
   /** Ledger only: called when user toggles expansion. Use with expandedRowId for single-expand behavior. */
@@ -503,15 +491,11 @@ export function FinancialRow({
   data,
   onSelect,
   onEntityPress,
-  tripOptions = [],
-  recommendedTripIds = [],
-  onMissionChange,
   expandedRowId,
   onExpandedChange,
   ledgerExpandedDesktopThreeColumn = false,
 }: FinancialRowProps) {
   const { t } = useLanguage();
-  const [showTripPicker, setShowTripPicker] = useState(false);
   const [expandedInternal, setExpandedInternal] = useState(false);
   const isControlled =
     type === "ledger" && expandedRowId !== undefined && onExpandedChange != null;
@@ -552,12 +536,7 @@ export function FinancialRow({
 
   const hasTrip =
     type === "ledger" && (data.tripId || (data.msn && data.msn !== "General"));
-  const canChangeTrip =
-    type === "ledger" &&
-    tripOptions.length > 0 &&
-    typeof onMissionChange === "function";
-  const showSourceAsNa = type === "ledger" && !hasTrip && !canChangeTrip;
-  const showSourceDropdown = type === "ledger" && canChangeTrip;
+  const showSourceAsNa = type === "ledger" && !hasTrip;
 
   const tripDetailLine =
     type === "ledger" && data.tripDetail
@@ -922,57 +901,6 @@ export function FinancialRow({
           <Text style={styles.cellSourceNa} numberOfLines={1}>
             NA
           </Text>
-        ) : showSourceDropdown ? (
-          <>
-            <TouchableOpacity
-              style={styles.sourceDropdownTrigger}
-              onPress={() => setShowTripPicker(true)}
-              activeOpacity={0.7}
-              accessibilityLabel={
-                hasTrip ? `Linked: ${missionLabel}. Change` : "Select link"
-              }
-              accessibilityRole="button"
-            >
-              <View style={styles.sourceDropdownTriggerContent}>
-                {hasTrip ? (
-                  <>
-                    {missionLabel !== "Trip" && missionLabel !== "General" && (
-                      <Text style={styles.cellSourceTextWrap} numberOfLines={2}>
-                        {missionLabel}
-                      </Text>
-                    )}
-                    {tripDetailLine ? (
-                      <Text style={styles.cellSourceDetailWrap} numberOfLines={2}>
-                        {tripDetailLine}
-                      </Text>
-                    ) : missionLabel === "Trip" ||
-                      missionLabel === "General" ? (
-                      <Text style={styles.cellSourceNa} numberOfLines={1}>
-                        —
-                      </Text>
-                    ) : null}
-                    {tripDateLine ? (
-                      <Text style={styles.cellSourceDateRow} numberOfLines={1}>
-                        {tripDateLine}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : (
-                  <Text style={styles.cellSourceNa} numberOfLines={1}>
-                    NA
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-            <TripPickerModal
-              visible={showTripPicker}
-              onClose={() => setShowTripPicker(false)}
-              tripOptions={tripOptions}
-              recommendedTripIds={recommendedTripIds}
-              selectedTripId={data.tripId}
-              onSelect={(tripId) => onMissionChange?.(data.id, tripId)}
-            />
-          </>
         ) : hasTrip ? (
           <View style={styles.cellSourceBlock}>
             {missionLabel !== "Trip" && missionLabel !== "General" && (
@@ -1079,25 +1007,16 @@ export function FinancialRow({
     </>
   );
 
-  const expandedDetail =
-    type === "ledger" && expanded ? (
-      <LedgerExpandedCardFromData
-        data={data}
-        enableDesktopThreeColumn={ledgerExpandedDesktopThreeColumn}
-      />
-    ) : null;
-
   if (type === "ledger") {
     return (
       <View style={styles.ledgerRowWrapper}>
         <Pressable
           style={({ pressed }) => [styles.row, styles.rowLedger, pressed && styles.rowPressed]}
-          onPress={() => setExpanded(!expanded)}
+          onPress={() => onSelect?.(data)}
           android_ripple={undefined}
         >
           {content}
         </Pressable>
-        {expandedDetail}
       </View>
     );
   }
@@ -1232,7 +1151,7 @@ const styles = StyleSheet.create({
   },
   ledgerEntityRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
     minWidth: 0,
   },
@@ -1242,7 +1161,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    marginTop: 1,
   },
   ledgerEntityTextCol: {
     flex: 1,

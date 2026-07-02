@@ -399,6 +399,9 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
     paddingTop: 2,
+    flex: 1,
+    minHeight: 360,
+    justifyContent: "center",
   },
   awaitingPaneShellStacked: {
     paddingTop: 0,

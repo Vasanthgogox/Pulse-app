@@ -48,7 +48,6 @@ export interface FinanceTabBodyProps {
       driver_commission?: number | null;
     }
   >;
-  onLedgerMissionChange: (entryId: string, tripId: string) => void;
   clientRows: ClientRow[];
   tripRows: TripRow[];
   supplierRows: SupplierRow[];

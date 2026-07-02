@@ -10,6 +10,19 @@ import { partyAvatarHasRenderableOutput } from "@/lib/partyAvatarDisplay";
 import { shouldUseOfflinePartyRoleAvatar } from "@/lib/partyOfflineRoleAvatar";
 import { StyleSheet, View } from "react-native";
 
+/** Gutter reserved for the integration status dot (matches `EntityAvatar` frame math). */
+export function entityAvatarBadgeGutter(size: number): number {
+  return Math.max(8, Math.round(size * 0.28));
+}
+
+/** Total width/height occupied when the integration badge is shown. */
+export function entityAvatarOuterSize(
+  size: number,
+  showIntegrationBadge = true,
+): number {
+  return showIntegrationBadge ? size + entityAvatarBadgeGutter(size) : size;
+}
+
 export interface EntityAvatarProps {
   name: string;
   avatarUrl?: string | null;
@@ -23,6 +36,12 @@ export interface EntityAvatarProps {
   isIntegrated?: boolean;
   /** Hide the integration badge (e.g. dense lists / hero). */
   showIntegrationBadge?: boolean;
+  /**
+   * Dense mode: keep the outer frame equal to `size` (no reserved gutter) and
+   * overlay the status dot on the avatar's lower-right edge. Use in tight rows
+   * (e.g. cash ledger) so the avatar aligns to a fixed column.
+   */
+  badgeOverlay?: boolean;
 }
 
 export function EntityAvatar({
@@ -35,8 +54,9 @@ export function EntityAvatar({
   size = 36,
   isIntegrated = false,
   showIntegrationBadge = true,
+  badgeOverlay = false,
 }: EntityAvatarProps) {
-  const badgeSize = Math.max(8, Math.round(size * 0.28));
+  const badgeSize = entityAvatarBadgeGutter(size);
   /** Reserve space so the status dot sits outside the avatar ring (no border overlap). */
   const badgeGutter = badgeSize;
   const frame = size + badgeGutter;
@@ -79,6 +99,33 @@ export function EntityAvatar({
     );
   }
 
+  /** Dense overlay: no reserved gutter; dot hugs the avatar's lower-right edge. */
+  if (badgeOverlay) {
+    const overlayBadge = Math.max(8, Math.round(size * 0.3));
+    return (
+      <View
+        style={[
+          styles.frame,
+          styles.overlayFrame,
+          { width: size, height: size },
+        ]}
+      >
+        {avatar}
+        <View
+          style={[
+            styles.badge,
+            {
+              width: overlayBadge,
+              height: overlayBadge,
+              borderRadius: overlayBadge / 2,
+              backgroundColor: isIntegrated ? Theme.darkGreen : Theme.iconSlate,
+            },
+          ]}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.frame, { width: frame, height: frame }]}>
       <View style={[styles.avatarAnchor, { width: size, height: size }]}>{avatar}</View>
@@ -101,6 +148,10 @@ const styles = StyleSheet.create({
   frame: {
     position: "relative",
     flexShrink: 0,
+  },
+  overlayFrame: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarAnchor: {
     position: "absolute",

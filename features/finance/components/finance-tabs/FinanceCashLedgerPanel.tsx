@@ -12,9 +12,7 @@ export function FinanceCashLedgerPanel({
   ledgerRefreshKey,
   onLedgerRowSelect,
   getVehicleNumberForTripId,
-  tripOptions: trips,
   tripDetailsMap,
-  onLedgerMissionChange,
   onAddTransactionPress,
   clientRows,
   supplierRows,
@@ -40,7 +38,9 @@ export function FinanceCashLedgerPanel({
   return (
     <View
       style={
-        embedInParentScroll ? styles.tableBodyWrapEmbedded : styles.tableBodyWrap
+        embedInParentScroll
+          ? styles.tableBodyWrapLedgerFlatEmbedded
+          : styles.tableBodyWrapLedgerFlat
       }
     >
       {header}
@@ -78,9 +78,7 @@ export function FinanceCashLedgerPanel({
           onRowSelect={onLedgerRowSelect}
           onEntitySelect={() => {}}
           getVehicleNumberForTripId={getVehicleNumberForTripId}
-          tripOptions={trips}
           tripDetailsMap={tripDetailsMap}
-          onMissionChange={onLedgerMissionChange}
           onAddTransactionPress={onAddTransactionPress}
           clientRows={clientRows}
           supplierRows={supplierRows}

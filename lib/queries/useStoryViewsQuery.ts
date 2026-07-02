@@ -13,6 +13,7 @@ export function useStoryViewsQuery(postId: string | null, enabled: boolean) {
     },
     enabled: !!postId && enabled,
     staleTime: STALE.moderate,
+    refetchOnWindowFocus: true,
   });
 }
 

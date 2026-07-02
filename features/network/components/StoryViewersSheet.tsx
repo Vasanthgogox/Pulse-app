@@ -104,7 +104,7 @@ export function StoryViewersSheet({
               {views.map((item) => (
                 <View key={item.id} style={styles.viewerCard}>
                   <PartyAvatar
-                    name={item.viewer_org_name ?? "Unknown"}
+                    name={item.viewer_org_name?.trim() || "Partner"}
                     initialsColorSeed={item.viewer_org_id}
                     entityType="client"
                     size={40}
@@ -112,7 +112,7 @@ export function StoryViewersSheet({
                   />
                   <View style={styles.rowText}>
                     <Text style={styles.orgName} numberOfLines={1}>
-                      {item.viewer_org_name ?? "Unknown org"}
+                      {item.viewer_org_name?.trim() || "Partner"}
                     </Text>
                     <Text style={styles.viewedAt}>{timeAgo(item.viewed_at)}</Text>
                   </View>

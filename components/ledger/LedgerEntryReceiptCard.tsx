@@ -121,7 +121,7 @@ export const LedgerEntryReceiptCard = memo(function LedgerEntryReceiptCard(
         {heroLottie ? (
           <ReceiptLottieGlyph
             source={heroLottie}
-            size={heroAnimation === "success" ? 56 : 48}
+            size={heroAnimation === "success" ? 152 : 120}
             loop={heroAnimation !== "success"}
             speed={heroAnimation === "success" ? 1 : 0.85}
           />
@@ -204,22 +204,22 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 999,
     backgroundColor: LEDGER_RECEIPT.statusBg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LEDGER_RECEIPT.statusBorder,
   },
   statusPillText: {
-    fontSize: 10,
+    fontSize: 7,
     fontWeight: "600",
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
     color: LEDGER_RECEIPT.statusText,
   },
   headline: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: LEDGER_RECEIPT.title,
     textAlign: "center",
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontSize: 34,
-    fontWeight: "600",
+    fontWeight: "800",
     letterSpacing: -0.6,
     fontVariant: ["tabular-nums"],
     textAlign: "center",
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     width: 100,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "600",
     color: LEDGER_RECEIPT.label,
     letterSpacing: 0.4,
@@ -268,15 +268,14 @@ const styles = StyleSheet.create({
   detailValue: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "400",
     color: LEDGER_RECEIPT.value,
     textAlign: "left",
-    lineHeight: 16,
+    lineHeight: 15,
   },
   detailValueMultiline: {
-    fontWeight: "700",
-    lineHeight: 17,
+    lineHeight: 16,
   },
   actions: {
     gap: 10,

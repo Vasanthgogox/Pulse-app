@@ -34,7 +34,6 @@ import {
   formatSettlementPct,
 } from "@/features/finance/lib/entityDetailReports.util";
 import {
-  buildFinancialRowDataForLedgerRow,
   resolveLedgerPartyName,
   type LedgerTripDetailsMap,
   type LedgerTripPartyMap,
@@ -188,9 +187,6 @@ export default function SupplierDetailScreen({
     [],
   );
   const [orgSuppliers, setOrgSuppliers] = useState<SupplierRow[]>([]);
-  const [expandedCashFlowRowId, setExpandedCashFlowRowId] = useState<
-    string | null
-  >(null);
   const [cashFlowDriverProfileUrls, setCashFlowDriverProfileUrls] = useState<
     Record<string, string>
   >({});
@@ -949,44 +945,6 @@ export default function SupplierDetailScreen({
     tripPartyMapForCash,
     supplierTripDetailsMap,
   ]);
-
-  const expandedCashFlowRowData = useMemo(() => {
-    if (!expandedCashFlowRowId) return null;
-    const row = cashFlowTransactionRows.find(
-      (r) => r.id === expandedCashFlowRowId,
-    );
-    if (!row) return null;
-    return buildFinancialRowDataForLedgerRow(row, {
-      allRows: allOrgTransactions,
-      tripDetailsMap: supplierTripDetailsMap,
-      tripPartyMap: tripPartyMapForCash,
-      clientById: clientByIdForLedger,
-      supplierById: supplierByIdForLedger,
-      driverById: driverByIdForCashExpand,
-      getVehicleNumberForTripId,
-      linkedOrgDisplayMap,
-      profileImages: cashFlowDriverProfileUrls,
-      driverProfileImageUrls: cashFlowDriverProfileUrls,
-      disputesByTripId,
-    });
-  }, [
-    expandedCashFlowRowId,
-    cashFlowTransactionRows,
-    allOrgTransactions,
-    supplierTripDetailsMap,
-    tripPartyMapForCash,
-    clientByIdForLedger,
-    supplierByIdForLedger,
-    driverByIdForCashExpand,
-    getVehicleNumberForTripId,
-    linkedOrgDisplayMap,
-    cashFlowDriverProfileUrls,
-    disputesByTripId,
-  ]);
-
-  useEffect(() => {
-    if (detailSubTab !== "cash") setExpandedCashFlowRowId(null);
-  }, [detailSubTab]);
 
   const tripOptions = useMemo(
     () =>
@@ -2025,13 +1983,6 @@ export default function SupplierDetailScreen({
           <View style={styles.cashSection}>
             <LedgerTransactionListView
               transactions={cashFlowTransactionRows}
-              onRowPress={(id) => {
-                setExpandedCashFlowRowId((prev) => (prev === id ? null : id));
-              }}
-              expandedRowId={expandedCashFlowRowId}
-              expandedRowData={expandedCashFlowRowData}
-              highlightId={expandedCashFlowRowId}
-              expandedDesktopThreeColumn
               tripDetailsMap={supplierTripDetailsMap}
               tripOptions={tripOptions.map((t) => ({
                 id: t.id,
@@ -2069,8 +2020,9 @@ export default function SupplierDetailScreen({
                 return (
                   <EntityIdentityAvatar
                     identity={identity}
-                    size="md"
+                    sizePx={32}
                     showIntegrationBadge
+                    badgeOverlay
                   />
                 );
               }}

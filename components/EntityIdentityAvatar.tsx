@@ -16,17 +16,23 @@ export type EntityIdentitySize = keyof typeof SIZES;
 export interface EntityIdentityAvatarProps {
   identity: ResolvedPartyAvatarIdentity;
   size?: EntityIdentitySize;
+  /** Exact pixel size; overrides the `size` preset (e.g. to match a fixed row column). */
+  sizePx?: number;
   showName?: boolean;
   showIntegrationBadge?: boolean;
+  /** Dense mode: dot overlays the avatar edge instead of reserving an outer gutter. */
+  badgeOverlay?: boolean;
 }
 
 export function EntityIdentityAvatar({
   identity,
   size = "md",
+  sizePx,
   showName = false,
   showIntegrationBadge = true,
+  badgeOverlay = false,
 }: EntityIdentityAvatarProps) {
-  const px = SIZES[size];
+  const px = sizePx ?? SIZES[size];
   const props = resolvedIdentityToEntityAvatarProps(identity);
   const useOfflineRoleIcon = shouldUseOfflinePartyRoleAvatar(
     identity.isIntegrated,
@@ -54,6 +60,7 @@ export function EntityIdentityAvatar({
           {...props}
           size={px}
           showIntegrationBadge={showIntegrationBadge}
+          badgeOverlay={badgeOverlay}
         />
       ) : null}
       {showName ? (
@@ -68,7 +75,7 @@ export function EntityIdentityAvatar({
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     flexShrink: 0,
   },
   rowWithName: {

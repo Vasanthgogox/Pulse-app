@@ -80,7 +80,6 @@ import { useFinanceEntities } from "../hooks/useFinanceEntities";
 import { useFinanceLedger } from "../hooks/useFinanceLedger";
 import { useFinanceTransactionSubmit } from "../hooks/useFinanceTransactionSubmit";
 import type { LedgerRow } from "../services/finance.service";
-import { updateLedgerEntry } from "../services/finance.service";
 import { createReportRow } from "../lib/reportRow.util";
 import type { FinanceSubTab } from "../types";
 import type { TripEntryContext } from "./EntityDetailOverlay";
@@ -1323,27 +1322,6 @@ export function FinanceScreen() {
     ],
   );
 
-  const handleLedgerMissionChange = useCallback(
-    async (entryId: string, tripId: string) => {
-      const orgId = currentOrganization?.id;
-      if (!orgId) return;
-      const row = filteredLedgerForDisplay.find((r) => r.id === entryId);
-      if (!row) return;
-      const { error } = await updateLedgerEntry(orgId, entryId, {
-        trip_id: tripId,
-        party_name: row.party_name,
-        description: row.description ?? "ENTRY",
-        amount_in: row.amount_in,
-        amount_out: row.amount_out,
-        transaction_date: row.transaction_date,
-        contact_id: row.contact_id ?? undefined,
-        contact_type: row.contact_type ?? undefined,
-      });
-      if (!error) setLedgerRefreshKey((k) => k + 1);
-    },
-    [currentOrganization?.id, filteredLedgerForDisplay],
-  );
-
   const handleRefresh = useCallback(async () => {
     const org = currentOrganization?.id;
     setRefreshing(true);
@@ -1596,7 +1574,6 @@ export function FinanceScreen() {
               getVehicleNumberForTripId={getVehicleNumberForTripId}
               tripOptions={filteredTripOptionsForFinance}
               tripDetailsMap={tripDetailsMap}
-              onLedgerMissionChange={handleLedgerMissionChange}
               clientRows={clientRows}
               tripRows={financeFilteredAllTripsForLedger}
               supplierRows={supplierRows}

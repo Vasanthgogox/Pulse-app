@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
     minWidth: 96,
     maxWidth: 128,
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 5,
     paddingRight: 4,
   },
@@ -565,7 +565,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 3,
-    paddingTop: 1,
   },
   colNote: {
     width: COL_NOTE,

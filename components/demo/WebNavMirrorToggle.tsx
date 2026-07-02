@@ -2,18 +2,18 @@
  * Desktop web header nav — Slack-style mirror toggle.
  * Selection stays fully expanded on a dark thumb; hover previews on a light thumb.
  */
-import Theme from "@/constants/Theme";
 import { WEB_TOP_NAV_ICON } from "@/components/demo/webTopNavIcon.tokens";
+import Theme from "@/constants/Theme";
 import type { LucideIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
-  Easing,
-  makeMutable,
-  type SharedValue,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    Easing,
+    makeMutable,
+    type SharedValue,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from "react-native-reanimated";
 
 const PADDING = 6;

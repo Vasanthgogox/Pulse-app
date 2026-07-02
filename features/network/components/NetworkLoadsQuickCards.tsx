@@ -2,7 +2,10 @@
  * Give / Get loads — Network home quick actions with Metronic illustrations + Lottie.
  */
 import Theme from "@/constants/Theme";
-import { NETWORK_HUB_GRID_ROW_PADDING_H } from "@/features/network/constants/networkHubGrid";
+import {
+  NETWORK_HUB_GRID_ROW_PADDING_H,
+  SPLIT_STACK_BREAKPOINT,
+} from "@/features/network/constants/networkHubGrid";
 import {
   fitNetworkLoadsIllustration,
   NETWORK_LOADS_QUICK_ACTIONS,
@@ -23,7 +26,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
-const MOBILE_MARKETPLACE_BREAKPOINT = 520;
+const NATIVE_APP = Platform.OS !== "web";
 /** Readable subline on pastel supply/demand washes. */
 const SUB_ON_WASH = "#64748B";
 
@@ -93,8 +96,6 @@ function MarketplaceCard({
 
   const illusBoxW = sidebar ? 76 : compact || width < 380 ? 80 : 96;
   const illusBoxH = sidebar ? 64 : compact || width < 380 ? 68 : 80;
-  const mobileArtW = compact ? 108 : 120;
-  const mobileArtH = compact ? 84 : 92;
 
   const arrowOrb = (
     <View
@@ -112,6 +113,9 @@ function MarketplaceCard({
   );
 
   if (mobileTile) {
+    const artW = compact ? 76 : 84;
+    const artH = compact ? 64 : 72;
+
     return (
       <View
         style={[
@@ -121,7 +125,7 @@ function MarketplaceCard({
           pressed && styles.cardPressed,
         ]}
       >
-        <View style={styles.cardMobileTop}>
+        <View style={styles.cardMobileBody}>
           <View style={styles.cardMobileText}>
             <Text style={[styles.chip, { color: action.accent }]}>
               {action.chip}
@@ -129,19 +133,19 @@ function MarketplaceCard({
             <Text style={styles.titleMobile} numberOfLines={1}>
               {action.label}
             </Text>
-            <Text style={styles.subMobile} numberOfLines={1}>
+            <Text style={styles.subMobile} numberOfLines={2}>
               {action.sub}
             </Text>
           </View>
-          {arrowOrb}
-        </View>
-        <View style={styles.cardMobileArt}>
-          <MarketplaceArt
-            action={action}
-            illusBoxW={mobileArtW}
-            illusBoxH={mobileArtH}
-            useLottie
-          />
+          <View style={styles.cardMobileAside}>
+            <MarketplaceArt
+              action={action}
+              illusBoxW={artW}
+              illusBoxH={artH}
+              useLottie
+            />
+            {arrowOrb}
+          </View>
         </View>
       </View>
     );
@@ -199,7 +203,12 @@ function MarketplaceCard({
 
 function SectionHeader({ sidebar, isMobile }: { sidebar?: boolean; isMobile?: boolean }) {
   return (
-    <View style={sidebar ? styles.headSidebar : styles.head}>
+    <View
+      style={[
+        sidebar ? styles.headSidebar : styles.head,
+        isMobile && styles.headMobile,
+      ]}
+    >
       <View style={styles.headPill}>
         <View style={styles.headIconOrb}>
           <Zap size={sidebar ? 10 : 11} color={Theme.primary} strokeWidth={2} />
@@ -227,7 +236,7 @@ export function NetworkLoadsQuickCards({
   const router = useRouter();
   const { width } = useWindowDimensions();
   const sidebar = layout === "sidebar";
-  const isMobile = !sidebar && (compact || width < MOBILE_MARKETPLACE_BREAKPOINT);
+  const isMobile = !sidebar && (NATIVE_APP || width < SPLIT_STACK_BREAKPOINT);
 
   const openLoadCenter = () => {
     if (Platform.OS !== "web") {
@@ -338,6 +347,11 @@ const styles = StyleSheet.create({
     gap: 10,
     width: "100%",
   },
+  headMobile: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 4,
+  },
   headSidebar: {
     paddingHorizontal: 0,
   },
@@ -401,6 +415,7 @@ const styles = StyleSheet.create({
   railMobile: {
     flexDirection: "column",
     gap: 10,
+    alignSelf: "stretch",
   },
   railSidebar: {
     flexDirection: "column",
@@ -419,33 +434,32 @@ const styles = StyleSheet.create({
   },
   cardMobile: {
     width: "100%",
-    minHeight: 148,
+    minHeight: 96,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
     paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 10,
-    gap: 4,
+    paddingVertical: 12,
     ...cardShadow,
   },
   cardMobileCompact: {
-    minHeight: 136,
+    minHeight: 88,
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingVertical: 10,
   },
-  cardMobileTop: {
+  cardMobileBody: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    alignItems: "center",
     gap: 10,
+    width: "100%",
   },
   cardMobileText: {
     flex: 1,
     minWidth: 0,
     gap: 3,
+    justifyContent: "center",
   },
   titleMobile: {
     fontSize: 17,
@@ -460,12 +474,11 @@ const styles = StyleSheet.create({
     color: SUB_ON_WASH,
     lineHeight: 16,
   },
-  cardMobileArt: {
+  cardMobileAside: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "stretch",
-    minHeight: 84,
-    marginTop: 2,
+    gap: 6,
+    flexShrink: 0,
   },
   arrowOrbMobile: {
     width: 32,
@@ -475,7 +488,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
-    marginTop: 2,
   },
   lottieSlot: {
     alignItems: "center",
@@ -570,9 +582,10 @@ const styles = StyleSheet.create({
   cardSlotMobile: {
     width: "100%",
     minWidth: 0,
+    alignSelf: "stretch",
   },
   cardPress: {
-    flex: 1,
+    width: "100%",
     alignSelf: "stretch",
     minWidth: 0,
   },

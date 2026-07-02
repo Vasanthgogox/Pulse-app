@@ -9,6 +9,7 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { BidSheet } from "@/features/network/components/BidSheet";
 import { StoryBroadcastPreview } from "@/features/network/components/StoryBroadcastPreview";
 import { StoryOwnerFooterActions } from "@/features/network/components/StoryDetailFooterActions";
+import { StoryOwnerBidsSheet } from "@/features/network/components/StoryOwnerBidsSheet";
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import {
   deactivatePost,
@@ -17,11 +18,22 @@ import {
   type PostRow,
 } from "@/features/network/services/posts.service";
 import {
+  getIndentDisplayNumber,
   getVisibleIndentById,
   resolveSupplierTargetDisplayRate,
 } from "@/features/indents/services/indents.service";
+import {
+  buildStoryOwnerBidRows,
+  storyOwnerBidsLabel,
+} from "@/features/network/utils/storyOwnerBids.util";
+import {
+  buildStoryOwnerViewRows,
+  storyOwnerViewsLabel,
+  toStoryViewRows,
+} from "@/features/network/utils/storyOwnerViews.util";
 import { useNetworkFeedQuery, useAfterPostDeleted, useInvalidatePosts } from "@/lib/queries/usePostsQuery";
-import { useMyBidQuery } from "@/lib/queries/useBidsQuery";
+import { useBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
+import { useIndentDirectQuotesQuery } from "@/lib/queries";
 import { useStoryViewsQuery, useRecordStoryViewMutation } from "@/lib/queries/useStoryViewsQuery";
 import { confirmDialog } from "@/lib/confirmDialog";
 import { ROUTES } from "@/lib/routes";
@@ -263,6 +275,7 @@ export default function StoryDetailScreen() {
   const [editBidMode, setEditBidMode] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [showViewers, setShowViewers] = useState(false);
+  const [showBids, setShowBids] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
   const footerFade = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -348,11 +361,33 @@ export default function StoryDetailScreen() {
     recordedViewsRef.current.add(post.id);
     if (__DEV__) console.log('[story-views] recording view for post', post.id, 'org', myOrgId);
     recordViewMutate({ postId: post.id, orgId: myOrgId, orgName: currentOrganization?.name ?? "" });
-  }, [post?.id, isOwnPost, myOrgId, recordViewMutate]);
+  }, [post?.id, isOwnPost, myOrgId, currentOrganization?.name, recordViewMutate]);
 
   // Fetch viewers (own posts only)
   const viewsQ = useStoryViewsQuery(isOwnPost ? (post?.id ?? null) : null, isOwnPost);
   const views = viewsQ.data ?? [];
+
+  const ownerIndentId =
+    isOwnPost && isLoad ? (post?.source_indent_id ?? null) : null;
+  const storyBidsQ = useBidsForPostQuery(
+    isOwnPost && isLoad ? (post?.id ?? null) : null,
+  );
+  const ownerQuotesQ = useIndentDirectQuotesQuery(ownerIndentId);
+  const ownerBidRows = useMemo(
+    () =>
+      buildStoryOwnerBidRows(storyBidsQ.data ?? [], ownerQuotesQ.data ?? []),
+    [storyBidsQ.data, ownerQuotesQ.data],
+  );
+  const ownerBidsLoading = storyBidsQ.isLoading || ownerQuotesQ.isLoading;
+  const ownerViewRows = useMemo(
+    () => buildStoryOwnerViewRows(views, ownerBidRows),
+    [views, ownerBidRows],
+  );
+  const ownerViewsLoading =
+    viewsQ.isLoading || (ownerBidsLoading && views.length === 0);
+  const indentDisplayLabel = linkedIndentQ.data
+    ? getIndentDisplayNumber(linkedIndentQ.data)
+    : null;
 
   const headline = post ? storyHeadline(post, Boolean(isLoad), Boolean(isVehicle)) : "";
   const originParts = splitLocationParts(post?.origin);
@@ -571,10 +606,12 @@ export default function StoryDetailScreen() {
       <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) + 8, opacity: footerFade }]}>
         {isOwnPost && isLoad && (
           <StoryOwnerFooterActions
-            viewsLabel={viewsQ.isLoading ? "…" : views.length === 0 ? "No views yet" : `${views.length} viewed`}
+            viewsLabel={storyOwnerViewsLabel(ownerViewRows.length, ownerViewsLoading)}
+            bidsLabel={storyOwnerBidsLabel(ownerBidRows.length, ownerBidsLoading)}
             hint="This is your broadcast — others can place bids on this indent."
             primaryLabel="Open load center"
             onViewersPress={() => setShowViewers(true)}
+            onBidsPress={ownerIndentId ? () => setShowBids(true) : undefined}
             onPrimaryPress={() => router.push(ROUTES.PULSE_LOADS)}
             onShareWhatsApp={handleShareWhatsApp}
           />
@@ -582,7 +619,7 @@ export default function StoryDetailScreen() {
 
         {isOwnPost && isVehicle && (
           <StoryOwnerFooterActions
-            viewsLabel={viewsQ.isLoading ? "…" : views.length === 0 ? "No views yet" : `${views.length} viewed`}
+            viewsLabel={storyOwnerViewsLabel(ownerViewRows.length, ownerViewsLoading)}
             hint="Your vehicle availability is visible to your network."
             primaryLabel="Done"
             onViewersPress={() => setShowViewers(true)}
@@ -664,9 +701,23 @@ export default function StoryDetailScreen() {
 
       <StoryViewersSheet
         visible={showViewers}
-        views={views}
-        loading={viewsQ.isLoading}
+        views={post ? toStoryViewRows(ownerViewRows, post.id) : []}
+        loading={ownerViewsLoading}
         onClose={() => setShowViewers(false)}
+      />
+
+      <StoryOwnerBidsSheet
+        visible={showBids}
+        bids={ownerBidRows}
+        loading={ownerBidsLoading}
+        indentId={ownerIndentId}
+        indentLabel={indentDisplayLabel}
+        onClose={() => setShowBids(false)}
+        onOpenReviewHub={
+          ownerIndentId
+            ? () => router.push(ROUTES.indentDetail(ownerIndentId) as never)
+            : undefined
+        }
       />
     </View>
   );
