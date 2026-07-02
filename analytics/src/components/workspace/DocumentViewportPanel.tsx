@@ -79,7 +79,9 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
         </div>
       )}
 
-      {/* Mock document preview area */}
+      {/* Document preview area — real signed-URL render when available,
+          mock placeholder as fallback (e.g. signed URL failed to generate,
+          or applicant hasn't uploaded yet). */}
       <div className="flex-1 rounded-xl border border-border bg-muted/30 overflow-hidden">
         {doc.status === 'Missing' ? (
           <div className="flex h-full items-center justify-center">
@@ -89,52 +91,29 @@ function DocViewer({ doc }: { doc: BusinessDocument }) {
               <p className="mt-1 text-[11px] text-muted-foreground/70">Applicant has not provided this document</p>
             </div>
           </div>
+        ) : doc.url && doc.mime_type === 'application/pdf' ? (
+          <iframe
+            src={doc.url}
+            title={doc.file_name}
+            className="h-full w-full border-0"
+          />
+        ) : doc.url ? (
+          <div className="flex h-full items-center justify-center overflow-auto p-4">
+            <img
+              src={doc.url}
+              alt={doc.file_name}
+              className={[
+                'max-h-full max-w-full rounded shadow-md object-contain',
+                doc.status === 'Unreadable' ? 'opacity-40' : '',
+              ].join(' ')}
+            />
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-            {/* Simulated PDF page stack */}
-            <div className="relative">
-              {(doc.page_count ?? 1) > 1 && (
-                <>
-                  <div className="absolute -right-1.5 -top-1.5 h-48 w-36 rounded border border-border bg-card shadow-sm opacity-50" />
-                  <div className="absolute -right-0.5 -top-0.5 h-48 w-36 rounded border border-border bg-card shadow-sm opacity-75" />
-                </>
-              )}
-              <div className={[
-                'relative flex h-48 w-36 flex-col items-center justify-center gap-2 rounded border bg-white shadow-md',
-                doc.status === 'Unreadable' ? 'opacity-40' : '',
-                doc.status === 'Expired' ? 'border-red-300' : 'border-border',
-              ].join(' ')}>
-                <FileText className={[
-                  'size-10',
-                  doc.status === 'Flagged' ? 'text-red-400' : 'text-muted-foreground/40',
-                ].join(' ')} />
-                <span className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-wide">
-                  {doc.mime_type.split('/')[1]}
-                </span>
-                {doc.status === 'Unreadable' && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded">
-                    <div className="rotate-[-15deg] rounded border border-amber-400 bg-amber-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">
-                      Unreadable
-                    </div>
-                  </div>
-                )}
-                {doc.status === 'Expired' && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded">
-                    <div className="rotate-[-15deg] rounded border border-red-400 bg-red-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700">
-                      Expired
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground">
-              {doc.file_name}
-              {doc.page_count && doc.page_count > 1 && ` · ${doc.page_count} pages`}
-            </p>
-
+            <FileText className="size-10 text-muted-foreground/40" />
+            <p className="text-[11px] text-muted-foreground">{doc.file_name}</p>
             <p className="max-w-[200px] text-center text-[10px] text-muted-foreground/60">
-              In production, the document renders here via signed URL or embedded PDF viewer.
+              Preview unavailable — signed URL could not be generated.
             </p>
           </div>
         )}

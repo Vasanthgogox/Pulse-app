@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type {
   Organization, AdminContextValue, AccountFilter,
   OrgUser, UsageMetric, FeatureFlag,
-  BillingTier, AppStatus,
+  BillingTier, AppStatus, CheckStatus,
   AuditEntry, AutomatedCheck, BusinessDocument,
 } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +25,8 @@ function mapOrg(
   tripCounts: Record<string, number>,
   featureFlagMap: Record<string, Record<string, boolean>>,
   auditByOrg: Record<string, AuditEntry[]>,
+  docsByOrg: Record<string, BusinessDocument[]>,
+  jobsByOrg: Record<string, Record<string, unknown>>,
 ): Organization {
   const status = mapStatus(row.verification_status as string);
 
@@ -83,8 +85,8 @@ function mapOrg(
     rejection_reason:     undefined,
     rejection_notes:      undefined,
     escalation_reason:    undefined,
-    automated_checks:     mapChecks(row),
-    documents:            [] as BusinessDocument[],
+    automated_checks:     mapChecks(row, jobsByOrg[row.id as string]),
+    documents:            docsByOrg[row.id as string] ?? [] as BusinessDocument[],
     audit_trail:          auditByOrg[row.id as string] ?? [] as AuditEntry[],
     billing_tier:         'Starter' as BillingTier,
     api_usage:            0,
@@ -134,24 +136,77 @@ function auditTitle(prev: string | null, next: string): string {
   return `Status changed to ${next}`;
 }
 
-function mapChecks(row: Record<string, unknown>): AutomatedCheck[] {
+// Maps verification_jobs.<pillar>_status (pillar_status_type from
+// 20261101000005) to the admin console's CheckStatus. Falls back to a
+// field-presence check only when no job row exists yet (org hasn't reached
+// submit_business_verification, so the async worker was never queued).
+function mapPillarStatus(pillarStatus: string | undefined, fallbackPresent: boolean): CheckStatus {
+  switch (pillarStatus) {
+    case 'PASSED':        return 'Passed';
+    case 'FAILED':        return 'Failed';
+    case 'MANUAL_REVIEW': return 'Manual Review';
+    case 'QUEUED':
+    case 'PROCESSING':    return 'Pending';
+    case 'NOT_STARTED':   return 'N/A';
+    default:              return fallbackPresent ? 'Pending' : 'N/A';
+  }
+}
+
+function mapChecks(row: Record<string, unknown>, job: Record<string, unknown> | undefined): AutomatedCheck[] {
+  const gstinStatus = mapPillarStatus(job?.pillar_1_tax_status as string | undefined, !!row.gstin);
+  const panStatus   = gstinStatus; // pillar_1_tax_status covers GSTIN + PAN together — see verification-worker/index.ts
+  const ocrStatus   = mapPillarStatus(job?.ocr_status as string | undefined, !!row.address_proof_path);
+
   return [
     {
       id: 'gstin', label: 'GSTIN Registry',
-      status: row.gstin ? 'Passed' : 'Pending',
-      detail: row.gstin ? `GSTIN: ${row.gstin}` : 'Not submitted',
+      status: gstinStatus,
+      detail: job
+        ? `GSTIN: ${row.gstin ?? '—'} · registry check ${(job.pillar_1_tax_status as string ?? 'not queued').toLowerCase()}`
+        : row.gstin ? `GSTIN: ${row.gstin} · not yet submitted for verification` : 'Not submitted',
     },
     {
       id: 'pan', label: 'PAN Verification',
-      status: row.business_pan ? 'Passed' : 'Pending',
-      detail: row.business_pan ? `PAN: ${row.business_pan}` : 'Not submitted',
+      status: panStatus,
+      detail: job
+        ? `PAN: ${row.business_pan ?? '—'} · registry check ${(job.pillar_1_tax_status as string ?? 'not queued').toLowerCase()}`
+        : row.business_pan ? `PAN: ${row.business_pan} · not yet submitted for verification` : 'Not submitted',
     },
     {
-      id: 'address', label: 'Address Proof',
-      status: row.address_proof_path ? 'Passed' : 'Pending',
-      detail: row.address_proof_type as string ?? 'Not uploaded',
+      id: 'address', label: 'Address Proof / OCR Congruence',
+      status: ocrStatus,
+      detail: job
+        ? `${(row.address_proof_type as string) ?? 'document'} · OCR ${(job.ocr_status as string ?? 'not queued').toLowerCase()}`
+        : row.address_proof_path ? `${row.address_proof_type as string ?? 'Uploaded'} · not yet submitted for verification` : 'Not uploaded',
     },
   ];
+}
+
+// Maps verification_documents.document_type (from 20261111000000) to the
+// admin console's DocumentType label set.
+function mapDocumentType(t: string): BusinessDocument['type'] {
+  switch (t) {
+    case 'gst_certificate':              return 'GST Certificate';
+    case 'pan_card':                     return 'PAN Card';
+    case 'address_proof_lease':
+    case 'address_proof_utility_bill':
+    case 'address_proof_other':          return 'Address Proof';
+    default:                             return 'Address Proof';
+  }
+}
+
+// Maps verification_documents.status to the admin console's review-facing
+// DocumentStatus. MANUAL_REVIEW/OCR_FAILED read as Flagged rather than a
+// distinct state — the checklist above (mapChecks) already surfaces the
+// specific OCR reason via automated_checks; this drives the doc tab badge.
+function mapDocumentStatus(s: string): BusinessDocument['status'] {
+  switch (s) {
+    case 'OCR_PASSED':    return 'Valid';
+    case 'OCR_FAILED':
+    case 'MANUAL_REVIEW': return 'Flagged';
+    case 'UPLOADED':
+    default:              return 'Valid';
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
@@ -254,8 +309,49 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         featureFlagMap[oid][f.flag_id as string] = f.enabled as boolean;
       }
 
+      // Fetch verification documents for all orgs (GST cert, PAN card, address
+      // proof — see 20261111000000_verification_documents_registry.sql).
+      // Signed URLs generated directly since this console runs under
+      // service_role and bypasses storage RLS.
+      const { data: docRows } = await supabase
+        .from('verification_documents')
+        .select('*')
+        .neq('status', 'REPLACED')
+        .order('created_at', { ascending: false });
+      const docsByOrg: Record<string, BusinessDocument[]> = {};
+      for (const d of (docRows ?? [])) {
+        const oid = d.org_id as string;
+        const storagePath = d.storage_path as string;
+        const { data: signed } = await supabase.storage
+          .from('verification-documents')
+          .createSignedUrl(storagePath, 3600);
+        if (!docsByOrg[oid]) docsByOrg[oid] = [];
+        docsByOrg[oid].push({
+          id:         d.id as string,
+          type:       mapDocumentType(d.document_type as string),
+          file_name:  storagePath.split('/').pop() ?? storagePath,
+          status:     mapDocumentStatus(d.status as string),
+          uploaded_at: d.created_at as string,
+          url:        signed?.signedUrl ?? '',
+          mime_type:  d.mime_type as BusinessDocument['mime_type'],
+          size_kb:    Math.round((d.size_bytes as number) / 1024),
+        });
+      }
+
+      // Fetch verification_jobs (real OCR / tax-registry / MCA pillar results —
+      // see 20261101000005_verification_tiers_async_workers.sql) so
+      // Automated Pre-Checks reflects what the async worker actually found,
+      // not just whether the org typed a GSTIN/PAN into the form.
+      const { data: jobRows } = await supabase
+        .from('verification_jobs')
+        .select('*');
+      const jobsByOrg: Record<string, Record<string, unknown>> = {};
+      for (const j of (jobRows ?? [])) {
+        jobsByOrg[j.organization_id as string] = j as Record<string, unknown>;
+      }
+
       const mapped = (orgs ?? []).map((o) =>
-        mapOrg(o as Record<string, unknown>, byOrg[o.id] ?? [], tripCounts, featureFlagMap, auditByOrg),
+        mapOrg(o as Record<string, unknown>, byOrg[o.id] ?? [], tripCounts, featureFlagMap, auditByOrg, docsByOrg, jobsByOrg),
       );
       setApplications(mapped);
       if (mapped.length > 0 && !selectedId) setSelectedId(mapped[0].id);
@@ -270,13 +366,20 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
 
   const selectedApp = applications.find(a => a.id === selectedId) ?? null;
 
+  // approveApp/rejectApp go through the admin_approve_profile / admin_reject_profile
+  // procedures (not raw .update()) so verified_by, marketplace_verified, frozen_at
+  // unfreeze, and the verification_audit_logs entry all happen atomically — matching
+  // what the mobile wizard's submit/frozen-view code expects. This console runs under
+  // the service_role key with no per-admin session, so p_admin_id is passed as null;
+  // the audit trail records the action without attributing it to a specific admin user.
   const approveApp = useCallback(async (id: string) => {
     setIsActing(true);
     try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({ verification_status: 'verified', updated_at: new Date().toISOString() })
-        .eq('id', id);
+      const { error } = await supabase.rpc('admin_approve_profile', {
+        p_org_id:   id,
+        p_admin_id: null,
+        p_notes:    null,
+      });
       if (error) throw error;
       await loadData();
     } finally { setIsActing(false); }
@@ -285,14 +388,12 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
   const rejectApp = useCallback(async (id: string, reason: string, notes: string) => {
     setIsActing(true);
     try {
-      const { error } = await supabase
-        .from('organizations')
-        .update({
-          verification_status: 'rejected',
-          rejection_reasons: [reason, notes].filter(Boolean),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
+      const { error } = await supabase.rpc('admin_reject_profile', {
+        p_org_id:            id,
+        p_admin_id:          null,
+        p_rejection_reasons: { checklist: [reason], notes },
+        p_notes:             notes,
+      });
       if (error) throw error;
       await loadData();
     } finally { setIsActing(false); }

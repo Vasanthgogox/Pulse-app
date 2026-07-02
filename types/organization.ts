@@ -69,10 +69,14 @@ export interface WorkspaceKyc {
   iec_number: string | null;
   // Sprint 1: verification pipeline
   registration_type: RegistrationType | null;
+  /** Signup-time business type on organizations; fallback source for registration_type. */
+  business_type: string | null;
   address_line: string | null;
   city: string | null;
   state: string | null;
   address_pincode: string | null;
+  /** Signup-time pincode on organizations; fallback when address_pincode is unset. */
+  pincode: string | null;
   address_proof_path: string | null;
   address_proof_type: AddressProofType | null;
   frozen_at: string | null;

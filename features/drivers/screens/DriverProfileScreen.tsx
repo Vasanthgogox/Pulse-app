@@ -15,7 +15,6 @@ import {
   getRatingsForDriver,
 } from '@/features/ratings/services/ratings.service';
 import type { RatingRow } from '@/features/ratings/types';
-import { useLayoutInsets } from '@/lib/layoutInsets';
 import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 import * as driversService from '@/features/drivers/services/drivers.service';
@@ -49,6 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const SCREEN_PAD = Layout.screenPaddingHorizontal;
 
@@ -84,7 +84,7 @@ function formatShortDate(iso?: string | null) {
 
 export default function DriverProfileScreen() {
   const insets = useSafeAreaInsets();
-  const layout = useLayoutInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { theme } = useDriverTheme();
   const isDark = theme === 'dark';
@@ -557,7 +557,7 @@ export default function DriverProfileScreen() {
         style={styles.scroll}
         contentContainerStyle={{
           paddingTop: 12,
-          paddingBottom: layout.scrollBottomPadding(16),
+          paddingBottom: tabBarHeight + 16,
           paddingHorizontal: SCREEN_PAD,
         }}
         showsVerticalScrollIndicator={false}

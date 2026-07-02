@@ -3,6 +3,34 @@ import type { AddressProofType, RegistrationType } from '@/types/organization';
 
 const VERIFICATION_BUCKET = 'verification-documents';
 
+// Mirrors the bucket + register_verification_document RPC constraints in
+// 20261111000000_verification_documents_registry.sql — checked client-side
+// too so the user gets an inline error instead of a failed upload/RPC call.
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+const ALLOWED_DOCUMENT_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf',
+];
+
+export type VerificationDocumentType =
+  | 'gst_certificate'
+  | 'pan_card'
+  | 'address_proof_lease'
+  | 'address_proof_utility_bill'
+  | 'address_proof_other';
+
+export function validateDocumentFile(file: {
+  mimeType: string;
+  sizeBytes?: number;
+}): string | null {
+  if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimeType)) {
+    return 'Unsupported file type. Please upload a JPG, PNG, WEBP, HEIC, or PDF.';
+  }
+  if (file.sizeBytes != null && file.sizeBytes > MAX_DOCUMENT_BYTES) {
+    return 'File is too large. Maximum size is 10 MB.';
+  }
+  return null;
+}
+
 // ─── GSTIN validation ─────────────────────────────────────────────────────────
 
 export type GstinValidationResult =
@@ -59,21 +87,148 @@ async function readFileBytes(uri: string, base64?: string): Promise<Uint8Array> 
   return new Uint8Array(buf);
 }
 
+export interface DocVerifyResult {
+  passed:          boolean;
+  route_to_manual: boolean;
+  message:         string;
+  score?:          number;
+}
+
+/** Calls gemini-doc-verify right after upload. Network/config failures are
+ *  treated as pass-through (route to manual review server-side later) rather
+ *  than blocking the user — the authoritative check still runs post-submit
+ *  in the async worker regardless of this result. */
+async function verifyUploadedDocument(
+  documentType: VerificationDocumentType,
+  storagePath:  string,
+  typedGstin?:  string,
+  typedPan?:    string,
+): Promise<DocVerifyResult | null> {
+  const { data: { session } } = await supabase().auth.getSession();
+  const token = session?.access_token ?? '';
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/gemini-doc-verify`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        document_type: documentType,
+        storage_path:  storagePath,
+        typed_gstin:   typedGstin,
+        typed_pan:     typedPan,
+      }),
+    });
+    if (!res.ok) return null; // config/network issue — don't block on it
+    return await res.json() as DocVerifyResult;
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadAddressProof(
-  orgId: string,
-  file:  AddressProofFile,
-): Promise<{ path: string | null; error: Error | null }> {
+  orgId:     string,
+  file:      AddressProofFile,
+  proofType?: AddressProofType,
+): Promise<{ path: string | null; error: Error | null; verify: DocVerifyResult | null }> {
+  const bytes = await readFileBytes(file.uri, file.base64);
+
+  const formatError = validateDocumentFile({ mimeType: file.mimeType, sizeBytes: bytes.byteLength });
+  if (formatError) return { path: null, error: new Error(formatError), verify: null };
+
   const ext = file.fileName.split('.').pop()?.toLowerCase() ?? 'jpg';
   const path = `${orgId}/address-proof-${Date.now()}.${ext}`;
-
-  const bytes = await readFileBytes(file.uri, file.base64);
 
   const { error } = await supabase()
     .storage.from(VERIFICATION_BUCKET)
     .upload(path, bytes, { contentType: file.mimeType, upsert: true });
 
-  if (error) return { path: null, error: new Error(error.message) };
-  return { path, error: null };
+  if (error) return { path: null, error: new Error(error.message), verify: null };
+
+  const documentType: VerificationDocumentType =
+    proofType === 'lease' ? 'address_proof_lease'
+    : proofType === 'utility_bill' ? 'address_proof_utility_bill'
+    : 'address_proof_other';
+
+  const verify = await verifyUploadedDocument(documentType, path);
+  if (verify && !verify.passed) {
+    await supabase().storage.from(VERIFICATION_BUCKET).remove([path]);
+    return { path: null, error: new Error(verify.message), verify };
+  }
+
+  return { path, error: null, verify };
+}
+
+// ─── Generic verification document upload (GST cert, PAN card, …) ─────────────
+
+export interface VerificationDocumentFile {
+  uri:      string;
+  mimeType: string;
+  fileName: string;
+  base64?:  string;
+}
+
+export async function uploadVerificationDocument(
+  orgId:        string,
+  documentType: VerificationDocumentType,
+  file:         VerificationDocumentFile,
+  typedValues?: { gstin?: string; pan?: string },
+): Promise<{ path: string | null; error: Error | null; verify: DocVerifyResult | null }> {
+  const bytes = await readFileBytes(file.uri, file.base64);
+
+  const formatError = validateDocumentFile({ mimeType: file.mimeType, sizeBytes: bytes.byteLength });
+  if (formatError) return { path: null, error: new Error(formatError), verify: null };
+
+  const ext  = file.fileName.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const path = `${orgId}/${documentType}/${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase()
+    .storage.from(VERIFICATION_BUCKET)
+    .upload(path, bytes, { contentType: file.mimeType, upsert: true });
+
+  if (uploadError) return { path: null, error: new Error(uploadError.message), verify: null };
+
+  const verify = await verifyUploadedDocument(documentType, path, typedValues?.gstin, typedValues?.pan);
+
+  // Gemini explicitly rejected the document (mismatch/unreadable) — remove
+  // the file and don't register it, so a bad upload never counts toward
+  // "document uploaded" in the wizard or submit_business_verification.
+  if (verify && !verify.passed) {
+    await supabase().storage.from(VERIFICATION_BUCKET).remove([path]);
+    return { path: null, error: new Error(verify.message), verify };
+  }
+
+  const { error: rpcError } = await supabase().rpc('register_verification_document', {
+    p_org_id:        orgId,
+    p_document_type: documentType,
+    p_storage_path:  path,
+    p_mime_type:      file.mimeType,
+    p_size_bytes:     bytes.byteLength,
+  });
+
+  if (rpcError) return { path: null, error: new Error(rpcError.message), verify };
+  return { path, error: null, verify };
+}
+
+export interface VerificationDocumentRecord {
+  id:             string;
+  document_type:  VerificationDocumentType;
+  storage_path:   string;
+  mime_type:      string;
+  size_bytes:     number;
+  status:         'UPLOADED' | 'OCR_PASSED' | 'OCR_FAILED' | 'MANUAL_REVIEW' | 'REPLACED';
+  created_at:     string;
+}
+
+export async function getVerificationDocuments(
+  orgId: string,
+): Promise<{ documents: VerificationDocumentRecord[]; error: Error | null }> {
+  const { data, error } = await supabase().rpc('get_verification_documents', { p_org_id: orgId });
+  if (error) return { documents: [], error: new Error(error.message) };
+  return { documents: (data ?? []) as VerificationDocumentRecord[], error: null };
 }
 
 export async function getAddressProofSignedUrl(

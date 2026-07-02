@@ -346,7 +346,7 @@ export async function getWorkspaceKyc(orgId: string): Promise<{
 }> {
   const { data, error } = await supabase()
     .from('organizations')
-    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,verification_status,verified_at,kyc_rejected_reason')
+    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
     .eq('id', orgId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), kyc: null };
@@ -390,7 +390,7 @@ export async function updateWorkspaceKyc(
 
   const { data: fresh, error: fetchErr } = await supabase()
     .from('organizations')
-    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,verification_status,verified_at,kyc_rejected_reason')
+    .select('id,name,logo_url,business_pan,gstin,cin,msme_number,tan_number,iec_number,registration_type,business_type,address_line,city,state,pincode,address_pincode,address_proof_path,address_proof_type,frozen_at,submitted_at,verification_status,verified_at,kyc_rejected_reason,rejection_reasons')
     .eq('id', orgId)
     .maybeSingle();
   if (fetchErr) return { error: new Error(fetchErr.message), kyc: null };

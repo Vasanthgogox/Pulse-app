@@ -4382,6 +4382,7 @@ export default function DriverRadarScreen() {
                 setAssignableTripsNotifyOnlyAfterMission(true);
                 void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
                 persistPostMissionPendingSnapshot();
+                if (uid) void invalidateDriverHome(uid);
               }}
               onBackToDashboard={async () => {
                 await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
@@ -4422,6 +4423,7 @@ export default function DriverRadarScreen() {
                 setAssignableTripsNotifyOnlyAfterMission(true);
                 void AsyncStorage.setItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY, "1");
                 persistPostMissionPendingSnapshot();
+                if (uid) void invalidateDriverHome(uid);
               }}
               onBackToDashboard={async () => {
                 await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);

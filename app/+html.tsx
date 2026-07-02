@@ -21,6 +21,26 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content={VIEWPORT_CONTENT_BASE} />
 
+        {/* Open Graph — link previews on WhatsApp/LinkedIn/Slack/etc. og:image must be an absolute URL. */}
+        <meta property="og:title" content="Pulse — Fleet Management Platform" />
+        <meta
+          property="og:description"
+          content="Manage fleets, drivers, trips, and logistics from one platform."
+        />
+        <meta property="og:image" content="https://gx-pulse.netlify.app/og-image.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:url" content="https://gx-pulse.netlify.app" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Pulse" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Pulse — Fleet Management Platform" />
+        <meta
+          name="twitter:description"
+          content="Manage fleets, drivers, trips, and logistics from one platform."
+        />
+        <meta name="twitter:image" content="https://gx-pulse.netlify.app/og-image.png" />
+
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
           However, body scrolling is often nice to have for mobile web. If you want to enable it, remove this line.

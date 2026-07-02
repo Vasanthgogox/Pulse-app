@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -39,10 +40,13 @@ import {
 } from '@/features/organization/services/organization.service';
 import {
   getAddressProofSignedUrl,
+  getVerificationDocuments,
   submitBusinessVerification,
   uploadAddressProof,
+  uploadVerificationDocument,
   validateGstin,
   type AddressProofFile,
+  type VerificationDocumentFile,
 } from '@/features/organization/services/businessVerification.service';
 import { isVerificationFrozen } from '@/types/organization';
 import type { AddressProofType, KycVerificationStatus, RegistrationType, WorkspaceKyc } from '@/types/organization';
@@ -55,6 +59,9 @@ const REGISTRATION_TYPES: { value: RegistrationType; label: string }[] = [
   { value: 'partnership',    label: 'Partnership'             },
 ];
 
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const PAN_REGEX   = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
 const ADDRESS_PROOF_TYPES: { value: AddressProofType; label: string }[] = [
   { value: 'lease',        label: 'Lease Agreement'  },
   { value: 'utility_bill', label: 'Utility Bill'     },
@@ -62,6 +69,16 @@ const ADDRESS_PROOF_TYPES: { value: AddressProofType; label: string }[] = [
 ];
 
 const TOTAL_STEPS = 3;
+
+/** Signup collects business_type (SOLE_PROPRIETOR/PVT_LTD/…); map it to the
+ *  verification registration_type enum so the wizard prefills. OPC/OTHER have
+ *  no equivalent and stay unselected. */
+const BUSINESS_TYPE_TO_REGISTRATION: Record<string, RegistrationType> = {
+  SOLE_PROPRIETOR: 'proprietorship',
+  PARTNERSHIP:     'partnership',
+  PVT_LTD:         'pvt_ltd',
+  LLP:             'llp',
+};
 
 // ─── Frozen / read-only view ──────────────────────────────────────────────────
 
@@ -171,6 +188,10 @@ function Step0LegalDetails({
   state:    Step0State;
   onChange: (patch: Partial<Step0State>) => void;
 }) {
+  const pincodeError = state.pincode.length > 0 && state.pincode.length < 6
+    ? 'Pincode must be 6 digits.'
+    : null;
+
   return (
     <View>
       <StepTitle
@@ -222,13 +243,18 @@ function Step0LegalDetails({
         placeholder="560001"
         keyboardType="number-pad"
         maxLength={6}
+        errorMessage={pincodeError}
       />
     </View>
   );
 }
 
 function isStep0Valid(s: Step0State): boolean {
-  return !!s.registrationType && s.city.trim().length > 0 && s.state.trim().length > 0;
+  return !!s.registrationType
+    && s.addressLine.trim().length > 0
+    && s.city.trim().length > 0
+    && s.state.trim().length > 0
+    && s.pincode.length === 6;
 }
 
 // ─── Step 1 — Tax Credentials ─────────────────────────────────────────────────
@@ -240,6 +266,14 @@ interface Step1State {
   gstinValidating:  boolean;
   gstinError:       string | null;
   gstinRegistryName: string | null;
+  gstCertUploading:    boolean;
+  gstCertPath:         string | null;
+  gstCertFileName:     string | null;
+  gstCertUploadError:  string | null;
+  panCardUploading:    boolean;
+  panCardPath:         string | null;
+  panCardFileName:     string | null;
+  panCardUploadError:  string | null;
 }
 
 function Step1TaxCredentials({
@@ -247,17 +281,43 @@ function Step1TaxCredentials({
   state,
   onChange,
   onValidateGstin,
+  onPickGstCert,
+  onPickPanCard,
 }: {
   orgName:           string;
   state:             Step1State;
   onChange:          (patch: Partial<Step1State>) => void;
   onValidateGstin:   () => void;
+  onPickGstCert:     () => void;
+  onPickPanCard:     () => void;
 }) {
+  const gstinFormatValid = GSTIN_REGEX.test(state.gstin);
+  const gstinFormatError =
+    state.gstin.length === 15 && !gstinFormatValid
+      ? 'Invalid GSTIN format. Expected e.g. 29ABCDE1234F1Z5.'
+      : state.gstin.length > 0 && state.gstin.length < 15
+      ? `${state.gstin.length}/15 characters — expected format: 29ABCDE1234F1Z5`
+      : null;
+
   const gstinHint = state.gstinValidated
     ? `✓ Matched: ${state.gstinRegistryName ?? 'Active'}`
-    : state.gstinError
+    : (state.gstinError || gstinFormatError)
     ? null
     : 'Enter 15-character GSTIN. We verify against the GST registry.';
+
+  const panFormatValid = PAN_REGEX.test(state.pan);
+  const panError =
+    state.pan.length === 10 && !panFormatValid
+      ? 'Invalid PAN format. Expected e.g. ABCDE1234F.'
+      : state.pan.length > 0 && state.pan.length < 10
+      ? `${state.pan.length}/10 characters — expected format: ABCDE1234F`
+      : null;
+
+  const incompleteReasons: string[] = [];
+  if (!state.gstinValidated) incompleteReasons.push('Verify your GSTIN');
+  if (!panFormatValid) incompleteReasons.push('Enter a valid PAN');
+  if (!state.gstCertPath) incompleteReasons.push('Upload GST registration certificate');
+  if (!state.panCardPath) incompleteReasons.push('Upload PAN card copy');
 
   return (
     <View>
@@ -271,14 +331,18 @@ function Step1TaxCredentials({
         <OnboardingFocusedField
           label="GSTIN"
           value={state.gstin}
-          onChangeText={v => onChange({ gstin: v.toUpperCase().replace(/\s/g, ''), gstinValidated: false, gstinError: null })}
+          onChangeText={v => {
+            const next = v.toUpperCase().replace(/\s/g, '');
+            if (next === state.gstin) return; // no real change — don't drop an already-verified state
+            onChange({ gstin: next, gstinValidated: false, gstinError: null });
+          }}
           placeholder="29ABCDE1234F1Z5"
           autoCapitalize="characters"
           maxLength={15}
-          errorMessage={state.gstinError}
-          hintMessage={state.gstinValidated ? gstinHint : (!state.gstinError ? gstinHint : undefined)}
+          errorMessage={state.gstinError ?? gstinFormatError}
+          hintMessage={state.gstinValidated ? gstinHint : (!state.gstinError && !gstinFormatError ? gstinHint : undefined)}
         />
-        {state.gstin.length === 15 && !state.gstinValidated && !state.gstinValidating && (
+        {gstinFormatValid && !state.gstinValidated && !state.gstinValidating && (
           <Pressable style={styles.validateButton} onPress={onValidateGstin}>
             <Text style={styles.validateButtonText}>Verify GSTIN →</Text>
           </Pressable>
@@ -291,6 +355,17 @@ function Step1TaxCredentials({
         )}
       </View>
 
+      <DocumentUploadZone
+        label="GST Registration Certificate"
+        state={{
+          uploading:    state.gstCertUploading,
+          uploadedPath: state.gstCertPath,
+          fileName:     state.gstCertFileName,
+          uploadError:  state.gstCertUploadError,
+        }}
+        onPickFile={onPickGstCert}
+      />
+
       <OnboardingFocusedField
         label="PAN (Permanent Account Number)"
         value={state.pan}
@@ -298,15 +373,89 @@ function Step1TaxCredentials({
         placeholder="ABCDE1234F"
         autoCapitalize="characters"
         maxLength={10}
-        hintMessage="10-character PAN (e.g. ABCDE1234F)"
+        errorMessage={panError}
+        hintMessage={!panError ? '10-character PAN (e.g. ABCDE1234F)' : undefined}
       />
+
+      <DocumentUploadZone
+        label="PAN Card Copy"
+        state={{
+          uploading:    state.panCardUploading,
+          uploadedPath: state.panCardPath,
+          fileName:     state.panCardFileName,
+          uploadError:  state.panCardUploadError,
+        }}
+        onPickFile={onPickPanCard}
+      />
+
+      {incompleteReasons.length > 0 && (
+        <View style={styles.incompleteBanner}>
+          <Text style={styles.incompleteBannerTitle}>To continue, you still need to:</Text>
+          {incompleteReasons.map(reason => (
+            <Text key={reason} style={styles.incompleteBannerItem}>• {reason}</Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 function isStep1Valid(s: Step1State): boolean {
-  const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-  return s.gstinValidated && panRegex.test(s.pan);
+  return s.gstinValidated && PAN_REGEX.test(s.pan) && !!s.gstCertPath && !!s.panCardPath;
+}
+
+// ─── Shared document upload zone ───────────────────────────────────────────────
+// Same tap-to-upload control used for GST cert, PAN card, and address proof —
+// factored out so picker/upload states render identically across doc types.
+
+interface DocUploadZoneState {
+  uploading:    boolean;
+  uploadedPath: string | null;
+  fileName:     string | null;
+  uploadError:  string | null;
+}
+
+function DocumentUploadZone({
+  label,
+  state,
+  onPickFile,
+}: {
+  label:      string;
+  state:      DocUploadZoneState;
+  onPickFile: () => void;
+}) {
+  return (
+    <View style={styles.docUploadField}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        style={[styles.uploadZone, state.uploadedPath ? styles.uploadZoneDone : null]}
+        onPress={onPickFile}
+        disabled={state.uploading}
+      >
+        {state.uploading ? (
+          <>
+            <ActivityIndicator size="small" color={Theme.primary} />
+            <Text style={styles.uploadZoneText}>Uploading…</Text>
+          </>
+        ) : state.uploadedPath ? (
+          <>
+            <CheckCircle size={20} color={Theme.success} />
+            <Text style={styles.uploadZoneText}>{state.fileName ?? 'Document uploaded'}</Text>
+            <Text style={styles.uploadZoneHint}>Tap to replace</Text>
+          </>
+        ) : (
+          <>
+            <Upload size={20} color={colors.textSecondary} />
+            <Text style={styles.uploadZoneText}>Tap to upload</Text>
+            <Text style={styles.uploadZoneHint}>JPG, PNG, or PDF · max 10 MB</Text>
+          </>
+        )}
+      </Pressable>
+      {state.uploadError ? (
+        <Text style={styles.uploadError}>{state.uploadError}</Text>
+      ) : null}
+    </View>
+  );
 }
 
 // ─── Step 2 — Address Proof Upload ───────────────────────────────────────────
@@ -415,6 +564,14 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     gstinValidating:   false,
     gstinError:        null,
     gstinRegistryName: null,
+    gstCertUploading:    false,
+    gstCertPath:         null,
+    gstCertFileName:     null,
+    gstCertUploadError:  null,
+    panCardUploading:    false,
+    panCardPath:         null,
+    panCardFileName:     null,
+    panCardUploadError:  null,
   });
 
   const [step2, setStep2] = useState<Step2State>({
@@ -429,33 +586,43 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
   // Load current KYC state
   useEffect(() => {
     if (!orgId) return;
-    getWorkspaceKyc(orgId).then(({ kyc: data }) => {
-      if (data) {
-        setKyc(data);
-        // Pre-fill from existing data
-        setStep0(s => ({
-          ...s,
-          registrationType: data.registration_type ?? null,
-          addressLine:      data.address_line       ?? '',
-          city:             data.city               ?? '',
-          state:            data.state              ?? '',
-          pincode:          data.address_pincode    ?? '',
-        }));
-        setStep1(s => ({
-          ...s,
-          gstin: data.gstin            ?? '',
-          pan:   data.business_pan     ?? '',
-          gstinValidated: !!data.gstin, // treat as validated if already saved
-        }));
-        setStep2(s => ({
-          ...s,
-          proofType:    data.address_proof_type ?? null,
-          uploadedPath: data.address_proof_path ?? null,
-          fileName:     data.address_proof_path ? 'Existing document' : null,
-        }));
-      }
-      setLoading(false);
-    });
+    Promise.all([getWorkspaceKyc(orgId), getVerificationDocuments(orgId)]).then(
+      ([{ kyc: data }, { documents }]) => {
+        if (data) {
+          setKyc(data);
+          // Pre-fill from existing data
+          setStep0(s => ({
+            ...s,
+            registrationType: data.registration_type
+              ?? BUSINESS_TYPE_TO_REGISTRATION[data.business_type ?? ''] ?? null,
+            addressLine:      data.address_line       ?? '',
+            city:             data.city               ?? '',
+            state:            data.state              ?? '',
+            pincode:          data.address_pincode ?? data.pincode ?? '',
+          }));
+
+          const gstCert = documents.find(d => d.document_type === 'gst_certificate');
+          const panCard = documents.find(d => d.document_type === 'pan_card');
+          setStep1(s => ({
+            ...s,
+            gstin: data.gstin            ?? '',
+            pan:   data.business_pan     ?? '',
+            gstinValidated: !!data.gstin, // treat as validated if already saved
+            gstCertPath:     gstCert?.storage_path ?? null,
+            gstCertFileName: gstCert ? 'Existing document' : null,
+            panCardPath:     panCard?.storage_path ?? null,
+            panCardFileName: panCard ? 'Existing document' : null,
+          }));
+          setStep2(s => ({
+            ...s,
+            proofType:    data.address_proof_type ?? null,
+            uploadedPath: data.address_proof_path ?? null,
+            fileName:     data.address_proof_path ? 'Existing document' : null,
+          }));
+        }
+        setLoading(false);
+      },
+    );
   }, [orgId]);
 
   const handleValidateGstin = async () => {
@@ -478,7 +645,25 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     }
   };
 
-  const handlePickFile = async () => {
+  type PickedAsset = { uri: string; mimeType?: string | null; fileName?: string | null; base64?: string | null };
+
+  const pickDocumentAsset = (onPicked: (asset: PickedAsset) => void) => {
+    // RN Web's Alert.alert only supports a single-button confirm — a
+    // multi-option action sheet never renders, so "Tap to upload" would be a
+    // silent no-op on web. Skip straight to the file picker there; it already
+    // wraps a native <input type="file"> covering camera/gallery/file on
+    // mobile browsers.
+    if (Platform.OS === 'web') {
+      DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], copyToCacheDirectory: true })
+        .then(res => {
+          if (!res.canceled && res.assets[0]) {
+            const a = res.assets[0];
+            onPicked({ uri: a.uri, mimeType: a.mimeType ?? 'application/pdf', fileName: a.name });
+          }
+        });
+      return;
+    }
+
     Alert.alert('Upload Document', 'Choose source', [
       {
         text:    'Camera',
@@ -486,7 +671,7 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
           const perm = await ImagePicker.requestCameraPermissionsAsync();
           if (!perm.granted) { Alert.alert('Permission required', 'Camera access is needed.'); return; }
           const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85, base64: true });
-          if (!res.canceled && res.assets[0]) await processPickedFile(res.assets[0]);
+          if (!res.canceled && res.assets[0]) onPicked(res.assets[0]);
         },
       },
       {
@@ -495,7 +680,7 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
           const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (!perm.granted) { Alert.alert('Permission required', 'Photo library access is needed.'); return; }
           const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'livePhotos'], quality: 0.85, base64: true });
-          if (!res.canceled && res.assets[0]) await processPickedFile(res.assets[0]);
+          if (!res.canceled && res.assets[0]) onPicked(res.assets[0]);
         },
       },
       {
@@ -504,7 +689,7 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
           const res = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], copyToCacheDirectory: true });
           if (!res.canceled && res.assets[0]) {
             const a = res.assets[0];
-            await processPickedFile({ uri: a.uri, mimeType: a.mimeType ?? 'application/pdf', fileName: a.name });
+            onPicked({ uri: a.uri, mimeType: a.mimeType ?? 'application/pdf', fileName: a.name });
           }
         },
       },
@@ -512,7 +697,9 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     ]);
   };
 
-  const processPickedFile = async (asset: { uri: string; mimeType?: string | null; fileName?: string | null; base64?: string | null }) => {
+  const handlePickFile = () => pickDocumentAsset(processPickedFile);
+
+  const processPickedFile = async (asset: PickedAsset) => {
     const mimeType = asset.mimeType ?? 'image/jpeg';
     const fileName = asset.fileName ?? `address-proof-${Date.now()}.jpg`;
     const file: AddressProofFile = {
@@ -520,7 +707,7 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     };
 
     setStep2(s => ({ ...s, uploading: true, uploadError: null, file, fileName }));
-    const { path, error } = await uploadAddressProof(orgId, file);
+    const { path, error } = await uploadAddressProof(orgId, file, step2.proofType ?? undefined);
     if (error || !path) {
       setStep2(s => ({ ...s, uploading: false, uploadError: error?.message ?? 'Upload failed. Please try again.' }));
       return;
@@ -528,19 +715,49 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
     setStep2(s => ({ ...s, uploading: false, uploadedPath: path, uploadError: null }));
   };
 
+  const handlePickGstCert = () => pickDocumentAsset(async asset => {
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+    const fileName = asset.fileName ?? `gst-certificate-${Date.now()}.jpg`;
+    const file: VerificationDocumentFile = { uri: asset.uri, mimeType, fileName, base64: asset.base64 ?? undefined };
+
+    setStep1(s => ({ ...s, gstCertUploading: true, gstCertUploadError: null }));
+    const { path, error } = await uploadVerificationDocument(orgId, 'gst_certificate', file, { gstin: step1.gstin });
+    if (error || !path) {
+      setStep1(s => ({ ...s, gstCertUploading: false, gstCertUploadError: error?.message ?? 'Upload failed. Please try again.' }));
+      return;
+    }
+    setStep1(s => ({ ...s, gstCertUploading: false, gstCertPath: path, gstCertFileName: fileName, gstCertUploadError: null }));
+  });
+
+  const handlePickPanCard = () => pickDocumentAsset(async asset => {
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+    const fileName = asset.fileName ?? `pan-card-${Date.now()}.jpg`;
+    const file: VerificationDocumentFile = { uri: asset.uri, mimeType, fileName, base64: asset.base64 ?? undefined };
+
+    setStep1(s => ({ ...s, panCardUploading: true, panCardUploadError: null }));
+    const { path, error } = await uploadVerificationDocument(orgId, 'pan_card', file, { pan: step1.pan });
+    if (error || !path) {
+      setStep1(s => ({ ...s, panCardUploading: false, panCardUploadError: error?.message ?? 'Upload failed. Please try again.' }));
+      return;
+    }
+    setStep1(s => ({ ...s, panCardUploading: false, panCardPath: path, panCardFileName: fileName, panCardUploadError: null }));
+  });
+
   const handleNext = async () => {
     if (step === 0) {
       // Save address + registration type to org before advancing
-      await updateWorkspaceKyc(orgId, {});
+      const { error } = await updateWorkspaceKyc(orgId, {});
+      if (error) { Alert.alert('Could not save', error.message); return; }
       setStep(1);
       return;
     }
     if (step === 1) {
       // Save PAN + GSTIN via existing RPC before advancing
-      await updateWorkspaceKyc(orgId, {
+      const { error } = await updateWorkspaceKyc(orgId, {
         business_pan: step1.pan   || null,
         gstin:        step1.gstin || null,
       });
+      if (error) { Alert.alert('Could not save', error.message); return; }
       setStep(2);
       return;
     }
@@ -617,6 +834,8 @@ export function BusinessVerificationWizard({ onDone }: { onDone?: () => void }) 
             state={step1}
             onChange={patch => setStep1(s => ({ ...s, ...patch }))}
             onValidateGstin={handleValidateGstin}
+            onPickGstCert={handlePickGstCert}
+            onPickPanCard={handlePickPanCard}
           />
         )}
         {step === 2 && (
@@ -721,6 +940,17 @@ const styles = StyleSheet.create({
   validatingRow:  { flexDirection: 'row', alignItems: 'center', gap: space[2], marginBottom: space[3] },
   validatingText: { fontSize: 13, color: colors.textSecondary },
 
+  docUploadField: { marginBottom: space[4] },
+  incompleteBanner: {
+    backgroundColor: '#fffbeb',
+    borderWidth:     1,
+    borderColor:     '#fde68a',
+    borderRadius:    radius.md,
+    padding:         space[4],
+    marginTop:       space[2],
+  },
+  incompleteBannerTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, marginBottom: space[2] },
+  incompleteBannerItem:  { fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
   uploadZone: {
     borderWidth:     1.5,
     borderStyle:     'dashed',

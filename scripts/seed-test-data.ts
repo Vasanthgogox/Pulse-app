@@ -128,7 +128,7 @@ async function seedSuppliers(organizationId: string): Promise<void> {
   for (const s of suppliers) {
     const { error } = await supabase.from('suppliers').insert({
       organization_id: organizationId,
-      company_name: s.company_name,
+      name: s.company_name,
       contact_person: s.contact_person,
       phone: s.phone,
       email: s.email,

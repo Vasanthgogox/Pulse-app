@@ -78,16 +78,24 @@ export function WorkspaceFlexCardShell({
       >
         {useSplit ? (
           <View style={styles.splitRow}>
-            <Pressable
+            <View
               style={[styles.hubPane, { width: hubPaneWidth, maxWidth: hubPaneWidth }]}
-              onPress={onClosePanel}
-              accessibilityRole="button"
-              accessibilityLabel="Close detail panel"
+              // Tap-to-close only fires for clicks on the pane background itself —
+              // not on any button/link inside `hub`. Wrapping the whole pane in a
+              // Pressable (as before) nested real <button> children inside an
+              // outer <button>, which is invalid HTML and broke web hydration.
+              // `onClick` is RN-Web-only (forwarded straight to the underlying
+              // div); React Native's View types don't declare it.
+              {...({
+                onClick: (e: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
+                  if (e.target === e.currentTarget) onClosePanel();
+                },
+              } as object)}
             >
               <View style={styles.hubPaneInner} pointerEvents="box-none">
                 {hub}
               </View>
-            </Pressable>
+            </View>
             <View style={styles.detailPane}>{panel}</View>
           </View>
         ) : panelOpen && panel ? (
